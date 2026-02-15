@@ -82,26 +82,32 @@ export function ListingDetail({
     titleNext: () => {},
     titleEdit: () => {},
     titleLive: () => {},
+    titleDelete: () => {},
     bulletsPrev: () => {},
     bulletsNext: () => {},
     bulletsEdit: () => {},
     bulletsLive: () => {},
+    bulletsDelete: () => {},
     galleryPrev: () => {},
     galleryNext: () => {},
     galleryLive: () => {},
     galleryUpload: () => {},
     galleryDownload: () => {},
+    galleryDelete: () => {},
     videoPrev: () => {},
     videoNext: () => {},
     videoLive: () => {},
     videoUpload: () => {},
+    videoDelete: () => {},
     ebcPrev: () => {},
     ebcNext: () => {},
     ebcLive: () => {},
+    ebcDelete: () => {},
     ebcModulePrev: (_sectionType: string, _modulePosition: number) => {},
     ebcModuleNext: (_sectionType: string, _modulePosition: number) => {},
     ebcModuleLive: (_sectionType: string, _modulePosition: number) => {},
     ebcModuleEdit: (_sectionType: string, _modulePosition: number) => {},
+    ebcModuleDelete: (_sectionType: string, _modulePosition: number) => {},
     ebcDownload: () => {},
     variationSelect: (_asin: string) => {},
   })
@@ -123,10 +129,29 @@ export function ListingDetail({
     }
     callbacksRef.current.titleLive = () => {
       const activeId = activePointers?.activeTitleId
-      if (!activeId) return
-      const index = titleRevisions.findIndex((rev) => rev.id === activeId)
-      if (index < 0) return
-      setTitleIndex(index)
+      const index = activeId ? titleRevisions.findIndex((rev) => rev.id === activeId) : -1
+      if (index >= 0) {
+        setTitleIndex(index)
+        return
+      }
+      if (titleRevisions.length > 0) {
+        setTitleIndex(titleRevisions.length - 1)
+      }
+    }
+    callbacksRef.current.titleDelete = () => {
+      if (!listing) return
+      const selected = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
+      if (!selected) return
+      if (!window.confirm(`Delete Title v${selected.seq}?`)) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisionId: selected.id }),
+        })
+        setRefreshKey((current) => current + 1)
+      })()
     }
 
     callbacksRef.current.bulletsPrev = () => {
@@ -150,10 +175,29 @@ export function ListingDetail({
     }
     callbacksRef.current.bulletsLive = () => {
       const activeId = activePointers?.activeBulletsId
-      if (!activeId) return
-      const index = bulletsRevisions.findIndex((rev) => rev.id === activeId)
-      if (index < 0) return
-      setBulletsIndex(index)
+      const index = activeId ? bulletsRevisions.findIndex((rev) => rev.id === activeId) : -1
+      if (index >= 0) {
+        setBulletsIndex(index)
+        return
+      }
+      if (bulletsRevisions.length > 0) {
+        setBulletsIndex(bulletsRevisions.length - 1)
+      }
+    }
+    callbacksRef.current.bulletsDelete = () => {
+      if (!listing) return
+      const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
+      if (!selected) return
+      if (!window.confirm(`Delete Bullets v${selected.seq}?`)) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisionId: selected.id }),
+        })
+        setRefreshKey((current) => current + 1)
+      })()
     }
 
     callbacksRef.current.galleryPrev = () => {
@@ -166,14 +210,33 @@ export function ListingDetail({
     callbacksRef.current.galleryNext = () => setGalleryIndex((current) => (current > 0 ? current - 1 : current))
     callbacksRef.current.galleryLive = () => {
       const activeId = activePointers?.activeGalleryId
-      if (!activeId) return
-      const index = galleryRevisions.findIndex((rev) => rev.id === activeId)
-      if (index < 0) return
-      setGalleryIndex(index)
+      const index = activeId ? galleryRevisions.findIndex((rev) => rev.id === activeId) : -1
+      if (index >= 0) {
+        setGalleryIndex(index)
+        return
+      }
+      if (galleryRevisions.length > 0) {
+        setGalleryIndex(galleryRevisions.length - 1)
+      }
     }
     callbacksRef.current.galleryUpload = () => {
       setGalleryFiles([])
       setGalleryUploaderOpen(true)
+    }
+    callbacksRef.current.galleryDelete = () => {
+      if (!listing) return
+      const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
+      if (!selected) return
+      if (!window.confirm(`Delete Images v${selected.seq}?`)) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisionId: selected.id }),
+        })
+        setRefreshKey((current) => current + 1)
+      })()
     }
 
     callbacksRef.current.videoPrev = () => {
@@ -186,15 +249,34 @@ export function ListingDetail({
     callbacksRef.current.videoNext = () => setVideoIndex((current) => (current > 0 ? current - 1 : current))
     callbacksRef.current.videoLive = () => {
       const activeId = activePointers?.activeVideoId
-      if (!activeId) return
-      const index = videoRevisions.findIndex((rev) => rev.id === activeId)
-      if (index < 0) return
-      setVideoIndex(index)
+      const index = activeId ? videoRevisions.findIndex((rev) => rev.id === activeId) : -1
+      if (index >= 0) {
+        setVideoIndex(index)
+        return
+      }
+      if (videoRevisions.length > 0) {
+        setVideoIndex(videoRevisions.length - 1)
+      }
     }
     callbacksRef.current.videoUpload = () => {
       setVideoFile(null)
       setVideoPosterFile(null)
       setVideoUploaderOpen(true)
+    }
+    callbacksRef.current.videoDelete = () => {
+      if (!listing) return
+      const selected = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
+      if (!selected) return
+      if (!window.confirm(`Delete Video v${selected.seq}?`)) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisionId: selected.id }),
+        })
+        setRefreshKey((current) => current + 1)
+      })()
     }
 
     async function persistEbcModulePointer(sectionType: string, modulePosition: number, ebcRevisionId: string) {
@@ -254,11 +336,33 @@ export function ListingDetail({
     }
     callbacksRef.current.ebcLive = () => {
       const activeId = activePointers?.activeEbcId
-      if (!activeId) return
-      const index = ebcRevisions.findIndex((rev) => rev.id === activeId)
-      if (index < 0) return
-      setEbcIndex(index)
-      void setAllEbcModulesToRevision(activeId)
+      const index = activeId ? ebcRevisions.findIndex((rev) => rev.id === activeId) : -1
+      if (index >= 0) {
+        setEbcIndex(index)
+        void setAllEbcModulesToRevision(activeId as string)
+        return
+      }
+      if (ebcRevisions.length > 0) {
+        const oldestIndex = ebcRevisions.length - 1
+        const oldest = ebcRevisions[oldestIndex]
+        if (!oldest) return
+        setEbcIndex(oldestIndex)
+        void setAllEbcModulesToRevision(oldest.id)
+      }
+    }
+
+    callbacksRef.current.ebcDelete = () => {
+      if (!listing) return
+      if (!window.confirm('Clear all A+ module overrides?')) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ all: true }),
+        })
+        setEbcModulePointers({})
+      })()
     }
 
     callbacksRef.current.ebcModulePrev = (sectionType: string, modulePosition: number) => {
@@ -291,9 +395,12 @@ export function ListingDetail({
 
     callbacksRef.current.ebcModuleLive = (sectionType: string, modulePosition: number) => {
       const activeId = activePointers?.activeEbcId
-      if (!activeId) return
-      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: activeId }))
-      void persistEbcModulePointer(sectionType, modulePosition, activeId)
+      const fallback = ebcRevisions.length > 0 ? ebcRevisions[ebcRevisions.length - 1] : null
+      const nextRevisionId = activeId ? activeId : (fallback ? fallback.id : null)
+      if (!nextRevisionId) return
+
+      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
     }
 
     callbacksRef.current.ebcModuleEdit = (sectionType: string, modulePosition: number) => {
@@ -315,6 +422,27 @@ export function ListingDetail({
       setEbcModuleEditorOpen(true)
     }
 
+    callbacksRef.current.ebcModuleDelete = (sectionType: string, modulePosition: number) => {
+      if (!listing) return
+      if (!window.confirm('Clear this module override?')) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sectionType, modulePosition }),
+        })
+
+        const key = ebcModulePointerKey(sectionType, modulePosition)
+        setEbcModulePointers((current) => {
+          if (!(key in current)) return current
+          const next = { ...current }
+          delete next[key]
+          return next
+        })
+      })()
+    }
+
     callbacksRef.current.variationSelect = (asin: string) => {
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
@@ -326,19 +454,21 @@ export function ListingDetail({
           body: JSON.stringify({ asin: normalized }),
         })
 
-        router.push(`${basePath}/listings/${normalized}`)
+        router.push(`/listings/${normalized}`)
       })()
     }
   }, [
     listing,
     activePointers,
     ebcIndex,
+    galleryIndex,
     router,
     titleIndex,
     titleRevisions,
     bulletsIndex,
     bulletsRevisions,
     galleryRevisions,
+    videoIndex,
     ebcModulePointers,
     videoRevisions,
     ebcRevisions,
@@ -1175,26 +1305,32 @@ function injectArgusVersionControls(
     titleNext: () => void
     titleEdit: () => void
     titleLive: () => void
+    titleDelete: () => void
     bulletsPrev: () => void
     bulletsNext: () => void
     bulletsEdit: () => void
     bulletsLive: () => void
+    bulletsDelete: () => void
     galleryPrev: () => void
     galleryNext: () => void
     galleryLive: () => void
     galleryUpload: () => void
     galleryDownload: () => void
+    galleryDelete: () => void
     videoPrev: () => void
     videoNext: () => void
     videoLive: () => void
     videoUpload: () => void
+    videoDelete: () => void
     ebcPrev: () => void
     ebcNext: () => void
     ebcLive: () => void
+    ebcDelete: () => void
     ebcModulePrev: (sectionType: string, modulePosition: number) => void
     ebcModuleNext: (sectionType: string, modulePosition: number) => void
     ebcModuleLive: (sectionType: string, modulePosition: number) => void
     ebcModuleEdit: (sectionType: string, modulePosition: number) => void
+    ebcModuleDelete: (sectionType: string, modulePosition: number) => void
     ebcDownload: () => void
     variationSelect: (asin: string) => void
   }>,
@@ -1236,6 +1372,12 @@ function injectArgusVersionControls(
         user-select: none;
       }
       .argus-vc-btn:hover { background: #e6e6e6; }
+      .argus-vc-btn.argus-vc-danger {
+        background: #fff1f1;
+        border-color: rgba(220, 38, 38, 0.35);
+        color: rgb(185, 28, 28);
+      }
+      .argus-vc-btn.argus-vc-danger:hover { background: #ffe5e5; }
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
@@ -1326,26 +1468,32 @@ function ensureTrackControls(
     titleNext: () => void
     titleEdit: () => void
     titleLive: () => void
+    titleDelete: () => void
     bulletsPrev: () => void
     bulletsNext: () => void
     bulletsEdit: () => void
     bulletsLive: () => void
+    bulletsDelete: () => void
     galleryPrev: () => void
     galleryNext: () => void
     galleryLive: () => void
     galleryUpload: () => void
     galleryDownload: () => void
+    galleryDelete: () => void
     videoPrev: () => void
     videoNext: () => void
     videoLive: () => void
     videoUpload: () => void
+    videoDelete: () => void
     ebcPrev: () => void
     ebcNext: () => void
     ebcLive: () => void
+    ebcDelete: () => void
     ebcModulePrev: (sectionType: string, modulePosition: number) => void
     ebcModuleNext: (sectionType: string, modulePosition: number) => void
     ebcModuleLive: (sectionType: string, modulePosition: number) => void
     ebcModuleEdit: (sectionType: string, modulePosition: number) => void
+    ebcModuleDelete: (sectionType: string, modulePosition: number) => void
     ebcDownload: () => void
   }>,
 ) {
@@ -1472,6 +1620,22 @@ function ensureTrackControls(
     download.addEventListener('click', () => callbacksRef.current?.ebcDownload())
     controls.append(download)
   }
+
+  const del = doc.createElement('button')
+  del.id = `argus-vc-delete-${track}`
+  del.className = 'argus-vc-btn argus-vc-danger'
+  del.type = 'button'
+  del.textContent = '🗑'
+  del.title = track === 'ebc' ? 'Clear overrides' : 'Delete version'
+  del.addEventListener('click', () => {
+    if (track === 'title') callbacksRef.current?.titleDelete()
+    if (track === 'bullets') callbacksRef.current?.bulletsDelete()
+    if (track === 'gallery') callbacksRef.current?.galleryDelete()
+    if (track === 'video') callbacksRef.current?.videoDelete()
+    if (track === 'ebc') callbacksRef.current?.ebcDelete()
+  })
+  controls.append(del)
+
   target.append(controls)
 }
 
@@ -1485,6 +1649,7 @@ function ensureEbcModuleControls(
     ebcModuleNext: (sectionType: string, modulePosition: number) => void
     ebcModuleLive: (sectionType: string, modulePosition: number) => void
     ebcModuleEdit: (sectionType: string, modulePosition: number) => void
+    ebcModuleDelete: (sectionType: string, modulePosition: number) => void
   }>,
 ) {
   if (!target.style.position) {
@@ -1534,7 +1699,14 @@ function ensureEbcModuleControls(
   edit.title = 'New version'
   edit.addEventListener('click', () => callbacksRef.current?.ebcModuleEdit(sectionType, modulePosition))
 
-  controls.append(prev, label, next, live, edit)
+  const del = doc.createElement('button')
+  del.className = 'argus-vc-btn argus-vc-danger'
+  del.type = 'button'
+  del.textContent = '🗑'
+  del.title = 'Clear override'
+  del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
+
+  controls.append(prev, label, next, live, edit, del)
   target.append(controls)
 }
 
@@ -1561,9 +1733,15 @@ function updateTrackControls(
 
   const prev = doc.getElementById(`argus-vc-prev-${track}`) as HTMLButtonElement | null
   const next = doc.getElementById(`argus-vc-next-${track}`) as HTMLButtonElement | null
+  const live = doc.getElementById(`argus-vc-live-${track}`) as HTMLButtonElement | null
+  const del = doc.getElementById(`argus-vc-delete-${track}`) as HTMLButtonElement | null
+  const download = doc.getElementById(`argus-vc-download-${track}`) as HTMLButtonElement | null
 
   if (prev) prev.disabled = count === 0 ? true : index >= count - 1
   if (next) next.disabled = count === 0 ? true : index <= 0
+  if (live) live.disabled = count === 0
+  if (download) download.disabled = count === 0
+  if (del && track !== 'ebc') del.disabled = count === 0
 }
 
 function applyTitle(doc: Document, title: string | null) {
@@ -1575,13 +1753,12 @@ function applyTitle(doc: Document, title: string | null) {
 }
 
 function applyBullets(doc: Document, rev: BulletsRevision | null) {
-  if (!rev) return
-
   const list = doc.querySelector('#feature-bullets ul')
   if (!list) return
 
   const template = list.querySelector('li')
   list.querySelectorAll('li').forEach((li) => li.remove())
+  if (!rev) return
 
   const bullets = [rev.bullet1, rev.bullet2, rev.bullet3, rev.bullet4, rev.bullet5]
     .filter((b): b is string => b !== null)
@@ -1598,14 +1775,30 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
 }
 
 function applyGallery(doc: Document, rev: GalleryRevision | null) {
-  if (!rev) return
-  if (rev.images.length === 0) return
+  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+  const altImages = doc.getElementById('altImages') as HTMLElement | null
+
+  if (!rev || rev.images.length === 0) {
+    if (landing) {
+      landing.style.visibility = 'hidden'
+      landing.removeAttribute('src')
+      landing.removeAttribute('data-old-hires')
+    }
+    if (altImages) altImages.style.display = 'none'
+    return
+  }
 
   const sorted = rev.images.slice().sort((a, b) => a.position - b.position)
   const main = sorted[0]
   const thumbs = sorted.slice(1)
 
-  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+  if (landing) {
+    landing.style.visibility = ''
+  }
+  if (altImages) {
+    altImages.style.display = ''
+  }
+
   if (landing && main) {
     const src = resolveImageSrc(main.src)
     landing.src = src
@@ -1670,10 +1863,14 @@ function applyVideo(doc: Document, rev: VideoRevision | null) {
 }
 
 function applyEbc(doc: Document, rev: EbcRevision | null) {
-  if (!rev) return
-
   const brandContainer = doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
   const descriptionContainer = doc.querySelector<HTMLElement>('#aplus_feature_div')
+
+  if (!rev) {
+    if (brandContainer) brandContainer.style.display = 'none'
+    if (descriptionContainer) descriptionContainer.style.display = 'none'
+    return
+  }
 
   if (rev.sections.length === 0) {
     if (brandContainer) brandContainer.style.display = 'none'

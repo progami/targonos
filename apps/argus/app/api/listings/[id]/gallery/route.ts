@@ -98,3 +98,22 @@ export async function POST(
 
   return NextResponse.json(rev)
 }
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  const body = await request.json()
+
+  const { revisionId } = body as { revisionId: string }
+
+  const rev = await prisma.galleryRevision.findFirstOrThrow({
+    where: { id: revisionId, listingId: id },
+  })
+
+  await prisma.gallerySlot.deleteMany({ where: { revisionId: rev.id } })
+  await prisma.galleryRevision.delete({ where: { id: rev.id } })
+
+  return NextResponse.json({ ok: true })
+}
