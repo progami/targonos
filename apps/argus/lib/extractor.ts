@@ -75,7 +75,39 @@ export function extractBullets($: cheerio.CheerioAPI): ExtractedBullets {
 export function extractGallery($: cheerio.CheerioAPI): ExtractedGallery {
   const images: ExtractedImage[] = []
 
-  // Main landing image
+  // Preferred: hi-res gallery from the main media view.
+  const mainViewItems = $('ul.desktop-media-mainView > li')
+  if (mainViewItems.length > 0) {
+    mainViewItems.each((_i, el) => {
+      const li = $(el)
+      const mediaType = (li.attr('data-csa-c-media-type') ?? '').toUpperCase()
+      if (mediaType === 'VIDEO') return
+
+      const hiResAttr = li.find('[data-old-hires]').first().attr('data-old-hires')
+      const hiRes = hiResAttr && hiResAttr.trim().length > 0 ? hiResAttr.trim() : null
+
+      const imgSrcAttr = li.find('img').first().attr('src')
+      const imgSrc = imgSrcAttr && imgSrcAttr.trim().length > 0 ? imgSrcAttr.trim() : null
+
+      const dynamicAttr = li.find('[data-a-dynamic-image]').first().attr('data-a-dynamic-image')
+      const dynamicSrc = pickLargestDynamicImageUrl(dynamicAttr)
+
+      const src = imgSrc ?? dynamicSrc ?? hiRes
+      if (!src) return
+
+      images.push({
+        position: images.length,
+        src,
+        hiRes,
+        isVideo: false,
+      })
+    })
+
+    return { images }
+  }
+
+  // Fallback: legacy landing image + thumbnail list.
+
   const landing = $('#landingImage')
   if (landing.length > 0) {
     const src = landing.attr('src')
@@ -89,16 +121,15 @@ export function extractGallery($: cheerio.CheerioAPI): ExtractedGallery {
     }
   }
 
-  // Thumbnail images (position 1+)
   $('#altImages li img').each((_i, el) => {
     const img = $(el)
     const src = img.attr('src')
     if (!src) return
-    // Skip the main image duplicate (already captured as position 0)
     if (images.length === 1 && images[0].src === src) return
 
     const parentLi = img.closest('li')
-    const isVideo = parentLi.hasClass('videoThumbnail') ||
+    const isVideo =
+      parentLi.hasClass('videoThumbnail') ||
       parentLi.find('.videoThumbnail').length > 0 ||
       src.includes('PKplay-button')
 
@@ -111,6 +142,27 @@ export function extractGallery($: cheerio.CheerioAPI): ExtractedGallery {
   })
 
   return { images }
+}
+
+function pickLargestDynamicImageUrl(dynamicImageAttr: string | undefined): string | null {
+  if (!dynamicImageAttr) return null
+  try {
+    const data = JSON.parse(dynamicImageAttr) as Record<string, [number, number]>
+    let bestUrl: string | null = null
+    let bestArea = 0
+    for (const [url, dims] of Object.entries(data)) {
+      const width = dims[0]
+      const height = dims[1]
+      const area = width * height
+      if (area > bestArea) {
+        bestArea = area
+        bestUrl = url
+      }
+    }
+    return bestUrl
+  } catch {
+    return null
+  }
 }
 
 export function extractEbc($: cheerio.CheerioAPI): ExtractedEbcSection[] {

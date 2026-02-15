@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState } from 'react'
 import type { RefObject } from 'react'
+import { useRouter } from 'next/navigation'
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
 
@@ -16,6 +17,7 @@ interface ListingActivePointers {
   activeBulletsId: string | null
   activeGalleryId: string | null
   activeEbcId: string | null
+  activeVideoId: string | null
 }
 
 interface ListingDetailProps {
@@ -27,6 +29,7 @@ export function ListingDetail({
   listingId,
   listing,
 }: ListingDetailProps) {
+  const router = useRouter()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [iframeHeight, setIframeHeight] = useState(3000)
   const iframeDocRef = useRef<Document | null>(null)
@@ -39,16 +42,40 @@ export function ListingDetail({
 
   const [bulletsRevisions, setBulletsRevisions] = useState<BulletsRevision[]>([])
   const [galleryRevisions, setGalleryRevisions] = useState<GalleryRevision[]>([])
+  const [videoRevisions, setVideoRevisions] = useState<VideoRevision[]>([])
   const [ebcRevisions, setEbcRevisions] = useState<EbcRevision[]>([])
+  const [ebcModulePointers, setEbcModulePointers] = useState<Record<string, string>>({})
 
   const [activePointers, setActivePointers] = useState<ListingActivePointers | null>(null)
 
   const [bulletsIndex, setBulletsIndex] = useState(0)
   const [galleryIndex, setGalleryIndex] = useState(0)
+  const [videoIndex, setVideoIndex] = useState(0)
   const [ebcIndex, setEbcIndex] = useState(0)
 
   const [titleEditorOpen, setTitleEditorOpen] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
+
+  const [bulletsEditorOpen, setBulletsEditorOpen] = useState(false)
+  const [bulletsDraft, setBulletsDraft] = useState({
+    bullet1: '',
+    bullet2: '',
+    bullet3: '',
+    bullet4: '',
+    bullet5: '',
+  })
+
+  const [galleryUploaderOpen, setGalleryUploaderOpen] = useState(false)
+  const [galleryFiles, setGalleryFiles] = useState<File[]>([])
+
+  const [videoUploaderOpen, setVideoUploaderOpen] = useState(false)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoPosterFile, setVideoPosterFile] = useState<File | null>(null)
+
+  const [ebcModuleEditorOpen, setEbcModuleEditorOpen] = useState(false)
+  const [ebcModuleEditorTarget, setEbcModuleEditorTarget] = useState<{ sectionType: string; modulePosition: number } | null>(null)
+  const [ebcModuleDraft, setEbcModuleDraft] = useState({ headline: '', bodyText: '' })
+  const [ebcModuleFiles, setEbcModuleFiles] = useState<File[]>([])
 
   const callbacksRef = useRef({
     titlePrev: () => {},
@@ -57,15 +84,26 @@ export function ListingDetail({
     titleLive: () => {},
     bulletsPrev: () => {},
     bulletsNext: () => {},
+    bulletsEdit: () => {},
     bulletsLive: () => {},
     galleryPrev: () => {},
     galleryNext: () => {},
     galleryLive: () => {},
+    galleryUpload: () => {},
     galleryDownload: () => {},
+    videoPrev: () => {},
+    videoNext: () => {},
+    videoLive: () => {},
+    videoUpload: () => {},
     ebcPrev: () => {},
     ebcNext: () => {},
     ebcLive: () => {},
+    ebcModulePrev: (_sectionType: string, _modulePosition: number) => {},
+    ebcModuleNext: (_sectionType: string, _modulePosition: number) => {},
+    ebcModuleLive: (_sectionType: string, _modulePosition: number) => {},
+    ebcModuleEdit: (_sectionType: string, _modulePosition: number) => {},
     ebcDownload: () => {},
+    variationSelect: (_asin: string) => {},
   })
 
   useEffect(() => {
@@ -99,6 +137,17 @@ export function ListingDetail({
       })
     }
     callbacksRef.current.bulletsNext = () => setBulletsIndex((current) => (current > 0 ? current - 1 : current))
+    callbacksRef.current.bulletsEdit = () => {
+      const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
+      setBulletsDraft({
+        bullet1: selected?.bullet1 ?? '',
+        bullet2: selected?.bullet2 ?? '',
+        bullet3: selected?.bullet3 ?? '',
+        bullet4: selected?.bullet4 ?? '',
+        bullet5: selected?.bullet5 ?? '',
+      })
+      setBulletsEditorOpen(true)
+    }
     callbacksRef.current.bulletsLive = () => {
       const activeId = activePointers?.activeBulletsId
       if (!activeId) return
@@ -122,29 +171,176 @@ export function ListingDetail({
       if (index < 0) return
       setGalleryIndex(index)
     }
+    callbacksRef.current.galleryUpload = () => {
+      setGalleryFiles([])
+      setGalleryUploaderOpen(true)
+    }
 
-    callbacksRef.current.ebcPrev = () => {
-      setEbcIndex((current) => {
-        const max = ebcRevisions.length - 1
+    callbacksRef.current.videoPrev = () => {
+      setVideoIndex((current) => {
+        const max = videoRevisions.length - 1
         if (max < 0) return current
         return current < max ? current + 1 : current
       })
     }
-    callbacksRef.current.ebcNext = () => setEbcIndex((current) => (current > 0 ? current - 1 : current))
+    callbacksRef.current.videoNext = () => setVideoIndex((current) => (current > 0 ? current - 1 : current))
+    callbacksRef.current.videoLive = () => {
+      const activeId = activePointers?.activeVideoId
+      if (!activeId) return
+      const index = videoRevisions.findIndex((rev) => rev.id === activeId)
+      if (index < 0) return
+      setVideoIndex(index)
+    }
+    callbacksRef.current.videoUpload = () => {
+      setVideoFile(null)
+      setVideoPosterFile(null)
+      setVideoUploaderOpen(true)
+    }
+
+    async function persistEbcModulePointer(sectionType: string, modulePosition: number, ebcRevisionId: string) {
+      if (!listing) return
+      await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sectionType, modulePosition, ebcRevisionId }),
+      })
+    }
+
+    function getEffectiveEbcRevisionIdForModule(sectionType: string, modulePosition: number): string | null {
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      const selected = ebcModulePointers[key]
+      if (selected) return selected
+      const live = activePointers?.activeEbcId
+      if (live) return live
+      return null
+    }
+
+    async function setAllEbcModulesToRevision(revisionId: string) {
+      const baseId = activePointers?.activeEbcId
+      const base = baseId ? ebcRevisions.find((rev) => rev.id === baseId) ?? null : null
+      const layout = base ? base : (ebcRevisions.length > 0 ? ebcRevisions[0] : null)
+      if (!layout) return
+
+      const nextPointers: Record<string, string> = { ...ebcModulePointers }
+      const updates: Promise<void>[] = []
+
+      for (const section of layout.sections) {
+        for (let mi = 0; mi < section.modules.length; mi++) {
+          const key = ebcModulePointerKey(section.sectionType, mi)
+          nextPointers[key] = revisionId
+          updates.push(persistEbcModulePointer(section.sectionType, mi, revisionId))
+        }
+      }
+
+      setEbcModulePointers(nextPointers)
+      await Promise.all(updates)
+    }
+
+    callbacksRef.current.ebcPrev = () => {
+      const max = ebcRevisions.length - 1
+      if (max < 0) return
+      const nextIndex = ebcIndex < max ? ebcIndex + 1 : ebcIndex
+      setEbcIndex(nextIndex)
+      const rev = ebcRevisions[nextIndex]
+      if (!rev) return
+      void setAllEbcModulesToRevision(rev.id)
+    }
+    callbacksRef.current.ebcNext = () => {
+      const nextIndex = ebcIndex > 0 ? ebcIndex - 1 : ebcIndex
+      setEbcIndex(nextIndex)
+      const rev = ebcRevisions[nextIndex]
+      if (!rev) return
+      void setAllEbcModulesToRevision(rev.id)
+    }
     callbacksRef.current.ebcLive = () => {
       const activeId = activePointers?.activeEbcId
       if (!activeId) return
       const index = ebcRevisions.findIndex((rev) => rev.id === activeId)
       if (index < 0) return
       setEbcIndex(index)
+      void setAllEbcModulesToRevision(activeId)
+    }
+
+    callbacksRef.current.ebcModulePrev = (sectionType: string, modulePosition: number) => {
+      const history = getEbcModuleHistory(ebcRevisions, sectionType, modulePosition)
+      if (history.length === 0) return
+
+      const currentRevisionId = getEffectiveEbcRevisionIdForModule(sectionType, modulePosition)
+      const effectiveId = currentRevisionId ? currentRevisionId : history[0].revisionId
+      const index = history.findIndex((item) => item.revisionId === effectiveId)
+      const safeIndex = index >= 0 ? index : 0
+      const nextIndex = safeIndex < history.length - 1 ? safeIndex + 1 : safeIndex
+      const nextRevisionId = history[nextIndex].revisionId
+      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
+    }
+
+    callbacksRef.current.ebcModuleNext = (sectionType: string, modulePosition: number) => {
+      const history = getEbcModuleHistory(ebcRevisions, sectionType, modulePosition)
+      if (history.length === 0) return
+
+      const currentRevisionId = getEffectiveEbcRevisionIdForModule(sectionType, modulePosition)
+      const effectiveId = currentRevisionId ? currentRevisionId : history[0].revisionId
+      const index = history.findIndex((item) => item.revisionId === effectiveId)
+      const safeIndex = index >= 0 ? index : 0
+      const nextIndex = safeIndex > 0 ? safeIndex - 1 : safeIndex
+      const nextRevisionId = history[nextIndex].revisionId
+      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: nextRevisionId }))
+      void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
+    }
+
+    callbacksRef.current.ebcModuleLive = (sectionType: string, modulePosition: number) => {
+      const activeId = activePointers?.activeEbcId
+      if (!activeId) return
+      setEbcModulePointers((current) => ({ ...current, [ebcModulePointerKey(sectionType, modulePosition)]: activeId }))
+      void persistEbcModulePointer(sectionType, modulePosition, activeId)
+    }
+
+    callbacksRef.current.ebcModuleEdit = (sectionType: string, modulePosition: number) => {
+      const revisionId = getEffectiveEbcRevisionIdForModule(sectionType, modulePosition)
+      const fallbackRevision = ebcRevisions.length > 0 ? ebcRevisions[0] : null
+      const selectedRevision = revisionId ? ebcRevisions.find((rev) => rev.id === revisionId) ?? fallbackRevision : fallbackRevision
+      if (!selectedRevision) return
+
+      const section = selectedRevision.sections.find((s) => s.sectionType === sectionType) ?? null
+      const mod = section ? section.modules[modulePosition] ?? null : null
+      if (!mod) return
+
+      setEbcModuleEditorTarget({ sectionType, modulePosition })
+      setEbcModuleDraft({
+        headline: mod.headline ?? '',
+        bodyText: mod.bodyText ?? '',
+      })
+      setEbcModuleFiles([])
+      setEbcModuleEditorOpen(true)
+    }
+
+    callbacksRef.current.variationSelect = (asin: string) => {
+      const normalized = String(asin).trim()
+      if (normalized.length === 0) return
+
+      void (async () => {
+        await fetch(`${basePath}/api/listings/ensure`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ asin: normalized }),
+        })
+
+        router.push(`${basePath}/listings/${normalized}`)
+      })()
     }
   }, [
     listing,
     activePointers,
+    ebcIndex,
+    router,
     titleIndex,
     titleRevisions,
+    bulletsIndex,
     bulletsRevisions,
     galleryRevisions,
+    ebcModulePointers,
+    videoRevisions,
     ebcRevisions,
   ])
 
@@ -155,7 +351,7 @@ export function ListingDetail({
     const abortController = new AbortController()
 
     async function loadRevisions() {
-      const [meta, titles, bullets, gallery, ebc] = await Promise.all([
+      const [meta, titles, bullets, gallery, video, ebc, pointers] = await Promise.all([
         fetch(`${basePath}/api/listings/${listingDbId}`, { signal: abortController.signal })
           .then((res) => res.json()) as Promise<ListingActivePointers>,
         fetch(`${basePath}/api/listings/${listingDbId}/title`, { signal: abortController.signal })
@@ -164,19 +360,29 @@ export function ListingDetail({
           .then((res) => res.json()) as Promise<BulletsRevision[]>,
         fetch(`${basePath}/api/listings/${listingDbId}/gallery`, { signal: abortController.signal })
           .then((res) => res.json()) as Promise<GalleryApiRevision[]>,
+        fetch(`${basePath}/api/listings/${listingDbId}/video`, { signal: abortController.signal })
+          .then((res) => res.json()) as Promise<VideoApiRevision[]>,
         fetch(`${basePath}/api/listings/${listingDbId}/ebc`, { signal: abortController.signal })
           .then((res) => res.json()) as Promise<EbcApiRevision[]>,
+        fetch(`${basePath}/api/listings/${listingDbId}/ebc/pointers`, { signal: abortController.signal })
+          .then((res) => res.json()) as Promise<EbcModulePointerApi[]>,
       ])
 
       setActivePointers(meta)
       setTitleRevisions(titles)
       setBulletsRevisions(bullets)
       setGalleryRevisions(gallery.map(toGalleryRevision))
+      setVideoRevisions(video.map(toVideoRevision))
       setEbcRevisions(ebc.map(toEbcRevision))
+      setEbcModulePointers(pointers.reduce<Record<string, string>>((acc, pointer) => {
+        acc[ebcModulePointerKey(pointer.sectionType, pointer.modulePosition)] = pointer.ebcRevisionId
+        return acc
+      }, {}))
 
       setTitleIndex(0)
       setBulletsIndex(0)
       setGalleryIndex(0)
+      setVideoIndex(0)
       setEbcIndex(0)
     }
 
@@ -221,18 +427,23 @@ export function ListingDetail({
     const selectedTitleRev = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
     const selectedBullets = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
     const selectedGallery = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
+    const selectedVideo = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
     const selectedEbc = ebcRevisions.length > ebcIndex ? ebcRevisions[ebcIndex] : null
+    const appliedEbc = composeEbcRevision(ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
     const selectedTitle = selectedTitleRev ? selectedTitleRev.title : (listing ? listing.label : null)
 
     applyTitle(doc, selectedTitle)
     applyBullets(doc, selectedBullets)
     applyGallery(doc, selectedGallery)
-    applyEbc(doc, selectedEbc)
+    applyVideo(doc, selectedVideo)
+    applyEbc(doc, appliedEbc)
 
     updateTrackControls(doc, 'title', selectedTitleRev?.seq, titleIndex, titleRevisions.length)
     updateTrackControls(doc, 'bullets', selectedBullets?.seq, bulletsIndex, bulletsRevisions.length)
     updateTrackControls(doc, 'gallery', selectedGallery?.seq, galleryIndex, galleryRevisions.length)
+    updateTrackControls(doc, 'video', selectedVideo?.seq, videoIndex, videoRevisions.length)
     updateTrackControls(doc, 'ebc', selectedEbc?.seq, ebcIndex, ebcRevisions.length)
+    updateEbcModuleControls(doc, ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
 
     const height = doc.documentElement.scrollHeight
     if (height > 0) {
@@ -241,13 +452,17 @@ export function ListingDetail({
   }, [
     iframeEpoch,
     listing,
+    activePointers,
     titleIndex,
     titleRevisions,
     bulletsRevisions,
     bulletsIndex,
     galleryRevisions,
     galleryIndex,
+    videoRevisions,
+    videoIndex,
     ebcRevisions,
+    ebcModulePointers,
     ebcIndex,
   ])
 
@@ -259,11 +474,11 @@ export function ListingDetail({
     }
 
     callbacksRef.current.ebcDownload = () => {
-      const selected = ebcRevisions.length > ebcIndex ? ebcRevisions[ebcIndex] : null
-      if (!selected) return
-      void downloadEbcRevisionZip(selected).catch((err) => console.error(err))
+      const composed = composeEbcRevision(ebcRevisions, ebcModulePointers, activePointers?.activeEbcId ?? null)
+      if (!composed) return
+      void downloadEbcZip('ebc_current.zip', 'ebc_current', composed).catch((err) => console.error(err))
     }
-  }, [galleryRevisions, galleryIndex, ebcRevisions, ebcIndex])
+  }, [galleryRevisions, galleryIndex, ebcRevisions, ebcIndex, ebcModulePointers, activePointers])
 
   return (
     <div className="flex flex-col h-screen bg-white">
@@ -309,6 +524,267 @@ export function ListingDetail({
                       body: JSON.stringify({ title: titleDraft }),
                     })
                     setTitleEditorOpen(false)
+                    setRefreshKey((current) => current + 1)
+                  }}
+                >
+                  Save new version
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {bulletsEditorOpen && listing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
+            <div className="px-4 py-3 border-b">
+              <div className="text-sm font-semibold">New bullets version</div>
+              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
+            </div>
+            <div className="p-4 space-y-3">
+              {([
+                ['bullet1', 'Bullet 1'],
+                ['bullet2', 'Bullet 2'],
+                ['bullet3', 'Bullet 3'],
+                ['bullet4', 'Bullet 4'],
+                ['bullet5', 'Bullet 5'],
+              ] as const).map(([key, label]) => (
+                <div key={key}>
+                  <div className="text-xs text-muted-foreground mb-1">{label}</div>
+                  <textarea
+                    value={bulletsDraft[key]}
+                    onChange={(e) => setBulletsDraft((current) => ({ ...current, [key]: e.target.value }))}
+                    rows={2}
+                    className="w-full rounded border px-3 py-2 text-sm"
+                    placeholder="Enter bullet text…"
+                  />
+                </div>
+              ))}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+                  onClick={() => setBulletsEditorOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white"
+                  onClick={async () => {
+                    await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        bullet1: bulletsDraft.bullet1,
+                        bullet2: bulletsDraft.bullet2,
+                        bullet3: bulletsDraft.bullet3,
+                        bullet4: bulletsDraft.bullet4,
+                        bullet5: bulletsDraft.bullet5,
+                      }),
+                    })
+                    setBulletsEditorOpen(false)
+                    setRefreshKey((current) => current + 1)
+                  }}
+                >
+                  Save new version
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {galleryUploaderOpen && listing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
+            <div className="px-4 py-3 border-b">
+              <div className="text-sm font-semibold">New gallery version</div>
+              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
+            </div>
+            <div className="p-4 space-y-3">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="block w-full text-sm"
+                onChange={(e) => {
+                  const list = e.target.files ? Array.from(e.target.files) : []
+                  setGalleryFiles(list)
+                }}
+              />
+              <div className="text-xs text-muted-foreground">
+                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select JPG/PNG/WebP/AVIF files.'}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+                  onClick={() => setGalleryUploaderOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
+                  disabled={galleryFiles.length === 0}
+                  onClick={async () => {
+                    const form = new FormData()
+                    for (const file of galleryFiles) {
+                      form.append('files', file)
+                    }
+
+                    await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+                      method: 'POST',
+                      body: form,
+                    })
+                    setGalleryUploaderOpen(false)
+                    setRefreshKey((current) => current + 1)
+                  }}
+                >
+                  Upload new version
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {videoUploaderOpen && listing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
+            <div className="px-4 py-3 border-b">
+              <div className="text-sm font-semibold">New video version</div>
+              <div className="text-xs text-muted-foreground">ASIN {listing.asin}</div>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Video file</div>
+                <input
+                  type="file"
+                  accept="video/mp4,video/webm"
+                  className="block w-full text-sm"
+                  onChange={(e) => {
+                    const file = e.target.files ? e.target.files[0] : null
+                    setVideoFile(file)
+                  }}
+                />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Poster image (optional)</div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="block w-full text-sm"
+                  onChange={(e) => {
+                    const file = e.target.files ? e.target.files[0] : null
+                    setVideoPosterFile(file)
+                  }}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+                  onClick={() => setVideoUploaderOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
+                  disabled={!videoFile}
+                  onClick={async () => {
+                    if (!videoFile) return
+                    const form = new FormData()
+                    form.append('file', videoFile)
+                    if (videoPosterFile) form.append('poster', videoPosterFile)
+
+                    await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+                      method: 'POST',
+                      body: form,
+                    })
+                    setVideoUploaderOpen(false)
+                    setRefreshKey((current) => current + 1)
+                  }}
+                >
+                  Upload new version
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {ebcModuleEditorOpen && listing && ebcModuleEditorTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl border">
+            <div className="px-4 py-3 border-b">
+              <div className="text-sm font-semibold">New A+ module version</div>
+              <div className="text-xs text-muted-foreground">
+                {ebcModuleEditorTarget.sectionType} · Module {ebcModuleEditorTarget.modulePosition + 1}
+              </div>
+            </div>
+            <div className="p-4 space-y-3">
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Headline</div>
+                <textarea
+                  value={ebcModuleDraft.headline}
+                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, headline: e.target.value }))}
+                  rows={2}
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  placeholder="Enter headline…"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Body</div>
+                <textarea
+                  value={ebcModuleDraft.bodyText}
+                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, bodyText: e.target.value }))}
+                  rows={5}
+                  className="w-full rounded border px-3 py-2 text-sm"
+                  placeholder="Enter body text…"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Images (optional)</div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="block w-full text-sm"
+                  onChange={(e) => {
+                    const list = e.target.files ? Array.from(e.target.files) : []
+                    setEbcModuleFiles(list)
+                  }}
+                />
+                <div className="text-xs text-muted-foreground mt-1">
+                  {ebcModuleFiles.length > 0 ? `${ebcModuleFiles.length} file(s) selected` : 'Leave empty to keep current images.'}
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+                  onClick={() => setEbcModuleEditorOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 text-sm rounded bg-blue-600 text-white"
+                  onClick={async () => {
+                    const form = new FormData()
+                    form.append('sectionType', ebcModuleEditorTarget.sectionType)
+                    form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
+                    form.append('headline', ebcModuleDraft.headline)
+                    form.append('bodyText', ebcModuleDraft.bodyText)
+                    for (const file of ebcModuleFiles) {
+                      form.append('files', file)
+                    }
+
+                    await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+                      method: 'POST',
+                      body: form,
+                    })
+                    setEbcModuleEditorOpen(false)
                     setRefreshKey((current) => current + 1)
                   }}
                 >
@@ -365,6 +841,28 @@ interface GalleryImage {
   src: string
   hiRes: string | null
   isVideo: boolean
+}
+
+interface VideoApiRevision {
+  id: string
+  seq: number
+  createdAt: string
+  media: { filePath: string; sourceUrl: string | null }
+  posterMedia: { filePath: string; sourceUrl: string | null } | null
+}
+
+interface VideoRevision {
+  id: string
+  seq: number
+  createdAt: string
+  src: string
+  posterSrc: string | null
+}
+
+interface EbcModulePointerApi {
+  sectionType: string
+  modulePosition: number
+  ebcRevisionId: string
 }
 
 interface EbcApiRevision {
@@ -428,6 +926,21 @@ function toGalleryRevision(rev: GalleryApiRevision): GalleryRevision {
   }
 }
 
+function toVideoRevision(rev: VideoApiRevision): VideoRevision {
+  const src = rev.media.sourceUrl === null ? rev.media.filePath : rev.media.sourceUrl
+  const posterSrc = rev.posterMedia
+    ? (rev.posterMedia.sourceUrl === null ? rev.posterMedia.filePath : rev.posterMedia.sourceUrl)
+    : null
+
+  return {
+    id: rev.id,
+    seq: rev.seq,
+    createdAt: rev.createdAt,
+    src,
+    posterSrc,
+  }
+}
+
 function toEbcRevision(rev: EbcApiRevision): EbcRevision {
   return {
     id: rev.id,
@@ -463,9 +976,128 @@ function resolveImageSrc(src: string): string {
     return `${basePath}/api/fixture/${src.replace('./', '')}`
   }
   if (src.startsWith('media/')) {
-    return `${basePath}/${src}`
+    return `${basePath}/api/media/${src.replace('media/', '')}`
   }
   return src
+}
+
+function ebcModulePointerKey(sectionType: string, modulePosition: number): string {
+  return `${sectionType}:${modulePosition}`
+}
+
+function composeEbcRevision(
+  all: EbcRevision[],
+  pointers: Record<string, string>,
+  liveRevisionId: string | null,
+): EbcRevision | null {
+  if (all.length === 0) return null
+
+  const baseId = liveRevisionId ? liveRevisionId : all[0].id
+  const base = all.find((rev) => rev.id === baseId) ?? all[0]
+
+  const byId = new Map<string, EbcRevision>()
+  for (const rev of all) {
+    byId.set(rev.id, rev)
+  }
+
+  const sections: EbcSection[] = base.sections.map((section) => {
+    const modules: EbcModule[] = section.modules.map((_mod, modulePosition) => {
+      const key = ebcModulePointerKey(section.sectionType, modulePosition)
+      const selectedRevisionId = pointers[key]
+      const revisionId = selectedRevisionId ? selectedRevisionId : base.id
+      const srcRevision = byId.get(revisionId)
+      if (!srcRevision) return section.modules[modulePosition]
+
+      const srcSection = srcRevision.sections.find((s) => s.sectionType === section.sectionType) ?? null
+      const srcModule = srcSection ? srcSection.modules[modulePosition] ?? null : null
+      return srcModule ? srcModule : section.modules[modulePosition]
+    })
+
+    return {
+      sectionType: section.sectionType,
+      heading: section.heading,
+      modules,
+    }
+  })
+
+  return {
+    id: base.id,
+    seq: base.seq,
+    createdAt: base.createdAt,
+    sections,
+  }
+}
+
+function moduleSignature(mod: EbcModule): string {
+  return JSON.stringify({
+    moduleType: mod.moduleType,
+    headline: mod.headline,
+    bodyText: mod.bodyText,
+    images: mod.images.map((img) => img.src),
+  })
+}
+
+function getEbcModuleHistory(
+  all: EbcRevision[],
+  sectionType: string,
+  modulePosition: number,
+): { revisionId: string; seq: number; module: EbcModule }[] {
+  const history: { revisionId: string; seq: number; module: EbcModule }[] = []
+  let lastSig: string | null = null
+
+  for (const rev of all) {
+    const section = rev.sections.find((s) => s.sectionType === sectionType) ?? null
+    if (!section) continue
+    const mod = section.modules[modulePosition] ?? null
+    if (!mod) continue
+    const sig = moduleSignature(mod)
+    if (lastSig !== sig) {
+      history.push({ revisionId: rev.id, seq: rev.seq, module: mod })
+      lastSig = sig
+    }
+  }
+
+  return history
+}
+
+function updateEbcModuleControls(
+  doc: Document,
+  allRevisions: EbcRevision[],
+  pointers: Record<string, string>,
+  liveRevisionId: string | null,
+) {
+  const controls = Array.from(doc.querySelectorAll<HTMLElement>('.argus-vc-ebc-module-controls'))
+  for (const control of controls) {
+    const sectionType = control.dataset.sectionType
+    const modulePositionValue = control.dataset.modulePosition
+    if (!sectionType || !modulePositionValue) continue
+
+    const modulePosition = Number(modulePositionValue)
+    if (!Number.isFinite(modulePosition)) continue
+
+    const history = getEbcModuleHistory(allRevisions, sectionType, modulePosition)
+    if (history.length === 0) continue
+
+    const key = ebcModulePointerKey(sectionType, modulePosition)
+    const selectedRevisionId = pointers[key]
+    const activeId = selectedRevisionId ? selectedRevisionId : liveRevisionId
+    const effectiveId = activeId ? activeId : history[0].revisionId
+
+    const index = history.findIndex((item) => item.revisionId === effectiveId)
+    const safeIndex = index >= 0 ? index : 0
+
+    const label = control.querySelector<HTMLElement>('.argus-vc-label')
+    if (label) {
+      const seq = history[safeIndex]?.seq
+      label.textContent = seq ? `Module v${seq}` : 'Module —'
+    }
+
+    const prev = control.querySelector<HTMLButtonElement>('button[data-dir="prev"]')
+    const next = control.querySelector<HTMLButtonElement>('button[data-dir="next"]')
+
+    if (prev) prev.disabled = safeIndex >= history.length - 1
+    if (next) next.disabled = safeIndex <= 0
+  }
 }
 
 function fileExt(path: string): string {
@@ -505,9 +1137,10 @@ async function downloadGalleryRevisionZip(rev: GalleryRevision) {
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((img) => {
-      const ext = fileExt(img.src)
+      const downloadSrc = img.hiRes ? img.hiRes : img.src
+      const ext = fileExt(downloadSrc)
       return {
-        url: resolveImageSrc(img.src),
+        url: resolveImageSrc(downloadSrc),
         filename: `gallery_v${rev.seq}_${String(img.position).padStart(2, '0')}${ext}`,
       }
     })
@@ -515,7 +1148,7 @@ async function downloadGalleryRevisionZip(rev: GalleryRevision) {
   await downloadFilesAsZip(`gallery_v${rev.seq}.zip`, files)
 }
 
-async function downloadEbcRevisionZip(rev: EbcRevision) {
+async function downloadEbcZip(zipName: string, filePrefix: string, rev: EbcRevision) {
   const files: { url: string; filename: string }[] = []
   for (let si = 0; si < rev.sections.length; si++) {
     const section = rev.sections[si]
@@ -526,13 +1159,13 @@ async function downloadEbcRevisionZip(rev: EbcRevision) {
         const ext = fileExt(img.src)
         files.push({
           url: resolveImageSrc(img.src),
-          filename: `ebc_v${rev.seq}_s${si + 1}_m${mi + 1}_i${ii + 1}${ext}`,
+          filename: `${filePrefix}_s${si + 1}_m${mi + 1}_i${ii + 1}${ext}`,
         })
       }
     }
   }
 
-  await downloadFilesAsZip(`ebc_v${rev.seq}.zip`, files)
+  await downloadFilesAsZip(zipName, files)
 }
 
 function injectArgusVersionControls(
@@ -544,15 +1177,26 @@ function injectArgusVersionControls(
     titleLive: () => void
     bulletsPrev: () => void
     bulletsNext: () => void
+    bulletsEdit: () => void
     bulletsLive: () => void
     galleryPrev: () => void
     galleryNext: () => void
     galleryLive: () => void
+    galleryUpload: () => void
     galleryDownload: () => void
+    videoPrev: () => void
+    videoNext: () => void
+    videoLive: () => void
+    videoUpload: () => void
     ebcPrev: () => void
     ebcNext: () => void
     ebcLive: () => void
+    ebcModulePrev: (sectionType: string, modulePosition: number) => void
+    ebcModuleNext: (sectionType: string, modulePosition: number) => void
+    ebcModuleLive: (sectionType: string, modulePosition: number) => void
+    ebcModuleEdit: (sectionType: string, modulePosition: number) => void
     ebcDownload: () => void
+    variationSelect: (asin: string) => void
   }>,
 ) {
   if (!doc.getElementById('argus-vc-style')) {
@@ -627,16 +1271,55 @@ function injectArgusVersionControls(
     ensureTrackControls(doc, bullets, 'bullets', 'Bullets', callbacksRef)
   }
 
-  const ebc = doc.querySelector<HTMLElement>('#aplus_feature_div') ?? doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
-  if (ebc) {
-    ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
+  const video = doc.querySelector<HTMLElement>('[data-elementid="vse-vw-dp-widget-container"]') ?? doc.querySelector<HTMLElement>('#ive-hero-video-player')
+  if (video) {
+    ensureTrackControls(doc, video, 'video', 'Video', callbacksRef)
   }
-}
+
+	  const ebc = doc.querySelector<HTMLElement>('#aplus_feature_div') ?? doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
+	  if (ebc) {
+	    ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
+	  }
+
+	  const brandContainer = doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
+	  if (brandContainer) {
+	    const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+	    for (let i = 0; i < modules.length; i++) {
+	      ensureEbcModuleControls(doc, modules[i], 'BRAND_STORY', i, callbacksRef)
+	    }
+	  }
+
+	  const descriptionContainer = doc.querySelector<HTMLElement>('#aplus_feature_div')
+	  if (descriptionContainer) {
+	    const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+	    for (let i = 0; i < modules.length; i++) {
+	      ensureEbcModuleControls(doc, modules[i], 'PRODUCT_DESCRIPTION', i, callbacksRef)
+	    }
+	  }
+
+	  const swatches = Array.from(doc.querySelectorAll<HTMLElement>('#twister_feature_div li[data-asin]'))
+	  for (const swatch of swatches) {
+	    const asin = swatch.getAttribute('data-asin')
+	    if (!asin) continue
+	    if (swatch.dataset.argusVariationBound === 'true') continue
+	    swatch.dataset.argusVariationBound = 'true'
+	    swatch.style.cursor = 'pointer'
+	    swatch.addEventListener(
+	      'click',
+	      (e) => {
+	        e.preventDefault()
+	        e.stopPropagation()
+	        callbacksRef.current?.variationSelect(asin)
+	      },
+	      true,
+	    )
+	  }
+	}
 
 function ensureTrackControls(
   doc: Document,
   target: HTMLElement,
-  track: 'title' | 'bullets' | 'gallery' | 'ebc',
+  track: 'title' | 'bullets' | 'gallery' | 'video' | 'ebc',
   label: string,
   callbacksRef: RefObject<{
     titlePrev: () => void
@@ -645,14 +1328,24 @@ function ensureTrackControls(
     titleLive: () => void
     bulletsPrev: () => void
     bulletsNext: () => void
+    bulletsEdit: () => void
     bulletsLive: () => void
     galleryPrev: () => void
     galleryNext: () => void
     galleryLive: () => void
+    galleryUpload: () => void
     galleryDownload: () => void
+    videoPrev: () => void
+    videoNext: () => void
+    videoLive: () => void
+    videoUpload: () => void
     ebcPrev: () => void
     ebcNext: () => void
     ebcLive: () => void
+    ebcModulePrev: (sectionType: string, modulePosition: number) => void
+    ebcModuleNext: (sectionType: string, modulePosition: number) => void
+    ebcModuleLive: (sectionType: string, modulePosition: number) => void
+    ebcModuleEdit: (sectionType: string, modulePosition: number) => void
     ebcDownload: () => void
   }>,
 ) {
@@ -677,6 +1370,7 @@ function ensureTrackControls(
     if (track === 'title') callbacksRef.current?.titlePrev()
     if (track === 'bullets') callbacksRef.current?.bulletsPrev()
     if (track === 'gallery') callbacksRef.current?.galleryPrev()
+    if (track === 'video') callbacksRef.current?.videoPrev()
     if (track === 'ebc') callbacksRef.current?.ebcPrev()
   })
 
@@ -694,6 +1388,7 @@ function ensureTrackControls(
     if (track === 'title') callbacksRef.current?.titleNext()
     if (track === 'bullets') callbacksRef.current?.bulletsNext()
     if (track === 'gallery') callbacksRef.current?.galleryNext()
+    if (track === 'video') callbacksRef.current?.videoNext()
     if (track === 'ebc') callbacksRef.current?.ebcNext()
   })
 
@@ -709,6 +1404,7 @@ function ensureTrackControls(
     if (track === 'title') callbacksRef.current?.titleLive()
     if (track === 'bullets') callbacksRef.current?.bulletsLive()
     if (track === 'gallery') callbacksRef.current?.galleryLive()
+    if (track === 'video') callbacksRef.current?.videoLive()
     if (track === 'ebc') callbacksRef.current?.ebcLive()
   })
   controls.append(live)
@@ -724,7 +1420,27 @@ function ensureTrackControls(
     controls.append(edit)
   }
 
+  if (track === 'bullets') {
+    const edit = doc.createElement('button')
+    edit.id = `argus-vc-edit-${track}`
+    edit.className = 'argus-vc-btn'
+    edit.type = 'button'
+    edit.textContent = '✎'
+    edit.title = 'New version'
+    edit.addEventListener('click', () => callbacksRef.current?.bulletsEdit())
+    controls.append(edit)
+  }
+
   if (track === 'gallery') {
+    const upload = doc.createElement('button')
+    upload.id = `argus-vc-upload-${track}`
+    upload.className = 'argus-vc-btn'
+    upload.type = 'button'
+    upload.textContent = '⬆'
+    upload.title = 'Upload new version'
+    upload.addEventListener('click', () => callbacksRef.current?.galleryUpload())
+    controls.append(upload)
+
     const download = doc.createElement('button')
     download.id = `argus-vc-download-${track}`
     download.className = 'argus-vc-btn'
@@ -733,6 +1449,17 @@ function ensureTrackControls(
     download.title = 'Download images'
     download.addEventListener('click', () => callbacksRef.current?.galleryDownload())
     controls.append(download)
+  }
+
+  if (track === 'video') {
+    const upload = doc.createElement('button')
+    upload.id = `argus-vc-upload-${track}`
+    upload.className = 'argus-vc-btn'
+    upload.type = 'button'
+    upload.textContent = '⬆'
+    upload.title = 'Upload new version'
+    upload.addEventListener('click', () => callbacksRef.current?.videoUpload())
+    controls.append(upload)
   }
 
   if (track === 'ebc') {
@@ -748,16 +1475,87 @@ function ensureTrackControls(
   target.append(controls)
 }
 
+function ensureEbcModuleControls(
+  doc: Document,
+  target: HTMLElement,
+  sectionType: string,
+  modulePosition: number,
+  callbacksRef: RefObject<{
+    ebcModulePrev: (sectionType: string, modulePosition: number) => void
+    ebcModuleNext: (sectionType: string, modulePosition: number) => void
+    ebcModuleLive: (sectionType: string, modulePosition: number) => void
+    ebcModuleEdit: (sectionType: string, modulePosition: number) => void
+  }>,
+) {
+  if (!target.style.position) {
+    target.style.position = 'relative'
+  }
+
+  const controlsId = `argus-vc-controls-ebc-${sectionType}-${modulePosition}`
+  if (doc.getElementById(controlsId)) return
+
+  const controls = doc.createElement('div')
+  controls.id = controlsId
+  controls.className = 'argus-vc-controls argus-vc-ebc-module-controls'
+  controls.dataset.sectionType = sectionType
+  controls.dataset.modulePosition = String(modulePosition)
+
+  const prev = doc.createElement('button')
+  prev.className = 'argus-vc-btn'
+  prev.type = 'button'
+  prev.textContent = '‹'
+  prev.title = 'Previous version'
+  prev.dataset.dir = 'prev'
+  prev.addEventListener('click', () => callbacksRef.current?.ebcModulePrev(sectionType, modulePosition))
+
+  const label = doc.createElement('span')
+  label.className = 'argus-vc-label'
+  label.textContent = 'Module —'
+
+  const next = doc.createElement('button')
+  next.className = 'argus-vc-btn'
+  next.type = 'button'
+  next.textContent = '›'
+  next.title = 'Next version'
+  next.dataset.dir = 'next'
+  next.addEventListener('click', () => callbacksRef.current?.ebcModuleNext(sectionType, modulePosition))
+
+  const live = doc.createElement('button')
+  live.className = 'argus-vc-btn'
+  live.type = 'button'
+  live.textContent = '⟲'
+  live.title = 'Jump to live'
+  live.addEventListener('click', () => callbacksRef.current?.ebcModuleLive(sectionType, modulePosition))
+
+  const edit = doc.createElement('button')
+  edit.className = 'argus-vc-btn'
+  edit.type = 'button'
+  edit.textContent = '✎'
+  edit.title = 'New version'
+  edit.addEventListener('click', () => callbacksRef.current?.ebcModuleEdit(sectionType, modulePosition))
+
+  controls.append(prev, label, next, live, edit)
+  target.append(controls)
+}
+
 function updateTrackControls(
   doc: Document,
-  track: 'title' | 'bullets' | 'gallery' | 'ebc',
+  track: 'title' | 'bullets' | 'gallery' | 'video' | 'ebc',
   seq: number | undefined,
   index: number,
   count: number,
 ) {
   const label = doc.getElementById(`argus-vc-label-${track}`)
   if (label) {
-    const prefix = track === 'title' ? 'Title' : track === 'gallery' ? 'Images' : track === 'ebc' ? 'A+ Content' : 'Bullets'
+    const prefix = track === 'title'
+      ? 'Title'
+      : track === 'gallery'
+        ? 'Images'
+        : track === 'video'
+          ? 'Video'
+          : track === 'ebc'
+            ? 'A+ Content'
+            : 'Bullets'
     label.textContent = seq ? `${prefix} v${seq}` : `${prefix} —`
   }
 
@@ -811,7 +1609,8 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   if (landing && main) {
     const src = resolveImageSrc(main.src)
     landing.src = src
-    landing.setAttribute('data-old-hires', src)
+    const hiRes = main.hiRes ? resolveImageSrc(main.hiRes) : src
+    landing.setAttribute('data-old-hires', hiRes)
   }
 
   const altList = doc.querySelector('#altImages ul')
@@ -828,7 +1627,8 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
     const existingImg = li.querySelector('img')
     const img = existingImg ? existingImg : doc.createElement('img')
     img.src = resolveImageSrc(item.src)
-    img.setAttribute('data-old-hires', img.src)
+    const hiRes = item.hiRes ? resolveImageSrc(item.hiRes) : img.src
+    img.setAttribute('data-old-hires', hiRes)
     if (!li.contains(img)) li.append(img)
     li.style.display = ''
     if (!existingLis[i]) altList.append(li)
@@ -836,6 +1636,36 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
 
   for (let i = thumbs.length; i < existingLis.length; i++) {
     existingLis[i].style.display = 'none'
+  }
+}
+
+function applyVideo(doc: Document, rev: VideoRevision | null) {
+  const container = doc.querySelector<HTMLElement>('#ive-hero-video-player')
+  if (!container) return
+  if (!rev) return
+
+  const existing = container.querySelector<HTMLVideoElement>('video.argus-video')
+  const video = existing ? existing : doc.createElement('video')
+
+  if (!existing) {
+    container.replaceChildren()
+    video.className = 'argus-video'
+    video.controls = true
+    video.style.width = '100%'
+    video.style.maxWidth = '100%'
+    video.style.height = '100%'
+    video.setAttribute('playsinline', 'true')
+    container.append(video)
+  }
+
+  const src = resolveImageSrc(rev.src)
+  if (video.src !== src) {
+    video.src = src
+    video.load()
+  }
+
+  if (rev.posterSrc) {
+    video.poster = resolveImageSrc(rev.posterSrc)
   }
 }
 
