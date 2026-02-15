@@ -35,6 +35,7 @@ export interface ExtractedEbcSection {
 }
 
 export interface ExtractedSnapshot {
+  title: string | null
   bullets: ExtractedBullets
   gallery: ExtractedGallery
   ebc: ExtractedEbcSection[]
@@ -183,11 +184,18 @@ function extractModulesFromContainer(
   return modules
 }
 
+export function extractTitle($: cheerio.CheerioAPI): string | null {
+  const raw = $('#productTitle').text()
+  const normalized = raw.replace(/\s+/gu, ' ').trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 // ─── Main entry point ────────────────────────────────────────────
 
 export function extractAll(html: string): ExtractedSnapshot {
   const $ = cheerio.load(html)
   return {
+    title: extractTitle($),
     bullets: extractBullets($),
     gallery: extractGallery($),
     ebc: extractEbc($),

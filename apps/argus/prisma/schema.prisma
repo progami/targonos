@@ -260,10 +260,12 @@ model Listing {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  activeTitleId   String?
   activeBulletsId String?
   activeGalleryId String?
   activeEbcId     String?
 
+  titleRevisions   TitleRevision[]
   bulletsRevisions BulletsRevision[]
   galleryRevisions GalleryRevision[]
   ebcRevisions     EbcRevision[]
@@ -281,12 +283,27 @@ model Snapshot {
   capturedAt        DateTime
   ingestedAt        DateTime @default(now())
   note              String?
+  titleRevisionId   String?
   bulletsRevisionId String?
   galleryRevisionId String?
   ebcRevisionId     String?
 
   @@unique([listingId, seq])
   @@index([listingId, capturedAt])
+}
+
+model TitleRevision {
+  id        String         @id @default(cuid())
+  listingId String
+  listing   Listing        @relation(fields: [listingId], references: [id])
+  seq       Int
+  title     String
+  origin    RevisionOrigin
+  note      String?
+  createdAt DateTime       @default(now())
+
+  @@unique([listingId, seq])
+  @@index([listingId, createdAt])
 }
 
 model BulletsRevision {
