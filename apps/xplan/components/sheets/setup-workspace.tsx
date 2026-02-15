@@ -95,10 +95,7 @@ type SetupWorkspaceProps = {
 
 const TABS = [
   { id: 'strategies' as const, label: 'Strategies' },
-  { id: 'products' as const, label: 'Products' },
-  { id: 'operations' as const, label: 'Operations' },
-  { id: 'sales' as const, label: 'Sales' },
-  { id: 'finance' as const, label: 'Finance' },
+  { id: 'defaults' as const, label: 'Defaults & Products' },
 ];
 
 type TabId = (typeof TABS)[number]['id'];
@@ -168,7 +165,7 @@ export function SetupWorkspace({
       </div>
 
       {/* Sub-tabs */}
-      <div className="grid grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 gap-3 max-w-md">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -241,45 +238,23 @@ export function SetupWorkspace({
         );
       })()}
 
-      {activeTab === 'products' && hasStrategy && (
-        <SetupProductTable
-          strategyId={activeStrategyId!}
-          products={products}
-          leadStageTemplates={leadStageTemplates}
-          leadTimeProfiles={leadTimeProfiles}
-          leadTimeOverrideIds={leadTimeOverrideIds}
-          operationsParameters={operationsParameters}
-        />
-      )}
-
-      {activeTab === 'operations' && hasStrategy && (
-        <SetupDefaultsBand
-          strategyId={activeStrategyId!}
-          operationsParameters={operationsParameters}
-          salesParameters={salesParameters}
-          financeParameters={financeParameters}
-          visibleGroup="ops"
-        />
-      )}
-
-      {activeTab === 'sales' && hasStrategy && (
-        <SetupDefaultsBand
-          strategyId={activeStrategyId!}
-          operationsParameters={operationsParameters}
-          salesParameters={salesParameters}
-          financeParameters={financeParameters}
-          visibleGroup="sales"
-        />
-      )}
-
-      {activeTab === 'finance' && hasStrategy && (
-        <SetupDefaultsBand
-          strategyId={activeStrategyId!}
-          operationsParameters={operationsParameters}
-          salesParameters={salesParameters}
-          financeParameters={financeParameters}
-          visibleGroup="finance"
-        />
+      {activeTab === 'defaults' && hasStrategy && (
+        <div className="space-y-6">
+          <SetupDefaultsBand
+            strategyId={activeStrategyId!}
+            operationsParameters={operationsParameters}
+            salesParameters={salesParameters}
+            financeParameters={financeParameters}
+          />
+          <SetupProductTable
+            strategyId={activeStrategyId!}
+            products={products}
+            leadStageTemplates={leadStageTemplates}
+            leadTimeProfiles={leadTimeProfiles}
+            leadTimeOverrideIds={leadTimeOverrideIds}
+            operationsParameters={operationsParameters}
+          />
+        </div>
       )}
     </div>
   );
