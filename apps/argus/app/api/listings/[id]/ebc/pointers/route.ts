@@ -50,3 +50,37 @@ export async function POST(
   return NextResponse.json(pointer)
 }
 
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params
+  const body = await request.json()
+
+  const { all, sectionType, modulePosition } = body as {
+    all?: boolean
+    sectionType?: string
+    modulePosition?: number
+  }
+
+  if (all === true) {
+    const res = await prisma.ebcModulePointer.deleteMany({
+      where: { listingId: id },
+    })
+    return NextResponse.json({ ok: true, deleted: res.count })
+  }
+
+  if (!sectionType || typeof modulePosition !== 'number') {
+    return NextResponse.json({ error: 'sectionType and modulePosition are required' }, { status: 400 })
+  }
+
+  const res = await prisma.ebcModulePointer.deleteMany({
+    where: {
+      listingId: id,
+      sectionType,
+      modulePosition,
+    },
+  })
+
+  return NextResponse.json({ ok: true, deleted: res.count })
+}
