@@ -16,7 +16,54 @@ import {
   Typography,
 } from '@mui/material'
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ''
+function normalizeBasePath(value: string): string {
+  const raw = value.trim()
+  if (raw.length === 0) return ''
+
+  const prefixed = raw.startsWith('/') ? raw : `/${raw}`
+  const withoutTrailingSlash = prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed
+  const segments = withoutTrailingSlash.split('/').filter(Boolean)
+
+  const halfLen = Math.floor(segments.length / 2)
+  const hasDuplicatedSegments =
+    segments.length > 0 &&
+    segments.length % 2 === 0 &&
+    segments.slice(0, halfLen).join('/') === segments.slice(halfLen).join('/')
+
+  const normalized = hasDuplicatedSegments
+    ? `/${segments.slice(0, halfLen).join('/')}`
+    : withoutTrailingSlash
+
+  return normalized === '/' ? '' : normalized
+}
+
+const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
+const CLOUDFLARE_MAX_UPLOAD_BYTES = 100_000_000
+
+function formatBytes(bytes: number): string {
+  const mb = bytes / 1_000_000
+  if (mb >= 1) return `${mb.toFixed(1)}MB`
+  const kb = bytes / 1_000
+  return `${kb.toFixed(1)}KB`
+}
+
+function getUploadSizeError(files: File[], maxBytes: number): string | null {
+  const oversized = files.find((file) => file.size > maxBytes) ?? null
+  if (oversized) {
+    return `“${oversized.name}” is ${formatBytes(oversized.size)}. Max upload size is 100MB per request.`
+  }
+
+  let total = 0
+  for (const file of files) {
+    total += file.size
+  }
+
+  if (total > maxBytes) {
+    return `Selected files total ${formatBytes(total)}. Max upload size is 100MB per request. Upload fewer files at once.`
+  }
+
+  return null
+}
 
 interface ListingSummary {
   id: string
@@ -157,11 +204,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Title v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -203,11 +254,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Bullets v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -242,11 +297,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Images v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -282,11 +341,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Video v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -368,11 +431,15 @@ export function ListingDetail({
       if (!window.confirm('Clear all A+ module overrides?')) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ all: true }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setEbcModulePointers({})
       })()
     }
@@ -439,11 +506,15 @@ export function ListingDetail({
       if (!window.confirm('Clear this module override?')) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sectionType, modulePosition }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
 
         const key = ebcModulePointerKey(sectionType, modulePosition)
         setEbcModulePointers((current) => {
@@ -460,11 +531,15 @@ export function ListingDetail({
       if (normalized.length === 0) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/ensure`, {
+        const res = await fetch(`${basePath}/api/listings/ensure`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ asin: normalized }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
 
         router.push(`${basePath}/listings/${normalized}`)
       })()
@@ -703,11 +778,15 @@ export function ListingDetail({
               disabled={titleDraft.trim().length === 0}
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
-                await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ title: titleDraft }),
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setTitleEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -813,7 +892,7 @@ export function ListingDetail({
               variant="contained"
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
-                await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -824,6 +903,10 @@ export function ListingDetail({
                     bullet5: bulletsDraft.bullet5,
                   }),
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setBulletsEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -900,15 +983,29 @@ export function ListingDetail({
               disabled={galleryFiles.length === 0}
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
+                const sizeError = getUploadSizeError(galleryFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 for (const file of galleryFiles) {
                   form.append('files', file)
                 }
 
-                await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
+                  window.alert(await res.text())
+                  return
+                }
                 setGalleryUploaderOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1010,14 +1107,30 @@ export function ListingDetail({
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
                 if (!videoFile) return
+
+                const selectedFiles = videoPosterFile ? [videoFile, videoPosterFile] : [videoFile]
+                const sizeError = getUploadSizeError(selectedFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 form.append('file', videoFile)
                 if (videoPosterFile) form.append('poster', videoPosterFile)
 
-                await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
+                  window.alert(await res.text())
+                  return
+                }
                 setVideoUploaderOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1131,6 +1244,12 @@ export function ListingDetail({
               variant="contained"
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
+                const sizeError = getUploadSizeError(ebcModuleFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+                if (sizeError) {
+                  window.alert(sizeError)
+                  return
+                }
+
                 const form = new FormData()
                 form.append('sectionType', ebcModuleEditorTarget.sectionType)
                 form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
@@ -1140,10 +1259,18 @@ export function ListingDetail({
                   form.append('files', file)
                 }
 
-                await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  if (res.status === 413) {
+                    window.alert('Upload too large. Max upload size is 100MB per request.')
+                    return
+                  }
+                  window.alert(await res.text())
+                  return
+                }
                 setEbcModuleEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1609,18 +1736,6 @@ function injectArgusVersionControls(
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
-
-      /* Match the fixture's intended gallery layout (horizontal thumbnails). */
-      #altImages ul {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        gap: 6px !important;
-      }
-      #altImages ul.a-vertical { align-items: center !important; }
-      #altImages li { margin: 0 !important; }
     `
     doc.head.append(style)
   }
