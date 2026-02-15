@@ -16,6 +16,8 @@
     "qbo": "tsx scripts/qbo.ts",
     "autopost:check": "tsx scripts/autopost-check.ts",
     "settlements:us:rematch": "tsx scripts/us-settlement-rematch.ts",
+    "settlements:us:reconcile:spapi": "tsx scripts/us-settlement-reconcile-spapi.ts",
+    "settlements:us:ingest:spapi": "tsx scripts/us-settlement-ingest-spapi.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:push": "prisma db push --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
