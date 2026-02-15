@@ -113,6 +113,29 @@ Notes:
 
 ---
 
+## ASIN review ingest + weekly insights sync
+
+Hermes now supports:
+
+1) **Manual product-review ingest** (copy/paste friendly)
+- API: `POST /api/reviews/import`
+- You can send either:
+  - `reviews: [{ body, rating?, title?, reviewDate?, externalReviewId?, raw? }]`
+  - or `rawText` with review blocks separated by `---` (or triple blank lines)
+- Reviews are deduplicated by a stable content hash per `(connection_id, marketplace_id, asin)`.
+
+2) **Weekly Customer Feedback API pulls** (ASIN-level topics/trends)
+- Runs inside the existing `orders-sync` worker loop.
+- Pulls for ASINs already seen in `hermes_manual_reviews`.
+- Stores latest snapshots in `hermes_asin_review_insights`.
+
+Relevant env knobs:
+- `HERMES_REVIEW_INSIGHTS_ENABLED` (default `true`)
+- `HERMES_REVIEW_INSIGHTS_INTERVAL_HOURS` (default `168`)
+- `HERMES_REVIEW_INSIGHTS_MAX_ASINS_PER_RUN` (default `250`)
+
+---
+
 ## Configuration (what Hermes needs)
 
 - **Base path**: Hermes is meant to run behind a base path (default `/hermes`).
