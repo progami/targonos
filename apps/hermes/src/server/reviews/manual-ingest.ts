@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getPgPool } from "../db/pool";
 
 export type ManualReviewInput = {
+  asin?: string;
   externalReviewId?: string;
   reviewDate?: string;
   rating?: number;
@@ -42,11 +43,16 @@ function cleanRating(input: number | null | undefined): number | null {
   return input;
 }
 
+function normalizeSku(sku: string): string {
+  return sku.trim().toUpperCase();
+}
+
 function normalizeAsin(asin: string): string {
   return asin.trim().toUpperCase();
 }
 
 function computeReviewHash(params: {
+  sku: string;
   asin: string;
   externalReviewId: string | null;
   reviewDate: string | null;
@@ -55,6 +61,7 @@ function computeReviewHash(params: {
   body: string;
 }): string {
   const canonical = JSON.stringify({
+    sku: params.sku,
     asin: params.asin,
     externalReviewId: params.externalReviewId,
     reviewDate: params.reviewDate,
@@ -115,24 +122,28 @@ export function parseManualReviewText(rawText: string): ManualReviewInput[] {
 export async function importManualReviews(params: {
   connectionId: string;
   marketplaceId: string;
-  asin: string;
+  sku: string;
+  asin?: string | null;
   source: string;
   reviews: ManualReviewInput[];
 }): Promise<{ requested: number; inserted: number; deduplicated: number }> {
   const pool = getPgPool();
-  const asin = normalizeAsin(params.asin);
+  const sku = normalizeSku(params.sku);
+  const fallbackAsin = params.asin ? normalizeAsin(params.asin) : sku;
 
   const rows = params.reviews
     .map((review) => {
       const body = cleanText(review.body);
       if (!body) return null;
 
+      const asin = review.asin ? normalizeAsin(review.asin) : fallbackAsin;
       const externalReviewId = cleanText(review.externalReviewId);
       const reviewDate = cleanDateIso(review.reviewDate);
       const rating = cleanRating(review.rating);
       const title = cleanText(review.title);
 
       const reviewHash = computeReviewHash({
+        sku,
         asin,
         externalReviewId,
         reviewDate,
@@ -143,6 +154,7 @@ export async function importManualReviews(params: {
 
       return {
         id: newId(),
+        asin,
         external_review_id: externalReviewId,
         review_date: reviewDate,
         rating,
@@ -165,7 +177,7 @@ export async function importManualReviews(params: {
   const insert = await pool.query(
     `
     INSERT INTO hermes_manual_reviews (
-      id, connection_id, marketplace_id, asin,
+      id, connection_id, marketplace_id, sku, asin,
       source, external_review_id, review_date, rating, title, body, review_hash, raw,
       imported_at, updated_at
     )
@@ -174,6 +186,7 @@ export async function importManualReviews(params: {
       $1,
       $2,
       $3,
+      x.asin,
       $4,
       x.external_review_id,
       x.review_date::timestamptz,
@@ -186,6 +199,7 @@ export async function importManualReviews(params: {
       NOW()
     FROM jsonb_to_recordset($5::jsonb) AS x(
       id text,
+      asin text,
       external_review_id text,
       review_date text,
       rating numeric,
@@ -194,9 +208,9 @@ export async function importManualReviews(params: {
       review_hash text,
       raw jsonb
     )
-    ON CONFLICT (connection_id, marketplace_id, asin, review_hash) DO NOTHING;
+    ON CONFLICT (connection_id, marketplace_id, sku, review_hash) DO NOTHING;
     `,
-    [params.connectionId, params.marketplaceId, asin, params.source, JSON.stringify(rows)]
+    [params.connectionId, params.marketplaceId, sku, params.source, JSON.stringify(rows)]
   );
 
   const inserted = insert.rowCount ?? 0;
@@ -229,6 +243,7 @@ export async function listReviewAsinTargets(params: {
     FROM hermes_manual_reviews r
     WHERE r.connection_id = $1
       AND r.marketplace_id = ANY($2::text[])
+      AND r.asin ~ '^[A-Z0-9]{10}$'
     GROUP BY r.marketplace_id, r.asin
     ORDER BY MAX(r.imported_at) DESC
     LIMIT $3;

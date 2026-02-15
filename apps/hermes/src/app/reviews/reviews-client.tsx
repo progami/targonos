@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, RefreshCw, Upload } from "lucide-react";
+import { Download, Loader2, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { hermesApiUrl } from "@/lib/base-path";
@@ -14,41 +14,35 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useConnectionsStore } from "@/stores/connections-store";
 
 type ManualReviewRow = {
   id: string;
   connectionId: string;
   marketplaceId: string;
+  sku: string;
   asin: string;
-  source: string;
-  externalReviewId: string | null;
   reviewDate: string | null;
   rating: number | null;
   title: string | null;
   body: string;
-  raw: unknown;
   importedAt: string;
-  updatedAt: string;
 };
 
-type InsightRow = {
-  connectionId: string;
-  marketplaceId: string;
-  asin: string;
-  itemName: string | null;
-  countryCode: string | null;
-  topicsMentions: unknown;
-  topicsStarRatingImpact: unknown;
-  reviewTrends: unknown;
-  topicsDateStart: string | null;
-  topicsDateEnd: string | null;
-  trendsDateStart: string | null;
-  trendsDateEnd: string | null;
-  lastSyncError: string | null;
-  lastSyncAt: string;
-  updatedAt: string;
+type ManualReviewInsights = {
+  totalReviews: number;
+  avgRating: number | null;
+  fiveStarReviews: number;
+  fiveStarRatePct: number | null;
+  last30DaysReviews: number;
+  previous30DaysReviews: number;
+  changeLast30Pct: number | null;
+  series: Array<{
+    day: string;
+    reviews: number;
+    avgRating: number | null;
+    fiveStarReviews: number;
+  }>;
 };
 
 type ImportResult = {
@@ -61,35 +55,39 @@ function fmtDateTime(iso: string | null): string {
   if (iso === null) return "—";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
-  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-function fmtReviewDate(iso: string | null): string {
+function fmtDate(iso: string | null): string {
   if (iso === null) return "—";
   const date = new Date(iso);
   if (!Number.isFinite(date.getTime())) return "—";
   return date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-function shortBody(text: string): string {
-  if (text.length <= 120) return text;
-  return `${text.slice(0, 120)}…`;
+function fmtRating(value: number | null): string {
+  if (value === null) return "—";
+  return value.toFixed(2);
 }
 
-function toAsin(value: string): string {
+function toSku(value: string): string {
   return value.trim().toUpperCase();
 }
 
-function toTopicCount(payload: unknown, key: "positiveTopics" | "negativeTopics"): number {
-  if (payload === null) return 0;
-  if (typeof payload !== "object") return 0;
+function shortBody(text: string): string {
+  if (text.length <= 140) return text;
+  return `${text.slice(0, 140)}…`;
+}
 
-  const topics = (payload as { topics?: unknown }).topics;
-  if (topics === null || typeof topics !== "object") return 0;
-
-  const list = (topics as { [k: string]: unknown })[key];
-  if (!Array.isArray(list)) return 0;
-  return list.length;
+function renderDelta(delta: number | null): { label: string; variant: "secondary" | "destructive" | "outline" } {
+  if (delta === null) return { label: "n/a", variant: "outline" };
+  if (delta >= 0) return { label: `+${delta.toFixed(1)}%`, variant: "secondary" };
+  return { label: `${delta.toFixed(1)}%`, variant: "destructive" };
 }
 
 export function ReviewsClient() {
@@ -117,148 +115,120 @@ export function ReviewsClient() {
     [activeConnection]
   );
 
-  const [importMarketplaceId, setImportMarketplaceId] = React.useState<string>("");
-  const [importAsin, setImportAsin] = React.useState<string>("");
-  const [importSource, setImportSource] = React.useState<string>("manual");
-  const [importRawText, setImportRawText] = React.useState<string>("");
+  const [marketplaceId, setMarketplaceId] = React.useState<string>("");
+  const [skuInput, setSkuInput] = React.useState<string>("");
+  const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = React.useState(false);
   const [importResult, setImportResult] = React.useState<ImportResult | null>(null);
 
-  const [manualMarketplaceFilter, setManualMarketplaceFilter] = React.useState<string>("any");
-  const [manualAsinFilter, setManualAsinFilter] = React.useState<string>("");
-  const [manualRows, setManualRows] = React.useState<ManualReviewRow[]>([]);
-  const [manualLoading, setManualLoading] = React.useState(false);
-
-  const [insightsMarketplaceFilter, setInsightsMarketplaceFilter] = React.useState<string>("any");
-  const [insightsAsinFilter, setInsightsAsinFilter] = React.useState<string>("");
-  const [insightRows, setInsightRows] = React.useState<InsightRow[]>([]);
+  const [reviews, setReviews] = React.useState<ManualReviewRow[]>([]);
+  const [reviewsLoading, setReviewsLoading] = React.useState(false);
+  const [insights, setInsights] = React.useState<ManualReviewInsights | null>(null);
   const [insightsLoading, setInsightsLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (marketplaceOptions.length === 0) {
-      setImportMarketplaceId("");
+      setMarketplaceId("");
+      return;
+    }
+    const selectedExists = marketplaceOptions.includes(marketplaceId);
+    if (selectedExists) return;
+    setMarketplaceId(marketplaceOptions[0] ?? "");
+  }, [marketplaceId, marketplaceOptions]);
+
+  const sku = toSku(skuInput);
+  const canQuery = connectionId.length > 0 && marketplaceId.length > 0 && sku.length > 0;
+
+  async function loadReviewsAndInsights() {
+    if (!canQuery) {
+      setReviews([]);
+      setInsights(null);
       return;
     }
 
-    const hasSelectedMarketplace = marketplaceOptions.includes(importMarketplaceId);
-    if (hasSelectedMarketplace) return;
-
-    setImportMarketplaceId(marketplaceOptions[0] ?? "");
-  }, [marketplaceOptions, importMarketplaceId]);
-
-  React.useEffect(() => {
-    if (!connectionId) {
-      setManualRows([]);
-      setInsightRows([]);
-      return;
-    }
-    void loadManualReviews();
-    void loadInsights();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectionId]);
-
-  async function loadManualReviews() {
-    if (!connectionId) return;
-
-    setManualLoading(true);
-    try {
-      const qs = new URLSearchParams();
-      qs.set("connectionId", connectionId);
-      if (manualMarketplaceFilter !== "any") qs.set("marketplaceId", manualMarketplaceFilter);
-      const manualAsin = toAsin(manualAsinFilter);
-      if (manualAsin.length > 0) qs.set("asin", manualAsin);
-      qs.set("limit", "200");
-
-      const res = await fetch(hermesApiUrl(`/api/reviews/manual?${qs.toString()}`));
-      const json = await res.json();
-      if (!res.ok || json?.ok !== true) {
-        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
-      }
-
-      const rows = Array.isArray(json.rows) ? (json.rows as ManualReviewRow[]) : [];
-      setManualRows(rows);
-    } catch (error: any) {
-      toast.error("Could not load manual reviews", { description: error?.message ?? "" });
-      setManualRows([]);
-    } finally {
-      setManualLoading(false);
-    }
-  }
-
-  async function loadInsights() {
-    if (!connectionId) return;
-
+    setReviewsLoading(true);
     setInsightsLoading(true);
-    try {
-      const qs = new URLSearchParams();
-      qs.set("connectionId", connectionId);
-      if (insightsMarketplaceFilter !== "any") qs.set("marketplaceId", insightsMarketplaceFilter);
-      const insightsAsin = toAsin(insightsAsinFilter);
-      if (insightsAsin.length > 0) qs.set("asin", insightsAsin);
-      qs.set("limit", "200");
 
-      const res = await fetch(hermesApiUrl(`/api/reviews/insights?${qs.toString()}`));
-      const json = await res.json();
-      if (!res.ok || json?.ok !== true) {
-        throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
+    try {
+      const manualQs = new URLSearchParams();
+      manualQs.set("connectionId", connectionId);
+      manualQs.set("marketplaceId", marketplaceId);
+      manualQs.set("sku", sku);
+      manualQs.set("limit", "500");
+
+      const insightsQs = new URLSearchParams();
+      insightsQs.set("connectionId", connectionId);
+      insightsQs.set("marketplaceId", marketplaceId);
+      insightsQs.set("sku", sku);
+
+      const [manualRes, insightsRes] = await Promise.all([
+        fetch(hermesApiUrl(`/api/reviews/manual?${manualQs.toString()}`)),
+        fetch(hermesApiUrl(`/api/reviews/insights?${insightsQs.toString()}`)),
+      ]);
+
+      const manualJson = await manualRes.json();
+      if (!manualRes.ok || manualJson?.ok !== true) {
+        throw new Error(typeof manualJson?.error === "string" ? manualJson.error : `HTTP ${manualRes.status}`);
       }
 
-      const rows = Array.isArray(json.rows) ? (json.rows as InsightRow[]) : [];
-      setInsightRows(rows);
+      const insightsJson = await insightsRes.json();
+      if (!insightsRes.ok || insightsJson?.ok !== true) {
+        throw new Error(typeof insightsJson?.error === "string" ? insightsJson.error : `HTTP ${insightsRes.status}`);
+      }
+
+      const rows = Array.isArray(manualJson.rows) ? (manualJson.rows as ManualReviewRow[]) : [];
+      setReviews(rows);
+      setInsights((insightsJson.insights as ManualReviewInsights) ?? null);
     } catch (error: any) {
-      toast.error("Could not load ASIN insights", { description: error?.message ?? "" });
-      setInsightRows([]);
+      setReviews([]);
+      setInsights(null);
+      toast.error("Could not load reviews data", { description: error?.message ?? "" });
     } finally {
+      setReviewsLoading(false);
       setInsightsLoading(false);
     }
   }
 
+  React.useEffect(() => {
+    void loadReviewsAndInsights();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId, marketplaceId, sku]);
+
   async function handleImport() {
-    if (!connectionId) {
-      toast.error("Select an account first");
+    if (!canQuery) {
+      toast.error("Select account, marketplace, and SKU first");
       return;
     }
-
-    if (!importMarketplaceId) {
-      toast.error("Select a marketplace");
-      return;
-    }
-
-    const asin = toAsin(importAsin);
-    if (asin.length === 0) {
-      toast.error("Enter an ASIN");
-      return;
-    }
-
-    const rawText = importRawText.trim();
-    if (rawText.length === 0) {
-      toast.error("Paste reviews into the text area");
+    if (selectedFile === null) {
+      toast.error("Choose a file to import");
       return;
     }
 
     setImporting(true);
     try {
+      const form = new FormData();
+      form.set("connectionId", connectionId);
+      form.set("marketplaceId", marketplaceId);
+      form.set("sku", sku);
+      form.set("file", selectedFile);
+
       const res = await fetch(hermesApiUrl("/api/reviews/import"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          connectionId,
-          marketplaceId: importMarketplaceId,
-          asin,
-          source: importSource.trim(),
-          rawText,
-        }),
+        body: form,
       });
       const json = await res.json();
       if (!res.ok || json?.ok !== true) {
         throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
       }
 
-      setImportResult(json.result as ImportResult);
-      setImportRawText("");
-      toast.success("Reviews imported");
-
-      await Promise.all([loadManualReviews(), loadInsights()]);
+      setImportResult((json.result as ImportResult) ?? null);
+      setSelectedFile(null);
+      if (fileInputRef.current !== null) {
+        fileInputRef.current.value = "";
+      }
+      toast.success("Reviews file imported");
+      await loadReviewsAndInsights();
     } catch (error: any) {
       toast.error("Import failed", { description: error?.message ?? "" });
     } finally {
@@ -266,94 +236,110 @@ export function ReviewsClient() {
     }
   }
 
+  function handleExport() {
+    if (!canQuery) {
+      toast.error("Select account, marketplace, and SKU first");
+      return;
+    }
+    const qs = new URLSearchParams();
+    qs.set("connectionId", connectionId);
+    qs.set("marketplaceId", marketplaceId);
+    qs.set("sku", sku);
+    window.open(hermesApiUrl(`/api/reviews/export?${qs.toString()}`), "_blank", "noopener,noreferrer");
+  }
+
   const accountPlaceholder = connectionsLoading ? "Loading…" : "Account";
+  const delta = insights ? renderDelta(insights.changeLast30Pct) : null;
 
   return (
     <div className="space-y-4">
       <PageHeader
-        title="ASIN Reviews"
-        subtitle="Manual product-review ingest and Customer Feedback insights."
+        title="Reviews Ingest"
+        subtitle="Import and track product reviews by marketplace + SKU."
         right={
-          <Select value={connectionId} onValueChange={setActiveConnectionId}>
-            <SelectTrigger className="h-9 w-[260px]" disabled={connectionsLoading}>
-              <SelectValue placeholder={accountPlaceholder} />
-            </SelectTrigger>
-            <SelectContent>
-              {connections.map((connection) => (
-                <SelectItem key={connection.id} value={connection.id}>
-                  {connection.accountName} • {connection.region}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={connectionId} onValueChange={setActiveConnectionId}>
+              <SelectTrigger className="h-9 w-[240px]" disabled={connectionsLoading}>
+                <SelectValue placeholder={accountPlaceholder} />
+              </SelectTrigger>
+              <SelectContent>
+                {connections.map((connection) => (
+                  <SelectItem key={connection.id} value={connection.id}>
+                    {connection.accountName} • {connection.region}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={marketplaceId} onValueChange={setMarketplaceId} disabled={marketplaceOptions.length === 0}>
+              <SelectTrigger className="h-9 w-[210px]">
+                <SelectValue placeholder="Marketplace" />
+              </SelectTrigger>
+              <SelectContent>
+                {marketplaceOptions.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Input
+              value={skuInput}
+              onChange={(event) => setSkuInput(event.target.value)}
+              placeholder="SKU"
+              className="h-9 w-[180px] font-mono"
+            />
+          </div>
         }
       />
 
-      <Tabs defaultValue="import" className="space-y-4">
+      <Tabs defaultValue="reviews" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="import">Import</TabsTrigger>
+          <TabsTrigger value="reviews">Reviews</TabsTrigger>
           <TabsTrigger value="insights">Insights</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="import" className="space-y-4">
+        <TabsContent value="reviews" className="space-y-4">
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Paste Reviews</CardTitle>
+              <CardTitle className="text-sm">Import / Export</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="grid gap-3 md:grid-cols-4">
-                <div className="space-y-1.5">
-                  <Label>Marketplace</Label>
-                  <Select value={importMarketplaceId} onValueChange={setImportMarketplaceId}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Marketplace" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {marketplaceOptions.map((marketplaceId) => (
-                        <SelectItem key={marketplaceId} value={marketplaceId}>
-                          {marketplaceId}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>ASIN</Label>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="space-y-1.5 md:col-span-2">
+                  <Label>Reviews File</Label>
                   <Input
-                    value={importAsin}
-                    onChange={(e) => setImportAsin(e.target.value)}
-                    placeholder="B0XXXXXXXX"
-                    className="h-9 font-mono"
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.tsv,.txt,.json,text/csv,text/tab-separated-values,text/plain,application/json"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      setSelectedFile(file ?? null);
+                    }}
+                    className="h-9"
                   />
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label>Source</Label>
-                  <Input value={importSource} onChange={(e) => setImportSource(e.target.value)} className="h-9" />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Action</Label>
-                  <Button className="h-9 w-full" onClick={handleImport} disabled={importing || !connectionId}>
+                <div className="flex items-end gap-2">
+                  <Button className="h-9 flex-1" onClick={handleImport} disabled={importing || !canQuery}>
                     {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    <span className="ml-1.5">Import Reviews</span>
+                    <span className="ml-1.5">Import</span>
+                  </Button>
+                  <Button className="h-9" variant="outline" onClick={handleExport} disabled={!canQuery}>
+                    <Download className="h-4 w-4" />
+                    <span className="ml-1.5">Export</span>
                   </Button>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label>Review Text</Label>
-                <Textarea
-                  value={importRawText}
-                  onChange={(e) => setImportRawText(e.target.value)}
-                  placeholder={"Paste reviews here. Separate reviews with --- or triple blank lines.\nOptional rating prefix: 4.0/5 Great quality"}
-                  className="min-h-[220px] text-sm"
-                />
-              </div>
+              {selectedFile ? (
+                <div className="text-xs text-muted-foreground">
+                  Selected file: <span className="font-medium text-foreground">{selectedFile.name}</span>
+                </div>
+              ) : null}
 
               {importResult ? (
-                <div className="flex flex-wrap items-center gap-2 text-xs">
+                <div className="flex flex-wrap gap-2 text-xs">
                   <Badge variant="secondary">Requested: {importResult.requested}</Badge>
                   <Badge variant="secondary">Inserted: {importResult.inserted}</Badge>
                   <Badge variant="outline">Deduplicated: {importResult.deduplicated}</Badge>
@@ -364,68 +350,41 @@ export function ReviewsClient() {
 
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">Imported Manual Reviews</CardTitle>
+              <CardTitle className="text-sm">Imported Reviews</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 p-0">
-              <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
-                <Select value={manualMarketplaceFilter} onValueChange={setManualMarketplaceFilter}>
-                  <SelectTrigger className="h-9 w-[220px]">
-                    <SelectValue placeholder="Marketplace" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">All marketplaces</SelectItem>
-                    {marketplaceOptions.map((marketplaceId) => (
-                      <SelectItem key={marketplaceId} value={marketplaceId}>
-                        {marketplaceId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  value={manualAsinFilter}
-                  onChange={(e) => setManualAsinFilter(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    void loadManualReviews();
-                  }}
-                  placeholder="Filter ASIN"
-                  className="h-9 w-[220px] font-mono"
-                />
-
-                <Button size="sm" variant="outline" onClick={loadManualReviews} disabled={manualLoading || !connectionId}>
-                  {manualLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              <div className="px-4 pt-3">
+                <Button size="sm" variant="outline" onClick={loadReviewsAndInsights} disabled={reviewsLoading || !canQuery}>
+                  {reviewsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   <span className="ml-1.5">Refresh</span>
                 </Button>
               </div>
 
-              <div className="max-h-[55vh] overflow-auto">
+              <div className="max-h-[58vh] overflow-auto">
                 <Table className="text-xs">
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
                       <TableHead>Imported</TableHead>
-                      <TableHead>ASIN</TableHead>
-                      <TableHead>Marketplace</TableHead>
-                      <TableHead>Rating</TableHead>
                       <TableHead>Review Date</TableHead>
+                      <TableHead>Rating</TableHead>
+                      <TableHead>ASIN</TableHead>
                       <TableHead>Preview</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {manualRows.map((row) => (
+                    {reviews.map((row) => (
                       <TableRow key={row.id}>
                         <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDateTime(row.importedAt)}</TableCell>
+                        <TableCell className="whitespace-nowrap">{fmtDate(row.reviewDate)}</TableCell>
+                        <TableCell>{fmtRating(row.rating)}</TableCell>
                         <TableCell className="font-mono">{row.asin}</TableCell>
-                        <TableCell className="font-mono">{row.marketplaceId}</TableCell>
-                        <TableCell>{row.rating === null ? "—" : row.rating.toFixed(1)}</TableCell>
-                        <TableCell>{fmtReviewDate(row.reviewDate)}</TableCell>
-                        <TableCell className="max-w-[520px] truncate text-muted-foreground">{shortBody(row.body)}</TableCell>
+                        <TableCell className="max-w-[620px] truncate text-muted-foreground">{shortBody(row.body)}</TableCell>
                       </TableRow>
                     ))}
-                    {manualRows.length === 0 ? (
+                    {reviews.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                          {manualLoading ? "Loading…" : "No manual reviews"}
+                        <TableCell colSpan={5} className="py-12 text-center text-sm text-muted-foreground">
+                          {reviewsLoading ? "Loading…" : "No reviews for this SKU"}
                         </TableCell>
                       </TableRow>
                     ) : null}
@@ -437,88 +396,62 @@ export function ReviewsClient() {
         </TabsContent>
 
         <TabsContent value="insights" className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Total Reviews</CardTitle>
+              </CardHeader>
+              <CardContent className="text-2xl font-semibold">
+                {insightsLoading ? "…" : insights?.totalReviews ?? 0}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Average Rating</CardTitle>
+              </CardHeader>
+              <CardContent className="text-2xl font-semibold">
+                {insightsLoading ? "…" : fmtRating(insights?.avgRating ?? null)}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Five-Star Rate</CardTitle>
+              </CardHeader>
+              <CardContent className="flex items-center gap-2 text-2xl font-semibold">
+                <span>{insightsLoading ? "…" : insights?.fiveStarRatePct ?? "n/a"}{insights && insights.fiveStarRatePct !== null ? "%" : ""}</span>
+                {delta ? <Badge variant={delta.variant}>{delta.label}</Badge> : null}
+              </CardContent>
+            </Card>
+          </div>
+
           <Card>
             <CardHeader className="py-3">
-              <CardTitle className="text-sm">ASIN Review Insights</CardTitle>
+              <CardTitle className="text-sm">Recent Trend (90 days)</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3 p-0">
-              <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
-                <Select value={insightsMarketplaceFilter} onValueChange={setInsightsMarketplaceFilter}>
-                  <SelectTrigger className="h-9 w-[220px]">
-                    <SelectValue placeholder="Marketplace" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">All marketplaces</SelectItem>
-                    {marketplaceOptions.map((marketplaceId) => (
-                      <SelectItem key={marketplaceId} value={marketplaceId}>
-                        {marketplaceId}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Input
-                  value={insightsAsinFilter}
-                  onChange={(e) => setInsightsAsinFilter(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    void loadInsights();
-                  }}
-                  placeholder="Filter ASIN"
-                  className="h-9 w-[220px] font-mono"
-                />
-
-                <Button size="sm" variant="outline" onClick={loadInsights} disabled={insightsLoading || !connectionId}>
-                  {insightsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  <span className="ml-1.5">Refresh</span>
-                </Button>
-              </div>
-
-              <div className="max-h-[55vh] overflow-auto">
+            <CardContent className="p-0">
+              <div className="max-h-[58vh] overflow-auto">
                 <Table className="text-xs">
                   <TableHeader className="sticky top-0 z-10 bg-background">
                     <TableRow>
-                      <TableHead>Last Sync</TableHead>
-                      <TableHead>ASIN</TableHead>
-                      <TableHead>Item</TableHead>
-                      <TableHead>Topics</TableHead>
-                      <TableHead>Trends Window</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Day</TableHead>
+                      <TableHead>Reviews</TableHead>
+                      <TableHead>Avg Rating</TableHead>
+                      <TableHead>Five-Star</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {insightRows.map((row) => {
-                      const positiveCount = toTopicCount(row.topicsMentions, "positiveTopics");
-                      const negativeCount = toTopicCount(row.topicsMentions, "negativeTopics");
-                      return (
-                        <TableRow key={`${row.marketplaceId}-${row.asin}`}>
-                          <TableCell className="whitespace-nowrap text-muted-foreground">{fmtDateTime(row.lastSyncAt)}</TableCell>
-                          <TableCell className="font-mono">{row.asin}</TableCell>
-                          <TableCell className="max-w-[320px] truncate">{row.itemName ?? "—"}</TableCell>
-                          <TableCell>
-                            <span className="font-medium">+{positiveCount}</span>
-                            <span className="mx-1 text-muted-foreground">/</span>
-                            <span className="font-medium">-{negativeCount}</span>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {fmtReviewDate(row.trendsDateStart)} → {fmtReviewDate(row.trendsDateEnd)}
-                          </TableCell>
-                          <TableCell>
-                            {row.lastSyncError === null ? (
-                              <Badge variant="secondary">ok</Badge>
-                            ) : (
-                              <Badge variant="destructive" title={row.lastSyncError}>
-                                error
-                              </Badge>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                    {insightRows.length === 0 ? (
+                    {(insights?.series ?? []).map((point) => (
+                      <TableRow key={point.day}>
+                        <TableCell>{point.day}</TableCell>
+                        <TableCell>{point.reviews}</TableCell>
+                        <TableCell>{fmtRating(point.avgRating)}</TableCell>
+                        <TableCell>{point.fiveStarReviews}</TableCell>
+                      </TableRow>
+                    ))}
+                    {(insights?.series.length ?? 0) === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                          {insightsLoading ? "Loading…" : "No ASIN insights"}
+                        <TableCell colSpan={4} className="py-12 text-center text-sm text-muted-foreground">
+                          {insightsLoading ? "Loading…" : "No trend data"}
                         </TableCell>
                       </TableRow>
                     ) : null}

@@ -3,66 +3,81 @@ import { z } from "zod";
 
 import { withApiLogging } from "@/server/api-logging";
 import { maybeAutoMigrate } from "@/server/db/migrate";
-import { importManualReviews, parseManualReviewText } from "@/server/reviews/manual-ingest";
+import { parseReviewsFile } from "@/server/reviews/file-parser";
+import { importManualReviews } from "@/server/reviews/manual-ingest";
 
 export const runtime = "nodejs";
 
-const reviewInputSchema = z.object({
-  externalReviewId: z.string().min(1).optional(),
-  reviewDate: z.string().min(1).optional(),
-  rating: z.number().min(0).max(5).optional(),
-  title: z.string().min(1).optional(),
-  body: z.string().min(1),
-  raw: z.unknown().optional(),
-});
+function formString(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  if (typeof value !== "string") return undefined;
+  return value;
+}
 
 async function handlePost(req: Request) {
   await maybeAutoMigrate();
 
-  const body = await req.json().catch(() => null);
+  const formData = await req.formData().catch(() => null);
+  if (formData === null) {
+    return NextResponse.json({ ok: false, error: "Invalid form data" }, { status: 400 });
+  }
 
   const schema = z.object({
     connectionId: z.string().min(1),
     marketplaceId: z.string().min(1),
-    asin: z.string().min(1),
-    source: z.string().min(1).optional().default("manual"),
-    reviews: z.array(reviewInputSchema).max(1000).optional(),
-    rawText: z.string().min(1).optional(),
+    sku: z.string().min(1),
+    asin: z.string().min(1).optional(),
   });
 
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse({
+    connectionId: formString(formData, "connectionId"),
+    marketplaceId: formString(formData, "marketplaceId"),
+    sku: formString(formData, "sku"),
+    asin: formString(formData, "asin"),
+  });
   if (!parsed.success) {
     return NextResponse.json(
-      { ok: false, error: "Invalid body", issues: parsed.error.flatten() },
+      { ok: false, error: "Invalid form fields", issues: parsed.error.flatten() },
       { status: 400 }
     );
   }
 
-  const rawReviews = parsed.data.rawText ? parseManualReviewText(parsed.data.rawText) : [];
-  const explicitReviews = parsed.data.reviews ?? [];
-  const mergedReviews = explicitReviews.concat(rawReviews);
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ ok: false, error: "Upload a file in field 'file'" }, { status: 400 });
+  }
 
-  if (mergedReviews.length === 0) {
-    return NextResponse.json(
-      { ok: false, error: "Provide reviews[] or rawText with at least one review." },
-      { status: 400 }
-    );
+  const fileName = file.name.trim();
+  if (fileName.length === 0) {
+    return NextResponse.json({ ok: false, error: "Uploaded file has no name" }, { status: 400 });
+  }
+
+  const content = await file.text();
+  const reviews = parseReviewsFile({
+    fileName,
+    content,
+  });
+
+  if (reviews.length === 0) {
+    return NextResponse.json({ ok: false, error: "No reviews found in uploaded file" }, { status: 400 });
   }
 
   const result = await importManualReviews({
     connectionId: parsed.data.connectionId,
     marketplaceId: parsed.data.marketplaceId,
+    sku: parsed.data.sku,
     asin: parsed.data.asin,
-    source: parsed.data.source,
-    reviews: mergedReviews,
+    source: "file_upload",
+    reviews,
   });
 
   return NextResponse.json({
     ok: true,
     connectionId: parsed.data.connectionId,
     marketplaceId: parsed.data.marketplaceId,
-    asin: parsed.data.asin.trim().toUpperCase(),
-    source: parsed.data.source,
+    sku: parsed.data.sku.trim().toUpperCase(),
+    asin: parsed.data.asin ? parsed.data.asin.trim().toUpperCase() : null,
+    fileName,
     result,
   });
 }
