@@ -40,7 +40,7 @@ export function DataTableContainer({
           {headerContent && <div className="flex items-center gap-2">{headerContent}</div>}
         </div>
       )}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">{children}</div>
+      <div className="flex-1 min-h-0 overflow-auto">{children}</div>
     </div>
   )
 }
@@ -55,7 +55,7 @@ export function DataTableHead({ children, className }: DataTableHeadProps) {
   return (
     <thead
       className={cn(
-        'bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground',
+        'bg-muted text-xs uppercase tracking-wide text-muted-foreground',
         className
       )}
     >
@@ -85,7 +85,7 @@ export function DataTableHeaderCell({
   return (
     <th
       className={cn(
-        'sticky top-0 z-10 bg-muted/40 px-3 py-2 font-semibold whitespace-nowrap align-top',
+        'sticky top-0 z-10 bg-muted px-2 py-2 font-semibold whitespace-nowrap align-top',
         alignClass,
         className
       )}
