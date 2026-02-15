@@ -157,11 +157,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Title v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -203,11 +207,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Bullets v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -242,11 +250,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Images v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -282,11 +294,15 @@ export function ListingDetail({
       if (!window.confirm(`Delete Video v${selected.seq}?`)) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ revisionId: selected.id }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setRefreshKey((current) => current + 1)
       })()
     }
@@ -368,11 +384,15 @@ export function ListingDetail({
       if (!window.confirm('Clear all A+ module overrides?')) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ all: true }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
         setEbcModulePointers({})
       })()
     }
@@ -439,11 +459,15 @@ export function ListingDetail({
       if (!window.confirm('Clear this module override?')) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/pointers`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sectionType, modulePosition }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
 
         const key = ebcModulePointerKey(sectionType, modulePosition)
         setEbcModulePointers((current) => {
@@ -460,11 +484,15 @@ export function ListingDetail({
       if (normalized.length === 0) return
 
       void (async () => {
-        await fetch(`${basePath}/api/listings/ensure`, {
+        const res = await fetch(`${basePath}/api/listings/ensure`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ asin: normalized }),
         })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
 
         router.push(`${basePath}/listings/${normalized}`)
       })()
@@ -703,11 +731,15 @@ export function ListingDetail({
               disabled={titleDraft.trim().length === 0}
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
-                await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ title: titleDraft }),
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setTitleEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -813,7 +845,7 @@ export function ListingDetail({
               variant="contained"
               sx={{ px: 2.5, fontWeight: 600 }}
               onClick={async () => {
-                await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -824,6 +856,10 @@ export function ListingDetail({
                     bullet5: bulletsDraft.bullet5,
                   }),
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setBulletsEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -905,10 +941,14 @@ export function ListingDetail({
                   form.append('files', file)
                 }
 
-                await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setGalleryUploaderOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1014,10 +1054,14 @@ export function ListingDetail({
                 form.append('file', videoFile)
                 if (videoPosterFile) form.append('poster', videoPosterFile)
 
-                await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setVideoUploaderOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1140,10 +1184,14 @@ export function ListingDetail({
                   form.append('files', file)
                 }
 
-                await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+                const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
                   method: 'POST',
                   body: form,
                 })
+                if (!res.ok) {
+                  window.alert(await res.text())
+                  return
+                }
                 setEbcModuleEditorOpen(false)
                 setRefreshKey((current) => current + 1)
               }}
@@ -1609,18 +1657,6 @@ function injectArgusVersionControls(
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
-
-      /* Match the fixture's intended gallery layout (horizontal thumbnails). */
-      #altImages ul {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-        overflow-y: hidden !important;
-        gap: 6px !important;
-      }
-      #altImages ul.a-vertical { align-items: center !important; }
-      #altImages li { margin: 0 !important; }
     `
     doc.head.append(style)
   }
