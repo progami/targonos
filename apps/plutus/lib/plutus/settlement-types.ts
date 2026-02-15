@@ -21,7 +21,6 @@ export type ProcessingBlock =
     };
 
 const NON_BLOCKING_PROCESSING_CODES = new Set([
-  'PNL_ALLOCATION_ERROR',
   'LATE_COST_ON_HAND_ZERO',
   'MISSING_COST_BASIS',
 ]);
