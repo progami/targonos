@@ -11,16 +11,23 @@ import UploadIcon from '@mui/icons-material/Upload';
 import CancelIcon from '@mui/icons-material/Cancel';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import MuiButton from '@mui/material/Button';
+import MuiCard from '@mui/material/Card';
+import MuiCardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import MuiSelect from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import MuiTable from '@mui/material/Table';
+import MuiTableHead from '@mui/material/TableHead';
+import MuiTableBody from '@mui/material/TableBody';
+import MuiTableRow from '@mui/material/TableRow';
+import MuiTableCell from '@mui/material/TableCell';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import { Select, SelectItem } from '@/components/ui/select';
 import { StatCard } from '@/components/ui/stat-card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -79,13 +86,39 @@ function formatCurrency(amount: number, currency: 'USD' | 'GBP'): string {
 function statusBadge(status: ReconciliationRow['status']) {
   switch (status) {
     case 'matched':
-      return <Badge variant="success">Matched</Badge>;
+      return (
+        <Chip
+          label="Matched"
+          size="small"
+          color="success"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+        />
+      );
     case 'discrepancy':
-      return <Badge variant="destructive">Discrepancy</Badge>;
+      return (
+        <Chip
+          label="Discrepancy"
+          size="small"
+          color="error"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+        />
+      );
     case 'amazon-only':
-      return <Badge variant="secondary">Amazon Only</Badge>;
+      return (
+        <Chip
+          label="Amazon Only"
+          size="small"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'action.hover', color: 'text.secondary' }}
+        />
+      );
     case 'lmb-only':
-      return <Badge variant="secondary">LMB Only</Badge>;
+      return (
+        <Chip
+          label="LMB Only"
+          size="small"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'action.hover', color: 'text.secondary' }}
+        />
+      );
   }
 }
 
@@ -197,8 +230,8 @@ export default function ReconciliationPage() {
         />
 
         {/* Instructions */}
-        <Card sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
-          <CardContent sx={{ p: 3 }}>
+        <MuiCard sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <MuiCardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
             <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>How it works</Typography>
             <Box sx={{ mt: 2, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
@@ -235,25 +268,88 @@ export default function ReconciliationPage() {
                 </Box>
               </Box>
             </Box>
-          </CardContent>
-        </Card>
+          </MuiCardContent>
+        </MuiCard>
 
         {/* Upload Form */}
-        <Card sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
-          <CardContent sx={{ p: 3 }}>
+        <MuiCard sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <MuiCardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
             <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
               <Box>
                 <Box component="label" htmlFor="month-input" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                   Month
                 </Box>
-                <Input id="month-input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+                <TextField
+                  id="month-input"
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      sx: {
+                        fontSize: '0.875rem',
+                        height: 36,
+                      },
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#45B3D4',
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                        borderWidth: 2,
+                      },
+                    },
+                  }}
+                />
               </Box>
               <Box>
                 <Box component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Marketplace</Box>
-                <Select value={marketplace} onValueChange={(v) => setMarketplace(v as 'US' | 'UK')}>
-                  <SelectItem value="US">US - Amazon.com</SelectItem>
-                  <SelectItem value="UK">UK - Amazon.co.uk</SelectItem>
-                </Select>
+                <FormControl size="small" fullWidth>
+                  <MuiSelect
+                    value={marketplace}
+                    onChange={(e) => setMarketplace(e.target.value as 'US' | 'UK')}
+                    displayEmpty
+                    renderValue={(selected) => {
+                      if (!selected) return <span style={{ color: '#94a3b8' }}>Select</span>;
+                      return selected;
+                    }}
+                    sx={{
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: 'divider',
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#45B3D4',
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                        borderWidth: 2,
+                      },
+                    }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          borderRadius: 3,
+                          border: 1,
+                          borderColor: 'divider',
+                          boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                          mt: 0.5,
+                        },
+                      },
+                    }}
+                  >
+                    <MenuItem value="US" sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>US - Amazon.com</MenuItem>
+                    <MenuItem value="UK" sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>UK - Amazon.co.uk</MenuItem>
+                  </MuiSelect>
+                </FormControl>
               </Box>
             </Box>
 
@@ -341,7 +437,27 @@ export default function ReconciliationPage() {
 
             {/* Reconcile Button */}
             <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-              <Button onClick={handleReconcile} disabled={!selectedFile || isReconciling}>
+              <MuiButton
+                variant="contained"
+                disableElevation
+                onClick={handleReconcile}
+                disabled={!selectedFile || isReconciling}
+                sx={{
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  gap: 1,
+                  whiteSpace: 'nowrap',
+                  height: 36,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  bgcolor: '#45B3D4',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#2fa3c7' },
+                  '&:active': { bgcolor: '#2384a1' },
+                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                }}
+              >
                 {isReconciling ? (
                   <>
                     <Box sx={{ height: 16, width: 16, borderRadius: 99, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } }} />
@@ -353,7 +469,7 @@ export default function ReconciliationPage() {
                     Reconcile
                   </>
                 )}
-              </Button>
+              </MuiButton>
             </Box>
 
             {/* Error */}
@@ -363,8 +479,8 @@ export default function ReconciliationPage() {
                 {error}
               </Box>
             )}
-          </CardContent>
-        </Card>
+          </MuiCardContent>
+        </MuiCard>
 
         {/* Results */}
         {result !== null && (
@@ -406,8 +522,8 @@ export default function ReconciliationPage() {
             </Box>
 
             {/* Results Table */}
-            <Card sx={{ mt: 2, borderColor: 'rgba(203,213,225,0.7)', overflow: 'hidden' }}>
-              <CardContent sx={{ p: 0 }}>
+            <MuiCard sx={{ mt: 2, borderColor: 'rgba(203,213,225,0.7)', overflow: 'hidden' }}>
+              <MuiCardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'rgba(203,213,225,0.7)', px: 2, py: 1.5 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                     Reconciliation Details
@@ -415,45 +531,100 @@ export default function ReconciliationPage() {
                       ({result.rows.length.toLocaleString()} orders)
                     </Box>
                   </Typography>
-                  <Button variant="outline" size="sm" onClick={() => exportToCsv(result.rows, month, marketplace)}>
+                  <MuiButton
+                    variant="outlined"
+                    disableElevation
+                    size="small"
+                    onClick={() => exportToCsv(result.rows, month, marketplace)}
+                    sx={{
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      gap: 1,
+                      whiteSpace: 'nowrap',
+                      height: 32,
+                      px: 1.5,
+                      fontSize: '0.75rem',
+                      borderColor: 'divider',
+                      color: 'text.primary',
+                      bgcolor: 'background.paper',
+                      '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+                      '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                    }}
+                  >
                     <DownloadIcon sx={{ fontSize: 14 }} />
                     Export CSV
-                  </Button>
+                  </MuiButton>
                 </Box>
                 <Box sx={{ overflowX: 'auto' }}>
-                  <Table>
-                    <TableHeader>
-                      <TableRow sx={{ bgcolor: 'rgba(248,250,252,0.8)' }}>
-                        <TableHead sx={{ fontWeight: 600 }}>Order ID</TableHead>
-                        <TableHead sx={{ fontWeight: 600 }}>Date</TableHead>
-                        <TableHead sx={{ fontWeight: 600 }}>Type</TableHead>
-                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Amazon</TableHead>
-                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>LMB</TableHead>
-                        <TableHead sx={{ fontWeight: 600, textAlign: 'right' }}>Difference</TableHead>
-                        <TableHead sx={{ fontWeight: 600 }}>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
+                    <MuiTableHead
+                      sx={{
+                        bgcolor: 'rgba(248, 250, 252, 0.8)',
+                        '[data-mui-color-scheme="dark"] &, .dark &': {
+                          bgcolor: 'rgba(255, 255, 255, 0.05)',
+                        },
+                        '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                      }}
+                    >
+                      <MuiTableRow
+                        sx={{
+                          borderBottom: 1,
+                          borderColor: 'divider',
+                          bgcolor: 'rgba(248,250,252,0.8)',
+                        }}
+                      >
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Order ID</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Date</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Type</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Amazon</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>LMB</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Difference</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Status</MuiTableCell>
+                      </MuiTableRow>
+                    </MuiTableHead>
+                    <MuiTableBody
+                      sx={{
+                        '& .MuiTableRow-root:last-child': { borderBottom: 0 },
+                      }}
+                    >
                       {result.rows.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} sx={{ py: 4, textAlign: 'center', fontSize: '0.875rem', color: 'text.secondary' }}>
+                        <MuiTableRow
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            transition: 'background-color 0.15s',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
+                        >
+                          <MuiTableCell colSpan={7} sx={{ px: 1.5, py: 4, color: 'text.primary', textAlign: 'center', fontSize: '0.875rem' }}>
                             No matching orders found for this period
-                          </TableCell>
-                        </TableRow>
+                          </MuiTableCell>
+                        </MuiTableRow>
                       )}
                       {result.rows.map((row) => (
-                        <TableRow key={row.orderId}>
-                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{row.orderId}</TableCell>
-                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{row.date}</TableCell>
-                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>{row.type}</TableCell>
-                          <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                        <MuiTableRow
+                          key={row.orderId}
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            transition: 'background-color 0.15s',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
+                        >
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontFamily: 'monospace', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>{row.orderId}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{row.date}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{row.type}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '\u2014'}
-                          </TableCell>
-                          <TableCell sx={{ fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                             {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '\u2014'}
-                          </TableCell>
-                          <TableCell
+                          </MuiTableCell>
+                          <MuiTableCell
                             sx={{
+                              px: 1.5,
+                              py: 1.5,
                               fontSize: '0.875rem',
                               textAlign: 'right',
                               fontVariantNumeric: 'tabular-nums',
@@ -467,15 +638,15 @@ export default function ReconciliationPage() {
                             {row.difference !== 0
                               ? `${row.difference > 0 ? '+' : ''}${formatCurrency(row.difference, currency)}`
                               : '\u2014'}
-                          </TableCell>
-                          <TableCell>{statusBadge(row.status)}</TableCell>
-                        </TableRow>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>{statusBadge(row.status)}</MuiTableCell>
+                        </MuiTableRow>
                       ))}
-                    </TableBody>
-                  </Table>
+                    </MuiTableBody>
+                  </MuiTable>
                 </Box>
-              </CardContent>
-            </Card>
+              </MuiCardContent>
+            </MuiCard>
           </>
         )}
       </Box>

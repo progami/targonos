@@ -1,7 +1,8 @@
 import * as React from 'react';
 import MuiSkeleton from '@mui/material/Skeleton';
 import Box from '@mui/material/Box';
-import { TableCell, TableRow } from './table';
+import TableCell from '@mui/material/TableCell';
+import TableRow from '@mui/material/TableRow';
 
 interface SkeletonProps extends React.HTMLAttributes<HTMLDivElement> {
   sx?: object;

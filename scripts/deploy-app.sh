@@ -195,7 +195,8 @@ case "$app_key" in
     workspace="@targon/argus"
     app_dir="$REPO_DIR/apps/argus"
     pm2_name="${PM2_PREFIX}-argus"
-    prisma_cmd=""
+    prisma_cmd="cd $app_dir && npx prisma generate"
+    migrate_cmd="cd $app_dir && npx prisma migrate deploy --schema prisma/schema.prisma"
     build_cmd="pnpm --filter $workspace build"
     ;;
   *)
@@ -587,6 +588,11 @@ if [[ -n "$prisma_cmd" ]]; then
           run_prisma_generate="true"
         fi
         ;;
+      argus)
+        if any_changed "apps/argus/prisma/schema.prisma" && ! any_changed_under "packages/prisma-argus/generated/"; then
+          run_prisma_generate="true"
+        fi
+        ;;
     esac
   fi
 
@@ -630,6 +636,11 @@ if [[ -n "$migrate_cmd" ]]; then
         ;;
       atlas)
         if any_changed "apps/atlas/prisma/schema.prisma" || any_changed_under "apps/atlas/prisma/migrations/"; then
+          run_migrations="true"
+        fi
+        ;;
+      argus)
+        if any_changed "apps/argus/prisma/schema.prisma" || any_changed_under "apps/argus/prisma/migrations/"; then
           run_migrations="true"
         fi
         ;;

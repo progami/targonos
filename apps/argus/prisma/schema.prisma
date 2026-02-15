@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../../packages/prisma-argus/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Legacy enums (from old argus) ───────────────────────────────
+
+enum Marketplace {
+  US
+  UK
+}
+
+enum WatchTargetOwner {
+  OURS
+  COMPETITOR
+}
+
+enum WatchTargetSource {
+  MANUAL
+  TALOS
+}
+
+enum CaptureJobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  BLOCKED
+}
+
+enum ArtifactKind {
+  ASIN_FULLPAGE
+}
+
+enum ImportRunStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+enum ImportSource {
+  TALOS
+}
+
+// ─── Legacy models (from old argus) ──────────────────────────────
+
+model WatchTarget {
+  id             String            @id @default(cuid())
+  marketplace    Marketplace
+  owner          WatchTargetOwner
+  source         WatchTargetSource @default(MANUAL)
+  label          String
+  asin           String
+  cadenceMinutes Int               @default(360)
+  enabled        Boolean           @default(true)
+  nextRunAt      DateTime
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  activeImageVersionId String?
+  activeImageVersion   ListingImageVersion? @relation("TargetActiveImageVersion", fields: [activeImageVersionId], references: [id], onDelete: SetNull)
+  imageVersions        ListingImageVersion[] @relation("TargetImageVersions")
+
+  jobs       CaptureJob[]
+  runs       CaptureRun[]
+  alertRules AlertRule[]
+
+  @@unique([marketplace, asin])
+  @@index([marketplace])
+  @@index([owner])
+  @@index([source])
+  @@index([enabled])
+  @@index([nextRunAt])
+  @@index([activeImageVersionId])
+}
+
+model CaptureJob {
+  id                   String           @id @default(cuid())
+  targetId             String
+  target               WatchTarget      @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  scheduledAt          DateTime
+  status               CaptureJobStatus @default(QUEUED)
+  lockedAt             DateTime?
+  lockedBy             String?
+  attemptCount         Int              @default(0)
+  lastError            String?
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  runId                String?
+  run                  CaptureRun?      @relation(fields: [runId], references: [id], onDelete: SetNull)
+  acknowledgedAt       DateTime?
+  acknowledgedByUserId String?
+  acknowledgedByEmail  String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([targetId])
+  @@index([scheduledAt])
+}
+
+model CaptureRun {
+  id                   String       @id @default(cuid())
+  targetId             String
+  target               WatchTarget  @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  startedAt            DateTime     @default(now())
+  finishedAt           DateTime?
+  finalUrl             String
+  contentHash          String
+  rawExtracted         Json?
+  normalizedExtracted  Json?
+  changedFromRunId     String?
+  changedFromRun       CaptureRun?  @relation("ChangedFrom", fields: [changedFromRunId], references: [id], onDelete: SetNull)
+  changedToRuns        CaptureRun[] @relation("ChangedFrom")
+  changeSummary        Json?
+  acknowledgedAt       DateTime?
+  acknowledgedByUserId String?
+  acknowledgedByEmail  String?
+  notes                String?
+  artifacts            RunArtifact[]
+  jobs                 CaptureJob[]
+  alertEvents          AlertEvent[]
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@index([targetId, startedAt])
+  @@index([startedAt])
+}
+
+model RunArtifact {
+  id          String       @id @default(cuid())
+  runId       String
+  run         CaptureRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  kind        ArtifactKind
+  marketplace Marketplace
+  asin        String?
+  position    Int?
+  s3Key       String
+  sha256      String
+  createdAt   DateTime     @default(now())
+
+  @@index([runId])
+  @@index([kind])
+}
+
+model AlertRule {
+  id         String      @id @default(cuid())
+  targetId   String      @unique
+  target     WatchTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  enabled    Boolean     @default(true)
+  thresholds Json
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  events     AlertEvent[]
+}
+
+model AlertEvent {
+  id                   String     @id @default(cuid())
+  ruleId               String
+  rule                 AlertRule  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  runId                String
+  run                  CaptureRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  sentAt               DateTime   @default(now())
+  toEmails             String[]   @default([])
+  subject              String
+  bodyPreview          String
+  acknowledgedAt       DateTime?
+  acknowledgedByUserId String?
+  acknowledgedByEmail  String?
+
+  @@unique([ruleId, runId])
+  @@index([sentAt])
+  @@index([runId])
+}
+
+model ImportRun {
+  id           String          @id @default(cuid())
+  source       ImportSource
+  status       ImportRunStatus @default(RUNNING)
+  startedAt    DateTime        @default(now())
+  finishedAt   DateTime?
+  createdCount Int             @default(0)
+  updatedCount Int             @default(0)
+  skippedCount Int             @default(0)
+  error        String?
+  details      Json?
+  updatedAt    DateTime        @updatedAt
+
+  @@index([startedAt])
+  @@index([status])
+  @@index([source])
+}
+
+model ListingImageBlob {
+  sha256      String @id
+  s3Key       String
+  contentType String
+  byteSize    Int
+  width       Int
+  height      Int
+  createdAt   DateTime @default(now())
+
+  slots ListingImageVersionSlot[]
+}
+
+model ListingImageVersion {
+  id              String      @id @default(cuid())
+  targetId        String
+  target          WatchTarget @relation("TargetImageVersions", fields: [targetId], references: [id], onDelete: Cascade)
+  versionNumber   Int
+  label           String?
+  notes           String?
+  createdByUserId String
+  createdByEmail  String?
+  createdAt       DateTime    @default(now())
+
+  slots            ListingImageVersionSlot[]
+  activeForTargets WatchTarget[]             @relation("TargetActiveImageVersion")
+
+  @@unique([targetId, versionNumber])
+  @@index([targetId, createdAt])
+}
+
+model ListingImageVersionSlot {
+  id         String              @id @default(cuid())
+  versionId  String
+  version    ListingImageVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  position   Int
+  fileName   String
+  blobSha256 String
+  blob       ListingImageBlob    @relation(fields: [blobSha256], references: [sha256], onDelete: Restrict)
+  createdAt  DateTime            @default(now())
+
+  @@unique([versionId, position])
+  @@index([versionId])
+  @@index([blobSha256])
+}
+
+// ─── Version control enums ───────────────────────────────────────
+
+enum RevisionOrigin {
+  MANUAL_ENTRY
+  CAPTURED_SNAPSHOT
+}
+
+// ─── Version control models ──────────────────────────────────────
+
+model Listing {
+  id          String   @id @default(cuid())
+  asin        String
+  marketplace String   @default("US")
+  label       String
+  brandName   String?
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  activeBulletsId String?
+  activeGalleryId String?
+  activeEbcId     String?
+
+  bulletsRevisions BulletsRevision[]
+  galleryRevisions GalleryRevision[]
+  ebcRevisions     EbcRevision[]
+  snapshots        Snapshot[]
+
+  @@unique([marketplace, asin])
+}
+
+model Snapshot {
+  id                String   @id @default(cuid())
+  listingId         String
+  listing           Listing  @relation(fields: [listingId], references: [id])
+  seq               Int
+  rawHtmlPath       String?
+  capturedAt        DateTime
+  ingestedAt        DateTime @default(now())
+  note              String?
+  bulletsRevisionId String?
+  galleryRevisionId String?
+  ebcRevisionId     String?
+
+  @@unique([listingId, seq])
+  @@index([listingId, capturedAt])
+}
+
+model BulletsRevision {
+  id        String         @id @default(cuid())
+  listingId String
+  listing   Listing        @relation(fields: [listingId], references: [id])
+  seq       Int
+  bullet1   String?
+  bullet2   String?
+  bullet3   String?
+  bullet4   String?
+  bullet5   String?
+  origin    RevisionOrigin
+  note      String?
+  createdAt DateTime       @default(now())
+
+  @@unique([listingId, seq])
+  @@index([listingId, createdAt])
+}
+
+model GalleryRevision {
+  id        String         @id @default(cuid())
+  listingId String
+  listing   Listing        @relation(fields: [listingId], references: [id])
+  seq       Int
+  origin    RevisionOrigin
+  note      String?
+  createdAt DateTime       @default(now())
+
+  slots GallerySlot[]
+
+  @@unique([listingId, seq])
+  @@index([listingId, createdAt])
+}
+
+model GallerySlot {
+  id         String          @id @default(cuid())
+  revisionId String
+  revision   GalleryRevision @relation(fields: [revisionId], references: [id])
+  position   Int
+  mediaId    String
+  media      MediaAsset      @relation(fields: [mediaId], references: [id])
+
+  @@unique([revisionId, position])
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  sha256       String   @unique
+  filePath     String
+  mimeType     String
+  bytes        Int?
+  width        Int?
+  height       Int?
+  sourceUrl    String?
+  originalName String?
+  createdAt    DateTime @default(now())
+
+  gallerySlots GallerySlot[]
+  ebcImages    EbcImage[]
+}
+
+model EbcRevision {
+  id        String         @id @default(cuid())
+  listingId String
+  listing   Listing        @relation(fields: [listingId], references: [id])
+  seq       Int
+  origin    RevisionOrigin
+  note      String?
+  createdAt DateTime       @default(now())
+
+  sections EbcSection[]
+
+  @@unique([listingId, seq])
+  @@index([listingId, createdAt])
+}
+
+model EbcSection {
+  id          String      @id @default(cuid())
+  revisionId  String
+  revision    EbcRevision @relation(fields: [revisionId], references: [id])
+  position    Int
+  sectionType String
+  heading     String?
+  createdAt   DateTime    @default(now())
+
+  modules EbcModule[]
+
+  @@unique([revisionId, position])
+}
+
+model EbcModule {
+  id         String     @id @default(cuid())
+  sectionId  String
+  section    EbcSection @relation(fields: [sectionId], references: [id])
+  position   Int
+  moduleType String
+  headline   String?
+  bodyText   String?
+  createdAt  DateTime   @default(now())
+
+  images EbcImage[]
+
+  @@unique([sectionId, position])
+}
+
+model EbcImage {
+  id       String     @id @default(cuid())
+  moduleId String
+  module   EbcModule  @relation(fields: [moduleId], references: [id])
+  position Int
+  mediaId  String
+  media    MediaAsset @relation(fields: [mediaId], references: [id])
+  altText  String?
+
+  @@unique([moduleId, position])
+}

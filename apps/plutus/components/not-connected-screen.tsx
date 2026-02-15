@@ -3,7 +3,7 @@
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
-import { Button } from '@/components/ui/button';
+import Button from '@mui/material/Button';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -100,6 +100,7 @@ export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
 
           <Box sx={{ mt: 4 }}>
             <Button
+              variant="contained"
               onClick={handleConnect}
               sx={{
                 width: '100%',

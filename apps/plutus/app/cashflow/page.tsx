@@ -9,8 +9,25 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogActions from '@mui/material/DialogActions';
+import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
+import Skeleton from '@mui/material/Skeleton';
+import Switch from '@mui/material/Switch';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import {
   CartesianGrid,
   Line,
@@ -23,21 +40,7 @@ import {
 
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/stat-card';
-import { Switch } from '@/components/ui/switch';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   CASHFLOW_SOURCE_LABELS,
   type CashflowEvent,
@@ -505,7 +508,8 @@ export default function CashflowPage() {
         actions={(
           <>
             <Button
-              variant="outline"
+              variant="outlined"
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
               onClick={() => refreshMutation.mutate()}
               disabled={refreshMutation.isPending}
             >
@@ -513,14 +517,16 @@ export default function CashflowPage() {
               Refresh
             </Button>
             <Button
-              variant="outline"
+              variant="outlined"
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
               onClick={() => setConfigDialogOpen(true)}
             >
               <SettingsIcon sx={{ fontSize: 16, mr: 1 }} />
               Configure Cash Accounts
             </Button>
             <Button
-              variant="outline"
+              variant="outlined"
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
               onClick={() => setAdjustmentDialogOpen(true)}
             >
               <AddIcon sx={{ fontSize: 16, mr: 1 }} />
@@ -528,7 +534,8 @@ export default function CashflowPage() {
             </Button>
             <Button
               component="a"
-              variant="outline"
+              variant="outlined"
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
               disabled={snapshot === undefined}
               href={
                 snapshot === undefined
@@ -541,7 +548,8 @@ export default function CashflowPage() {
             </Button>
             <Button
               component="a"
-              variant="outline"
+              variant="outlined"
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
               disabled={snapshot === undefined}
               href={
                 snapshot === undefined
@@ -599,16 +607,16 @@ export default function CashflowPage() {
               </Box>
 
               <Table>
-                <TableHeader>
+                <TableHead>
                   <TableRow>
-                    <TableHead sx={{ width: 220 }}>Week</TableHead>
-                    <TableHead>Starting</TableHead>
-                    <TableHead>Inflows</TableHead>
-                    <TableHead>Outflows</TableHead>
-                    <TableHead>Ending</TableHead>
-                    <TableHead sx={{ width: 120 }}>Details</TableHead>
+                    <TableCell sx={{ width: 220 }}>Week</TableCell>
+                    <TableCell>Starting</TableCell>
+                    <TableCell>Inflows</TableCell>
+                    <TableCell>Outflows</TableCell>
+                    <TableCell>Ending</TableCell>
+                    <TableCell sx={{ width: 120 }}>Details</TableCell>
                   </TableRow>
-                </TableHeader>
+                </TableHead>
                 <TableBody>
                   {snapshot.forecast.weeks.map((week) => {
                     const expanded = expandedWeekStart === week.weekStart;
@@ -630,8 +638,9 @@ export default function CashflowPage() {
                           </TableCell>
                           <TableCell>
                             <Button
-                              variant="ghost"
-                              size="sm"
+                              variant="text"
+                              size="small"
+                              sx={{ color: 'text.secondary' }}
                               onClick={() => setExpandedWeekStart(expanded ? null : week.weekStart)}
                             >
                               {expanded ? 'Hide' : 'View'}
@@ -715,19 +724,30 @@ export default function CashflowPage() {
         </>
       )}
 
-      <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen} maxWidth="md">
+      <Dialog
+        open={configDialogOpen}
+        onClose={() => setConfigDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+      >
         <DialogContent sx={{ maxHeight: '88vh', overflowY: 'auto' }}>
-          <DialogHeader>
-            <DialogTitle>Configure Cash Accounts</DialogTitle>
-            <DialogDescription>
-              Select the accounts that represent available cash and enable/disable forecast sources.
-            </DialogDescription>
-          </DialogHeader>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Box>
+              <DialogTitle sx={{ p: 0 }}>Configure Cash Accounts</DialogTitle>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                Select the accounts that represent available cash and enable/disable forecast sources.
+              </Typography>
+            </Box>
+            <IconButton onClick={() => setConfigDialogOpen(false)} size="small" sx={{ mt: -0.5 }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
 
           {configQuery.isLoading ? (
-            <Skeleton sx={{ height: 224, width: '100%' }} />
+            <Skeleton sx={{ height: 224, width: '100%', mt: 2 }} />
           ) : configQuery.data ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, mt: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Cash On Hand Accounts</Typography>
                 <Box sx={{ maxHeight: 288, display: 'flex', flexDirection: 'column', gap: 1, overflow: 'auto', borderRadius: 2, border: 1, borderColor: 'divider', p: 1.5 }}>
@@ -797,7 +817,7 @@ export default function CashflowPage() {
                   <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Open Bills</Typography>
                   <Switch
                     checked={configForm.includeOpenBills}
-                    onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeOpenBills: value }))}
+                    onChange={(_, checked) => setConfigForm((current) => ({ ...current, includeOpenBills: checked }))}
                   />
                 </Box>
 
@@ -805,7 +825,7 @@ export default function CashflowPage() {
                   <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Open Invoices</Typography>
                   <Switch
                     checked={configForm.includeOpenInvoices}
-                    onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeOpenInvoices: value }))}
+                    onChange={(_, checked) => setConfigForm((current) => ({ ...current, includeOpenInvoices: checked }))}
                   />
                 </Box>
 
@@ -813,7 +833,7 @@ export default function CashflowPage() {
                   <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Recurring Transactions</Typography>
                   <Switch
                     checked={configForm.includeRecurring}
-                    onCheckedChange={(value) => setConfigForm((current) => ({ ...current, includeRecurring: value }))}
+                    onChange={(_, checked) => setConfigForm((current) => ({ ...current, includeRecurring: checked }))}
                   />
                 </Box>
 
@@ -821,10 +841,10 @@ export default function CashflowPage() {
                   <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Projected Amazon Settlements</Typography>
                   <Switch
                     checked={configForm.includeProjectedSettlements}
-                    onCheckedChange={(value) =>
+                    onChange={(_, checked) =>
                       setConfigForm((current) => ({
                         ...current,
-                        includeProjectedSettlements: value,
+                        includeProjectedSettlements: checked,
                       }))
                     }
                   />
@@ -838,10 +858,10 @@ export default function CashflowPage() {
                   <Typography sx={{ fontSize: '0.875rem', color: 'text.primary' }}>Enabled</Typography>
                   <Switch
                     checked={configForm.autoRefreshEnabled}
-                    onCheckedChange={(value) =>
+                    onChange={(_, checked) =>
                       setConfigForm((current) => ({
                         ...current,
-                        autoRefreshEnabled: value,
+                        autoRefreshEnabled: checked,
                       }))
                     }
                   />
@@ -852,8 +872,9 @@ export default function CashflowPage() {
                     <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                       Time (Local)
                     </Typography>
-                    <Input
+                    <TextField
                       type="time"
+                      size="small"
                       value={configForm.autoRefreshTimeLocal}
                       onChange={(event) =>
                         setConfigForm((current) => ({
@@ -867,10 +888,10 @@ export default function CashflowPage() {
                     <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                       Min Snapshot Age (minutes)
                     </Typography>
-                    <Input
+                    <TextField
                       type="number"
-                      min="0"
-                      step="1"
+                      size="small"
+                      slotProps={{ htmlInput: { min: 0, step: 1 } }}
                       value={String(configForm.autoRefreshMinSnapshotAgeMinutes)}
                       onChange={(event) => {
                         const parsed = Number.parseInt(event.target.value, 10);
@@ -891,35 +912,47 @@ export default function CashflowPage() {
           ) : (
             <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Unable to load config.</Typography>
           )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => saveConfigMutation.mutate(configForm)}
-              disabled={saveConfigMutation.isPending}
-            >
-              Save
-            </Button>
-          </DialogFooter>
         </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => setConfigDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+            onClick={() => saveConfigMutation.mutate(configForm)}
+            disabled={saveConfigMutation.isPending}
+          >
+            Save
+          </Button>
+        </DialogActions>
       </Dialog>
 
-      <Dialog open={adjustmentDialogOpen} onOpenChange={setAdjustmentDialogOpen}>
+      <Dialog
+        open={adjustmentDialogOpen}
+        onClose={() => setAdjustmentDialogOpen(false)}
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+      >
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Adjustment</DialogTitle>
-            <DialogDescription>
-              Add a known one-off inflow or outflow to the forecast.
-            </DialogDescription>
-          </DialogHeader>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Box>
+              <DialogTitle sx={{ p: 0 }}>Add Adjustment</DialogTitle>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                Add a known one-off inflow or outflow to the forecast.
+              </Typography>
+            </Box>
+            <IconButton onClick={() => setAdjustmentDialogOpen(false)} size="small" sx={{ mt: -0.5 }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
 
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Date</Typography>
-              <Input
+              <TextField
                 type="date"
+                size="small"
                 value={adjustmentForm.date}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, date: event.target.value }))}
               />
@@ -927,11 +960,10 @@ export default function CashflowPage() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Amount</Typography>
-              <Input
+              <TextField
                 type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
+                size="small"
+                slotProps={{ htmlInput: { inputMode: 'decimal', min: 0, step: 0.01 } }}
                 placeholder="0.00"
                 value={adjustmentForm.amount}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, amount: event.target.value }))}
@@ -943,14 +975,22 @@ export default function CashflowPage() {
               <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1 }}>
                 <Button
                   type="button"
-                  variant={adjustmentForm.direction === 'inflow' ? 'default' : 'outline'}
+                  variant={adjustmentForm.direction === 'inflow' ? 'contained' : 'outlined'}
+                  sx={adjustmentForm.direction === 'inflow'
+                    ? { bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }
+                    : { borderColor: 'divider', color: 'text.primary' }
+                  }
                   onClick={() => setAdjustmentForm((current) => ({ ...current, direction: 'inflow' }))}
                 >
                   Inflow
                 </Button>
                 <Button
                   type="button"
-                  variant={adjustmentForm.direction === 'outflow' ? 'default' : 'outline'}
+                  variant={adjustmentForm.direction === 'outflow' ? 'contained' : 'outlined'}
+                  sx={adjustmentForm.direction === 'outflow'
+                    ? { bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }
+                    : { borderColor: 'divider', color: 'text.primary' }
+                  }
                   onClick={() => setAdjustmentForm((current) => ({ ...current, direction: 'outflow' }))}
                 >
                   Outflow
@@ -960,7 +1000,8 @@ export default function CashflowPage() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Description</Typography>
-              <Input
+              <TextField
+                size="small"
                 placeholder="Description"
                 value={adjustmentForm.description}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, description: event.target.value }))}
@@ -969,47 +1010,50 @@ export default function CashflowPage() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Notes (optional)</Typography>
-              <Input
+              <TextField
+                size="small"
                 placeholder="Optional note"
                 value={adjustmentForm.notes}
                 onChange={(event) => setAdjustmentForm((current) => ({ ...current, notes: event.target.value }))}
               />
             </Box>
           </Box>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAdjustmentDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                try {
-                  const absCents = parseAmountToCents(adjustmentForm.amount);
-                  const amountCents = adjustmentForm.direction === 'inflow' ? absCents : -absCents;
-                  const description = adjustmentForm.description.trim();
-
-                  if (description === '') {
-                    throw new Error('Description is required');
-                  }
-
-                  const notesTrimmed = adjustmentForm.notes.trim();
-
-                  createAdjustmentMutation.mutate({
-                    date: adjustmentForm.date,
-                    amountCents,
-                    description,
-                    notes: notesTrimmed === '' ? undefined : notesTrimmed,
-                  });
-                } catch (error) {
-                  enqueueSnackbar(error instanceof Error ? error.message : 'Invalid adjustment', { variant: 'error' });
-                }
-              }}
-              disabled={createAdjustmentMutation.isPending}
-            >
-              Save Adjustment
-            </Button>
-          </DialogFooter>
         </DialogContent>
+
+        <DialogActions sx={{ px: 3, pb: 3, pt: 0 }}>
+          <Button variant="outlined" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => setAdjustmentDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+            onClick={() => {
+              try {
+                const absCents = parseAmountToCents(adjustmentForm.amount);
+                const amountCents = adjustmentForm.direction === 'inflow' ? absCents : -absCents;
+                const description = adjustmentForm.description.trim();
+
+                if (description === '') {
+                  throw new Error('Description is required');
+                }
+
+                const notesTrimmed = adjustmentForm.notes.trim();
+
+                createAdjustmentMutation.mutate({
+                  date: adjustmentForm.date,
+                  amountCents,
+                  description,
+                  notes: notesTrimmed === '' ? undefined : notesTrimmed,
+                });
+              } catch (error) {
+                enqueueSnackbar(error instanceof Error ? error.message : 'Invalid adjustment', { variant: 'error' });
+              }
+            }}
+            disabled={createAdjustmentMutation.isPending}
+          >
+            Save Adjustment
+          </Button>
+        </DialogActions>
       </Dialog>
     </Box>
   );

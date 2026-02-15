@@ -7,26 +7,32 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import WarningIcon from '@mui/icons-material/Warning';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControl from '@mui/material/FormControl';
+import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import Skeleton from '@mui/material/Skeleton';
+import MuiTab from '@mui/material/Tab';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import MuiTabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
 import { BackButton } from '@/components/back-button';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { PageHeader } from '@/components/page-header';
-import { Select, SelectItem } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { buildSettlementSkuProfitability } from '@/lib/plutus/settlement-ads-profitability';
@@ -262,14 +268,14 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
 }
 
 function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
-  return <Badge variant="secondary">LMB {status}</Badge>;
+  if (status === 'Posted') return <Chip label="LMB Posted" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
+  return <Chip label={`LMB ${status}`} size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
-  return <Badge variant="destructive">Plutus Pending</Badge>;
+  if (status === 'Processed') return <Chip label="Plutus Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
+  if (status === 'RolledBack') return <Chip label="Plutus Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
+  return <Chip label="Plutus Pending" size="small" color="error" />;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -530,25 +536,36 @@ function ProcessSettlementDialog({
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>Process Settlement</Button>
-      <Dialog open={open} onOpenChange={handleOpenChange} maxWidth="md">
-        <DialogContent onClose={() => handleOpenChange(false)} sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
-          <DialogHeader>
-            <DialogTitle>Process Settlement</DialogTitle>
-            <DialogDescription>
-              Match an audit data invoice to this settlement, preview the journal entries, then post to QuickBooks.
-            </DialogDescription>
-          </DialogHeader>
+      <Button size="small" variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={() => setOpen(true)}>Process Settlement</Button>
+      <Dialog
+        open={open}
+        onClose={() => handleOpenChange(false)}
+        maxWidth="md"
+        fullWidth
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+      >
+        <DialogContent sx={{ maxHeight: '85vh', overflowY: 'auto' }}>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Box>
+              <DialogTitle sx={{ p: 0 }}>Process Settlement</DialogTitle>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+                Match an audit data invoice to this settlement, preview the journal entries, then post to QuickBooks.
+              </Typography>
+            </Box>
+            <IconButton size="small" onClick={() => handleOpenChange(false)} sx={{ mt: -0.5 }}>
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
 
           {isLoadingAuditData && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-              <Skeleton sx={{ height: 36, width: '100%' }} />
-              <Skeleton sx={{ height: 20, width: 192 }} />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mt: 2 }}>
+              <Skeleton variant="rectangular" sx={{ height: 36, width: '100%' }} />
+              <Skeleton variant="rectangular" sx={{ height: 20, width: 192 }} />
             </Box>
           )}
 
           {!isLoadingAuditData && invoices.length === 0 && (
-            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3 }}>
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data available</Typography>
                 <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
@@ -559,7 +576,7 @@ function ProcessSettlementDialog({
           )}
 
           {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
-            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3 }}>
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2 }}>
               <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
                 <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
@@ -570,7 +587,7 @@ function ProcessSettlementDialog({
           )}
 
           {!isLoadingAuditData && marketplaceInvoices.length > 0 && (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
               {invoiceRecommendation.kind === 'ambiguous' && (
                 <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5, fontSize: '0.875rem', color: 'warning.dark' }}>
                   Multiple audit invoices match this settlement period. Select the correct invoice manually.
@@ -585,64 +602,66 @@ function ProcessSettlementDialog({
               {/* Invoice selector */}
               <Box>
                 <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.75 }}>Invoice</Typography>
-                <Select
-                  value={selectedInvoice}
-                  onValueChange={(v) => {
-                    setSelectedInvoice(v);
-                    setPreview(null);
-                    setError(null);
-                  }}
-                  placeholder="Select an invoice..."
-                  sx={{ bgcolor: 'background.paper' }}
-                  renderValue={(selected) => {
-                    if (!selected) return <Box component="span" sx={{ color: '#94a3b8' }}>Select an invoice...</Box>;
-                    return selected;
-                  }}
-                >
-                  {invoicesWithMeta.map((inv) => (
-                    <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Box component="span">{inv.invoiceId}</Box>
-                        {inv.recommended && (
-                          <Box
-                            component="span"
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              borderRadius: '6px',
-                              bgcolor: 'rgba(69, 179, 212, 0.1)',
-                              px: 0.75,
-                              py: 0.25,
-                              fontSize: '10px',
-                              fontWeight: 500,
-                              color: '#2384a1',
-                            }}
-                          >
-                            Recommended
-                          </Box>
-                        )}
-                        {inv.candidate && !inv.recommended && (
-                          <Box
-                            component="span"
-                            sx={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              borderRadius: '6px',
-                              bgcolor: 'rgba(245, 158, 11, 0.1)',
-                              px: 0.75,
-                              py: 0.25,
-                              fontSize: '10px',
-                              fontWeight: 500,
-                              color: 'warning.dark',
-                            }}
-                          >
-                            Candidate
-                          </Box>
-                        )}
-                      </Box>
-                    </SelectItem>
-                  ))}
-                </Select>
+                <FormControl fullWidth size="small">
+                  <Select
+                    value={selectedInvoice}
+                    onChange={(e) => {
+                      setSelectedInvoice(e.target.value as string);
+                      setPreview(null);
+                      setError(null);
+                    }}
+                    displayEmpty
+                    sx={{ bgcolor: 'background.paper' }}
+                    renderValue={(selected) => {
+                      if (!selected) return <Box component="span" sx={{ color: '#94a3b8' }}>Select an invoice...</Box>;
+                      return selected;
+                    }}
+                  >
+                    {invoicesWithMeta.map((inv) => (
+                      <MenuItem key={inv.invoiceId} value={inv.invoiceId}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box component="span">{inv.invoiceId}</Box>
+                          {inv.recommended && (
+                            <Box
+                              component="span"
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                borderRadius: '6px',
+                                bgcolor: 'rgba(69, 179, 212, 0.1)',
+                                px: 0.75,
+                                py: 0.25,
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                color: '#2384a1',
+                              }}
+                            >
+                              Recommended
+                            </Box>
+                          )}
+                          {inv.candidate && !inv.recommended && (
+                            <Box
+                              component="span"
+                              sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                borderRadius: '6px',
+                                bgcolor: 'rgba(245, 158, 11, 0.1)',
+                                px: 0.75,
+                                py: 0.25,
+                                fontSize: '10px',
+                                fontWeight: 500,
+                                color: 'warning.dark',
+                              }}
+                            >
+                              Candidate
+                            </Box>
+                          )}
+                        </Box>
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
 
                 {/* Invoice metadata */}
                 {selectedMeta && (
@@ -657,7 +676,7 @@ function ProcessSettlementDialog({
                       </>
                     )}
                     {selectedMeta.recommended && (
-                      <Badge variant="default" sx={{ fontSize: '10px' }}>Recommended</Badge>
+                      <Chip label="Recommended" size="small" sx={{ fontSize: '10px', bgcolor: 'rgba(69, 179, 212, 0.1)', color: '#2384a1' }} />
                     )}
                   </Box>
                 )}
@@ -671,7 +690,8 @@ function ProcessSettlementDialog({
               <Button
                 onClick={() => void handlePreview()}
                 disabled={!selectedInvoice || isPreviewLoading}
-                variant="outline"
+                variant="outlined"
+                sx={{ borderColor: 'divider', color: 'text.primary' }}
               >
                 {isPreviewLoading ? 'Computing preview...' : 'Preview'}
               </Button>
@@ -695,21 +715,22 @@ function ProcessSettlementDialog({
                         Hash {preview.processingHash.slice(0, 10)} &middot; {preview.minDate} &rarr; {preview.maxDate}
                       </Typography>
                     </Box>
-                    <Badge
-                      variant={
+                    <Chip
+                      size="small"
+                      label={
                         previewBlockingBlocks.length > 0
-                          ? 'destructive'
+                          ? 'Blocked'
                           : previewWarningBlocks.length > 0
-                            ? 'secondary'
-                            : 'success'
+                            ? 'Ready (Warnings)'
+                            : 'Ready'
                       }
-                    >
-                      {previewBlockingBlocks.length > 0
-                        ? 'Blocked'
+                      {...(previewBlockingBlocks.length > 0
+                        ? { color: 'error' as const }
                         : previewWarningBlocks.length > 0
-                          ? 'Ready (Warnings)'
-                          : 'Ready'}
-                    </Badge>
+                          ? { sx: { bgcolor: 'action.hover', color: 'text.secondary' } }
+                          : { color: 'success' as const, sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' } }
+                      )}
+                    />
                   </Box>
 
                   <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(3, 1fr)' } }}>
@@ -774,7 +795,7 @@ function ProcessSettlementDialog({
                   )}
 
                   {previewBlockingBlocks.length === 0 && (
-                    <Button onClick={() => void handlePost()} disabled={isPosting}>
+                    <Button variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={() => void handlePost()} disabled={isPosting}>
                       {isPosting ? 'Posting...' : 'Post to QBO'}
                     </Button>
                   )}
@@ -819,7 +840,7 @@ export default function SettlementDetailPage() {
   const queryClient = useQueryClient();
   const initialTab = searchParams.get('tab');
   const [tab, setTab] = useState<SettlementDetailTab>(parseSettlementTab(initialTab));
-  const handleTabChange = (value: string) => {
+  const handleTabChange = (_: React.SyntheticEvent, value: string) => {
     setTab(parseSettlementTab(value));
   };
 
@@ -1257,6 +1278,24 @@ export default function SettlementDetailPage() {
     await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
   }
 
+  const tabsSx = {
+    minHeight: 40,
+    bgcolor: 'action.hover',
+    borderRadius: 2,
+    p: 0.5,
+    '& .MuiTabs-indicator': { display: 'none' },
+  };
+
+  const tabSx = {
+    minHeight: 36,
+    borderRadius: 1.5,
+    '&.Mui-selected': {
+      bgcolor: 'background.paper',
+      color: 'text.primary',
+      boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
+    },
+  };
+
   return (
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '72rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
@@ -1312,7 +1351,7 @@ export default function SettlementDetailPage() {
                     />
                   )}
                   {data?.processing && (
-                    <Button variant="outline" size="sm" onClick={() => void handleRollback()} disabled={isRollingBack}>
+                    <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void handleRollback()} disabled={isRollingBack}>
                       {isRollingBack ? 'Rolling back...' : 'Rollback'}
                     </Button>
                   )}
@@ -1330,25 +1369,25 @@ export default function SettlementDetailPage() {
 
         <Card sx={{ border: 1, borderColor: 'divider' }}>
           <CardContent sx={{ p: 0 }}>
-            <Tabs value={tab} onValueChange={handleTabChange}>
-              <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
-                  <TabsList>
-                    <TabsTrigger value="sales">LMB Settlement</TabsTrigger>
-                    {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                      <TabsTrigger value="plutus-preview">Plutus Settlement</TabsTrigger>
-                    )}
-                  </TabsList>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
+              <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
+                <MuiTabs value={tab} onChange={handleTabChange} sx={tabsSx}>
+                  <MuiTab value="sales" label="LMB Settlement" sx={tabSx} />
+                  {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
+                    <MuiTab value="plutus-preview" label="Plutus Settlement" sx={tabSx} />
+                  )}
+                </MuiTabs>
 
-                  {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
-                    <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.75, sm: 1 }, alignItems: { sm: 'center' } }}>
-                      <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary' }}>Preview invoice</Typography>
+                {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
+                  <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.75, sm: 1 }, alignItems: { sm: 'center' } }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary' }}>Preview invoice</Typography>
+                    <FormControl size="small">
                       <Select
                         value={previewInvoiceId ?? ''}
-                        onValueChange={(v) => {
-                          setPendingPreviewInvoiceId(v);
+                        onChange={(e) => {
+                          setPendingPreviewInvoiceId(e.target.value as string);
                         }}
-                        placeholder="Select invoice..."
+                        displayEmpty
                         sx={{ width: { xs: '100%', sm: 360 }, bgcolor: 'background.paper' }}
                         renderValue={(selected) => {
                           if (!selected) return <Box component="span" sx={{ color: '#94a3b8' }}>Select invoice...</Box>;
@@ -1356,7 +1395,7 @@ export default function SettlementDetailPage() {
                         }}
                       >
                         {marketplaceAuditInvoices.map((inv) => (
-                          <SelectItem key={inv.invoiceId} value={inv.invoiceId}>
+                          <MenuItem key={inv.invoiceId} value={inv.invoiceId}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Box component="span">{inv.invoiceId}</Box>
                               {inv.invoiceId === recommendedInvoice && (
@@ -1378,21 +1417,23 @@ export default function SettlementDetailPage() {
                                 </Box>
                               )}
                             </Box>
-                          </SelectItem>
+                          </MenuItem>
                         ))}
                       </Select>
-                    </Box>
-                  )}
-                </Box>
+                    </FormControl>
+                  </Box>
+                )}
               </Box>
+            </Box>
 
-              <TabsContent value="sales" sx={{ p: 2 }}>
+            {tab === 'sales' && (
+              <Box sx={{ p: 2 }}>
                 {isLoading && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Skeleton sx={{ height: 20, width: 160 }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 20, width: 160 }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
                   </Box>
                 )}
                 {!isLoading && error && (
@@ -1404,13 +1445,13 @@ export default function SettlementDetailPage() {
                 {settlement && (
                   <Box sx={{ overflowX: 'auto' }}>
                     <Table>
-                      <TableHeader>
+                      <TableHead>
                         <TableRow>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Account</TableHead>
-                          <TableHead sx={{ textAlign: 'right' }}>Amount</TableHead>
+                          <TableCell>Description</TableCell>
+                          <TableCell>Account</TableCell>
+                          <TableCell sx={{ textAlign: 'right' }}>Amount</TableCell>
                         </TableRow>
-                      </TableHeader>
+                      </TableHead>
                       <TableBody>
                         {settlement.lines.map((line, idx) => (
                           <TableRow key={`${idx}`}>
@@ -1446,15 +1487,17 @@ export default function SettlementDetailPage() {
                     </Table>
                   </Box>
                 )}
-              </TabsContent>
+              </Box>
+            )}
 
-              <TabsContent value="plutus-preview" sx={{ p: 2 }}>
+            {tab === 'plutus-preview' && (
+              <Box sx={{ p: 2 }}>
                 {!settlement && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Skeleton sx={{ height: 20, width: 256 }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
-                    <Skeleton sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 20, width: 256 }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
                   </Box>
                 )}
 
@@ -1473,10 +1516,10 @@ export default function SettlementDetailPage() {
                   <>
                     {isAdsAllocationLoading && (
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        <Skeleton sx={{ height: 20, width: 256 }} />
-                        <Skeleton sx={{ height: 40, width: '100%' }} />
-                        <Skeleton sx={{ height: 40, width: '100%' }} />
-                        <Skeleton sx={{ height: 40, width: '100%' }} />
+                        <Skeleton variant="rectangular" sx={{ height: 20, width: 256 }} />
+                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
                       </Box>
                     )}
 
@@ -1504,7 +1547,7 @@ export default function SettlementDetailPage() {
                                 Advertising cost allocation (SKU)
                               </Typography>
                               {!adsAllocationSaveEnabled && (
-                                <Badge variant="secondary" sx={{ fontSize: '10px' }}>Preview</Badge>
+                                <Chip label="Preview" size="small" sx={{ fontSize: '10px', bgcolor: 'action.hover', color: 'text.secondary' }} />
                               )}
                             </Box>
                             <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
@@ -1530,7 +1573,9 @@ export default function SettlementDetailPage() {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
                               <Button
-                                size="sm"
+                                size="small"
+                                variant="contained"
+                                sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
                                 onClick={() => saveAdsAllocationMutation.mutate()}
                                 disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
                               >
@@ -1578,13 +1623,13 @@ export default function SettlementDetailPage() {
 
                             <Box sx={{ overflowX: 'auto' }}>
                               <Table>
-                                <TableHeader>
+                                <TableHead>
                                   <TableRow>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead sx={{ textAlign: 'right' }}>Amount</TableHead>
-                                    <TableHead sx={{ textAlign: 'right' }}>Posted</TableHead>
+                                    <TableCell>SKU</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Amount</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Posted</TableCell>
                                   </TableRow>
-                                </TableHeader>
+                                </TableHead>
                                 <TableBody>
                                   {adsAllocationPreview.lines.map((line) => (
                                     <TableRow key={line.sku}>
@@ -1594,9 +1639,11 @@ export default function SettlementDetailPage() {
                                       <TableCell sx={{ textAlign: 'right' }}>
                                         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                                           <Box sx={{ width: 140 }}>
-                                            <Input
+                                            <TextField
                                               type="number"
-                                              step="0.01"
+                                              size="small"
+                                              fullWidth
+                                              inputProps={{ step: '0.01' }}
                                               value={line.weightInput}
                                               onChange={(event) => {
                                                 const next = event.target.value;
@@ -1635,18 +1682,18 @@ export default function SettlementDetailPage() {
                                 </Typography>
                                 <Box sx={{ overflowX: 'auto' }}>
                                   <Table>
-                                    <TableHeader>
+                                    <TableHead>
                                       <TableRow>
-                                        <TableHead>SKU</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Sold</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Returns</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Net Units</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Principal</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>COGS</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Ads</TableHead>
-                                        <TableHead sx={{ textAlign: 'right' }}>Contribution</TableHead>
+                                        <TableCell>SKU</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Sold</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Returns</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Net Units</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Principal</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>COGS</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Ads</TableCell>
+                                        <TableCell sx={{ textAlign: 'right' }}>Contribution</TableCell>
                                       </TableRow>
-                                    </TableHeader>
+                                    </TableHead>
                                     <TableBody>
                                       {adsSkuProfitabilityPreview.lines.map((line) => (
                                         <TableRow key={`profit-${line.sku}`}>
@@ -1741,117 +1788,110 @@ export default function SettlementDetailPage() {
                     )}
                   </>
                 )}
-              </TabsContent>
+              </Box>
+            )}
 
-              {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                <TabsContent value="plutus-preview" sx={{ p: 2 }}>
-                  {(isLoadingAudit || isPreviewLoading) && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                      <Skeleton sx={{ height: 20, width: 224 }} />
-                      <Skeleton sx={{ height: 40, width: '100%' }} />
-                      <Skeleton sx={{ height: 40, width: '100%' }} />
-                      <Skeleton sx={{ height: 40, width: '100%' }} />
+            {tab === 'plutus-preview' && (settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
+              <Box sx={{ p: 2 }}>
+                {(isLoadingAudit || isPreviewLoading) && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Skeleton variant="rectangular" sx={{ height: 20, width: 224 }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                  </Box>
+                )}
+
+                {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data uploaded</Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                        Upload the LMB Audit Data CSV on the{' '}
+                        <Box
+                          component={Link}
+                          href="/audit-data"
+                          sx={{ color: '#2384a1', '&:hover': { textDecoration: 'underline' } }}
+                        >
+                          Audit Data
+                        </Box>{' '}
+                        page first.
+                      </Typography>
                     </Box>
-                  )}
+                  </Box>
+                )}
 
-                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
-                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data uploaded</Typography>
-                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                          Upload the LMB Audit Data CSV on the{' '}
-                          <Box
-                            component={Link}
-                            href="/audit-data"
-                            sx={{ color: '#2384a1', '&:hover': { textDecoration: 'underline' } }}
-                          >
-                            Audit Data
-                          </Box>{' '}
-                          page first.
+                {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && auditData?.invoices?.length && marketplaceAuditInvoices.length === 0 && (
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                        Audit data exists, but none of the uploaded invoices match {settlement.marketplace.id}.
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+
+                {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && marketplaceAuditInvoices.length > 0 && !previewInvoiceId && (
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
+                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                        Choose a Preview invoice above to compute a settlement preview.
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+
+                {previewError && (
+                  <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
+                    {previewError instanceof Error ? previewError.message : String(previewError)}
+                  </Box>
+                )}
+
+                {previewData && previewData.cogsJournalEntry && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {/* Header */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                          Invoice {previewData.invoiceId}
+                        </Typography>
+                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
+                          {previewData.minDate} &rarr; {previewData.maxDate}
                         </Typography>
                       </Box>
-                    </Box>
-                  )}
-
-                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && auditData?.invoices?.length && marketplaceAuditInvoices.length === 0 && (
-                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
-                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                          Audit data exists, but none of the uploaded invoices match {settlement.marketplace.id}.
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-
-                  {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && marketplaceAuditInvoices.length > 0 && !previewInvoiceId && (
-                    <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
-                        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                          Choose a Preview invoice above to compute a settlement preview.
-                        </Typography>
-                      </Box>
-                    </Box>
-                  )}
-
-                  {previewError && (
-                    <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
-                      {previewError instanceof Error ? previewError.message : String(previewError)}
-                    </Box>
-                  )}
-
-                  {previewData && previewData.cogsJournalEntry && (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                      {/* Header */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Box>
-                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                            Invoice {previewData.invoiceId}
-                          </Typography>
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
-                            {previewData.minDate} &rarr; {previewData.maxDate}
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {data?.processing && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                component="a"
-                                href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
-                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                              >
-                                COGS JE
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                component="a"
-                                href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
-                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                              >
-                                P&amp;L JE
-                              </Button>
-                            </>
-                          )}
-                          <Badge
-                            variant={
-                              isProcessedPreview
-                                ? previewIssueCount === 0
-                                  ? 'success'
-                                  : 'secondary'
-                                : previewBlockingCount > 0
-                                  ? 'destructive'
-                                  : previewWarningCount > 0
-                                    ? 'secondary'
-                                    : 'success'
-                            }
-                          >
-                            {isProcessedPreview
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {data?.processing && (
+                          <>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              sx={{ borderColor: 'divider', color: 'text.primary' }}
+                              component="a"
+                              href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                              {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                              endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                            >
+                              COGS JE
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              sx={{ borderColor: 'divider', color: 'text.primary' }}
+                              component="a"
+                              href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                              {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                              endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                            >
+                              P&amp;L JE
+                            </Button>
+                          </>
+                        )}
+                        <Chip
+                          size="small"
+                          label={
+                            isProcessedPreview
                               ? previewIssueCount === 0
                                 ? 'Processed'
                                 : 'Processed (Needs Review)'
@@ -1859,225 +1899,235 @@ export default function SettlementDetailPage() {
                                 ? 'Blocked'
                                 : previewWarningCount > 0
                                   ? 'Ready (Warnings)'
-                                  : 'Ready to Process'}
-                          </Badge>
-                        </Box>
+                                  : 'Ready to Process'
+                          }
+                          {...(isProcessedPreview
+                            ? previewIssueCount === 0
+                              ? { color: 'success' as const, sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' } }
+                              : { sx: { bgcolor: 'action.hover', color: 'text.secondary' } }
+                            : previewBlockingCount > 0
+                              ? { color: 'error' as const }
+                              : previewWarningCount > 0
+                                ? { sx: { bgcolor: 'action.hover', color: 'text.secondary' } }
+                                : { color: 'success' as const, sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' } }
+                          )}
+                        />
                       </Box>
-
-                      {/* Summary cards */}
-                      <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(4, 1fr)' } }}>
-                        <Card sx={{ border: 1, borderColor: 'divider' }}>
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales</Typography>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.sales.length}</Typography>
-                          </CardContent>
-                        </Card>
-                        <Card sx={{ border: 1, borderColor: 'divider' }}>
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Returns</Typography>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.returns.length}</Typography>
-                          </CardContent>
-                        </Card>
-                        <Card sx={{ border: 1, borderColor: 'divider' }}>
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>COGS Lines</Typography>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.cogsJournalEntry.lines.length}</Typography>
-                          </CardContent>
-                        </Card>
-                        <Card sx={{ border: 1, borderColor: 'divider' }}>
-                          <CardContent sx={{ p: 1.5 }}>
-                            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>P&amp;L Lines</Typography>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.pnlJournalEntry.lines.length}</Typography>
-                          </CardContent>
-                        </Card>
-                      </Box>
-
-                      {/* Blocks */}
-                      {isProcessedPreview && previewIssueCount > 0 && (
-                        <Box sx={{ borderRadius: 2, p: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
-                              {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
-                            </Box>
-                          </Box>
-                          <Box component="ul" sx={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: 0.5, color: 'warning.dark' }}>
-                            {visiblePreviewBlocks.map((b, idx) => (
-                              <li key={idx}>
-                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
-                                )}
-                              </li>
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
-
-                      {!isProcessedPreview && previewBlockingCount > 0 && (
-                        <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <WarningIcon sx={{ fontSize: 16, color: 'error.main' }} />
-                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'error.dark' }}>
-                              {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
-                            </Box>
-                          </Box>
-                          <Box component="ul" sx={{ fontSize: '0.875rem', color: 'error.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                            {previewBlockingBlocks.map((b, idx) => (
-                              <li key={idx}>
-                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
-                                )}
-                              </li>
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
-
-                      {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
-                        <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 2 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
-                            <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
-                              {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
-                            </Box>
-                          </Box>
-                          <Box component="ul" sx={{ fontSize: '0.875rem', color: 'warning.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                            {previewWarningBlocks.map((b, idx) => (
-                              <li key={idx}>
-                                <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
-                                {b.details && 'error' in b.details && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
-                                )}
-                                {formatBlockDetails(b.details) && (
-                                  <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
-                                )}
-                              </li>
-                            ))}
-                          </Box>
-                        </Box>
-                      )}
-
-                      {/* COGS Journal Entry */}
-                      {previewData.cogsJournalEntry.lines.length > 0 && (
-                        <Box>
-                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
-                            COGS Journal Entry
-                            <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
-                              {previewData.cogsJournalEntry.docNumber}
-                            </Box>
-                          </Typography>
-                          <Box sx={{ overflowX: 'auto' }}>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Account</TableHead>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead sx={{ textAlign: 'right' }}>Debit</TableHead>
-                                  <TableHead sx={{ textAlign: 'right' }}>Credit</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {previewData.cogsJournalEntry.lines.map((line, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                                        <Box component="span">{line.accountName}</Box>
-                                        {line.accountNumber ? (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
-                                        ) : (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
-                                        )}
-                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                                            {line.accountFullyQualifiedName}
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    </TableCell>
-                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                                      {line.description}
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </Box>
-                        </Box>
-                      )}
-
-                      {/* P&L Reclass Journal Entry */}
-                      {previewData.pnlJournalEntry.lines.length > 0 && (
-                        <Box>
-                          <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
-                            P&amp;L Reclass Journal Entry
-                            <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
-                              {previewData.pnlJournalEntry.docNumber}
-                            </Box>
-                          </Typography>
-                          <Box sx={{ overflowX: 'auto' }}>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>Account</TableHead>
-                                  <TableHead>Description</TableHead>
-                                  <TableHead sx={{ textAlign: 'right' }}>Debit</TableHead>
-                                  <TableHead sx={{ textAlign: 'right' }}>Credit</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {previewData.pnlJournalEntry.lines.map((line, idx) => (
-                                  <TableRow key={idx}>
-                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                                      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                                        <Box component="span">{line.accountName}</Box>
-                                        {line.accountNumber ? (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
-                                        ) : (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
-                                        )}
-                                        {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
-                                          <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                                            {line.accountFullyQualifiedName}
-                                          </Box>
-                                        )}
-                                      </Box>
-                                    </TableCell>
-                                    <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                                      {line.description}
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                                      {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                                      {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </Box>
-                        </Box>
-                      )}
                     </Box>
-                  )}
-                </TabsContent>
-              )}
 
-            </Tabs>
+                    {/* Summary cards */}
+                    <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(4, 1fr)' } }}>
+                      <Card sx={{ border: 1, borderColor: 'divider' }}>
+                        <CardContent sx={{ p: 1.5 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales</Typography>
+                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.sales.length}</Typography>
+                        </CardContent>
+                      </Card>
+                      <Card sx={{ border: 1, borderColor: 'divider' }}>
+                        <CardContent sx={{ p: 1.5 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Returns</Typography>
+                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.returns.length}</Typography>
+                        </CardContent>
+                      </Card>
+                      <Card sx={{ border: 1, borderColor: 'divider' }}>
+                        <CardContent sx={{ p: 1.5 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>COGS Lines</Typography>
+                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.cogsJournalEntry.lines.length}</Typography>
+                        </CardContent>
+                      </Card>
+                      <Card sx={{ border: 1, borderColor: 'divider' }}>
+                        <CardContent sx={{ p: 1.5 }}>
+                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>P&amp;L Lines</Typography>
+                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.pnlJournalEntry.lines.length}</Typography>
+                        </CardContent>
+                      </Card>
+                    </Box>
+
+                    {/* Blocks */}
+                    {isProcessedPreview && previewIssueCount > 0 && (
+                      <Box sx={{ borderRadius: 2, p: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
+                            {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
+                          </Box>
+                        </Box>
+                        <Box component="ul" sx={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: 0.5, color: 'warning.dark' }}>
+                          {visiblePreviewBlocks.map((b, idx) => (
+                            <li key={idx}>
+                              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                              {b.details && 'error' in b.details && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                              )}
+                              {formatBlockDetails(b.details) && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                              )}
+                            </li>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {!isProcessedPreview && previewBlockingCount > 0 && (
+                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <WarningIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'error.dark' }}>
+                            {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
+                          </Box>
+                        </Box>
+                        <Box component="ul" sx={{ fontSize: '0.875rem', color: 'error.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {previewBlockingBlocks.map((b, idx) => (
+                            <li key={idx}>
+                              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                              {b.details && 'error' in b.details && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                              )}
+                              {formatBlockDetails(b.details) && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                              )}
+                            </li>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {!isProcessedPreview && previewBlockingCount === 0 && previewWarningCount > 0 && (
+                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
+                            {previewWarningCount} warning{previewWarningCount === 1 ? '' : 's'} (non-blocking)
+                          </Box>
+                        </Box>
+                        <Box component="ul" sx={{ fontSize: '0.875rem', color: 'warning.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {previewWarningBlocks.map((b, idx) => (
+                            <li key={idx}>
+                              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                              {b.details && 'error' in b.details && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                              )}
+                              {formatBlockDetails(b.details) && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                              )}
+                            </li>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* COGS Journal Entry */}
+                    {previewData.cogsJournalEntry.lines.length > 0 && (
+                      <Box>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
+                          COGS Journal Entry
+                          <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
+                            {previewData.cogsJournalEntry.docNumber}
+                          </Box>
+                        </Typography>
+                        <Box sx={{ overflowX: 'auto' }}>
+                          <Table>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Account</TableCell>
+                                <TableCell>Description</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Debit</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Credit</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {previewData.cogsJournalEntry.lines.map((line, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                      <Box component="span">{line.accountName}</Box>
+                                      {line.accountNumber ? (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
+                                      ) : (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
+                                      )}
+                                      {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                          {line.accountFullyQualifiedName}
+                                        </Box>
+                                      )}
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    {line.description}
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                    {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                    {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* P&L Reclass Journal Entry */}
+                    {previewData.pnlJournalEntry.lines.length > 0 && (
+                      <Box>
+                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', mb: 1 }}>
+                          P&amp;L Reclass Journal Entry
+                          <Box component="span" sx={{ ml: 1, fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
+                            {previewData.pnlJournalEntry.docNumber}
+                          </Box>
+                        </Typography>
+                        <Box sx={{ overflowX: 'auto' }}>
+                          <Table>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Account</TableCell>
+                                <TableCell>Description</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Debit</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Credit</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {previewData.pnlJournalEntry.lines.map((line, idx) => (
+                                <TableRow key={idx}>
+                                  <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                                      <Box component="span">{line.accountName}</Box>
+                                      {line.accountNumber ? (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>#{line.accountNumber}</Box>
+                                      ) : (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', fontFamily: 'monospace', color: 'text.secondary' }}>ID {line.accountId}</Box>
+                                      )}
+                                      {line.accountFullyQualifiedName && line.accountFullyQualifiedName !== line.accountName && (
+                                        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                                          {line.accountFullyQualifiedName}
+                                        </Box>
+                                      )}
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    {line.description}
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                    {line.postingType === 'Debit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                    {line.postingType === 'Credit' ? formatMoney(line.amountCents / 100, settlement.marketplace.currency) : ''}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            )}
+
           </CardContent>
         </Card>
       </Box>
