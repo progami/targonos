@@ -13,12 +13,12 @@ const UsSettlementMappingSchema = z.object({
 
 export async function GET() {
   try {
-    const config = await db.setupConfig.findFirst();
-    const memoMapping = config?.usSettlementAccountIdByMemo;
+    const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+    const memoMapping = config?.accountIdByMemo;
 
     return NextResponse.json({
-      usSettlementBankAccountId: config?.usSettlementBankAccountId ?? null,
-      usSettlementPaymentAccountId: config?.usSettlementPaymentAccountId ?? null,
+      usSettlementBankAccountId: config?.bankAccountId ?? null,
+      usSettlementPaymentAccountId: config?.paymentAccountId ?? null,
       usSettlementAccountIdByMemo: typeof memoMapping === 'object' && memoMapping !== null ? memoMapping : {},
     });
   } catch (error) {
@@ -32,48 +32,44 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = UsSettlementMappingSchema.parse(body);
 
-    const existing = await db.setupConfig.findFirst();
+    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
 
     const nextBank =
       parsed.usSettlementBankAccountId === undefined
-        ? existing?.usSettlementBankAccountId ?? null
+        ? existing?.bankAccountId ?? null
         : parsed.usSettlementBankAccountId;
 
     const nextPayment =
       parsed.usSettlementPaymentAccountId === undefined
-        ? existing?.usSettlementPaymentAccountId ?? null
+        ? existing?.paymentAccountId ?? null
         : parsed.usSettlementPaymentAccountId;
 
     const nextMemoMapping =
       parsed.usSettlementAccountIdByMemo === undefined
-        ? existing?.usSettlementAccountIdByMemo ?? {}
+        ? existing?.accountIdByMemo ?? {}
         : parsed.usSettlementAccountIdByMemo;
 
-    if (existing) {
-      await db.setupConfig.update({
-        where: { id: existing.id },
-        data: {
-          usSettlementBankAccountId: nextBank,
-          usSettlementPaymentAccountId: nextPayment,
-          usSettlementAccountIdByMemo: nextMemoMapping,
-        },
-      });
-    } else {
-      await db.setupConfig.create({
-        data: {
-          usSettlementBankAccountId: nextBank,
-          usSettlementPaymentAccountId: nextPayment,
-          usSettlementAccountIdByMemo: nextMemoMapping,
-        },
-      });
-    }
+    await db.settlementPostingConfig.upsert({
+      where: { marketplace: 'amazon.com' },
+      update: {
+        bankAccountId: nextBank,
+        paymentAccountId: nextPayment,
+        accountIdByMemo: nextMemoMapping,
+      },
+      create: {
+        marketplace: 'amazon.com',
+        bankAccountId: nextBank,
+        paymentAccountId: nextPayment,
+        accountIdByMemo: nextMemoMapping,
+      },
+    });
 
     const user = await getCurrentUser();
     await logAudit({
       userId: user?.id ?? 'system',
       userName: user?.name ?? user?.email ?? 'system',
       action: 'CONFIG_UPDATED',
-      entityType: 'SetupConfig',
+      entityType: 'SettlementPostingConfig',
       details: {
         usSettlementMemoMappings: Object.keys(nextMemoMapping ?? {}).length,
       },
@@ -88,4 +84,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save settlement mapping' }, { status: 500 });
   }
 }
-
