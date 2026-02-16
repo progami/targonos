@@ -85,13 +85,31 @@ model SetupConfig {
   autopostEnabled    Boolean  @default(false)
   autopostStartDate  DateTime?
 
-  // US settlement posting mappings (SP-API Finances -> QBO)
-  usSettlementBankAccountId    String?
-  usSettlementPaymentAccountId String?
-  usSettlementAccountIdByMemo  Json?   @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// SettlementPostingConfig stores memo→account mappings needed to post settlement JEs.
+/// Used for deterministic mapping when ingesting settlements directly (e.g., US SP-API Finances).
+model SettlementPostingConfig {
+  id String @id @default(cuid())
+
+  /// Marketplace identifier (e.g. "amazon.com")
+  marketplace String @unique
+
+  /// QBO account id for the payout line when OriginalTotal is positive ("Transfer to Bank")
+  bankAccountId String?
+
+  /// QBO account id for the payout line when OriginalTotal is negative ("Payment to Amazon")
+  paymentAccountId String?
+
+  /// Maps settlement memo strings to QBO account ids.
+  accountIdByMemo Json @db.JsonB
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([marketplace])
 }
 
 /// AuditDataUpload tracks a single LMB Audit Data CSV upload.

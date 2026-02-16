@@ -113,35 +113,31 @@ export async function POST() {
       await saveServerQboConnection(imported.updatedConnection);
     }
 
-    const existing = await db.setupConfig.findFirst();
-    const nextBankAccountId = imported.result.bankAccountId ?? existing?.usSettlementBankAccountId ?? null;
-    const nextPaymentAccountId = imported.result.paymentAccountId ?? existing?.usSettlementPaymentAccountId ?? null;
+    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+    const nextBankAccountId = imported.result.bankAccountId ?? existing?.bankAccountId ?? null;
+    const nextPaymentAccountId = imported.result.paymentAccountId ?? existing?.paymentAccountId ?? null;
 
-    if (existing) {
-      await db.setupConfig.update({
-        where: { id: existing.id },
-        data: {
-          usSettlementBankAccountId: nextBankAccountId,
-          usSettlementPaymentAccountId: nextPaymentAccountId,
-          usSettlementAccountIdByMemo: imported.result.memoMappings,
-        },
-      });
-    } else {
-      await db.setupConfig.create({
-        data: {
-          usSettlementBankAccountId: nextBankAccountId,
-          usSettlementPaymentAccountId: nextPaymentAccountId,
-          usSettlementAccountIdByMemo: imported.result.memoMappings,
-        },
-      });
-    }
+    await db.settlementPostingConfig.upsert({
+      where: { marketplace: 'amazon.com' },
+      update: {
+        bankAccountId: nextBankAccountId,
+        paymentAccountId: nextPaymentAccountId,
+        accountIdByMemo: imported.result.memoMappings,
+      },
+      create: {
+        marketplace: 'amazon.com',
+        bankAccountId: nextBankAccountId,
+        paymentAccountId: nextPaymentAccountId,
+        accountIdByMemo: imported.result.memoMappings,
+      },
+    });
 
     const user = await getCurrentUser();
     await logAudit({
       userId: user?.id ?? 'system',
       userName: user?.name ?? user?.email ?? 'system',
       action: 'CONFIG_UPDATED',
-      entityType: 'SetupConfig',
+      entityType: 'SettlementPostingConfig',
       details: {
         usSettlementMemoMappings: Object.keys(imported.result.memoMappings).length,
         usSettlementBankAccountId: nextBankAccountId,
@@ -168,4 +164,3 @@ export async function POST() {
     );
   }
 }
-

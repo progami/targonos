@@ -139,15 +139,15 @@ async function loadUsSettlementPostingMapping(input: {
   bankAccountId: string;
   paymentAccountId: string;
 }> {
-  const config = await db.setupConfig.findFirst();
+  const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
   if (!config) {
-    throw new Error('Missing setup config: configure settlement mapping first');
+    throw new Error('Missing settlement mapping: configure Settlement Mapping first');
   }
 
-  const bankAccountId = config.usSettlementBankAccountId ? config.usSettlementBankAccountId.trim() : '';
-  const paymentAccountId = config.usSettlementPaymentAccountId ? config.usSettlementPaymentAccountId.trim() : '';
+  const bankAccountId = config.bankAccountId ? config.bankAccountId.trim() : '';
+  const paymentAccountId = config.paymentAccountId ? config.paymentAccountId.trim() : '';
 
-  const memoMapping = requireMemoAccountMapping(config.usSettlementAccountIdByMemo ?? {});
+  const memoMapping = requireMemoAccountMapping(config.accountIdByMemo);
   const accountIdByMemo = new Map<string, string>(Object.entries(memoMapping));
 
   const missingMemos = Array.from(input.requiredMemos).filter((memo) => !accountIdByMemo.has(memo)).sort();
