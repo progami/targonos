@@ -894,7 +894,7 @@ function AccountsSection({
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
         {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
         {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
-        {renderAccountGroup('Revenue & Fees (LMB)', LMB_ACCOUNTS)}
+        {renderAccountGroup('Amazon Revenue & Fees', LMB_ACCOUNTS)}
       </Box>
 
       {error && (

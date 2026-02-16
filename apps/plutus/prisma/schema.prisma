@@ -85,6 +85,11 @@ model SetupConfig {
   autopostEnabled    Boolean  @default(false)
   autopostStartDate  DateTime?
 
+  // US settlement posting mappings (SP-API Finances -> QBO)
+  usSettlementBankAccountId    String?
+  usSettlementPaymentAccountId String?
+  usSettlementAccountIdByMemo  Json?   @db.JsonB
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
