@@ -540,7 +540,7 @@ export async function computeSettlementPreview(input: {
     });
     for (const issue of deterministicAllocations.issues) {
       blocks.push({
-        code: 'PNL_ALLOCATION_ERROR',
+        code: 'PNL_ALLOCATION_WARNING',
         message: issue.message,
         details: { bucket: issue.bucket },
       });
@@ -552,8 +552,8 @@ export async function computeSettlementPreview(input: {
 
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
       blocks.push({
-        code: 'PNL_ALLOCATION_ERROR',
-        message: deterministicSourceGuidanceForBucket(issue.bucket),
+        code: 'PNL_ALLOCATION_WARNING',
+        message: `Leaving SKU-less bucket amount in parent account. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
         details: { bucket: issue.bucket, totalCents: issue.totalCents, reason: issue.reason },
       });
     }
