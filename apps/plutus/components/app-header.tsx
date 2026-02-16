@@ -117,6 +117,7 @@ const NAV_ITEMS: NavItem[] = [
     icon: ChecklistIcon,
     items: [
       { href: '/setup', label: 'Setup Wizard' },
+      { href: '/settlement-mapping', label: 'Settlement Mapping' },
       { href: '/chart-of-accounts', label: 'Chart of Accounts' },
     ],
   },
