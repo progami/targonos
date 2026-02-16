@@ -114,7 +114,7 @@ function statusBadge(status: ReconciliationRow['status']) {
     case 'lmb-only':
       return (
         <Chip
-          label="LMB Only"
+          label="Audit Only"
           size="small"
           sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'action.hover', color: 'text.secondary' }}
         />
@@ -123,7 +123,7 @@ function statusBadge(status: ReconciliationRow['status']) {
 }
 
 function exportToCsv(rows: ReconciliationRow[], month: string, marketplace: string) {
-  const header = ['Order ID', 'Date', 'Type', 'Amazon Amount', 'LMB Amount', 'Status', 'Difference'];
+  const header = ['Order ID', 'Date', 'Type', 'Amazon Amount', 'Audit Amount', 'Status', 'Difference'];
   const csvRows = rows.map((r) => [
     r.orderId,
     r.date,
@@ -225,7 +225,7 @@ export default function ReconciliationPage() {
       <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Reconciliation"
-          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored LMB audit data"
+          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored audit data"
           variant="accent"
         />
 
@@ -263,7 +263,7 @@ export default function ReconciliationPage() {
                 <Box>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Upload and reconcile</Typography>
                   <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
-                    Compare Amazon order totals against your stored LMB audit data
+                    Compare Amazon order totals against your stored audit data
                   </Typography>
                 </Box>
               </Box>
@@ -514,11 +514,11 @@ export default function ReconciliationPage() {
 
             {/* Detail Breakdown */}
             <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.75rem', color: 'text.secondary', px: 0.5 }}>
-              <Box component="span">LMB rows: {result.summary.totalLmbRows.toLocaleString()}</Box>
+              <Box component="span">Audit rows: {result.summary.totalLmbRows.toLocaleString()}</Box>
               <Box component="span">&middot;</Box>
               <Box component="span">Amazon only: {result.summary.amazonOnly.toLocaleString()}</Box>
               <Box component="span">&middot;</Box>
-              <Box component="span">LMB only: {result.summary.lmbOnly.toLocaleString()}</Box>
+              <Box component="span">Audit only: {result.summary.lmbOnly.toLocaleString()}</Box>
             </Box>
 
             {/* Results Table */}
@@ -578,7 +578,7 @@ export default function ReconciliationPage() {
                         <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Date</MuiTableCell>
                         <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Type</MuiTableCell>
                         <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Amazon</MuiTableCell>
-                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>LMB</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Audit</MuiTableCell>
                         <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Difference</MuiTableCell>
                         <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Status</MuiTableCell>
                       </MuiTableRow>

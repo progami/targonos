@@ -457,7 +457,7 @@ export default function ChartOfAccountsPage() {
               value="lmb"
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  LMB / Plutus
+                  Template
                   <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.lmb}</Box>
                 </Box>
               }
@@ -653,7 +653,7 @@ export default function ChartOfAccountsPage() {
                               </Box>
                               {account.source === 'lmb' && (
                                 <Chip
-                                  label="LMB"
+                                  label="Template"
                                   size="small"
                                   sx={{
                                     ml: 1,

@@ -189,7 +189,7 @@ test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settle
   });
 
   assert.equal(draft.segments.length, 1);
-  assert.equal(draft.segments[0]?.docNumber, 'LMB-US-19-31DEC-25-1');
+  assert.equal(draft.segments[0]?.docNumber, 'PLUTUS#LMB-US-19-31DEC-25-1');
 
   const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);

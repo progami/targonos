@@ -76,7 +76,7 @@ function buildUsLmbDocNumber(input: { startIsoDay: string; endIsoDay: string; se
   const endToken = `${pad2(end.day)}${month}`;
   const yearToken = String(end.year).slice(-2);
 
-  return `LMB-US-${startToken}-${endToken}-${yearToken}-${input.seq}`;
+  return `PLUTUS#LMB-US-${startToken}-${endToken}-${yearToken}-${input.seq}`;
 }
 
 function addCents(map: Map<string, number>, key: string, cents: number): void {

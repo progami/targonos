@@ -9,7 +9,7 @@ import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
-import { createJournalEntry, fetchJournalEntries, fetchJournalEntryById, type QboConnection } from '@/lib/qbo/api';
+import { createJournalEntry, fetchJournalEntries, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type SettlementDraftBundle = {
@@ -112,9 +112,25 @@ async function findExistingJournalEntryIdByDocNumber(
   return { journalEntryId: exact.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
-async function buildAccountMappingFromExistingUsSettlements(input: {
-  connection: QboConnection;
-  scanStartDate?: string;
+function requireMemoAccountMapping(value: unknown): Record<string, string> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('US settlement memo mapping must be an object');
+  }
+
+  const obj = value as Record<string, unknown>;
+  const result: Record<string, string> = {};
+
+  for (const [memo, accountIdRaw] of Object.entries(obj)) {
+    if (typeof accountIdRaw !== 'string' || accountIdRaw.trim() === '') {
+      throw new Error(`Invalid account id for memo mapping: ${memo}`);
+    }
+    result[memo] = accountIdRaw;
+  }
+
+  return result;
+}
+
+async function loadUsSettlementPostingMapping(input: {
   requiredMemos: Set<string>;
   needBankAccount: boolean;
   needPaymentAccount: boolean;
@@ -122,108 +138,34 @@ async function buildAccountMappingFromExistingUsSettlements(input: {
   accountIdByMemo: Map<string, string>;
   bankAccountId: string;
   paymentAccountId: string;
-  updatedConnection?: QboConnection;
 }> {
-  let activeConnection = input.connection;
-
-  const remainingMemos = new Set(Array.from(input.requiredMemos));
-  const accountIdByMemo = new Map<string, string>();
-  let bankAccountId = '';
-  let paymentAccountId = '';
-
-  const pageSize = 100;
-  let startPosition = 1;
-
-  while (true) {
-    const page = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'LMB-US-',
-      startDate: input.scanStartDate,
-      maxResults: pageSize,
-      startPosition,
-    });
-
-    if (page.updatedConnection) {
-      activeConnection = page.updatedConnection;
-    }
-
-    for (const je of page.journalEntries) {
-      const full = await fetchJournalEntryById(activeConnection, je.Id);
-      if (full.updatedConnection) {
-        activeConnection = full.updatedConnection;
-      }
-
-      const lines = Array.isArray(full.journalEntry.Line) ? full.journalEntry.Line : [];
-      for (const line of lines) {
-        const detail = line.JournalEntryLineDetail;
-        if (!detail) continue;
-        const accountId = detail.AccountRef?.value;
-        if (typeof accountId !== 'string' || accountId.trim() === '') continue;
-
-        const description = typeof line.Description === 'string' ? line.Description.trim() : '';
-        if (description === '') continue;
-
-        if (description === 'Transfer to Bank') {
-          if (bankAccountId !== '' && bankAccountId !== accountId) {
-            throw new Error(`Multiple bank accounts detected for 'Transfer to Bank': ${bankAccountId}, ${accountId}`);
-          }
-          bankAccountId = accountId;
-          continue;
-        }
-
-        if (description === 'Payment to Amazon') {
-          if (paymentAccountId !== '' && paymentAccountId !== accountId) {
-            throw new Error(`Multiple payment accounts detected for 'Payment to Amazon': ${paymentAccountId}, ${accountId}`);
-          }
-          paymentAccountId = accountId;
-          continue;
-        }
-
-        if (!remainingMemos.has(description)) continue;
-
-        const existing = accountIdByMemo.get(description);
-        if (existing !== undefined && existing !== accountId) {
-          throw new Error(`Memo '${description}' maps to multiple accounts: ${existing}, ${accountId}`);
-        }
-
-        accountIdByMemo.set(description, accountId);
-        remainingMemos.delete(description);
-      }
-
-      const hasAllMemos = remainingMemos.size === 0;
-      const hasBank = input.needBankAccount ? bankAccountId !== '' : true;
-      const hasPayment = input.needPaymentAccount ? paymentAccountId !== '' : true;
-      if (hasAllMemos && hasBank && hasPayment) {
-        return {
-          accountIdByMemo,
-          bankAccountId,
-          paymentAccountId,
-          updatedConnection: activeConnection === input.connection ? undefined : activeConnection,
-        };
-      }
-    }
-
-    if (page.journalEntries.length === 0) break;
-    startPosition += page.journalEntries.length;
-    if (startPosition > page.totalCount) break;
+  const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+  if (!config) {
+    throw new Error('Missing settlement mapping: configure Settlement Mapping first');
   }
 
-  const missingMemos = Array.from(remainingMemos).sort();
+  const bankAccountId = config.bankAccountId ? config.bankAccountId.trim() : '';
+  const paymentAccountId = config.paymentAccountId ? config.paymentAccountId.trim() : '';
+
+  const memoMapping = requireMemoAccountMapping(config.accountIdByMemo);
+  const accountIdByMemo = new Map<string, string>(Object.entries(memoMapping));
+
+  const missingMemos = Array.from(input.requiredMemos).filter((memo) => !accountIdByMemo.has(memo)).sort();
   if (missingMemos.length > 0) {
     throw new Error(`Missing account mappings for memos: ${missingMemos.join(' | ')}`);
   }
 
   if (input.needBankAccount && bankAccountId === '') {
-    throw new Error("Missing 'Transfer to Bank' account id (no positive settlements found in QBO history)");
+    throw new Error("Missing 'Transfer to Bank' account id (configure it in Settlement Mapping)");
   }
   if (input.needPaymentAccount && paymentAccountId === '') {
-    throw new Error("Missing 'Payment to Amazon' account id (no negative settlements found in QBO history)");
+    throw new Error("Missing 'Payment to Amazon' account id (configure it in Settlement Mapping)");
   }
 
   return {
     accountIdByMemo,
     bankAccountId,
     paymentAccountId,
-    updatedConnection: activeConnection === input.connection ? undefined : activeConnection,
   };
 }
 
@@ -317,15 +259,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     bundles.push({ settlementId, eventGroupId, draft });
   }
 
-  const mapping = await buildAccountMappingFromExistingUsSettlements({
-    connection: activeConnection,
-    requiredMemos,
-    needBankAccount,
-    needPaymentAccount,
-  });
-  if (mapping.updatedConnection) {
-    activeConnection = mapping.updatedConnection;
-  }
+  const mapping = await loadUsSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
 
   const segments: UsSpApiSettlementSyncSegmentResult[] = [];
 
