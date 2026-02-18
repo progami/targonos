@@ -118,7 +118,7 @@ function readApiError(payload: unknown, fallback: string): string {
 /* ---- shared table sx ---- */
 const thSx = { height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' } as const;
 const tdSx = { px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' } as const;
-const theadSx = { bgcolor: 'rgba(248, 250, 252, 0.8)', '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' }, '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' } } as const;
+const theadSx = { bgcolor: 'rgba(245, 245, 245, 0.8)', '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' }, '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' } } as const;
 const tbodySx = { '& .MuiTableRow-root:last-child': { borderBottom: 0 } } as const;
 const rowSx = { borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } } as const;
 const tableSx = { width: '100%', fontSize: '0.875rem' } as const;
@@ -127,14 +127,14 @@ const selectSx = {
   borderRadius: '8px',
   fontSize: '0.875rem',
   '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
   '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
 } as const;
 
 const dateFieldSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
     '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
   },
 } as const;
@@ -386,8 +386,8 @@ export default function DataSourcesPage() {
                   py: 5,
                   transition: 'all 0.2s',
                   ...(isDragging
-                    ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
-                    : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
+                    ? { borderColor: '#00C2B9', bgcolor: 'rgba(0, 194, 185, 0.05)' }
+                    : { borderColor: 'divider', '&:hover': { borderColor: '#00C2B9' } }),
                 }}
                 onDragOver={(e: React.DragEvent) => {
                   e.preventDefault();
@@ -406,7 +406,7 @@ export default function DataSourcesPage() {
                         borderRadius: '50%',
                         border: 4,
                         borderColor: 'divider',
-                        borderTopColor: '#45B3D4',
+                        borderTopColor: '#00C2B9',
                         animation: 'spin 1s linear infinite',
                         '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
                       }}
@@ -424,8 +424,8 @@ export default function DataSourcesPage() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         borderRadius: 3,
-                        bgcolor: 'rgba(69, 179, 212, 0.08)',
-                        color: '#45B3D4',
+                        bgcolor: 'rgba(0, 194, 185, 0.08)',
+                        color: '#00C2B9',
                       }}
                     >
                       <UploadIcon sx={{ fontSize: 28 }} />
@@ -439,7 +439,7 @@ export default function DataSourcesPage() {
                       sx={{
                         mt: 2,
                         borderRadius: 2,
-                        bgcolor: '#45B3D4',
+                        bgcolor: '#00C2B9',
                         px: 2,
                         py: 1,
                         fontSize: '0.875rem',
@@ -449,7 +449,7 @@ export default function DataSourcesPage() {
                         transition: 'background-color 0.2s',
                         border: 'none',
                         cursor: 'pointer',
-                        '&:hover': { bgcolor: '#2fa3c7' },
+                        '&:hover': { bgcolor: '#00a89f' },
                       }}
                     >
                       Choose File

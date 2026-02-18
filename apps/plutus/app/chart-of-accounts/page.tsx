@@ -197,7 +197,7 @@ function ColumnFilterDropdown({
           cursor: 'pointer',
           p: 0,
           ...(isActive
-            ? { color: '#45B3D4' }
+            ? { color: '#00C2B9' }
             : { color: 'text.secondary', '&:hover': { color: 'text.primary' } }),
         }}
       >
@@ -246,7 +246,7 @@ function ColumnFilterDropdown({
                 px: 1,
                 py: 0.75,
                 fontSize: '0.875rem',
-                color: '#45B3D4',
+                color: '#00C2B9',
                 '&:hover': { bgcolor: 'action.hover' },
                 borderRadius: 1,
                 border: 'none',
@@ -290,7 +290,7 @@ function ColumnFilterDropdown({
                     borderRadius: 0.5,
                     border: 1,
                     ...(selectedValues.has(option)
-                      ? { borderColor: '#45B3D4', bgcolor: '#45B3D4', color: '#fff' }
+                      ? { borderColor: '#00C2B9', bgcolor: '#00C2B9', color: '#fff' }
                       : { borderColor: 'divider' }),
                   }}
                 >
@@ -480,7 +480,7 @@ export default function ChartOfAccountsPage() {
                       fontWeight: 600,
                       textTransform: 'uppercase',
                       letterSpacing: '0.05em',
-                      color: '#45B3D4',
+                      color: '#00C2B9',
                     }}
                   >
                     Search
@@ -541,7 +541,7 @@ export default function ChartOfAccountsPage() {
               <Box sx={{ overflowX: 'auto' }}>
                 <MuiTable>
                   <TableHead>
-                    <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                    <TableRow sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
                       <TableCell sx={{ fontWeight: 600, width: 80 }}>Code</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>
@@ -610,7 +610,7 @@ export default function ChartOfAccountsPage() {
                       !isCheckingConnection &&
                       !error &&
                       filteredAccounts.map((account) => (
-                        <TableRow key={account.id} sx={{ transition: 'background-color 0.15s', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}>
+                        <TableRow key={account.id} sx={{ transition: 'background-color 0.15s', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}>
                           {/* Code */}
                           <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.acctNum ? account.acctNum : '—'}
