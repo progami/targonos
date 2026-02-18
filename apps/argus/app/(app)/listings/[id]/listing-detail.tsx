@@ -2155,9 +2155,9 @@ function injectArgusVersionControls(
 	    }
 	  }
 
-	  const swatches = Array.from(doc.querySelectorAll<HTMLElement>('#twister_feature_div li[data-asin]'))
+	  const swatches = getVariationSwatches(doc)
 	  for (const swatch of swatches) {
-	    const asin = swatch.getAttribute('data-asin')
+	    const asin = getVariationAsin(swatch)
 	    if (!asin) continue
 	    if (swatch.dataset.argusVariationBound === 'true') continue
 	    swatch.dataset.argusVariationBound = 'true'
@@ -2880,25 +2880,70 @@ function ensureGalleryThumbnailSwap(
   }, true)
 }
 
+function getVariationSwatches(doc: Document): HTMLElement[] {
+  return Array.from(
+    doc.querySelectorAll<HTMLElement>(
+      '#twister_feature_div li[data-asin], #twister_feature_div li[data-defaultasin], #twister_feature_div li[data-csa-c-item-id]',
+    ),
+  )
+}
+
+function getVariationAsin(swatch: HTMLElement): string | null {
+  const attributes = ['data-asin', 'data-defaultasin', 'data-csa-c-item-id'] as const
+  for (const attribute of attributes) {
+    const candidate = swatch.getAttribute(attribute)
+    if (!candidate) continue
+    if (looksLikeAsin(candidate)) return candidate
+  }
+
+  return null
+}
+
+function getVariationLabel(swatch: HTMLElement): string | null {
+  const textNode = swatch.querySelector<HTMLElement>('.swatch-title-text-display')
+    ?? swatch.querySelector<HTMLElement>('.swatch-title-text')
+    ?? swatch.querySelector<HTMLElement>('.a-button-text')
+
+  if (!textNode) return null
+  const text = textNode.textContent?.trim() ?? ''
+  if (text.length === 0) return null
+  return text
+}
+
 function applyVariationSelection(doc: Document, asin: string | null) {
   if (!asin) return
-  const swatches = Array.from(doc.querySelectorAll<HTMLElement>('#twister_feature_div li[data-asin]'))
+  const swatches = getVariationSwatches(doc)
   if (swatches.length === 0) return
 
   for (const swatch of swatches) {
+    swatch.classList.remove('swatch-list-item-selected')
     const button = swatch.querySelector<HTMLElement>('.a-button.a-button-toggle')
     if (button) button.classList.remove('a-button-selected')
     const input = swatch.querySelector<HTMLInputElement>('input[role="radio"]')
     if (input) input.setAttribute('aria-checked', 'false')
   }
 
-  const selected = swatches.find((swatch) => swatch.getAttribute('data-asin') === asin) ?? null
+  const selected = swatches.find((swatch) => getVariationAsin(swatch) === asin) ?? null
   if (!selected) return
 
+  selected.classList.add('swatch-list-item-selected')
   const selectedButton = selected.querySelector<HTMLElement>('.a-button.a-button-toggle')
   if (selectedButton) selectedButton.classList.add('a-button-selected')
   const selectedInput = selected.querySelector<HTMLInputElement>('input[role="radio"]')
   if (selectedInput) selectedInput.setAttribute('aria-checked', 'true')
+
+  const selectedLabel = getVariationLabel(selected)
+  if (!selectedLabel) return
+
+  const modelText = doc.getElementById('inline-twister-expanded-dimension-text-model')
+  if (modelText) {
+    modelText.textContent = selectedLabel
+  }
+
+  const modelHeader = doc.getElementById('inline-twister-expander-header-model')
+  if (modelHeader) {
+    modelHeader.setAttribute('aria-label', `Selected Model is ${selectedLabel}. Tap to collapse.`)
+  }
 }
 
 function applyVideo(doc: Document, rev: VideoRevision | null) {
