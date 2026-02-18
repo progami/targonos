@@ -11,7 +11,12 @@ export async function POST(request: Request) {
   }
 
   const normalizedMarketplace = marketplace ? String(marketplace).trim() : 'US'
-  const nextLabel = label ? String(label).trim() : normalizedAsin
+  const normalizedLabel = label ? String(label).trim() : ''
+
+  const updateData: { label?: string } = {}
+  if (label !== undefined) {
+    updateData.label = normalizedLabel.length > 0 ? normalizedLabel : normalizedAsin
+  }
 
   const listing = await prisma.listing.upsert({
     where: {
@@ -20,16 +25,13 @@ export async function POST(request: Request) {
         asin: normalizedAsin,
       },
     },
-    update: {
-      label: nextLabel,
-    },
+    update: updateData,
     create: {
       asin: normalizedAsin,
       marketplace: normalizedMarketplace,
-      label: nextLabel,
+      label: normalizedLabel.length > 0 ? normalizedLabel : normalizedAsin,
     },
   })
 
   return NextResponse.json(listing)
 }
-
