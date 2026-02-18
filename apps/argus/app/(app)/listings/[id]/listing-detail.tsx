@@ -721,11 +721,14 @@ export function ListingDetail({
 
       if (typeof window !== 'undefined') {
         const pathname = window.location.pathname
-        const match = /^(.*\/listings)\/[^/]+\/?$/u.exec(pathname)
-        if (match) {
-          window.location.assign(`${match[1]}/${normalized}`)
-          return
-        }
+        const listingsMarker = '/listings/'
+        const markerIndex = pathname.lastIndexOf(listingsMarker)
+        const inferredBasePath = markerIndex >= 0
+          ? normalizeBasePath(pathname.slice(0, markerIndex))
+          : ''
+        const targetBasePath = inferredBasePath.length > 0 ? inferredBasePath : basePath
+        window.location.assign(`${targetBasePath}/listings/${normalized}`)
+        return
       }
 
       router.push(`/listings/${normalized}`)
