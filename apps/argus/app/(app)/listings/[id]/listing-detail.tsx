@@ -719,6 +719,15 @@ export function ListingDetail({
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
 
+      if (typeof window !== 'undefined') {
+        const pathname = window.location.pathname
+        const match = /^(.*\/listings)\/[^/]+\/?$/u.exec(pathname)
+        if (match) {
+          window.location.assign(`${match[1]}/${normalized}`)
+          return
+        }
+      }
+
       router.push(`/listings/${normalized}`)
     }
   }, [
@@ -904,32 +913,6 @@ export function ListingDetail({
 
   return (
     <div className="flex flex-col h-screen bg-white">
-      {listing && (
-        <Box sx={{ position: 'fixed', bottom: 20, left: 20, zIndex: 1400 }}>
-          <MuiButton
-            type="button"
-            variant="outlined"
-            color="error"
-            sx={{ fontWeight: 700 }}
-            onClick={() => {
-              if (!window.confirm(`Reset ${listing.asin}? This permanently deletes all tracked content (title, bullets, images, video, A+, snapshots) and clears price overrides.`)) {
-                return
-              }
-
-              void (async () => {
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/reset`, { method: 'POST' })
-                if (!res.ok) {
-                  window.alert(await res.text())
-                  return
-                }
-                setRefreshKey((current) => current + 1)
-              })()
-            }}
-          >
-            Reset tracked content
-          </MuiButton>
-        </Box>
-      )}
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
