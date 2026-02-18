@@ -719,7 +719,7 @@ export function ListingDetail({
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
 
-      router.push(normalized)
+      router.push(`/listings/${normalized}`)
     }
   }, [
     listing,
