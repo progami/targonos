@@ -2655,6 +2655,7 @@ const ARGUS_GALLERY_PLACEHOLDER_MAIN = svgPlaceholderDataUrl('Upload images')
 const ARGUS_GALLERY_PLACEHOLDER_THUMB = svgPlaceholderDataUrl('Upload')
 const ARGUS_EBC_PLACEHOLDER_IMAGE = svgPlaceholderDataUrl('Upload image')
 const ARGUS_GALLERY_THUMB_SIZE_PX = 48
+const ARGUS_GALLERY_STRETCH_RATIO = 1.3
 
 function sizeGalleryThumbImage(img: HTMLImageElement) {
   img.width = ARGUS_GALLERY_THUMB_SIZE_PX
@@ -2663,6 +2664,25 @@ function sizeGalleryThumbImage(img: HTMLImageElement) {
   img.style.height = `${ARGUS_GALLERY_THUMB_SIZE_PX}px`
   img.style.objectFit = 'contain'
   img.style.display = 'block'
+}
+
+function applyGalleryLandingStretchClass(img: HTMLImageElement) {
+  const naturalWidth = img.naturalWidth
+  const naturalHeight = img.naturalHeight
+  if (naturalWidth <= 0 || naturalHeight <= 0) return
+
+  img.classList.remove('a-stretch-horizontal', 'a-stretch-vertical')
+  img.classList.add(naturalWidth / naturalHeight > ARGUS_GALLERY_STRETCH_RATIO ? 'a-stretch-horizontal' : 'a-stretch-vertical')
+}
+
+function ensureGalleryLandingSizing(img: HTMLImageElement) {
+  if (img.dataset.argusLandingSizingBound !== 'true') {
+    img.dataset.argusLandingSizingBound = 'true'
+    img.removeAttribute('onload')
+    img.addEventListener('load', () => applyGalleryLandingStretchClass(img))
+  }
+
+  applyGalleryLandingStretchClass(img)
 }
 
 function itemNoFromElement(el: Element): number | null {
@@ -2722,6 +2742,10 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   const landing = doc.getElementById('landingImage') as HTMLImageElement | null
   const altImages = doc.getElementById('altImages') as HTMLElement | null
   const altList = doc.querySelector<HTMLElement>('#altImages ul')
+
+  if (landing) {
+    ensureGalleryLandingSizing(landing)
+  }
 
   if (storedDoc.__argusMainMediaIndex === undefined) {
     storedDoc.__argusMainMediaIndex = 0
@@ -2875,6 +2899,7 @@ function ensureGalleryThumbnailSwap(
     landing.style.visibility = ''
     landing.src = src
     landing.setAttribute('data-old-hires', src)
+    ensureGalleryLandingSizing(landing)
 
     setAltImagesSelection(altList, li)
   }, true)
