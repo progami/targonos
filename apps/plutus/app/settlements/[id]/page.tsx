@@ -543,7 +543,7 @@ function ProcessSettlementDialog({
 
   return (
     <>
-      <Button size="small" variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={() => setOpen(true)}>Process Settlement</Button>
+      <Button size="small" variant="contained" sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }} onClick={() => setOpen(true)}>Process Settlement</Button>
       <Dialog
         open={open}
         onClose={() => handleOpenChange(false)}
@@ -635,12 +635,12 @@ function ProcessSettlementDialog({
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 borderRadius: '6px',
-                                bgcolor: 'rgba(69, 179, 212, 0.1)',
+                                bgcolor: 'rgba(0, 194, 185, 0.1)',
                                 px: 0.75,
                                 py: 0.25,
                                 fontSize: '10px',
                                 fontWeight: 500,
-                                color: '#2384a1',
+                                color: '#008f87',
                               }}
                             >
                               Recommended
@@ -683,7 +683,7 @@ function ProcessSettlementDialog({
                       </>
                     )}
                     {selectedMeta.recommended && (
-                      <Chip label="Recommended" size="small" sx={{ fontSize: '10px', bgcolor: 'rgba(69, 179, 212, 0.1)', color: '#2384a1' }} />
+                      <Chip label="Recommended" size="small" sx={{ fontSize: '10px', bgcolor: 'rgba(0, 194, 185, 0.1)', color: '#008f87' }} />
                     )}
                   </Box>
                 )}
@@ -802,7 +802,7 @@ function ProcessSettlementDialog({
                   )}
 
                   {previewBlockingBlocks.length === 0 && (
-                    <Button variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={() => void handlePost()} disabled={isPosting}>
+                    <Button variant="contained" sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }} onClick={() => void handlePost()} disabled={isPosting}>
                       {isPosting ? 'Posting...' : 'Post to QBO'}
                     </Button>
                   )}
@@ -1426,12 +1426,12 @@ export default function SettlementDetailPage() {
                                     display: 'inline-flex',
                                     alignItems: 'center',
                                     borderRadius: '6px',
-                                    bgcolor: 'rgba(69, 179, 212, 0.1)',
+                                    bgcolor: 'rgba(0, 194, 185, 0.1)',
                                     px: 0.75,
                                     py: 0.25,
                                     fontSize: '10px',
                                     fontWeight: 500,
-                                    color: '#2384a1',
+                                    color: '#008f87',
                                   }}
                                 >
                                   Recommended
@@ -1596,7 +1596,7 @@ export default function SettlementDetailPage() {
                               <Button
                                 size="small"
                                 variant="contained"
-                                sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+                                sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
                                 onClick={() => saveAdsAllocationMutation.mutate()}
                                 disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
                               >
@@ -1832,7 +1832,7 @@ export default function SettlementDetailPage() {
                         <Box
                           component={Link}
                           href="/audit-data"
-                          sx={{ color: '#2384a1', '&:hover': { textDecoration: 'underline' } }}
+                          sx={{ color: '#008f87', '&:hover': { textDecoration: 'underline' } }}
                         >
                           Audit Data
                         </Box>{' '}

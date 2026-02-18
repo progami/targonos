@@ -49,7 +49,7 @@ export function PageHeader({ title, kicker, description, actions, sx, variant = 
             fontSize: '1.875rem',
             lineHeight: 1,
             letterSpacing: '-0.025em',
-            color: variant === 'accent' ? '#f97316' : 'text.primary',
+            color: variant === 'accent' ? '#00C2B9' : 'text.primary',
           }}
         >
           {title}
@@ -64,7 +64,7 @@ export function PageHeader({ title, kicker, description, actions, sx, variant = 
             mt: 1.5,
             height: 1,
             width: 96,
-            background: 'linear-gradient(to right, rgba(69, 179, 212, 0.5), transparent)',
+            background: 'linear-gradient(to right, rgba(0, 194, 185, 0.5), transparent)',
           }}
         />
       </Box>

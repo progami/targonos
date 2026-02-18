@@ -357,7 +357,7 @@ export default function SettingsPage() {
                     {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
                   </Button>
                 ) : (
-                  <Button variant="contained" sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }} onClick={handleConnect}>Connect to QuickBooks</Button>
+                  <Button variant="contained" sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }} onClick={handleConnect}>Connect to QuickBooks</Button>
                 )}
               </Box>
             </CardContent>
@@ -390,7 +390,7 @@ export default function SettingsPage() {
               <Box sx={{ mt: 2.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Button
                   variant="contained"
-                  sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+                  sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
                   onClick={() => savePrefsMutation.mutate(localPrefs)}
                   disabled={!prefsDirty || savePrefsMutation.isPending}
                 >
@@ -435,7 +435,7 @@ export default function SettingsPage() {
               <Box sx={{ mt: 2 }}>
                 <Button
                   variant="contained"
-                  sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+                  sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
                   onClick={handleSaveAutopost}
                   disabled={autopostMutation.isPending}
                 >
