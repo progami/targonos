@@ -506,10 +506,10 @@ const outlineSx = {
 
 const defaultBtnSx = {
   ...btnBase,
-  bgcolor: '#45B3D4',
+  bgcolor: '#00C2B9',
   color: '#fff',
-  '&:hover': { bgcolor: '#2fa3c7' },
-  '&:active': { bgcolor: '#2384a1' },
+  '&:hover': { bgcolor: '#00a89f' },
+  '&:active': { bgcolor: '#008f87' },
 } as const;
 
 const smSize = { height: 32, px: 1.5, fontSize: '0.75rem' } as const;
@@ -519,7 +519,7 @@ const defaultSize = { height: 36, px: 2, fontSize: '0.875rem' } as const;
 const textFieldSx = {
   '& .MuiOutlinedInput-root': {
     borderRadius: '8px',
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
     '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
   },
 } as const;
@@ -765,7 +765,7 @@ export default function SettlementsPage() {
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr auto' }, alignItems: { md: 'end' } }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     Search
                   </Typography>
                   <Box sx={{ position: 'relative' }}>
@@ -790,7 +790,7 @@ export default function SettlementsPage() {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     Start date
                   </Typography>
                   <TextField
@@ -810,7 +810,7 @@ export default function SettlementsPage() {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     End date
                   </Typography>
                   <TextField
@@ -853,12 +853,12 @@ export default function SettlementsPage() {
                 <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
                   <MuiTableHead
                     sx={{
-                      bgcolor: 'rgba(248, 250, 252, 0.8)',
+                      bgcolor: 'rgba(245, 245, 245, 0.8)',
                       '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
                       '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                     }}
                   >
-                    <MuiTableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                    <MuiTableRow sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
@@ -908,7 +908,7 @@ export default function SettlementsPage() {
                         return (
                           <MuiTableRow
                             key={s.id}
-                            sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}
+                            sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}
                             onClick={() => router.push(`/settlements/${s.id}`)}
                           >
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
@@ -986,7 +986,7 @@ export default function SettlementsPage() {
               </Box>
 
               {data && data.pagination.totalPages > 1 && (
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'rgba(245, 245, 245, 0.5)' }}>
                   <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                     Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
                   </Typography>
@@ -1107,7 +1107,7 @@ export default function SettlementsPage() {
 
               {syncResult && (
                 <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(245, 245, 245, 0.5)' }}>
                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                       Results
                     </Typography>
@@ -1119,7 +1119,7 @@ export default function SettlementsPage() {
                   </Box>
                   <Box sx={{ overflow: 'auto' }}>
                     <MuiTable size="small" sx={{ width: '100%', fontSize: '0.875rem' }}>
-                      <MuiTableHead sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                      <MuiTableHead sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
                         <MuiTableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
                           <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Doc #</MuiTableCell>
                           <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>

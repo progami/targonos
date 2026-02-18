@@ -346,7 +346,7 @@ function Sidebar({
                   ...(item.complete
                     ? { bgcolor: '#10b981', borderColor: '#10b981', color: '#fff' }
                     : isActive
-                      ? { bgcolor: 'background.paper', borderColor: '#45B3D4', color: '#45B3D4' }
+                      ? { bgcolor: 'background.paper', borderColor: '#00C2B9', color: '#00C2B9' }
                       : { bgcolor: 'background.paper', borderColor: 'divider', color: 'text.disabled' }),
                 }}
               >
@@ -421,7 +421,7 @@ function BrandsSection({
               <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
                 <TableHead
                   sx={{
-                    bgcolor: 'rgba(248, 250, 252, 0.8)',
+                    bgcolor: 'rgba(245, 245, 245, 0.8)',
                     '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
                     '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                   }}
@@ -485,7 +485,7 @@ function BrandsSection({
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: '8px',
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                   },
                 }}
@@ -508,7 +508,7 @@ function BrandsSection({
                     borderRadius: '8px',
                     fontSize: '0.875rem',
                     '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                     '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                   }}
                   MenuProps={{
@@ -549,10 +549,10 @@ function BrandsSection({
                   height: 36,
                   px: 2,
                   fontSize: '0.875rem',
-                  bgcolor: '#45B3D4',
+                  bgcolor: '#00C2B9',
                   color: '#fff',
-                  '&:hover': { bgcolor: '#2fa3c7' },
-                  '&:active': { bgcolor: '#2384a1' },
+                  '&:hover': { bgcolor: '#00a89f' },
+                  '&:active': { bgcolor: '#008f87' },
                 }}
               >
                 Add Brand
@@ -602,9 +602,9 @@ function AccountRow({
               fontSize: '0.875rem',
               bgcolor: 'background.paper',
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: selected ? '#45B3D4' : 'divider',
+                borderColor: selected ? '#00C2B9' : 'divider',
               },
-              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
               '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
             }}
             MenuProps={{
@@ -766,10 +766,10 @@ function AccountsSection({
                 sx={{
                   width: '100%',
                   borderRadius: 3,
-                  bgcolor: '#45B3D4',
+                  bgcolor: '#00C2B9',
                   color: '#fff',
-                  '&:hover': { bgcolor: '#2fa3c7' },
-                  boxShadow: '0 4px 14px -3px rgba(69,179,212,0.25)',
+                  '&:hover': { bgcolor: '#00a89f' },
+                  boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
                 }}
               >
                 Connect to QuickBooks
@@ -812,7 +812,7 @@ function AccountsSection({
           <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
             <TableHead
               sx={{
-                bgcolor: 'rgba(248, 250, 252, 0.8)',
+                bgcolor: 'rgba(245, 245, 245, 0.8)',
                 '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
                 '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
               }}
@@ -919,10 +919,10 @@ function AccountsSection({
           height: 36,
           px: 2,
           fontSize: '0.875rem',
-          bgcolor: '#45B3D4',
+          bgcolor: '#00C2B9',
           color: '#fff',
-          '&:hover': { bgcolor: '#2fa3c7' },
-          '&:active': { bgcolor: '#2384a1' },
+          '&:hover': { bgcolor: '#00a89f' },
+          '&:active': { bgcolor: '#008f87' },
           width: '100%',
         }}
       >
@@ -1115,7 +1115,7 @@ function SkusSection({
             <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
               <TableHead
                 sx={{
-                  bgcolor: 'rgba(248, 250, 252, 0.8)',
+                  bgcolor: 'rgba(245, 245, 245, 0.8)',
                   '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
                   '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                 }}
@@ -1160,7 +1160,7 @@ function SkusSection({
                             sx={{
                               '& .MuiOutlinedInput-root': {
                                 borderRadius: '8px',
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                               },
                             }}
@@ -1190,7 +1190,7 @@ function SkusSection({
                             sx={{
                               '& .MuiOutlinedInput-root': {
                                 borderRadius: '8px',
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                               },
                             }}
@@ -1230,7 +1230,7 @@ function SkusSection({
                                 fontSize: '0.875rem',
                                 width: 220,
                                 '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                               }}
                               MenuProps={{
@@ -1297,7 +1297,7 @@ function SkusSection({
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                     },
                   }}
@@ -1323,7 +1323,7 @@ function SkusSection({
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                     },
                   }}
@@ -1349,7 +1349,7 @@ function SkusSection({
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                     },
                   }}
@@ -1370,7 +1370,7 @@ function SkusSection({
                       borderRadius: '8px',
                       fontSize: '0.875rem',
                       '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
                     }}
                     MenuProps={{
@@ -1409,10 +1409,10 @@ function SkusSection({
                   height: 36,
                   px: 2,
                   fontSize: '0.875rem',
-                  bgcolor: '#45B3D4',
+                  bgcolor: '#00C2B9',
                   color: '#fff',
-                  '&:hover': { bgcolor: '#2fa3c7' },
-                  '&:active': { bgcolor: '#2384a1' },
+                  '&:hover': { bgcolor: '#00a89f' },
+                  '&:active': { bgcolor: '#008f87' },
                 }}
               >
                 Add SKU
@@ -1441,10 +1441,10 @@ function SkusSection({
             height: 36,
             px: 2,
             fontSize: '0.875rem',
-            bgcolor: '#45B3D4',
+            bgcolor: '#00C2B9',
             color: '#fff',
-            '&:hover': { bgcolor: '#2fa3c7' },
-            '&:active': { bgcolor: '#2384a1' },
+            '&:hover': { bgcolor: '#00a89f' },
+            '&:active': { bgcolor: '#008f87' },
           }}
         >
           Save SKUs

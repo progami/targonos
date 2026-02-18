@@ -39,7 +39,7 @@ export function SplitButton({
         <Button
           onClick={onClick}
           sx={{
-            bgcolor: '#45B3D4',
+            bgcolor: '#00C2B9',
             color: '#fff',
             fontSize: '0.75rem',
             fontWeight: 600,
@@ -47,7 +47,7 @@ export function SplitButton({
             letterSpacing: '0.05em',
             px: 2,
             borderRight: '1px solid rgba(255,255,255,0.2) !important',
-            '&:hover': { bgcolor: '#2fa3c7' },
+            '&:hover': { bgcolor: '#00a89f' },
           }}
         >
           {children}
@@ -56,11 +56,11 @@ export function SplitButton({
           size="small"
           onClick={(e) => setAnchorEl(e.currentTarget)}
           sx={{
-            bgcolor: '#2fa3c7',
+            bgcolor: '#00a89f',
             color: '#fff',
             px: 0.5,
             minWidth: 32,
-            '&:hover': { bgcolor: '#2384a1' },
+            '&:hover': { bgcolor: '#008f87' },
           }}
         >
           <ExpandMoreIcon sx={{ fontSize: 18 }} />

@@ -106,7 +106,7 @@ const rowSx = {
 
 /* ---- shared table head section sx ---- */
 const theadSx = {
-  bgcolor: 'rgba(248, 250, 252, 0.8)',
+  bgcolor: 'rgba(245, 245, 245, 0.8)',
   '[data-mui-color-scheme="dark"] &, .dark &': {
     bgcolor: 'rgba(255, 255, 255, 0.05)',
   },
@@ -227,8 +227,8 @@ export default function AuditDataPage() {
                 py: 6,
                 transition: 'all 0.2s',
                 ...(isDragging
-                  ? { borderColor: '#45B3D4', bgcolor: 'rgba(69, 179, 212, 0.05)' }
-                  : { borderColor: 'divider', '&:hover': { borderColor: '#45B3D4' } }),
+                  ? { borderColor: '#00C2B9', bgcolor: 'rgba(0, 194, 185, 0.05)' }
+                  : { borderColor: 'divider', '&:hover': { borderColor: '#00C2B9' } }),
               }}
               onDragOver={(e: React.DragEvent) => {
                 e.preventDefault();
@@ -254,7 +254,7 @@ export default function AuditDataPage() {
                       borderRadius: '50%',
                       border: 4,
                       borderColor: 'divider',
-                      borderTopColor: '#45B3D4',
+                      borderTopColor: '#00C2B9',
                       animation: 'spin 1s linear infinite',
                       '@keyframes spin': { to: { transform: 'rotate(360deg)' } },
                     }}
@@ -272,8 +272,8 @@ export default function AuditDataPage() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       borderRadius: 3,
-                      bgcolor: 'rgba(69, 179, 212, 0.08)',
-                      color: '#45B3D4',
+                      bgcolor: 'rgba(0, 194, 185, 0.08)',
+                      color: '#00C2B9',
                     }}
                   >
                     <UploadIcon sx={{ fontSize: 28 }} />
@@ -291,7 +291,7 @@ export default function AuditDataPage() {
                     sx={{
                       mt: 2,
                       borderRadius: 2,
-                      bgcolor: '#45B3D4',
+                      bgcolor: '#00C2B9',
                       px: 2,
                       py: 1,
                       fontSize: '0.875rem',
@@ -301,7 +301,7 @@ export default function AuditDataPage() {
                       transition: 'background-color 0.2s',
                       border: 'none',
                       cursor: 'pointer',
-                      '&:hover': { bgcolor: '#2fa3c7' },
+                      '&:hover': { bgcolor: '#00a89f' },
                     }}
                   >
                     Choose File
@@ -402,7 +402,7 @@ export default function AuditDataPage() {
             <Box sx={{ overflowX: 'auto' }}>
               <Table sx={tableSx}>
                 <TableHead sx={theadSx}>
-                  <TableRow sx={{ ...rowSx, bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                  <TableRow sx={{ ...rowSx, bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
                     <TableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Filename</TableCell>
                     <TableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Uploaded</TableCell>
                     <TableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Settlements</TableCell>

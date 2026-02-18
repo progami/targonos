@@ -64,7 +64,7 @@ export function StatCard({ label, value, icon, trend, dotColor, sx }: StatCardPr
           position: 'absolute',
           inset: '0 0 auto 0',
           height: 2,
-          background: 'linear-gradient(to right, rgba(69, 179, 212, 0.6), rgba(69, 179, 212, 0.4), transparent)',
+          background: 'linear-gradient(to right, rgba(0, 194, 185, 0.6), rgba(0, 194, 185, 0.4), transparent)',
           opacity: 0,
           transition: 'opacity 0.2s',
         }}
@@ -144,8 +144,8 @@ export function StatCard({ label, value, icon, trend, dotColor, sx }: StatCardPr
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 2,
-              bgcolor: 'rgba(69, 179, 212, 0.08)',
-              color: '#2384a1',
+              bgcolor: 'rgba(0, 194, 185, 0.08)',
+              color: '#008f87',
             }}
           >
             {icon}
