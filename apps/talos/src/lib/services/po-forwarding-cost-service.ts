@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import {
   CostCategory,
   FinancialLedgerCategory,
@@ -7,7 +8,8 @@ import {
   TransactionType,
 } from '@targon/prisma-talos'
 import { ValidationError } from '@/lib/api'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { normalizePoCostCurrency } from '@/lib/constants/cost-currency'
+import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 
 export async function syncPurchaseOrderForwardingCostLedger(params: {
@@ -15,6 +17,11 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
   createdByName: string
 }) {
   const prisma = await getTenantPrisma()
+  const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    throw new ValidationError(`Unsupported tenant currency: ${tenant.currency}`)
+  }
 
   await prisma.$transaction(async tx => {
     const order = await tx.purchaseOrder.findUnique({
@@ -64,7 +71,7 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
 
     const forwardingCosts = await tx.purchaseOrderForwardingCost.findMany({
       where: { purchaseOrderId: order.id },
-      select: { costName: true, totalCost: true },
+      select: { costName: true, totalCost: true, currency: true },
       orderBy: [{ createdAt: 'asc' }],
     })
 
@@ -98,8 +105,10 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
       cartonDimensionsCm: txRow.cartonDimensionsCm,
     }))
 
-    const forwardingEntries = forwardingCosts.flatMap(cost =>
-      buildPoForwardingCostLedgerEntries({
+    const forwardingEntries: Array<Prisma.CostLedgerCreateManyInput & { currency: string }> = []
+    for (const cost of forwardingCosts) {
+      const resolvedCurrency = normalizePoCostCurrency(cost.currency) ?? tenantCurrency
+      const builtEntries = buildPoForwardingCostLedgerEntries({
         costName: cost.costName,
         totalCost: Number(cost.totalCost),
         lines,
@@ -108,60 +117,55 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
         createdAt: order.receivedDate!,
         createdByName: params.createdByName,
       })
-    )
+
+      for (const entry of builtEntries) {
+        forwardingEntries.push({
+          id: randomUUID(),
+          ...entry,
+          currency: resolvedCurrency,
+        })
+      }
+    }
 
     if (forwardingEntries.length > 0) {
-      await tx.costLedger.createMany({ data: forwardingEntries })
-
-      const inserted = await tx.costLedger.findMany({
-        where: {
-          transactionId: { in: transactionIds },
-          costCategory: CostCategory.Forwarding,
-        },
-        select: {
-          id: true,
-          transactionId: true,
-          costCategory: true,
-          costName: true,
-          quantity: true,
-          unitRate: true,
-          totalCost: true,
-          warehouseCode: true,
-          warehouseName: true,
-          createdAt: true,
-          createdByName: true,
-        },
+      await tx.costLedger.createMany({
+        data: forwardingEntries.map(({ currency: _currency, ...entry }) => entry),
       })
 
       const txById = new Map(transactions.map(row => [row.id, row]))
-      const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = inserted.map(row => {
-        const txRow = txById.get(row.transactionId)
-        if (!txRow) {
-          throw new ValidationError(`Missing inventory transaction context for ${row.transactionId}`)
-        }
+      const financialEntries: Prisma.FinancialLedgerEntryCreateManyInput[] = forwardingEntries.map(
+        row => {
+          const txRow = txById.get(row.transactionId)
+          if (!txRow) {
+            throw new ValidationError(
+              `Missing inventory transaction context for ${row.transactionId}`
+            )
+          }
 
-        return {
-          id: row.id,
-          sourceType: FinancialLedgerSourceType.COST_LEDGER,
-          sourceId: row.id,
-          category: FinancialLedgerCategory.Forwarding,
-          costName: row.costName,
-          quantity: row.quantity,
-          unitRate: row.unitRate,
-          amount: row.totalCost,
-          warehouseCode: row.warehouseCode,
-          warehouseName: row.warehouseName,
-          skuCode: txRow.skuCode,
-          skuDescription: txRow.skuDescription,
-          lotRef: txRow.lotRef,
-          inventoryTransactionId: row.transactionId,
-          purchaseOrderId: txRow.purchaseOrderId,
-          purchaseOrderLineId: txRow.purchaseOrderLineId,
-          effectiveAt: row.createdAt,
-          createdAt: row.createdAt,
-          createdByName: row.createdByName,
+          return {
+            id: row.id,
+            sourceType: FinancialLedgerSourceType.COST_LEDGER,
+            sourceId: row.id,
+            category: FinancialLedgerCategory.Forwarding,
+            costName: row.costName,
+            quantity: row.quantity,
+            unitRate: row.unitRate,
+            amount: row.totalCost,
+            currency: row.currency,
+            warehouseCode: row.warehouseCode,
+            warehouseName: row.warehouseName,
+            skuCode: txRow.skuCode,
+            skuDescription: txRow.skuDescription,
+            lotRef: txRow.lotRef,
+            inventoryTransactionId: row.transactionId,
+            purchaseOrderId: txRow.purchaseOrderId,
+            purchaseOrderLineId: txRow.purchaseOrderLineId,
+            effectiveAt: row.createdAt,
+            createdAt: row.createdAt,
+            createdByName: row.createdByName,
+          }
         }
-      })
+      )
 
       if (financialEntries.length > 0) {
         await tx.financialLedgerEntry.createMany({

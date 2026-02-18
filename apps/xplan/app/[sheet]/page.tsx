@@ -558,15 +558,15 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
-    const defaultStrategy = await prismaAny.strategy.findFirst({
+    const primaryStrategy = await prismaAny.strategy.findFirst({
       where: {
-        isDefault: true,
+        isPrimary: true,
         ...buildStrategyAccessWhere(actor),
       },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     });
-    if (defaultStrategy) return defaultStrategy.id;
+    if (primaryStrategy) return primaryStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where: buildStrategyAccessWhere(actor),
@@ -597,15 +597,15 @@ async function resolveStrategyId(
       if (exists) return searchParamStrategy;
     }
 
-    const defaultStrategy = await prismaAny.strategy.findFirst({
+    const primaryStrategy = await prismaAny.strategy.findFirst({
       where: {
-        isDefault: true,
+        isPrimary: true,
         ...where,
       },
       orderBy: { updatedAt: 'desc' },
       select: { id: true },
     });
-    if (defaultStrategy) return defaultStrategy.id;
+    if (primaryStrategy) return primaryStrategy.id;
 
     const firstStrategy = await prismaAny.strategy.findFirst({
       where,
@@ -666,8 +666,18 @@ async function getProductSetupView(strategyId: string) {
         findMany: (args?: unknown) => Promise<BusinessParameter[]>;
       }
     | undefined;
+  const leadStageDelegate = prismaAny.leadStageTemplate as
+    | {
+        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
+      }
+    | undefined;
+  const leadOverrideDelegate = prismaAny.leadTimeOverride as
+    | {
+        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
+      }
+    | undefined;
 
-  const [products, businessParameters] = await Promise.all([
+  const [products, businessParameters, leadStages, leadOverrides] = await Promise.all([
     safeFindMany<Product[]>(
       productDelegate,
       { where: { strategyId }, orderBy: { name: 'asc' } },
@@ -679,6 +689,18 @@ async function getProductSetupView(strategyId: string) {
       { where: { strategyId }, orderBy: { label: 'asc' } },
       [],
       'businessParameter',
+    ),
+    safeFindMany<LeadStageTemplate[]>(
+      leadStageDelegate,
+      { orderBy: { sequence: 'asc' } },
+      [],
+      'leadStageTemplate',
+    ),
+    safeFindMany<LeadTimeOverride[]>(
+      leadOverrideDelegate,
+      { where: { product: { strategyId } } },
+      [],
+      'leadTimeOverride',
     ),
   ]);
 
@@ -743,12 +765,75 @@ async function getProductSetupView(strategyId: string) {
       name: product.name,
     }));
 
+  const leadStageTemplateViews = mapLeadStageTemplates(leadStages).map((stage) => ({
+    id: stage.id,
+    label: stage.label,
+    defaultWeeks: stage.defaultWeeks,
+    sequence: stage.sequence,
+  }));
+
+  const leadProfiles = buildLeadTimeProfiles(
+    mapLeadStageTemplates(leadStages),
+    mapLeadOverrides(leadOverrides),
+    productRows.map((p) => p.id),
+  );
+
+  const leadTimeProfiles: Record<string, { productionWeeks: number; sourceWeeks: number; oceanWeeks: number; finalWeeks: number }> = {};
+  for (const [productId, profile] of leadProfiles) {
+    leadTimeProfiles[productId] = profile;
+  }
+
+  const leadTimeOverrideIds = leadOverrides.map((o) => ({
+    productId: o.productId,
+    stageTemplateId: o.stageTemplateId,
+  }));
+
   return {
     products: productRows,
     operationsParameters,
     salesParameters,
     financeParameters,
+    leadStageTemplates: leadStageTemplateViews,
+    leadTimeProfiles,
+    leadTimeOverrideIds,
   };
+}
+
+async function getKeyParametersForAllStrategies(
+  strategyIds: string[],
+): Promise<Record<string, Array<{ label: string; value: string }>>> {
+  if (strategyIds.length === 0) return {};
+
+  const prismaAny = prisma as unknown as Record<string, unknown>;
+  const businessParameterDelegate = prismaAny.businessParameter as
+    | {
+        findMany: (args?: unknown) => Promise<BusinessParameter[]>;
+      }
+    | undefined;
+
+  const allParams = await safeFindMany<BusinessParameter[]>(
+    businessParameterDelegate,
+    {
+      where: { strategyId: { in: strategyIds } },
+      orderBy: { label: 'asc' },
+    },
+    [],
+    'businessParameter',
+  );
+
+  const result: Record<string, Array<{ label: string; value: string }>> = {};
+  for (const param of allParams) {
+    const sid = (param as unknown as { strategyId: string }).strategyId;
+    if (!result[sid]) result[sid] = [];
+    result[sid].push({
+      label: param.label,
+      value:
+        param.valueNumeric != null
+          ? formatNumeric(param.valueNumeric)
+          : (param.valueText ?? ''),
+    });
+  }
+  return result;
 }
 
 async function loadOperationsContext(strategyId: string, calendar?: PlanningCalendar['calendar']) {
@@ -2204,10 +2289,23 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   const activeStrategyRow = strategyId
     ? await prismaAnyLocal.strategy?.findUnique?.({
         where: { id: strategyId },
-        select: { name: true, region: true },
+        select: {
+          name: true,
+          region: true,
+          strategyGroup: {
+            select: {
+              code: true,
+              name: true,
+            },
+          },
+        },
       })
     : null;
-  const activeStrategyName: string | null = activeStrategyRow?.name ?? null;
+  const activeStrategyName: string | null = activeStrategyRow
+    ? activeStrategyRow.strategyGroup?.name
+      ? `${activeStrategyRow.strategyGroup.name} · ${activeStrategyRow.name}`
+      : activeStrategyRow.name
+    : null;
   const strategyRegion: StrategyRegion =
     strategyId && activeStrategyRow
       ? (() => {
@@ -2275,7 +2373,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         salesWeeks: true,
       };
 
-      const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
+      const orderBy = [{ isPrimary: 'desc' }, { updatedAt: 'desc' }];
 
       const strategySelect = {
         id: true,
@@ -2284,6 +2382,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: true,
         region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
+        strategyGroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            region: true,
+            createdById: true,
+            createdByEmail: true,
+            assigneeId: true,
+            assigneeEmail: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         createdById: true,
         createdByEmail: true,
         assigneeId: true,
@@ -2308,6 +2422,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: true,
         region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
+        strategyGroup: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            region: true,
+            createdById: true,
+            createdByEmail: true,
+            assigneeId: true,
+            assigneeEmail: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
         createdAt: true,
         updatedAt: true,
         _count: { select: countsSelect },
@@ -2348,6 +2478,20 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: string;
         region: 'US' | 'UK';
         isDefault: boolean;
+        isPrimary: boolean;
+        strategyGroupId: string;
+        strategyGroup: {
+          id: string;
+          code: string;
+          name: string;
+          region: 'US' | 'UK';
+          createdById: string | null;
+          createdByEmail: string | null;
+          assigneeId: string | null;
+          assigneeEmail: string | null;
+          createdAt: string;
+          updatedAt: string;
+        } | null;
         createdById: string | null;
         createdByEmail: string | null;
         assigneeId: string | null;
@@ -2373,6 +2517,22 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         status: s.status,
         region: s.region === 'UK' ? 'UK' : 'US',
         isDefault: Boolean(s.isDefault),
+        isPrimary: Boolean(s.isPrimary),
+        strategyGroupId: s.strategyGroupId,
+        strategyGroup: s.strategyGroup
+          ? {
+              id: s.strategyGroup.id,
+              code: s.strategyGroup.code,
+              name: s.strategyGroup.name,
+              region: s.strategyGroup.region === 'UK' ? 'UK' : 'US',
+              createdById: s.strategyGroup.createdById ?? null,
+              createdByEmail: s.strategyGroup.createdByEmail ?? null,
+              assigneeId: s.strategyGroup.assigneeId ?? null,
+              assigneeEmail: s.strategyGroup.assigneeEmail ?? null,
+              createdAt: s.strategyGroup.createdAt.toISOString(),
+              updatedAt: s.strategyGroup.updatedAt.toISOString(),
+            }
+          : null,
         createdById: s.createdById ?? null,
         createdByEmail: s.createdByEmail ?? null,
         assigneeId: s.assigneeId ?? null,
@@ -2383,9 +2543,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         _count: s._count,
       }));
 
-      const productSetupView = strategyId
-        ? await getProductSetupView(strategyId)
-        : { products: [], operationsParameters: [], salesParameters: [], financeParameters: [] };
+      const allStrategyIds = strategies.map((s) => s.id);
+      const [productSetupView, keyParametersByStrategyId] = await Promise.all([
+        strategyId
+          ? getProductSetupView(strategyId)
+          : Promise.resolve({ products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] }),
+        getKeyParametersForAllStrategies(allStrategyIds),
+      ]);
 
       tabularContent = (
         <SetupWorkspace
@@ -2396,6 +2560,10 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           operationsParameters={productSetupView.operationsParameters}
           salesParameters={productSetupView.salesParameters}
           financeParameters={productSetupView.financeParameters}
+          leadStageTemplates={productSetupView.leadStageTemplates}
+          leadTimeProfiles={productSetupView.leadTimeProfiles}
+          leadTimeOverrideIds={productSetupView.leadTimeOverrideIds}
+          keyParametersByStrategyId={keyParametersByStrategyId}
         />
       );
       visualContent = null;

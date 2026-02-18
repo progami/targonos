@@ -98,6 +98,49 @@ function lintBuyerMessageText(text: string): { ok: boolean; reasons: string[] } 
   return { ok: reasons.length === 0, reasons };
 }
 
+function collectStringValues(input: unknown, opts?: { maxValues?: number; maxDepth?: number }): string[] {
+  const maxValuesRaw = opts?.maxValues;
+  const maxDepthRaw = opts?.maxDepth;
+  const maxValues =
+    typeof maxValuesRaw === "number" && Number.isFinite(maxValuesRaw)
+      ? Math.max(1, Math.min(maxValuesRaw, 200))
+      : 25;
+  const maxDepth =
+    typeof maxDepthRaw === "number" && Number.isFinite(maxDepthRaw)
+      ? Math.max(0, Math.min(maxDepthRaw, 8))
+      : 4;
+
+  const out: string[] = [];
+  const seen = new Set<unknown>();
+
+  const walk = (value: unknown, depth: number) => {
+    if (out.length >= maxValues) return;
+    if (depth > maxDepth) return;
+
+    if (typeof value === "string") {
+      const t = value.trim();
+      if (t) out.push(t);
+      return;
+    }
+
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+
+    if (Array.isArray(value)) {
+      for (const v of value) walk(v, depth + 1);
+      return;
+    }
+
+    for (const v of Object.values(value as Record<string, unknown>)) {
+      walk(v, depth + 1);
+    }
+  };
+
+  walk(input, 0);
+  return out;
+}
+
 async function loadDispatchById(id: string) {
   const pool = getPgPool();
   const res = await pool.query(
@@ -162,15 +205,27 @@ async function handlePost(req: Request) {
 
   const { connectionId, orderId, marketplaceId, kind, text, sendNow, scheduledAt } = parsed.data;
 
-  // If user gave text (vs raw body), run a strict linter.
-  if (typeof text === "string") {
-    const lint = lintBuyerMessageText(text);
+  const messageBody = parsed.data.body ?? (typeof text === "string" ? { text } : undefined);
+
+  // Strict linter: blocks obvious policy violations. Apply to both text and raw body payloads.
+  const stringsToLint = [
+    ...(typeof text === "string" ? [text] : []),
+    ...(messageBody !== undefined ? collectStringValues(messageBody, { maxValues: 25, maxDepth: 4 }) : []),
+  ];
+
+  const reasons = new Set<string>();
+  for (const s of stringsToLint) {
+    if (s.length > 5000) continue;
+    const lint = lintBuyerMessageText(s);
     if (!lint.ok) {
-      return NextResponse.json(
-        { ok: false, error: "Message blocked by safety checks", reasons: lint.reasons },
-        { status: 400 }
-      );
+      for (const r of lint.reasons) reasons.add(r);
     }
+  }
+  if (reasons.size > 0) {
+    return NextResponse.json(
+      { ok: false, error: "Message blocked by safety checks", reasons: Array.from(reasons) },
+      { status: 400 }
+    );
   }
 
   const scheduledDate = scheduledAt ? new Date(scheduledAt) : new Date();
@@ -178,7 +233,6 @@ async function handlePost(req: Request) {
   try {
     const expiresAt = await computeDefaultExpiresAt({ connectionId, orderId });
 
-    const messageBody = parsed.data.body ?? (typeof text === "string" ? { text } : undefined);
     const meta = {
       source: "api.messaging.send",
       message: {

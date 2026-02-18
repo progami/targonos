@@ -494,8 +494,7 @@ function buildDemoUser() {
         kairos: { role: 'viewer', departments: ['Product'] },
         xplan: { role: 'viewer', departments: ['Product'] },
         hermes: { role: 'viewer', departments: ['Account / Listing'] },
-        plutus: { role: 'viewer', departments: ['Finance'] },
-        argus: { role: 'viewer', departments: ['Account / Listing'] },
+        plutus: { role: 'viewer', departments: ['Finance'] }
     };
     return {
         id: DEMO_ADMIN_UUID,

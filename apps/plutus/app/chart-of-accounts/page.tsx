@@ -2,20 +2,27 @@
 
 import { useMemo, useCallback, useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import SearchIcon from '@mui/icons-material/Search';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
+import MuiTab from '@mui/material/Tab';
+import MuiTable from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import MuiTabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useChartOfAccountsStore } from '@/lib/store/chart-of-accounts';
-import { cn } from '@/lib/utils';
 
 interface Account {
   id: string;
@@ -59,39 +66,67 @@ async function fetchAccounts(): Promise<{ accounts: Account[]; total: number }> 
   return res.json();
 }
 
-function RefreshIcon({ className }: { className?: string }) {
+function RefreshSvgIcon({ sx }: { sx?: object }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <Box
+      component="svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      sx={{ width: 16, height: 16, ...sx }}
+    >
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
       />
-    </svg>
+    </Box>
   );
 }
 
-function CheckIcon({ className }: { className?: string }) {
+function CheckSvgIcon({ sx }: { sx?: object }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <Box
+      component="svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      sx={{ width: 12, height: 12, ...sx }}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
+    </Box>
   );
 }
 
-function FilterIcon({ className }: { className?: string }) {
+function FilterSvgIcon({ sx }: { sx?: object }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <Box
+      component="svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      sx={{ width: 12, height: 12, ...sx }}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-    </svg>
+    </Box>
   );
 }
 
-function ChevronDownIcon({ className }: { className?: string }) {
+function ChevronDownSvgIcon({ sx }: { sx?: object }) {
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <Box
+      component="svg"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      sx={{ width: 12, height: 12, ...sx }}
+    >
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
+    </Box>
   );
 }
 
@@ -144,58 +179,130 @@ function ColumnFilterDropdown({
   };
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
+    <Box sx={{ position: 'relative' }} ref={dropdownRef}>
+      <Box
+        component="button"
         onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide transition-colors',
-          isActive
-            ? 'text-brand-teal-600 dark:text-brand-teal-400'
-            : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
-        )}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.75,
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          transition: 'color 0.15s',
+          border: 'none',
+          bgcolor: 'transparent',
+          cursor: 'pointer',
+          p: 0,
+          ...(isActive
+            ? { color: '#45B3D4' }
+            : { color: 'text.secondary', '&:hover': { color: 'text.primary' } }),
+        }}
       >
         {label}
         {isActive ? (
-          <FilterIcon className="h-3 w-3" />
+          <FilterSvgIcon />
         ) : (
-          <ChevronDownIcon className="h-3 w-3" />
+          <ChevronDownSvgIcon />
         )}
-      </button>
+      </Box>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 z-50 min-w-[200px] max-h-[300px] overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-white/10 dark:bg-slate-800">
-          <div className="sticky top-0 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-slate-800 p-2">
-            <button
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '100%',
+            left: 0,
+            mt: 1,
+            zIndex: 50,
+            minWidth: 200,
+            maxHeight: 300,
+            overflow: 'auto',
+            borderRadius: 2,
+            border: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            boxShadow: 3,
+          }}
+        >
+          <Box
+            sx={{
+              position: 'sticky',
+              top: 0,
+              borderBottom: 1,
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+              p: 1,
+            }}
+          >
+            <Box
+              component="button"
               onClick={selectAll}
-              className="w-full text-left px-2 py-1.5 text-sm text-brand-teal-600 dark:text-brand-teal-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+              sx={{
+                width: '100%',
+                textAlign: 'left',
+                px: 1,
+                py: 0.75,
+                fontSize: '0.875rem',
+                color: '#45B3D4',
+                '&:hover': { bgcolor: 'action.hover' },
+                borderRadius: 1,
+                border: 'none',
+                bgcolor: 'transparent',
+                cursor: 'pointer',
+              }}
             >
               {selectedValues.size > 0 ? 'Clear filter' : 'All selected'}
-            </button>
-          </div>
-          <div className="p-1">
+            </Box>
+          </Box>
+          <Box sx={{ p: 0.5 }}>
             {options.map((option) => (
-              <button
+              <Box
+                component="button"
                 key={option}
                 onClick={() => toggleOption(option)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 rounded"
+                sx={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 1,
+                  py: 0.75,
+                  fontSize: '0.875rem',
+                  color: 'text.primary',
+                  '&:hover': { bgcolor: 'action.hover' },
+                  borderRadius: 1,
+                  border: 'none',
+                  bgcolor: 'transparent',
+                  cursor: 'pointer',
+                }}
               >
-                <span
-                  className={cn(
-                    'flex h-4 w-4 items-center justify-center rounded border',
-                    selectedValues.has(option)
-                      ? 'border-brand-teal-500 bg-brand-teal-500 text-white'
-                      : 'border-slate-300 dark:border-slate-600'
-                  )}
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'flex',
+                    height: 16,
+                    width: 16,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: 0.5,
+                    border: 1,
+                    ...(selectedValues.has(option)
+                      ? { borderColor: '#45B3D4', bgcolor: '#45B3D4', color: '#fff' }
+                      : { borderColor: 'divider' }),
+                  }}
                 >
-                  {selectedValues.has(option) && <CheckIcon className="h-3 w-3" />}
-                </span>
-                <span className="truncate">{option}</span>
-              </button>
+                  {selectedValues.has(option) && <CheckSvgIcon />}
+                </Box>
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{option}</Box>
+              </Box>
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -285,89 +392,159 @@ export default function ChartOfAccountsPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Chart of Accounts"
           variant="accent"
           actions={
-            <Button onClick={handleRefresh} variant="outline" size="sm">
-              <RefreshIcon className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
+            <Button
+              onClick={handleRefresh}
+              variant="outlined"
+              size="small"
+              startIcon={
+                <RefreshSvgIcon sx={isLoading ? { animation: 'spin 1s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } } : {}} />
+              }
+              sx={{ borderColor: 'divider', color: 'text.primary' }}
+            >
               Refresh
             </Button>
           }
         />
 
-        <div className="mt-6 grid gap-4">
+        <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Source Tabs */}
-          <Tabs
+          <MuiTabs
             value={sourceFilter}
-            onValueChange={(v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
+            onChange={(_, v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
+            sx={{
+              minHeight: 40,
+              bgcolor: 'action.hover',
+              borderRadius: 2,
+              p: 0.5,
+              '& .MuiTabs-indicator': { display: 'none' },
+            }}
           >
-            <TabsList>
-              <TabsTrigger value="all">
-                All
-                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.all}</span>
-              </TabsTrigger>
-              <TabsTrigger value="qbo">
-                QBO Created
-                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.qbo}</span>
-              </TabsTrigger>
-              <TabsTrigger value="lmb">
-                LMB / Plutus
-                <span className="ml-1.5 text-xs tabular-nums opacity-60">{sourceCounts.lmb}</span>
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+            <MuiTab
+              value="all"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  All
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.all}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+            <MuiTab
+              value="qbo"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  QBO Created
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.qbo}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+            <MuiTab
+              value="lmb"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  Template
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.lmb}</Box>
+                </Box>
+              }
+              sx={{
+                minHeight: 36,
+                borderRadius: 1.5,
+                '&.Mui-selected': { bgcolor: 'background.paper', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' },
+              }}
+            />
+          </MuiTabs>
 
           {/* Filter Bar */}
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1fr,auto] md:items-end">
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+          <Card sx={{ borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1fr auto' }, alignItems: { md: 'end' } }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography
+                    sx={{
+                      fontSize: '0.625rem',
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      color: '#45B3D4',
+                    }}
+                  >
                     Search
-                  </div>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
+                  </Typography>
+                  <Box sx={{ position: 'relative' }}>
+                    <SearchIcon
+                      sx={{
+                        pointerEvents: 'none',
+                        position: 'absolute',
+                        left: 12,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        fontSize: 16,
+                        color: 'text.disabled',
+                        zIndex: 1,
+                      }}
+                    />
+                    <TextField
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search by name or number..."
-                      className="pl-9"
+                      size="small"
+                      fullWidth
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          '& .MuiOutlinedInput-input': {
+                            pl: 4.5,
+                          },
+                        },
+                      }}
                     />
-                  </div>
-                </div>
+                  </Box>
+                </Box>
 
-                <div className="flex items-center gap-3">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   {/* Count */}
-                  <div className="text-xs text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                     {filteredAccounts.length === total
                       ? `${total} accounts`
                       : `${filteredAccounts.length} of ${total}`}
-                  </div>
+                  </Typography>
                   <Button
-                    variant="outline"
+                    variant="outlined"
                     onClick={() => clearFilters()}
                     disabled={!search && sourceFilter === 'all' && activeFiltersCount === 0}
+                    sx={{ borderColor: 'divider', color: 'text.primary' }}
                   >
                     Clear
                   </Button>
-                </div>
-              </div>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
 
           {/* Table */}
-          <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table className="table-striped">
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                      <TableHead className="font-semibold w-[80px]">Code</TableHead>
-                      <TableHead className="font-semibold">Name</TableHead>
-                      <TableHead className="font-semibold">
+          <Card sx={{ borderColor: 'divider', overflow: 'hidden' }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+              <Box sx={{ overflowX: 'auto' }}>
+                <MuiTable>
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                      <TableCell sx={{ fontWeight: 600, width: 80 }}>Code</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Type"
                           options={accountTypes}
@@ -375,8 +552,8 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedTypesRaw(Array.from(values))}
                           isActive={selectedTypes.size > 0}
                         />
-                      </TableHead>
-                      <TableHead className="font-semibold">
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Detail Type"
                           options={detailTypes}
@@ -384,8 +561,8 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedDetailTypesRaw(Array.from(values))}
                           isActive={selectedDetailTypes.size > 0}
                         />
-                      </TableHead>
-                      <TableHead className="font-semibold">
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600 }}>
                         <ColumnFilterDropdown
                           label="Currency"
                           options={currencies}
@@ -393,17 +570,17 @@ export default function ChartOfAccountsPage() {
                           onSelectionChange={(values) => setSelectedCurrenciesRaw(Array.from(values))}
                           isActive={selectedCurrencies.size > 0}
                         />
-                      </TableHead>
-                      <TableHead className="font-semibold text-right">Balance</TableHead>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 600, textAlign: 'right' }}>Balance</TableCell>
                     </TableRow>
-                  </TableHeader>
+                  </TableHead>
                   <TableBody>
                     {(isLoading || isCheckingConnection) && (
                       <>
                         {Array.from({ length: 12 }).map((_, idx) => (
                           <TableRow key={idx}>
-                            <TableCell colSpan={6} className="py-4">
-                              <Skeleton className="h-6 w-full" />
+                            <TableCell colSpan={6} sx={{ py: 2 }}>
+                              <Skeleton sx={{ height: 24, width: '100%' }} />
                             </TableCell>
                           </TableRow>
                         ))}
@@ -412,7 +589,7 @@ export default function ChartOfAccountsPage() {
 
                     {!isLoading && !isCheckingConnection && error && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                        <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
                         </TableCell>
                       </TableRow>
@@ -433,70 +610,106 @@ export default function ChartOfAccountsPage() {
                       !isCheckingConnection &&
                       !error &&
                       filteredAccounts.map((account) => (
-                        <TableRow key={account.id} className="table-row-hover">
+                        <TableRow key={account.id} sx={{ transition: 'background-color 0.15s', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}>
                           {/* Code */}
-                          <TableCell className="font-mono text-sm text-slate-600 dark:text-slate-400">
+                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.acctNum ? account.acctNum : '—'}
                           </TableCell>
 
                           {/* Name with hierarchy indentation */}
                           <TableCell>
-                            <div
-                              className="flex items-center min-w-0"
+                            <Box
+                              sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}
                               style={{ paddingLeft: `${account.depth * 20}px` }}
                               title={account.fullyQualifiedName ? account.fullyQualifiedName : account.name}
                             >
                               {account.depth > 0 && (
-                                <span className="mr-1.5 text-slate-300 dark:text-slate-600 flex-shrink-0 select-none font-mono text-xs">└</span>
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    mr: 0.75,
+                                    color: 'divider',
+                                    flexShrink: 0,
+                                    userSelect: 'none',
+                                    fontFamily: 'monospace',
+                                    fontSize: '0.75rem',
+                                  }}
+                                >
+                                  └
+                                </Box>
                               )}
-                              <span className="font-medium text-slate-900 dark:text-white truncate text-sm">
+                              <Box
+                                component="span"
+                                sx={{
+                                  fontWeight: 500,
+                                  color: 'text.primary',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  fontSize: '0.875rem',
+                                }}
+                              >
                                 {account.name}
-                              </span>
+                              </Box>
                               {account.source === 'lmb' && (
-                                <Badge variant="secondary" className="ml-2 flex-shrink-0 text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300 border-0">
-                                  LMB
-                                </Badge>
+                                <Chip
+                                  label="Template"
+                                  size="small"
+                                  sx={{
+                                    ml: 1,
+                                    flexShrink: 0,
+                                    fontSize: '10px',
+                                    bgcolor: 'rgba(139, 92, 246, 0.1)',
+                                    color: 'rgb(109, 40, 217)',
+                                    border: 0,
+                                  }}
+                                />
                               )}
-                            </div>
+                            </Box>
                           </TableCell>
 
                           {/* Type */}
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.type}
                           </TableCell>
 
                           {/* Detail Type */}
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.subType ? account.subType : '—'}
                           </TableCell>
 
                           {/* Currency */}
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                          <TableCell sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                             {account.currency}
                           </TableCell>
 
                           {/* Balance */}
-                          <TableCell className="text-right">
-                            <span className={cn(
-                              'font-mono text-sm tabular-nums',
-                              account.balance < 0
-                                ? 'text-red-600 dark:text-red-400'
-                                : account.balance > 0
-                                  ? 'text-emerald-600 dark:text-emerald-400'
-                                  : 'text-slate-400 dark:text-slate-500'
-                            )}>
+                          <TableCell sx={{ textAlign: 'right' }}>
+                            <Box
+                              component="span"
+                              sx={{
+                                fontFamily: 'monospace',
+                                fontSize: '0.875rem',
+                                fontVariantNumeric: 'tabular-nums',
+                                ...(account.balance < 0
+                                  ? { color: 'error.main' }
+                                  : account.balance > 0
+                                    ? { color: 'success.main' }
+                                    : { color: 'text.disabled' }),
+                              }}
+                            >
                               {formatCurrency(account.balance, account.currency)}
-                            </span>
+                            </Box>
                           </TableCell>
                         </TableRow>
                       ))}
                   </TableBody>
-                </Table>
-              </div>
+                </MuiTable>
+              </Box>
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </main>
+        </Box>
+      </Box>
+    </Box>
   );
 }

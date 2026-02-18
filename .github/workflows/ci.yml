@@ -39,6 +39,8 @@ jobs:
           cp apps/atlas/.env.dev.ci apps/atlas/.env.local
           cp apps/plutus/.env.dev.ci apps/plutus/.env.dev
           cp apps/plutus/.env.dev.ci apps/plutus/.env.local
+          cp apps/argus/.env.dev.ci apps/argus/.env.dev
+          cp apps/argus/.env.dev.ci apps/argus/.env.local
       - name: Verify dev environment configuration
         run: bash scripts/verify-dev-env.sh
       - name: Generate Prisma clients (parallel)

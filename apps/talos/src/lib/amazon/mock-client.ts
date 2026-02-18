@@ -83,7 +83,10 @@ export async function getInventory() {
  return getMockData('getInventorySummaries')
 }
 
-export async function getInboundShipments(_tenantCode?: unknown, _options?: { nextToken?: string }) {
+export async function getInboundShipments(
+  _tenantCode?: unknown,
+  _options?: { nextToken?: string; includeCancelled?: boolean }
+) {
  // console.log('Mock: Fetching inbound shipments')
  return { shipments: [] }
 }

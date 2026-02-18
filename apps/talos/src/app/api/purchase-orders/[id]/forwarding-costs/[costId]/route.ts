@@ -1,4 +1,5 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
@@ -27,7 +28,14 @@ const UpdateForwardingCostSchema = z.object({
   costName: OptionalString,
   quantity: OptionalNumber,
   notes: OptionalString,
-  currency: OptionalString,
+  currency: z.preprocess(
+    value => {
+      const cleaned = emptyToUndefined(value)
+      if (cleaned === undefined) return undefined
+      return normalizePoCostCurrency(cleaned) ?? cleaned
+    },
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
 })
 
 function readParam(params: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -165,7 +173,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
           costName: nextCostName,
           isActive: true,
         },
-        orderBy: [{ effectiveDate: 'desc' }],
+        orderBy: [{ updatedAt: 'desc' }],
       })
     : null
 

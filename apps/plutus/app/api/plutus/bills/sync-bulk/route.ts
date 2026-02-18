@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
       try {
         const lineDescriptions = buildManufacturingLineDescriptionsFromMappings(qboBillId, mapping.lines);
         const syncResult = await updateBill(activeConnection, qboBillId, {
-          privateNote: `PO: ${mapping.poNumber}`,
+          privateNote: mapping.poNumber.trim() === '' ? undefined : `PO: ${mapping.poNumber}`,
           lineDescriptions,
         });
         if (syncResult.updatedConnection) {

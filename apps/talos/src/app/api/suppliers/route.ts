@@ -228,7 +228,13 @@ export const DELETE = withAuth(async (request, session) => {
           equals: supplier.name,
           mode: 'insensitive',
         },
-        status: { not: PurchaseOrderStatus.CANCELLED },
+        status: {
+          notIn: [
+            PurchaseOrderStatus.CLOSED,
+            PurchaseOrderStatus.CANCELLED,
+            PurchaseOrderStatus.REJECTED,
+          ],
+        },
       },
     }),
     prisma.inventoryTransaction.count({

@@ -23,8 +23,6 @@ interface CostRate {
   costName: string
   costValue: number
   unitOfMeasure: string
-  effectiveDate: string
-  endDate: string | null
 }
 
 interface WarehouseRatesPanelProps {
@@ -38,9 +36,8 @@ type TabKey = 'inbound' | 'storage' | 'outbound' | 'forwarding'
 interface InlineEditState {
   rateId: string | null
   templateName: string | null
-  field: 'rate' | 'effectiveDate' | 'new'
+  field: 'rate' | 'new'
   value: string
-  effectiveDate: string
 }
 
 // Rate templates define expected rates with their categories and units
@@ -211,17 +208,6 @@ export function WarehouseRatesPanel({
       templateName: rate.costName,
       field: 'rate',
       value: rate.costValue.toString(),
-      effectiveDate: rate.effectiveDate.slice(0, 10),
-    })
-  }
-
-  const startEditingEffectiveDate = (rate: CostRate) => {
-    setEditState({
-      rateId: rate.id,
-      templateName: rate.costName,
-      field: 'effectiveDate',
-      value: rate.costValue.toString(),
-      effectiveDate: rate.effectiveDate.slice(0, 10),
     })
   }
 
@@ -231,7 +217,6 @@ export function WarehouseRatesPanel({
       templateName: template.costName,
       field: 'new',
       value: template.defaultValue.toString(),
-      effectiveDate: new Date().toISOString().split('T')[0],
     })
   }
 
@@ -247,8 +232,6 @@ export function WarehouseRatesPanel({
       const payload: Record<string, unknown> = {}
       if (editState.field === 'rate') {
         payload.costValue = parseFloat(editState.value)
-      } else if (editState.field === 'effectiveDate') {
-        payload.effectiveDate = new Date(editState.effectiveDate)
       }
 
       const response = await fetchWithCSRF(`/api/settings/rates/${rate.id}`, {
@@ -290,7 +273,7 @@ export function WarehouseRatesPanel({
           costName: template.costName,
           unitOfMeasure: template.unitOfMeasure,
           costValue: numericValue,
-          effectiveDate: new Date(editState.effectiveDate),
+          effectiveDate: new Date('2000-01-01'),
           endDate: null,
         }),
       })
@@ -314,18 +297,17 @@ export function WarehouseRatesPanel({
     const rate = getRateForTemplate(template)
     const isEditingThis = editState?.templateName === template.costName
     const isEditingRate = isEditingThis && editState?.field === 'rate'
-    const isEditingDate = isEditingThis && editState?.field === 'effectiveDate'
     const isAddingNew = isEditingThis && editState?.field === 'new'
 
     return (
       <tr key={template.costName} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-        <td className="px-3 py-2 text-foreground whitespace-nowrap w-[40%]">
+        <td className="px-3 py-2 text-foreground whitespace-nowrap w-[55%]">
           {template.costName}
           {showCategory && (
             <span className="ml-2 text-xs text-muted-foreground">({template.costCategory})</span>
           )}
         </td>
-        <td className="px-3 py-2 text-right w-[20%]">
+        <td className="px-3 py-2 text-right w-[25%]">
           {rate ? (
             isEditingRate ? (
               <div className="flex items-center justify-end gap-2">
@@ -381,62 +363,6 @@ export function WarehouseRatesPanel({
                 className="w-24 px-2 py-1 text-right border rounded focus:outline-none focus:ring-2 focus:ring-primary"
                 autoFocus
               />
-            </div>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </td>
-        <td className="px-3 py-2 w-[25%]">
-          {rate ? (
-            isEditingDate ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={editState?.effectiveDate || ''}
-                  onChange={e =>
-                    setEditState(prev => (prev ? { ...prev, effectiveDate: e.target.value } : null))
-                  }
-                  className="w-36 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                  autoFocus
-                />
-                <button
-                  onClick={() => saveRate(rate)}
-                  disabled={saving}
-                  className="p-1 text-green-600 hover:bg-green-50 rounded"
-                  title="Save"
-                >
-                  <Save className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={cancelEditing}
-                  className="p-1 text-muted-foreground hover:bg-muted rounded"
-                  title="Cancel"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <span className="text-muted-foreground">{rate.effectiveDate.slice(0, 10)}</span>
-                <button
-                  onClick={() => startEditingEffectiveDate(rate)}
-                  className="p-1 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 rounded transition-colors"
-                  title="Edit effective date"
-                >
-                  <Edit className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )
-          ) : isAddingNew ? (
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={editState?.effectiveDate || ''}
-                onChange={e =>
-                  setEditState(prev => (prev ? { ...prev, effectiveDate: e.target.value } : null))
-                }
-                className="w-36 px-2 py-1 border rounded focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              />
               <button
                 onClick={() => createRate(template)}
                 disabled={saving}
@@ -457,7 +383,7 @@ export function WarehouseRatesPanel({
             <span className="text-muted-foreground">—</span>
           )}
         </td>
-        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap w-[15%]">
+        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap w-[20%]">
           {rate ? (
             formatUnit(template.unitOfMeasure)
           ) : isAddingNew ? (
@@ -505,7 +431,10 @@ export function WarehouseRatesPanel({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">{warehouseName}</h2>
-          <p className="text-sm text-muted-foreground">Rate Sheet • {warehouseCode} • USD</p>
+          <p className="text-sm text-muted-foreground">Template Rates • {warehouseCode} • USD</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Used to prefill warehouse-stage costs in the PO workflow.
+          </p>
         </div>
         <Badge className="bg-green-50 text-green-700 border-green-200">
           {rates.length} rates configured
@@ -592,10 +521,9 @@ function InboundTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Container Type</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Container Type</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
             </tr>
           </thead>
           <tbody>
@@ -644,10 +572,9 @@ function StorageTab({ templates, renderRateRow }: StorageTabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Description</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Description</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>
@@ -677,10 +604,9 @@ function OutboundTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Pallet Range</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Pallet Range</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
             </tr>
           </thead>
           <tbody>{truckingRates.map(t => renderRateRow(t))}</tbody>
@@ -723,10 +649,9 @@ function ForwardingTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[45%]">Service</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[20%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Effective</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[15%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Service</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>

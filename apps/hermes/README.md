@@ -113,6 +113,33 @@ Notes:
 
 ---
 
+## SKU review ingest + insights
+
+Hermes now supports:
+
+1) **File-based product-review ingest** (no copy/paste)
+- API: `POST /api/reviews/import`
+- Send `multipart/form-data` with:
+  - `connectionId` (string)
+  - `marketplaceId` (string)
+  - `sku` (string)
+  - `file` (`.csv`, `.tsv`, `.txt`, or `.json`)
+- Optional `asin` can be included as a fallback for rows that do not carry ASIN.
+- Reviews are deduplicated by a stable content hash per `(connection_id, marketplace_id, sku)`.
+
+2) **Ingested-review insights**
+- API: `GET /api/reviews/manual?connectionId=...&marketplaceId=...&sku=...`
+- API: `GET /api/reviews/insights?connectionId=...&marketplaceId=...&sku=...`
+- API: `GET /api/reviews/export?connectionId=...&marketplaceId=...&sku=...`
+- Metrics are computed from `hermes_manual_reviews` for the selected marketplace + SKU.
+
+Relevant env knobs:
+- `HERMES_REVIEW_INSIGHTS_ENABLED` (default `true`)
+- `HERMES_REVIEW_INSIGHTS_INTERVAL_HOURS` (default `168`)
+- `HERMES_REVIEW_INSIGHTS_MAX_ASINS_PER_RUN` (default `250`)
+
+---
+
 ## Configuration (what Hermes needs)
 
 - **Base path**: Hermes is meant to run behind a base path (default `/hermes`).

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type StatCardProps = {
   label: string;
@@ -7,13 +9,13 @@ type StatCardProps = {
   icon?: ReactNode;
   trend?: { direction: 'up' | 'down' | 'neutral'; label?: string };
   dotColor?: string;
-  className?: string;
+  sx?: SxProps<Theme>;
 };
 
 function TrendArrow({ direction }: { direction: 'up' | 'down' | 'neutral' }) {
   if (direction === 'neutral') {
     return (
-      <svg className="h-3.5 w-3.5 text-slate-400" viewBox="0 0 16 16" fill="none">
+      <svg style={{ width: 14, height: 14, color: '#94a3b8' }} viewBox="0 0 16 16" fill="none">
         <path d="M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       </svg>
     );
@@ -21,7 +23,7 @@ function TrendArrow({ direction }: { direction: 'up' | 'down' | 'neutral' }) {
 
   return (
     <svg
-      className={cn('h-3.5 w-3.5', direction === 'up' ? 'text-emerald-500' : 'text-red-500')}
+      style={{ width: 14, height: 14, color: direction === 'up' ? '#22c55e' : '#ef4444' }}
       viewBox="0 0 16 16"
       fill="none"
     >
@@ -36,55 +38,120 @@ function TrendArrow({ direction }: { direction: 'up' | 'down' | 'neutral' }) {
   );
 }
 
-export function StatCard({ label, value, icon, trend, dotColor, className }: StatCardProps) {
+export function StatCard({ label, value, icon, trend, dotColor, sx }: StatCardProps) {
   return (
-    <div
-      className={cn(
-        'group relative overflow-hidden rounded-xl border border-slate-200/70 bg-white p-4 shadow-sm transition-all duration-200 hover:shadow-md dark:border-white/10 dark:bg-slate-900/80',
-        className,
-      )}
+    <Box
+      sx={{
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: 3,
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'background.paper',
+        p: 2,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+        transition: 'all 0.2s',
+        '&:hover': {
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+          '& .stat-card-gradient': { opacity: 1 },
+        },
+        ...sx,
+      }}
     >
-      <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-teal-400/60 via-brand-teal-500/40 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+      <Box
+        className="stat-card-gradient"
+        sx={{
+          position: 'absolute',
+          inset: '0 0 auto 0',
+          height: 2,
+          background: 'linear-gradient(to right, rgba(69, 179, 212, 0.6), rgba(69, 179, 212, 0.4), transparent)',
+          opacity: 0,
+          transition: 'opacity 0.2s',
+        }}
+      />
 
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             {dotColor && (
-              <span className={cn('inline-block h-2 w-2 rounded-full', dotColor)} />
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  height: 8,
+                  width: 8,
+                  borderRadius: '50%',
+                  bgcolor: dotColor,
+                }}
+              />
             )}
-            <span className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 500,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'text.secondary',
+              }}
+            >
               {label}
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            </Typography>
+          </Box>
+          <Box sx={{ mt: 1, display: 'flex', alignItems: 'baseline', gap: 1 }}>
+            <Typography
+              variant="h5"
+              component="span"
+              sx={{
+                fontWeight: 600,
+                letterSpacing: '-0.025em',
+                color: 'text.primary',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
               {value}
-            </span>
+            </Typography>
             {trend && (
-              <span className="flex items-center gap-1">
+              <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <TrendArrow direction={trend.direction} />
                 {trend.label && (
-                  <span
-                    className={cn(
-                      'text-xs font-medium',
-                      trend.direction === 'up' && 'text-emerald-600 dark:text-emerald-400',
-                      trend.direction === 'down' && 'text-red-600 dark:text-red-400',
-                      trend.direction === 'neutral' && 'text-slate-500 dark:text-slate-400',
-                    )}
+                  <Typography
+                    variant="caption"
+                    component="span"
+                    sx={{
+                      fontWeight: 500,
+                      color:
+                        trend.direction === 'up'
+                          ? 'success.main'
+                          : trend.direction === 'down'
+                            ? 'error.main'
+                            : 'text.secondary',
+                    }}
                   >
                     {trend.label}
-                  </span>
+                  </Typography>
                 )}
-              </span>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-teal-50 text-brand-teal-600 dark:bg-brand-teal-950/40 dark:text-brand-teal-400">
+          <Box
+            sx={{
+              display: 'flex',
+              height: 40,
+              width: 40,
+              flexShrink: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 2,
+              bgcolor: 'rgba(69, 179, 212, 0.08)',
+              color: '#2384a1',
+            }}
+          >
             {icon}
-          </div>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }

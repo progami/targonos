@@ -227,7 +227,6 @@ Use the same pattern — point `DATABASE_URL` to `localhost:6432` with the appro
 | Kairos | `@targon/kairos` | 3010 | `kairos` |
 | Plutus | `@targon/plutus` | 3012 | — (uses QuickBooks API) |
 | Hermes | `@targon/hermes` | 3014 | `dev_hermes` |
-| Argus | `@targon/argus` | 3016 | `dev_argus` |
 
 ### 4. Generate Prisma clients
 

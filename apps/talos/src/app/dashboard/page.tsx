@@ -353,7 +353,7 @@ export default function DashboardPage() {
  {/* Order Pipeline and Cost Breakdown */}
  <div className="grid gap-4 md:grid-cols-2 mb-6">
  <OrderPipeline
-   pipeline={stats?.orderPipeline ?? { draft: 0, issued: 0, manufacturing: 0, inTransit: 0, atWarehouse: 0 }}
+   pipeline={stats?.orderPipeline ?? { issued: 0, manufacturing: 0, inTransit: 0, atWarehouse: 0 }}
    pendingFulfillmentOrders={stats?.pendingFulfillmentOrders ?? 0}
  />
  <CostBreakdown

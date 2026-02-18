@@ -89,10 +89,7 @@ function escapeHtml(str: string | null | undefined): string {
     .replace(/'/g, '&#039;')
 }
 
-type OrderDocumentType = 'rfq' | 'po'
-
 function renderOrderDocumentHtml(params: {
-  documentType: OrderDocumentType
   documentNumber: string
   vendorPiNumbers: string[]
   generatedAt: Date
@@ -125,7 +122,6 @@ function renderOrderDocumentHtml(params: {
     totalCost: number | null
   }>
 }): string {
-  const isRfq = params.documentType === 'rfq'
   const logoSrc = '/talos/brand/logo.svg'
 
   // Calculate totals
@@ -213,24 +209,6 @@ function renderOrderDocumentHtml(params: {
   })()
 
   const lineItemsHtml = (() => {
-    if (isRfq) {
-      return params.lines
-        .map(line => {
-          return `
-            <tr>
-              <td class="desc-cell">
-                <div class="sku-code">${escapeHtml(line.skuCode)}</div>
-                ${line.skuDescription ? `<div class="sku-detail"><span class="detail-label">Product:</span> ${escapeHtml(line.skuDescription)}</div>` : ''}
-                ${line.packingDetails ? `<div class="sku-detail"><span class="detail-label">Packing:</span> ${escapeHtml(line.packingDetails)}</div>` : ''}
-                ${line.cartonDetails ? `<div class="sku-detail"><span class="detail-label">Carton:</span> ${escapeHtml(line.cartonDetails)}</div>` : ''}
-              </td>
-              <td class="qty-cell">${line.unitsOrdered.toLocaleString()}</td>
-            </tr>
-          `
-        })
-        .join('')
-    }
-
     return params.lines
       .map(line => {
         const unitCost = line.unitCost
@@ -258,7 +236,7 @@ function renderOrderDocumentHtml(params: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${isRfq ? 'RFQ' : 'Purchase Order'} ${escapeHtml(params.documentNumber)}</title>
+  <title>Purchase Order ${escapeHtml(params.documentNumber)}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
@@ -672,10 +650,10 @@ function renderOrderDocumentHtml(params: {
           </div>
         </div>
         <div class="po-title-section">
-          <div class="po-title">${isRfq ? 'REQUEST<br>FOR QUOTE' : 'PURCHASE<br>ORDER'}</div>
+          <div class="po-title">PURCHASE<br>ORDER</div>
           <div class="po-meta">
             <div class="po-meta-row">
-              <span class="po-meta-label">${isRfq ? 'RFQ Number:' : 'PO Number:'}</span>
+              <span class="po-meta-label">PO Number:</span>
               <span class="po-meta-value">${escapeHtml(params.documentNumber)}</span>
             </div>
             <div class="po-meta-row">
@@ -686,7 +664,7 @@ function renderOrderDocumentHtml(params: {
               <span class="po-meta-label">Generated:</span>
               <span class="po-meta-value">${formatDateTime(params.generatedAt)}${params.generatedByName ? ` by ${escapeHtml(params.generatedByName)}` : ''}</span>
             </div>
-            ${!isRfq && params.vendorPiNumbers.length > 0 ? `
+            ${params.vendorPiNumbers.length > 0 ? `
             <div class="po-meta-row">
               <span class="po-meta-label">Vendor PI${params.vendorPiNumbers.length === 1 ? '' : 's'}:</span>
               <span class="po-meta-value">${escapeHtml(params.vendorPiNumbers.join(', '))}</span>
@@ -707,7 +685,7 @@ function renderOrderDocumentHtml(params: {
           <div class="party-address">
             ${supplierAddressHtml}
             ${params.supplierPhone ? `<br>Tel: ${escapeHtml(params.supplierPhone)}` : ''}
-            ${!isRfq && supplierBankingHtml ? `
+            ${supplierBankingHtml ? `
               <span class="banking-label">Banking</span>
               <span class="banking-details">${supplierBankingHtml}</span>
             ` : ''}
@@ -725,10 +703,8 @@ function renderOrderDocumentHtml(params: {
           <tr>
             <th>Description & Packing Details</th>
             <th>Qty</th>
-            ${isRfq ? '' : `
-              <th>Unit Price</th>
-              <th>Total</th>
-            `}
+            <th>Unit Price</th>
+            <th>Total</th>
           </tr>
         </thead>
         <tbody>
@@ -736,23 +712,21 @@ function renderOrderDocumentHtml(params: {
         </tbody>
       </table>
 
-      ${isRfq ? '' : `
-        <div class="totals-section">
-          <div class="totals-box">
-            <div class="total-row">
-              <span class="total-label">Total Amount (USD):</span>
-              <span class="total-value">${formatCurrency(grandTotal)}</span>
-            </div>
-            <div class="total-row balance">
-              <span class="total-label">BALANCE DUE:</span>
-              <span class="total-value">${formatCurrency(grandTotal)}</span>
-            </div>
-            <div class="amount-words">
-              SAY TOTAL U.S. DOLLARS ${amountInWords.toUpperCase()}.
-            </div>
+      <div class="totals-section">
+        <div class="totals-box">
+          <div class="total-row">
+            <span class="total-label">Total Amount (USD):</span>
+            <span class="total-value">${formatCurrency(grandTotal)}</span>
+          </div>
+          <div class="total-row balance">
+            <span class="total-label">BALANCE DUE:</span>
+            <span class="total-value">${formatCurrency(grandTotal)}</span>
+          </div>
+          <div class="amount-words">
+            SAY TOTAL U.S. DOLLARS ${amountInWords.toUpperCase()}.
           </div>
         </div>
-      `}
+      </div>
     </div>
     <div class="footer">Page 1 of 2</div>
   </div>
@@ -764,7 +738,7 @@ function renderOrderDocumentHtml(params: {
 
       <div class="terms-notes">
         <div class="info-box">
-          <div class="info-box-title">${isRfq ? 'RFQ Details' : 'Terms & Conditions'}</div>
+          <div class="info-box-title">Terms & Conditions</div>
           ${params.expectedDate ? `
           <div class="info-row">
             <span class="info-label">Delivery:</span>
@@ -773,7 +747,7 @@ function renderOrderDocumentHtml(params: {
           ` : ''}
           ${params.paymentTerms ? `
           <div class="info-row">
-            <span class="info-label">${isRfq ? 'Requested Payment Terms:' : 'Payment Terms:'}</span><br>
+            <span class="info-label">Payment Terms:</span><br>
             <span class="info-value">${escapeHtml(params.paymentTerms)}</span>
           </div>
           ` : ''}
@@ -861,13 +835,9 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const tenant = await getCurrentTenant()
   const buyerVatNumber = getBuyerVatNumber(tenant.code)
 
-  const documentType: OrderDocumentType = order.status === 'RFQ' ? 'rfq' : 'po'
-  const documentNumber = toPublicOrderNumber(
-    documentType === 'rfq' ? order.orderNumber : order.poNumber ?? order.orderNumber
-  )
+  const documentNumber = toPublicOrderNumber(order.poNumber ?? order.orderNumber)
 
   if (
-    documentType === 'po' &&
     (!supplierBankingDetails || supplierBankingDetails.trim().length === 0)
   ) {
     return ApiResponses.badRequest(
@@ -900,25 +870,14 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const generatedAt = new Date()
   const generatedByName = _session.user.name ?? _session.user.email ?? null
 
-  if (documentType === 'rfq') {
-    await prisma.purchaseOrder.update({
-      where: { id: order.id },
-      data: {
-        rfqPdfGeneratedAt: generatedAt,
-        rfqPdfGeneratedById: _session.user.id,
-        rfqPdfGeneratedByName: generatedByName,
-      },
-    })
-  } else {
-    await prisma.purchaseOrder.update({
-      where: { id: order.id },
-      data: {
-        poPdfGeneratedAt: generatedAt,
-        poPdfGeneratedById: _session.user.id,
-        poPdfGeneratedByName: generatedByName,
-      },
-    })
-  }
+  await prisma.purchaseOrder.update({
+    where: { id: order.id },
+    data: {
+      poPdfGeneratedAt: generatedAt,
+      poPdfGeneratedById: _session.user.id,
+      poPdfGeneratedByName: generatedByName,
+    },
+  })
 
   const lines = order.lines.map(line => ({
     skuCode: line.skuCode,
@@ -931,7 +890,6 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   }))
 
   const html = renderOrderDocumentHtml({
-    documentType,
     documentNumber,
     vendorPiNumbers,
     generatedAt,

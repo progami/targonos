@@ -1,21 +1,39 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { ChevronLeft, ChevronRight, ExternalLink, Play, Search } from 'lucide-react';
+import { useSnackbar } from 'notistack';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SearchIcon from '@mui/icons-material/Search';
+import Checkbox from '@mui/material/Checkbox';
+import Box from '@mui/material/Box';
+import MuiButton from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Skeleton from '@mui/material/Skeleton';
+import MuiTable from '@mui/material/Table';
+import MuiTableBody from '@mui/material/TableBody';
+import MuiTableCell from '@mui/material/TableCell';
+import MuiTableHead from '@mui/material/TableHead';
+import MuiTableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
@@ -58,6 +76,9 @@ type ConnectionStatus = { connected: boolean; error?: string };
 type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
 type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
 
+/* ── shared chip styles ── */
+const chipBase = { height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px' } as const;
+
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
 
@@ -96,75 +117,279 @@ function formatMoney(amount: number, currency: string): string {
 }
 
 function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
-  if (status === 'Posted') return <Badge variant="success">LMB Posted</Badge>;
-  return <Badge variant="secondary">LMB {status}</Badge>;
+  if (status === 'Posted')
+    return (
+      <Chip
+        label="Posted"
+        size="small"
+        color="success"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+      />
+    );
+  return (
+    <Chip
+      label={status}
+      size="small"
+      color="default"
+      variant="filled"
+      sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
+    />
+  );
+}
+
+function displaySettlementDocNumber(docNumber: string): string {
+  const raw = docNumber.trim();
+  const normalized = raw.replace(/^.*#(LMB-[A-Z]{2}-)/, '$1');
+  return normalized.startsWith('LMB-') ? normalized.slice('LMB-'.length) : normalized;
+}
+
+function extractSettlementIdFromMemo(memo: string): string | null {
+  const matchSpapi = memo.match(/Settlement:\s*([0-9]+)/);
+  if (matchSpapi) return matchSpapi[1]!;
+
+  const matchLmb = memo.match(/downloadAuditFile\/\d+-([0-9]+)/);
+  if (matchLmb) return matchLmb[1]!;
+
+  return null;
+}
+
+function isoDaySubtractDays(isoDay: string, days: number): string {
+  const date = new Date(`${isoDay}T00:00:00.000Z`);
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error(`Invalid iso day: ${isoDay}`);
+  }
+  date.setUTCDate(date.getUTCDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+type UsSpApiSettlementSyncSegmentResult = {
+  settlementId: string;
+  eventGroupId: string;
+  docNumber: string;
+  txnDate: string;
+  qboJournalEntryId: string | null;
+  qboAction: 'existing' | 'posted' | 'skipped' | 'error';
+  processed: boolean;
+  reason?: string;
+  error?: string;
+};
+
+type UsSpApiSettlementSyncResult = {
+  totals: {
+    settlements: number;
+    segments: number;
+    posted: number;
+    existing: number;
+    processed: number;
+    skipped: number;
+    errors: number;
+  };
+  segments: UsSpApiSettlementSyncSegmentResult[];
+};
+
+function readStringField(payload: unknown, key: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const value = (payload as Record<string, unknown>)[key];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+async function syncUsSettlementsFromAmazon(input: {
+  startDate: string;
+  endDate: string | null;
+  settlementIds: string[];
+  postToQbo: boolean;
+  process: boolean;
+}): Promise<UsSpApiSettlementSyncResult> {
+  const payload: Record<string, unknown> = {
+    startDate: input.startDate,
+    postToQbo: input.postToQbo,
+    process: input.process,
+  };
+  if (input.endDate !== null) payload.endDate = input.endDate;
+  if (input.settlementIds.length > 0) payload.settlementIds = input.settlementIds;
+
+  const res = await fetch(`${basePath}/api/plutus/settlements/spapi/us/sync`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json()) as unknown;
+  if (!res.ok) {
+    const details = readStringField(data, 'details');
+    if (details) {
+      throw new Error(details);
+    }
+
+    const error = readStringField(data, 'error');
+    if (error) {
+      throw new Error(error);
+    }
+
+    throw new Error('Sync failed');
+  }
+  return data as UsSpApiSettlementSyncResult;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
-  if (status === 'Processed') return <Badge variant="success">Plutus Processed</Badge>;
-  if (status === 'RolledBack') return <Badge variant="secondary">Plutus Rolled Back</Badge>;
-  if (status === 'Blocked') return <Badge variant="destructive">Plutus Blocked</Badge>;
-  return <Badge variant="destructive">Plutus Pending</Badge>;
+  if (status === 'Processed')
+    return (
+      <Chip
+        label="Plutus Processed"
+        size="small"
+        color="success"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+      />
+    );
+  if (status === 'RolledBack')
+    return (
+      <Chip
+        label="Plutus Rolled Back"
+        size="small"
+        color="default"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
+      />
+    );
+  if (status === 'Blocked')
+    return (
+      <Chip
+        label="Plutus Blocked"
+        size="small"
+        color="error"
+        variant="filled"
+        sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+      />
+    );
+  return (
+    <Chip
+      label="Plutus Pending"
+      size="small"
+      color="error"
+      variant="filled"
+      sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+    />
+  );
 }
 
 function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
   if (!match) {
-    return <Badge variant="outline">—</Badge>;
+    return (
+      <Chip
+        label="—"
+        size="small"
+        color="default"
+        variant="outlined"
+        sx={chipBase}
+      />
+    );
   }
 
   if (match.kind === 'match') {
     return (
-      <div className="flex flex-col items-start gap-1">
-        <Badge variant="success">Audit Ready</Badge>
-        <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{match.invoiceId}</span>
-      </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+        <Chip
+          label="Audit Ready"
+          size="small"
+          color="success"
+          variant="filled"
+          sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+        />
+        <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>{match.invoiceId}</Box>
+      </Box>
     );
   }
 
   if (match.kind === 'ambiguous') {
     const count = match.candidateInvoiceIds.length;
     return (
-      <div className="flex flex-col items-start gap-1">
-        <Badge
-          variant="secondary"
-          className="bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
-        >
-          Multiple ({count})
-        </Badge>
-        <span className="text-xs text-slate-500 dark:text-slate-400">Select in detail</span>
-      </div>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+        <Chip
+          label={`Multiple (${count})`}
+          size="small"
+          color="default"
+          variant="filled"
+          sx={{ ...chipBase, bgcolor: 'rgba(251, 191, 36, 0.1)', color: '#b45309' }}
+        />
+        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Select in detail</Box>
+      </Box>
     );
   }
 
   if (match.kind === 'missing_period') {
-    return <Badge variant="outline">Unknown</Badge>;
+    return (
+      <Chip
+        label="Unknown"
+        size="small"
+        color="default"
+        variant="outlined"
+        sx={chipBase}
+      />
+    );
   }
 
-  return <Badge variant="outline">No Audit</Badge>;
+  return (
+    <Chip
+      label="No Audit"
+      size="small"
+      color="default"
+      variant="outlined"
+      sx={chipBase}
+    />
+  );
 }
 
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
   if (region === 'US') {
     return (
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-xs dark:bg-blue-950/40" title="United States">
-        <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="3" width="14" height="10" rx="1.5" className="fill-blue-600" />
-          <path d="M1 5h14M1 7h14M1 9h14M1 11h14" className="stroke-white" strokeWidth="0.6" />
-          <rect x="1" y="3" width="6" height="5" className="fill-blue-800" />
+      <Box
+        component="span"
+        title="United States"
+        sx={{
+          display: 'inline-flex',
+          height: 24,
+          width: 24,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 99,
+          bgcolor: 'rgba(59, 130, 246, 0.05)',
+          fontSize: '0.75rem',
+        }}
+      >
+        <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
+          <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#2563eb" />
+          <path d="M1 5h14M1 7h14M1 9h14M1 11h14" stroke="white" strokeWidth="0.6" />
+          <rect x="1" y="3" width="6" height="5" fill="#1e40af" />
         </svg>
-      </span>
+      </Box>
     );
   }
   return (
-    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-50 text-xs dark:bg-red-950/40" title="United Kingdom">
-      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="3" width="14" height="10" rx="1.5" className="fill-blue-700" />
-        <path d="M1 3l14 10M15 3L1 13" className="stroke-white" strokeWidth="1.5" />
-        <path d="M1 3l14 10M15 3L1 13" className="stroke-red-600" strokeWidth="0.8" />
-        <path d="M8 3v10M1 8h14" className="stroke-white" strokeWidth="2.5" />
-        <path d="M8 3v10M1 8h14" className="stroke-red-600" strokeWidth="1.5" />
+    <Box
+      component="span"
+      title="United Kingdom"
+      sx={{
+        display: 'inline-flex',
+        height: 24,
+        width: 24,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 99,
+        bgcolor: 'rgba(239, 68, 68, 0.05)',
+        fontSize: '0.75rem',
+      }}
+    >
+      <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#1d4ed8" />
+        <path d="M1 3l14 10M15 3L1 13" stroke="white" strokeWidth="1.5" />
+        <path d="M1 3l14 10M15 3L1 13" stroke="#dc2626" strokeWidth="0.8" />
+        <path d="M8 3v10M1 8h14" stroke="white" strokeWidth="2.5" />
+        <path d="M8 3v10M1 8h14" stroke="#dc2626" strokeWidth="1.5" />
       </svg>
-    </span>
+    </Box>
   );
 }
 
@@ -213,9 +438,9 @@ async function fetchSettlements({
 
 function SettlementsEmptyIcon() {
   return (
-    <svg className="h-10 w-10" viewBox="0 0 48 48" fill="none">
-      <rect x="8" y="6" width="32" height="36" rx="4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <path d="M16 16h16M16 22h12M16 28h8" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" strokeLinecap="round" />
+    <svg style={{ height: 40, width: 40 }} viewBox="0 0 48 48" fill="none">
+      <rect x="8" y="6" width="32" height="36" rx="4" stroke="#cbd5e1" strokeWidth="2" />
+      <path d="M16 16h16M16 22h12M16 28h8" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -235,9 +460,78 @@ async function runAutopostCheck(): Promise<AutopostCheckResult> {
   return res.json();
 }
 
+/* ── shared table-cell styles ── */
+const thSx = {
+  height: 44,
+  px: 1.5,
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  textTransform: 'uppercase',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+} as const;
+
+const tdSx = {
+  px: 1.5,
+  py: 1.5,
+  color: 'text.primary',
+  fontVariantNumeric: 'tabular-nums',
+} as const;
+
+const rowHoverSx = {
+  borderBottom: 1,
+  borderColor: 'divider',
+  transition: 'background-color 0.15s',
+  '&:hover': { bgcolor: 'action.hover' },
+} as const;
+
+/* ── shared button style helpers ── */
+const btnBase = {
+  borderRadius: '8px',
+  textTransform: 'none',
+  fontWeight: 500,
+  gap: 1,
+  whiteSpace: 'nowrap',
+  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+} as const;
+
+const outlineSx = {
+  ...btnBase,
+  borderColor: 'divider',
+  color: 'text.primary',
+  bgcolor: 'background.paper',
+  '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+} as const;
+
+const defaultBtnSx = {
+  ...btnBase,
+  bgcolor: '#45B3D4',
+  color: '#fff',
+  '&:hover': { bgcolor: '#2fa3c7' },
+  '&:active': { bgcolor: '#2384a1' },
+} as const;
+
+const smSize = { height: 32, px: 1.5, fontSize: '0.75rem' } as const;
+const defaultSize = { height: 36, px: 2, fontSize: '0.875rem' } as const;
+
+/* ── shared TextField styles ── */
+const textFieldSx = {
+  '& .MuiOutlinedInput-root': {
+    borderRadius: '8px',
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#45B3D4' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+  },
+} as const;
+
+const textFieldInputSlotProps = {
+  input: { sx: { fontSize: '0.875rem', height: 36 } },
+} as const;
+
 export default function SettlementsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { enqueueSnackbar } = useSnackbar();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
@@ -316,6 +610,31 @@ export default function SettlementsPage() {
     return { total, processed, pending, hasAnyTotal, totalAmount, primaryCurrency };
   }, [data, settlements]);
 
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncStartDate, setSyncStartDate] = useState(() => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - 30);
+    return date.toISOString().slice(0, 10);
+  });
+  const [syncEndDate, setSyncEndDate] = useState<string>('');
+  const [syncSettlementIds, setSyncSettlementIds] = useState<string>('');
+  const [syncPostToQbo, setSyncPostToQbo] = useState(true);
+  const [syncProcess, setSyncProcess] = useState(false);
+  const [syncResult, setSyncResult] = useState<UsSpApiSettlementSyncResult | null>(null);
+
+  const syncMutation = useMutation({
+    mutationFn: syncUsSettlementsFromAmazon,
+    onSuccess: (result) => {
+      setSyncResult(result);
+      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+      queryClient.invalidateQueries({ queryKey: ['plutus-audit-data'] });
+      enqueueSnackbar(`Synced ${result.totals.segments} segment${result.totals.segments === 1 ? '' : 's'}`, { variant: 'success' });
+    },
+    onError: (err) => {
+      enqueueSnackbar(err instanceof Error ? err.message : 'Sync failed', { variant: 'error' });
+    },
+  });
+
   const autoprocessMutation = useMutation({
     mutationFn: runAutopostCheck,
     onSuccess: (result) => {
@@ -325,49 +644,99 @@ export default function SettlementsPage() {
       const errorCount = result.errors.length;
 
       if (processedCount > 0) {
-        toast.success(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`);
+        enqueueSnackbar(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`, { variant: 'success' });
       } else if (errorCount > 0) {
-        toast.error(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`);
+        enqueueSnackbar(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`, { variant: 'error' });
       } else {
-        toast.info(`No settlements to auto-process (${skippedCount} skipped)`);
+        enqueueSnackbar(`No settlements to auto-process (${skippedCount} skipped)`, { variant: 'info' });
       }
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Auto-process failed');
+      enqueueSnackbar(err instanceof Error ? err.message : 'Auto-process failed', { variant: 'error' });
     },
   });
+
+  const openSyncDialog = (options?: { settlementId?: string; postedDate?: string }) => {
+    setSyncResult(null);
+
+    const settlementId = options?.settlementId ? options.settlementId.trim() : '';
+    setSyncSettlementIds(settlementId);
+
+    const postedDate = options?.postedDate ? options.postedDate.trim() : '';
+    if (postedDate !== '' && /^\d{4}-\d{2}-\d{2}$/.test(postedDate)) {
+      setSyncStartDate(isoDaySubtractDays(postedDate, 45));
+      setSyncEndDate(postedDate);
+    } else {
+      setSyncEndDate('');
+    }
+
+    setSyncPostToQbo(true);
+    setSyncProcess(false);
+    setSyncOpen(true);
+  };
+
+  const runSync = () => {
+    const settlementIds = syncSettlementIds
+      .split(/[\s,]+/)
+      .map((id) => id.trim())
+      .filter((id) => id !== '');
+
+    syncMutation.mutate({
+      startDate: syncStartDate.trim(),
+      endDate: syncEndDate.trim() === '' ? null : syncEndDate.trim(),
+      settlementIds,
+      postToQbo: syncPostToQbo,
+      process: syncProcess,
+    });
+  };
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlements" error={connection.error} />;
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Process LMB-posted settlements from QBO. Prereqs: upload Audit Data and map Bills so Plutus can compute COGS + allocate fees by brand."
+            description="Process settlement journal entries posted to QBO. Prereqs: upload Audit Data (or sync from Amazon for US) and map Bills so Plutus can compute COGS + allocate fees by brand."
             variant="accent"
           />
-          <Button
-            variant="outline"
-            onClick={() => autoprocessMutation.mutate()}
-            disabled={autoprocessMutation.isPending}
-          >
-            <Play className="mr-1.5 h-3.5 w-3.5" />
-            {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
-          </Button>
-        </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {marketplace === 'US' && (
+              <MuiButton
+                variant="outlined"
+                disableElevation
+                onClick={() => openSyncDialog()}
+                disabled={syncMutation.isPending}
+                startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
+                sx={{ ...outlineSx, ...defaultSize }}
+              >
+                {syncMutation.isPending ? 'Syncing…' : 'Sync from Amazon'}
+              </MuiButton>
+            )}
+            <MuiButton
+              variant="outlined"
+              disableElevation
+              onClick={() => autoprocessMutation.mutate()}
+              disabled={autoprocessMutation.isPending}
+              startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
+              sx={{ ...outlineSx, ...defaultSize }}
+            >
+              {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
+            </MuiButton>
+          </Box>
+        </Box>
 
         {/* KPI Strip */}
         {!isLoading && data && (
-          <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
             <StatCard
               label="Total"
               value={stats.total}
               icon={
-                <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none">
+                <svg style={{ height: 20, width: 20 }} viewBox="0 0 20 20" fill="none">
                   <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
                   <path d="M7 6h6M7 10h4M7 14h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
@@ -387,34 +756,44 @@ export default function SettlementsPage() {
               value={stats.pending}
               dotColor="bg-amber-500"
             />
-          </div>
+          </Box>
         )}
 
-        <div className="mt-6 grid gap-4">
+        <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Filter Bar */}
-          <Card className="border-slate-200/70 dark:border-white/10">
-            <CardContent className="p-4">
-              <div className="grid gap-3 md:grid-cols-[1.4fr,0.55fr,0.55fr,auto] md:items-end">
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr auto' }, alignItems: { md: 'end' } }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Search
-                  </div>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input
+                  </Typography>
+                  <Box sx={{ position: 'relative' }}>
+                    <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+                    <TextField
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
                       placeholder="Doc number, memo…"
-                      className="pl-9"
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      slotProps={textFieldInputSlotProps}
+                      sx={{
+                        ...textFieldSx,
+                        '& .MuiOutlinedInput-root': {
+                          ...textFieldSx['& .MuiOutlinedInput-root'],
+                          '& input': { pl: 4.5 },
+                        },
+                      }}
                     />
-                  </div>
-                </div>
+                  </Box>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     Start date
-                  </div>
-                  <Input
+                  </Typography>
+                  <TextField
                     type="date"
                     value={startDate}
                     onChange={(e) => {
@@ -422,14 +801,19 @@ export default function SettlementsPage() {
                       setStartDate(value);
                       setPage(1);
                     }}
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    slotProps={textFieldInputSlotProps}
+                    sx={textFieldSx}
                   />
-                </div>
+                </Box>
 
-                <div className="space-y-1.5">
-                  <div className="text-2xs font-semibold uppercase tracking-wider text-brand-teal-600 dark:text-brand-teal-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
                     End date
-                  </div>
-                  <Input
+                  </Typography>
+                  <TextField
                     type="date"
                     value={endDate}
                     onChange={(e) => {
@@ -437,190 +821,357 @@ export default function SettlementsPage() {
                       setEndDate(value);
                       setPage(1);
                     }}
+                    size="small"
+                    variant="outlined"
+                    fullWidth
+                    slotProps={textFieldInputSlotProps}
+                    sx={textFieldSx}
                   />
-                </div>
+                </Box>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <MuiButton
+                    variant="outlined"
+                    disableElevation
                     onClick={() => {
                       clear();
                     }}
                     disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
+                    sx={{ ...outlineSx, ...defaultSize }}
                   >
                     Clear
-                  </Button>
-                </div>
-              </div>
+                  </MuiButton>
+                </Box>
+              </Box>
             </CardContent>
           </Card>
 
           {/* Table */}
-          <Card className="border-slate-200/70 dark:border-white/10 overflow-hidden">
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <Table className="table-striped">
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                      <TableHead className="font-semibold">Marketplace</TableHead>
-                      <TableHead className="font-semibold">Period</TableHead>
-                      <TableHead className="font-semibold">Settlement Total</TableHead>
-                      <TableHead className="font-semibold">LMB</TableHead>
-                      <TableHead className="font-semibold">Audit Data</TableHead>
-                      <TableHead className="font-semibold text-right">Plutus</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+          <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+              <Box sx={{ overflow: 'auto' }}>
+                <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
+                  <MuiTableHead
+                    sx={{
+                      bgcolor: 'rgba(248, 250, 252, 0.8)',
+                      '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                      '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                    }}
+                  >
+                    <MuiTableRow sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Audit Data</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus</MuiTableCell>
+                    </MuiTableRow>
+                  </MuiTableHead>
+                  <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
                     {isLoading && (
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
-                          <TableRow key={idx}>
-                            <TableCell colSpan={6} className="py-4">
-                              <Skeleton className="h-10 w-full" />
-                            </TableCell>
-                          </TableRow>
+                          <MuiTableRow key={idx} sx={rowHoverSx}>
+                            <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 2 }}>
+                              <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
+                            </MuiTableCell>
+                          </MuiTableRow>
                         ))}
                       </>
                     )}
 
                     {!isLoading && error && (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-sm text-danger-700 dark:text-danger-400">
+                      <MuiTableRow sx={rowHoverSx}>
+                        <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
-                        </TableCell>
-                      </TableRow>
+                        </MuiTableCell>
+                      </MuiTableRow>
                     )}
 
                     {!isLoading && !error && settlements.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={6}>
+                      <MuiTableRow sx={rowHoverSx}>
+                        <MuiTableCell colSpan={6} sx={tdSx}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
                             description="No settlements match your current filters. Try adjusting the date range or search terms."
                           />
-                        </TableCell>
-                      </TableRow>
+                        </MuiTableCell>
+                      </MuiTableRow>
                     )}
 
                     {!isLoading &&
                       !error &&
-                      settlements.map((s) => (
-                        <TableRow
-                          key={s.id}
-                          className="table-row-hover cursor-row group"
-                          onClick={() => router.push(`/settlements/${s.id}`)}
-                        >
-                          <TableCell className="align-top">
-                            <div className="flex items-center gap-2.5">
+                      settlements.map((s) => {
+                        const settlementId = extractSettlementIdFromMemo(s.memo);
+
+                        return (
+                          <MuiTableRow
+                            key={s.id}
+                            sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' } }}
+                            onClick={() => router.push(`/settlements/${s.id}`)}
+                          >
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
                               <MarketplaceFlag region={s.marketplace.region} />
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white group-hover:text-brand-teal-600 dark:group-hover:text-brand-cyan transition-colors">
+                              <Box sx={{ minWidth: 0 }}>
+                                <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
                                   {s.marketplace.label}
-                                </div>
-                                <div className="mt-0.5 truncate font-mono text-sm text-slate-700 dark:text-slate-300">
-                                  {s.docNumber}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="align-top text-sm">
-                            <div className="font-medium text-slate-900 dark:text-white">
+                                </Box>
+                                <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                  {displaySettlementDocNumber(s.docNumber)}
+                                </Box>
+                              </Box>
+                            </Box>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
+                            <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
                               {formatPeriod(s.periodStart, s.periodEnd)}
-                            </div>
-                            <div className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
+                            </Box>
+                            <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
                               Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-                          </TableCell>
-                          <TableCell className="align-top text-sm font-semibold tabular-nums text-slate-900 dark:text-white">
+                            </Box>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                          </TableCell>
-                          <TableCell className="align-top">
-                            <a
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
+                            <Box
+                              component="a"
                               href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="inline-flex items-center gap-1.5 group"
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, textDecoration: 'none' }}
                             >
                               <StatusPill status={s.lmbStatus} />
-                              <ExternalLink className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
-                            </a>
-                          </TableCell>
-                          <TableCell className="align-top">
+                              <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }} />
+                            </Box>
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
-                          </TableCell>
-                          <TableCell className="align-top text-right" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-2">
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
                               <PlutusPill status={s.plutusStatus} />
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
-                                  { label: 'View', onClick: () => router.push(`/settlements/${s.id}`) },
-                                  { label: 'History', onClick: () => router.push(`/settlements/${s.id}?tab=history`) },
-                                  { label: 'Analysis', onClick: () => router.push(`/settlements/${s.id}?tab=analysis`) },
+                                  { label: 'Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-settlement`) },
+                                  { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus-settlement`) },
+                                  ...(s.marketplace.region === 'US' && settlementId !== null
+                                    ? [
+                                        {
+                                          label: 'Sync from Amazon',
+                                          onClick: () =>
+                                            openSyncDialog({
+                                              settlementId,
+                                              postedDate: s.postedDate,
+                                            }),
+                                        },
+                                      ]
+                                    : []),
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
                                 Action
                               </SplitButton>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                </Table>
-              </div>
+                            </Box>
+                          </MuiTableCell>
+                          </MuiTableRow>
+                        );
+                      })}
+                  </MuiTableBody>
+                </MuiTable>
+              </Box>
 
               {data && data.pagination.totalPages > 1 && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 border-t border-slate-200/70 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.03]">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 tabular-nums">
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                     Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <MuiButton
+                      variant="outlined"
+                      disableElevation
                       disabled={page <= 1}
                       onClick={() => setPage(page - 1)}
-                      className="h-8 w-8 p-0"
+                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
+                      <ChevronLeftIcon sx={{ fontSize: 16 }} />
+                    </MuiButton>
                     {/* Page number buttons */}
                     {Array.from({ length: Math.min(data.pagination.totalPages, 5) }).map((_, idx) => {
                       const pageNum = idx + 1;
                       return (
-                        <Button
+                        <MuiButton
                           key={pageNum}
-                          variant={page === pageNum ? 'default' : 'outline'}
-                          size="sm"
+                          variant={page === pageNum ? 'contained' : 'outlined'}
+                          disableElevation
                           onClick={() => setPage(pageNum)}
-                          className="h-8 w-8 p-0 tabular-nums"
+                          sx={{
+                            ...(page === pageNum ? defaultBtnSx : outlineSx),
+                            ...smSize,
+                            height: 32,
+                            width: 32,
+                            p: 0,
+                            minWidth: 32,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
                         >
                           {pageNum}
-                        </Button>
+                        </MuiButton>
                       );
                     })}
                     {data.pagination.totalPages > 5 && (
-                      <span className="px-1 text-xs text-slate-400">…</span>
+                      <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
                     )}
-                    <Button
-                      variant="outline"
-                      size="sm"
+                    <MuiButton
+                      variant="outlined"
+                      disableElevation
                       disabled={page >= data.pagination.totalPages}
                       onClick={() => setPage(page + 1)}
-                      className="h-8 w-8 p-0"
+                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
                     >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
+                      <ChevronRightIcon sx={{ fontSize: 16 }} />
+                    </MuiButton>
+                  </Box>
+                </Box>
               )}
             </CardContent>
           </Card>
-        </div>
-      </div>
-    </main>
+
+          <Dialog
+            open={syncOpen}
+            onClose={() => setSyncOpen(false)}
+            maxWidth="md"
+            fullWidth
+            slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+          >
+            <DialogTitle>Sync from Amazon (US)</DialogTitle>
+            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                Pulls settlements from Amazon SP-API Finances, generates settlement JEs + Audit Data, and optionally processes them in Plutus.
+              </Typography>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+                <TextField
+                  label="Start date"
+                  type="date"
+                  value={syncStartDate}
+                  onChange={(e) => setSyncStartDate(e.target.value)}
+                  sx={textFieldSx}
+                  InputLabelProps={{ shrink: true }}
+                />
+                <TextField
+                  label="End date (optional)"
+                  type="date"
+                  value={syncEndDate}
+                  onChange={(e) => setSyncEndDate(e.target.value)}
+                  sx={textFieldSx}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+
+              <TextField
+                label="Settlement IDs (optional)"
+                placeholder="25223291971 25223291972"
+                value={syncSettlementIds}
+                onChange={(e) => setSyncSettlementIds(e.target.value)}
+                helperText="Comma or space-separated. Leave empty to sync everything in the date range."
+                multiline
+                minRows={2}
+                sx={textFieldSx}
+              />
+
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                <FormControlLabel
+                  control={<Checkbox checked={syncPostToQbo} onChange={(e) => setSyncPostToQbo(e.target.checked)} />}
+                  label="Post missing JEs to QBO"
+                />
+                <FormControlLabel
+                  control={<Checkbox checked={syncProcess} onChange={(e) => setSyncProcess(e.target.checked)} />}
+                  label="Process in Plutus"
+                />
+              </Box>
+
+              {syncMutation.isPending && (
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Syncing…</Typography>
+              )}
+
+              {syncMutation.error && (
+                <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                  {syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed'}
+                </Typography>
+              )}
+
+              {syncResult && (
+                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(248, 250, 252, 0.5)' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                      Results
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {syncResult.totals.settlements} settlement{syncResult.totals.settlements === 1 ? '' : 's'} &middot;{' '}
+                      {syncResult.totals.segments} segment{syncResult.totals.segments === 1 ? '' : 's'} &middot;{' '}
+                      posted {syncResult.totals.posted}, existing {syncResult.totals.existing}, processed {syncResult.totals.processed}, skipped {syncResult.totals.skipped}, errors {syncResult.totals.errors}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ overflow: 'auto' }}>
+                    <MuiTable size="small" sx={{ width: '100%', fontSize: '0.875rem' }}>
+                      <MuiTableHead sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                        <MuiTableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Doc #</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Plutus</MuiTableCell>
+                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Note</MuiTableCell>
+                        </MuiTableRow>
+                      </MuiTableHead>
+                      <MuiTableBody>
+                        {syncResult.segments.map((seg, idx) => (
+                          <MuiTableRow key={`${seg.docNumber}-${idx}`} sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                            <MuiTableCell sx={{ ...tdSx, fontFamily: 'monospace' }}>{displaySettlementDocNumber(seg.docNumber)}</MuiTableCell>
+                            <MuiTableCell sx={tdSx}>
+                              {seg.qboAction === 'posted' && <Chip label="Posted" size="small" color="success" sx={chipBase} />}
+                              {seg.qboAction === 'existing' && <Chip label="Existing" size="small" color="default" sx={chipBase} />}
+                              {seg.qboAction === 'skipped' && <Chip label="Skipped" size="small" color="default" sx={chipBase} />}
+                              {seg.qboAction === 'error' && <Chip label="Error" size="small" color="error" sx={chipBase} />}
+                            </MuiTableCell>
+                            <MuiTableCell sx={tdSx}>
+                              {seg.processed ? (
+                                <Chip label="Processed" size="small" color="success" sx={chipBase} />
+                              ) : (
+                                <Chip label="Not processed" size="small" color="default" sx={chipBase} />
+                              )}
+                            </MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, color: seg.qboAction === 'error' ? 'error.main' : 'text.secondary' }}>
+                              {seg.reason ? seg.reason : seg.error ? seg.error : null}
+                            </MuiTableCell>
+                          </MuiTableRow>
+                        ))}
+                      </MuiTableBody>
+                    </MuiTable>
+                  </Box>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 2 }}>
+              <MuiButton variant="outlined" disableElevation onClick={() => setSyncOpen(false)} sx={{ ...outlineSx, ...defaultSize }}>
+                Close
+              </MuiButton>
+              <MuiButton
+                variant="contained"
+                disableElevation
+                onClick={() => runSync()}
+                disabled={syncMutation.isPending || syncStartDate.trim() === ''}
+                sx={{ ...defaultBtnSx, ...defaultSize }}
+              >
+                Run sync
+              </MuiButton>
+            </DialogActions>
+          </Dialog>
+        </Box>
+      </Box>
+    </Box>
   );
 }

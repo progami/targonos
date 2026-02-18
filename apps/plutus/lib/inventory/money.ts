@@ -41,7 +41,11 @@ export function allocateByWeight(
   }
 
   let remaining = totalCents - allocated;
-  base.sort((a, b) => b.remainder - a.remainder);
+  base.sort((a, b) => {
+    const remainderDiff = b.remainder - a.remainder;
+    if (remainderDiff !== 0) return remainderDiff;
+    return a.key.localeCompare(b.key);
+  });
 
   for (let i = 0; i < base.length && remaining > 0; i++) {
     base[i].cents += 1;
@@ -108,4 +112,3 @@ export function removeProportionalComponents(
 
   return result;
 }
-
