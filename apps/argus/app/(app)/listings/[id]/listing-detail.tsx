@@ -693,19 +693,41 @@ export function ListingDetail({
 
     callbacksRef.current.ebcModuleDelete = (sectionType: string, modulePosition: number) => {
       if (!listing) return
-      if (!window.confirm('Clear this module?')) return
+      const history = getEbcModuleHistory(ebcRevisions, sectionType, modulePosition)
+      if (history.length === 0) return
+
+      const currentRevisionId = getEffectiveEbcRevisionIdForModule(sectionType, modulePosition)
+      const effectiveId = currentRevisionId ? currentRevisionId : history[0].revisionId
+      const liveRevisionId = activePointers?.activeEbcId
+      if (liveRevisionId && effectiveId === liveRevisionId) return
+
+      const index = history.findIndex((item) => item.revisionId === effectiveId)
+      const safeIndex = index >= 0 ? index : 0
+      const versionNumber = history.length - safeIndex
+
+      const nextHistoryIndex = safeIndex < history.length - 1 ? safeIndex + 1 : safeIndex - 1
+      const nextRevisionId = nextHistoryIndex >= 0 ? history[nextHistoryIndex]?.revisionId ?? null : null
+      if (!nextRevisionId) return
+
+      if (!window.confirm(`Delete Module v${versionNumber}?`)) return
+
+      const key = ebcModulePointerKey(sectionType, modulePosition)
+      setEbcModulePointers((current) => {
+        const next = { ...current }
+        if (liveRevisionId && nextRevisionId === liveRevisionId) {
+          if (key in next) delete next[key]
+          return next
+        }
+        next[key] = nextRevisionId
+        return next
+      })
+      void persistEbcModulePointer(sectionType, modulePosition, nextRevisionId)
 
       void (async () => {
-        const form = new FormData()
-        form.append('sectionType', sectionType)
-        form.append('modulePosition', String(modulePosition))
-        form.append('headline', '')
-        form.append('bodyText', '')
-        form.append('clearImages', 'true')
-
-        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
-          method: 'POST',
-          body: form,
+        const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ revisionId: effectiveId }),
         })
         if (!res.ok) {
           window.alert(await res.text())
@@ -719,19 +741,21 @@ export function ListingDetail({
       const normalized = String(asin).trim()
       if (normalized.length === 0) return
 
-      if (typeof window !== 'undefined') {
-        const pathname = window.location.pathname
-        const listingsMarker = '/listings/'
-        const markerIndex = pathname.lastIndexOf(listingsMarker)
-        const inferredBasePath = markerIndex >= 0
-          ? normalizeBasePath(pathname.slice(0, markerIndex))
-          : ''
-        const targetBasePath = inferredBasePath.length > 0 ? inferredBasePath : basePath
-        window.location.assign(`${targetBasePath}/listings/${normalized}`)
-        return
-      }
+      void (async () => {
+        const res = await fetch(`${basePath}/api/listings/ensure`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            asin: normalized,
+          }),
+        })
+        if (!res.ok) {
+          window.alert(await res.text())
+          return
+        }
 
-      router.push(`/listings/${normalized}`)
+        router.push(`/listings/${normalized}`)
+      })()
     }
   }, [
     listing,
@@ -1918,7 +1942,7 @@ function updateEbcModuleControls(
 
     if (prev) prev.disabled = safeIndex >= history.length - 1
     if (next) next.disabled = safeIndex <= 0
-    if (del) del.disabled = false
+    if (del) del.disabled = liveRevisionId !== null && effectiveId === liveRevisionId
   }
 }
 
@@ -2464,7 +2488,7 @@ function ensureEbcModuleControls(
   del.className = 'argus-vc-btn argus-vc-danger'
   del.type = 'button'
   del.textContent = '🗑'
-  del.title = 'Clear module'
+  del.title = 'Delete version'
   del.dataset.action = 'delete'
   del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
 
