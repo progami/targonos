@@ -84,7 +84,7 @@ const shared = {
           '& .MuiOutlinedInput-root': {
             borderRadius: 8,
             '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#45B3D4',
+              borderColor: '#00C2B9',
             },
             '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
               borderColor: '#00C2B9',
@@ -100,7 +100,7 @@ const shared = {
           borderRadius: 8,
           fontSize: '0.875rem',
           '&:hover .MuiOutlinedInput-notchedOutline': {
-            borderColor: '#45B3D4',
+            borderColor: '#00C2B9',
           },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
             borderColor: '#00C2B9',
@@ -158,7 +158,7 @@ const shared = {
     MuiTableHead: {
       styleOverrides: {
         root: {
-          backgroundColor: 'rgba(248, 250, 252, 0.8)',
+          backgroundColor: 'rgba(245, 245, 245, 0.8)',
         },
       },
     },
@@ -216,10 +216,10 @@ export const lightTheme = createTheme({
       main: '#0b273f',
     },
     secondary: {
-      main: '#45B3D4',
+      main: '#00C2B9',
     },
     background: {
-      default: '#F8FAFC',
+      default: '#F5F5F5',
       paper: '#FFFFFF',
     },
     divider: 'rgba(0, 0, 0, 0.08)',
@@ -231,10 +231,10 @@ export const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#45B3D4',
+      main: '#00C2B9',
     },
     secondary: {
-      main: '#00C2B9',
+      main: '#0b273f',
     },
     background: {
       default: '#0B1120',

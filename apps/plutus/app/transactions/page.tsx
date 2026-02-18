@@ -1468,7 +1468,7 @@ function CreateBillModal({
             </Box>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>Memo</Box>
+              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>Memo</Box>
               <TextField
                 multiline
                 rows={4}
@@ -1481,7 +1481,7 @@ function CreateBillModal({
             </Box>
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>Attachments</Box>
+              <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>Attachments</Box>
               <Box
                 component="input"
                 type="file"
@@ -1531,7 +1531,7 @@ function CreateBillModal({
             onClick={handleSubmit}
             disabled={isContextLoading || !!contextError || createMutation.isPending}
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Save bill'}
@@ -1664,7 +1664,7 @@ function CreatePurchaseModal({
                 component="select"
                 value={createState.paymentAccountId}
                 onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setCreateState((prev) => ({ ...prev, paymentAccountId: event.target.value }))}
-                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(0,194,185,0.4)' } }}
               >
                 <option value="">{createContextLoading ? 'Loading accounts…' : 'Select payment account'}</option>
                 {paymentAccounts.map((account) => (
@@ -1678,7 +1678,7 @@ function CreatePurchaseModal({
                 component="select"
                 value={createState.vendorId}
                 onChange={(event: React.ChangeEvent<HTMLSelectElement>) => setCreateState((prev) => ({ ...prev, vendorId: event.target.value }))}
-                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(0,194,185,0.4)' } }}
               >
                 <option value="">{createContextLoading ? 'Loading vendors…' : 'No payee'}</option>
                 {vendors.map((vendor) => (
@@ -1723,7 +1723,7 @@ function CreatePurchaseModal({
                             description: nextAccount ? nextAccount.fullyQualifiedName : '',
                           });
                         }}
-                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' } }}
+                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(0,194,185,0.4)' } }}
                       >
                         <option value="">{createContextLoading ? 'Loading accounts…' : 'Select account'}</option>
                         {lineAccounts.map((account) => (
@@ -1788,7 +1788,7 @@ function CreatePurchaseModal({
             onClick={() => createMutation.mutate()}
             disabled={!canSave || createMutation.isPending || createContextLoading}
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {createMutation.isPending ? 'Creating...' : 'Create Expense'}
@@ -1968,7 +1968,7 @@ function EditBillModal({
               target="_blank"
               rel="noopener noreferrer"
               title="Open in QuickBooks"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#00C2B9', bgcolor: 'rgba(0,194,185,0.08)' } }}
             >
               <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
@@ -2003,7 +2003,7 @@ function EditBillModal({
                 component="select"
                 value={editState.brandId}
                 onChange={(event: React.ChangeEvent<HTMLSelectElement>) => handleBrandChange(event.target.value)}
-                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(69,179,212,0.4)' } }}
+                sx={{ height: 36, width: '100%', borderRadius: 1.5, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1.5, fontSize: '0.875rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 2px rgba(0,194,185,0.4)' } }}
               >
                 <option value="">Select brand</option>
                 {brands.map((brand) => (
@@ -2050,7 +2050,7 @@ function EditBillModal({
                                     value={split.sku}
                                     onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateSplit(trackedLine.lineId, split.id, { sku: event.target.value })}
                                     disabled={editState.brandId === ''}
-                                    sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' }, '&:disabled': { opacity: 0.5 } }}
+                                    sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(0,194,185,0.4)' }, '&:disabled': { opacity: 0.5 } }}
                                   >
                                     <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
                                     {filteredSkus.map((sku) => (
@@ -2086,7 +2086,7 @@ function EditBillModal({
                               value={lineState.sku}
                               onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateLine(trackedLine.lineId, { sku: event.target.value })}
                               disabled={editState.brandId === ''}
-                              sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' }, '&:disabled': { opacity: 0.5 } }}
+                              sx={{ height: 28, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 0.75, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(0,194,185,0.4)' }, '&:disabled': { opacity: 0.5 } }}
                             >
                               <option value="">{editState.brandId === '' ? 'Select brand first' : 'Select SKU'}</option>
                               {filteredSkus.map((sku) => (
@@ -2166,7 +2166,7 @@ function EditBillModal({
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
@@ -2345,7 +2345,7 @@ function EditPurchaseModal({
               target="_blank"
               rel="noopener noreferrer"
               title="Open in QuickBooks"
-              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, borderRadius: 1.5, px: 1, py: 0.5, fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', transition: 'background-color 0.15s', '&:hover': { color: '#00C2B9', bgcolor: 'rgba(0,194,185,0.08)' } }}
             >
               <OpenInNewIcon sx={{ fontSize: 14 }} />
               QuickBooks
@@ -2390,7 +2390,7 @@ function EditPurchaseModal({
                         component="select"
                         value={lineState.accountId}
                         onChange={(event: React.ChangeEvent<HTMLSelectElement>) => updateLine(lineState.qboLineId, { accountId: event.target.value })}
-                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(69,179,212,0.4)' } }}
+                        sx={{ height: 32, width: '100%', borderRadius: 1, border: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1, fontSize: '0.75rem', color: 'text.primary', '&:focus': { outline: 'none', boxShadow: '0 0 0 1px rgba(0,194,185,0.4)' } }}
                       >
                         <option value="">Select account</option>
                         {accounts.map((account) => (
@@ -2532,7 +2532,7 @@ function EditPurchaseModal({
             onClick={() => saveMutation.mutate()}
             disabled={!canSave || saveMutation.isPending}
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' }, gap: 0.75 }}
           >
             <SaveIcon sx={{ fontSize: 14 }} />
             {saveMutation.isPending ? 'Saving...' : 'Save'}
@@ -2680,7 +2680,7 @@ export default function TransactionsPage() {
                 },
               }}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     Search
                   </Box>
                   <Box sx={{ position: 'relative' }}>
@@ -2697,7 +2697,7 @@ export default function TransactionsPage() {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     Start date
                   </Box>
                   <TextField
@@ -2714,7 +2714,7 @@ export default function TransactionsPage() {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     End date
                   </Box>
                   <TextField
@@ -2731,7 +2731,7 @@ export default function TransactionsPage() {
                 </Box>
 
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                  <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                     Rows
                   </Box>
                   <FormControl size="small" fullWidth>
@@ -2754,7 +2754,7 @@ export default function TransactionsPage() {
 
                 {tab === 'purchase' && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}>
+                    <Box sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
                       Payment account
                     </Box>
                     <FormControl size="small" fullWidth>
@@ -2783,7 +2783,7 @@ export default function TransactionsPage() {
                     <Button
                       onClick={() => setCreateBillOpen(true)}
                       variant="contained"
-                      sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' }, gap: 0.75 }}
+                      sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' }, gap: 0.75 }}
                     >
                       <AddIcon sx={{ fontSize: 14 }} />
                       New Bill
@@ -2905,7 +2905,7 @@ export default function TransactionsPage() {
                                 rel="noopener noreferrer"
                                 onClick={(event: React.MouseEvent) => event.stopPropagation()}
                                 title="Open in QuickBooks"
-                                sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, borderRadius: 1, color: 'text.disabled', transition: 'background-color 0.15s', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' } }}
+                                sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, borderRadius: 1, color: 'text.disabled', transition: 'background-color 0.15s', '&:hover': { color: '#00C2B9', bgcolor: 'rgba(0,194,185,0.08)' } }}
                               >
                                 <OpenInNewIcon sx={{ fontSize: 14 }} />
                               </Box>
@@ -2990,7 +2990,7 @@ export default function TransactionsPage() {
 
                         return (
                           <Fragment key={row.id}>
-                            <TableRow sx={{ transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#45B3D4' }, '& td:first-of-type': { position: 'relative' }, '& .show-on-hover': { opacity: 0, transition: 'opacity 0.2s' }, '&:hover .show-on-hover': { opacity: 1 } }}>
+                            <TableRow sx={{ transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' }, '& td:first-of-type': { position: 'relative' }, '& .show-on-hover': { opacity: 0, transition: 'opacity 0.2s' }, '&:hover .show-on-hover': { opacity: 1 } }}>
                               <TableCell sx={{ verticalAlign: 'top' }}>
                                 <Box
                                   component="button"
@@ -3045,7 +3045,7 @@ export default function TransactionsPage() {
                                     aria-label="Open in QuickBooks"
                                     title="Open in QuickBooks"
                                     className="show-on-hover"
-                                    sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, mt: -0.25, borderRadius: 1, color: 'text.disabled', '&:hover': { color: '#45B3D4', bgcolor: 'rgba(69,179,212,0.08)' }, '&:focus-within': { opacity: 1 } }}
+                                    sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, width: 28, mt: -0.25, borderRadius: 1, color: 'text.disabled', '&:hover': { color: '#00C2B9', bgcolor: 'rgba(0,194,185,0.08)' }, '&:focus-within': { opacity: 1 } }}
                                   >
                                     <OpenInNewIcon sx={{ fontSize: 16 }} />
                                   </Box>
