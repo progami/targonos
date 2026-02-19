@@ -12,6 +12,7 @@ export type ProcessingBlock =
         | 'INVOICE_CONFLICT'
         | 'ORDER_ALREADY_PROCESSED'
         | 'REFUND_UNMATCHED'
+        | 'REFUND_ADJUSTMENT'
         | 'REFUND_PARTIAL'
         | 'BILLS_FETCH_ERROR'
         | 'BILLS_PARSE_ERROR'
@@ -24,6 +25,8 @@ export type ProcessingBlock =
 const NON_BLOCKING_PROCESSING_CODES = new Set([
   'LATE_COST_ON_HAND_ZERO',
   'MISSING_COST_BASIS',
+  'REFUND_ADJUSTMENT',
+  'REFUND_PARTIAL',
   'PNL_ALLOCATION_WARNING',
 ]);
 
