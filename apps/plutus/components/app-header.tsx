@@ -160,7 +160,7 @@ function NavDropdown({ item, pathname }: { item: Extract<NavItem, { items: any[]
           cursor: 'pointer',
           transition: 'all 0.15s',
           position: 'relative',
-          color: anyActive ? '#2384a1' : 'text.secondary',
+          color: anyActive ? '#008f87' : 'text.secondary',
           '&:hover': { color: 'text.primary' },
         }}
       >
@@ -182,7 +182,7 @@ function NavDropdown({ item, pathname }: { item: Extract<NavItem, { items: any[]
               right: 10,
               height: 2,
               borderRadius: 1,
-              bgcolor: '#45B3D4',
+              bgcolor: '#00C2B9',
             }}
           />
         )}
@@ -242,9 +242,9 @@ export function AppHeader() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 2,
-                background: 'linear-gradient(135deg, #45B3D4, #2fa3c7)',
+                background: 'linear-gradient(135deg, #0b273f, #00C2B9)',
                 color: '#fff',
-                boxShadow: '0 2px 8px rgba(69, 179, 212, 0.25)',
+                boxShadow: '0 2px 8px rgba(11, 39, 63, 0.25)',
               }}
             >
               <LogoIcon />
@@ -278,7 +278,7 @@ export function AppHeader() {
                         fontSize: '13px',
                         fontWeight: 500,
                         transition: 'all 0.15s',
-                        color: isActive ? '#2384a1' : 'text.secondary',
+                        color: isActive ? '#008f87' : 'text.secondary',
                         '&:hover': { color: 'text.primary' },
                       }}
                     >
@@ -292,7 +292,7 @@ export function AppHeader() {
                             right: 10,
                             height: 2,
                             borderRadius: 1,
-                            bgcolor: '#45B3D4',
+                            bgcolor: '#00C2B9',
                           }}
                         />
                       )}
@@ -370,7 +370,7 @@ export function AppHeader() {
       <Box
         sx={{
           height: 1,
-          background: 'linear-gradient(to right, transparent, rgba(69, 179, 212, 0.3), transparent)',
+          background: 'linear-gradient(to right, transparent, rgba(0, 194, 185, 0.3), transparent)',
         }}
       />
 
@@ -416,12 +416,12 @@ export function AppHeader() {
                       fontSize: '0.875rem',
                       fontWeight: 500,
                       transition: 'background-color 0.15s',
-                      color: isActive ? '#2384a1' : 'text.secondary',
-                      bgcolor: isActive ? 'rgba(69, 179, 212, 0.08)' : 'transparent',
+                      color: isActive ? '#008f87' : 'text.secondary',
+                      bgcolor: isActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
                       '&:hover': { bgcolor: 'action.hover' },
                     }}
                   >
-                    <Icon sx={{ fontSize: 16, color: isActive ? '#45B3D4' : 'text.disabled' }} />
+                    <Icon sx={{ fontSize: 16, color: isActive ? '#00C2B9' : 'text.disabled' }} />
                     {item.label}
                   </Box>
                 </Link>
@@ -467,8 +467,8 @@ export function AppHeader() {
                           fontSize: '0.875rem',
                           fontWeight: 500,
                           transition: 'background-color 0.15s',
-                          color: isActive ? '#2384a1' : 'text.secondary',
-                          bgcolor: isActive ? 'rgba(69, 179, 212, 0.08)' : 'transparent',
+                          color: isActive ? '#008f87' : 'text.secondary',
+                          bgcolor: isActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
                           '&:hover': { bgcolor: 'action.hover' },
                         }}
                       >

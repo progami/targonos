@@ -235,7 +235,7 @@ export default function ReconciliationPage() {
             <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>How it works</Typography>
             <Box sx={{ mt: 2, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   1
                 </Box>
                 <Box>
@@ -246,7 +246,7 @@ export default function ReconciliationPage() {
                 </Box>
               </Box>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   2
                 </Box>
                 <Box>
@@ -257,7 +257,7 @@ export default function ReconciliationPage() {
                 </Box>
               </Box>
               <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(69, 179, 212, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#2384a1' }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   3
                 </Box>
                 <Box>
@@ -299,7 +299,7 @@ export default function ReconciliationPage() {
                     '& .MuiOutlinedInput-root': {
                       borderRadius: '8px',
                       '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#45B3D4',
+                        borderColor: '#00C2B9',
                       },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                         borderColor: '#00C2B9',
@@ -327,7 +327,7 @@ export default function ReconciliationPage() {
                         borderColor: 'divider',
                       },
                       '&:hover .MuiOutlinedInput-notchedOutline': {
-                        borderColor: '#45B3D4',
+                        borderColor: '#00C2B9',
                       },
                       '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                         borderColor: '#00C2B9',
@@ -364,13 +364,13 @@ export default function ReconciliationPage() {
                 justifyContent: 'center',
                 borderRadius: 3,
                 border: '2px dashed',
-                borderColor: isDragging ? '#45B3D4' : 'divider',
-                bgcolor: isDragging ? 'rgba(69, 179, 212, 0.04)' : 'transparent',
+                borderColor: isDragging ? '#00C2B9' : 'divider',
+                bgcolor: isDragging ? 'rgba(0, 194, 185, 0.04)' : 'transparent',
                 px: 3,
                 py: 5,
                 transition: 'all 0.2s',
                 '&:hover': {
-                  borderColor: '#45B3D4',
+                  borderColor: '#00C2B9',
                 },
               }}
               onDragOver={(e: React.DragEvent) => {
@@ -393,14 +393,14 @@ export default function ReconciliationPage() {
                     component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    sx={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500, color: '#2384a1', '&:hover': { color: '#1a6b82' } }}
+                    sx={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500, color: '#008f87', '&:hover': { color: '#007069' } }}
                   >
                     Choose a different file
                   </Box>
                 </Box>
               ) : (
                 <>
-                  <Box sx={{ mb: 1.5, display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(69, 179, 212, 0.08)', color: '#2384a1' }}>
+                  <Box sx={{ mb: 1.5, display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(0, 194, 185, 0.08)', color: '#008f87' }}>
                     <UploadIcon sx={{ fontSize: 24 }} />
                   </Box>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
@@ -416,7 +416,7 @@ export default function ReconciliationPage() {
                     sx={{
                       mt: 1.5,
                       borderRadius: 2,
-                      bgcolor: '#45B3D4',
+                      bgcolor: '#00C2B9',
                       px: 2,
                       py: 1,
                       fontSize: '0.875rem',
@@ -426,7 +426,7 @@ export default function ReconciliationPage() {
                       cursor: 'pointer',
                       boxShadow: 1,
                       transition: 'background-color 0.2s',
-                      '&:hover': { bgcolor: '#2fa3c7' },
+                      '&:hover': { bgcolor: '#00a89f' },
                     }}
                   >
                     Choose File
@@ -451,10 +451,10 @@ export default function ReconciliationPage() {
                   height: 36,
                   px: 2,
                   fontSize: '0.875rem',
-                  bgcolor: '#45B3D4',
+                  bgcolor: '#00C2B9',
                   color: '#fff',
-                  '&:hover': { bgcolor: '#2fa3c7' },
-                  '&:active': { bgcolor: '#2384a1' },
+                  '&:hover': { bgcolor: '#00a89f' },
+                  '&:active': { bgcolor: '#008f87' },
                   '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
                 }}
               >
@@ -560,7 +560,7 @@ export default function ReconciliationPage() {
                   <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
                     <MuiTableHead
                       sx={{
-                        bgcolor: 'rgba(248, 250, 252, 0.8)',
+                        bgcolor: 'rgba(245, 245, 245, 0.8)',
                         '[data-mui-color-scheme="dark"] &, .dark &': {
                           bgcolor: 'rgba(255, 255, 255, 0.05)',
                         },

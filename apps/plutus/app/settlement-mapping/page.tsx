@@ -244,7 +244,7 @@ export default function SettlementMappingPage() {
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
               startIcon={<SaveIcon sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 2, textTransform: 'none', bgcolor: '#45B3D4', '&:hover': { bgcolor: '#2fa3c7' } }}
+              sx={{ borderRadius: 2, textTransform: 'none', bgcolor: '#00C2B9', '&:hover': { bgcolor: '#00a89f' } }}
             >
               {saveMutation.isPending ? 'Saving…' : 'Save'}
             </Button>
@@ -263,7 +263,7 @@ export default function SettlementMappingPage() {
 
               <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#45B3D4' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
                     Transfer to Bank
                   </Typography>
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
@@ -287,7 +287,7 @@ export default function SettlementMappingPage() {
                 </Box>
 
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#45B3D4' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
                     Payment to Amazon
                   </Typography>
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
@@ -337,7 +337,7 @@ export default function SettlementMappingPage() {
 
               <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1.2fr 1fr auto' }, alignItems: { md: 'end' } }}>
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#45B3D4' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
                     Add memo
                   </Typography>
                   <TextField
@@ -351,7 +351,7 @@ export default function SettlementMappingPage() {
                 </Box>
 
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#45B3D4' }}>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
                     Account
                   </Typography>
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
@@ -389,7 +389,7 @@ export default function SettlementMappingPage() {
 
               <Box sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
                 <Table size="small">
-                  <TableHead sx={{ bgcolor: 'rgba(248, 250, 252, 0.8)' }}>
+                  <TableHead sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
                     <TableRow>
                       <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                         Memo

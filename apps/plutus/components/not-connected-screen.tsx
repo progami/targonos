@@ -84,7 +84,7 @@ export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
 
           <Typography
             variant="caption"
-            sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#2384a1' }}
+            sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}
           >
             QuickBooks Online
           </Typography>
@@ -105,10 +105,10 @@ export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
               sx={{
                 width: '100%',
                 borderRadius: 3,
-                background: 'linear-gradient(to right, #45B3D4, #2fa3c7)',
+                background: 'linear-gradient(to right, #00C2B9, #00a89f)',
                 color: '#fff',
-                boxShadow: '0 4px 16px rgba(69, 179, 212, 0.25)',
-                '&:hover': { background: 'linear-gradient(to right, #2fa3c7, #2384a1)' },
+                boxShadow: '0 4px 16px rgba(0, 194, 185, 0.25)',
+                '&:hover': { background: 'linear-gradient(to right, #00a89f, #008f87)' },
               }}
             >
               Connect to QuickBooks

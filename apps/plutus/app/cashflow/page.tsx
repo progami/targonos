@@ -920,7 +920,7 @@ export default function CashflowPage() {
           </Button>
           <Button
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
             onClick={() => saveConfigMutation.mutate(configForm)}
             disabled={saveConfigMutation.isPending}
           >
@@ -977,7 +977,7 @@ export default function CashflowPage() {
                   type="button"
                   variant={adjustmentForm.direction === 'inflow' ? 'contained' : 'outlined'}
                   sx={adjustmentForm.direction === 'inflow'
-                    ? { bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }
+                    ? { bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }
                     : { borderColor: 'divider', color: 'text.primary' }
                   }
                   onClick={() => setAdjustmentForm((current) => ({ ...current, direction: 'inflow' }))}
@@ -988,7 +988,7 @@ export default function CashflowPage() {
                   type="button"
                   variant={adjustmentForm.direction === 'outflow' ? 'contained' : 'outlined'}
                   sx={adjustmentForm.direction === 'outflow'
-                    ? { bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }
+                    ? { bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }
                     : { borderColor: 'divider', color: 'text.primary' }
                   }
                   onClick={() => setAdjustmentForm((current) => ({ ...current, direction: 'outflow' }))}
@@ -1026,7 +1026,7 @@ export default function CashflowPage() {
           </Button>
           <Button
             variant="contained"
-            sx={{ bgcolor: '#45B3D4', color: '#fff', '&:hover': { bgcolor: '#2fa3c7' } }}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
             onClick={() => {
               try {
                 const absCents = parseAmountToCents(adjustmentForm.amount);
