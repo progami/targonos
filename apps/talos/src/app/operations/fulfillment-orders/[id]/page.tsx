@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { PageLoading } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { ZoomablePdfIframe } from '@/components/ui/zoomable-pdf-iframe'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
@@ -1874,7 +1875,7 @@ export default function FulfillmentOrderDetailPage() {
                             style={{ backgroundImage: `url(${inlinePreviewDocument.viewUrl})` }}
                           />
                         ) : inlineIsPdf ? (
-                          <iframe
+                          <ZoomablePdfIframe
                             title={inlinePreviewDocument.fileName}
                             src={inlinePreviewDocument.viewUrl}
                             className="h-full w-full"
@@ -2056,7 +2057,11 @@ export default function FulfillmentOrderDetailPage() {
                       style={{ backgroundImage: `url(${previewDocument.viewUrl})` }}
                     />
                   ) : previewIsPdf ? (
-                    <iframe title={previewDocument.fileName} src={previewDocument.viewUrl} className="h-full w-full" />
+                    <ZoomablePdfIframe
+                      title={previewDocument.fileName}
+                      src={previewDocument.viewUrl}
+                      className="h-full w-full"
+                    />
                   ) : (
                     <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
                       <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">

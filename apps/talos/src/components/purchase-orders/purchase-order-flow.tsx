@@ -18,6 +18,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { ZoomablePdfIframe } from '@/components/ui/zoomable-pdf-iframe'
 import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -4823,7 +4824,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   style={{ backgroundImage: `url(${inlinePreviewDocument.viewUrl})` }}
                                 />
                               ) : inlineIsPdf ? (
-                                <iframe
+                                <ZoomablePdfIframe
                                   title={inlinePreviewDocument.fileName}
                                   src={inlinePreviewDocument.viewUrl}
                                   className="h-full w-full"
@@ -7110,7 +7111,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                         style={{ backgroundImage: `url(${previewDocument.viewUrl})` }}
                       />
                     ) : previewIsPdf ? (
-                      <iframe
+                      <ZoomablePdfIframe
                         title={previewDocument.fileName}
                         src={previewDocument.viewUrl}
                         className="h-full w-full"
