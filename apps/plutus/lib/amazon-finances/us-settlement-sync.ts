@@ -80,6 +80,16 @@ function computeGroupStartedAfterIso(startDate: string): string {
   return new Date(start.getTime() - sixtyDaysMs).toISOString();
 }
 
+function isClosedFinancialEventGroup(group: any): boolean {
+  if (!group || typeof group !== 'object') return false;
+  if (group.ProcessingStatus !== 'Closed') return false;
+  const start = group.FinancialEventGroupStart;
+  const end = group.FinancialEventGroupEnd;
+  if (typeof start !== 'string' || start.trim() === '') return false;
+  if (typeof end !== 'string' || end.trim() === '') return false;
+  return true;
+}
+
 async function buildSkuToBrandName(): Promise<Map<string, string>> {
   const skus = await db.sku.findMany({ include: { brand: true } });
   const skuToBrandName = new Map<string, string>();
@@ -223,6 +233,27 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     const id = g.FinancialEventGroupId;
     if (typeof id !== 'string' || id.trim() === '') continue;
     groupById.set(id, g);
+  }
+
+  if (settlementIds.length > 0) {
+    for (const [settlementId, eventGroupId] of settlementToGroupId.entries()) {
+      const eventGroup = groupById.get(eventGroupId);
+      if (!eventGroup) {
+        throw new Error(`Event group not found for settlement ${settlementId}: ${eventGroupId}`);
+      }
+      if (!isClosedFinancialEventGroup(eventGroup)) {
+        throw new Error(`Settlement is not closed yet: ${settlementId} (${String(eventGroup.ProcessingStatus ?? 'unknown')})`);
+      }
+    }
+  } else {
+    const closedSettlementToGroupId = new Map<string, string>();
+    for (const [settlementId, eventGroupId] of settlementToGroupId.entries()) {
+      const eventGroup = groupById.get(eventGroupId);
+      if (!eventGroup) continue;
+      if (!isClosedFinancialEventGroup(eventGroup)) continue;
+      closedSettlementToGroupId.set(settlementId, eventGroupId);
+    }
+    settlementToGroupId = closedSettlementToGroupId;
   }
 
   const bundles: SettlementDraftBundle[] = [];
