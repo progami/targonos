@@ -545,6 +545,7 @@ export async function computeSettlementPreview(input: {
       marketplace,
       invoiceStartDate: minDate,
       invoiceEndDate: maxDate,
+      skuToBrand,
     });
     for (const issue of deterministicAllocations.issues) {
       blocks.push({

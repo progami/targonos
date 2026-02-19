@@ -13,7 +13,7 @@ export type AuditInvoiceMatch =
   | { kind: 'missing_period' }
   | { kind: 'none' }
   | { kind: 'ambiguous'; matchType: 'contained' | 'overlap'; candidateInvoiceIds: string[] }
-  | { kind: 'match'; matchType: 'contained' | 'overlap'; invoiceId: string };
+  | { kind: 'match'; matchType: 'doc_number' | 'contained' | 'overlap'; invoiceId: string };
 
 export function normalizeAuditMarketToMarketplaceId(value: string): MarketplaceId | null {
   const normalized = value.trim().toLowerCase();
@@ -50,6 +50,18 @@ function isLmbInvoiceId(value: string): boolean {
   return /^LMB-(US|UK)-/i.test(value.trim());
 }
 
+function normalizeSettlementDocNumberForInvoiceId(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') return trimmed;
+
+  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
+  if (hashMatch) {
+    return hashMatch[1]!;
+  }
+
+  return trimmed;
+}
+
 function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {
   const lmb = candidates.filter((inv) => isLmbInvoiceId(inv.invoiceId));
   if (lmb.length === 1) return lmb[0]!;
@@ -60,16 +72,28 @@ export function selectAuditInvoiceForSettlement(input: {
   settlementMarketplace: MarketplaceId;
   settlementPeriodStart: string | null;
   settlementPeriodEnd: string | null;
+  settlementDocNumber?: string;
   invoices: AuditInvoiceSummary[];
 }): AuditInvoiceMatch {
+  const marketplaceInvoices = input.invoices.filter((inv) => inv.marketplace === input.settlementMarketplace);
+
+  const docNumberRaw = input.settlementDocNumber;
+  if (typeof docNumberRaw === 'string') {
+    const normalizedDocNumber = normalizeSettlementDocNumberForInvoiceId(docNumberRaw);
+    if (normalizedDocNumber !== '') {
+      const exact = marketplaceInvoices.find((inv) => inv.invoiceId === normalizedDocNumber);
+      if (exact) {
+        return { kind: 'match', matchType: 'doc_number', invoiceId: exact.invoiceId };
+      }
+    }
+  }
+
   const periodStart = input.settlementPeriodStart;
   const periodEnd = input.settlementPeriodEnd;
 
   if (periodStart === null || periodEnd === null) {
     return { kind: 'missing_period' };
   }
-
-  const marketplaceInvoices = input.invoices.filter((inv) => inv.marketplace === input.settlementMarketplace);
 
   const contained = marketplaceInvoices.filter((inv) => inv.minDate >= periodStart && inv.maxDate <= periodEnd);
   if (contained.length === 1) {

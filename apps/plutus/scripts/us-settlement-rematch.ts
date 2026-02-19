@@ -253,6 +253,7 @@ async function main(): Promise<void> {
       settlementMarketplace: meta.marketplace.id,
       settlementPeriodStart: meta.periodStart,
       settlementPeriodEnd: meta.periodEnd,
+      settlementDocNumber: meta.normalizedDocNumber,
       invoices,
     });
 
@@ -281,7 +282,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    if (match.matchType !== 'contained') {
+    if (match.matchType === 'overlap') {
       statusRows.push({
         settlementId: settlement.Id,
         docNumber: settlement.DocNumber,
