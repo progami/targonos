@@ -207,13 +207,14 @@ export const PUT = withAuthAndParams(async (request, params, session) => {
       )
     }
 
-    const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
-    if (currentStage && DOCUMENT_STAGE_ORDER[parsedStage] < DOCUMENT_STAGE_ORDER[currentStage]) {
-      return NextResponse.json(
-        { error: `Documents for completed stages are locked (current stage: ${order.status})` },
-        { status: 409 }
-      )
-    }
+    // TODO: Re-enable stage locking once business rules are finalised
+    // const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
+    // if (currentStage && DOCUMENT_STAGE_ORDER[parsedStage] < DOCUMENT_STAGE_ORDER[currentStage]) {
+    //   return NextResponse.json(
+    //     { error: `Documents for completed stages are locked (current stage: ${order.status})` },
+    //     { status: 409 }
+    //   )
+    // }
 
     const tenantCode = await getCurrentTenantCode()
     const purchaseOrderNumber = toPublicOrderNumber(order.orderNumber)
