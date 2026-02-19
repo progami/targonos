@@ -3367,58 +3367,58 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
+                    <table className="w-full text-sm table-fixed" style={{ minWidth: '960px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[60px]">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                             Units/Ctn
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
                             Cartons
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
                             HS Code
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
                             Country
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[128px]">
                             Carton Size ({lengthUnit})
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                             Net ({weightUnit})
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                             Gross ({weightUnit})
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[68px]">
                             Material
                           </th>
                           {canEditDispatchAllocation && (
-                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[80px]">
                               Ship Now
                             </th>
                           )}
                           {activeViewStage === 'ISSUED' && (
-                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[130px]">
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
                               PI #
                             </th>
                           )}
                           {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
                             <>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                                 Recvd
                               </th>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[52px]">
                                 Delta
                               </th>
                             </>
@@ -3749,7 +3749,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                                                void patchOrderLine(line.id, { quantityReceived: parsed })
 	                                              }}
 	                                              className={cn(
-	                                                'h-7 w-24 px-2 py-0 text-xs text-right',
+	                                                'h-7 w-16 px-2 py-0 text-xs text-right',
 	                                                issue && 'border-rose-500 focus-visible:ring-rose-500'
 	                                              )}
 	                                            />
@@ -3971,48 +3971,48 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
                     data-gate-key="cargo.lines"
                   >
-                    <table className="w-full text-sm" style={{ minWidth: '900px' }}>
+                    <table className="w-full text-sm table-fixed" style={{ minWidth: '960px' }}>
                       <thead>
                         <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[60px]">
                             SKU
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
                             Lot Ref
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                             Units
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                             Units/Ctn
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
                             Cartons
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
                             HS Code
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
                             Country
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[128px]">
                             Carton Size ({lengthUnit})
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                             Net ({weightUnit})
                           </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                             Gross ({weightUnit})
                           </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[68px]">
                             Material
                           </th>
                           {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
                             <>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
                                 Recvd
                               </th>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[52px]">
                                 Delta
                               </th>
                             </>
