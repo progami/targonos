@@ -102,6 +102,7 @@ async function main(): Promise<void> {
   const { db } = await import('@/lib/db');
   const { computePnlAllocation } = await import('@/lib/pnl-allocation');
   const { buildDeterministicSkuAllocations } = await import('@/lib/plutus/fee-allocation');
+  const { normalizeAuditMarketToMarketplaceId } = await import('@/lib/plutus/audit-invoice-matching');
   const { normalizeSku } = await import('@/lib/plutus/settlement-validation');
 
   const skuRows = await db.sku.findMany({ include: { brand: true } });
@@ -111,9 +112,8 @@ async function main(): Promise<void> {
     skuToBrand.set(normalizeSku(row.sku), row.brand.name);
   }
 
-  const market = options.marketplace === 'amazon.com' ? 'us' : 'uk';
   const storedRows = await db.auditDataRow.findMany({
-    where: { invoiceId: options.invoiceId, market: { equals: market, mode: 'insensitive' } },
+    where: { invoiceId: options.invoiceId },
     select: {
       invoiceId: true,
       market: true,
@@ -126,11 +126,13 @@ async function main(): Promise<void> {
     },
   });
 
-  if (storedRows.length === 0) {
-    throw new Error(`No AuditDataRow found for invoiceId=${options.invoiceId} market=${market}`);
+  const scopedRows = storedRows.filter((row) => normalizeAuditMarketToMarketplaceId(row.market) === options.marketplace);
+
+  if (scopedRows.length === 0) {
+    throw new Error(`No AuditDataRow found for invoiceId=${options.invoiceId} marketplace=${options.marketplace}`);
   }
 
-  const auditRows: LmbAuditRow[] = storedRows.map((r) => ({
+  const auditRows: LmbAuditRow[] = scopedRows.map((r) => ({
     invoice: r.invoiceId,
     market: r.market,
     date: r.date,
