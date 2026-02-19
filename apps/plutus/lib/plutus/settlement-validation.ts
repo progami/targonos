@@ -148,8 +148,8 @@ export function matchRefundsToSales(
     const returnedSoFar = alreadyReturned === undefined ? 0 : alreadyReturned;
     if (returnedSoFar + refundQty > saleQty) {
       blocks.push({
-        code: 'REFUND_PARTIAL',
-        message: 'Refund quantity exceeds remaining sale quantity',
+        code: 'REFUND_ADJUSTMENT',
+        message: 'Refund exceeds remaining sale quantity; treated as a financial adjustment (no additional inventory return)',
         details: { orderId: refund.orderId, sku: refund.sku, saleQty, returnedSoFar, refundQty },
       });
       continue;
