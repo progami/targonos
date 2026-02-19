@@ -333,8 +333,15 @@ async function fetchLmbUsJournalEntries(input: {
   }
 
   const filtered = settlementJournals
-    .filter((entry) => entry.DocNumber && entry.DocNumber.includes('LMB-US-'))
-    .map((entry) => ({ id: entry.Id, docNumber: entry.DocNumber!, txnDate: entry.TxnDate }));
+    .filter((entry) => {
+      const docNumber = entry.DocNumber;
+      if (typeof docNumber !== 'string') return false;
+      const trimmed = docNumber.trim();
+      if (/^LMB-US-/i.test(trimmed)) return true;
+      if (/#LMB-US-/i.test(trimmed)) return true;
+      return false;
+    })
+    .map((entry) => ({ id: entry.Id, docNumber: entry.DocNumber!.trim(), txnDate: entry.TxnDate }));
 
   return { journalEntries: filtered, updatedConnection: connection };
 }
