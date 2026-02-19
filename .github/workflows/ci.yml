@@ -9,9 +9,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-test:
-    runs-on: ${{ vars.USE_SELF_HOSTED == 'true' && fromJSON('["self-hosted","macOS","ARM64"]') || 'ubuntu-latest' }}
-    steps:
+  build-test-self-hosted:
+    if: vars.USE_SELF_HOSTED == 'true'
+    runs-on: [self-hosted, macOS, ARM64]
+    steps: &build-test-steps
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -39,6 +40,8 @@ jobs:
           cp apps/atlas/.env.dev.ci apps/atlas/.env.local
           cp apps/plutus/.env.dev.ci apps/plutus/.env.dev
           cp apps/plutus/.env.dev.ci apps/plutus/.env.local
+          cp apps/argus/.env.dev.ci apps/argus/.env.dev
+          cp apps/argus/.env.dev.ci apps/argus/.env.local
       - name: Verify dev environment configuration
         run: bash scripts/verify-dev-env.sh
       - name: Generate Prisma clients (parallel)
@@ -68,3 +71,22 @@ jobs:
         run: pnpm build
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
+  build-test-github-hosted:
+    if: vars.USE_SELF_HOSTED != 'true'
+    runs-on: ubuntu-latest
+    steps: *build-test-steps
+  build-test:
+    needs:
+      - build-test-self-hosted
+      - build-test-github-hosted
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate at least one CI path succeeded
+        run: |
+          if [[ "${{ needs.build-test-self-hosted.result }}" == "success" || "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
+            echo "A CI execution path completed successfully."
+          else
+            echo "No CI execution path succeeded."
+            exit 1
+          fi

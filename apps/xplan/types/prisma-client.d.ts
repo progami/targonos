@@ -20,7 +20,23 @@ declare module '@targon/prisma-xplan' {
     status: StrategyStatus;
     region: StrategyRegion;
     isDefault: boolean;
+    isPrimary: boolean;
+    strategyGroupId: string;
+    strategyGroup?: StrategyGroup;
     strategyAssignees?: StrategyAssignee[];
+    createdAt?: Date;
+    updatedAt?: Date;
+  }
+
+  export interface StrategyGroup {
+    id: string;
+    code: string;
+    name: string;
+    region: StrategyRegion;
+    createdById?: string | null;
+    createdByEmail?: string | null;
+    assigneeId?: string | null;
+    assigneeEmail?: string | null;
     createdAt?: Date;
     updatedAt?: Date;
   }

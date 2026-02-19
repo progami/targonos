@@ -145,8 +145,9 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'argus',
     name: 'Argus',
-    description: 'Listings watcher (ASIN + search snapshots, screenshots, diffs).',
+    description: 'Amazon listing version control and monitoring.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
+    entryPolicy: 'public',
     category: 'Account / Listing',
     devPath: '/argus',
     devUrl: 'http://localhost:3016',

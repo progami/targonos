@@ -431,6 +431,7 @@ jobs:
             [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
             [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
             [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
+            [[ "${{ needs.detect-changes.outputs.argus }}" == "true" ]] && apps+=(argus)
           fi
 
           if [[ ${#apps[@]} -eq 0 ]]; then

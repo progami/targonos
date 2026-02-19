@@ -870,10 +870,8 @@ export const POST = withAuth(async (request, session) => {
           where: {
             warehouseId: warehouse.id,
             isActive: true,
-            effectiveDate: { lte: transactionDateObj },
-            OR: [{ endDate: null }, { endDate: { gte: transactionDateObj } }],
           },
-          orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }],
+          orderBy: [{ costName: 'asc' }, { updatedAt: 'desc' }],
         })
 
         const ratesByCostName = new Map<

@@ -13,7 +13,7 @@ export type AuditInvoiceMatch =
   | { kind: 'missing_period' }
   | { kind: 'none' }
   | { kind: 'ambiguous'; matchType: 'contained' | 'overlap'; candidateInvoiceIds: string[] }
-  | { kind: 'match'; matchType: 'contained' | 'overlap'; invoiceId: string };
+  | { kind: 'match'; matchType: 'doc_number' | 'contained' | 'overlap'; invoiceId: string };
 
 export function normalizeAuditMarketToMarketplaceId(value: string): MarketplaceId | null {
   const normalized = value.trim().toLowerCase();
@@ -46,12 +46,48 @@ export function dateRangesOverlapIsoDay(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+function isLmbInvoiceId(value: string): boolean {
+  return /^LMB-(US|UK)-/i.test(value.trim());
+}
+
+function normalizeSettlementDocNumberForInvoiceId(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') return trimmed;
+
+  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
+  if (hashMatch) {
+    return hashMatch[1]!;
+  }
+
+  return trimmed;
+}
+
+function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {
+  const lmb = candidates.filter((inv) => isLmbInvoiceId(inv.invoiceId));
+  if (lmb.length === 1) return lmb[0]!;
+  return null;
+}
+
 export function selectAuditInvoiceForSettlement(input: {
   settlementMarketplace: MarketplaceId;
   settlementPeriodStart: string | null;
   settlementPeriodEnd: string | null;
+  settlementDocNumber?: string;
   invoices: AuditInvoiceSummary[];
 }): AuditInvoiceMatch {
+  const marketplaceInvoices = input.invoices.filter((inv) => inv.marketplace === input.settlementMarketplace);
+
+  const docNumberRaw = input.settlementDocNumber;
+  if (typeof docNumberRaw === 'string') {
+    const normalizedDocNumber = normalizeSettlementDocNumberForInvoiceId(docNumberRaw);
+    if (normalizedDocNumber !== '') {
+      const exact = marketplaceInvoices.find((inv) => inv.invoiceId === normalizedDocNumber);
+      if (exact) {
+        return { kind: 'match', matchType: 'doc_number', invoiceId: exact.invoiceId };
+      }
+    }
+  }
+
   const periodStart = input.settlementPeriodStart;
   const periodEnd = input.settlementPeriodEnd;
 
@@ -59,13 +95,15 @@ export function selectAuditInvoiceForSettlement(input: {
     return { kind: 'missing_period' };
   }
 
-  const marketplaceInvoices = input.invoices.filter((inv) => inv.marketplace === input.settlementMarketplace);
-
   const contained = marketplaceInvoices.filter((inv) => inv.minDate >= periodStart && inv.maxDate <= periodEnd);
   if (contained.length === 1) {
     return { kind: 'match', matchType: 'contained', invoiceId: contained[0]!.invoiceId };
   }
   if (contained.length > 1) {
+    const preferred = pickPreferredInvoice(contained);
+    if (preferred) {
+      return { kind: 'match', matchType: 'contained', invoiceId: preferred.invoiceId };
+    }
     return {
       kind: 'ambiguous',
       matchType: 'contained',
@@ -80,6 +118,10 @@ export function selectAuditInvoiceForSettlement(input: {
     return { kind: 'match', matchType: 'overlap', invoiceId: overlap[0]!.invoiceId };
   }
   if (overlap.length > 1) {
+    const preferred = pickPreferredInvoice(overlap);
+    if (preferred) {
+      return { kind: 'match', matchType: 'overlap', invoiceId: preferred.invoiceId };
+    }
     return {
       kind: 'ambiguous',
       matchType: 'overlap',

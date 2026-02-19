@@ -24,7 +24,7 @@ export async function GET(
  warehouseId: warehouseId,
  isActive: true
  },
- orderBy: [{ costName: 'asc' }, { effectiveDate: 'desc' }]
+ orderBy: [{ costName: 'asc' }, { updatedAt: 'desc' }]
  })
 
  // Transform to match frontend expectations

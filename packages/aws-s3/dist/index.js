@@ -22,6 +22,9 @@ export class S3Service {
             region: this.region,
             useAccelerateEndpoint: process.env.S3_USE_ACCELERATED_ENDPOINT === 'true',
             forcePathStyle: process.env.S3_FORCE_PATH_STYLE === 'true',
+            // Some proxies and load balancers mishandle `Expect: 100-continue`, which can stall large uploads.
+            // Disabling it ensures the request body starts streaming immediately.
+            expectContinueHeader: false,
         };
         if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
             clientConfig.credentials = {
@@ -278,6 +281,22 @@ export class S3Service {
         if (!body)
             throw new Error('No stream returned from S3');
         return body;
+    }
+    async getObjectStream(key, options = {}) {
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: options.range });
+        const response = await this.client.send(command);
+        const body = response.Body;
+        if (!body)
+            throw new Error('No stream returned from S3');
+        return {
+            body,
+            contentType: response.ContentType,
+            contentLength: response.ContentLength,
+            contentRange: response.ContentRange,
+            acceptRanges: response.AcceptRanges,
+            etag: response.ETag?.replace(/"/g, ''),
+            lastModified: response.LastModified,
+        };
     }
     async deleteFile(key) {
         try {

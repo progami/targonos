@@ -39,11 +39,15 @@ export function getMarketplaceFromRegion(region: string): LmbMarketplace {
 }
 
 export function normalizeLmbDocNumber(docNumber: string): string {
-  const idxHash = docNumber.indexOf('#LMB-');
-  if (idxHash !== -1) return docNumber.slice(idxHash + 1);
+  const trimmed = docNumber.trim();
+  if (/^LMB-(US|UK)-/i.test(trimmed)) {
+    return trimmed;
+  }
 
-  const idx = docNumber.indexOf('LMB-');
-  if (idx !== -1) return docNumber.slice(idx);
+  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
+  if (hashMatch) {
+    return hashMatch[1]!;
+  }
 
   throw new Error(`DocNumber is not an LMB settlement id: ${docNumber}`);
 }
@@ -165,4 +169,3 @@ export function computeSettlementTotalFromJournalEntry(
 
   return total;
 }
-

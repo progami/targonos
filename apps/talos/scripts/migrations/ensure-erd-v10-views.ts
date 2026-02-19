@@ -212,33 +212,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       w."address",
       w."contact_phone" AS "phone"
     FROM "warehouses" w`,
-    `CREATE OR REPLACE VIEW "rfq" AS
-    WITH doc_urls AS (
-      SELECT
-        d."purchase_order_id",
-        MAX(CASE WHEN d."document_type" = 'rfq_pdf' THEN d."s3_key" END) AS "rfq_pdf_url",
-        MAX(CASE WHEN d."document_type" = 'inventory_summary' THEN d."s3_key" END) AS "inventory_summary_url"
-      FROM "purchase_order_documents" d
-      GROUP BY d."purchase_order_id"
-    )
-    SELECT
-      po."id" AS "rfq_id",
-      po."order_number" AS "rfq_ref",
-      po."sku_group" AS "sku_group",
-      po."ship_to_country" AS "destination",
-      po."expected_date"::date AS "cargo_ready_date",
-      po."incoterms",
-      po."payment_terms",
-      po."notes",
-      po."status"::text AS "status",
-      po."created_at" AS "created_at",
-      po."created_by_name" AS "created_by",
-      docs."rfq_pdf_url",
-      docs."inventory_summary_url"
-    FROM "purchase_orders" po
-    LEFT JOIN doc_urls docs
-      ON docs."purchase_order_id" = po."id"
-    WHERE po."is_legacy" = false`,
     `CREATE OR REPLACE VIEW "purchase_order" AS
     WITH line_totals AS (
       SELECT
@@ -283,10 +256,9 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         ELSE po."order_number"
       END AS "po_ref",
       po."sku_group" AS "sku_group",
-      po."id" AS "rfq_id",
       s."id" AS "supplier_id",
       po."ship_to_country" AS "destination",
-      po."rfq_approved_at"::date AS "issue_date",
+      COALESCE(po."rfq_approved_at", po."created_at")::date AS "issue_date",
       po."status"::text AS "status",
       po."expected_date"::date AS "cargo_ready_date",
       po."incoterms",
@@ -331,13 +303,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       ON docs."purchase_order_id" = po."id"
     LEFT JOIN ledger_totals led
       ON led."purchase_order_id" = po."id"
-    WHERE po."is_legacy" = false
-      AND po."rfq_approved_at" IS NOT NULL`,
+    WHERE po."is_legacy" = false`,
     `CREATE OR REPLACE VIEW "lot" AS
     SELECT
       pol."id" AS "lot_id",
       s."id" AS "sku_id",
-      pol."purchase_order_id" AS "rfq_id",
       pol."purchase_order_id" AS "po_id",
       pol."lot_ref" AS "lot_ref",
       pol."units_ordered" AS "qty_units",

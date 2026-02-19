@@ -2,31 +2,32 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  AlertCircle,
-  ArrowDownToLine,
-  CheckCircle2,
-  Download,
-  FileSearch,
-  Upload,
-  XCircle,
-} from 'lucide-react';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import VerticalAlignBottomIcon from '@mui/icons-material/VerticalAlignBottom';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import DownloadIcon from '@mui/icons-material/Download';
+import FindInPageIcon from '@mui/icons-material/FindInPage';
+import UploadIcon from '@mui/icons-material/Upload';
+import CancelIcon from '@mui/icons-material/Cancel';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import MuiButton from '@mui/material/Button';
+import MuiCard from '@mui/material/Card';
+import MuiCardContent from '@mui/material/CardContent';
+import TextField from '@mui/material/TextField';
+import FormControl from '@mui/material/FormControl';
+import MuiSelect from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import MuiTable from '@mui/material/Table';
+import MuiTableHead from '@mui/material/TableHead';
+import MuiTableBody from '@mui/material/TableBody';
+import MuiTableRow from '@mui/material/TableRow';
+import MuiTableCell from '@mui/material/TableCell';
 
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { StatCard } from '@/components/ui/stat-card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -85,18 +86,44 @@ function formatCurrency(amount: number, currency: 'USD' | 'GBP'): string {
 function statusBadge(status: ReconciliationRow['status']) {
   switch (status) {
     case 'matched':
-      return <Badge variant="success">Matched</Badge>;
+      return (
+        <Chip
+          label="Matched"
+          size="small"
+          color="success"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+        />
+      );
     case 'discrepancy':
-      return <Badge variant="destructive">Discrepancy</Badge>;
+      return (
+        <Chip
+          label="Discrepancy"
+          size="small"
+          color="error"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+        />
+      );
     case 'amazon-only':
-      return <Badge variant="secondary">Amazon Only</Badge>;
+      return (
+        <Chip
+          label="Amazon Only"
+          size="small"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'action.hover', color: 'text.secondary' }}
+        />
+      );
     case 'lmb-only':
-      return <Badge variant="secondary">LMB Only</Badge>;
+      return (
+        <Chip
+          label="Audit Only"
+          size="small"
+          sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px', bgcolor: 'action.hover', color: 'text.secondary' }}
+        />
+      );
   }
 }
 
 function exportToCsv(rows: ReconciliationRow[], month: string, marketplace: string) {
-  const header = ['Order ID', 'Date', 'Type', 'Amazon Amount', 'LMB Amount', 'Status', 'Difference'];
+  const header = ['Order ID', 'Date', 'Type', 'Amazon Amount', 'Audit Amount', 'Status', 'Difference'];
   const csvRows = rows.map((r) => [
     r.orderId,
     r.date,
@@ -194,270 +221,435 @@ export default function ReconciliationPage() {
   }
 
   return (
-    <main className="flex-1 page-enter">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+    <Box component="main" sx={{ flex: 1 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <PageHeader
           title="Reconciliation"
-          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored LMB audit data"
+          description="Optional: compare an Amazon Seller Central Date Range Transaction Report against stored audit data"
           variant="accent"
         />
 
         {/* Instructions */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">How it works</h2>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+        <MuiCard sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <MuiCardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>How it works</Typography>
+            <Box sx={{ mt: 2, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(3, 1fr)' } }}>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   1
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Download your report</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Download your report</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                     Export the Date Range Transaction Report from Amazon Seller Central (this is not required for settlement processing)
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   2
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Select month and marketplace</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select month and marketplace</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
                     Choose the period and marketplace to reconcile
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-teal-50 text-xs font-bold text-brand-teal-700 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
+                  </Typography>
+                </Box>
+              </Box>
+              <Box sx={{ display: 'flex', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', height: 28, width: 28, flexShrink: 0, alignItems: 'center', justifyContent: 'center', borderRadius: 99, bgcolor: 'rgba(0, 194, 185, 0.08)', fontSize: '0.75rem', fontWeight: 700, color: '#008f87' }}>
                   3
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Upload and reconcile</p>
-                  <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                    Compare Amazon order totals against your stored LMB audit data
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Upload and reconcile</Typography>
+                  <Typography sx={{ mt: 0.25, fontSize: '0.75rem', color: 'text.secondary' }}>
+                    Compare Amazon order totals against your stored audit data
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          </MuiCardContent>
+        </MuiCard>
 
         {/* Upload Form */}
-        <Card className="mt-6 border-slate-200/70 dark:border-white/10">
-          <CardContent className="p-6">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="month-input" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">
+        <MuiCard sx={{ mt: 3, borderColor: 'rgba(203,213,225,0.7)' }}>
+          <MuiCardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
+            <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' } }}>
+              <Box>
+                <Box component="label" htmlFor="month-input" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                   Month
-                </label>
-                <Input id="month-input" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-200">Marketplace</label>
-                <Select value={marketplace} onValueChange={(v) => setMarketplace(v as 'US' | 'UK')}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="US">US - Amazon.com</SelectItem>
-                    <SelectItem value="UK">UK - Amazon.co.uk</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                </Box>
+                <TextField
+                  id="month-input"
+                  type="month"
+                  value={month}
+                  onChange={(e) => setMonth(e.target.value)}
+                  size="small"
+                  variant="outlined"
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      sx: {
+                        fontSize: '0.875rem',
+                        height: 36,
+                      },
+                    },
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: '8px',
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                        borderWidth: 2,
+                      },
+                    },
+                  }}
+                />
+              </Box>
+              <Box>
+                <Box component="label" sx={{ display: 'block', mb: 0.75, fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Marketplace</Box>
+                <FormControl size="small" fullWidth>
+                  <MuiSelect
+                    value={marketplace}
+                    onChange={(e) => setMarketplace(e.target.value as 'US' | 'UK')}
+                    displayEmpty
+                    renderValue={(selected) => {
+                      if (!selected) return <span style={{ color: '#94a3b8' }}>Select</span>;
+                      return selected;
+                    }}
+                    sx={{
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      '& .MuiOutlinedInput-notchedOutline': {
+                        borderColor: 'divider',
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                      },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                        borderColor: '#00C2B9',
+                        borderWidth: 2,
+                      },
+                    }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          borderRadius: 3,
+                          border: 1,
+                          borderColor: 'divider',
+                          boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+                          mt: 0.5,
+                        },
+                      },
+                    }}
+                  >
+                    <MenuItem value="US" sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>US - Amazon.com</MenuItem>
+                    <MenuItem value="UK" sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>UK - Amazon.co.uk</MenuItem>
+                  </MuiSelect>
+                </FormControl>
+              </Box>
+            </Box>
 
             {/* Drop Zone */}
-            <div
-              className={`relative mt-4 flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-10 transition-colors ${
-                isDragging
-                  ? 'border-brand-teal-500 bg-brand-teal-50/50 dark:border-brand-cyan dark:bg-brand-cyan/5'
-                  : 'border-slate-300 hover:border-brand-teal-400 dark:border-slate-700 dark:hover:border-brand-cyan/50'
-              }`}
-              onDragOver={(e) => {
+            <Box
+              sx={{
+                position: 'relative',
+                mt: 2,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 3,
+                border: '2px dashed',
+                borderColor: isDragging ? '#00C2B9' : 'divider',
+                bgcolor: isDragging ? 'rgba(0, 194, 185, 0.04)' : 'transparent',
+                px: 3,
+                py: 5,
+                transition: 'all 0.2s',
+                '&:hover': {
+                  borderColor: '#00C2B9',
+                },
+              }}
+              onDragOver={(e: React.DragEvent) => {
                 e.preventDefault();
                 setIsDragging(true);
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={onDrop}
             >
-              <input ref={fileInputRef} type="file" accept=".csv" onChange={onFileChange} className="hidden" />
+              <input ref={fileInputRef} type="file" accept=".csv" onChange={onFileChange} style={{ display: 'none' }} />
 
               {selectedFile ? (
-                <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
-                    <CheckCircle2 className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{selectedFile.name}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{(selectedFile.size / 1024).toFixed(1)} KB</p>
-                  <button
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(16, 185, 129, 0.08)', color: '#059669' }}>
+                    <CheckCircleOutlineIcon sx={{ fontSize: 24 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>{selectedFile.name}</Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{(selectedFile.size / 1024).toFixed(1)} KB</Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="text-xs font-medium text-brand-teal-600 hover:text-brand-teal-700 dark:text-brand-cyan dark:hover:text-brand-cyan/80"
+                    sx={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500, color: '#008f87', '&:hover': { color: '#007069' } }}
                   >
                     Choose a different file
-                  </button>
-                </div>
+                  </Box>
+                </Box>
               ) : (
                 <>
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-brand-teal-50 text-brand-teal-600 dark:bg-brand-teal-950/40 dark:text-brand-cyan">
-                    <Upload className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <Box sx={{ mb: 1.5, display: 'flex', height: 48, width: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 3, bgcolor: 'rgba(0, 194, 185, 0.08)', color: '#008f87' }}>
+                    <UploadIcon sx={{ fontSize: 24 }} />
+                  </Box>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
                     Drop your Amazon Transaction Report here
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  </Typography>
+                  <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
                     CSV format, Date Range Transaction Report from Seller Central
-                  </p>
-                  <button
+                  </Typography>
+                  <Box
+                    component="button"
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="mt-3 rounded-lg bg-brand-teal-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-teal-600 dark:bg-brand-cyan dark:text-slate-900 dark:hover:bg-brand-cyan/90"
+                    sx={{
+                      mt: 1.5,
+                      borderRadius: 2,
+                      bgcolor: '#00C2B9',
+                      px: 2,
+                      py: 1,
+                      fontSize: '0.875rem',
+                      fontWeight: 500,
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      boxShadow: 1,
+                      transition: 'background-color 0.2s',
+                      '&:hover': { bgcolor: '#00a89f' },
+                    }}
                   >
                     Choose File
-                  </button>
+                  </Box>
                 </>
               )}
-            </div>
+            </Box>
 
             {/* Reconcile Button */}
-            <div className="mt-4 flex justify-end">
-              <Button onClick={handleReconcile} disabled={!selectedFile || isReconciling}>
+            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+              <MuiButton
+                variant="contained"
+                disableElevation
+                onClick={handleReconcile}
+                disabled={!selectedFile || isReconciling}
+                sx={{
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  gap: 1,
+                  whiteSpace: 'nowrap',
+                  height: 36,
+                  px: 2,
+                  fontSize: '0.875rem',
+                  bgcolor: '#00C2B9',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#00a89f' },
+                  '&:active': { bgcolor: '#008f87' },
+                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                }}
+              >
                 {isReconciling ? (
                   <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                    <Box sx={{ height: 16, width: 16, borderRadius: 99, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', animation: 'spin 1s linear infinite', '@keyframes spin': { to: { transform: 'rotate(360deg)' } } }} />
                     Reconciling...
                   </>
                 ) : (
                   <>
-                    <FileSearch className="h-4 w-4" />
+                    <FindInPageIcon sx={{ fontSize: 16 }} />
                     Reconcile
                   </>
                 )}
-              </Button>
-            </div>
+              </MuiButton>
+            </Box>
 
             {/* Error */}
             {error !== null && (
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
-                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+              <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.06)', px: 2, py: 1.5, fontSize: '0.875rem', color: '#b91c1c' }}>
+                <ErrorOutlineIcon sx={{ fontSize: 16, flexShrink: 0 }} />
                 {error}
-              </div>
+              </Box>
             )}
-          </CardContent>
-        </Card>
+          </MuiCardContent>
+        </MuiCard>
 
         {/* Results */}
         {result !== null && (
           <>
             {/* Summary Stats */}
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Box sx={{ mt: 3, display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
               <StatCard
                 label="Amazon Transactions"
                 value={result.summary.totalAmazonTransactions.toLocaleString()}
-                icon={<ArrowDownToLine className="h-5 w-5" />}
+                icon={<VerticalAlignBottomIcon sx={{ fontSize: 20 }} />}
               />
               <StatCard
                 label="Matched"
                 value={result.summary.matched.toLocaleString()}
-                icon={<CheckCircle2 className="h-5 w-5" />}
+                icon={<CheckCircleOutlineIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-emerald-500"
               />
               <StatCard
                 label="Discrepancies"
                 value={result.summary.discrepancies.toLocaleString()}
-                icon={<AlertCircle className="h-5 w-5" />}
+                icon={<ErrorOutlineIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-red-500"
               />
               <StatCard
                 label="Unmatched"
                 value={(result.summary.amazonOnly + result.summary.lmbOnly).toLocaleString()}
-                icon={<XCircle className="h-5 w-5" />}
+                icon={<CancelIcon sx={{ fontSize: 20 }} />}
                 dotColor="bg-amber-500"
               />
-            </div>
+            </Box>
 
             {/* Detail Breakdown */}
-            <div className="mt-2 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400 px-1">
-              <span>LMB rows: {result.summary.totalLmbRows.toLocaleString()}</span>
-              <span>&middot;</span>
-              <span>Amazon only: {result.summary.amazonOnly.toLocaleString()}</span>
-              <span>&middot;</span>
-              <span>LMB only: {result.summary.lmbOnly.toLocaleString()}</span>
-            </div>
+            <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 2, fontSize: '0.75rem', color: 'text.secondary', px: 0.5 }}>
+              <Box component="span">Audit rows: {result.summary.totalLmbRows.toLocaleString()}</Box>
+              <Box component="span">&middot;</Box>
+              <Box component="span">Amazon only: {result.summary.amazonOnly.toLocaleString()}</Box>
+              <Box component="span">&middot;</Box>
+              <Box component="span">Audit only: {result.summary.lmbOnly.toLocaleString()}</Box>
+            </Box>
 
             {/* Results Table */}
-            <Card className="mt-4 border-slate-200/70 dark:border-white/10 overflow-hidden">
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between border-b border-slate-200/70 px-4 py-3 dark:border-white/10">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+            <MuiCard sx={{ mt: 2, borderColor: 'rgba(203,213,225,0.7)', overflow: 'hidden' }}>
+              <MuiCardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: 1, borderColor: 'rgba(203,213,225,0.7)', px: 2, py: 1.5 }}>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                     Reconciliation Details
-                    <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                    <Box component="span" sx={{ ml: 1, fontSize: '0.75rem', fontWeight: 400, color: 'text.secondary' }}>
                       ({result.rows.length.toLocaleString()} orders)
-                    </span>
-                  </h3>
-                  <Button variant="outline" size="sm" onClick={() => exportToCsv(result.rows, month, marketplace)}>
-                    <Download className="h-3.5 w-3.5" />
+                    </Box>
+                  </Typography>
+                  <MuiButton
+                    variant="outlined"
+                    disableElevation
+                    size="small"
+                    onClick={() => exportToCsv(result.rows, month, marketplace)}
+                    sx={{
+                      borderRadius: '8px',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      gap: 1,
+                      whiteSpace: 'nowrap',
+                      height: 32,
+                      px: 1.5,
+                      fontSize: '0.75rem',
+                      borderColor: 'divider',
+                      color: 'text.primary',
+                      bgcolor: 'background.paper',
+                      '&:hover': { bgcolor: 'action.hover', borderColor: 'divider' },
+                      '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+                    }}
+                  >
+                    <DownloadIcon sx={{ fontSize: 14 }} />
                     Export CSV
-                  </Button>
-                </div>
-                <div className="overflow-x-auto">
-                  <Table className="table-striped">
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/80 dark:bg-white/[0.03]">
-                        <TableHead className="font-semibold">Order ID</TableHead>
-                        <TableHead className="font-semibold">Date</TableHead>
-                        <TableHead className="font-semibold">Type</TableHead>
-                        <TableHead className="font-semibold text-right">Amazon</TableHead>
-                        <TableHead className="font-semibold text-right">LMB</TableHead>
-                        <TableHead className="font-semibold text-right">Difference</TableHead>
-                        <TableHead className="font-semibold">Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
+                  </MuiButton>
+                </Box>
+                <Box sx={{ overflowX: 'auto' }}>
+                  <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
+                    <MuiTableHead
+                      sx={{
+                        bgcolor: 'rgba(245, 245, 245, 0.8)',
+                        '[data-mui-color-scheme="dark"] &, .dark &': {
+                          bgcolor: 'rgba(255, 255, 255, 0.05)',
+                        },
+                        '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                      }}
+                    >
+                      <MuiTableRow
+                        sx={{
+                          borderBottom: 1,
+                          borderColor: 'divider',
+                          bgcolor: 'rgba(248,250,252,0.8)',
+                        }}
+                      >
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Order ID</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Date</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Type</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Amazon</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Audit</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', textAlign: 'right' }}>Difference</MuiTableCell>
+                        <MuiTableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Status</MuiTableCell>
+                      </MuiTableRow>
+                    </MuiTableHead>
+                    <MuiTableBody
+                      sx={{
+                        '& .MuiTableRow-root:last-child': { borderBottom: 0 },
+                      }}
+                    >
                       {result.rows.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                        <MuiTableRow
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            transition: 'background-color 0.15s',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
+                        >
+                          <MuiTableCell colSpan={7} sx={{ px: 1.5, py: 4, color: 'text.primary', textAlign: 'center', fontSize: '0.875rem' }}>
                             No matching orders found for this period
-                          </TableCell>
-                        </TableRow>
+                          </MuiTableCell>
+                        </MuiTableRow>
                       )}
                       {result.rows.map((row) => (
-                        <TableRow key={row.orderId}>
-                          <TableCell className="font-mono text-xs">{row.orderId}</TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.date}</TableCell>
-                          <TableCell className="text-sm text-slate-600 dark:text-slate-300">{row.type}</TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '—'}
-                          </TableCell>
-                          <TableCell className="text-sm text-right tabular-nums">
-                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '—'}
-                          </TableCell>
-                          <TableCell
-                            className={`text-sm text-right tabular-nums ${
-                              row.difference !== 0
+                        <MuiTableRow
+                          key={row.orderId}
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            transition: 'background-color 0.15s',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
+                        >
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontFamily: 'monospace', fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums' }}>{row.orderId}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{row.date}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{row.type}</MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {row.amazonTotal !== 0 ? formatCurrency(row.amazonTotal, currency) : '\u2014'}
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontSize: '0.875rem', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                            {row.lmbTotal !== 0 ? formatCurrency(row.lmbTotal, currency) : '\u2014'}
+                          </MuiTableCell>
+                          <MuiTableCell
+                            sx={{
+                              px: 1.5,
+                              py: 1.5,
+                              fontSize: '0.875rem',
+                              textAlign: 'right',
+                              fontVariantNumeric: 'tabular-nums',
+                              ...(row.difference !== 0
                                 ? row.difference > 0
-                                  ? 'text-red-600 dark:text-red-400'
-                                  : 'text-amber-600 dark:text-amber-400'
-                                : 'text-slate-400 dark:text-slate-500'
-                            }`}
+                                  ? { color: '#dc2626' }
+                                  : { color: '#d97706' }
+                                : { color: 'text.disabled' }),
+                            }}
                           >
                             {row.difference !== 0
                               ? `${row.difference > 0 ? '+' : ''}${formatCurrency(row.difference, currency)}`
-                              : '—'}
-                          </TableCell>
-                          <TableCell>{statusBadge(row.status)}</TableCell>
-                        </TableRow>
+                              : '\u2014'}
+                          </MuiTableCell>
+                          <MuiTableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>{statusBadge(row.status)}</MuiTableCell>
+                        </MuiTableRow>
                       ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                    </MuiTableBody>
+                  </MuiTable>
+                </Box>
+              </MuiCardContent>
+            </MuiCard>
           </>
         )}
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

@@ -59,14 +59,46 @@ function getMarketplaceFromRegion(region: string): Marketplace {
   throw new Error(`Unsupported LMB region: ${region}`);
 }
 
-function normalizeLmbDocNumber(docNumber: string): string {
-  const idxHash = docNumber.indexOf('#LMB-');
-  if (idxHash !== -1) return docNumber.slice(idxHash + 1);
+function isLmbSettlementDocNumber(docNumber: string): boolean {
+  const trimmed = docNumber.trim();
+  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
+  if (/#LMB-(US|UK)-/i.test(trimmed)) return true;
+  return false;
+}
 
-  const idx = docNumber.indexOf('LMB-');
-  if (idx !== -1) return docNumber.slice(idx);
+function isCanonicalLmbSettlementDocNumber(docNumber: string): boolean {
+  return /^LMB-(US|UK)-/i.test(docNumber.trim());
+}
+
+function normalizeLmbDocNumber(docNumber: string): string {
+  const trimmed = docNumber.trim();
+  if (/^LMB-(US|UK)-/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
+  if (hashMatch) {
+    return hashMatch[1]!;
+  }
 
   throw new Error(`DocNumber is not an LMB settlement id: ${docNumber}`);
+}
+
+function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
+  const aDocNumber = a.DocNumber ? a.DocNumber : '';
+  const bDocNumber = b.DocNumber ? b.DocNumber : '';
+
+  const aCanonical = isCanonicalLmbSettlementDocNumber(aDocNumber);
+  const bCanonical = isCanonicalLmbSettlementDocNumber(bDocNumber);
+
+  if (aCanonical && !bCanonical) return a;
+  if (bCanonical && !aCanonical) return b;
+
+  if (a.TxnDate !== b.TxnDate) {
+    return a.TxnDate > b.TxnDate ? a : b;
+  }
+
+  return a.Id > b.Id ? a : b;
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
@@ -204,7 +236,6 @@ export async function GET(req: NextRequest) {
     const rawPageSize = searchParams.get('pageSize');
     const page = parseInt(rawPage === null ? '1' : rawPage, 10);
     const pageSize = parseInt(rawPageSize === null ? '25' : rawPageSize, 10);
-    const startPosition = (page - 1) * pageSize + 1;
 
     const docNumberContains = search !== undefined
       ? search
@@ -212,23 +243,66 @@ export async function GET(req: NextRequest) {
         ? `LMB-${marketplaceFilter}-`
         : 'LMB-';
 
-    const { journalEntries, totalCount, updatedConnection } = await fetchJournalEntries(connection, {
-      startDate,
-      endDate,
-      docNumberContains,
-      maxResults: pageSize,
-      startPosition,
+    let activeConnection = connection;
+    let startPosition = 1;
+    const queryPageSize = 100;
+    const allJournalEntries: QboJournalEntry[] = [];
+
+    while (true) {
+      const pageResult = await fetchJournalEntries(activeConnection, {
+        startDate,
+        endDate,
+        docNumberContains,
+        maxResults: queryPageSize,
+        startPosition,
+      });
+      if (pageResult.updatedConnection) {
+        activeConnection = pageResult.updatedConnection;
+      }
+      allJournalEntries.push(...pageResult.journalEntries);
+      if (allJournalEntries.length >= pageResult.totalCount) break;
+      if (pageResult.journalEntries.length === 0) break;
+      startPosition += pageResult.journalEntries.length;
+    }
+
+    const filteredJournalEntries = allJournalEntries.filter((je) => {
+      if (!je.DocNumber) return false;
+      if (!isLmbSettlementDocNumber(je.DocNumber)) return false;
+      if (marketplaceFilter === null) return true;
+      const normalized = normalizeLmbDocNumber(je.DocNumber);
+      return normalized.startsWith(`LMB-${marketplaceFilter}-`);
     });
 
-    const accountsResult = await fetchAccounts(updatedConnection ? updatedConnection : connection, {
+    const dedupedByNormalizedDocNumber = new Map<string, QboJournalEntry>();
+    for (const journalEntry of filteredJournalEntries) {
+      if (!journalEntry.DocNumber) continue;
+      const normalized = normalizeLmbDocNumber(journalEntry.DocNumber);
+      const existing = dedupedByNormalizedDocNumber.get(normalized);
+      if (!existing) {
+        dedupedByNormalizedDocNumber.set(normalized, journalEntry);
+        continue;
+      }
+      dedupedByNormalizedDocNumber.set(normalized, pickPreferredSettlementEntry(existing, journalEntry));
+    }
+
+    const uniqueJournalEntries = Array.from(dedupedByNormalizedDocNumber.values()).sort((a, b) => {
+      if (a.TxnDate !== b.TxnDate) return b.TxnDate.localeCompare(a.TxnDate);
+      const aDoc = a.DocNumber ? a.DocNumber : '';
+      const bDoc = b.DocNumber ? b.DocNumber : '';
+      return aDoc.localeCompare(bDoc);
+    });
+
+    const totalCount = uniqueJournalEntries.length;
+    const pageStart = (page - 1) * pageSize;
+    const pagedJournalEntries = uniqueJournalEntries.slice(pageStart, pageStart + pageSize);
+
+    const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
     });
 
-    const activeConnection = accountsResult.updatedConnection
+    activeConnection = accountsResult.updatedConnection
       ? accountsResult.updatedConnection
-      : updatedConnection
-        ? updatedConnection
-        : connection;
+      : activeConnection;
 
     if (activeConnection !== connection) {
       await saveServerQboConnection(activeConnection);
@@ -240,18 +314,18 @@ export async function GET(req: NextRequest) {
     }
 
     const processed = await db.settlementProcessing.findMany({
-      where: { qboSettlementJournalEntryId: { in: journalEntries.map((je) => je.Id) } },
+      where: { qboSettlementJournalEntryId: { in: pagedJournalEntries.map((je) => je.Id) } },
       select: { qboSettlementJournalEntryId: true },
     });
     const processedSet = new Set(processed.map((p) => p.qboSettlementJournalEntryId));
 
     const rolledBack = await db.settlementRollback.findMany({
-      where: { qboSettlementJournalEntryId: { in: journalEntries.map((je) => je.Id) } },
+      where: { qboSettlementJournalEntryId: { in: pagedJournalEntries.map((je) => je.Id) } },
       select: { qboSettlementJournalEntryId: true },
     });
     const rolledBackSet = new Set(rolledBack.map((r) => r.qboSettlementJournalEntryId));
 
-    const rows: SettlementRow[] = journalEntries.map((je) => {
+    const rows: SettlementRow[] = pagedJournalEntries.map((je) => {
       if (!je.DocNumber) {
         throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
       }

@@ -184,7 +184,7 @@ export default function WarehouseRatesPage({
       <PageContainer>
         <PageHeaderSection
           title={warehouse.name}
-          description={`Rate Sheet • ${warehouse.code}`}
+          description={`Template Rates • ${warehouse.code}`}
           icon={DollarSign}
           backHref="/config/warehouses"
           backLabel="Back"

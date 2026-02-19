@@ -16,11 +16,34 @@ import {
   extractTrackedLinesFromBill,
 } from '../lib/plutus/bills/classification';
 import {
+  buildBillMappingPullSyncUpdates,
+  extractPoNumberFromBill,
+} from '../lib/plutus/bills/pull-sync';
+import {
   allocateManufacturingSplitAmounts,
   normalizeManufacturingSplits,
 } from '../lib/plutus/bills/split';
+import {
+  parseAutoRefreshTimeLocal,
+  shouldRefreshCashflowSnapshot,
+} from '../lib/plutus/cashflow/auto-refresh';
+import { buildCashflowForecast } from '../lib/plutus/cashflow/forecast';
+import {
+  mapOpenBillsToEvents,
+  mapRecurringTransactionsToEvents,
+} from '../lib/plutus/cashflow/qbo-mappers';
+import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
+import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
+import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
-import type { QboAccount, QboBill } from '../lib/qbo/api';
+import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
+import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
+import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
+import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
+import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
+import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
+import type { ProcessingBlock } from '../lib/plutus/settlement-types';
+import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
 function test(name: string, fn: () => void) {
   try {
@@ -101,8 +124,33 @@ test('selectAuditInvoiceForSettlement falls back to unique overlap match', () =>
   assert.deepEqual(match, { kind: 'match', matchType: 'overlap', invoiceId: 'A' });
 });
 
+test('selectAuditInvoiceForSettlement prefers invoiceId matching settlement DocNumber', () => {
+  const invoices: AuditInvoiceSummary[] = [
+    { invoiceId: 'MONTHLY', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-28', rowCount: 100 },
+    { invoiceId: 'LMB-US-01-14FEB-26-1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
+  ];
+
+  const match = selectAuditInvoiceForSettlement({
+    settlementMarketplace: 'amazon.com',
+    settlementPeriodStart: '2026-02-01',
+    settlementPeriodEnd: '2026-02-14',
+    settlementDocNumber: 'LMB-US-01-14FEB-26-1',
+    invoices,
+  });
+
+  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'LMB-US-01-14FEB-26-1' });
+});
+
 test('parseAmazonTransactionCsv parses required totals', () => {
   const csv = ['Order Id,Total,Type', '123-123,10.50,Order'].join('\n');
+  const parsed = parseAmazonTransactionCsv(csv);
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0]?.orderId, '123-123');
+  assert.equal(parsed.rows[0]?.total, 10.5);
+});
+
+test('parseAmazonTransactionCsv skips preamble before header row', () => {
+  const csv = ['"Includes Amazon Marketplace transactions"', 'Order Id,Total,Type', '123-123,10.50,Order'].join('\n');
   const parsed = parseAmazonTransactionCsv(csv);
   assert.equal(parsed.rows.length, 1);
   assert.equal(parsed.rows[0]?.orderId, '123-123');
@@ -112,6 +160,440 @@ test('parseAmazonTransactionCsv parses required totals', () => {
 test('parseAmazonTransactionCsv throws on invalid totals', () => {
   const csv = ['Order Id,Total', '123-123,abc'].join('\n');
   assert.throws(() => parseAmazonTransactionCsv(csv));
+});
+
+test('parseAmazonUnifiedTransactionCsv parses Monthly Unified Transaction report rows (including non-order)', () => {
+  const csv = [
+    '"Includes Amazon Marketplace, Fulfillment by Amazon (FBA), and Amazon Webstore transactions"',
+    '"All amounts in USD, unless specified"',
+    '"date/time","settlement id","type","order id","sku","description","quantity","marketplace","product sales","product sales tax","shipping credits","shipping credits tax","gift wrap credits","giftwrap credits tax","Regulatory Fee","Tax On Regulatory Fee","promotional rebates","promotional rebates tax","marketplace withheld tax","selling fees","fba fees","other transaction fees","other","total"',
+    '"Jan 5, 2026 11:03:05 AM PST","S1","Service Fee","","","Subscription","","Amazon.com","0","0","0","0","0","0","0","0","0","0","0","0","0","0","0","-21.73","-21.73"',
+    '"Jan 6, 2026 7:21:49 PM PST","S1","Order","111-1","SKU-1","Test Product","1","amazon.com","10.00","0.80","0","0","0","0","0","0","0","0","-0.80","-1.50","-3.00","0","0","5.50"',
+  ].join('\n');
+
+  const parsed = parseAmazonUnifiedTransactionCsv(csv);
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0]?.settlementId, 'S1');
+  assert.equal(parsed.rows[0]?.type, 'Service Fee');
+  assert.equal(parsed.rows[0]?.orderId, '');
+  assert.equal(parsed.rows[0]?.total, -21.73);
+  assert.equal(parsed.rows[1]?.orderId, '111-1');
+  assert.equal(parsed.rows[1]?.productSales, 10);
+  assert.equal(parsed.rows[1]?.sellingFees, -1.5);
+  assert.equal(parsed.rows[1]?.fbaFees, -3);
+  assert.equal(parsed.rows[1]?.total, 5.5);
+});
+
+test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settlements to month-end', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-1',
+    eventGroupId: 'GROUP-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2025-12-19T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-01-02T08:00:00.000Z',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -1 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-01-02T08:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments[0]?.docNumber, 'LMB-US-19-31DEC-25-1');
+
+  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  assert.equal(cents, -100);
+
+  assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+});
+
+test('parseSpAdvertisedProductCsv filters rows by selected country', () => {
+  const csv = [
+    'Date,Country,Advertised SKU,Spend',
+    '2026-02-01,United States,sku-a,1.00',
+    '2026-02-01,United Kingdom,sku-a,5.00',
+    '2026-02-02,U.S.,sku-a,2.50',
+    '2026-02-03,UK,sku-b,3.00',
+    '2026-02-04,US,sku-b,0.00',
+  ].join('\n');
+
+  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States', 'US'] });
+
+  assert.equal(parsed.rawRowCount, 5);
+  assert.equal(parsed.minDate, '2026-02-01');
+  assert.equal(parsed.maxDate, '2026-02-04');
+  assert.equal(parsed.skuCount, 1);
+  assert.deepEqual(parsed.rows, [
+    { date: '2026-02-01', sku: 'SKU-A', spendCents: 100 },
+    { date: '2026-02-02', sku: 'SKU-A', spendCents: 250 },
+  ]);
+});
+
+test('parseSpAdvertisedProductCsv requires Country when filtering by marketplace', () => {
+  const csv = ['Date,Advertised SKU,Spend', '2026-02-01,sku-a,1.00'].join('\n');
+  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /Missing required column: Country/);
+});
+
+test('parseSpAdvertisedProductCsv errors when marketplace has no rows', () => {
+  const csv = ['Date,Country,Advertised SKU,Spend', '2026-02-01,United Kingdom,sku-a,1.00'].join('\n');
+  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /CSV has no rows for selected marketplace/);
+});
+
+test('parseSpAdvertisedProductCsv accepts Excel date serials', () => {
+  const csv = ['Date,Country,Advertised SKU,Spend', '46012,United States,sku-a,1.00'].join('\n');
+  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] });
+  assert.equal(parsed.minDate, '2025-12-21');
+  assert.equal(parsed.maxDate, '2025-12-21');
+  assert.equal(parsed.rows[0]?.date, '2025-12-21');
+});
+
+test('parseAwdFeeCsv parses monthly SKU fee rows', () => {
+  const csv = [
+    'month_of_,year_of_ch,msku,country_c,fee_type,fee_amoun,currency',
+    'January,2026,cs-007,US,STORAGE_F,11.78,USD',
+    'January,2026,cs-010,US,STORAGE_F,7.17,USD',
+  ].join('\n');
+
+  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
+  assert.equal(parsed.rawRowCount, 2);
+  assert.equal(parsed.skuCount, 2);
+  assert.equal(parsed.minDate, '2026-01-01');
+  assert.equal(parsed.maxDate, '2026-01-31');
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0]?.sku, 'CS-007');
+  assert.equal(parsed.rows[0]?.feeCents, 1178);
+});
+
+test('computePnlAllocation leaves SKU-less fees unallocated without deterministic source', () => {
+  const rows = [
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand B',
+      net: 10,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Commission',
+      net: -9,
+    },
+  ];
+
+  const allocation = computePnlAllocation(rows, {
+    getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
+  });
+
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, undefined);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 1);
+  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.bucket, 'amazonSellerFees');
+  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.totalCents, -900);
+});
+
+test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
+  const rows = [
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand B',
+      net: 10,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon FBA Fees - AWD Processing Fee',
+      net: -9,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: 'SKU-A',
+      quantity: 0,
+      description: 'Amazon Storage Fees - AWD Storage Fee',
+      net: -3,
+    },
+  ];
+
+  const allocation = computePnlAllocation(
+    rows,
+    {
+      getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
+    },
+    {
+      skuAllocationsByBucket: {
+        warehousingAwd: {
+          'SKU-A': -600,
+          'SKU-B': -300,
+        },
+      },
+    },
+  );
+
+  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandA, -900);
+  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandB, -300);
+  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonStorageFees.BrandA, undefined);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+});
+
+test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '238',
+      SyncToken: '0',
+      Name: 'AWD',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'ShippingFreightDeliveryCos',
+    },
+    {
+      Id: '245',
+      SyncToken: '0',
+      Name: 'US-PDS',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'ShippingFreightDeliveryCos',
+      ParentRef: { value: '238', name: 'AWD' },
+    },
+  ];
+
+  const lines = buildPnlJournalLines(
+    { warehousingAwd: { 'US-PDS': -12345 } },
+    { warehousingAwd: '238' },
+    accounts,
+    'INV-1',
+    blocks,
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.accountId, '245');
+  assert.equal(lines[0]?.postingType, 'Debit');
+  assert.equal(lines[0]?.amountCents, 12345);
+  assert.equal(lines[1]?.accountId, '238');
+  assert.equal(lines[1]?.postingType, 'Credit');
+  assert.equal(lines[1]?.amountCents, 12345);
+  assert.equal(blocks.length, 0);
+});
+
+test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '203',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+    },
+    {
+      Id: '211',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+    },
+    {
+      Id: '209',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+      ParentRef: { value: '203', name: 'Manufacturing' },
+    },
+    {
+      Id: '217',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+      ParentRef: { value: '211', name: 'Manufacturing' },
+    },
+  ];
+
+  const lines = buildCogsJournalLines(
+    {
+      'US-PDS': {
+        manufacturing: 12345,
+        freight: 0,
+        duty: 0,
+        mfgAccessories: 0,
+      },
+    },
+    ['US-PDS'],
+    {
+      invManufacturing: '203',
+      cogsManufacturing: '211',
+    },
+    accounts,
+    'INV-COGS-1',
+    blocks,
+    {
+      'US-PDS': {
+        manufacturing: {
+          'CS-007': 8230,
+          'CS-010': 4115,
+        },
+        freight: {},
+        duty: {},
+        mfgAccessories: {},
+      },
+    },
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.description, 'Manufacturing COGS | SKUs CS-007:$82.30, CS-010:$41.15');
+  assert.equal(lines[1]?.description, 'Manufacturing inventory | SKUs CS-007:$82.30, CS-010:$41.15');
+  assert.equal(blocks.length, 0);
+});
+
+test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee rows', () => {
+  const rows = [
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: -2,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 20,
+    },
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-2',
+      sku: 'SKU-B',
+      quantity: -1,
+      description: 'Amazon Sales - Principal - Brand A',
+      net: 10,
+    },
+    {
+      invoice: 'INV-2',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Commission',
+      net: -3,
+    },
+  ];
+
+  const allocation = computePnlAllocation(
+    rows,
+    {
+      getBrandForSku: () => 'BrandA',
+    },
+    {
+      skuAllocationsByBucket: {
+        amazonSellerFees: {
+          'SKU-A': -200,
+          'SKU-B': -100,
+        },
+      },
+    },
+  );
+
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -300);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -200);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-B'], -100);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+});
+
+test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '186',
+      SyncToken: '0',
+      Name: 'Amazon Advertising Costs',
+      AccountType: 'Expense',
+      AccountSubType: 'AdvertisingPromotional',
+    },
+    {
+      Id: '199',
+      SyncToken: '0',
+      Name: 'Amazon Advertising Costs - US-PDS',
+      AccountType: 'Expense',
+      AccountSubType: 'AdvertisingPromotional',
+      ParentRef: { value: '186', name: 'Amazon Advertising Costs' },
+    },
+  ];
+
+  const lines = buildPnlJournalLines(
+    { amazonAdvertisingCosts: { 'US-PDS': -12345 } },
+    { amazonAdvertisingCosts: '186' },
+    accounts,
+    'INV-3',
+    blocks,
+    {
+      amazonAdvertisingCosts: {
+        'US-PDS': {
+          'SKU-A': -8230,
+          'SKU-B': -4115,
+        },
+      },
+    },
+  );
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]?.description.includes('SKUs'), true);
+  assert.equal(lines[0]?.description.includes('SKU-A'), true);
+  assert.equal(lines[0]?.description.includes('SKU-B'), true);
+});
+
+test('isBlockingProcessingCode treats PNL allocation as blocking', () => {
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), false);
+  assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
+  assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), false);
+  assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
 });
 
 test('ledger blocks missing cost basis', () => {
@@ -157,6 +639,61 @@ test('ledger computes proportional manufacturing COGS', () => {
   assert.equal(replay.blocks.length, 0);
   assert.equal(replay.computedCosts.length, 1);
   assert.equal(replay.computedCosts[0]?.costByComponentCents.manufacturing, 200);
+});
+
+test('ledger defers SKU cost lines until units arrive', () => {
+  const parsedBills = {
+    events: [
+      { kind: 'cost' as const, date: '2026-02-01', poNumber: 'PO-1', component: 'mfgAccessories' as const, costCents: 500, sku: 'SKU' },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU', units: 10, costCents: 1000 },
+    ],
+    poUnitsBySku: new Map<string, Map<string, number>>(),
+  };
+
+  const replay = replayInventoryLedger({
+    parsedBills,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [{ date: '2026-02-03', orderId: 'O', sku: 'SKU', units: 5 }],
+  });
+
+  assert.equal(replay.blocks.some((block) => block.code === 'LATE_COST_ON_HAND_ZERO'), false);
+  assert.equal(replay.blocks.length, 0);
+  assert.equal(replay.computedCosts.length, 1);
+  assert.equal(replay.computedCosts[0]?.costByComponentCents.manufacturing, 500);
+  assert.equal(replay.computedCosts[0]?.costByComponentCents.mfgAccessories, 250);
+
+  const state = replay.snapshot.bySku.get('SKU');
+  assert.equal(state?.deferredValueByComponentCents.mfgAccessories, 0);
+});
+
+test('ledger defers PO-allocated cost lines until units arrive', () => {
+  const poUnitsBySku = new Map<string, Map<string, number>>();
+  poUnitsBySku.set('PO-1', new Map([['SKU-A', 1], ['SKU-B', 2]]));
+
+  const parsedBills = {
+    events: [
+      { kind: 'cost' as const, date: '2026-02-01', poNumber: 'PO-1', component: 'freight' as const, costCents: 300 },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU-A', units: 1, costCents: 100 },
+      { kind: 'manufacturing' as const, date: '2026-02-02', poNumber: 'PO-1', sku: 'SKU-B', units: 2, costCents: 200 },
+    ],
+    poUnitsBySku,
+  };
+
+  const replay = replayInventoryLedger({
+    parsedBills,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [],
+  });
+
+  assert.equal(replay.blocks.length, 0);
+  const stateA = replay.snapshot.bySku.get('SKU-A');
+  const stateB = replay.snapshot.bySku.get('SKU-B');
+  assert.equal(stateA?.valueByComponentCents.freight, 100);
+  assert.equal(stateB?.valueByComponentCents.freight, 200);
+  assert.equal(stateA?.deferredValueByComponentCents.freight, 0);
+  assert.equal(stateB?.deferredValueByComponentCents.freight, 0);
 });
 
 test('bill mappings allocate non-sku costs by PO units', () => {
@@ -234,6 +771,100 @@ test('manufacturing split validation rejects duplicate sku and invalid qty', () 
   );
 });
 
+test('settlement ads profitability combines sales returns and ads by sku', () => {
+  const result = buildSettlementSkuProfitability({
+    sales: [
+      {
+        sku: 'sku-a',
+        quantity: 3,
+        principalCents: 3000,
+        costManufacturingCents: 900,
+        costFreightCents: 150,
+        costDutyCents: 90,
+        costMfgAccessoriesCents: 60,
+      },
+      {
+        sku: 'SKU-B',
+        quantity: 1,
+        principalCents: 1000,
+        costManufacturingCents: 250,
+        costFreightCents: 80,
+        costDutyCents: 40,
+        costMfgAccessoriesCents: 30,
+      },
+    ],
+    returns: [
+      {
+        sku: 'SKU A',
+        quantity: 1,
+        principalCents: -1000,
+        costManufacturingCents: 300,
+        costFreightCents: 50,
+        costDutyCents: 30,
+        costMfgAccessoriesCents: 20,
+      },
+    ],
+    allocationLines: [
+      { sku: 'SKU-A', allocatedCents: 600 },
+      { sku: 'SKU-B', allocatedCents: 400 },
+      { sku: 'SKU-C', allocatedCents: 100 },
+    ],
+  });
+
+  assert.equal(result.lines.length, 3);
+  assert.deepEqual(
+    result.lines.map((line) => line.sku),
+    ['SKU-A', 'SKU-B', 'SKU-C'],
+  );
+
+  const skuA = result.lines[0];
+  assert.equal(skuA?.soldUnits, 3);
+  assert.equal(skuA?.returnedUnits, 1);
+  assert.equal(skuA?.netUnits, 2);
+  assert.equal(skuA?.principalCents, 2000);
+  assert.equal(skuA?.cogsCents, 800);
+  assert.equal(skuA?.adsAllocatedCents, 600);
+  assert.equal(skuA?.contributionBeforeAdsCents, 1200);
+  assert.equal(skuA?.contributionAfterAdsCents, 600);
+
+  const skuB = result.lines[1];
+  assert.equal(skuB?.principalCents, 1000);
+  assert.equal(skuB?.cogsCents, 400);
+  assert.equal(skuB?.adsAllocatedCents, 400);
+  assert.equal(skuB?.contributionAfterAdsCents, 200);
+
+  const skuC = result.lines[2];
+  assert.equal(skuC?.principalCents, 0);
+  assert.equal(skuC?.cogsCents, 0);
+  assert.equal(skuC?.adsAllocatedCents, 100);
+  assert.equal(skuC?.contributionAfterAdsCents, -100);
+
+  assert.equal(result.totals.soldUnits, 4);
+  assert.equal(result.totals.returnedUnits, 1);
+  assert.equal(result.totals.netUnits, 3);
+  assert.equal(result.totals.principalCents, 3000);
+  assert.equal(result.totals.cogsCents, 1200);
+  assert.equal(result.totals.adsAllocatedCents, 1100);
+  assert.equal(result.totals.contributionBeforeAdsCents, 1800);
+  assert.equal(result.totals.contributionAfterAdsCents, 700);
+});
+
+test('settlement ads profitability normalizes sku keys and sums duplicate ads lines', () => {
+  const result = buildSettlementSkuProfitability({
+    sales: [],
+    returns: [],
+    allocationLines: [
+      { sku: ' sku-a ', allocatedCents: 101 },
+      { sku: 'SKU A', allocatedCents: 202 },
+    ],
+  });
+
+  assert.equal(result.lines.length, 1);
+  assert.equal(result.lines[0]?.sku, 'SKU-A');
+  assert.equal(result.lines[0]?.adsAllocatedCents, 303);
+  assert.equal(result.totals.adsAllocatedCents, 303);
+});
+
 test('tracked line extraction includes configured and inventory accounts', () => {
   const accounts: QboAccount[] = [
     {
@@ -305,6 +936,331 @@ test('tracked line extraction includes configured and inventory accounts', () =>
   assert.equal(tracked.length, 2);
   assert.equal(tracked[0]?.component, 'manufacturing');
   assert.equal(tracked[1]?.component, 'warehousing3pl');
+});
+
+test('extractPoNumberFromBill prefers PO custom field over memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'PO: OLD-PO',
+    CustomField: [
+      { Name: 'PO Number', StringValue: 'NEW-PO' },
+      { Name: 'Ignored', StringValue: 'X' },
+    ],
+  });
+
+  assert.equal(po, 'NEW-PO');
+});
+
+test('extractPoNumberFromBill reads PO from memo when no custom field exists', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'Some note\nPO: US-PO-123\nMore text',
+  });
+
+  assert.equal(po, 'US-PO-123');
+});
+
+test('extractPoNumberFromBill preserves direct PO code in memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'PO-19-PDS',
+  });
+
+  assert.equal(po, 'PO-19-PDS');
+});
+
+test('buildBillMappingPullSyncUpdates skips unsynced mappings', () => {
+  const updates = buildBillMappingPullSyncUpdates(
+    [
+      {
+        id: 'mapping-1',
+        qboBillId: 'bill-1',
+        poNumber: 'PO-OLD',
+        billDate: '2026-01-01',
+        vendorName: 'Vendor A',
+        totalAmount: 100,
+        syncedAt: null,
+      },
+    ],
+    new Map([
+      ['bill-1', { Id: 'bill-1', TxnDate: '2026-01-02', TotalAmt: 100, SyncToken: '0', CustomField: [{ Name: 'PO Number', StringValue: 'PO-NEW' }] }],
+    ] as const),
+  );
+
+  assert.equal(updates.length, 0);
+});
+
+test('buildBillMappingPullSyncUpdates detects PO and metadata drift', () => {
+  const updates = buildBillMappingPullSyncUpdates(
+    [
+      {
+        id: 'mapping-1',
+        qboBillId: 'bill-1',
+        poNumber: 'PO-OLD',
+        billDate: '2026-01-01',
+        vendorName: 'Vendor A',
+        totalAmount: 100,
+        syncedAt: new Date('2026-01-03T00:00:00.000Z'),
+      },
+    ],
+    new Map([
+      [
+        'bill-1',
+        {
+          Id: 'bill-1',
+          TxnDate: '2026-01-02',
+          TotalAmt: 101,
+          SyncToken: '0',
+          VendorRef: { value: 'v-1', name: 'Vendor B' },
+          PrivateNote: 'PO: PO-NEW',
+        },
+      ],
+    ] as const),
+  );
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0]?.poNumber, 'PO-NEW');
+  assert.equal(updates[0]?.billDate, '2026-01-02');
+  assert.equal(updates[0]?.vendorName, 'Vendor B');
+  assert.equal(updates[0]?.totalAmount, 101);
+});
+
+test('cashflow week bucketing ignores events earlier in the as-of week', () => {
+  const forecast = buildCashflowForecast({
+    asOfDate: '2026-02-11',
+    weekStartsOn: 1,
+    horizonWeeks: 2,
+    startingCashCents: 100_000,
+    events: [
+      {
+        date: '2026-02-10',
+        amountCents: 5_000,
+        label: 'Earlier this week',
+        source: 'manual_adjustment',
+      },
+      {
+        date: '2026-02-11',
+        amountCents: -2_500,
+        label: 'Same day',
+        source: 'manual_adjustment',
+      },
+    ],
+  });
+
+  assert.equal(forecast.weeks[0]?.events.length, 1);
+  assert.equal(forecast.weeks[0]?.events[0]?.label, 'Same day');
+  assert.equal(forecast.weeks[0]?.endingCashCents, 97_500);
+});
+
+test('open bill mapping warns on missing due date and falls back to txn date', () => {
+  const warnings: Array<{ code: string; message: string }> = [];
+  const bill: QboBill = {
+    Id: 'bill-1',
+    SyncToken: '0',
+    TxnDate: '2026-03-05',
+    TotalAmt: 125.5,
+    Balance: 125.5,
+  };
+
+  const mapped = mapOpenBillsToEvents({
+    bills: [bill],
+    asOfDate: '2026-03-01',
+    warnings,
+  });
+
+  assert.equal(mapped.events.length, 1);
+  assert.equal(mapped.events[0]?.date, '2026-03-05');
+  assert.equal(mapped.events[0]?.amountCents, -12_550);
+  assert.equal(warnings[0]?.code, 'OPEN_BILL_MISSING_DUEDATE');
+});
+
+test('recurring monthly expansion creates expected occurrences in horizon', () => {
+  const warnings: Array<{ code: string; message: string }> = [];
+  const recurring: QboRecurringTransaction = {
+    Id: 'rec-1',
+    RecurringInfo: {
+      Name: 'Rent',
+      Active: true,
+      ScheduleInfo: {
+        IntervalType: 'Monthly',
+        NumInterval: 1,
+        DayOfMonth: 1,
+        NextDate: '2026-01-01',
+      },
+    },
+    Purchase: {
+      Id: 'purchase-template',
+      SyncToken: '0',
+      TxnDate: '2026-01-01',
+      TotalAmt: 1000,
+      PaymentType: 'Cash',
+      AccountRef: { value: 'cash-1', name: 'Operating Bank' },
+    },
+  };
+
+  const mapped = mapRecurringTransactionsToEvents({
+    recurringTransactions: [recurring],
+    horizonStart: '2026-01-15',
+    horizonEnd: '2026-04-20',
+    cashAccountIds: ['cash-1'],
+    warnings,
+  });
+
+  assert.deepEqual(
+    mapped.events.map((event) => event.date),
+    ['2026-02-01', '2026-03-01', '2026-04-01'],
+  );
+  assert.equal(mapped.events[0]?.amountCents, -100_000);
+  assert.equal(warnings.length, 0);
+});
+
+test('recurring transfer netting respects selected cash accounts', () => {
+  const transfer: QboRecurringTransaction = {
+    Id: 'rec-transfer',
+    RecurringInfo: {
+      Name: 'Transfer sweep',
+      Active: true,
+      ScheduleInfo: {
+        IntervalType: 'Weekly',
+        NumInterval: 1,
+        NextDate: '2026-02-16',
+      },
+    },
+    Transfer: {
+      Amount: 500,
+      FromAccountRef: { value: 'acc-a', name: 'Bank A' },
+      ToAccountRef: { value: 'acc-b', name: 'Bank B' },
+    },
+  };
+
+  const bothIncluded = mapRecurringTransactionsToEvents({
+    recurringTransactions: [transfer],
+    horizonStart: '2026-02-09',
+    horizonEnd: '2026-02-23',
+    cashAccountIds: ['acc-a', 'acc-b'],
+    warnings: [],
+  });
+
+  const fromOnly = mapRecurringTransactionsToEvents({
+    recurringTransactions: [transfer],
+    horizonStart: '2026-02-09',
+    horizonEnd: '2026-02-23',
+    cashAccountIds: ['acc-a'],
+    warnings: [],
+  });
+
+  const toOnly = mapRecurringTransactionsToEvents({
+    recurringTransactions: [transfer],
+    horizonStart: '2026-02-09',
+    horizonEnd: '2026-02-23',
+    cashAccountIds: ['acc-b'],
+    warnings: [],
+  });
+
+  assert.equal(bothIncluded.events.length, 0);
+  assert.equal(fromOnly.events[0]?.amountCents, -50_000);
+  assert.equal(toOnly.events[0]?.amountCents, 50_000);
+});
+
+test('settlement projection infers cadence and average from recent history', () => {
+  const warnings: Array<{ code: string; message: string }> = [];
+  const projected = buildProjectedSettlementEvents({
+    history: [
+      {
+        journalEntryId: 'je-1',
+        channel: 'US',
+        docNumber: 'LMB-US-01JAN-14JAN-26-001',
+        txnDate: '2026-01-16',
+        periodEnd: '2026-01-14',
+        cashImpactCents: 100_000,
+      },
+      {
+        journalEntryId: 'je-2',
+        channel: 'US',
+        docNumber: 'LMB-US-15JAN-28JAN-26-002',
+        txnDate: '2026-01-30',
+        periodEnd: '2026-01-28',
+        cashImpactCents: 120_000,
+      },
+      {
+        journalEntryId: 'je-3',
+        channel: 'US',
+        docNumber: 'LMB-US-29JAN-11FEB-26-003',
+        txnDate: '2026-02-13',
+        periodEnd: '2026-02-11',
+        cashImpactCents: 140_000,
+      },
+    ],
+    asOfDate: '2026-02-12',
+    forecastEndDate: '2026-03-20',
+    settlementAverageCount: 3,
+    settlementDefaultIntervalDays: 14,
+    warnings,
+  });
+
+  assert.equal(projected.events.length > 0, true);
+  assert.equal(projected.events[0]?.date, '2026-02-27');
+  assert.equal(projected.events[0]?.amountCents, 120_000);
+  assert.equal(warnings.length, 0);
+});
+
+test('cashflow roll-forward arithmetic and minimum cash summary are correct', () => {
+  const forecast = buildCashflowForecast({
+    asOfDate: '2026-02-09',
+    weekStartsOn: 1,
+    horizonWeeks: 3,
+    startingCashCents: 100_000,
+    events: [
+      { date: '2026-02-09', amountCents: -30_000, label: 'Week 1 expense', source: 'manual_adjustment' },
+      { date: '2026-02-10', amountCents: 10_000, label: 'Week 1 income', source: 'manual_adjustment' },
+      { date: '2026-02-18', amountCents: -50_000, label: 'Week 2 expense', source: 'manual_adjustment' },
+      { date: '2026-02-25', amountCents: 20_000, label: 'Week 3 income', source: 'manual_adjustment' },
+    ],
+  });
+
+  assert.equal(forecast.weeks[0]?.endingCashCents, 80_000);
+  assert.equal(forecast.weeks[1]?.endingCashCents, 30_000);
+  assert.equal(forecast.weeks[2]?.endingCashCents, 50_000);
+  assert.equal(forecast.summary.minCashCents, 30_000);
+  assert.equal(forecast.summary.minCashWeekStart, '2026-02-16');
+  assert.equal(forecast.summary.endCashCents, 50_000);
+});
+
+test('auto refresh time parser rejects invalid HH:MM values', () => {
+  assert.throws(() => parseAutoRefreshTimeLocal('6:00'));
+  assert.throws(() => parseAutoRefreshTimeLocal('24:00'));
+  assert.throws(() => parseAutoRefreshTimeLocal('aa:bb'));
+});
+
+test('shouldRefreshCashflowSnapshot handles no snapshot, stale date, and min age guard', () => {
+  const now = new Date('2026-02-12T10:00:00Z');
+
+  const noSnapshot = shouldRefreshCashflowSnapshot({
+    now,
+    todayLocalDate: '2026-02-12',
+    latestSnapshot: null,
+    autoRefreshMinSnapshotAgeMinutes: 720,
+  });
+  assert.equal(noSnapshot, true);
+
+  const staleDateSnapshot = shouldRefreshCashflowSnapshot({
+    now,
+    todayLocalDate: '2026-02-12',
+    latestSnapshot: {
+      asOfDate: '2026-02-11',
+      createdAt: new Date('2026-02-11T06:00:00Z'),
+    },
+    autoRefreshMinSnapshotAgeMinutes: 720,
+  });
+  assert.equal(staleDateSnapshot, true);
+
+  const todayTooFresh = shouldRefreshCashflowSnapshot({
+    now,
+    todayLocalDate: '2026-02-12',
+    latestSnapshot: {
+      asOfDate: '2026-02-12',
+      createdAt: new Date('2026-02-12T09:50:00Z'),
+    },
+    autoRefreshMinSnapshotAgeMinutes: 30,
+  });
+  assert.equal(todayTooFresh, false);
 });
 
 process.stdout.write('All tests passed.\n');

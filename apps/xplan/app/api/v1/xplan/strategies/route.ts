@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@targon/prisma-xplan';
 import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { withXPlanAuth, RATE_LIMIT_PRESETS } from '@/lib/api/auth';
@@ -14,13 +15,17 @@ import {
 
 const EXPENSIVE_RATE_LIMIT = RATE_LIMIT_PRESETS.expensive;
 
-// Type assertion for strategy model (Prisma types are generated but not resolved correctly at build time)
 const prismaAny = prisma as unknown as Record<string, any>;
 
 const createSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
   region: z.enum(['US', 'UK']).optional(),
+  strategyGroupId: z.string().min(1).optional(),
+  strategyGroupCode: z.string().min(1).max(64).optional(),
+  strategyGroupName: z.string().min(1).max(120).optional(),
+  isPrimary: z.boolean().optional(),
   assigneeId: z.string().min(1).optional(),
   assigneeIds: z.array(z.string().min(1)).optional(),
 });
@@ -30,7 +35,7 @@ const updateSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
-  region: z.enum(['US', 'UK']).optional(),
+  isPrimary: z.boolean().optional(),
   assigneeId: z.string().min(1).optional(),
   assigneeIds: z.array(z.string().min(1)).optional(),
 });
@@ -51,6 +56,19 @@ const assigneeRelationSelect = {
   assigneeEmail: true,
 };
 
+const strategyGroupSelect = {
+  id: true,
+  code: true,
+  name: true,
+  region: true,
+  createdById: true,
+  createdByEmail: true,
+  assigneeId: true,
+  assigneeEmail: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
 const listSelect = {
   id: true,
   name: true,
@@ -58,6 +76,9 @@ const listSelect = {
   status: true,
   region: true,
   isDefault: true,
+  isPrimary: true,
+  strategyGroupId: true,
+  strategyGroup: { select: strategyGroupSelect },
   createdById: true,
   createdByEmail: true,
   assigneeId: true,
@@ -78,6 +99,9 @@ const legacyListSelect = {
   status: true,
   region: true,
   isDefault: true,
+  isPrimary: true,
+  strategyGroupId: true,
+  strategyGroup: { select: strategyGroupSelect },
   createdAt: true,
   updatedAt: true,
   _count: { select: countsSelect },
@@ -90,6 +114,9 @@ const writeSelect = {
   status: true,
   region: true,
   isDefault: true,
+  isPrimary: true,
+  strategyGroupId: true,
+  strategyGroup: { select: strategyGroupSelect },
   createdById: true,
   createdByEmail: true,
   assigneeId: true,
@@ -125,6 +152,21 @@ function normalizeAssigneeIds(input: string | string[] | undefined): string[] {
     }
     seen.add(id);
     normalized.push(id);
+  }
+
+  return normalized;
+}
+
+function normalizeStrategyGroupCode(raw: string) {
+  const normalized = raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-+/g, '-');
+
+  if (!normalized) {
+    throw new Error('StrategyGroupCodeInvalid');
   }
 
   return normalized;
@@ -195,9 +237,82 @@ function canActorAccessStrategy(existing: any, actor: StrategyActor): boolean {
   return false;
 }
 
+function buildStrategyGroups(strategies: any[]) {
+  const groups = new Map<string, any>();
+
+  for (const strategy of strategies) {
+    const group = strategy.strategyGroup;
+    if (!group) continue;
+
+    const existing = groups.get(group.id);
+    if (existing) {
+      existing.strategies.push(strategy);
+      continue;
+    }
+
+    groups.set(group.id, {
+      ...group,
+      strategies: [strategy],
+    });
+  }
+
+  const result = Array.from(groups.values()).map((group) => ({
+    ...group,
+    strategies: [...group.strategies].sort((left, right) => {
+      if (left.isPrimary !== right.isPrimary) {
+        return left.isPrimary ? -1 : 1;
+      }
+      return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+    }),
+  }));
+
+  return result.sort((left, right) => {
+    if (left.region !== right.region) {
+      return left.region.localeCompare(right.region);
+    }
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function uniqueViolationResponse(error: unknown) {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return null;
+  if (error.code !== 'P2002') return null;
+
+  const errorMeta = (error as Prisma.PrismaClientKnownRequestError & { meta?: unknown }).meta as
+    | { target?: unknown }
+    | undefined;
+
+  const target = Array.isArray(errorMeta?.target)
+    ? errorMeta.target.map(String).join(',')
+    : String(errorMeta?.target ?? '');
+
+  if (target.includes('StrategyGroup_region_code_key')) {
+    return NextResponse.json(
+      { error: 'A strategy group with this code already exists in this region' },
+      { status: 409 },
+    );
+  }
+
+  if (target.includes('Strategy_strategyGroupId_name_key')) {
+    return NextResponse.json(
+      { error: 'A scenario with this name already exists in this strategy group' },
+      { status: 409 },
+    );
+  }
+
+  if (target.includes('Strategy_primary_per_group_key')) {
+    return NextResponse.json(
+      { error: 'This strategy group already has a primary scenario' },
+      { status: 409 },
+    );
+  }
+
+  return NextResponse.json({ error: 'Unique constraint violation' }, { status: 409 });
+}
+
 export const GET = withXPlanAuth(async (_request, session) => {
   const actor = getStrategyActor(session);
-  const orderBy = [{ isDefault: 'desc' }, { updatedAt: 'desc' }];
+  const orderBy = [{ isPrimary: 'desc' }, { updatedAt: 'desc' }];
 
   let strategies: any[];
   if (areStrategyAssignmentFieldsAvailable()) {
@@ -226,7 +341,9 @@ export const GET = withXPlanAuth(async (_request, session) => {
     });
   }
 
-  return NextResponse.json({ strategies });
+  const strategyGroups = buildStrategyGroups(strategies);
+
+  return NextResponse.json({ strategies, strategyGroups });
 });
 
 export const POST = withXPlanAuth(async (request: Request, session) => {
@@ -262,54 +379,151 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
   const resolvedAssignees = resolvedAssigneesResult.assignees;
   const primaryAssignee = resolvedAssignees[0] ?? null;
 
-  let strategy: any;
   try {
-    strategy = await prismaAny.strategy.create({
-      data: {
-        name: parsed.data.name.trim(),
-        description: parsed.data.description?.trim(),
-        region: parsed.data.region ?? 'US',
-        isDefault: false,
-        status: 'DRAFT',
-        createdById: actor.id,
-        createdByEmail: actor.email,
-        assigneeId: primaryAssignee?.id ?? null,
-        assigneeEmail: primaryAssignee?.email ?? null,
-        strategyAssignees: {
-          create: resolvedAssignees.map((assignee) => ({
-            assigneeId: assignee.id,
-            assigneeEmail: assignee.email,
-          })),
+    const result = await prismaAny.$transaction(async (tx: any) => {
+      let group: any = null;
+
+      if (parsed.data.strategyGroupId) {
+        group = await tx.strategyGroup.findUnique({
+          where: { id: parsed.data.strategyGroupId },
+          select: strategyGroupSelect,
+        });
+
+        if (!group) {
+          throw new Error('StrategyGroupNotFound');
+        }
+
+        if (!actor.isSuperAdmin) {
+          const canAccessGroup = await tx.strategy.findFirst({
+            where: {
+              strategyGroupId: group.id,
+              ...buildStrategyAccessWhere(actor),
+            },
+            select: { id: true },
+          });
+          if (!canAccessGroup) {
+            throw new Error('StrategyGroupAccessDenied');
+          }
+        }
+      } else {
+        const groupName = parsed.data.strategyGroupName?.trim();
+        const groupCodeRaw = parsed.data.strategyGroupCode?.trim();
+
+        if (!groupName || !groupCodeRaw) {
+          throw new Error('StrategyGroupRequired');
+        }
+
+        const groupCode = normalizeStrategyGroupCode(groupCodeRaw);
+
+        group = await tx.strategyGroup.create({
+          data: {
+            code: groupCode,
+            name: groupName,
+            region: parsed.data.region ?? 'US',
+            createdById: actor.id,
+            createdByEmail: actor.email,
+            assigneeId: primaryAssignee?.id ?? null,
+            assigneeEmail: primaryAssignee?.email ?? null,
+          },
+          select: strategyGroupSelect,
+        });
+      }
+
+      const existingScenarioCount = await tx.strategy.count({
+        where: { strategyGroupId: group.id },
+      });
+
+      const shouldBePrimary = parsed.data.isPrimary === true || existingScenarioCount === 0;
+
+      if (shouldBePrimary) {
+        await tx.strategy.updateMany({
+          where: { strategyGroupId: group.id, isPrimary: true },
+          data: { isPrimary: false },
+        });
+      }
+
+      const desiredStatus = parsed.data.status ?? 'DRAFT';
+      if (desiredStatus === 'ACTIVE') {
+        await tx.strategy.updateMany({
+          where: { strategyGroupId: group.id, status: 'ACTIVE' },
+          data: { status: 'DRAFT' },
+        });
+      }
+
+      const strategy = await tx.strategy.create({
+        data: {
+          name: parsed.data.name.trim(),
+          description: parsed.data.description?.trim(),
+          status: desiredStatus,
+          region: group.region,
+          isDefault: false,
+          isPrimary: shouldBePrimary,
+          strategyGroupId: group.id,
+          createdById: actor.id,
+          createdByEmail: actor.email,
+          assigneeId: primaryAssignee?.id ?? null,
+          assigneeEmail: primaryAssignee?.email ?? null,
+          strategyAssignees: {
+            create: resolvedAssignees.map((assignee) => ({
+              assigneeId: assignee.id,
+              assigneeEmail: assignee.email,
+            })),
+          },
         },
-      },
-      select: writeSelect,
+        select: writeSelect,
+      });
+
+      return { strategy, group };
     });
+
+    emitAuditEvent({
+      event: 'xplan.strategy.create',
+      actor,
+      strategy: {
+        id: result.strategy.id,
+        name: result.strategy.name,
+        region: result.strategy.region,
+        isDefault: result.strategy.isDefault,
+        isPrimary: result.strategy.isPrimary,
+        strategyGroupId: result.strategy.strategyGroupId,
+        strategyGroupCode: result.strategy.strategyGroup?.code,
+        strategyGroupName: result.strategy.strategyGroup?.name,
+        createdByEmail: result.strategy.createdByEmail,
+        assigneeEmail: result.strategy.assigneeEmail,
+        assigneeEmails: Array.isArray(result.strategy.strategyAssignees)
+          ? result.strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+          : [],
+      },
+      request: buildAuditRequestMeta(request),
+    });
+
+    return NextResponse.json({ strategy: result.strategy, strategyGroup: result.group });
   } catch (error) {
-    if (!isStrategyAssignmentFieldsMissingError(error)) {
-      throw error;
+    const uniqueResponse = uniqueViolationResponse(error);
+    if (uniqueResponse) {
+      return uniqueResponse;
     }
-    markStrategyAssignmentFieldsUnavailable();
-    return strategyAccessUnavailableResponse();
+
+    if (error instanceof Error) {
+      if (error.message === 'StrategyGroupNotFound') {
+        return NextResponse.json({ error: 'Strategy group not found' }, { status: 404 });
+      }
+      if (error.message === 'StrategyGroupAccessDenied') {
+        return NextResponse.json({ error: 'No access to strategy group' }, { status: 403 });
+      }
+      if (error.message === 'StrategyGroupRequired') {
+        return NextResponse.json(
+          { error: 'strategyGroupName and strategyGroupCode are required for a new group' },
+          { status: 400 },
+        );
+      }
+      if (error.message === 'StrategyGroupCodeInvalid') {
+        return NextResponse.json({ error: 'Invalid strategy group code' }, { status: 400 });
+      }
+    }
+
+    throw error;
   }
-
-  emitAuditEvent({
-    event: 'xplan.strategy.create',
-    actor,
-    strategy: {
-      id: strategy.id,
-      name: strategy.name,
-      region: strategy.region,
-      isDefault: strategy.isDefault,
-      createdByEmail: strategy.createdByEmail,
-      assigneeEmail: strategy.assigneeEmail,
-      assigneeEmails: Array.isArray(strategy.strategyAssignees)
-        ? strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
-        : [],
-    },
-    request: buildAuditRequestMeta(request),
-  });
-
-  return NextResponse.json({ strategy });
 });
 
 export const PUT = withXPlanAuth(async (request: Request, session) => {
@@ -330,6 +544,8 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
   const { assigneeId, assigneeIds, ...strategyUpdates } = data;
   const shouldUpdateAssignees =
     Boolean(body) && typeof body === 'object' && ('assigneeId' in body || 'assigneeIds' in body);
+  const hasPrimaryFlag =
+    Boolean(body) && typeof body === 'object' && 'isPrimary' in body;
 
   const actor = getStrategyActor(session);
 
@@ -343,11 +559,16 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
       where: { id },
       select: {
         id: true,
+        name: true,
+        region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
         createdById: true,
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyGroup: { select: strategyGroupSelect },
         strategyAssignees: {
           select: assigneeRelationSelect,
         },
@@ -367,6 +588,13 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
 
   if (!canActorAccessStrategy(existing, actor)) {
     return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
+  }
+
+  if (hasPrimaryFlag && strategyUpdates.isPrimary === false) {
+    return NextResponse.json(
+      { error: 'A scenario cannot be explicitly demoted without promoting another scenario' },
+      { status: 400 },
+    );
   }
 
   let resolvedAssignees: Array<{ id: string; email: string }> | undefined;
@@ -396,13 +624,7 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     resolvedAssignees = resolvedAssigneesResult.assignees;
   }
 
-  // If setting this as ACTIVE, set others to DRAFT
-  if (strategyUpdates.status === 'ACTIVE') {
-    await prismaAny.strategy.updateMany({
-      where: { status: 'ACTIVE', id: { not: id } },
-      data: { status: 'DRAFT' },
-    });
-  }
+  const shouldPromotePrimary = hasPrimaryFlag && strategyUpdates.isPrimary === true;
 
   const updateData: Record<string, unknown> = {
     ...(strategyUpdates.name && { name: strategyUpdates.name.trim() }),
@@ -410,7 +632,7 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
       description: strategyUpdates.description?.trim(),
     }),
     ...(strategyUpdates.status && { status: strategyUpdates.status }),
-    ...(strategyUpdates.region && { region: strategyUpdates.region }),
+    ...(shouldPromotePrimary ? { isPrimary: true } : {}),
   };
 
   if (resolvedAssignees) {
@@ -426,31 +648,68 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
     };
   }
 
-  const strategy = await prismaAny.strategy.update({
-    where: { id },
-    data: updateData,
-    select: writeSelect,
-  });
+  try {
+    const strategy = await prismaAny.$transaction(async (tx: any) => {
+      if (strategyUpdates.status === 'ACTIVE') {
+        await tx.strategy.updateMany({
+          where: {
+            strategyGroupId: existing.strategyGroupId,
+            status: 'ACTIVE',
+            id: { not: id },
+          },
+          data: { status: 'DRAFT' },
+        });
+      }
 
-  emitAuditEvent({
-    event: 'xplan.strategy.update',
-    actor,
-    strategy: {
-      id: strategy.id,
-      name: strategy.name,
-      region: strategy.region,
-      isDefault: strategy.isDefault,
-      createdByEmail: strategy.createdByEmail,
-      assigneeEmail: strategy.assigneeEmail,
-      assigneeEmails: Array.isArray(strategy.strategyAssignees)
-        ? strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
-        : [],
-    },
-    changes: updateData,
-    request: buildAuditRequestMeta(request),
-  });
+      if (shouldPromotePrimary) {
+        await tx.strategy.updateMany({
+          where: {
+            strategyGroupId: existing.strategyGroupId,
+            isPrimary: true,
+            id: { not: id },
+          },
+          data: { isPrimary: false },
+        });
+      }
 
-  return NextResponse.json({ strategy });
+      return tx.strategy.update({
+        where: { id },
+        data: updateData,
+        select: writeSelect,
+      });
+    });
+
+    emitAuditEvent({
+      event: 'xplan.strategy.update',
+      actor,
+      strategy: {
+        id: strategy.id,
+        name: strategy.name,
+        region: strategy.region,
+        isDefault: strategy.isDefault,
+        isPrimary: strategy.isPrimary,
+        strategyGroupId: strategy.strategyGroupId,
+        strategyGroupCode: strategy.strategyGroup?.code,
+        strategyGroupName: strategy.strategyGroup?.name,
+        createdByEmail: strategy.createdByEmail,
+        assigneeEmail: strategy.assigneeEmail,
+        assigneeEmails: Array.isArray(strategy.strategyAssignees)
+          ? strategy.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+          : [],
+      },
+      changes: updateData,
+      request: buildAuditRequestMeta(request),
+    });
+
+    return NextResponse.json({ strategy });
+  } catch (error) {
+    const uniqueResponse = uniqueViolationResponse(error);
+    if (uniqueResponse) {
+      return uniqueResponse;
+    }
+
+    throw error;
+  }
 });
 
 export const DELETE = withXPlanAuth(async (request: Request, session) => {
@@ -478,10 +737,13 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
         name: true,
         region: true,
         isDefault: true,
+        isPrimary: true,
+        strategyGroupId: true,
         createdById: true,
         createdByEmail: true,
         assigneeId: true,
         assigneeEmail: true,
+        strategyGroup: { select: strategyGroupSelect },
         strategyAssignees: {
           select: assigneeRelationSelect,
         },
@@ -511,6 +773,10 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
       name: existing.name,
       region: existing.region,
       isDefault: existing.isDefault,
+      isPrimary: existing.isPrimary,
+      strategyGroupId: existing.strategyGroupId,
+      strategyGroupCode: existing.strategyGroup?.code,
+      strategyGroupName: existing.strategyGroup?.name,
       createdByEmail: existing.createdByEmail,
       assigneeEmail: existing.assigneeEmail,
       assigneeEmails: Array.isArray(existing.strategyAssignees)
@@ -520,8 +786,7 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     request: buildAuditRequestMeta(request),
   });
 
-  // Avoid runtime crashes caused by legacy DB constraints lacking cascades.
-  await prismaAny.$transaction(async (tx: any) => {
+  const txResult = await prismaAny.$transaction(async (tx: any) => {
     await tx.batchTableRow.deleteMany({
       where: { purchaseOrder: { strategyId: id } },
     });
@@ -543,7 +808,30 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
     await tx.quarterlySummary.deleteMany({ where: { strategyId: id } });
     await tx.product.deleteMany({ where: { strategyId: id } });
     await tx.strategy.delete({ where: { id } });
+
+    const remainingStrategies = await tx.strategy.findMany({
+      where: { strategyGroupId: existing.strategyGroupId },
+      select: { id: true, isPrimary: true, updatedAt: true },
+      orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
+    });
+
+    if (remainingStrategies.length === 0) {
+      await tx.strategyGroup.delete({ where: { id: existing.strategyGroupId } });
+      return { deletedGroup: true, promotedId: null as string | null };
+    }
+
+    const hasPrimary = remainingStrategies.some((strategy: { isPrimary: boolean }) => strategy.isPrimary);
+    if (!hasPrimary) {
+      const promoted = remainingStrategies[0];
+      await tx.strategy.update({
+        where: { id: promoted.id },
+        data: { isPrimary: true },
+      });
+      return { deletedGroup: false, promotedId: promoted.id };
+    }
+
+    return { deletedGroup: false, promotedId: null as string | null };
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, ...txResult });
 }, { rateLimit: EXPENSIVE_RATE_LIMIT });

@@ -1,4 +1,6 @@
+import { createRequire } from 'node:module';
 const clientCache = new Map();
+const require = createRequire(import.meta.url);
 function readEnvVar(name) {
     const value = process.env[name];
     if (!value)
@@ -72,7 +74,7 @@ function getCacheKey(config) {
     return `${config.region}:${config.marketplaceId}:${config.refreshToken}`;
 }
 function createAmazonClient(config) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // amazon-sp-api is CJS; use createRequire for ESM compatibility.
     const SellingPartnerAPI = require('amazon-sp-api');
     return new SellingPartnerAPI({
         region: config.region,

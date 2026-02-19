@@ -46,7 +46,6 @@ export const ERD_V10_ENTITY_COLUMNS = {
   lot: [
     'lot_id',
     'sku_id',
-    'rfq_id',
     'po_id',
     'lot_ref',
     'qty_units',
@@ -62,26 +61,10 @@ export const ERD_V10_ENTITY_COLUMNS = {
     'status',
     'created_at',
   ],
-  rfq: [
-    'rfq_id',
-    'rfq_ref',
-    'sku_group',
-    'destination',
-    'cargo_ready_date',
-    'incoterms',
-    'payment_terms',
-    'notes',
-    'status',
-    'created_at',
-    'created_by',
-    'rfq_pdf_url',
-    'inventory_summary_url',
-  ],
   purchase_order: [
     'po_id',
     'po_ref',
     'sku_group',
-    'rfq_id',
     'supplier_id',
     'destination',
     'issue_date',
@@ -193,4 +176,3 @@ export function parseErdV10Limit(raw: string | null, defaultLimit: number = 200)
   }
   return candidate
 }
-

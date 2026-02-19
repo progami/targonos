@@ -15,7 +15,6 @@ export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
 const MAX_DOCUMENT_SIZE_MB = 1024
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
-  'RFQ',
   'ISSUED',
   'MANUFACTURING',
   'OCEAN',
@@ -24,18 +23,18 @@ const STAGES: readonly PurchaseOrderDocumentStage[] = [
 ]
 
 const DOCUMENT_STAGE_ORDER: Record<PurchaseOrderDocumentStage, number> = {
-  RFQ: 0,
-  ISSUED: 1,
-  MANUFACTURING: 2,
-  OCEAN: 3,
-  WAREHOUSE: 4,
-  SHIPPED: 5,
+  RFQ: 0, // Legacy; treat as ISSUED
+  ISSUED: 0,
+  MANUFACTURING: 1,
+  OCEAN: 2,
+  WAREHOUSE: 3,
+  SHIPPED: 4,
 }
 
 function statusToDocumentStage(status: PurchaseOrderStatus): PurchaseOrderDocumentStage | null {
   switch (status) {
     case PurchaseOrderStatus.RFQ:
-      return PurchaseOrderDocumentStage.RFQ
+      return PurchaseOrderDocumentStage.ISSUED
     case PurchaseOrderStatus.ISSUED:
       return PurchaseOrderDocumentStage.ISSUED
     case PurchaseOrderStatus.MANUFACTURING:
@@ -179,7 +178,11 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
     }
 
-    if (order.status === PurchaseOrderStatus.CANCELLED || order.status === PurchaseOrderStatus.REJECTED) {
+    if (
+      order.status === PurchaseOrderStatus.CLOSED ||
+      order.status === PurchaseOrderStatus.CANCELLED ||
+      order.status === PurchaseOrderStatus.REJECTED
+    ) {
       return NextResponse.json(
         { error: `Cannot modify documents for ${order.status.toLowerCase()} purchase orders` },
         { status: 409 }
@@ -439,7 +442,7 @@ export const GET = withAuthAndParams(async (request, params, _session) => {
 
         return {
           id: doc.id,
-          stage: doc.stage,
+          stage: doc.stage === PurchaseOrderDocumentStage.RFQ ? PurchaseOrderDocumentStage.ISSUED : doc.stage,
           documentType: doc.documentType,
           fileName: doc.fileName,
           contentType: doc.contentType,

@@ -21,12 +21,35 @@ export const QboConnectionSchema = z.object({
 // File-path helpers
 // ---------------------------------------------------------------------------
 
-function resolveConnectionPath(): string {
+function resolveConfiguredConnectionPath(): string | null {
   const configuredPath = process.env.PLUTUS_QBO_CONNECTION_PATH;
-  if (configuredPath) return configuredPath;
+  if (configuredPath === undefined) return null;
 
+  const trimmed = configuredPath.trim();
+  if (trimmed === '') return null;
+  return trimmed;
+}
+
+function getDefaultConnectionPath(): string {
+  const envSuffix = process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production';
+  return path.join(os.homedir(), '.targonos', 'plutus', `qbo_connection.main.${envSuffix}.json`);
+}
+
+function getLegacyConnectionPath(): string {
   const envSuffix = process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production';
   return path.join(os.homedir(), '.targonos', 'plutus', `qbo_connection.${envSuffix}.json`);
+}
+
+function resolveConnectionPath(): string {
+  const configuredPath = resolveConfiguredConnectionPath();
+  if (configuredPath !== null) return configuredPath;
+  return getDefaultConnectionPath();
+}
+
+function resolveLegacyConnectionPath(): string | null {
+  const configuredPath = resolveConfiguredConnectionPath();
+  if (configuredPath !== null) return null;
+  return getLegacyConnectionPath();
 }
 
 export function getServerQboConnectionPath(): string {
@@ -49,7 +72,21 @@ export async function loadServerQboConnection(): Promise<QboConnection | null> {
     return QboConnectionSchema.parse(JSON.parse(raw));
   } catch (error) {
     const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code === 'ENOENT') return null;
+    if (nodeError.code === 'ENOENT') {
+      const legacyPath = resolveLegacyConnectionPath();
+      if (legacyPath === null) return null;
+
+      try {
+        const legacyRaw = await fs.readFile(legacyPath, 'utf8');
+        const parsedConnection = QboConnectionSchema.parse(JSON.parse(legacyRaw));
+        await saveServerQboConnection(parsedConnection);
+        return parsedConnection;
+      } catch (legacyError) {
+        const legacyNodeError = legacyError as NodeJS.ErrnoException;
+        if (legacyNodeError.code === 'ENOENT') return null;
+        throw legacyError;
+      }
+    }
     throw error;
   }
 }
@@ -64,14 +101,23 @@ export async function saveServerQboConnection(connection: QboConnection): Promis
 }
 
 export async function deleteServerQboConnection(): Promise<void> {
-  const filePath = resolveConnectionPath();
+  const paths = new Set<string>();
+  const primaryPath = resolveConnectionPath();
+  paths.add(primaryPath);
 
-  try {
-    await fs.unlink(filePath);
-  } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code === 'ENOENT') return;
-    throw error;
+  const legacyPath = resolveLegacyConnectionPath();
+  if (legacyPath !== null) {
+    paths.add(legacyPath);
+  }
+
+  for (const filePath of paths) {
+    try {
+      await fs.unlink(filePath);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') continue;
+      throw error;
+    }
   }
 }
 

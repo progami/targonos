@@ -1,16 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { ChevronDown } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-
-const ChevronDownIcon = ChevronDown as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+import Button from '@mui/material/Button';
+import ButtonGroup from '@mui/material/ButtonGroup';
+import Box from '@mui/material/Box';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 type DropdownItem = {
   label: string;
@@ -24,7 +20,7 @@ type SplitButtonProps = {
   onClick?: () => void;
   dropdownItems: DropdownItem[];
   disabled?: boolean;
-  className?: string;
+  sx?: object;
 };
 
 export function SplitButton({
@@ -32,59 +28,67 @@ export function SplitButton({
   onClick,
   dropdownItems,
   disabled = false,
-  className,
+  sx,
 }: SplitButtonProps) {
+  const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
+  const menuOpen = Boolean(anchorEl);
+
   return (
-    <div className={cn('inline-flex rounded-md shadow-sm', className)}>
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={cn(
-          'inline-flex items-center justify-center px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition-colors',
-          'bg-brand-teal-500 hover:bg-brand-teal-600 active:bg-brand-teal-700',
-          'rounded-l-md border-r border-white/20',
-          'focus:outline-none focus:ring-2 focus:ring-brand-teal-500/50 focus:ring-offset-2',
-          'disabled:pointer-events-none disabled:opacity-50',
-          'dark:bg-brand-cyan dark:hover:bg-brand-teal-400 dark:text-slate-900',
-        )}
+    <Box sx={{ display: 'inline-flex', ...sx }}>
+      <ButtonGroup variant="contained" disableElevation disabled={disabled}>
+        <Button
+          onClick={onClick}
+          sx={{
+            bgcolor: '#00C2B9',
+            color: '#fff',
+            fontSize: '0.75rem',
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            px: 2,
+            borderRight: '1px solid rgba(255,255,255,0.2) !important',
+            '&:hover': { bgcolor: '#00a89f' },
+          }}
+        >
+          {children}
+        </Button>
+        <Button
+          size="small"
+          onClick={(e) => setAnchorEl(e.currentTarget)}
+          sx={{
+            bgcolor: '#00a89f',
+            color: '#fff',
+            px: 0.5,
+            minWidth: 32,
+            '&:hover': { bgcolor: '#008f87' },
+          }}
+        >
+          <ExpandMoreIcon sx={{ fontSize: 18 }} />
+        </Button>
+      </ButtonGroup>
+
+      <Menu
+        anchorEl={anchorEl}
+        open={menuOpen}
+        onClose={() => setAnchorEl(null)}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+        slotProps={{ paper: { sx: { minWidth: 140, mt: 0.75, p: 0.5 } } }}
       >
-        {children}
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            disabled={disabled}
-            className={cn(
-              'inline-flex items-center justify-center px-2 py-2 text-white transition-colors',
-              'bg-brand-teal-600 hover:bg-brand-teal-700 active:bg-brand-teal-800',
-              'rounded-r-md',
-              'focus:outline-none focus:ring-2 focus:ring-brand-teal-500/50 focus:ring-offset-2',
-              'disabled:pointer-events-none disabled:opacity-50',
-              'dark:bg-brand-teal-500 dark:hover:bg-brand-teal-600 dark:text-white',
-            )}
+        {dropdownItems.map((item, index) => (
+          <MenuItem
+            key={index}
+            onClick={() => {
+              item.onClick();
+              setAnchorEl(null);
+            }}
+            disabled={item.disabled}
+            sx={item.variant === 'destructive' ? { color: 'error.main' } : undefined}
           >
-            <ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
-            <span className="sr-only">Open options</span>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[140px]">
-          {dropdownItems.map((item, index) => (
-            <DropdownMenuItem
-              key={index}
-              onClick={item.onClick}
-              disabled={item.disabled}
-              className={cn(
-                item.variant === 'destructive' &&
-                  'text-danger-600 focus:text-danger-600 dark:text-danger-400 dark:focus:text-danger-400',
-              )}
-            >
-              {item.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+            {item.label}
+          </MenuItem>
+        ))}
+      </Menu>
+    </Box>
   );
 }

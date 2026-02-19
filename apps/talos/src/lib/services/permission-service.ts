@@ -412,7 +412,9 @@ export const STAGE_TRANSITION_PERMISSIONS = {
   RFQ_TO_REJECTED: 'po.approve.draft_to_manufacturing',
   RFQ_TO_MANUFACTURING: 'po.approve.draft_to_manufacturing',
   ISSUED_TO_MANUFACTURING: 'po.approve.draft_to_manufacturing',
+  ISSUED_TO_REJECTED: 'po.approve.draft_to_manufacturing',
   REJECTED_TO_RFQ: 'po.approve.draft_to_manufacturing',
+  REJECTED_TO_ISSUED: 'po.approve.draft_to_manufacturing',
   // Legacy keys using DRAFT (pre-RFQ rename)
   DRAFT_TO_ISSUED: 'po.approve.draft_to_manufacturing',
   DRAFT_TO_REJECTED: 'po.approve.draft_to_manufacturing',
