@@ -52,7 +52,7 @@ function normalizeVersion(value: string | null): string | null {
 
 export function getDeclaredReplicaVersion(doc: Document): string | null {
   const meta = doc.querySelector('meta[name="argus-replica-version"]')
-  if (!(meta instanceof HTMLMetaElement)) return null
+  if (!meta) return null
   return normalizeVersion(meta.getAttribute('content'))
 }
 
