@@ -2699,8 +2699,22 @@ function svgPlaceholderDataUrl(label: string): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+function svgVideoPlaceholderDataUrl(label: string): string {
+  const text = escapeSvgText(label)
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800" role="img" aria-label="${text}">
+  <rect width="800" height="800" fill="#f3f4f6"/>
+  <rect x="44" y="44" width="712" height="712" rx="28" fill="#ffffff" stroke="#d1d5db" stroke-width="4"/>
+  <circle cx="400" cy="340" r="130" fill="#eef2f7" stroke="#c7cdd6" stroke-width="4"/>
+  <path d="M372 270 L372 410 L494 340 Z" fill="#6b7280"/>
+  <text x="400" y="560" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="600" fill="#6b7280">${text}</text>
+</svg>`
+
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
 const ARGUS_GALLERY_PLACEHOLDER_MAIN = svgPlaceholderDataUrl('Upload images')
 const ARGUS_GALLERY_PLACEHOLDER_THUMB = svgPlaceholderDataUrl('Upload')
+const ARGUS_GALLERY_PLACEHOLDER_VIDEO_THUMB = svgVideoPlaceholderDataUrl('VIDEO')
 const ARGUS_EBC_PLACEHOLDER_IMAGE = svgPlaceholderDataUrl('Upload image')
 const ARGUS_GALLERY_THUMB_SIZE_PX = 48
 const ARGUS_GALLERY_STRETCH_RATIO = 1.3
@@ -2764,6 +2778,12 @@ function setDesktopMediaMainViewIndex(doc: Document, index: number) {
   }
 }
 
+function getVideoMainViewIndex(doc: Document): number | null {
+  const videoItem = doc.querySelector<HTMLElement>('ul.desktop-media-mainView li[data-csa-c-media-type="VIDEO"]')
+  if (!videoItem) return null
+  return itemNoFromElement(videoItem)
+}
+
 function setAltImagesSelection(altList: Element, selectedLi: Element | null) {
   const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
   for (const button of buttons) {
@@ -2800,6 +2820,9 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   }
 
   if (!rev || rev.images.length === 0) {
+    const videoIndex = getVideoMainViewIndex(doc)
+    const desiredIndex = videoIndex !== null && storedDoc.__argusMainMediaIndex === videoIndex ? videoIndex : 0
+
     if (landing) {
       landing.style.visibility = ''
       landing.src = ARGUS_GALLERY_PLACEHOLDER_MAIN
@@ -2826,11 +2849,15 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
       }
 
       const first = imageLis.length > 0 ? imageLis[0] : null
-      setAltImagesSelection(altList, first)
+      const videoThumb = desiredIndex === videoIndex
+        ? altList.querySelector<HTMLLIElement>('li.videoThumbnail')
+        : null
+
+      setAltImagesSelection(altList, videoThumb ? videoThumb : first)
     }
 
-    storedDoc.__argusMainMediaIndex = 0
-    setDesktopMediaMainViewIndex(doc, 0)
+    storedDoc.__argusMainMediaIndex = desiredIndex
+    setDesktopMediaMainViewIndex(doc, desiredIndex)
     return
   }
 
@@ -3020,6 +3047,8 @@ function applyVariationSelection(doc: Document, asin: string | null) {
 }
 
 function applyVideo(doc: Document, rev: VideoRevision | null) {
+  applyVideoThumbnail(doc)
+
   const container = doc.getElementById('main-video-container') as HTMLElement | null
     ?? doc.getElementById('ive-hero-video-player') as HTMLElement | null
   if (!container) return
@@ -3067,6 +3096,26 @@ function applyVideo(doc: Document, rev: VideoRevision | null) {
 
   if (rev.posterSrc) {
     video.poster = resolveImageSrc(rev.posterSrc)
+  }
+}
+
+function applyVideoThumbnail(doc: Document) {
+  const videoThumb = doc.querySelector<HTMLElement>('#altImages li.videoThumbnail')
+  if (!videoThumb) return
+
+  const img = videoThumb.querySelector<HTMLImageElement>('img')
+  const thumb = img ? img : doc.createElement('img')
+  thumb.src = ARGUS_GALLERY_PLACEHOLDER_VIDEO_THUMB
+  thumb.alt = 'VIDEO'
+  sizeGalleryThumbImage(thumb)
+  if (!img) {
+    const button = videoThumb.querySelector<HTMLElement>('button')
+    if (button) button.append(thumb)
+  }
+
+  const label = videoThumb.querySelector<HTMLElement>('.video-count') ?? videoThumb.querySelector<HTMLElement>('#videoCount')
+  if (label) {
+    label.textContent = 'VIDEO'
   }
 }
 
