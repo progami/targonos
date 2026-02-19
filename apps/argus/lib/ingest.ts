@@ -141,7 +141,7 @@ export async function ingestSnapshot(
 
   // ─── EBC ─────────────────────────────────────────────────────
   const prevEbc = listing.ebcRevisions[0] ?? null
-  const ebcChanged = !prevEbc || hasEbcChanged(prevEbc.sections, extracted.ebc)
+  const ebcChanged = extracted.ebc.length > 0 && (!prevEbc || hasEbcChanged(prevEbc.sections, extracted.ebc))
   let ebcSeq = prevEbc?.seq ?? 0
 
   if (ebcChanged) {

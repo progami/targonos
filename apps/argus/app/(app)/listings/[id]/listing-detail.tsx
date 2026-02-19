@@ -2075,20 +2075,30 @@ function injectArgusVersionControls(
       }
       .argus-vc-btn {
         all: unset;
-        width: 20px;
-        height: 20px;
-        border-radius: 999px;
+        padding: 0 7px;
+        height: 22px;
+        border-radius: 5px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         cursor: pointer;
         background: #f0f0f0;
         border: 1px solid #cfcfcf;
-        color: #666;
+        color: #555;
+        font-size: 11px;
+        font-weight: 500;
         line-height: 1;
+        letter-spacing: 0.01em;
         user-select: none;
+        white-space: nowrap;
       }
       .argus-vc-btn:hover { background: #e6e6e6; }
+      .argus-vc-btn.argus-vc-live {
+        background: #eff6ff;
+        border-color: rgba(59, 130, 246, 0.45);
+        color: rgb(37, 99, 235);
+      }
+      .argus-vc-btn.argus-vc-live:hover { background: #dbeafe; }
       .argus-vc-btn.argus-vc-danger {
         background: #fff1f1;
         border-color: rgba(220, 38, 38, 0.35);
@@ -2097,6 +2107,12 @@ function injectArgusVersionControls(
       .argus-vc-btn.argus-vc-danger:hover { background: #ffe5e5; }
       .argus-vc-btn[disabled] { opacity: 0.4; cursor: default; }
       .argus-vc-label { user-select: none; white-space: nowrap; }
+      .argus-vc-sep {
+        width: 1px;
+        height: 14px;
+        background: rgba(180, 180, 180, 0.7);
+        flex-shrink: 0;
+      }
       .argus-vc-highlight { outline: 2px solid rgba(160, 160, 160, 0.7); outline-offset: 2px; }
       .argus-ebc-placeholder {
         position: relative !important;
@@ -2223,11 +2239,14 @@ function ensurePriceControls(
   label.className = 'argus-vc-label'
   label.textContent = 'Price —'
 
+  const sep = doc.createElement('span')
+  sep.className = 'argus-vc-sep'
+
   const edit = doc.createElement('button')
   edit.className = 'argus-vc-btn'
   edit.type = 'button'
-  edit.textContent = '✎'
-  edit.title = 'Edit price'
+  edit.textContent = 'Edit'
+  edit.title = 'Create new price override'
   edit.addEventListener('click', () => callbacksRef.current?.priceEdit())
 
   const del = doc.createElement('button')
@@ -2237,7 +2256,7 @@ function ensurePriceControls(
   del.title = 'Clear price override'
   del.addEventListener('click', () => callbacksRef.current?.priceDelete())
 
-  controls.append(label, edit, del)
+  controls.append(label, sep, edit, del)
   target.append(controls)
 }
 
@@ -2325,12 +2344,16 @@ function ensureTrackControls(
 
   controls.append(prev, span, next)
 
+  const sep = doc.createElement('span')
+  sep.className = 'argus-vc-sep'
+  controls.append(sep)
+
   const live = doc.createElement('button')
   live.id = `argus-vc-live-${track}`
-  live.className = 'argus-vc-btn'
+  live.className = 'argus-vc-btn argus-vc-live'
   live.type = 'button'
-  live.textContent = '⟲'
-  live.title = 'Jump to live'
+  live.textContent = 'Live'
+  live.title = 'Jump to live version on Amazon'
   live.addEventListener('click', () => {
     if (track === 'title') callbacksRef.current?.titleLive()
     if (track === 'bullets') callbacksRef.current?.bulletsLive()
@@ -2345,8 +2368,8 @@ function ensureTrackControls(
     edit.id = `argus-vc-edit-${track}`
     edit.className = 'argus-vc-btn'
     edit.type = 'button'
-    edit.textContent = '✎'
-    edit.title = 'New version'
+    edit.textContent = 'Edit'
+    edit.title = 'Create new version'
     edit.addEventListener('click', () => callbacksRef.current?.titleEdit())
     controls.append(edit)
   }
@@ -2356,8 +2379,8 @@ function ensureTrackControls(
     edit.id = `argus-vc-edit-${track}`
     edit.className = 'argus-vc-btn'
     edit.type = 'button'
-    edit.textContent = '✎'
-    edit.title = 'New version'
+    edit.textContent = 'Edit'
+    edit.title = 'Create new version'
     edit.addEventListener('click', () => callbacksRef.current?.bulletsEdit())
     controls.append(edit)
   }
@@ -2367,7 +2390,7 @@ function ensureTrackControls(
     upload.id = `argus-vc-upload-${track}`
     upload.className = 'argus-vc-btn'
     upload.type = 'button'
-    upload.textContent = '⬆'
+    upload.textContent = 'Upload'
     upload.title = 'Upload new version'
     upload.addEventListener('click', () => callbacksRef.current?.galleryUpload())
     controls.append(upload)
@@ -2387,7 +2410,7 @@ function ensureTrackControls(
     upload.id = `argus-vc-upload-${track}`
     upload.className = 'argus-vc-btn'
     upload.type = 'button'
-    upload.textContent = '⬆'
+    upload.textContent = 'Upload'
     upload.title = 'Upload new version'
     upload.addEventListener('click', () => callbacksRef.current?.videoUpload())
     controls.append(upload)
@@ -2468,18 +2491,21 @@ function ensureEbcModuleControls(
   next.dataset.dir = 'next'
   next.addEventListener('click', () => callbacksRef.current?.ebcModuleNext(sectionType, modulePosition))
 
+  const sep = doc.createElement('span')
+  sep.className = 'argus-vc-sep'
+
   const live = doc.createElement('button')
-  live.className = 'argus-vc-btn'
+  live.className = 'argus-vc-btn argus-vc-live'
   live.type = 'button'
-  live.textContent = '⟲'
-  live.title = 'Jump to live'
+  live.textContent = 'Live'
+  live.title = 'Jump to live version on Amazon'
   live.addEventListener('click', () => callbacksRef.current?.ebcModuleLive(sectionType, modulePosition))
 
   const edit = doc.createElement('button')
   edit.className = 'argus-vc-btn'
   edit.type = 'button'
-  edit.textContent = '✎'
-  edit.title = 'New version'
+  edit.textContent = 'Edit'
+  edit.title = 'Create new version'
   edit.addEventListener('click', () => callbacksRef.current?.ebcModuleEdit(sectionType, modulePosition))
 
   const del = doc.createElement('button')
@@ -2490,7 +2516,7 @@ function ensureEbcModuleControls(
   del.dataset.action = 'delete'
   del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
 
-  controls.append(prev, label, next, live, edit, del)
+  controls.append(prev, label, next, sep, live, edit, del)
   target.append(controls)
 }
 
