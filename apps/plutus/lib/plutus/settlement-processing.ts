@@ -59,6 +59,14 @@ export type {
   SettlementProcessingResult,
 } from './settlement-types';
 
+function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
+  const base = `${kind}${invoiceId}`;
+  if (base.length <= 21) {
+    return base;
+  }
+  return `${kind}${invoiceId.slice(-20)}`;
+}
+
 function buildEmptyPreview(input: {
   marketplace: string;
   settlementJournalEntryId: string;
@@ -74,14 +82,14 @@ function buildEmptyPreview(input: {
 
   const cogsPreview: JournalEntryPreview = {
     txnDate: input.settlementPostedDate,
-    docNumber: `PLUTUS-COGS-${input.invoiceId}`,
+    docNumber: buildProcessingDocNumber('C', input.invoiceId),
     privateNote: `Plutus COGS | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
     lines: [],
   };
 
   const pnlPreview: JournalEntryPreview = {
     txnDate: input.settlementPostedDate,
-    docNumber: `PLUTUS-PNL-${input.invoiceId}`,
+    docNumber: buildProcessingDocNumber('P', input.invoiceId),
     privateNote: `Plutus P&L Reclass | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
     lines: [],
   };
@@ -602,7 +610,8 @@ export async function computeSettlementPreview(input: {
     }
   }
 
-  // Match refunds to historical sales (DB)
+  // Match refunds to historical sales first; fallback for remaining refunds is handled
+  // after current settlement sales get costed.
   const refundPairs = Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku }));
   const saleRecordByKey = new Map<string, {
     orderId: string;
@@ -639,8 +648,21 @@ export async function computeSettlementPreview(input: {
     }
   }
 
-  const matchedReturns =
-    refundPairs.length === 0 ? [] : matchRefundsToSales(refundGroups, saleRecordByKey, returnedQtyByKey, blocks);
+  const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+  const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+  for (const refund of refundGroups.values()) {
+    const key = `${refund.orderId}::${refund.sku}`;
+    if (saleRecordByKey.has(key)) {
+      historicalRefundGroups.set(key, refund);
+      continue;
+    }
+    currentSettlementRefundGroups.set(key, refund);
+  }
+
+  const matchedReturnsFromHistory =
+    historicalRefundGroups.size === 0
+      ? []
+      : matchRefundsToSales(historicalRefundGroups, saleRecordByKey, returnedQtyByKey, blocks);
 
   const maxDateObj = new Date(`${maxDate}T00:00:00Z`);
 
@@ -690,8 +712,7 @@ export async function computeSettlementPreview(input: {
       });
     }
 
-    // Include current refunds in knownReturns for the replay
-    for (const ret of matchedReturns) {
+    for (const ret of matchedReturnsFromHistory) {
       knownReturns.push({
         date: ret.date,
         orderId: ret.orderId,
@@ -790,6 +811,37 @@ export async function computeSettlementPreview(input: {
     }
   }
 
+  const currentSettlementSaleRecordByKey = new Map<string, {
+    orderId: string;
+    sku: string;
+    quantity: number;
+    principalCents: number;
+    costManufacturingCents: number;
+    costFreightCents: number;
+    costDutyCents: number;
+    costMfgAccessoriesCents: number;
+  }>();
+  for (const sale of computedSales) {
+    const key = `${sale.orderId}::${sale.sku}`;
+    currentSettlementSaleRecordByKey.set(key, {
+      orderId: sale.orderId,
+      sku: sale.sku,
+      quantity: sale.quantity,
+      principalCents: sale.principalCents,
+      costManufacturingCents: sale.costByComponentCents.manufacturing,
+      costFreightCents: sale.costByComponentCents.freight,
+      costDutyCents: sale.costByComponentCents.duty,
+      costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
+    });
+  }
+
+  const matchedReturnsFromCurrentSettlement =
+    currentSettlementRefundGroups.size === 0
+      ? []
+      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleRecordByKey, new Map(), blocks);
+
+  const matchedReturns = [...matchedReturnsFromHistory, ...matchedReturnsFromCurrentSettlement];
+
   const salesCogsByBrand = sumCentsByBrandComponent(computedSales, skuToBrand);
   const returnsCogsByBrand = sumCentsByBrandComponent(matchedReturns, skuToBrand);
   const netCogsByBrand = mergeBrandComponentCents(salesCogsByBrand, returnsCogsByBrand, 'sub');
@@ -822,14 +874,14 @@ export async function computeSettlementPreview(input: {
 
   const cogsPreview: JournalEntryPreview = {
     txnDate: settlement.TxnDate,
-    docNumber: `PLUTUS-COGS-${invoiceId}`,
+    docNumber: buildProcessingDocNumber('C', invoiceId),
     privateNote: `Plutus COGS | Invoice: ${invoiceId} | Hash: ${hashPrefix}`,
     lines: cogsLines,
   };
 
   const pnlPreview: JournalEntryPreview = {
     txnDate: settlement.TxnDate,
-    docNumber: `PLUTUS-PNL-${invoiceId}`,
+    docNumber: buildProcessingDocNumber('P', invoiceId),
     privateNote: `Plutus P&L Reclass | Invoice: ${invoiceId} | Hash: ${hashPrefix}`,
     lines: pnlLines,
   };
