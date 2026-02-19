@@ -46,6 +46,16 @@ export function dateRangesOverlapIsoDay(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
+function isLmbInvoiceId(value: string): boolean {
+  return /^LMB-(US|UK)-/i.test(value.trim());
+}
+
+function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {
+  const lmb = candidates.filter((inv) => isLmbInvoiceId(inv.invoiceId));
+  if (lmb.length === 1) return lmb[0]!;
+  return null;
+}
+
 export function selectAuditInvoiceForSettlement(input: {
   settlementMarketplace: MarketplaceId;
   settlementPeriodStart: string | null;
@@ -66,6 +76,10 @@ export function selectAuditInvoiceForSettlement(input: {
     return { kind: 'match', matchType: 'contained', invoiceId: contained[0]!.invoiceId };
   }
   if (contained.length > 1) {
+    const preferred = pickPreferredInvoice(contained);
+    if (preferred) {
+      return { kind: 'match', matchType: 'contained', invoiceId: preferred.invoiceId };
+    }
     return {
       kind: 'ambiguous',
       matchType: 'contained',
@@ -80,6 +94,10 @@ export function selectAuditInvoiceForSettlement(input: {
     return { kind: 'match', matchType: 'overlap', invoiceId: overlap[0]!.invoiceId };
   }
   if (overlap.length > 1) {
+    const preferred = pickPreferredInvoice(overlap);
+    if (preferred) {
+      return { kind: 'match', matchType: 'overlap', invoiceId: preferred.invoiceId };
+    }
     return {
       kind: 'ambiguous',
       matchType: 'overlap',
