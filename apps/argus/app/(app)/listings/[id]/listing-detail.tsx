@@ -15,6 +15,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import {
+  formatAmazonPdpReplicaContractError,
+  getReplicaSlotElement,
+  validateAmazonPdpReplicaContract,
+  type AmazonPdpReplicaContractError,
+} from './amazon-pdp-replica'
 
 function normalizeBasePath(value: string): string {
   const raw = value.trim()
@@ -126,6 +132,7 @@ export function ListingDetail({
   const [iframeHeight, setIframeHeight] = useState(3000)
   const iframeDocRef = useRef<Document | null>(null)
   const [iframeEpoch, setIframeEpoch] = useState(0)
+  const [replicaContractError, setReplicaContractError] = useState<AmazonPdpReplicaContractError | null>(null)
 
   const [listing, setListing] = useState<ListingSummary | null>(listingProp ?? null)
 
@@ -844,25 +851,39 @@ export function ListingDetail({
         setIframeHeight(height)
       }
 
-      injectArgusVersionControls(doc, callbacksRef)
       doc.body.classList.remove('a-meter-animate')
 
       if (doc.documentElement.dataset.argusLinksBound !== 'true') {
         doc.documentElement.dataset.argusLinksBound = 'true'
-        doc.addEventListener('click', (e) => {
-          const target = e.target
-          if (!(target instanceof doc.defaultView!.Element)) return
-          const link = target.closest('a')
-          if (!link) return
-          e.preventDefault()
-          e.stopImmediatePropagation()
-          e.stopPropagation()
-        }, true)
+        doc.addEventListener(
+          'click',
+          (e) => {
+            const target = e.target
+            if (!(target instanceof doc.defaultView!.Element)) return
+            const link = target.closest('a')
+            if (!link) return
+            e.preventDefault()
+            e.stopImmediatePropagation()
+            e.stopPropagation()
+          },
+          true,
+        )
       }
+
+      const contract = validateAmazonPdpReplicaContract(doc)
+      if (!contract.ok) {
+        setReplicaContractError(contract)
+        console.error('Replica contract mismatch:', formatAmazonPdpReplicaContractError(contract))
+        return
+      }
+
+      setReplicaContractError(null)
+
+      injectArgusVersionControls(doc, callbacksRef)
     }
 
     iframe.addEventListener('load', handleLoad)
-    if (iframe.contentDocument?.readyState === 'complete' || iframe.contentDocument?.readyState === 'interactive') {
+    if (iframe.contentDocument?.readyState === 'complete') {
       handleLoad()
     }
     return () => iframe.removeEventListener('load', handleLoad)
@@ -871,6 +892,7 @@ export function ListingDetail({
   useEffect(() => {
     const doc = iframeDocRef.current
     if (!doc) return
+    if (replicaContractError) return
 
     const selectedTitleRev = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
     const selectedBullets = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
@@ -910,6 +932,7 @@ export function ListingDetail({
     listing,
     activePointers,
     price,
+    replicaContractError,
     titleIndex,
     titleRevisions,
     bulletsRevisions,
@@ -940,6 +963,11 @@ export function ListingDetail({
 
   return (
     <div className="flex flex-col h-screen bg-white">
+      {replicaContractError && (
+        <div className="px-4 py-2 text-sm border-b border-red-200 bg-red-50 text-red-800">
+          Replica template mismatch: {formatAmazonPdpReplicaContractError(replicaContractError)}
+        </div>
+      )}
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
@@ -2142,77 +2170,79 @@ function injectArgusVersionControls(
     doc.head.append(style)
   }
 
-  const imageBlock = doc.querySelector<HTMLElement>('#imageBlock')
+  const imageBlock = getReplicaSlotElement<HTMLElement>(doc, 'gallery-root')
   if (imageBlock) {
     ensureTrackControls(doc, imageBlock, 'gallery', 'Images', callbacksRef)
     ensureGalleryThumbnailSwap(doc, callbacksRef)
   }
 
-  const titleSectionCandidate = doc.querySelector<HTMLElement>('#titleSection')
-  const titleSection = titleSectionCandidate ? titleSectionCandidate : doc.querySelector<HTMLElement>('#title')
+  const titleSection = getReplicaSlotElement<HTMLElement>(doc, 'title')
   if (titleSection) {
     ensureTrackControls(doc, titleSection, 'title', 'Title', callbacksRef)
   }
 
-  const bullets = doc.querySelector<HTMLElement>('#feature-bullets')
+  const bullets = getReplicaSlotElement<HTMLElement>(doc, 'bullets-root')
   if (bullets) {
     ensureTrackControls(doc, bullets, 'bullets', 'Bullets', callbacksRef)
   }
 
-  const price = doc.querySelector<HTMLElement>('#corePrice_feature_div') ?? doc.querySelector<HTMLElement>('#corePriceDisplay_desktop_feature_div')
+  const price = getReplicaSlotElement<HTMLElement>(doc, 'price-root')
   if (price) {
     ensurePriceControls(doc, price, callbacksRef)
   }
 
-  const video = doc.getElementById('video-outer-container') as HTMLElement | null
-    ?? doc.querySelector<HTMLElement>('ul.desktop-media-mainView li[data-csa-c-media-type="VIDEO"]')
-    ?? doc.querySelector<HTMLElement>('[data-elementid="vse-vw-dp-widget-container"]')
-    ?? doc.querySelector<HTMLElement>('#ive-hero-video-player')
+  const video = getReplicaSlotElement<HTMLElement>(doc, 'gallery-video-thumb')
   if (video) {
     ensureTrackControls(doc, video, 'video', 'Video', callbacksRef)
   }
 
-	  const ebc = doc.querySelector<HTMLElement>('#aplus_feature_div') ?? doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
-	  if (ebc) {
-	    ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
-	  }
+  let ebc: HTMLElement | null = null
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  if (descriptionContainer) {
+    ebc = descriptionContainer
+  } else if (brandContainer) {
+    ebc = brandContainer
+  }
 
-	  const brandContainer = doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
-	  if (brandContainer) {
-	    const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-	    for (let i = 0; i < modules.length; i++) {
-	      ensureEbcModuleControls(doc, modules[i], 'BRAND_STORY', i, callbacksRef)
-	    }
-	  }
+  if (ebc) {
+    ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
+  }
 
-	  const descriptionContainer = doc.querySelector<HTMLElement>('#aplus_feature_div')
-	  if (descriptionContainer) {
-	    const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-	    for (let i = 0; i < modules.length; i++) {
-	      ensureEbcModuleControls(doc, modules[i], 'PRODUCT_DESCRIPTION', i, callbacksRef)
-	    }
-	  }
+  if (brandContainer) {
+    const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+    for (let i = 0; i < modules.length; i++) {
+      ensureEbcModuleControls(doc, modules[i], 'BRAND_STORY', i, callbacksRef)
+    }
+  }
 
-	  const swatches = getVariationSwatches(doc)
-	  for (const swatch of swatches) {
-	    const asin = getVariationAsin(swatch)
-	    if (!asin) continue
-	    if (swatch.dataset.argusVariationBound === 'true') continue
-	    swatch.dataset.argusVariationBound = 'true'
-	    swatch.style.cursor = 'pointer'
-	    swatch.addEventListener(
-	      'click',
-	      (e) => {
-	        e.preventDefault()
-	        e.stopImmediatePropagation()
-	        e.stopPropagation()
-	        applyVariationSelection(doc, asin)
-	        callbacksRef.current?.variationSelect(asin)
-	      },
-	      true,
-	    )
-	  }
-	}
+  if (descriptionContainer) {
+    const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
+    for (let i = 0; i < modules.length; i++) {
+      ensureEbcModuleControls(doc, modules[i], 'PRODUCT_DESCRIPTION', i, callbacksRef)
+    }
+  }
+
+  const swatches = getVariationSwatches(doc)
+  for (const swatch of swatches) {
+    const asin = getVariationAsin(swatch)
+    if (!asin) continue
+    if (swatch.dataset.argusVariationBound === 'true') continue
+    swatch.dataset.argusVariationBound = 'true'
+    swatch.style.cursor = 'pointer'
+    swatch.addEventListener(
+      'click',
+      (e) => {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        e.stopPropagation()
+        applyVariationSelection(doc, asin)
+        callbacksRef.current?.variationSelect(asin)
+      },
+      true,
+    )
+  }
+}
 
 function ensurePriceControls(
   doc: Document,
@@ -2555,9 +2585,11 @@ function updateTrackControls(
 }
 
 function applyTitle(doc: Document, title: string | null) {
-  const productTitle = doc.getElementById('productTitle')
+  const titleSection = getReplicaSlotElement<HTMLElement>(doc, 'title')
+  if (!titleSection) return
+  const productTitle = titleSection.querySelector<HTMLElement>('#productTitle')
   if (!productTitle) return
-  productTitle.textContent = title ?? ''
+  productTitle.textContent = title ? title : ''
 }
 
 function applyPrice(doc: Document, price: ListingPriceState | null) {
@@ -2649,7 +2681,7 @@ function applyPrice(doc: Document, price: ListingPriceState | null) {
 }
 
 function applyBullets(doc: Document, rev: BulletsRevision | null) {
-  const list = doc.querySelector('#feature-bullets ul')
+  const list = getReplicaSlotElement<HTMLUListElement>(doc, 'bullets-list')
   if (!list) return
 
   const template = list.querySelector('li')
@@ -2807,9 +2839,9 @@ function setAltImagesSelection(altList: Element, selectedLi: Element | null) {
 function applyGallery(doc: Document, rev: GalleryRevision | null) {
   const storedDoc = doc as ArgusReplicaDocument
 
-  const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+  const landing = getReplicaSlotElement<HTMLImageElement>(doc, 'gallery-landing-image')
   const altImages = doc.getElementById('altImages') as HTMLElement | null
-  const altList = doc.querySelector<HTMLElement>('#altImages ul')
+  const altList = getReplicaSlotElement<HTMLElement>(doc, 'gallery-thumbnails')
 
   if (landing) {
     ensureGalleryLandingSizing(landing)
@@ -2922,7 +2954,7 @@ function ensureGalleryThumbnailSwap(
   doc: Document,
   callbacksRef: RefObject<{ galleryUpload: () => void }>,
 ) {
-  const altList = doc.querySelector<HTMLElement>('#altImages ul')
+  const altList = getReplicaSlotElement<HTMLElement>(doc, 'gallery-thumbnails')
   if (!altList) return
 
   if (altList.dataset.argusGallerySwapBound === 'true') return
@@ -2953,7 +2985,7 @@ function ensureGalleryThumbnailSwap(
     const img = li.querySelector<HTMLImageElement>('img')
     if (!img) return
 
-    const landing = doc.getElementById('landingImage') as HTMLImageElement | null
+    const landing = getReplicaSlotElement<HTMLImageElement>(doc, 'gallery-landing-image')
     if (!landing) return
 
     const src = img.getAttribute('data-old-hires') ?? img.getAttribute('src')
@@ -2981,11 +3013,10 @@ function ensureGalleryThumbnailSwap(
 }
 
 function getVariationSwatches(doc: Document): HTMLElement[] {
-  return Array.from(
-    doc.querySelectorAll<HTMLElement>(
-      '#twister_feature_div li[data-asin], #twister_feature_div li[data-defaultasin], #twister_feature_div li[data-csa-c-item-id]',
-    ),
-  )
+  const root = getReplicaSlotElement<HTMLElement>(doc, 'variations-root')
+  if (!root) return []
+
+  return Array.from(root.querySelectorAll<HTMLElement>('li[data-asin], li[data-defaultasin], li[data-csa-c-item-id]'))
 }
 
 function getVariationAsin(swatch: HTMLElement): string | null {
@@ -3049,8 +3080,7 @@ function applyVariationSelection(doc: Document, asin: string | null) {
 function applyVideo(doc: Document, rev: VideoRevision | null) {
   applyVideoThumbnail(doc)
 
-  const container = doc.getElementById('main-video-container') as HTMLElement | null
-    ?? doc.getElementById('ive-hero-video-player') as HTMLElement | null
+  const container = getReplicaSlotElement<HTMLElement>(doc, 'video-container')
   if (!container) return
 
   const storedDoc = doc as ArgusReplicaDocument
@@ -3100,7 +3130,7 @@ function applyVideo(doc: Document, rev: VideoRevision | null) {
 }
 
 function applyVideoThumbnail(doc: Document) {
-  const videoThumb = doc.querySelector<HTMLElement>('#altImages li.videoThumbnail')
+  const videoThumb = getReplicaSlotElement<HTMLElement>(doc, 'gallery-video-thumb')
   if (!videoThumb) return
 
   const img = videoThumb.querySelector<HTMLImageElement>('img')
@@ -3120,8 +3150,8 @@ function applyVideoThumbnail(doc: Document) {
 }
 
 function applyEbc(doc: Document, rev: EbcRevision | null) {
-  const brandContainer = doc.querySelector<HTMLElement>('#aplusBrandStory_feature_div')
-  const descriptionContainer = doc.querySelector<HTMLElement>('#aplus_feature_div')
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
 
   if (!rev || rev.sections.length === 0) {
     if (brandContainer) {
