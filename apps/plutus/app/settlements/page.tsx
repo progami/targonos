@@ -592,6 +592,7 @@ export default function SettlementsPage() {
           settlementMarketplace: settlement.marketplace.id,
           settlementPeriodStart: settlement.periodStart,
           settlementPeriodEnd: settlement.periodEnd,
+          settlementDocNumber: settlement.docNumber,
           invoices: auditInvoices,
         }),
       );

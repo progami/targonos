@@ -233,11 +233,13 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
     let marketplace: MarketplaceId;
     let periodStart: string | null;
     let periodEnd: string | null;
+    let normalizedDocNumber: string;
     try {
       const meta = parseLmbSettlementDocNumber(settlement.DocNumber);
       marketplace = meta.marketplace.id;
       periodStart = meta.periodStart;
       periodEnd = meta.periodEnd;
+      normalizedDocNumber = meta.normalizedDocNumber;
     } catch (error) {
       result.skipped.push({
         settlementId: settlement.Id,
@@ -251,6 +253,7 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
       settlementMarketplace: marketplace,
       settlementPeriodStart: periodStart,
       settlementPeriodEnd: periodEnd,
+      settlementDocNumber: normalizedDocNumber,
       invoices,
     });
 
