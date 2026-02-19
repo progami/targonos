@@ -165,6 +165,7 @@ const nextConfig = {
   turbopack: {
     resolveAlias: {
       '@targon/auth': '../../packages/auth/dist/index.js',
+      '@targon/aws-s3': '../../packages/aws-s3/dist/index.js',
     },
   },
 

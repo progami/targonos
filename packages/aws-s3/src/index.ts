@@ -45,6 +45,16 @@ export interface S3DownloadOptions {
   expiresIn?: number;
 }
 
+export interface S3ObjectStreamResult {
+  body: Readable;
+  contentType: string | undefined;
+  contentLength: number | undefined;
+  contentRange: string | undefined;
+  acceptRanges: string | undefined;
+  etag: string | undefined;
+  lastModified: Date | undefined;
+}
+
 export type FileContext =
   | { type: 'transaction'; transactionId: string; documentType: string }
   | {
@@ -384,6 +394,23 @@ export class S3Service {
     const body = response.Body as Readable | undefined;
     if (!body) throw new Error('No stream returned from S3');
     return body;
+  }
+
+  async getObjectStream(key: string, options: { range?: string } = {}): Promise<S3ObjectStreamResult> {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: options.range });
+    const response = await this.client.send(command);
+    const body = response.Body as Readable | undefined;
+    if (!body) throw new Error('No stream returned from S3');
+
+    return {
+      body,
+      contentType: response.ContentType,
+      contentLength: response.ContentLength,
+      contentRange: response.ContentRange,
+      acceptRanges: response.AcceptRanges,
+      etag: response.ETag?.replace(/"/g, ''),
+      lastModified: response.LastModified,
+    };
   }
 
   async deleteFile(key: string): Promise<void> {
