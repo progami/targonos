@@ -38,6 +38,14 @@ export interface QboPreferences {
     };
     MultiCurrencyEnabled?: boolean;
   };
+  VendorAndPurchasePrefs?: {
+    POCustomField?: {
+      CustomField?: Array<{
+        Name?: string;
+        Type?: string;
+      }>;
+    };
+  };
   ProductAndServicesPrefs?: {
     ForSales?: boolean;
     ForPurchase?: boolean;

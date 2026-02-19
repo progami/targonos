@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { ReviewsClient } from "@/app/reviews/reviews-client";
 
 export default function ReviewsPage() {
-  redirect("/insights");
+  return <ReviewsClient />;
 }

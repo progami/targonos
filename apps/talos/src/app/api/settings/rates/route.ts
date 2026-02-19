@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth'
 import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
 import { UserRole } from '@targon/prisma-talos'
 export const dynamic = 'force-dynamic'
+const TEMPLATE_EFFECTIVE_DATE = new Date('2000-01-01')
 
 // Lazy-loaded password hash to avoid build-time errors
 let _placeholderPasswordHash: string | null = null
@@ -93,7 +94,7 @@ export async function GET(_request: NextRequest) {
  orderBy: [
  { warehouse: { name: 'asc' } },
  { costCategory: 'asc' },
- { effectiveDate: 'desc' }
+ { updatedAt: 'desc' }
  ]
  })
 
@@ -145,8 +146,7 @@ export async function POST(request: NextRequest) {
    !costCategory ||
    costValue === undefined ||
    costValue === null ||
-   !unitOfMeasure ||
-   !effectiveDate
+   !unitOfMeasure
   ) {
    return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -156,7 +156,11 @@ export async function POST(request: NextRequest) {
     ? rawCostName.trim()
     : String(costCategory)
 
-  const effectiveOn = new Date(effectiveDate)
+  const effectiveOn =
+   effectiveDate === undefined || effectiveDate === null || String(effectiveDate).trim().length === 0
+    ? TEMPLATE_EFFECTIVE_DATE
+    : new Date(effectiveDate)
+
   if (Number.isNaN(effectiveOn.getTime())) {
    return NextResponse.json({ error: 'Invalid effective date' }, { status: 400 })
   }
@@ -174,14 +178,14 @@ export async function POST(request: NextRequest) {
    where: {
     warehouseId,
     costName,
-    effectiveDate: effectiveOn,
+    isActive: true,
    },
   })
 
   if (duplicateRate) {
    return NextResponse.json(
     {
-     error: `A rate named "${costName}" already exists for this warehouse on ${effectiveOn.toISOString().slice(0, 10)}.`,
+     error: `A rate named "${costName}" already exists for this warehouse.`,
     },
    { status: 400 }
    )

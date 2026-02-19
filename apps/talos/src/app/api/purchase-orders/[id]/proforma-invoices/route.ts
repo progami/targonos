@@ -1,5 +1,6 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import type { NextRequest } from 'next/server'
 
@@ -37,6 +38,14 @@ export const GET = withAuthAndParams(async (_request: NextRequest, params, sessi
   }
 
   const prisma = await getTenantPrisma()
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
 
   const invoices = await prisma.purchaseOrderProformaInvoice.findMany({
     where: { purchaseOrderId: id },
@@ -84,12 +93,22 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     where: { id },
     select: {
       id: true,
+      status: true,
       proformaInvoiceNumber: true,
     },
   })
 
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const piNumber = parsed.data.piNumber.trim()
@@ -139,4 +158,3 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     createdByName: created.createdByName ?? null,
   })
 })
-

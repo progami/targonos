@@ -1,6 +1,8 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { CostCategory, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
@@ -26,7 +28,14 @@ const UpdateForwardingCostSchema = z.object({
   costName: OptionalString,
   quantity: OptionalNumber,
   notes: OptionalString,
-  currency: OptionalString,
+  currency: z.preprocess(
+    value => {
+      const cleaned = emptyToUndefined(value)
+      if (cleaned === undefined) return undefined
+      return normalizePoCostCurrency(cleaned) ?? cleaned
+    },
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
 })
 
 function readParam(params: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -58,6 +67,15 @@ export const DELETE = withAuthAndParams(async (_request: NextRequest, params, se
 
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: purchaseOrderId,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
@@ -115,6 +133,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
     return ApiResponses.notFound('Purchase order not found')
   }
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: purchaseOrderId,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
     return ApiResponses.conflict('Forwarding costs can be updated during OCEAN or WAREHOUSE stages')
   }
@@ -146,7 +173,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
           costName: nextCostName,
           isActive: true,
         },
-        orderBy: [{ effectiveDate: 'desc' }],
+        orderBy: [{ updatedAt: 'desc' }],
       })
     : null
 

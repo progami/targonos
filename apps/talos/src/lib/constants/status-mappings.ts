@@ -5,7 +5,6 @@
 
 // Purchase Order Status Types (5-stage state machine)
 export type POStatus =
-  | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -34,14 +33,13 @@ export type POLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
  * Badge CSS classes for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
-  RFQ: 'bg-slate-100 text-slate-700 border border-slate-200',
   ISSUED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
   WAREHOUSE: 'bg-purple-50 text-purple-700 border border-purple-200',
   SHIPPED: 'bg-slate-50 text-slate-600 border border-slate-200',
-  REJECTED: 'bg-rose-50 text-rose-700 border border-rose-200',
-  CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
+  REJECTED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  CANCELLED: 'bg-slate-50 text-slate-600 border border-slate-200',
   ARCHIVED: 'bg-slate-50 text-slate-600 border border-slate-200',
   AWAITING_PROOF: 'bg-amber-50 text-amber-700 border border-amber-200',
   REVIEW: 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -53,14 +51,13 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
  * Human-readable labels for Purchase Order statuses (5-stage state machine)
  */
 export const PO_STATUS_LABELS: Record<POStatus, string> = {
-  RFQ: 'RFQ',
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',
   WAREHOUSE: 'Warehouse',
   SHIPPED: 'Legacy Closed',
-  REJECTED: 'Rejected',
-  CANCELLED: 'Cancelled',
+  REJECTED: 'Closed',
+  CANCELLED: 'Closed',
   ARCHIVED: 'Archived',
   AWAITING_PROOF: 'Awaiting Proof',
   REVIEW: 'Review',

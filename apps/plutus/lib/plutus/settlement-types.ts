@@ -12,13 +12,31 @@ export type ProcessingBlock =
         | 'INVOICE_CONFLICT'
         | 'ORDER_ALREADY_PROCESSED'
         | 'REFUND_UNMATCHED'
+        | 'REFUND_ADJUSTMENT'
         | 'REFUND_PARTIAL'
         | 'BILLS_FETCH_ERROR'
         | 'BILLS_PARSE_ERROR'
-        | 'PNL_ALLOCATION_ERROR';
+        | 'PNL_ALLOCATION_ERROR'
+        | 'PNL_ALLOCATION_WARNING';
       message: string;
       details?: Record<string, string | number>;
     };
+
+const NON_BLOCKING_PROCESSING_CODES = new Set([
+  'LATE_COST_ON_HAND_ZERO',
+  'MISSING_COST_BASIS',
+  'REFUND_ADJUSTMENT',
+  'REFUND_PARTIAL',
+  'PNL_ALLOCATION_WARNING',
+]);
+
+export function isBlockingProcessingCode(code: string): boolean {
+  return !NON_BLOCKING_PROCESSING_CODES.has(code);
+}
+
+export function isBlockingProcessingBlock(block: { code: string }): boolean {
+  return isBlockingProcessingCode(block.code);
+}
 
 export type ProcessingSale = {
   orderId: string;
@@ -49,6 +67,8 @@ export type KnownLedgerEvent = {
 export type JournalEntryLinePreview = {
   accountId: string;
   accountName: string;
+  accountFullyQualifiedName?: string;
+  accountNumber?: string;
   postingType: 'Debit' | 'Credit';
   amountCents: number;
   description: string;

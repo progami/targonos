@@ -131,7 +131,13 @@ async function requireServerConnection(): Promise<QboConnection> {
 
 async function showConnection(): Promise<void> {
   const connection = await requireServerConnection();
-  console.log(JSON.stringify({ realmId: connection.realmId, expiresAt: connection.expiresAt }, null, 2));
+  console.log(
+    JSON.stringify(
+      { connectionPath: getServerQboConnectionPath(), realmId: connection.realmId, expiresAt: connection.expiresAt },
+      null,
+      2,
+    ),
+  );
 }
 
 async function deactivateAmazonDuplicateAccounts(): Promise<void> {

@@ -3,6 +3,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
@@ -90,6 +91,14 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
   const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const line = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: lineId,
@@ -156,6 +165,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   const line = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: lineId,
@@ -167,8 +185,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     throw new NotFoundError(`Line item not found: ${lineId}`)
   }
 
-  // Only allow editing most fields in RFQ status
-  // quantityReceived can be edited in WAREHOUSE status
   const payload = await request.json().catch(() => null)
   const result = UpdateLineSchema.safeParse(payload)
 
@@ -179,12 +195,14 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
-  const allowCommercialEdits = order.status === 'RFQ'
-  const allowIssuedPackagingEdits = order.status === 'ISSUED'
-  const allowPiNumberEdits = order.status === 'ISSUED'
+  const allowCommercialEdits =
+    order.status !== 'CLOSED' &&
+    order.status !== 'CANCELLED' &&
+    order.status !== 'REJECTED'
+  const allowIssuedPackagingEdits = allowCommercialEdits
+  const allowPiNumberEdits = allowCommercialEdits
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
 
-  // Core fields - only editable in RFQ
   if (allowCommercialEdits) {
     if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
@@ -303,7 +321,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     }
   }
 
-  // unitsPerCarton can be adjusted through ISSUED to support shipping marks inputs.
   if (allowIssuedPackagingEdits && result.data.unitsPerCarton !== undefined) {
     let cartonsOrdered: number
     try {
@@ -322,20 +339,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     updateData.quantity = cartonsOrdered
   }
 
-  // quantityReceived - editable in WAREHOUSE status
-  if (
-    order.status === 'WAREHOUSE' &&
-    !order.postedAt &&
-    result.data.quantityReceived !== undefined
-  ) {
+  if (allowCommercialEdits && result.data.quantityReceived !== undefined) {
     updateData.quantityReceived = result.data.quantityReceived
   }
 
-  if (Object.keys(updateData).length === 0 && order.status !== 'RFQ') {
-    return ApiResponses.badRequest('No valid fields to update for current order status')
+  if (Object.keys(updateData).length === 0) {
+    return ApiResponses.badRequest('No valid fields to update')
   }
 
-  if (order.status === 'RFQ') {
+  if (allowCommercialEdits) {
     const skuCodeChanged =
       result.data.skuCode !== undefined &&
       result.data.skuCode.trim().toLowerCase() !== line.skuCode.trim().toLowerCase()
@@ -419,7 +431,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   if (Object.keys(updateData).length === 0) {
-    return ApiResponses.badRequest('No valid fields to update for current order status')
+    return ApiResponses.badRequest('No valid fields to update')
   }
 
   let updated
@@ -566,9 +578,21 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
-  // Only allow deleting lines in RFQ status
-  if (order.status !== 'RFQ') {
-    return ApiResponses.badRequest('Can only delete line items from orders in RFQ status')
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
+  if (
+    order.status === 'CLOSED' ||
+    order.status === 'CANCELLED' ||
+    order.status === 'REJECTED'
+  ) {
+    return ApiResponses.badRequest('Cannot delete line items from terminal orders')
   }
 
   const line = await prisma.purchaseOrderLine.findFirst({

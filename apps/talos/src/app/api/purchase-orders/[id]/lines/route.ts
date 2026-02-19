@@ -3,6 +3,7 @@ import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import {
@@ -88,6 +89,15 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
   return ApiResponses.success({
     data: order.lines.map(line => ({
       id: line.id,
@@ -125,7 +135,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 
 /**
  * POST /api/purchase-orders/[id]/lines
- * Add a new line item to an RFQ purchase order
+ * Add a new line item to an ISSUED purchase order
  */
 export const POST = withAuthAndParams(async (request: NextRequest, params, session) => {
   const id = params.id as string
@@ -152,8 +162,21 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     throw new NotFoundError(`Purchase Order not found: ${id}`)
   }
 
-  if (order.status !== 'RFQ') {
-    return ApiResponses.badRequest('Can only add line items to orders in RFQ status')
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
+  }
+
+  if (
+    order.status === 'CLOSED' ||
+    order.status === 'CANCELLED' ||
+    order.status === 'REJECTED'
+  ) {
+    return ApiResponses.badRequest('Cannot add line items to terminal orders')
   }
 
   const payload = await request.json().catch(() => null)

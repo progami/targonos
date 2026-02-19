@@ -1,40 +1,54 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Stack from '@mui/material/Stack';
+import type { SxProps, Theme } from '@mui/material/styles';
 
 type EmptyStateProps = {
   icon?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
-  className?: string;
+  sx?: SxProps<Theme>;
 };
 
 function DefaultIcon() {
   return (
-    <svg className="h-10 w-10" viewBox="0 0 48 48" fill="none">
-      <rect x="6" y="10" width="36" height="28" rx="4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <path d="M6 18h36" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <circle cx="24" cy="28" r="4" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" />
-      <path d="M20 34l4-2 4 2" className="stroke-slate-300 dark:stroke-slate-600" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg style={{ width: 40, height: 40 }} viewBox="0 0 48 48" fill="none">
+      <rect x="6" y="10" width="36" height="28" rx="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M6 18h36" stroke="currentColor" strokeWidth="2" />
+      <circle cx="24" cy="28" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M20 34l4-2 4 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon, title, description, action, sx }: EmptyStateProps) {
   return (
-    <div className={cn('flex flex-col items-center justify-center py-16 px-4', className)}>
-      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5">
-        <div className="text-slate-400 dark:text-slate-500">
-          {icon ?? <DefaultIcon />}
-        </div>
-      </div>
-      <h3 className="mt-4 text-sm font-semibold text-slate-900 dark:text-white">{title}</h3>
+    <Stack alignItems="center" justifyContent="center" sx={{ py: 8, px: 2, ...sx }}>
+      <Box
+        sx={{
+          display: 'flex',
+          height: 80,
+          width: 80,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 4,
+          bgcolor: 'action.hover',
+          color: 'text.disabled',
+        }}
+      >
+        {icon ?? <DefaultIcon />}
+      </Box>
+      <Typography variant="body2" fontWeight={600} sx={{ mt: 2, color: 'text.primary' }}>
+        {title}
+      </Typography>
       {description && (
-        <p className="mt-1 max-w-sm text-center text-sm text-slate-500 dark:text-slate-400">
+        <Typography variant="body2" sx={{ mt: 0.5, maxWidth: 384, textAlign: 'center', color: 'text.secondary' }}>
           {description}
-        </p>
+        </Typography>
       )}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
+      {action && <Box sx={{ mt: 2 }}>{action}</Box>}
+    </Stack>
   );
 }

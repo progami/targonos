@@ -1,4 +1,7 @@
 import { ValidationError } from '@/lib/api/responses'
+import { TENANT_CODES, type TenantCode } from '@/lib/tenant/constants'
+import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
+import { Prisma } from '@targon/prisma-talos'
 
 const PO_REFERENCE_REGEX = /^PO-(\d+)-([A-Z0-9]+)$/
 const LEGACY_PO_REFERENCE_REGEX = /^INV-(\d+)[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$/
@@ -19,6 +22,13 @@ interface PurchaseOrderReferenceReader {
   }
 }
 
+type PurchaseOrderSequenceReader = PurchaseOrderReferenceReader & {
+  $transaction<T>(
+    fn: (tx: Prisma.TransactionClient) => Promise<T>,
+    options?: { timeout?: number }
+  ): Promise<T>
+}
+
 interface GrnReferenceReader {
   grn: {
     findMany(args: {
@@ -28,6 +38,25 @@ interface GrnReferenceReader {
       }
     }): Promise<Array<{ referenceNumber: string | null }>>
   }
+}
+
+const GLOBAL_PO_SEQUENCE_COUNTER_PREFIX = 'po_sequence'
+
+function parsePositiveInteger(value: unknown, fieldName: string): number {
+  const numericValue =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'bigint'
+        ? Number(value)
+        : typeof value === 'string'
+          ? Number.parseInt(value, 10)
+          : Number.NaN
+
+  if (!Number.isSafeInteger(numericValue) || numericValue <= 0) {
+    throw new ValidationError(`Invalid ${fieldName}: ${String(value)}`)
+  }
+
+  return numericValue
 }
 
 function parseSequence(value: string): number | null {
@@ -170,16 +199,16 @@ function findMaxSequence(
   return maxSequence
 }
 
-export async function getNextPurchaseOrderSequence(
-  prisma: PurchaseOrderReferenceReader,
+async function readPoReferencesForTenant(
+  tenantCode: TenantCode,
   skuGroup: string
-): Promise<number> {
-  const normalizedGroup = normalizeSkuGroup(skuGroup)
+): Promise<string[]> {
+  const prisma = await getTenantPrismaClient(tenantCode)
   const records = await prisma.purchaseOrder.findMany({
     where: {
       OR: [
-        { orderNumber: { contains: `-${normalizedGroup}` } },
-        { poNumber: { contains: `-${normalizedGroup}` } },
+        { orderNumber: { contains: `-${skuGroup}` } },
+        { poNumber: { contains: `-${skuGroup}` } },
       ],
     },
     select: {
@@ -198,8 +227,87 @@ export async function getNextPurchaseOrderSequence(
     }
   }
 
-  const maxSequence = findMaxSequence(references, parseOrderReference, normalizedGroup)
-  return maxSequence + 1
+  return references
+}
+
+async function findMaxPurchaseOrderSequenceAcrossTenants(skuGroup: string): Promise<number> {
+  const references: string[] = []
+  for (const tenantCode of TENANT_CODES) {
+    const tenantReferences = await readPoReferencesForTenant(tenantCode, skuGroup)
+    references.push(...tenantReferences)
+  }
+  return findMaxSequence(references, parseOrderReference, skuGroup)
+}
+
+async function reserveNextGlobalPurchaseOrderSequence(
+  prisma: PurchaseOrderSequenceReader,
+  skuGroup: string
+): Promise<number> {
+  const counterKey = `${GLOBAL_PO_SEQUENCE_COUNTER_PREFIX}:${skuGroup}`
+
+  return prisma.$transaction(async tx => {
+    await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${counterKey}))`)
+
+    const rows = await tx.$queryRaw<Array<{ nextValue: number | bigint | string }>>(Prisma.sql`
+      SELECT "next_value" AS "nextValue"
+      FROM "public"."global_reference_counters"
+      WHERE "counter_key" = ${counterKey}
+      FOR UPDATE
+    `)
+
+    const existing = rows[0]
+    if (existing) {
+      const reserved = parsePositiveInteger(existing.nextValue, 'next_value')
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "public"."global_reference_counters"
+        SET "next_value" = ${reserved + 1}, "updated_at" = NOW()
+        WHERE "counter_key" = ${counterKey}
+      `)
+      return reserved
+    }
+
+    const maxSequence = await findMaxPurchaseOrderSequenceAcrossTenants(skuGroup)
+    const nextSequence = maxSequence + 1
+    await tx.$executeRaw(Prisma.sql`
+      INSERT INTO "public"."global_reference_counters" (
+        "counter_key",
+        "next_value",
+        "updated_at"
+      ) VALUES (${counterKey}, ${nextSequence + 1}, NOW())
+    `)
+
+    return nextSequence
+  })
+}
+
+export async function getNextPurchaseOrderSequence(
+  prisma: PurchaseOrderSequenceReader,
+  skuGroup: string
+): Promise<number> {
+  const normalizedGroup = normalizeSkuGroup(skuGroup)
+  return reserveNextGlobalPurchaseOrderSequence(prisma, normalizedGroup)
+}
+
+export async function isPurchaseOrderReferenceUsedAcrossTenants(reference: string): Promise<boolean> {
+  const normalizedReference = reference.trim().toUpperCase()
+  if (!normalizedReference) {
+    return false
+  }
+
+  for (const tenantCode of TENANT_CODES) {
+    const prisma = await getTenantPrismaClient(tenantCode)
+    const existing = await prisma.purchaseOrder.findFirst({
+      where: {
+        OR: [{ orderNumber: normalizedReference }, { poNumber: normalizedReference }],
+      },
+      select: { id: true },
+    })
+    if (existing) {
+      return true
+    }
+  }
+
+  return false
 }
 
 export async function getNextCommercialInvoiceSequence(

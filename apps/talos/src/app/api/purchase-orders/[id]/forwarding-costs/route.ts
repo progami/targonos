@@ -1,7 +1,9 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
+import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
+import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { CostCategory, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
 
@@ -28,7 +30,14 @@ const CreateForwardingCostSchema = z.object({
   costName: z.string().trim().min(1),
   quantity: QuantitySchema,
   notes: OptionalString,
-  currency: OptionalString,
+  currency: z.preprocess(
+    value => {
+      const cleaned = emptyToUndefined(value)
+      if (cleaned === undefined) return undefined
+      return normalizePoCostCurrency(cleaned) ?? cleaned
+    },
+    z.enum(PO_COST_CURRENCIES).optional()
+  ),
 })
 
 function readParam(params: Record<string, unknown> | undefined, key: string): string | undefined {
@@ -49,6 +58,14 @@ export const GET = withAuthAndParams(async (_request: NextRequest, params, sessi
   const canView = await hasPermission(session.user.id, 'po.view')
   if (!canView) {
     return ApiResponses.forbidden('Insufficient permissions')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   const costs = await prisma.purchaseOrderForwardingCost.findMany({
@@ -111,6 +128,11 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   const prisma = await getTenantPrisma()
+  const tenant = await getCurrentTenant()
+  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
+  if (!tenantCurrency) {
+    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
+  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -122,6 +144,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
 
   if (!order) {
     return ApiResponses.notFound('Purchase order not found')
+  }
+
+  const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+    prisma,
+    purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
+  })
+  if (crossTenantGuard) {
+    return crossTenantGuard
   }
 
   if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {
@@ -144,7 +175,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       costName: parsed.data.costName,
       isActive: true,
     },
-    orderBy: [{ effectiveDate: 'desc' }],
+    orderBy: [{ updatedAt: 'desc' }],
   })
 
   if (!rate) {
@@ -164,7 +195,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       quantity: new Prisma.Decimal(quantity),
       unitRate: new Prisma.Decimal(unitRate),
       totalCost: new Prisma.Decimal(totalCost),
-      currency: parsed.data.currency ?? null,
+      currency: parsed.data.currency ?? tenantCurrency,
       notes: parsed.data.notes ?? null,
       createdById: session.user.id,
       createdByName: session.user.name ?? session.user.email ?? null,

@@ -16,6 +16,8 @@ model Strategy {
   status      StrategyStatus @default(DRAFT)
   region      StrategyRegion @default(US)
   isDefault   Boolean        @default(false)
+  isPrimary   Boolean        @default(false)
+  strategyGroupId String
   createdById    String?
   createdByEmail String?
   assigneeId     String?
@@ -23,6 +25,7 @@ model Strategy {
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
+  strategyGroup        StrategyGroup         @relation(fields: [strategyGroupId], references: [id], onDelete: Cascade)
   products             Product[]
   businessParameters   BusinessParameter[]
   purchaseOrders       PurchaseOrder[]
@@ -34,7 +37,32 @@ model Strategy {
   monthlySummaries     MonthlySummary[]
   quarterlySummaries   QuarterlySummary[]
 
+  @@unique([strategyGroupId, name])
   @@index([status])
+  @@index([strategyGroupId])
+  @@index([strategyGroupId, isPrimary])
+  @@index([createdById])
+  @@index([createdByEmail])
+  @@index([assigneeId])
+  @@index([assigneeEmail])
+}
+
+model StrategyGroup {
+  id             String         @id @default(cuid())
+  code           String
+  name           String
+  region         StrategyRegion @default(US)
+  createdById    String?
+  createdByEmail String?
+  assigneeId     String?
+  assigneeEmail  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  strategies Strategy[]
+
+  @@unique([region, code])
+  @@index([region])
   @@index([createdById])
   @@index([createdByEmail])
   @@index([assigneeId])

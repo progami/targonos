@@ -65,7 +65,7 @@ async function handlePost(req: Request) {
     fulfillmentChannels: z.array(z.string().min(1)).optional(),
     maxResultsPerPage: z.number().int().min(1).max(100).optional(),
 
-    enqueueReviewRequests: z.boolean().optional().default(false),
+    enqueueReviewRequests: z.boolean().optional().default(true),
 
     // Scheduling knobs (campaign defaults)
     schedule: z

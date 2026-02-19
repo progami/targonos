@@ -1,12 +1,5 @@
 import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
-import { allocateByWeight, toCents } from '@/lib/inventory/money';
-
-export class PnlAllocationNoWeightsError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PnlAllocationNoWeightsError';
-  }
-}
+import { toCents } from '@/lib/inventory/money';
 
 export type PnlBucketKey =
   | 'amazonSellerFees'
@@ -14,21 +7,29 @@ export type PnlBucketKey =
   | 'amazonStorageFees'
   | 'amazonAdvertisingCosts'
   | 'amazonPromotions'
-  | 'amazonFbaInventoryReimbursement';
+  | 'amazonFbaInventoryReimbursement'
+  | 'warehousingAwd';
 
 export type PnlAllocation = {
   invoiceId: string;
   allocationsByBucket: Record<PnlBucketKey, Record<string, number>>;
+  skuBreakdownByBucketBrand: Record<PnlBucketKey, Record<string, Record<string, number>>>;
+  unallocatedSkuLessBuckets: Array<{ bucket: PnlBucketKey; totalCents: number; reason: string }>;
 };
 
 export type BrandResolver = {
   getBrandForSku: (sku: string) => string;
 };
 
-function classifyBucket(description: string): PnlBucketKey | null {
+export type PnlAllocationOptions = {
+  skuAllocationsByBucket?: Partial<Record<PnlBucketKey, Record<string, number>>>;
+};
+
+export function classifyPnlBucket(description: string): PnlBucketKey | null {
   const normalized = description.trim();
 
   if (normalized.startsWith('Amazon Seller Fees')) return 'amazonSellerFees';
+  if (/^Amazon (FBA Fees|Storage Fees)/.test(normalized) && /\bAWD\b/i.test(normalized)) return 'warehousingAwd';
   if (normalized.startsWith('Amazon FBA Fees')) return 'amazonFbaFees';
   if (normalized.startsWith('Amazon Storage Fees')) return 'amazonStorageFees';
   if (normalized.startsWith('Amazon Advertising Costs')) return 'amazonAdvertisingCosts';
@@ -38,48 +39,27 @@ function classifyBucket(description: string): PnlBucketKey | null {
   return null;
 }
 
-function isSalesPrincipal(description: string): boolean {
-  return description.trim().startsWith('Amazon Sales - Principal');
-}
-
-function allocateSignedByUnits(
-  totalCents: number,
-  unitsByBrand: Map<string, number>,
-): Record<string, number> {
-  if (unitsByBrand.size === 0) {
-    throw new PnlAllocationNoWeightsError(
-      'Cannot allocate SKU-less fee buckets because there are no Amazon Sales - Principal rows with SKU + quantity > 0',
-    );
-  }
-
-  const sign = totalCents < 0 ? -1 : 1;
-  const abs = Math.abs(totalCents);
-
-  const weights = Array.from(unitsByBrand.entries()).map(([brand, units]) => ({
-    key: brand,
-    weight: units,
-  }));
-
-  let totalUnits = 0;
-  for (const w of weights) totalUnits += w.weight;
-  if (totalUnits <= 0) {
-    throw new PnlAllocationNoWeightsError('Cannot allocate SKU-less P&L rows: total units-by-brand weight is 0');
-  }
-
-  const allocated = allocateByWeight(abs, weights);
-  const result: Record<string, number> = {};
-  for (const [brand, cents] of Object.entries(allocated)) {
-    result[brand] = sign * cents;
-  }
-  return result;
-}
-
 function addCents(target: Record<string, number>, brand: string, cents: number) {
   const current = target[brand];
   target[brand] = (current === undefined ? 0 : current) + cents;
 }
 
-export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandResolver): PnlAllocation {
+function addSkuCents(target: Record<string, Record<string, number>>, brand: string, sku: string, cents: number) {
+  const existingBySku = target[brand];
+  if (existingBySku === undefined) {
+    target[brand] = { [sku]: cents };
+    return;
+  }
+
+  const current = existingBySku[sku];
+  existingBySku[sku] = (current === undefined ? 0 : current) + cents;
+}
+
+export function computePnlAllocation(
+  rows: LmbAuditRow[],
+  brandResolver: BrandResolver,
+  options?: PnlAllocationOptions,
+): PnlAllocation {
   if (rows.length === 0) {
     throw new Error('No rows provided');
   }
@@ -98,23 +78,22 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
     amazonAdvertisingCosts: {},
     amazonPromotions: {},
     amazonFbaInventoryReimbursement: {},
+    warehousingAwd: {},
   };
+  const skuBreakdownByBucketBrand: Record<PnlBucketKey, Record<string, Record<string, number>>> = {
+    amazonSellerFees: {},
+    amazonFbaFees: {},
+    amazonStorageFees: {},
+    amazonAdvertisingCosts: {},
+    amazonPromotions: {},
+    amazonFbaInventoryReimbursement: {},
+    warehousingAwd: {},
+  };
+  const unallocatedSkuLessBuckets: Array<{ bucket: PnlBucketKey; totalCents: number; reason: string }> = [];
 
-  // Units sold by brand (weights for non-SKU lines)
-  const unitsByBrand = new Map<string, number>();
+  const skuLessTotalsByBucket = new Map<PnlBucketKey, number>();
   for (const row of rows) {
-    const sku = row.sku.trim();
-    if (sku === '') continue;
-    if (!isSalesPrincipal(row.description)) continue;
-    if (!Number.isFinite(row.quantity) || row.quantity <= 0) continue;
-
-    const brand = brandResolver.getBrandForSku(sku);
-    const current = unitsByBrand.get(brand);
-    unitsByBrand.set(brand, (current === undefined ? 0 : current) + row.quantity);
-  }
-
-  for (const row of rows) {
-    const bucket = classifyBucket(row.description);
+    const bucket = classifyPnlBucket(row.description);
     if (!bucket) continue;
 
     const cents = toCents(row.net);
@@ -122,18 +101,64 @@ export function computePnlAllocation(rows: LmbAuditRow[], brandResolver: BrandRe
       throw new Error('Net cents must be an integer');
     }
 
-    const sku = row.sku.trim();
-    if (sku !== '') {
-      const brand = brandResolver.getBrandForSku(sku);
+    const skuRaw = row.sku.trim();
+    if (skuRaw !== '') {
+      const brand = brandResolver.getBrandForSku(skuRaw);
       addCents(allocationsByBucket[bucket], brand, cents);
+      addSkuCents(skuBreakdownByBucketBrand[bucket], brand, skuRaw, cents);
       continue;
     }
 
-    const allocations = allocateSignedByUnits(cents, unitsByBrand);
-    for (const [brand, allocatedCents] of Object.entries(allocations)) {
-      addCents(allocationsByBucket[bucket], brand, allocatedCents);
+    const current = skuLessTotalsByBucket.get(bucket);
+    if (current === undefined) {
+      skuLessTotalsByBucket.set(bucket, cents);
+    } else {
+      skuLessTotalsByBucket.set(bucket, current + cents);
     }
   }
 
-  return { invoiceId, allocationsByBucket };
+  for (const [bucket, totalCents] of skuLessTotalsByBucket.entries()) {
+    if (totalCents === 0) continue;
+    if (!options?.skuAllocationsByBucket) {
+      unallocatedSkuLessBuckets.push({
+        bucket,
+        totalCents,
+        reason: 'Missing deterministic SKU allocation for SKU-less rows',
+      });
+      continue;
+    }
+    const skuAllocations = options.skuAllocationsByBucket[bucket];
+    if (!skuAllocations) {
+      unallocatedSkuLessBuckets.push({
+        bucket,
+        totalCents,
+        reason: 'Missing deterministic SKU allocation for SKU-less rows',
+      });
+      continue;
+    }
+
+    let allocatedTotal = 0;
+    for (const cents of Object.values(skuAllocations)) {
+      allocatedTotal += cents;
+    }
+    if (allocatedTotal !== totalCents) {
+      unallocatedSkuLessBuckets.push({
+        bucket,
+        totalCents,
+        reason: `Deterministic allocation total mismatch (${allocatedTotal} vs ${totalCents})`,
+      });
+      continue;
+    }
+
+    for (const [skuRaw, cents] of Object.entries(skuAllocations)) {
+      if (cents === 0) continue;
+      const sku = skuRaw.trim();
+      if (sku === '') continue;
+      const brand = brandResolver.getBrandForSku(sku);
+      addCents(allocationsByBucket[bucket], brand, cents);
+      addSkuCents(skuBreakdownByBucketBrand[bucket], brand, sku, cents);
+    }
+  }
+
+  return { invoiceId, allocationsByBucket, skuBreakdownByBucketBrand, unallocatedSkuLessBuckets };
 }

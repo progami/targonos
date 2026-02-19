@@ -6,6 +6,7 @@ export type { InventoryComponent };
 export type InventoryState = {
   units: number;
   valueByComponentCents: Record<InventoryComponent, number>;
+  deferredValueByComponentCents: Record<Exclude<InventoryComponent, 'manufacturing'>, number>;
 };
 
 export type LedgerSnapshot = {
@@ -30,6 +31,11 @@ function emptyState(): InventoryState {
     units: 0,
     valueByComponentCents: {
       manufacturing: 0,
+      freight: 0,
+      duty: 0,
+      mfgAccessories: 0,
+    },
+    deferredValueByComponentCents: {
       freight: 0,
       duty: 0,
       mfgAccessories: 0,
@@ -76,7 +82,18 @@ type TimelineEvent =
   | { date: string; order: number; kind: 'return_known'; event: KnownSaleEvent }
   | { date: string; order: number; kind: 'sale_compute'; event: PlannedSaleEvent };
 
-function applyBillEvent(snapshot: LedgerSnapshot, parsedBills: ParsedBills, event: ParsedBills['events'][number], blocks: LedgerBlock[]) {
+const deferredComponents: Array<Exclude<InventoryComponent, 'manufacturing'>> = ['freight', 'duty', 'mfgAccessories'];
+
+function applyDeferredCostsIfAny(state: InventoryState) {
+  for (const component of deferredComponents) {
+    const deferredCents = state.deferredValueByComponentCents[component];
+    if (deferredCents === 0) continue;
+    state.valueByComponentCents[component] += deferredCents;
+    state.deferredValueByComponentCents[component] = 0;
+  }
+}
+
+function applyBillEvent(snapshot: LedgerSnapshot, parsedBills: ParsedBills, event: ParsedBills['events'][number]) {
   if (event.kind === 'brand_cost') {
     // Brand-level cost events are tracked separately — they don't map to individual SKUs
     // Settlement processing handles brand-level P&L allocation directly
@@ -89,17 +106,14 @@ function applyBillEvent(snapshot: LedgerSnapshot, parsedBills: ParsedBills, even
 
     state.units += event.units;
     state.valueByComponentCents.manufacturing += event.costCents;
+    applyDeferredCostsIfAny(state);
     return;
   }
 
   if (event.sku) {
     const state = getState(snapshot, event.sku);
     if (state.units === 0) {
-      blocks.push({
-        code: 'LATE_COST_ON_HAND_ZERO',
-        message: 'Cannot apply cost because on-hand is 0',
-        details: { poNumber: event.poNumber, sku: event.sku, component: event.component, date: event.date },
-      });
+      state.deferredValueByComponentCents[event.component] += event.costCents;
       return;
     }
 
@@ -112,11 +126,7 @@ function applyBillEvent(snapshot: LedgerSnapshot, parsedBills: ParsedBills, even
     if (allocatedCents === 0) continue;
     const state = getState(snapshot, sku);
     if (state.units === 0) {
-      blocks.push({
-        code: 'LATE_COST_ON_HAND_ZERO',
-        message: 'Cannot apply PO cost because on-hand is 0',
-        details: { poNumber: event.poNumber, sku, component: event.component, date: event.date },
-      });
+      state.deferredValueByComponentCents[event.component] += allocatedCents;
       continue;
     }
     state.valueByComponentCents[event.component] += allocatedCents;
@@ -130,7 +140,7 @@ export function applyBillEvents(
   const blocks: LedgerBlock[] = [];
 
   for (const event of parsedBills.events) {
-    applyBillEvent(snapshot, parsedBills, event, blocks);
+    applyBillEvent(snapshot, parsedBills, event);
   }
 
   return { blocks };
@@ -194,7 +204,7 @@ export function replayInventoryLedger(input: {
 
   for (const entry of timeline) {
     if (entry.kind === 'bill') {
-      applyBillEvent(snapshot, input.parsedBills, entry.event, blocks);
+      applyBillEvent(snapshot, input.parsedBills, entry.event);
       continue;
     }
 

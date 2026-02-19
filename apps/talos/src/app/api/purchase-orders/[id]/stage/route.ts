@@ -6,6 +6,7 @@ import {
   serializePurchaseOrder,
   getValidNextStages,
 } from '@/lib/services/po-stage-service'
+import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
@@ -51,16 +52,22 @@ const OptionalInt = z.preprocess((value) => {
   return cleaned
 }, z.number().int().optional())
 
- const StageTransitionSchema = z.object({
-	  targetStatus: z.enum([
-	    'RFQ',
-	    'ISSUED',
-	    'MANUFACTURING',
-	    'OCEAN',
-	    'WAREHOUSE',
-	    'REJECTED',
-	    'CANCELLED',
-	  ] as const),
+function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
+  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
+  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
+    return PurchaseOrderStatus.CLOSED
+  }
+  return status
+}
+
+const StageTransitionSchema = z.object({
+  targetStatus: z.enum([
+    'ISSUED',
+    'MANUFACTURING',
+    'OCEAN',
+    'WAREHOUSE',
+    'CLOSED',
+  ] as const),
   stageData: z
     .object({
       // ===========================================
@@ -153,6 +160,15 @@ export const PATCH = withAuthAndParams(
       return ApiResponses.badRequest('Purchase order ID is required')
     }
 
+    const prisma = await getTenantPrisma()
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
+    }
+
     const payload = await request.json().catch(() => null)
     const result = StageTransitionSchema.safeParse(payload)
 
@@ -175,7 +191,6 @@ export const PATCH = withAuthAndParams(
         result.data.stageData as StageTransitionInput,
         userContext
       )
-      const prisma = await getTenantPrisma()
       const supplier =
         order.counterpartyName && order.counterpartyName.trim().length > 0
           ? await prisma.supplier.findFirst({
@@ -230,12 +245,19 @@ export const GET = withAuthAndParams(
       return ApiResponses.notFound('Purchase order not found')
     }
 
-    const validNextStages = getValidNextStages(
-      order.status as PurchaseOrderStatus
-    )
+    const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
+      prisma,
+      purchaseOrderId: id,
+      purchaseOrderStatus: order.status,
+    })
+    if (crossTenantGuard) {
+      return crossTenantGuard
+    }
+
+    const validNextStages = getValidNextStages(order.status as PurchaseOrderStatus)
 
     return ApiResponses.success({
-      currentStatus: order.status,
+      currentStatus: normalizeWorkflowStatus(order.status as PurchaseOrderStatus),
       validNextStages,
     })
   }

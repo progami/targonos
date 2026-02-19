@@ -624,14 +624,18 @@ export async function getInventory(tenantCode?: TenantCode) {
 
 export async function getInboundShipments(
   tenantCode?: TenantCode,
-  options?: { nextToken?: string }
+  options?: { nextToken?: string; includeCancelled?: boolean }
 ) {
   try {
     const config = getAmazonSpApiConfigFromEnv(tenantCode)
     const nextToken = options?.nextToken?.trim()
+    const includeCancelled = options?.includeCancelled === true
+    const shipmentStatusList = includeCancelled
+      ? ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED', 'CANCELLED', 'DELETED']
+      : ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED']
     const baseQuery = {
       MarketplaceId: config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID,
-      ShipmentStatusList: ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED', 'CANCELLED', 'DELETED'],
+      ShipmentStatusList: shipmentStatusList,
     }
     const response = await callAmazonApi<unknown>(tenantCode, {
       operation: 'getShipments',
