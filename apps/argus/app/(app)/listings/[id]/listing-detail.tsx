@@ -946,7 +946,7 @@ export function ListingDetail({
         className="w-full border-0"
         style={{ height: iframeHeight }}
         title={listing ? listing.label : listingId}
-        sandbox="allow-same-origin"
+        sandbox="allow-same-origin allow-scripts"
       />
       {titleEditorOpen && listing && (
         <Dialog
