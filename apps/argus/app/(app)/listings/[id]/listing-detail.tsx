@@ -2329,6 +2329,12 @@ function ensureTrackControls(
     ebcDownload: () => void
   }>,
 ) {
+  function stopClick(e: MouseEvent) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    e.stopPropagation()
+  }
+
   target.classList.add('argus-vc-highlight')
   if (!target.style.position) {
     target.style.position = 'relative'
@@ -2346,7 +2352,8 @@ function ensureTrackControls(
   prev.className = 'argus-vc-btn'
   prev.type = 'button'
   prev.textContent = '‹'
-  prev.addEventListener('click', () => {
+  prev.addEventListener('click', (e) => {
+    stopClick(e)
     if (track === 'title') callbacksRef.current?.titlePrev()
     if (track === 'bullets') callbacksRef.current?.bulletsPrev()
     if (track === 'gallery') callbacksRef.current?.galleryPrev()
@@ -2364,7 +2371,8 @@ function ensureTrackControls(
   next.className = 'argus-vc-btn'
   next.type = 'button'
   next.textContent = '›'
-  next.addEventListener('click', () => {
+  next.addEventListener('click', (e) => {
+    stopClick(e)
     if (track === 'title') callbacksRef.current?.titleNext()
     if (track === 'bullets') callbacksRef.current?.bulletsNext()
     if (track === 'gallery') callbacksRef.current?.galleryNext()
@@ -2384,7 +2392,8 @@ function ensureTrackControls(
   live.type = 'button'
   live.textContent = 'Live'
   live.title = 'Jump to live version on Amazon'
-  live.addEventListener('click', () => {
+  live.addEventListener('click', (e) => {
+    stopClick(e)
     if (track === 'title') callbacksRef.current?.titleLive()
     if (track === 'bullets') callbacksRef.current?.bulletsLive()
     if (track === 'gallery') callbacksRef.current?.galleryLive()
@@ -2400,7 +2409,10 @@ function ensureTrackControls(
     edit.type = 'button'
     edit.textContent = 'Edit'
     edit.title = 'Create new version'
-    edit.addEventListener('click', () => callbacksRef.current?.titleEdit())
+    edit.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.titleEdit()
+    })
     controls.append(edit)
   }
 
@@ -2411,7 +2423,10 @@ function ensureTrackControls(
     edit.type = 'button'
     edit.textContent = 'Edit'
     edit.title = 'Create new version'
-    edit.addEventListener('click', () => callbacksRef.current?.bulletsEdit())
+    edit.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.bulletsEdit()
+    })
     controls.append(edit)
   }
 
@@ -2422,7 +2437,10 @@ function ensureTrackControls(
     upload.type = 'button'
     upload.textContent = 'Upload'
     upload.title = 'Upload new version'
-    upload.addEventListener('click', () => callbacksRef.current?.galleryUpload())
+    upload.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.galleryUpload()
+    })
     controls.append(upload)
 
     const download = doc.createElement('button')
@@ -2431,7 +2449,10 @@ function ensureTrackControls(
     download.type = 'button'
     download.textContent = '⬇'
     download.title = 'Download images'
-    download.addEventListener('click', () => callbacksRef.current?.galleryDownload())
+    download.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.galleryDownload()
+    })
     controls.append(download)
   }
 
@@ -2442,7 +2463,10 @@ function ensureTrackControls(
     upload.type = 'button'
     upload.textContent = 'Upload'
     upload.title = 'Upload new version'
-    upload.addEventListener('click', () => callbacksRef.current?.videoUpload())
+    upload.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.videoUpload()
+    })
     controls.append(upload)
   }
 
@@ -2453,7 +2477,10 @@ function ensureTrackControls(
     download.type = 'button'
     download.textContent = '⬇'
     download.title = 'Download images'
-    download.addEventListener('click', () => callbacksRef.current?.ebcDownload())
+    download.addEventListener('click', (e) => {
+      stopClick(e)
+      callbacksRef.current?.ebcDownload()
+    })
     controls.append(download)
   }
 
@@ -2463,7 +2490,8 @@ function ensureTrackControls(
   del.type = 'button'
   del.textContent = '🗑'
   del.title = track === 'ebc' ? 'Clear overrides' : 'Delete version'
-  del.addEventListener('click', () => {
+  del.addEventListener('click', (e) => {
+    stopClick(e)
     if (track === 'title') callbacksRef.current?.titleDelete()
     if (track === 'bullets') callbacksRef.current?.bulletsDelete()
     if (track === 'gallery') callbacksRef.current?.galleryDelete()
@@ -2488,6 +2516,12 @@ function ensureEbcModuleControls(
     ebcModuleDelete: (sectionType: string, modulePosition: number) => void
   }>,
 ) {
+  function stopClick(e: MouseEvent) {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    e.stopPropagation()
+  }
+
   if (!target.style.position) {
     target.style.position = 'relative'
   }
@@ -2507,7 +2541,10 @@ function ensureEbcModuleControls(
   prev.textContent = '‹'
   prev.title = 'Previous version'
   prev.dataset.dir = 'prev'
-  prev.addEventListener('click', () => callbacksRef.current?.ebcModulePrev(sectionType, modulePosition))
+  prev.addEventListener('click', (e) => {
+    stopClick(e)
+    callbacksRef.current?.ebcModulePrev(sectionType, modulePosition)
+  })
 
   const label = doc.createElement('span')
   label.className = 'argus-vc-label'
@@ -2519,7 +2556,10 @@ function ensureEbcModuleControls(
   next.textContent = '›'
   next.title = 'Next version'
   next.dataset.dir = 'next'
-  next.addEventListener('click', () => callbacksRef.current?.ebcModuleNext(sectionType, modulePosition))
+  next.addEventListener('click', (e) => {
+    stopClick(e)
+    callbacksRef.current?.ebcModuleNext(sectionType, modulePosition)
+  })
 
   const sep = doc.createElement('span')
   sep.className = 'argus-vc-sep'
@@ -2529,14 +2569,20 @@ function ensureEbcModuleControls(
   live.type = 'button'
   live.textContent = 'Live'
   live.title = 'Jump to live version on Amazon'
-  live.addEventListener('click', () => callbacksRef.current?.ebcModuleLive(sectionType, modulePosition))
+  live.addEventListener('click', (e) => {
+    stopClick(e)
+    callbacksRef.current?.ebcModuleLive(sectionType, modulePosition)
+  })
 
   const edit = doc.createElement('button')
   edit.className = 'argus-vc-btn'
   edit.type = 'button'
   edit.textContent = 'Edit'
   edit.title = 'Create new version'
-  edit.addEventListener('click', () => callbacksRef.current?.ebcModuleEdit(sectionType, modulePosition))
+  edit.addEventListener('click', (e) => {
+    stopClick(e)
+    callbacksRef.current?.ebcModuleEdit(sectionType, modulePosition)
+  })
 
   const del = doc.createElement('button')
   del.className = 'argus-vc-btn argus-vc-danger'
@@ -2544,7 +2590,10 @@ function ensureEbcModuleControls(
   del.textContent = '🗑'
   del.title = 'Delete version'
   del.dataset.action = 'delete'
-  del.addEventListener('click', () => callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition))
+  del.addEventListener('click', (e) => {
+    stopClick(e)
+    callbacksRef.current?.ebcModuleDelete(sectionType, modulePosition)
+  })
 
   controls.append(prev, label, next, sep, live, edit, del)
   target.append(controls)
@@ -2963,6 +3012,7 @@ function ensureGalleryThumbnailSwap(
   altList.addEventListener('click', (e) => {
     const target = e.target
     if (!(target instanceof doc.defaultView!.Element)) return
+    if (target.closest('.argus-vc-controls')) return
     const li = target.closest('li')
     if (!li) return
 
