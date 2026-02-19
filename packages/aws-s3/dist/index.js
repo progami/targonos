@@ -282,6 +282,22 @@ export class S3Service {
             throw new Error('No stream returned from S3');
         return body;
     }
+    async getObjectStream(key, options = {}) {
+        const command = new GetObjectCommand({ Bucket: this.bucket, Key: key, Range: options.range });
+        const response = await this.client.send(command);
+        const body = response.Body;
+        if (!body)
+            throw new Error('No stream returned from S3');
+        return {
+            body,
+            contentType: response.ContentType,
+            contentLength: response.ContentLength,
+            contentRange: response.ContentRange,
+            acceptRanges: response.AcceptRanges,
+            etag: response.ETag?.replace(/"/g, ''),
+            lastModified: response.LastModified,
+        };
+    }
     async deleteFile(key) {
         try {
             const command = new DeleteObjectCommand({ Bucket: this.bucket, Key: key });
