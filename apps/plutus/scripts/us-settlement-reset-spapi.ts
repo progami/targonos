@@ -159,6 +159,7 @@ type DeletionTarget = {
   docNumber: string | null;
   kind: TargetKind;
   source: 'qbo-search' | 'db-processing' | 'db-rollback';
+  existsInQbo: boolean;
 };
 
 function toIsoStart(startDate: string): Date {
@@ -170,6 +171,13 @@ function toIsoEnd(endDate: string | undefined): Date {
     return new Date(`${endDate}T23:59:59.999Z`);
   }
   return new Date();
+}
+
+function isNotFoundError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('Failed to fetch journal entry: 404')) return true;
+  if (message.includes('Failed to delete journal entry: 404')) return true;
+  return false;
 }
 
 async function main(): Promise<void> {
@@ -297,6 +305,7 @@ async function main(): Promise<void> {
       docNumber: r.docNumber,
       kind: classifyDocNumber(r.docNumber),
       source: 'qbo-search',
+      existsInQbo: true,
     });
   }
 
@@ -307,7 +316,7 @@ async function main(): Promise<void> {
     for (const id of ids) {
       if (isNoopJournalEntryId(id)) continue;
       if (seenFromSearch.has(id)) continue;
-      targets.push({ journalEntryId: id, txnDate: null, docNumber: null, kind: 'unknown', source: 'db-processing' });
+      targets.push({ journalEntryId: id, txnDate: null, docNumber: null, kind: 'unknown', source: 'db-processing', existsInQbo: true });
     }
   }
 
@@ -316,20 +325,30 @@ async function main(): Promise<void> {
     for (const id of ids) {
       if (isNoopJournalEntryId(id)) continue;
       if (seenFromSearch.has(id)) continue;
-      targets.push({ journalEntryId: id, txnDate: null, docNumber: null, kind: 'unknown', source: 'db-rollback' });
+      targets.push({ journalEntryId: id, txnDate: null, docNumber: null, kind: 'unknown', source: 'db-rollback', existsInQbo: true });
     }
   }
 
   // Fetch missing DocNumber/TxnDate for db-sourced targets so the plan is auditable.
   for (const target of targets) {
     if (target.docNumber !== null && target.txnDate !== null) continue;
-    const full = await fetchJournalEntryById(activeConnection, target.journalEntryId);
-    if (full.updatedConnection) {
-      activeConnection = full.updatedConnection;
+    try {
+      const full = await fetchJournalEntryById(activeConnection, target.journalEntryId);
+      if (full.updatedConnection) {
+        activeConnection = full.updatedConnection;
+      }
+      target.docNumber = full.journalEntry.DocNumber ? full.journalEntry.DocNumber : null;
+      target.txnDate = full.journalEntry.TxnDate ? full.journalEntry.TxnDate : null;
+      target.kind = target.docNumber ? classifyDocNumber(target.docNumber) : 'unknown';
+    } catch (error) {
+      if (!isNotFoundError(error)) {
+        throw error;
+      }
+      target.existsInQbo = false;
+      target.docNumber = null;
+      target.txnDate = null;
+      target.kind = 'unknown';
     }
-    target.docNumber = full.journalEntry.DocNumber ? full.journalEntry.DocNumber : null;
-    target.txnDate = full.journalEntry.TxnDate ? full.journalEntry.TxnDate : null;
-    target.kind = target.docNumber ? classifyDocNumber(target.docNumber) : 'unknown';
   }
 
   // Stable, safer delete order: processing JEs first, then settlement JEs.
@@ -350,11 +369,15 @@ async function main(): Promise<void> {
   const deletionPlan = targets.map((t) => ({
     source: t.source,
     kind: t.kind,
+    existsInQbo: t.existsInQbo,
     txnDate: t.txnDate,
     docNumber: t.docNumber,
     journalEntryId: t.journalEntryId,
     qboUrl: buildQboJournalHref(t.journalEntryId),
   }));
+
+  const existingTargetCount = targets.filter((t) => t.existsInQbo).length;
+  const missingTargetCount = targets.length - existingTargetCount;
 
   if (!options.apply) {
     console.log(
@@ -364,7 +387,8 @@ async function main(): Promise<void> {
           options: { startDate, endDate, resync: options.resync },
           totals: {
             qboJournalEntriesMatchedByDocNumber: qboSearchResults.length,
-            qboJournalEntriesToDelete: targets.length,
+            qboJournalEntriesToDelete: existingTargetCount,
+            qboJournalEntriesMissing: missingTargetCount,
             dbSettlementProcessingRows: processingRows.length,
             dbSettlementRollbackRows: rollbackRows.length,
             auditInvoiceIdsToDelete: Array.from(invoiceIdsToDelete).length,
@@ -381,16 +405,31 @@ async function main(): Promise<void> {
     return;
   }
 
-  const deletions: Array<{ journalEntryId: string; ok: boolean; error?: string }> = [];
+  const deletions: Array<{ journalEntryId: string; ok: boolean; skipped: boolean; error?: string }> = [];
   for (const target of targets) {
+    if (!target.existsInQbo) {
+      deletions.push({ journalEntryId: target.journalEntryId, ok: true, skipped: true });
+      continue;
+    }
+
     try {
       const res = await deleteJournalEntry(activeConnection, target.journalEntryId);
       if (res.updatedConnection) {
         activeConnection = res.updatedConnection;
       }
-      deletions.push({ journalEntryId: target.journalEntryId, ok: true });
+      deletions.push({ journalEntryId: target.journalEntryId, ok: true, skipped: false });
     } catch (error) {
-      deletions.push({ journalEntryId: target.journalEntryId, ok: false, error: error instanceof Error ? error.message : String(error) });
+      if (isNotFoundError(error)) {
+        deletions.push({ journalEntryId: target.journalEntryId, ok: true, skipped: true });
+        continue;
+      }
+
+      deletions.push({
+        journalEntryId: target.journalEntryId,
+        ok: false,
+        skipped: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -413,6 +452,9 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+
+  const deletedCount = deletions.filter((d) => d.ok && !d.skipped).length;
+  const skippedCount = deletions.filter((d) => d.skipped).length;
 
   // DB cleanup (Plutus only) — remove processed/rollback records and invoice audit rows for this US range.
   await db.settlementProcessing.deleteMany({
@@ -460,7 +502,8 @@ async function main(): Promise<void> {
         dryRun: false,
         options: { startDate, endDate, resync: options.resync },
         totals: {
-          deletedQboJournalEntries: deletions.length,
+          deletedQboJournalEntries: deletedCount,
+          skippedQboJournalEntries: skippedCount,
           deletedSettlementProcessingRows: processingRows.length,
           deletedSettlementRollbackRows: rollbackRows.length,
           deletedAuditInvoiceIds: Array.from(invoiceIdsToDelete).length,
@@ -477,4 +520,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-
