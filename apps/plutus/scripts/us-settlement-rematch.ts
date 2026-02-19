@@ -177,7 +177,7 @@ async function main(): Promise<void> {
 
   while (true) {
     const page = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       startDate: options.startDate,
       maxResults: pageSize,
       startPosition,
@@ -212,7 +212,15 @@ async function main(): Promise<void> {
   const invoices = await fetchAuditInvoiceSummaries();
 
   const candidates = settlementJournals
-    .filter((entry) => entry.DocNumber && entry.DocNumber.includes('LMB-US-'))
+    .filter((entry) => {
+      const docNumber = entry.DocNumber;
+      if (!docNumber) return false;
+      const trimmed = docNumber.trim();
+      if (/^US-/i.test(trimmed)) return true;
+      if (/^LMB-US-/i.test(trimmed)) return true;
+      if (/#LMB-US-/i.test(trimmed)) return true;
+      return false;
+    })
     .filter((entry) => !processedSettlementIds.has(entry.Id))
     .sort((a, b) => b.TxnDate.localeCompare(a.TxnDate));
 

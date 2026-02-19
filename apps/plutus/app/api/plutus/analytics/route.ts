@@ -49,7 +49,7 @@ function requireMonth(value: string | null): { year: number; month: number; key:
 
 function requireChannel(value: string | null): Channel {
   if (value === 'targon-us') {
-    return { id: value, label: 'Targon US', region: 'US', docNumberContains: 'LMB-US-' };
+    return { id: value, label: 'Targon US', region: 'US', docNumberContains: 'US-' };
   }
   if (value === 'targon-uk') {
     return { id: value, label: 'Targon UK', region: 'UK', docNumberContains: 'LMB-UK-' };
@@ -214,6 +214,12 @@ export async function GET(req: NextRequest) {
     }
 
     for (const entry of journalEntries) {
+      const docNumber = entry.DocNumber ? entry.DocNumber.trim() : '';
+      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      if (first === 'C' || first === 'P') {
+        continue;
+      }
+
       const key = entry.TxnDate.slice(0, 7);
       const bucket = totalsByMonth.get(key);
       if (!bucket) continue;

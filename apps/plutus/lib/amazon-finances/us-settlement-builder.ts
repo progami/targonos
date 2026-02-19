@@ -63,7 +63,7 @@ function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
-function buildUsLmbDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
+function buildUsSettlementDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
   const start = parseIsoDayParts(input.startIsoDay, 'segment start');
   const end = parseIsoDayParts(input.endIsoDay, 'segment end');
 
@@ -76,7 +76,7 @@ function buildUsLmbDocNumber(input: { startIsoDay: string; endIsoDay: string; se
   const endToken = `${pad2(end.day)}${month}`;
   const yearToken = String(end.year).slice(-2);
 
-  return `LMB-US-${startToken}-${endToken}-${yearToken}-${input.seq}`;
+  return `US-${startToken}-${endToken}-${yearToken}-${input.seq}`;
 }
 
 function addCents(map: Map<string, number>, key: string, cents: number): void {
@@ -293,7 +293,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     const segEndDay = year === endParts.year && month === endParts.month ? endParts.day : lastDayOfMonth(year, month);
     const segStartIsoDay = `${year}-${pad2(month)}-${pad2(segStartDay)}`;
     const segEndIsoDay = `${year}-${pad2(month)}-${pad2(segEndDay)}`;
-    const docNumber = buildUsLmbDocNumber({ startIsoDay: segStartIsoDay, endIsoDay: segEndIsoDay, seq });
+    const docNumber = buildUsSettlementDocNumber({ startIsoDay: segStartIsoDay, endIsoDay: segEndIsoDay, seq });
 
     segments.push({
       seq,

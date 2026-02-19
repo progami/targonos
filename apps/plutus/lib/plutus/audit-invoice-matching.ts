@@ -46,8 +46,11 @@ export function dateRangesOverlapIsoDay(
   return aStart <= bEnd && bStart <= aEnd;
 }
 
-function isLmbInvoiceId(value: string): boolean {
-  return /^LMB-(US|UK)-/i.test(value.trim());
+function isSettlementInvoiceId(value: string): boolean {
+  const trimmed = value.trim();
+  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
+  if (/^(US|UK)-/i.test(trimmed)) return true;
+  return false;
 }
 
 function normalizeSettlementDocNumberForInvoiceId(value: string): string {
@@ -63,8 +66,8 @@ function normalizeSettlementDocNumberForInvoiceId(value: string): string {
 }
 
 function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {
-  const lmb = candidates.filter((inv) => isLmbInvoiceId(inv.invoiceId));
-  if (lmb.length === 1) return lmb[0]!;
+  const settlementInvoices = candidates.filter((inv) => isSettlementInvoiceId(inv.invoiceId));
+  if (settlementInvoices.length === 1) return settlementInvoices[0]!;
   return null;
 }
 
