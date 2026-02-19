@@ -39,19 +39,19 @@ export default async function ListingsPage() {
                         {listing._count.snapshots} snapshot{listing._count.snapshots !== 1 ? 's' : ''}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        T v{listing._count.titleRevisions}
+                        Title ×{listing._count.titleRevisions}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        B v{listing._count.bulletsRevisions}
+                        Bullets ×{listing._count.bulletsRevisions}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        G v{listing._count.galleryRevisions}
+                        Gallery ×{listing._count.galleryRevisions}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        V v{listing._count.videoRevisions}
+                        Video ×{listing._count.videoRevisions}
                       </span>
                       <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        E v{listing._count.ebcRevisions}
+                        A+ ×{listing._count.ebcRevisions}
                       </span>
                     </div>
                   </div>

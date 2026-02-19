@@ -225,6 +225,8 @@ function extractModulesFromContainer(
     const headings = mod.find('h3, h4, .aplus-module-heading').map((_j, e) => $(e).text().trim()).get().filter(Boolean)
     const paragraphs = mod.find('p').map((_j, e) => $(e).text().trim()).get().filter(Boolean)
 
+    if (images.length === 0 && !headings[0] && paragraphs.length === 0) return
+
     modules.push({
       moduleType,
       headline: headings[0] ?? null,
