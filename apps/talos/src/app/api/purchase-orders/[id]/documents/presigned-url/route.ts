@@ -11,6 +11,7 @@ import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 export const dynamic = 'force-dynamic'
 
 const MAX_DOCUMENT_SIZE_MB = 1024
+const DISABLE_PO_DOCUMENT_STAGE_LOCK = process.env.TALOS_DISABLE_PO_DOCUMENT_STAGE_LOCK === 'true'
 
 const STAGES: readonly PurchaseOrderDocumentStage[] = [
   'ISSUED',
@@ -141,14 +142,15 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       )
     }
 
-    // TODO: Re-enable stage locking once business rules are finalised
-    // const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
-    // if (currentStage && DOCUMENT_STAGE_ORDER[stage] < DOCUMENT_STAGE_ORDER[currentStage]) {
-    //   return NextResponse.json(
-    //     { error: `Documents for completed stages are locked (current stage: ${order.status})` },
-    //     { status: 409 }
-    //   )
-    // }
+    if (!DISABLE_PO_DOCUMENT_STAGE_LOCK) {
+      const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
+      if (currentStage && DOCUMENT_STAGE_ORDER[stage] < DOCUMENT_STAGE_ORDER[currentStage]) {
+        return NextResponse.json(
+          { error: `Documents for completed stages are locked (current stage: ${order.status})` },
+          { status: 409 }
+        )
+      }
+    }
 
     const tenantCode = await getCurrentTenantCode()
     const purchaseOrderNumber = toPublicOrderNumber(order.orderNumber)

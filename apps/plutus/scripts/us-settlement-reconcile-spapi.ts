@@ -128,6 +128,11 @@ function extractLinesFromJe(je: QboJournalEntry): QboLine[] {
 
 function requireSettlementIdFromPrivateNote(input: { docNumber: string; privateNote: string | undefined }): string {
   const privateNote = typeof input.privateNote === 'string' ? input.privateNote : '';
+  const matchSpapi = privateNote.match(/Settlement:\s*([0-9]+)/);
+  if (matchSpapi) {
+    return matchSpapi[1]!;
+  }
+
   const match = privateNote.match(/downloadAuditFile\/\d+-([0-9]+)/);
   if (!match) {
     throw new Error(`Missing settlementId in PrivateNote for ${input.docNumber}`);
