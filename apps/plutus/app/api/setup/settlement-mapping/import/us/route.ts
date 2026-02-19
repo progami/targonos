@@ -29,7 +29,7 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
 
   while (true) {
     const page = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       maxResults: pageSize,
       startPosition,
     });
@@ -38,6 +38,12 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
     }
 
     for (const je of page.journalEntries) {
+      const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
+      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      if (first === 'C' || first === 'P') {
+        continue;
+      }
+
       const full = await fetchJournalEntryById(activeConnection, je.Id);
       if (full.updatedConnection) {
         activeConnection = full.updatedConnection;
@@ -85,7 +91,7 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
   }
 
   if (memoMappings.size === 0) {
-    throw new Error("No settlements found in QBO history (DocNumber contains 'LMB-US-')");
+    throw new Error("No settlements found in QBO history (DocNumber contains 'US-')");
   }
 
   const memoEntries = Array.from(memoMappings.entries()).sort((a, b) => a[0].localeCompare(b[0]));

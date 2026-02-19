@@ -958,8 +958,8 @@ export default function SettlementsPage() {
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
-                                  { label: 'Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=lmb-settlement`) },
-                                  { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus-settlement`) },
+                                  { label: 'QBO Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
+                                  { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
                                   ...(s.marketplace.region === 'US' && settlementId !== null
                                     ? [
                                         {

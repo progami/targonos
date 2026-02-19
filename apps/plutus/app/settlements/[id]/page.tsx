@@ -826,10 +826,12 @@ function ProcessSettlementDialog({
 type SettlementDetailTab = 'sales' | 'plutus-preview';
 
 function parseSettlementTab(tab: string | null): SettlementDetailTab {
+  if (tab === 'settlement') return 'sales';
+  if (tab === 'qbo-settlement') return 'sales';
+  if (tab === 'plutus') return 'plutus-preview';
   if (tab === 'lmb-preview') return 'plutus-preview';
   if (tab === 'lmb-settlement') return 'sales';
   if (tab === 'plutus-settlement') return 'plutus-preview';
-  if (tab === 'lmb-preview') return 'plutus-preview';
   if (tab === 'history') return 'plutus-preview';
   if (tab === 'ads-allocation') return 'plutus-preview';
   if (tab === 'analysis') return 'plutus-preview';
