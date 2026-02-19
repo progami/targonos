@@ -228,6 +228,32 @@ export async function buildDeterministicSkuAllocations(input: {
     }
   }
 
+  const promotionsSkuLessTotal = skuLessTotalsByBucket.amazonPromotions;
+  if (promotionsSkuLessTotal !== undefined && promotionsSkuLessTotal !== 0) {
+    const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonPromotions');
+    const allocated = allocateSignedByWeight({
+      totalCents: promotionsSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonPromotions = allocated;
+    }
+  }
+
+  const reimbursementSkuLessTotal = skuLessTotalsByBucket.amazonFbaInventoryReimbursement;
+  if (reimbursementSkuLessTotal !== undefined && reimbursementSkuLessTotal !== 0) {
+    const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonFbaInventoryReimbursement');
+    const allocated = allocateSignedByWeight({
+      totalCents: reimbursementSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonFbaInventoryReimbursement = allocated;
+    }
+  }
+
   const adsSkuLessTotal = skuLessTotalsByBucket.amazonAdvertisingCosts;
   if (adsSkuLessTotal !== undefined && adsSkuLessTotal !== 0) {
     const adsUploads = await db.adsDataUpload.findMany({
@@ -248,10 +274,20 @@ export async function buildDeterministicSkuAllocations(input: {
 
     const upload = chooseBestUpload(adsUploads);
     if (upload === null) {
-      issues.push({
-        bucket: 'amazonAdvertisingCosts',
-        message: 'Missing Ads Data upload covering invoice date range',
+      const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonAdvertisingCosts');
+      const allocated = allocateSignedByWeight({
+        totalCents: adsSkuLessTotal,
+        weightsBySku,
       });
+
+      if (Object.keys(allocated).length > 0) {
+        skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
+      } else {
+        issues.push({
+          bucket: 'amazonAdvertisingCosts',
+          message: 'Missing Ads Data upload covering invoice date range',
+        });
+      }
     } else {
       const grouped = await db.adsDataRow.groupBy({
         by: ['sku'],
@@ -288,10 +324,20 @@ export async function buildDeterministicSkuAllocations(input: {
       const expected = Math.abs(adsSkuLessTotal);
       const weightsTotal = sumRecordValues(bySku);
       if (weightsTotal !== expected) {
-        issues.push({
-          bucket: 'amazonAdvertisingCosts',
-          message: `Ads report total mismatch (${weightsTotal} vs ${expected})`,
+        const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonAdvertisingCosts');
+        const fallbackAllocated = allocateSignedByWeight({
+          totalCents: adsSkuLessTotal,
+          weightsBySku,
         });
+
+        if (Object.keys(fallbackAllocated).length > 0) {
+          skuAllocationsByBucket.amazonAdvertisingCosts = fallbackAllocated;
+        } else {
+          issues.push({
+            bucket: 'amazonAdvertisingCosts',
+            message: `Ads report total mismatch (${weightsTotal} vs ${expected})`,
+          });
+        }
       } else {
         skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
       }
