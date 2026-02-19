@@ -127,18 +127,18 @@ test('selectAuditInvoiceForSettlement falls back to unique overlap match', () =>
 test('selectAuditInvoiceForSettlement prefers invoiceId matching settlement DocNumber', () => {
   const invoices: AuditInvoiceSummary[] = [
     { invoiceId: 'MONTHLY', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-28', rowCount: 100 },
-    { invoiceId: 'LMB-US-01-14FEB-26-1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
+    { invoiceId: 'US-01-14FEB-26-1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
   ];
 
   const match = selectAuditInvoiceForSettlement({
     settlementMarketplace: 'amazon.com',
     settlementPeriodStart: '2026-02-01',
     settlementPeriodEnd: '2026-02-14',
-    settlementDocNumber: 'LMB-US-01-14FEB-26-1',
+    settlementDocNumber: 'US-01-14FEB-26-1',
     invoices,
   });
 
-  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'LMB-US-01-14FEB-26-1' });
+  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'US-01-14FEB-26-1' });
 });
 
 test('parseAmazonTransactionCsv parses required totals', () => {
@@ -206,7 +206,7 @@ test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settle
   });
 
   assert.equal(draft.segments.length, 1);
-  assert.equal(draft.segments[0]?.docNumber, 'LMB-US-19-31DEC-25-1');
+  assert.equal(draft.segments[0]?.docNumber, 'US-19-31DEC-25-1');
 
   const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);
@@ -1166,7 +1166,7 @@ test('settlement projection infers cadence and average from recent history', () 
       {
         journalEntryId: 'je-1',
         channel: 'US',
-        docNumber: 'LMB-US-01JAN-14JAN-26-001',
+        docNumber: 'US-01JAN-14JAN-26-001',
         txnDate: '2026-01-16',
         periodEnd: '2026-01-14',
         cashImpactCents: 100_000,
@@ -1174,7 +1174,7 @@ test('settlement projection infers cadence and average from recent history', () 
       {
         journalEntryId: 'je-2',
         channel: 'US',
-        docNumber: 'LMB-US-15JAN-28JAN-26-002',
+        docNumber: 'US-15JAN-28JAN-26-002',
         txnDate: '2026-01-30',
         periodEnd: '2026-01-28',
         cashImpactCents: 120_000,
@@ -1182,7 +1182,7 @@ test('settlement projection infers cadence and average from recent history', () 
       {
         journalEntryId: 'je-3',
         channel: 'US',
-        docNumber: 'LMB-US-29JAN-11FEB-26-003',
+        docNumber: 'US-29JAN-11FEB-26-003',
         txnDate: '2026-02-13',
         periodEnd: '2026-02-11',
         cashImpactCents: 140_000,

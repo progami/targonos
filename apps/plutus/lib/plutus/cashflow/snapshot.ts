@@ -167,9 +167,15 @@ async function fetchSettlementHistoryForChannel(input: {
         continue;
       }
 
+      const docNumber = journalEntry.DocNumber.trim();
+      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      if (first === 'C' || first === 'P') {
+        continue;
+      }
+
       let periodEnd: string | null = null;
       try {
-        const parsed = parseLmbSettlementDocNumber(journalEntry.DocNumber);
+        const parsed = parseLmbSettlementDocNumber(docNumber);
         periodEnd = parsed.periodEnd;
       } catch (error) {
         input.warnings.push({
@@ -182,7 +188,7 @@ async function fetchSettlementHistoryForChannel(input: {
       rows.push({
         journalEntryId: journalEntry.Id,
         channel: input.channel,
-        docNumber: journalEntry.DocNumber,
+        docNumber,
         txnDate: journalEntry.TxnDate,
         periodEnd,
         cashImpactCents: buildCashImpactFromJournalEntry({
@@ -595,7 +601,7 @@ export async function generateCashflowSnapshot(): Promise<CashflowSnapshotPayloa
           connection,
           startDate: lookbackStart,
           endDate: asOfDate,
-          docNumberContains: 'LMB-US-',
+          docNumberContains: 'US-',
           channel: 'US',
           cashAccountIdSet,
           warnings,

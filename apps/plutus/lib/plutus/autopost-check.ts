@@ -119,7 +119,7 @@ async function loadAuditRowsForInvoice(input: {
   return { rows, sourceFilename };
 }
 
-async function fetchAllLmbSettlementJournalEntries(input: {
+async function fetchAllSettlementJournalEntries(input: {
   connection: QboConnection;
   startDate?: string;
 }): Promise<{
@@ -129,30 +129,41 @@ async function fetchAllLmbSettlementJournalEntries(input: {
   let activeConnection = input.connection;
 
   const pageSize = 100;
-  let startPosition = 1;
   let allJournalEntries: Array<{ Id: string; DocNumber?: string; TxnDate: string }> = [];
 
-  while (true) {
-    const result = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'LMB-',
-      maxResults: pageSize,
-      startPosition,
-      startDate: input.startDate,
-    });
+  const docNumberQueries = ['US-', 'UK-'];
 
-    if (result.updatedConnection) {
-      activeConnection = result.updatedConnection;
+  for (const docNumberContains of docNumberQueries) {
+    let startPosition = 1;
+    let fetchedForQuery = 0;
+    while (true) {
+      const result = await fetchJournalEntries(activeConnection, {
+        docNumberContains,
+        maxResults: pageSize,
+        startPosition,
+        startDate: input.startDate,
+      });
+
+      if (result.updatedConnection) {
+        activeConnection = result.updatedConnection;
+      }
+
+      allJournalEntries = allJournalEntries.concat(result.journalEntries);
+
+      fetchedForQuery += result.journalEntries.length;
+      if (fetchedForQuery >= result.totalCount) break;
+      if (result.journalEntries.length === 0) break;
+      startPosition += result.journalEntries.length;
     }
+  }
 
-    allJournalEntries = allJournalEntries.concat(result.journalEntries);
-
-    if (allJournalEntries.length >= result.totalCount) break;
-    if (result.journalEntries.length === 0) break;
-    startPosition += result.journalEntries.length;
+  const deduped = new Map<string, { Id: string; DocNumber?: string; TxnDate: string }>();
+  for (const je of allJournalEntries) {
+    deduped.set(je.Id, je);
   }
 
   return {
-    journalEntries: allJournalEntries,
+    journalEntries: Array.from(deduped.values()),
     updatedConnection: activeConnection === input.connection ? undefined : activeConnection,
   };
 }
@@ -189,7 +200,7 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
 
   const startDate = config.autopostStartDate ? config.autopostStartDate.toISOString().slice(0, 10) : undefined;
 
-  const { journalEntries, updatedConnection } = await fetchAllLmbSettlementJournalEntries({
+  const { journalEntries, updatedConnection } = await fetchAllSettlementJournalEntries({
     connection,
     startDate,
   });
@@ -230,12 +241,18 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
       continue;
     }
 
+    const trimmedDocNumber = settlement.DocNumber.trim();
+    const first = trimmedDocNumber[0] ? trimmedDocNumber[0].toUpperCase() : '';
+    if (first === 'C' || first === 'P') {
+      continue;
+    }
+
     let marketplace: MarketplaceId;
     let periodStart: string | null;
     let periodEnd: string | null;
     let normalizedDocNumber: string;
     try {
-      const meta = parseLmbSettlementDocNumber(settlement.DocNumber);
+      const meta = parseLmbSettlementDocNumber(trimmedDocNumber);
       marketplace = meta.marketplace.id;
       periodStart = meta.periodStart;
       periodEnd = meta.periodEnd;

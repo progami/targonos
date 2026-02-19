@@ -148,8 +148,8 @@ function classifyDocNumber(docNumber: string): TargetKind {
   const first = trimmed[0] ? trimmed[0].toUpperCase() : '';
   if (first === 'C') return 'cogs';
   if (first === 'P') return 'pnl';
-  if (/^LMB-US-/i.test(trimmed) || /#LMB-US-/i.test(trimmed)) return 'settlement';
-  if (/LMB-US-/i.test(trimmed)) return 'unknown';
+  if (/^US-/i.test(trimmed) || /^LMB-US-/i.test(trimmed) || /#LMB-US-/i.test(trimmed)) return 'settlement';
+  if (/US-/i.test(trimmed)) return 'unknown';
   return 'unknown';
 }
 
@@ -207,7 +207,7 @@ async function main(): Promise<void> {
   const processingRows = await db.settlementProcessing.findMany({
     where: {
       marketplace: 'amazon.com',
-      lmbDocNumber: { startsWith: 'LMB-US-' },
+      lmbDocNumber: { contains: 'US-' },
       lmbPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
@@ -223,7 +223,7 @@ async function main(): Promise<void> {
   const rollbackRows = await db.settlementRollback.findMany({
     where: {
       marketplace: 'amazon.com',
-      lmbDocNumber: { startsWith: 'LMB-US-' },
+      lmbDocNumber: { contains: 'US-' },
       lmbPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
@@ -264,9 +264,9 @@ async function main(): Promise<void> {
     invoiceIdsToDelete.add(row.lmbDocNumber);
   }
 
-  // QBO search by DocNumber contains "LMB-US-" catches:
-  // - settlement JEs (LMB-US-...)
-  // - processing JEs when invoiceId is an LMB docNumber (CLMB-US-... / PLMB-US-...)
+  // QBO search by DocNumber contains "US-" catches:
+  // - settlement JEs (US-... and legacy LMB-US-...)
+  // - processing JEs when invoiceId is a settlement doc number (CUS-... / PUS-... and legacy CLMB-US-... / PLMB-US-...)
   // It does NOT catch processing JEs for numeric invoiceIds (e.g. C18299627).
   const qboSearchResults: Array<{ id: string; txnDate: string; docNumber: string }> = [];
 
@@ -276,7 +276,7 @@ async function main(): Promise<void> {
     const page = await fetchJournalEntries(activeConnection, {
       startDate,
       endDate,
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       maxResults: queryPageSize,
       startPosition,
     });

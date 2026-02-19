@@ -35,12 +35,15 @@ function pad2(value: number): string {
 export function getMarketplaceFromRegion(region: string): LmbMarketplace {
   if (region === 'US') return { id: 'amazon.com', label: 'Amazon.com', currency: 'USD', region: 'US' };
   if (region === 'UK') return { id: 'amazon.co.uk', label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' };
-  throw new Error(`Unsupported LMB region: ${region}`);
+  throw new Error(`Unsupported settlement region: ${region}`);
 }
 
 export function normalizeLmbDocNumber(docNumber: string): string {
   const trimmed = docNumber.trim();
   if (/^LMB-(US|UK)-/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^(US|UK)-/i.test(trimmed)) {
     return trimmed;
   }
 
@@ -49,7 +52,7 @@ export function normalizeLmbDocNumber(docNumber: string): string {
     return hashMatch[1]!;
   }
 
-  throw new Error(`DocNumber is not an LMB settlement id: ${docNumber}`);
+  throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
@@ -62,13 +65,13 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
 
   const dayMonth = trimmed.match(/^(\d{2})([A-Z]{3})$/);
   if (!dayMonth) {
-    throw new Error(`Unrecognized LMB date token: ${token}`);
+    throw new Error(`Unrecognized settlement date token: ${token}`);
   }
 
   const monthRaw = dayMonth[2];
   const month = MONTHS[monthRaw];
   if (!month) {
-    throw new Error(`Unrecognized month in LMB date token: ${token}`);
+    throw new Error(`Unrecognized month in settlement date token: ${token}`);
   }
 
   return { day: Number(dayMonth[1]), month };
@@ -76,26 +79,25 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
 
 function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
   const tokens = normalizedDocNumber.split('-').map((t) => t.trim());
-  if (tokens[0] !== 'LMB') {
-    throw new Error(`Invalid LMB doc number format: ${normalizedDocNumber}`);
-  }
 
-  const region = tokens[1];
+  const isLmb = tokens[0] === 'LMB';
+  const region = isLmb ? tokens[1] : tokens[0];
   if (!region) {
-    throw new Error(`Missing LMB region in doc number: ${normalizedDocNumber}`);
+    throw new Error(`Missing settlement region in doc number: ${normalizedDocNumber}`);
   }
 
   const marketplace = getMarketplaceFromRegion(region);
+  const rangeStartIndex = isLmb ? 2 : 1;
 
-  if (tokens.length < 6) {
+  if (tokens.length < rangeStartIndex + 4) {
     return { marketplace, periodStart: null, periodEnd: null };
   }
 
   const yearToken = tokens[tokens.length - 2];
-  const rangeTokens = tokens.slice(2, tokens.length - 2);
+  const rangeTokens = tokens.slice(rangeStartIndex, tokens.length - 2);
 
   if (!yearToken) {
-    throw new Error(`Invalid LMB doc number format: ${normalizedDocNumber}`);
+    throw new Error(`Invalid settlement doc number format: ${normalizedDocNumber}`);
   }
 
   if (rangeTokens.length !== 2) {
@@ -111,7 +113,7 @@ function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
   const endYear = yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken);
 
   if (!Number.isFinite(endYear)) {
-    throw new Error(`Invalid year in LMB doc number: ${normalizedDocNumber}`);
+    throw new Error(`Invalid year in settlement doc number: ${normalizedDocNumber}`);
   }
 
   const start = parseDayMonth(startToken);

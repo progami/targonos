@@ -56,23 +56,30 @@ function pad2(value: number): string {
 function getMarketplaceFromRegion(region: string): Marketplace {
   if (region === 'US') return { id: 'amazon.com', label: 'Amazon.com', currency: 'USD', region: 'US' };
   if (region === 'UK') return { id: 'amazon.co.uk', label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' };
-  throw new Error(`Unsupported LMB region: ${region}`);
+  throw new Error(`Unsupported settlement region: ${region}`);
 }
 
-function isLmbSettlementDocNumber(docNumber: string): boolean {
+function isSettlementDocNumber(docNumber: string): boolean {
   const trimmed = docNumber.trim();
   if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
+  if (/^(US|UK)-/i.test(trimmed)) return true;
   if (/#LMB-(US|UK)-/i.test(trimmed)) return true;
   return false;
 }
 
-function isCanonicalLmbSettlementDocNumber(docNumber: string): boolean {
-  return /^LMB-(US|UK)-/i.test(docNumber.trim());
+function isCanonicalSettlementDocNumber(docNumber: string): boolean {
+  const trimmed = docNumber.trim();
+  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
+  if (/^(US|UK)-/i.test(trimmed)) return true;
+  return false;
 }
 
-function normalizeLmbDocNumber(docNumber: string): string {
+function normalizeSettlementDocNumber(docNumber: string): string {
   const trimmed = docNumber.trim();
   if (/^LMB-(US|UK)-/i.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^(US|UK)-/i.test(trimmed)) {
     return trimmed;
   }
 
@@ -81,15 +88,15 @@ function normalizeLmbDocNumber(docNumber: string): string {
     return hashMatch[1]!;
   }
 
-  throw new Error(`DocNumber is not an LMB settlement id: ${docNumber}`);
+  throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
 }
 
 function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
   const aDocNumber = a.DocNumber ? a.DocNumber : '';
   const bDocNumber = b.DocNumber ? b.DocNumber : '';
 
-  const aCanonical = isCanonicalLmbSettlementDocNumber(aDocNumber);
-  const bCanonical = isCanonicalLmbSettlementDocNumber(bDocNumber);
+  const aCanonical = isCanonicalSettlementDocNumber(aDocNumber);
+  const bCanonical = isCanonicalSettlementDocNumber(bDocNumber);
 
   if (aCanonical && !bCanonical) return a;
   if (bCanonical && !aCanonical) return b;
@@ -111,13 +118,13 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
 
   const dayMonth = trimmed.match(/^(\d{2})([A-Z]{3})$/);
   if (!dayMonth) {
-    throw new Error(`Unrecognized LMB date token: ${token}`);
+    throw new Error(`Unrecognized settlement date token: ${token}`);
   }
 
   const monthRaw = dayMonth[2];
   const month = MONTHS[monthRaw];
   if (!month) {
-    throw new Error(`Unrecognized month in LMB date token: ${token}`);
+    throw new Error(`Unrecognized month in settlement date token: ${token}`);
   }
 
   return { day: Number(dayMonth[1]), month };
@@ -125,27 +132,25 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
 
 function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
   const tokens = normalizedDocNumber.split('-').map((t) => t.trim());
-  if (tokens[0] !== 'LMB') {
-    throw new Error(`Invalid LMB doc number format: ${normalizedDocNumber}`);
-  }
-
-  const region = tokens[1];
+  const isLmb = tokens[0] === 'LMB';
+  const region = isLmb ? tokens[1] : tokens[0];
   if (!region) {
-    throw new Error(`Missing LMB region in doc number: ${normalizedDocNumber}`);
+    throw new Error(`Missing settlement region in doc number: ${normalizedDocNumber}`);
   }
 
   const marketplace = getMarketplaceFromRegion(region);
+  const rangeStartIndex = isLmb ? 2 : 1;
 
-  if (tokens.length < 6) {
+  if (tokens.length < rangeStartIndex + 4) {
     return { marketplace, periodStart: null, periodEnd: null };
   }
 
   const seqToken = tokens[tokens.length - 1];
   const yearToken = tokens[tokens.length - 2];
-  const rangeTokens = tokens.slice(2, tokens.length - 2);
+  const rangeTokens = tokens.slice(rangeStartIndex, tokens.length - 2);
 
   if (!seqToken || !yearToken) {
-    throw new Error(`Invalid LMB doc number format: ${normalizedDocNumber}`);
+    throw new Error(`Invalid settlement doc number format: ${normalizedDocNumber}`);
   }
 
   if (rangeTokens.length !== 2) {
@@ -162,7 +167,7 @@ function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
     yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken);
 
   if (!Number.isFinite(endYear)) {
-    throw new Error(`Invalid year in LMB doc number: ${normalizedDocNumber}`);
+    throw new Error(`Invalid year in settlement doc number: ${normalizedDocNumber}`);
   }
 
   const start = parseDayMonth(startToken);
@@ -240,43 +245,52 @@ export async function GET(req: NextRequest) {
     const docNumberContains = search !== undefined
       ? search
       : marketplaceFilter !== null
-        ? `LMB-${marketplaceFilter}-`
-        : 'LMB-';
+        ? `${marketplaceFilter}-`
+        : null;
 
     let activeConnection = connection;
     let startPosition = 1;
     const queryPageSize = 100;
     const allJournalEntries: QboJournalEntry[] = [];
 
-    while (true) {
-      const pageResult = await fetchJournalEntries(activeConnection, {
-        startDate,
-        endDate,
-        docNumberContains,
-        maxResults: queryPageSize,
-        startPosition,
-      });
-      if (pageResult.updatedConnection) {
-        activeConnection = pageResult.updatedConnection;
+    const docNumberQueries = docNumberContains
+      ? [docNumberContains]
+      : ['US-', 'UK-'];
+
+    for (const docQuery of docNumberQueries) {
+      startPosition = 1;
+      let fetchedForQuery = 0;
+      while (true) {
+        const pageResult = await fetchJournalEntries(activeConnection, {
+          startDate,
+          endDate,
+          docNumberContains: docQuery,
+          maxResults: queryPageSize,
+          startPosition,
+        });
+        if (pageResult.updatedConnection) {
+          activeConnection = pageResult.updatedConnection;
+        }
+        allJournalEntries.push(...pageResult.journalEntries);
+        fetchedForQuery += pageResult.journalEntries.length;
+        if (fetchedForQuery >= pageResult.totalCount) break;
+        if (pageResult.journalEntries.length === 0) break;
+        startPosition += pageResult.journalEntries.length;
       }
-      allJournalEntries.push(...pageResult.journalEntries);
-      if (allJournalEntries.length >= pageResult.totalCount) break;
-      if (pageResult.journalEntries.length === 0) break;
-      startPosition += pageResult.journalEntries.length;
     }
 
     const filteredJournalEntries = allJournalEntries.filter((je) => {
       if (!je.DocNumber) return false;
-      if (!isLmbSettlementDocNumber(je.DocNumber)) return false;
+      if (!isSettlementDocNumber(je.DocNumber)) return false;
       if (marketplaceFilter === null) return true;
-      const normalized = normalizeLmbDocNumber(je.DocNumber);
-      return normalized.startsWith(`LMB-${marketplaceFilter}-`);
+      const normalized = normalizeSettlementDocNumber(je.DocNumber);
+      return normalized.startsWith(`${marketplaceFilter}-`) || normalized.startsWith(`LMB-${marketplaceFilter}-`);
     });
 
     const dedupedByNormalizedDocNumber = new Map<string, QboJournalEntry>();
     for (const journalEntry of filteredJournalEntries) {
       if (!journalEntry.DocNumber) continue;
-      const normalized = normalizeLmbDocNumber(journalEntry.DocNumber);
+      const normalized = normalizeSettlementDocNumber(journalEntry.DocNumber);
       const existing = dedupedByNormalizedDocNumber.get(normalized);
       if (!existing) {
         dedupedByNormalizedDocNumber.set(normalized, journalEntry);
@@ -330,7 +344,7 @@ export async function GET(req: NextRequest) {
         throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
       }
 
-      const normalized = normalizeLmbDocNumber(je.DocNumber);
+      const normalized = normalizeSettlementDocNumber(je.DocNumber);
       const meta = parseSettlementPeriod(normalized);
 
       let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';

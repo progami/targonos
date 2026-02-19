@@ -322,7 +322,7 @@ async function fetchLmbUsJournalEntries(input: {
 
   while (true) {
     const page = await fetchJournalEntries(connection, {
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       startDate: input.startDate,
       maxResults: pageSize,
       startPosition,
@@ -342,6 +342,7 @@ async function fetchLmbUsJournalEntries(input: {
       const docNumber = entry.DocNumber;
       if (typeof docNumber !== 'string') return false;
       const trimmed = docNumber.trim();
+      if (/^US-/i.test(trimmed)) return true;
       if (/^LMB-US-/i.test(trimmed)) return true;
       if (/#LMB-US-/i.test(trimmed)) return true;
       return false;

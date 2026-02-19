@@ -238,7 +238,7 @@ async function findAccountIdInRecentLmbUsSettlementJournals(input: {
 
   while (true) {
     const page = await fetchJournalEntries(connection, {
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       startDate: input.startDate,
       maxResults: pageSize,
       startPosition,
@@ -248,6 +248,12 @@ async function findAccountIdInRecentLmbUsSettlementJournals(input: {
     }
 
     for (const je of page.journalEntries) {
+      const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
+      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      if (first === 'C' || first === 'P') {
+        continue;
+      }
+
       const full = await fetchJournalEntryById(connection, je.Id);
       if (full.updatedConnection) {
         connection = full.updatedConnection;
@@ -264,7 +270,7 @@ async function findAccountIdInRecentLmbUsSettlementJournals(input: {
     if (startPosition > page.totalCount) break;
   }
 
-  throw new Error(`Could not find '${input.description}' line in any recent LMB-US settlement JE`);
+  throw new Error(`Could not find '${input.description}' line in any recent US settlement JE`);
 }
 
 async function main(): Promise<void> {
@@ -294,16 +300,23 @@ async function main(): Promise<void> {
     templateJe = fetched.je;
   } else {
     const page = await fetchJournalEntries(connection, {
-      docNumberContains: 'LMB-US-',
+      docNumberContains: 'US-',
       startDate: options.startDate,
-      maxResults: 1,
+      maxResults: 25,
       startPosition: 1,
     });
     if (page.updatedConnection) connection = page.updatedConnection;
-    if (page.journalEntries.length !== 1) {
-      throw new Error('Could not find a template LMB-US-* journal entry in QBO');
+
+    const template = page.journalEntries.find((je) => {
+      const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
+      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      return first !== 'C' && first !== 'P';
+    });
+
+    if (!template) {
+      throw new Error('Could not find a template US-* settlement journal entry in QBO');
     }
-    const full = await fetchJournalEntryById(connection, page.journalEntries[0]!.Id);
+    const full = await fetchJournalEntryById(connection, template.Id);
     if (full.updatedConnection) connection = full.updatedConnection;
     templateJe = full.journalEntry;
   }
