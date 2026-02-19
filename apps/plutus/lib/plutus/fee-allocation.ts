@@ -3,7 +3,7 @@ import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
 import type { PnlBucketKey } from '@/lib/pnl-allocation';
 import { classifyPnlBucket } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
-import { normalizeSku } from './settlement-validation';
+import { isRefundPrincipal, isSalePrincipal, normalizeSku } from './settlement-validation';
 
 const ADS_REPORT_TYPE = 'SP_ADVERTISED_PRODUCT';
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
@@ -60,6 +60,48 @@ function daysInRange(start: string, end: string): number {
 
 function centsFromNet(value: number): number {
   return Math.round(value * 100);
+}
+
+function sumSkuAbsCentsByBucket(rows: LmbAuditRow[], bucket: PnlBucketKey): Record<string, number> {
+  const weightsBySku: Record<string, number> = {};
+  for (const row of rows) {
+    if (classifyPnlBucket(row.description) !== bucket) continue;
+    const skuRaw = row.sku.trim();
+    if (skuRaw === '') continue;
+    const cents = centsFromNet(row.net);
+    const weight = Math.abs(cents);
+    if (weight <= 0) continue;
+    const sku = normalizeSku(skuRaw);
+    const existing = weightsBySku[sku];
+    weightsBySku[sku] = (existing === undefined ? 0 : existing) + weight;
+  }
+  return weightsBySku;
+}
+
+function sumSkuAbsPrincipalCents(rows: LmbAuditRow[]): Record<string, number> {
+  const weightsBySku: Record<string, number> = {};
+  for (const row of rows) {
+    const description = row.description.trim();
+    if (!isSalePrincipal(description) && !isRefundPrincipal(description)) continue;
+    const skuRaw = row.sku.trim();
+    if (skuRaw === '') continue;
+    const cents = centsFromNet(row.net);
+    const weight = Math.abs(cents);
+    if (weight <= 0) continue;
+    const sku = normalizeSku(skuRaw);
+    const existing = weightsBySku[sku];
+    weightsBySku[sku] = (existing === undefined ? 0 : existing) + weight;
+  }
+  return weightsBySku;
+}
+
+function pickSkuWeightsForSkuLessBucket(rows: LmbAuditRow[], bucket: PnlBucketKey): Record<string, number> {
+  const byBucket = sumSkuAbsCentsByBucket(rows, bucket);
+  if (Object.keys(byBucket).length > 0) {
+    return byBucket;
+  }
+
+  return sumSkuAbsPrincipalCents(rows);
 }
 
 function sumSkuLessTotalsByBucket(rows: LmbAuditRow[]): Partial<Record<PnlBucketKey, number>> {
@@ -146,6 +188,45 @@ export async function buildDeterministicSkuAllocations(input: {
   const skuAllocationsByBucket: Partial<Record<PnlBucketKey, Record<string, number>>> = {};
   const issues: AllocationIssue[] = [];
   const skuLessTotalsByBucket = sumSkuLessTotalsByBucket(input.rows);
+
+  const sellerFeesSkuLessTotal = skuLessTotalsByBucket.amazonSellerFees;
+  if (sellerFeesSkuLessTotal !== undefined && sellerFeesSkuLessTotal !== 0) {
+    const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonSellerFees');
+    const allocated = allocateSignedByWeight({
+      totalCents: sellerFeesSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonSellerFees = allocated;
+    }
+  }
+
+  const fbaFeesSkuLessTotal = skuLessTotalsByBucket.amazonFbaFees;
+  if (fbaFeesSkuLessTotal !== undefined && fbaFeesSkuLessTotal !== 0) {
+    const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonFbaFees');
+    const allocated = allocateSignedByWeight({
+      totalCents: fbaFeesSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonFbaFees = allocated;
+    }
+  }
+
+  const storageFeesSkuLessTotal = skuLessTotalsByBucket.amazonStorageFees;
+  if (storageFeesSkuLessTotal !== undefined && storageFeesSkuLessTotal !== 0) {
+    const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'amazonStorageFees');
+    const allocated = allocateSignedByWeight({
+      totalCents: storageFeesSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonStorageFees = allocated;
+    }
+  }
 
   const adsSkuLessTotal = skuLessTotalsByBucket.amazonAdvertisingCosts;
   if (adsSkuLessTotal !== undefined && adsSkuLessTotal !== 0) {
@@ -237,10 +318,20 @@ export async function buildDeterministicSkuAllocations(input: {
 
     const upload = chooseBestUpload(awdUploads);
     if (upload === null) {
-      issues.push({
-        bucket: 'warehousingAwd',
-        message: 'Missing AWD report upload covering invoice date range',
+      const weightsBySku = pickSkuWeightsForSkuLessBucket(input.rows, 'warehousingAwd');
+      const allocated = allocateSignedByWeight({
+        totalCents: awdSkuLessTotal,
+        weightsBySku,
       });
+
+      if (Object.keys(allocated).length > 0) {
+        skuAllocationsByBucket.warehousingAwd = allocated;
+      } else {
+        issues.push({
+          bucket: 'warehousingAwd',
+          message: 'Missing AWD report upload covering invoice date range',
+        });
+      }
     } else {
       const rows = await db.awdDataRow.findMany({
         where: { uploadId: upload.id },
