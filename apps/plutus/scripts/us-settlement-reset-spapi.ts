@@ -177,6 +177,8 @@ function isNotFoundError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   if (message.includes('Failed to fetch journal entry: 404')) return true;
   if (message.includes('Failed to delete journal entry: 404')) return true;
+  if (message.includes('Object Not Found')) return true;
+  if (message.includes('"code":"610"')) return true;
   return false;
 }
 
