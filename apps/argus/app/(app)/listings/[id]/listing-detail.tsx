@@ -1755,8 +1755,8 @@ function toGalleryRevision(rev: GalleryApiRevision): GalleryRevision {
     .sort((a, b) => a.position - b.position)
     .map((slot) => ({
       position: slot.position,
-      src: slot.media.sourceUrl === null ? slot.media.filePath : slot.media.sourceUrl,
-      hiRes: slot.media.sourceUrl,
+      src: slot.media.filePath,
+      hiRes: slot.media.filePath,
       isVideo: false,
     }))
 
@@ -1769,10 +1769,8 @@ function toGalleryRevision(rev: GalleryApiRevision): GalleryRevision {
 }
 
 function toVideoRevision(rev: VideoApiRevision): VideoRevision {
-  const src = rev.media.sourceUrl === null ? rev.media.filePath : rev.media.sourceUrl
-  const posterSrc = rev.posterMedia
-    ? (rev.posterMedia.sourceUrl === null ? rev.posterMedia.filePath : rev.posterMedia.sourceUrl)
-    : null
+  const src = rev.media.filePath
+  const posterSrc = rev.posterMedia ? rev.posterMedia.filePath : null
 
   return {
     id: rev.id,
@@ -1805,7 +1803,7 @@ function toEbcRevision(rev: EbcApiRevision): EbcRevision {
               .slice()
               .sort((a, b) => a.position - b.position)
               .map((img) => ({
-                src: img.media.sourceUrl === null ? img.media.filePath : img.media.sourceUrl,
+                src: img.media.filePath,
                 alt: img.altText,
               })),
           })),

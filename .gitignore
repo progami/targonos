@@ -49,6 +49,8 @@ apps/argus/public/media/
 !apps/argus/public/media/.gitkeep
 
 # Playwright
+.playwright-cli/
+output/
 playwright-report/
 test-results/
 **/playwright-report/

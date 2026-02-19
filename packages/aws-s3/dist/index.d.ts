@@ -26,6 +26,15 @@ export interface S3DownloadOptions {
     responseContentDisposition?: string;
     expiresIn?: number;
 }
+export interface S3ObjectStreamResult {
+    body: Readable;
+    contentType: string | undefined;
+    contentLength: number | undefined;
+    contentRange: string | undefined;
+    acceptRanges: string | undefined;
+    etag: string | undefined;
+    lastModified: Date | undefined;
+}
 export type FileContext = {
     type: 'transaction';
     transactionId: string;
@@ -85,6 +94,9 @@ export declare class S3Service {
     getPublicUrl(key: string): string;
     downloadFile(key: string): Promise<Buffer>;
     streamFile(key: string): Promise<Readable>;
+    getObjectStream(key: string, options?: {
+        range?: string;
+    }): Promise<S3ObjectStreamResult>;
     deleteFile(key: string): Promise<void>;
     listFiles(prefix: string, maxKeys?: number): Promise<string[]>;
     copyFile(sourceKey: string, destinationKey: string): Promise<void>;
