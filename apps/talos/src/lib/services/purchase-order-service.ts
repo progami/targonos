@@ -68,7 +68,7 @@ export function serializePurchaseOrder(
     status: normalizeWorkflowStatus(order.status),
     expectedDate: order.expectedDate?.toISOString() ?? null,
     postedAt: order.postedAt?.toISOString() ?? null,
-    voidedFromStatus: metadata?.voidedFromStatus ?? null,
+    voidedFromStatus: metadata?.voidedFromStatus ? normalizeWorkflowStatus(metadata.voidedFromStatus) : null,
     voidedAt: metadata?.voidedAt
       ? typeof metadata.voidedAt === 'string'
         ? metadata.voidedAt

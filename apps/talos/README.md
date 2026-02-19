@@ -35,6 +35,9 @@ Optional AWS/Storage:
 Optional Redis:
 - `REDIS_URL`
 
+Optional feature flags:
+- `TALOS_DISABLE_PO_DOCUMENT_STAGE_LOCK` (set to `true` to allow uploading PO documents to completed stages)
+
 Optional Amazon SP-API:
 - `AMAZON_SP_API_REGION` (`eu`, `na`, `fe`)
 - `AMAZON_MARKETPLACE_ID`
