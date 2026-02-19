@@ -2778,6 +2778,12 @@ function setDesktopMediaMainViewIndex(doc: Document, index: number) {
   }
 }
 
+function getVideoMainViewIndex(doc: Document): number | null {
+  const videoItem = doc.querySelector<HTMLElement>('ul.desktop-media-mainView li[data-csa-c-media-type="VIDEO"]')
+  if (!videoItem) return null
+  return itemNoFromElement(videoItem)
+}
+
 function setAltImagesSelection(altList: Element, selectedLi: Element | null) {
   const buttons = Array.from(altList.querySelectorAll<HTMLElement>('.a-button-thumbnail'))
   for (const button of buttons) {
@@ -2814,6 +2820,9 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
   }
 
   if (!rev || rev.images.length === 0) {
+    const videoIndex = getVideoMainViewIndex(doc)
+    const desiredIndex = videoIndex !== null && storedDoc.__argusMainMediaIndex === videoIndex ? videoIndex : 0
+
     if (landing) {
       landing.style.visibility = ''
       landing.src = ARGUS_GALLERY_PLACEHOLDER_MAIN
@@ -2840,11 +2849,15 @@ function applyGallery(doc: Document, rev: GalleryRevision | null) {
       }
 
       const first = imageLis.length > 0 ? imageLis[0] : null
-      setAltImagesSelection(altList, first)
+      const videoThumb = desiredIndex === videoIndex
+        ? altList.querySelector<HTMLLIElement>('li.videoThumbnail')
+        : null
+
+      setAltImagesSelection(altList, videoThumb ? videoThumb : first)
     }
 
-    storedDoc.__argusMainMediaIndex = 0
-    setDesktopMediaMainViewIndex(doc, 0)
+    storedDoc.__argusMainMediaIndex = desiredIndex
+    setDesktopMediaMainViewIndex(doc, desiredIndex)
     return
   }
 

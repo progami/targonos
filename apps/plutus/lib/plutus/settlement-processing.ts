@@ -267,6 +267,25 @@ export async function computeSettlementPreview(input: {
     }
   }
 
+  const alreadyProcessedOrConflictCodes = new Set(['ALREADY_PROCESSED', 'INVOICE_CONFLICT']);
+  const hasAlreadyProcessedOrConflict = blocks.some((b) => alreadyProcessedOrConflictCodes.has(b.code));
+  if (hasAlreadyProcessedOrConflict) {
+    return {
+      preview: buildEmptyPreview({
+        marketplace,
+        settlementJournalEntryId: settlement.Id,
+        settlementDocNumber: settlement.DocNumber,
+        settlementPostedDate: settlement.TxnDate,
+        invoiceId,
+        processingHash,
+        minDate,
+        maxDate,
+        blocks,
+      }),
+      updatedConnection: settlementResult.updatedConnection,
+    };
+  }
+
   const setupConfig = await db.setupConfig.findFirst();
   if (!setupConfig || setupConfig.accountsCreated !== true) {
     blocks.push({

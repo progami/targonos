@@ -1192,6 +1192,59 @@ export async function fetchJournalEntryById(
 }
 
 /**
+ * Delete a single JournalEntry by ID.
+ *
+ * Note: QBO requires the current SyncToken for deletes.
+ */
+export async function deleteJournalEntry(
+  connection: QboConnection,
+  journalEntryId: string,
+): Promise<{ deletedJournalEntryId: string; updatedConnection?: QboConnection }> {
+  const existing = await fetchJournalEntryById(connection, journalEntryId);
+  let activeConnection = existing.updatedConnection ? existing.updatedConnection : connection;
+
+  const { accessToken, updatedConnection } = await getValidToken(activeConnection);
+  if (updatedConnection) {
+    activeConnection = updatedConnection;
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/v3/company/${activeConnection.realmId}/journalentry?operation=delete`;
+
+  const payload = {
+    Id: existing.journalEntry.Id,
+    SyncToken: existing.journalEntry.SyncToken,
+  };
+
+  logger.info('Deleting journal entry in QBO', { journalEntryId });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to delete journal entry', {
+      journalEntryId,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to delete journal entry: ${response.status} ${errorText}`);
+  }
+
+  return {
+    deletedJournalEntryId: existing.journalEntry.Id,
+    updatedConnection: activeConnection === connection ? undefined : activeConnection,
+  };
+}
+
+/**
  * Fetch a single Purchase by ID
  */
 export async function fetchPurchaseById(
