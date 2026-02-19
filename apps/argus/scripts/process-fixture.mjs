@@ -40,6 +40,25 @@ html = html.replace(/<script[\s\S]*?<\/script>/g, '')
 // Strip <noscript> wrappers (Chrome save-as keeps duplicate images inside noscript)
 html = html.replace(/<noscript>[\s\S]*?<\/noscript>/g, '')
 
+// Strip script preloads (we never execute Amazon JS in the replica)
+html = html.replace(/<link[^>]*rel="preload"[^>]*as="script"[^>]*>/g, '')
+html = html.replace(/<link[^>]*as="script"[^>]*rel="preload"[^>]*>/g, '')
+html = html.replace(/<link[^>]*rel='preload'[^>]*as='script'[^>]*>/g, '')
+html = html.replace(/<link[^>]*as='script'[^>]*rel='preload'[^>]*>/g, '')
+
+// Strip fetch preloads (ad-related artifacts that slow down Safari)
+html = html.replace(/<link[^>]*rel="preload"[^>]*as="fetch"[^>]*>/g, '')
+html = html.replace(/<link[^>]*as="fetch"[^>]*rel="preload"[^>]*>/g, '')
+html = html.replace(/<link[^>]*rel='preload'[^>]*as='fetch'[^>]*>/g, '')
+html = html.replace(/<link[^>]*as='fetch'[^>]*rel='preload'[^>]*>/g, '')
+
+// Strip inline event handlers (they depend on Amazon scripts we intentionally remove)
+html = html.replace(/\son[a-z]+="[^"]*"/g, '')
+html = html.replace(/\son[a-z]+='[^']*'/g, '')
+
+// Strip iframes (mostly ads / safeframes that carry scripts and slow Safari)
+html = html.replace(/<iframe[\s\S]*?<\/iframe>/g, '')
+
 // Fix lazy-loaded images: Amazon uses grey-pixel.gif as src with the real URL in data-src.
 // Since scripts are stripped, the lazy-load JS never runs, so swap data-src → src.
 html = html.replace(
