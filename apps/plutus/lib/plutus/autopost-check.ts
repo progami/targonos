@@ -251,6 +251,7 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
       settlementMarketplace: marketplace,
       settlementPeriodStart: periodStart,
       settlementPeriodEnd: periodEnd,
+      settlementDocNumber: meta.normalizedDocNumber,
       invoices,
     });
 

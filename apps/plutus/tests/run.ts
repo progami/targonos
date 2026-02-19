@@ -124,6 +124,23 @@ test('selectAuditInvoiceForSettlement falls back to unique overlap match', () =>
   assert.deepEqual(match, { kind: 'match', matchType: 'overlap', invoiceId: 'A' });
 });
 
+test('selectAuditInvoiceForSettlement prefers invoiceId matching settlement DocNumber', () => {
+  const invoices: AuditInvoiceSummary[] = [
+    { invoiceId: 'MONTHLY', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-28', rowCount: 100 },
+    { invoiceId: 'LMB-US-01-14FEB-26-1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
+  ];
+
+  const match = selectAuditInvoiceForSettlement({
+    settlementMarketplace: 'amazon.com',
+    settlementPeriodStart: '2026-02-01',
+    settlementPeriodEnd: '2026-02-14',
+    settlementDocNumber: 'LMB-US-01-14FEB-26-1',
+    invoices,
+  });
+
+  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'LMB-US-01-14FEB-26-1' });
+});
+
 test('parseAmazonTransactionCsv parses required totals', () => {
   const csv = ['Order Id,Total,Type', '123-123,10.50,Order'].join('\n');
   const parsed = parseAmazonTransactionCsv(csv);

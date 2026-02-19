@@ -401,6 +401,7 @@ function SignedAmount({
 
 function ProcessSettlementDialog({
   settlementId,
+  settlementDocNumber,
   periodStart,
   periodEnd,
   marketplaceId,
@@ -408,6 +409,7 @@ function ProcessSettlementDialog({
   onProcessed,
 }: {
   settlementId: string;
+  settlementDocNumber: string;
   periodStart: string | null;
   periodEnd: string | null;
   marketplaceId: MarketplaceId;
@@ -444,9 +446,10 @@ function ProcessSettlementDialog({
       settlementMarketplace: marketplaceId,
       settlementPeriodStart: periodStart,
       settlementPeriodEnd: periodEnd,
+      settlementDocNumber,
       invoices,
     });
-  }, [invoices, marketplaceId, periodEnd, periodStart]);
+  }, [invoices, marketplaceId, periodEnd, periodStart, settlementDocNumber]);
 
   // Compute meta for each invoice
   const invoicesWithMeta = useMemo(() => {
@@ -913,6 +916,7 @@ export default function SettlementDetailPage() {
       settlementMarketplace: settlement.marketplace.id,
       settlementPeriodStart: settlement.periodStart,
       settlementPeriodEnd: settlement.periodEnd,
+      settlementDocNumber: settlement.docNumber,
       invoices: auditInvoices,
     });
 
@@ -1364,6 +1368,7 @@ export default function SettlementDetailPage() {
                   {settlement.plutusStatus === 'Pending' && (
                     <ProcessSettlementDialog
                       settlementId={settlementId}
+                      settlementDocNumber={settlement.docNumber}
                       periodStart={settlement.periodStart}
                       periodEnd={settlement.periodEnd}
                       marketplaceId={settlement.marketplace.id}

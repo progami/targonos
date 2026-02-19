@@ -66,6 +66,10 @@ function isLmbSettlementDocNumber(docNumber: string): boolean {
   return false;
 }
 
+function isCanonicalLmbSettlementDocNumber(docNumber: string): boolean {
+  return /^LMB-(US|UK)-/i.test(docNumber.trim());
+}
+
 function normalizeLmbDocNumber(docNumber: string): string {
   const trimmed = docNumber.trim();
   if (/^LMB-(US|UK)-/i.test(trimmed)) {
@@ -78,6 +82,23 @@ function normalizeLmbDocNumber(docNumber: string): string {
   }
 
   throw new Error(`DocNumber is not an LMB settlement id: ${docNumber}`);
+}
+
+function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
+  const aDocNumber = a.DocNumber ? a.DocNumber : '';
+  const bDocNumber = b.DocNumber ? b.DocNumber : '';
+
+  const aCanonical = isCanonicalLmbSettlementDocNumber(aDocNumber);
+  const bCanonical = isCanonicalLmbSettlementDocNumber(bDocNumber);
+
+  if (aCanonical && !bCanonical) return a;
+  if (bCanonical && !aCanonical) return b;
+
+  if (a.TxnDate !== b.TxnDate) {
+    return a.TxnDate > b.TxnDate ? a : b;
+  }
+
+  return a.Id > b.Id ? a : b;
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
@@ -252,9 +273,28 @@ export async function GET(req: NextRequest) {
       return normalized.startsWith(`LMB-${marketplaceFilter}-`);
     });
 
-    const totalCount = filteredJournalEntries.length;
+    const dedupedByNormalizedDocNumber = new Map<string, QboJournalEntry>();
+    for (const journalEntry of filteredJournalEntries) {
+      if (!journalEntry.DocNumber) continue;
+      const normalized = normalizeLmbDocNumber(journalEntry.DocNumber);
+      const existing = dedupedByNormalizedDocNumber.get(normalized);
+      if (!existing) {
+        dedupedByNormalizedDocNumber.set(normalized, journalEntry);
+        continue;
+      }
+      dedupedByNormalizedDocNumber.set(normalized, pickPreferredSettlementEntry(existing, journalEntry));
+    }
+
+    const uniqueJournalEntries = Array.from(dedupedByNormalizedDocNumber.values()).sort((a, b) => {
+      if (a.TxnDate !== b.TxnDate) return b.TxnDate.localeCompare(a.TxnDate);
+      const aDoc = a.DocNumber ? a.DocNumber : '';
+      const bDoc = b.DocNumber ? b.DocNumber : '';
+      return aDoc.localeCompare(bDoc);
+    });
+
+    const totalCount = uniqueJournalEntries.length;
     const pageStart = (page - 1) * pageSize;
-    const pagedJournalEntries = filteredJournalEntries.slice(pageStart, pageStart + pageSize);
+    const pagedJournalEntries = uniqueJournalEntries.slice(pageStart, pageStart + pageSize);
 
     const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
