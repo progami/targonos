@@ -75,3 +75,18 @@ jobs:
     if: vars.USE_SELF_HOSTED != 'true'
     runs-on: ubuntu-latest
     steps: *build-test-steps
+  build-test:
+    needs:
+      - build-test-self-hosted
+      - build-test-github-hosted
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate at least one CI path succeeded
+        run: |
+          if [[ "${{ needs.build-test-self-hosted.result }}" == "success" || "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
+            echo "A CI execution path completed successfully."
+          else
+            echo "No CI execution path succeeded."
+            exit 1
+          fi
