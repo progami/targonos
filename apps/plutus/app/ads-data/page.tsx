@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
@@ -165,6 +165,14 @@ const trSx = {
 } as const;
 
 export default function AdsDataPage() {
+  return (
+    <Suspense>
+      <AdsDataPageInner />
+    </Suspense>
+  );
+}
+
+function AdsDataPageInner() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const searchParams = useSearchParams();
