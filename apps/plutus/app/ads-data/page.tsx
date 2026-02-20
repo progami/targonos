@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -164,8 +165,17 @@ const trSx = {
 } as const;
 
 export default function AdsDataPage() {
+  return (
+    <Suspense>
+      <AdsDataPageInner />
+    </Suspense>
+  );
+}
+
+function AdsDataPageInner() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const searchParams = useSearchParams();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -179,6 +189,23 @@ export default function AdsDataPage() {
   const [detectTodayUtc, setDetectTodayUtc] = useState('');
   const [detectMaxAllowedDate, setDetectMaxAllowedDate] = useState('');
   const [pendingTargets, setPendingTargets] = useState<PendingTarget[]>([]);
+
+  const prefill = useMemo(() => {
+    const marketplaceRaw = searchParams.get('marketplace');
+    const marketplace =
+      marketplaceRaw === 'amazon.com' || marketplaceRaw === 'amazon.co.uk' ? (marketplaceRaw as MarketplaceId) : null;
+
+    const startRaw = searchParams.get('startDate');
+    const endRaw = searchParams.get('endDate');
+    const startDate = startRaw && isIsoDate(startRaw) ? startRaw.trim() : null;
+    const endDate = endRaw && isIsoDate(endRaw) ? endRaw.trim() : null;
+
+    if (startDate && endDate && startDate > endDate) {
+      return { marketplace, startDate: null, endDate: null };
+    }
+
+    return { marketplace, startDate, endDate };
+  }, [searchParams]);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -239,10 +266,12 @@ export default function AdsDataPage() {
         setDetectTodayUtc(parsed.todayUtc);
         setDetectMaxAllowedDate(parsed.maxAllowedDate);
         setPendingTargets(
-          parsed.suggestions.map((row) => ({
-            ...row,
-            selected: row.isRecentEnough,
-          })),
+          parsed.suggestions.map((row) => {
+            if (prefill.marketplace === row.marketplace && prefill.startDate && prefill.endDate) {
+              return { ...row, startDate: prefill.startDate, endDate: prefill.endDate, selected: row.isRecentEnough };
+            }
+            return { ...row, selected: row.isRecentEnough };
+          }),
         );
         setReviewOpen(true);
       } catch (error) {
@@ -251,7 +280,7 @@ export default function AdsDataPage() {
         setIsDetecting(false);
       }
     },
-    [],
+    [prefill.endDate, prefill.marketplace, prefill.startDate],
   );
 
   const submitDetectedUpload = useCallback(async () => {
