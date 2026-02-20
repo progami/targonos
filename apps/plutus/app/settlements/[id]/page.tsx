@@ -274,11 +274,6 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
   return isBlockingProcessingCode(block.code);
 }
 
-function StatusPill({ status }: { status: SettlementDetailResponse['settlement']['lmbStatus'] }) {
-  if (status === 'Posted') return <Chip label="Posted" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
-  return <Chip label={status} size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
-}
-
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
   if (status === 'Processed') return <Chip label="Plutus Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
   if (status === 'RolledBack') return <Chip label="Plutus Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
@@ -292,16 +287,52 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
 
 async function fetchSettlement(id: string): Promise<SettlementDetailResponse> {
   const res = await fetch(`${basePath}/api/plutus/settlements/${id}`);
+  const data = (await res.json()) as unknown;
   if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
+    const payload = data as Record<string, unknown>;
+    const details = typeof payload.details === 'string' ? payload.details.trim() : '';
+    const error = typeof payload.error === 'string' ? payload.error.trim() : '';
+    throw new Error(details !== '' ? details : error !== '' ? error : 'Failed to fetch settlement detail');
   }
-  return res.json();
+  return data as SettlementDetailResponse;
 }
 
 async function fetchAuditData(): Promise<AuditDataResponse> {
   const res = await fetch(`${basePath}/api/plutus/audit-data`);
   return res.json();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function readApiErrorMessage(value: unknown, fallback: string): string {
+  if (!isRecord(value)) return fallback;
+
+  const details = value.details;
+  if (typeof details === 'string' && details.trim() !== '') {
+    return details.trim();
+  }
+
+  const error = value.error;
+  if (typeof error === 'string' && error.trim() !== '') {
+    return error.trim();
+  }
+
+  return fallback;
+}
+
+function isSettlementProcessingPreview(value: unknown): value is SettlementProcessingPreview {
+  if (!isRecord(value)) return false;
+  if (typeof value.invoiceId !== 'string') return false;
+  if (typeof value.minDate !== 'string') return false;
+  if (typeof value.maxDate !== 'string') return false;
+  if (!Array.isArray(value.blocks)) return false;
+  if (!isRecord(value.cogsJournalEntry)) return false;
+  if (!isRecord(value.pnlJournalEntry)) return false;
+  if (!Array.isArray(value.sales)) return false;
+  if (!Array.isArray(value.returns)) return false;
+  return true;
 }
 
 async function fetchPreview(
@@ -314,7 +345,18 @@ async function fetchPreview(
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ invoiceId, marketplace }),
   });
-  return res.json();
+  const data = (await res.json()) as unknown;
+
+  // Preview endpoint uses HTTP 400 to indicate "blocked", but still returns a valid preview payload.
+  if (isSettlementProcessingPreview(data)) {
+    return data;
+  }
+
+  if (!res.ok) {
+    throw new Error(readApiErrorMessage(data, 'Failed to preview settlement'));
+  }
+
+  throw new Error(readApiErrorMessage(data, 'Invalid settlement preview response'));
 }
 
 async function postSettlement(settlementId: string, invoiceId: string, marketplace: MarketplaceId) {
@@ -863,7 +905,7 @@ export default function SettlementDetailPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['plutus-settlement', settlementId],
     queryFn: () => fetchSettlement(settlementId),
-    enabled: connection?.connected === true,
+    enabled: connection?.connected !== false,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -938,6 +980,26 @@ export default function SettlementDetailPage() {
     enabled: previewEnabled,
     staleTime: 5 * 60 * 1000,
   });
+
+  const adsUploadHref = useMemo(() => {
+    const params = new URLSearchParams();
+
+    if (settlement) {
+      params.set('marketplace', settlement.marketplace.id);
+    }
+    if (previewInvoiceId) {
+      params.set('invoiceId', previewInvoiceId);
+    }
+    if (previewData?.minDate) {
+      params.set('startDate', previewData.minDate);
+    }
+    if (previewData?.maxDate) {
+      params.set('endDate', previewData.maxDate);
+    }
+
+    const query = params.toString();
+    return query === '' ? '/ads-data' : `/ads-data?${query}`;
+  }, [previewData?.maxDate, previewData?.minDate, previewInvoiceId, settlement]);
 
   const visiblePreviewBlocks = useMemo(() => {
     if (!previewData) return [] as PreviewBlock[];
@@ -1336,16 +1398,6 @@ export default function SettlementDetailPage() {
           </Box>
           {settlement && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box
-                component="a"
-                href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, textDecoration: 'none' }}
-              >
-                <StatusPill status={settlement.lmbStatus} />
-                <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
-              </Box>
               <PlutusPill status={settlement.plutusStatus} />
               {settlement.plutusStatus === 'Pending' && (
                 <ProcessSettlementDialog
@@ -1521,266 +1573,6 @@ export default function SettlementDetailPage() {
               </Box>
             )}
 
-            {tab === 'plutus-preview' && (
-              <Box sx={{ p: 2 }}>
-                {!settlement && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                    <Skeleton variant="rectangular" sx={{ height: 20, width: 256 }} />
-                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                    <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                  </Box>
-                )}
-
-                {settlement && !previewInvoiceId && (
-                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
-                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Select an invoice above</Typography>
-                  </Box>
-                )}
-
-                {settlement && previewInvoiceId && (
-                  <>
-                    {isAdsAllocationLoading && (
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                        <Skeleton variant="rectangular" sx={{ height: 20, width: 256 }} />
-                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
-                      </Box>
-                    )}
-
-                    {!isAdsAllocationLoading && adsAllocationError && (
-                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
-                        {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
-                      </Box>
-                    )}
-
-                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && (
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
-                          <Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                                Ads Allocation
-                              </Typography>
-                              <Chip
-                                label={
-                                  adsAllocation.totalSource === 'AUDIT_DATA' ? 'Audit Data'
-                                    : adsAllocation.totalSource === 'ADS_REPORT' ? 'Ads Report'
-                                    : adsAllocation.totalSource === 'SAVED' ? 'Saved'
-                                    : 'No Source'
-                                }
-                                size="small"
-                                sx={{
-                                  fontSize: '10px',
-                                  ...(adsAllocation.totalSource === 'SAVED'
-                                    ? { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }
-                                    : adsAllocation.totalSource === 'NONE'
-                                      ? { bgcolor: 'action.hover', color: 'text.secondary' }
-                                      : { bgcolor: 'rgba(0, 194, 185, 0.1)', color: '#008f87' }),
-                                }}
-                              />
-                              {!adsAllocationSaveEnabled && (
-                                <Chip label="Preview" size="small" sx={{ fontSize: '10px', bgcolor: 'action.hover', color: 'text.secondary' }} />
-                              )}
-                            </Box>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
-                              {adsAllocation.invoiceId} &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
-                            </Typography>
-                          </Box>
-
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            {adsAllocationSaveEnabled && adsAllocation.totalAdsCents !== 0 && (
-                              <Button
-                                size="small"
-                                variant="contained"
-                                sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
-                                onClick={() => saveAdsAllocationMutation.mutate()}
-                                disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
-                              >
-                                {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
-                              </Button>
-                            )}
-                          </Box>
-                        </Box>
-
-                        {adsAllocation.totalAdsCents === 0 ? (
-                          <Box sx={{ borderRadius: 2, border: 1, borderStyle: 'dashed', borderColor: 'divider', p: 3, textAlign: 'center' }}>
-                            <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No advertising costs for this invoice</Typography>
-                          </Box>
-                        ) : (
-                          <>
-                            {adsAllocationPreview.error && (
-                              <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
-                                {adsAllocationPreview.error}
-                              </Typography>
-                            )}
-
-                            {!adsAllocation.adsDataUpload && (
-                              <Box component={Link} href="/data-sources" sx={{ display: 'inline-flex', fontSize: '0.75rem', textDecoration: 'underline', color: 'error.main' }}>
-                                Upload ads data for this range
-                              </Box>
-                            )}
-
-                            <Box sx={{ overflowX: 'auto' }}>
-                              <Table>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableCell>SKU</TableCell>
-                                    <TableCell sx={{ textAlign: 'right' }}>Amount</TableCell>
-                                    <TableCell sx={{ textAlign: 'right' }}>Posted</TableCell>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {adsAllocationPreview.lines.map((line) => (
-                                    <TableRow key={line.sku}>
-                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
-                                        {line.sku}
-                                      </TableCell>
-                                      <TableCell sx={{ textAlign: 'right' }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                                          <Box sx={{ width: 140 }}>
-                                            <TextField
-                                              type="number"
-                                              size="small"
-                                              fullWidth
-                                              inputProps={{ step: '0.01' }}
-                                              value={line.weightInput}
-                                              onChange={(event) => {
-                                                const next = event.target.value;
-                                                setAdsDirty(true);
-                                                setAdsEditLines((prev) =>
-                                                  prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
-                                                );
-                                              }}
-                                            />
-                                          </Box>
-                                        </Box>
-                                      </TableCell>
-                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                                        {line.allocatedCents === null
-                                          ? '—'
-                                          : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                  <TableRow>
-                                    <TableCell colSpan={2} sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
-                                      Total
-                                    </TableCell>
-                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                                      {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
-                                    </TableCell>
-                                  </TableRow>
-                                </TableBody>
-                              </Table>
-                            </Box>
-
-                            {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
-                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                                <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                                  Contribution analysis
-                                </Typography>
-                                <Box sx={{ overflowX: 'auto' }}>
-                                  <Table>
-                                    <TableHead>
-                                      <TableRow>
-                                        <TableCell>SKU</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Sold</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Returns</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Net Units</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Principal</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>COGS</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Ads</TableCell>
-                                        <TableCell sx={{ textAlign: 'right' }}>Contribution</TableCell>
-                                      </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                      {adsSkuProfitabilityPreview.lines.map((line) => (
-                                        <TableRow key={`profit-${line.sku}`}>
-                                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
-                                            {line.sku}
-                                          </TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.soldUnits}</TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.returnedUnits}</TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.netUnits}</TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
-                                            {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
-                                            {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
-                                            {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                          <TableCell
-                                            sx={{
-                                              textAlign: 'right',
-                                              fontSize: '0.875rem',
-                                              fontWeight: 600,
-                                              fontVariantNumeric: 'tabular-nums',
-                                              ...(line.contributionAfterAdsCents < 0
-                                                ? { color: 'error.main' }
-                                                : { color: 'text.primary' }),
-                                            }}
-                                          >
-                                            {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                      <TableRow>
-                                        <TableCell sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Total</TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {adsSkuProfitabilityPreview.totals.soldUnits}
-                                        </TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {adsSkuProfitabilityPreview.totals.returnedUnits}
-                                        </TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {adsSkuProfitabilityPreview.totals.netUnits}
-                                        </TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                          {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
-                                        </TableCell>
-                                        <TableCell
-                                          sx={{
-                                            textAlign: 'right',
-                                            fontSize: '0.875rem',
-                                            fontWeight: 600,
-                                            fontVariantNumeric: 'tabular-nums',
-                                            ...(adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
-                                              ? { color: 'error.main' }
-                                              : { color: 'text.primary' }),
-                                          }}
-                                        >
-                                          {formatMoney(
-                                            adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
-                                            settlement.marketplace.currency,
-                                          )}
-                                        </TableCell>
-                                      </TableRow>
-                                    </TableBody>
-                                  </Table>
-                                </Box>
-                              </Box>
-                            )}
-
-                            <Box sx={{ height: 4 }} />
-                          </>
-                        )}
-                      </Box>
-                    )}
-                  </>
-                )}
-              </Box>
-            )}
-
             {tab === 'plutus-preview' && (settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
               <Box sx={{ p: 2 }}>
                 {(isLoadingAudit || isPreviewLoading) && (
@@ -1862,30 +1654,6 @@ export default function SettlementDetailPage() {
                             )}
                           </>
                         )}
-                        <Chip
-                          size="small"
-                          label={
-                            isProcessedPreview
-                              ? previewIssueCount === 0
-                                ? 'Processed'
-                                : 'Processed (Needs Review)'
-                              : previewBlockingCount > 0
-                                ? 'Blocked'
-                                : previewWarningCount > 0
-                                  ? 'Ready (Warnings)'
-                                  : 'Ready to Process'
-                          }
-                          {...(isProcessedPreview
-                            ? previewIssueCount === 0
-                              ? { color: 'success' as const, sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' } }
-                              : { sx: { bgcolor: 'action.hover', color: 'text.secondary' } }
-                            : previewBlockingCount > 0
-                              ? { color: 'error' as const }
-                              : previewWarningCount > 0
-                                ? { sx: { bgcolor: 'action.hover', color: 'text.secondary' } }
-                                : { color: 'success' as const, sx: { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' } }
-                          )}
-                        />
                       </Box>
                     </Box>
 
@@ -1967,6 +1735,232 @@ export default function SettlementDetailPage() {
                             </li>
                           ))}
                         </Box>
+                      </Box>
+                    )}
+
+                    {/* Ads Allocation */}
+                    {isAdsAllocationLoading && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                        <Skeleton variant="rectangular" sx={{ height: 20, width: 256 }} />
+                        <Skeleton variant="rectangular" sx={{ height: 40, width: '100%' }} />
+                      </Box>
+                    )}
+
+                    {!isAdsAllocationLoading && adsAllocationError && (
+                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5 }}>
+                        <Typography sx={{ fontSize: '0.875rem', color: 'error.dark' }}>
+                          {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
+                        </Typography>
+                        <Box component={Link} href={adsUploadHref} sx={{ display: 'inline-flex', mt: 1, fontSize: '0.75rem', textDecoration: 'underline', color: 'error.main' }}>
+                          Upload Sponsored Products report
+                        </Box>
+                      </Box>
+                    )}
+
+                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && adsAllocation.totalAdsCents !== 0 && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                              Ads Allocation
+                            </Typography>
+                            <Chip
+                              label={
+                                adsAllocation.totalSource === 'AUDIT_DATA' ? 'Audit Data'
+                                  : adsAllocation.totalSource === 'ADS_REPORT' ? 'Ads Report'
+                                  : adsAllocation.totalSource === 'SAVED' ? 'Saved'
+                                  : 'No Source'
+                              }
+                              size="small"
+                              sx={{
+                                fontSize: '10px',
+                                ...(adsAllocation.totalSource === 'SAVED'
+                                  ? { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }
+                                  : adsAllocation.totalSource === 'NONE'
+                                    ? { bgcolor: 'action.hover', color: 'text.secondary' }
+                                    : { bgcolor: 'rgba(0, 194, 185, 0.1)', color: '#008f87' }),
+                              }}
+                            />
+                            {!adsAllocationSaveEnabled && (
+                              <Chip label="Preview" size="small" sx={{ fontSize: '10px', bgcolor: 'action.hover', color: 'text.secondary' }} />
+                            )}
+                          </Box>
+
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {adsAllocationSaveEnabled && (
+                              <Button
+                                size="small"
+                                variant="contained"
+                                sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
+                                onClick={() => saveAdsAllocationMutation.mutate()}
+                                disabled={!adsAllocationPreview.ok || !adsAllocation.adsDataUpload || saveAdsAllocationMutation.isPending}
+                              >
+                                {saveAdsAllocationMutation.isPending ? 'Saving...' : 'Save'}
+                              </Button>
+                            )}
+                          </Box>
+                        </Box>
+
+                        {adsAllocationPreview.error && (
+                          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                            {adsAllocationPreview.error}
+                          </Typography>
+                        )}
+
+                        {!adsAllocation.adsDataUpload && (
+                          <Box component={Link} href="/data-sources" sx={{ display: 'inline-flex', fontSize: '0.75rem', textDecoration: 'underline', color: 'error.main' }}>
+                            Upload ads data for this range
+                          </Box>
+                        )}
+
+                        <Box sx={{ overflowX: 'auto' }}>
+                          <Table>
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>SKU</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Amount</TableCell>
+                                <TableCell sx={{ textAlign: 'right' }}>Posted</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {adsAllocationPreview.lines.map((line) => (
+                                <TableRow key={line.sku}>
+                                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    {line.sku}
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right' }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                      <Box sx={{ width: 140 }}>
+                                        <TextField
+                                          type="number"
+                                          size="small"
+                                          fullWidth
+                                          inputProps={{ step: '0.01' }}
+                                          value={line.weightInput}
+                                          onChange={(event) => {
+                                            const next = event.target.value;
+                                            setAdsDirty(true);
+                                            setAdsEditLines((prev) =>
+                                              prev.map((p) => (p.sku === line.sku ? { ...p, weightInput: next } : p)),
+                                            );
+                                          }}
+                                        />
+                                      </Box>
+                                    </Box>
+                                  </TableCell>
+                                  <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                                    {line.allocatedCents === null
+                                      ? '—'
+                                      : formatMoney(line.allocatedCents / 100, settlement.marketplace.currency)}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                              <TableRow>
+                                <TableCell colSpan={2} sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                                  Total
+                                </TableCell>
+                                <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                                  {formatMoney(adsAllocation.totalAdsCents / 100, settlement.marketplace.currency)}
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </Box>
+
+                        {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                              Contribution analysis
+                            </Typography>
+                            <Box sx={{ overflowX: 'auto' }}>
+                              <Table>
+                                <TableHead>
+                                  <TableRow>
+                                    <TableCell>SKU</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Sold</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Returns</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Net Units</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Principal</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>COGS</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Ads</TableCell>
+                                    <TableCell sx={{ textAlign: 'right' }}>Contribution</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {adsSkuProfitabilityPreview.lines.map((line) => (
+                                    <TableRow key={`profit-${line.sku}`}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                        {line.sku}
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.soldUnits}</TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.returnedUnits}</TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>{line.netUnits}</TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                        {formatMoney(line.principalCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                        {formatMoney(line.cogsCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontVariantNumeric: 'tabular-nums' }}>
+                                        {formatMoney(line.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                      <TableCell
+                                        sx={{
+                                          textAlign: 'right',
+                                          fontSize: '0.875rem',
+                                          fontWeight: 600,
+                                          fontVariantNumeric: 'tabular-nums',
+                                          ...(line.contributionAfterAdsCents < 0
+                                            ? { color: 'error.main' }
+                                            : { color: 'text.primary' }),
+                                        }}
+                                      >
+                                        {formatMoney(line.contributionAfterAdsCents / 100, settlement.marketplace.currency)}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                  <TableRow>
+                                    <TableCell sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Total</TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {adsSkuProfitabilityPreview.totals.soldUnits}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {adsSkuProfitabilityPreview.totals.returnedUnits}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {adsSkuProfitabilityPreview.totals.netUnits}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {formatMoney(adsSkuProfitabilityPreview.totals.principalCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {formatMoney(adsSkuProfitabilityPreview.totals.cogsCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                    <TableCell sx={{ textAlign: 'right', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                      {formatMoney(adsSkuProfitabilityPreview.totals.adsAllocatedCents / 100, settlement.marketplace.currency)}
+                                    </TableCell>
+                                    <TableCell
+                                      sx={{
+                                        textAlign: 'right',
+                                        fontSize: '0.875rem',
+                                        fontWeight: 600,
+                                        fontVariantNumeric: 'tabular-nums',
+                                        ...(adsSkuProfitabilityPreview.totals.contributionAfterAdsCents < 0
+                                          ? { color: 'error.main' }
+                                          : { color: 'text.primary' }),
+                                      }}
+                                    >
+                                      {formatMoney(
+                                        adsSkuProfitabilityPreview.totals.contributionAfterAdsCents / 100,
+                                        settlement.marketplace.currency,
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          </Box>
+                        )}
                       </Box>
                     )}
 
