@@ -151,6 +151,11 @@ input:-webkit-autofill:active {
   @apply bg-muted/50;
 }
 
+/* Clip cell content in fixed-layout tables to prevent overflow into adjacent columns */
+.table-fixed td {
+  overflow: hidden;
+}
+
 /* Form styles */
 .form-input {
   @apply w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary;
@@ -282,6 +287,34 @@ input:-webkit-autofill:active {
 
 /* Responsive Utilities */
 @layer utilities {
+  @keyframes talos-pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.25;
+    }
+    75% {
+      transform: scale(1.85);
+      opacity: 0;
+    }
+    100% {
+      transform: scale(1.85);
+      opacity: 0;
+    }
+  }
+
+  .talos-pulse-ring {
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: transform, opacity;
+    animation: talos-pulse-ring 1.25s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .talos-pulse-ring {
+      animation: none;
+    }
+  }
+
   /* Touch-friendly tap targets */
   .touch-target {
     @apply min-h-[44px] min-w-[44px];
