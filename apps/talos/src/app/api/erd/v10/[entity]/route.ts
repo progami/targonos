@@ -6,7 +6,7 @@ import {
   isErdV10Entity,
   type ErdV10Entity,
 } from '@/lib/erd/v10'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { getCurrentTenantSchema, getTenantPrisma } from '@/lib/tenant/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,8 +38,9 @@ export const GET = withAuthAndParams(async (request, params) => {
   const orderBy = ENTITY_ORDER_BY[entityRaw]
 
   const prisma = await getTenantPrisma()
+  const schema = await getCurrentTenantSchema()
   const rows = await prisma.$queryRawUnsafe<EntityRow[]>(
-    `SELECT * FROM "${entityRaw}" ORDER BY ${orderBy} LIMIT ${limit}`
+    `SELECT * FROM "${schema}"."${entityRaw}" ORDER BY ${orderBy} LIMIT ${limit}`
   )
 
   return ApiResponses.success({
