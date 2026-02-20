@@ -30,16 +30,12 @@ const MARKER_COORDINATES: Record<string, [number, number]> = {
 
 function PulseRing({ color }: { color: string }) {
   return (
-    <circle r={12} fill={color} opacity={0.25} className="motion-reduce:hidden">
-      <animateTransform
-        attributeName="transform"
-        type="scale"
-        values="1;1.85;1"
-        dur="1.25s"
-        repeatCount="indefinite"
-      />
-      <animate attributeName="opacity" values="0.25;0;0.25" dur="1.25s" repeatCount="indefinite" />
-    </circle>
+    <circle
+      r={12}
+      fill={color}
+      opacity={0.25}
+      className="talos-pulse-ring motion-reduce:hidden"
+    />
   )
 }
 
