@@ -75,7 +75,7 @@ export function TenantIndicator({ className, collapsed, showLogout = true }: Ten
   if (!current) {
     return (
       <div className={cn('flex items-center gap-3 px-3 py-2.5 text-slate-400', className)}>
-        <Globe className="h-5 w-5 animate-pulse" />
+        <Globe className="h-5 w-5 animate-pulse motion-reduce:animate-none" />
         {!collapsed && <span className="text-sm">Loading...</span>}
       </div>
     )

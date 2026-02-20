@@ -1,13 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  ComposableMap,
-  Geographies,
-  Geography,
-  Marker,
-} from 'react-simple-maps'
+import { ComposableMap, Geographies, Geography, Marker } from 'react-simple-maps'
 import { cn } from '@/lib/utils'
 import { getAllTenants, TenantCode, TenantConfig } from '@/lib/tenant/constants'
 import { FlatFlag } from './TenantIndicator'
@@ -21,11 +16,120 @@ interface WorldMapProps {
 // Natural Earth topojson - reliable CDN source
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 
+const MAP_PROJECTION = 'geoMercator' as const
+const MAP_PROJECTION_CONFIG = {
+  scale: 120,
+  center: [-20, 40],
+} as const
+
 // Geographic coordinates for markers
 const MARKER_COORDINATES: Record<string, [number, number]> = {
   US: [-118.2437, 34.0522], // Los Angeles
   UK: [-0.1276, 51.5074], // London
 }
+
+function PulseRing({ color }: { color: string }) {
+  return (
+    <circle r={12} fill={color} opacity={0.25} className="motion-reduce:hidden">
+      <animateTransform
+        attributeName="transform"
+        type="scale"
+        values="1;1.85;1"
+        dur="1.25s"
+        repeatCount="indefinite"
+      />
+      <animate attributeName="opacity" values="0.25;0;0.25" dur="1.25s" repeatCount="indefinite" />
+    </circle>
+  )
+}
+
+function MapFlag({ code }: { code: TenantCode }) {
+  if (code === 'US') {
+    return (
+      <svg x={-9} y={-6} width={18} height={12} viewBox="0 0 24 16" pointerEvents="none">
+        <rect width="24" height="16" fill="#B22234" rx="2" />
+        <rect y="1.23" width="24" height="1.23" fill="#FFF" />
+        <rect y="3.69" width="24" height="1.23" fill="#FFF" />
+        <rect y="6.15" width="24" height="1.23" fill="#FFF" />
+        <rect y="8.62" width="24" height="1.23" fill="#FFF" />
+        <rect y="11.08" width="24" height="1.23" fill="#FFF" />
+        <rect y="13.54" width="24" height="1.23" fill="#FFF" />
+        <rect width="9.6" height="8.62" fill="#3C3B6E" rx="2" />
+      </svg>
+    )
+  }
+
+  return (
+    <svg x={-9} y={-6} width={18} height={12} viewBox="0 0 24 16" pointerEvents="none">
+      <rect width="24" height="16" fill="#012169" rx="2" />
+      <path d="M0,0 L24,16 M24,0 L0,16" stroke="#FFF" strokeWidth="2.5" />
+      <path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" strokeWidth="1.5" />
+      <path d="M12,0 V16 M0,8 H24" stroke="#FFF" strokeWidth="4" />
+      <path d="M12,0 V16 M0,8 H24" stroke="#C8102E" strokeWidth="2.5" />
+    </svg>
+  )
+}
+
+const WorldBaseMap = memo(function WorldBaseMap() {
+  return (
+    <ComposableMap
+      projection={MAP_PROJECTION}
+      projectionConfig={MAP_PROJECTION_CONFIG}
+      style={{ width: '100%', height: '100%', pointerEvents: 'none' }}
+      aria-hidden
+    >
+      <Geographies geography={GEO_URL}>
+        {({ geographies }) =>
+          geographies.map((geo) => (
+            <Geography
+              key={geo.rsmKey}
+              geography={geo}
+              fill="#334155"
+              stroke="#475569"
+              strokeWidth={0.5}
+              style={{
+                default: { outline: 'none' },
+              }}
+            />
+          ))
+        }
+      </Geographies>
+    </ComposableMap>
+  )
+})
+
+const WorldMarkerLayer = memo(function WorldMarkerLayer({
+  tenants,
+  onSelectTenant,
+}: {
+  tenants: TenantConfig[]
+  onSelectTenant: (tenant: TenantConfig) => void
+}) {
+  return (
+    <ComposableMap
+      projection={MAP_PROJECTION}
+      projectionConfig={MAP_PROJECTION_CONFIG}
+      style={{ width: '100%', height: '100%' }}
+      aria-label="Region selection map"
+    >
+      {tenants.map((tenant) => {
+        const coords = MARKER_COORDINATES[tenant.code]
+        if (!coords) return null
+
+        return (
+          <Marker key={tenant.code} coordinates={coords}>
+            <g onClick={() => onSelectTenant(tenant)} style={{ cursor: 'pointer' }} className="group">
+              <PulseRing color={tenant.color} />
+              <circle r={16} fill={tenant.color} opacity={0.3} />
+              <circle r={12} fill="#0f172a" stroke={tenant.color} strokeWidth={2} />
+              <MapFlag code={tenant.code} />
+            </g>
+          </Marker>
+        )
+      })}
+    </ComposableMap>
+  )
+})
 
 export function WorldMap({ className }: WorldMapProps) {
   const router = useRouter()
@@ -33,7 +137,7 @@ export function WorldMap({ className }: WorldMapProps) {
   const [error, setError] = useState<string | null>(null)
   const [accessibleRegions, setAccessibleRegions] = useState<TenantCode[]>([])
   const [loading, setLoading] = useState(true)
-  const tenants = getAllTenants()
+  const tenants = useMemo(() => getAllTenants(), [])
 
   // Fetch user's accessible regions on mount
   useEffect(() => {
@@ -56,13 +160,13 @@ export function WorldMap({ className }: WorldMapProps) {
     fetchAccessibleRegions()
   }, [])
 
-  const canAccessTenant = (code: string): boolean => {
+  const canAccessTenant = useCallback((code: string): boolean => {
     // If still loading or no regions fetched, allow click (API will reject if unauthorized)
     if (loading || accessibleRegions.length === 0) return true
     return accessibleRegions.includes(code as TenantCode)
-  }
+  }, [accessibleRegions, loading])
 
-  const handleSelectTenant = async (tenant: TenantConfig) => {
+  const handleSelectTenant = useCallback(async (tenant: TenantConfig) => {
     if (!canAccessTenant(tenant.code)) {
       setError(`You don't have access to the ${tenant.displayName} region`)
       return
@@ -88,16 +192,25 @@ export function WorldMap({ className }: WorldMapProps) {
       setError(err instanceof Error ? err.message : 'Failed to select region')
       setSelecting(null)
     }
-  }
+  }, [canAccessTenant, router])
 
   return (
-    <div className={cn('relative h-screen bg-slate-950 overflow-hidden', className)}>
-      {/* Animated background grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]" />
+    <div className={cn('relative isolate h-screen bg-slate-950 overflow-hidden', className)}>
+      {/* Background grid */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_50%,#000_40%,transparent_100%)]"
+      />
 
-      {/* Glow effects */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[128px]" />
-      <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[128px]" />
+      {/* Glow effects (avoid animating blurred layers; Safari is sensitive to big filter regions) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/4 top-1/4 h-[48rem] w-[48rem] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.18)_0%,transparent_65%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute right-1/4 top-1/4 h-[48rem] w-[48rem] translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.16)_0%,transparent_65%)]"
+      />
 
       {/* Content */}
       <div className="relative z-10 flex flex-col items-center justify-between h-full px-4 py-4 lg:py-6">
@@ -113,75 +226,14 @@ export function WorldMap({ className }: WorldMapProps) {
 
         {/* World Map - flex-1 to take available space */}
         <div className="relative w-full max-w-3xl lg:max-w-4xl flex-1 min-h-0 flex items-center">
-          <ComposableMap
-            projection="geoMercator"
-            projectionConfig={{
-              scale: 120,
-              center: [-20, 40],
-            }}
-            style={{ width: '100%', height: '100%' }}
-          >
-            {/* Countries */}
-            <Geographies geography={GEO_URL}>
-              {({ geographies }) =>
-                geographies.map((geo) => (
-                  <Geography
-                    key={geo.rsmKey}
-                    geography={geo}
-                    fill="#334155"
-                    stroke="#475569"
-                    strokeWidth={0.5}
-                    style={{
-                      default: { outline: 'none' },
-                      hover: { outline: 'none', fill: '#475569' },
-                      pressed: { outline: 'none' },
-                    }}
-                  />
-                ))
-              }
-            </Geographies>
-
-            {/* Region markers */}
-            {tenants.map((tenant) => {
-              const coords = MARKER_COORDINATES[tenant.code]
-              if (!coords) return null
-
-              return (
-                <Marker key={tenant.code} coordinates={coords}>
-                  <g
-                    onClick={() => handleSelectTenant(tenant)}
-                    style={{ cursor: 'pointer' }}
-                    className="group"
-                  >
-                    {/* Outer pulse ring */}
-                    <circle
-                      r={20}
-                      fill={tenant.color}
-                      opacity={0.2}
-                      className="animate-ping"
-                    />
-                    {/* Inner glow */}
-                    <circle
-                      r={16}
-                      fill={tenant.color}
-                      opacity={0.3}
-                    />
-                    {/* Main circle */}
-                    <circle
-                      r={12}
-                      fill="#0f172a"
-                      stroke={tenant.color}
-                      strokeWidth={2}
-                    />
-                    {/* Flag */}
-                    <foreignObject x={-9} y={-6} width={18} height={12} style={{ pointerEvents: 'none' }}>
-                      <FlatFlag code={tenant.code} size={18} />
-                    </foreignObject>
-                  </g>
-                </Marker>
-              )
-            })}
-          </ComposableMap>
+          <div className="relative h-full w-full [contain:paint]">
+            <div className="absolute inset-0">
+              <WorldBaseMap />
+            </div>
+            <div className="absolute inset-0 transform-gpu">
+              <WorldMarkerLayer tenants={tenants} onSelectTenant={handleSelectTenant} />
+            </div>
+          </div>
 
           {/* Floating labels for markers */}
           {tenants.map((tenant) => {
@@ -201,7 +253,7 @@ export function WorldMap({ className }: WorldMapProps) {
                 className={cn(
                   'absolute transform -translate-x-1/2 translate-y-8 text-center',
                   'transition-all duration-200 hover:scale-105',
-                  selecting === tenant.code && 'animate-pulse'
+                  selecting === tenant.code && 'animate-pulse motion-reduce:animate-none'
                 )}
                 style={{ left: leftPos, top: topPos }}
               >
@@ -219,92 +271,92 @@ export function WorldMap({ className }: WorldMapProps) {
             const isDisabled = selecting !== null || !hasAccess
 
             return (
-            <button
-              key={tenant.code}
-              onClick={() => handleSelectTenant(tenant)}
-              disabled={isDisabled}
-              className={cn(
-                'group relative overflow-hidden rounded-xl p-3 lg:p-4 text-left transition-all duration-300',
-                'bg-slate-900/50 border border-slate-800',
-                hasAccess && 'hover:bg-slate-900 hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-900/50',
-                'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950',
-                selecting === tenant.code && 'ring-2',
-                !hasAccess && 'opacity-40 cursor-not-allowed',
-                selecting !== null && selecting !== tenant.code && 'opacity-50'
-              )}
-              style={{
-                ['--ring-color' as string]: tenant.color,
-              }}
-            >
-              {/* Gradient accent */}
-              <div
-                className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity"
+              <button
+                key={tenant.code}
+                onClick={() => handleSelectTenant(tenant)}
+                disabled={isDisabled}
+                className={cn(
+                  'group relative overflow-hidden rounded-xl p-3 lg:p-4 text-left transition-all duration-300',
+                  'bg-slate-900/50 border border-slate-800',
+                  hasAccess && 'hover:bg-slate-900 hover:border-slate-700 hover:shadow-2xl hover:shadow-slate-900/50',
+                  'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-950',
+                  selecting === tenant.code && 'ring-2',
+                  !hasAccess && 'opacity-40 cursor-not-allowed',
+                  selecting !== null && selecting !== tenant.code && 'opacity-50'
+                )}
                 style={{
-                  background: `linear-gradient(135deg, ${tenant.color} 0%, transparent 60%)`,
+                  ['--ring-color' as string]: tenant.color,
                 }}
-              />
+              >
+                {/* Gradient accent */}
+                <div
+                  className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity"
+                  style={{
+                    background: `linear-gradient(135deg, ${tenant.color} 0%, transparent 60%)`,
+                  }}
+                />
 
-              <div className="relative">
-                <div className="flex items-center gap-3 mb-2">
-                  <FlatFlag code={tenant.code} size={32} />
-                  <div>
-                    <h3 className="text-base lg:text-lg font-semibold text-white">
-                      {tenant.displayName}
-                    </h3>
-                    <p className="text-xs lg:text-sm text-slate-400">{tenant.name}</p>
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-2">
+                    <FlatFlag code={tenant.code} size={32} />
+                    <div>
+                      <h3 className="text-base lg:text-lg font-semibold text-white">
+                        {tenant.displayName}
+                      </h3>
+                      <p className="text-xs lg:text-sm text-slate-400">{tenant.name}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs lg:text-sm text-slate-400">
+                    <span>{tenant.timezone.replace('_', ' ')}</span>
+                    <span
+                      className="flex items-center gap-1.5 font-medium transition-colors group-hover:text-white"
+                      style={{ color: selecting === tenant.code ? tenant.color : undefined }}
+                    >
+                      {selecting === tenant.code ? (
+                        <>
+                          <svg className="animate-spin h-3 w-3 lg:h-4 lg:w-4 motion-reduce:animate-none" viewBox="0 0 24 24">
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                              fill="none"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                          Connecting...
+                        </>
+                      ) : !hasAccess ? (
+                        <span className="text-slate-500">No Access</span>
+                      ) : (
+                        <>
+                          Enter
+                          <svg
+                            className="w-3 h-3 lg:w-4 lg:h-4 transition-transform group-hover:translate-x-1"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M9 5l7 7-7 7"
+                            />
+                          </svg>
+                        </>
+                      )}
+                    </span>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between text-xs lg:text-sm text-slate-400">
-                  <span>{tenant.timezone.replace('_', ' ')}</span>
-                  <span
-                    className="flex items-center gap-1.5 font-medium transition-colors group-hover:text-white"
-                    style={{ color: selecting === tenant.code ? tenant.color : undefined }}
-                  >
-                    {selecting === tenant.code ? (
-                      <>
-                        <svg className="animate-spin h-3 w-3 lg:h-4 lg:w-4" viewBox="0 0 24 24">
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            fill="none"
-                          />
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          />
-                        </svg>
-                        Connecting...
-                      </>
-                    ) : !hasAccess ? (
-                      <span className="text-slate-500">No Access</span>
-                    ) : (
-                      <>
-                        Enter
-                        <svg
-                          className="w-3 h-3 lg:w-4 lg:h-4 transition-transform group-hover:translate-x-1"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 5l7 7-7 7"
-                          />
-                        </svg>
-                      </>
-                    )}
-                  </span>
-                </div>
-              </div>
-            </button>
+              </button>
             )
           })}
         </div>
