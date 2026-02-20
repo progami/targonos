@@ -32,7 +32,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
-import { PageHeader } from '@/components/page-header';
+import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
@@ -559,7 +559,7 @@ function ProcessSettlementDialog({
             <Box>
               <DialogTitle sx={{ p: 0 }}>Process Settlement</DialogTitle>
               <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-                Match an audit data invoice to this settlement, preview the journal entries, then post to QuickBooks.
+                Match an invoice, preview, then post to QBO.
               </Typography>
             </Box>
             <IconButton size="small" onClick={() => handleOpenChange(false)} sx={{ mt: -0.5 }}>
@@ -575,24 +575,14 @@ function ProcessSettlementDialog({
           )}
 
           {!isLoadingAuditData && invoices.length === 0 && (
-            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data available</Typography>
-                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  Upload Audit Data on the Data Sources page (UK) or sync the settlement from Amazon (US).
-                </Typography>
-              </Box>
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No audit data available</Typography>
             </Box>
           )}
 
           {!isLoadingAuditData && invoices.length > 0 && marketplaceInvoices.length === 0 && (
-            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
-                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  Audit data exists, but none of the uploaded invoices match {marketplaceId}. Upload the correct Audit Data file.
-                </Typography>
-              </Box>
+            <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2, textAlign: 'center' }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No invoices for {marketplaceId}</Typography>
             </Box>
           )}
 
@@ -691,8 +681,8 @@ function ProcessSettlementDialog({
                   </Box>
                 )}
 
-                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
-                  {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'} for this marketplace
+                <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled', mt: 0.5 }}>
+                  {marketplaceInvoices.length} invoice{marketplaceInvoices.length === 1 ? '' : 's'}
                 </Typography>
               </Box>
 
@@ -1326,76 +1316,89 @@ export default function SettlementDetailPage() {
   return (
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '72rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
-          <BackButton />
+        {/* Header */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <BackButton />
+            {settlement && (
+              <>
+                <Box sx={{ height: 16, width: 1, bgcolor: 'divider' }} />
+                <Chip
+                  label={settlement.marketplace.region}
+                  size="small"
+                  sx={{ bgcolor: 'rgba(0, 194, 185, 0.1)', color: '#008f87', fontWeight: 600, letterSpacing: '0.05em' }}
+                />
+                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+                  {displaySettlementDocNumber(settlement.docNumber)}
+                </Typography>
+              </>
+            )}
+          </Box>
+          {settlement && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box
+                component="a"
+                href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, textDecoration: 'none' }}
+              >
+                <StatusPill status={settlement.lmbStatus} />
+                <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
+              </Box>
+              <PlutusPill status={settlement.plutusStatus} />
+              {settlement.plutusStatus === 'Pending' && (
+                <ProcessSettlementDialog
+                  settlementId={settlementId}
+                  settlementDocNumber={settlement.docNumber}
+                  periodStart={settlement.periodStart}
+                  periodEnd={settlement.periodEnd}
+                  marketplaceId={settlement.marketplace.id}
+                  defaultInvoiceId={previewInvoiceId}
+                  onProcessed={() => void handleProcessed()}
+                />
+              )}
+              {data?.processing && (
+                <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void handleRollback()} disabled={isRollingBack}>
+                  {isRollingBack ? 'Rolling back...' : 'Rollback'}
+                </Button>
+              )}
+            </Box>
+          )}
         </Box>
 
-        <PageHeader
-          sx={{ mt: 2 }}
-          title="Settlement Details"
-          kicker={settlement ? settlement.marketplace.label : 'QBO'}
-          description={
-            settlement ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>{displaySettlementDocNumber(settlement.docNumber)}</Typography>
-                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  {formatPeriod(settlement.periodStart, settlement.periodEnd)} &middot; Posted{' '}
-                  {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                </Typography>
-                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                  {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
-                </Typography>
-              </Box>
-            ) : (
-              'Loads the QBO journal entry for this settlement and shows Plutus processing status.'
-            )
-          }
-          actions={
-            settlement ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 1.5 }}>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
-                  <Box
-                    component="a"
-                    href={`https://app.qbo.intuit.com/app/journal?txnId=${settlementId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, '&:hover .qbo-link-icon': { color: 'text.secondary' }, textDecoration: 'none' }}
-                  >
-                    <StatusPill status={settlement.lmbStatus} />
-                    <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s' }} />
-                  </Box>
-                  <PlutusPill status={settlement.plutusStatus} />
-                </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {settlement.plutusStatus === 'Pending' && (
-                    <ProcessSettlementDialog
-                      settlementId={settlementId}
-                      settlementDocNumber={settlement.docNumber}
-                      periodStart={settlement.periodStart}
-                      periodEnd={settlement.periodEnd}
-                      marketplaceId={settlement.marketplace.id}
-                      defaultInvoiceId={previewInvoiceId}
-                      onProcessed={() => void handleProcessed()}
-                    />
-                  )}
-                  {data?.processing && (
-                    <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void handleRollback()} disabled={isRollingBack}>
-                      {isRollingBack ? 'Rolling back...' : 'Rollback'}
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-            ) : null
-          }
-        />
+        {/* Summary Stats */}
+        {settlement ? (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5, mt: 2 }}>
+            <StatCard
+              label="Settlement"
+              value={settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
+            />
+            <StatCard
+              label="Period"
+              value={formatPeriod(settlement.periodStart, settlement.periodEnd)}
+            />
+            <StatCard
+              label="Posted"
+              value={new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+            />
+            <StatCard label="JE Lines" value={settlement.lines.length} />
+          </Box>
+        ) : isLoading ? (
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5, mt: 2 }}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} sx={{ height: 80, borderRadius: 3 }} />
+            ))}
+          </Box>
+        ) : null}
 
         {actionError && (
-          <Typography sx={{ mb: 2, fontSize: '0.875rem', color: 'error.main' }}>
+          <Typography sx={{ mt: 2, fontSize: '0.875rem', color: 'error.main' }}>
             {actionError}
           </Typography>
         )}
 
-        <Card sx={{ border: 1, borderColor: 'divider' }}>
+        <Card sx={{ border: 1, borderColor: 'divider', mt: 2 }}>
           <CardContent sx={{ p: 0 }}>
             <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
@@ -1408,7 +1411,7 @@ export default function SettlementDetailPage() {
 
                 {settlement?.plutusStatus === 'Pending' && marketplaceAuditInvoices.length > 0 && (
                   <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.75, sm: 1 }, alignItems: { sm: 'center' } }}>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary' }}>Preview invoice</Typography>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary' }}>Invoice</Typography>
                     <FormControl size="small">
                       <Select
                         value={previewInvoiceId ?? ''}
@@ -1530,13 +1533,8 @@ export default function SettlementDetailPage() {
                 )}
 
                 {settlement && !previewInvoiceId && (
-                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
-                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Choose a Preview invoice above to compute advertising allocation.
-                      </Typography>
-                    </Box>
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Select an invoice above</Typography>
                   </Box>
                 )}
 
@@ -1552,17 +1550,8 @@ export default function SettlementDetailPage() {
                     )}
 
                     {!isAdsAllocationLoading && adsAllocationError && (
-                      <Box sx={{ fontSize: '0.875rem', color: 'error.main' }}>
+                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5, fontSize: '0.875rem', color: 'error.dark' }}>
                         {adsAllocationError instanceof Error ? adsAllocationError.message : String(adsAllocationError)}
-                        <Box sx={{ mt: 1 }}>
-                          <Box
-                            component={Link}
-                            href="/data-sources"
-                            sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
-                          >
-                            Upload Ads Data
-                          </Box>
-                        </Box>
                       </Box>
                     )}
 
@@ -1572,30 +1561,32 @@ export default function SettlementDetailPage() {
                           <Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                                Advertising cost allocation (SKU)
+                                Ads Allocation
                               </Typography>
+                              <Chip
+                                label={
+                                  adsAllocation.totalSource === 'AUDIT_DATA' ? 'Audit Data'
+                                    : adsAllocation.totalSource === 'ADS_REPORT' ? 'Ads Report'
+                                    : adsAllocation.totalSource === 'SAVED' ? 'Saved'
+                                    : 'No Source'
+                                }
+                                size="small"
+                                sx={{
+                                  fontSize: '10px',
+                                  ...(adsAllocation.totalSource === 'SAVED'
+                                    ? { bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }
+                                    : adsAllocation.totalSource === 'NONE'
+                                      ? { bgcolor: 'action.hover', color: 'text.secondary' }
+                                      : { bgcolor: 'rgba(0, 194, 185, 0.1)', color: '#008f87' }),
+                                }}
+                              />
                               {!adsAllocationSaveEnabled && (
                                 <Chip label="Preview" size="small" sx={{ fontSize: '10px', bgcolor: 'action.hover', color: 'text.secondary' }} />
                               )}
                             </Box>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
-                              Invoice <Box component="span" sx={{ fontFamily: 'monospace' }}>{adsAllocation.invoiceId}</Box> &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
+                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
+                              {adsAllocation.invoiceId} &middot; {adsAllocation.invoiceStartDate} &rarr; {adsAllocation.invoiceEndDate}
                             </Typography>
-                            <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
-                              Total source:{' '}
-                              {adsAllocation.totalSource === 'AUDIT_DATA'
-                                ? 'Audit Data (Amazon Advertising Costs rows)'
-                                : adsAllocation.totalSource === 'ADS_REPORT'
-                                  ? 'Legacy inferred from Ads Data (no invoice billing total)'
-                                  : adsAllocation.totalSource === 'SAVED'
-                                    ? 'Saved allocation'
-                                    : 'No source data'}
-                            </Typography>
-                            {adsAllocation.adsDataUpload && (
-                              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary' }}>
-                                Source: {adsAllocation.adsDataUpload.filename} ({adsAllocation.adsDataUpload.startDate}–{adsAllocation.adsDataUpload.endDate})
-                              </Typography>
-                            )}
                           </Box>
 
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1613,24 +1604,10 @@ export default function SettlementDetailPage() {
                           </Box>
                         </Box>
 
-                        {!adsAllocationSaveEnabled ? (
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                            Preview allocation &middot; edit amounts and match billed total exactly
-                          </Typography>
-                        ) : adsAllocation.kind === 'saved' ? (
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                            Saved allocation &middot; edit amounts and re-save
-                          </Typography>
-                        ) : (
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                            Prefilled allocation &middot; review and save to lock it in
-                          </Typography>
-                        )}
-
                         {adsAllocation.totalAdsCents === 0 ? (
-                          <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                            No Amazon Advertising Costs rows found in Audit Data for this invoice. Nothing to allocate.
-                          </Typography>
+                          <Box sx={{ borderRadius: 2, border: 1, borderStyle: 'dashed', borderColor: 'divider', p: 3, textAlign: 'center' }}>
+                            <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No advertising costs for this invoice</Typography>
+                          </Box>
                         ) : (
                           <>
                             {adsAllocationPreview.error && (
@@ -1640,13 +1617,9 @@ export default function SettlementDetailPage() {
                             )}
 
                             {!adsAllocation.adsDataUpload && (
-                              <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
-                                Missing Ads Data upload for this invoice range.{' '}
-                                <Box component={Link} href="/data-sources" sx={{ textDecoration: 'underline', color: 'inherit' }}>
-                                  Upload Ads Data
-                                </Box>
-                                .
-                              </Typography>
+                              <Box component={Link} href="/data-sources" sx={{ display: 'inline-flex', fontSize: '0.75rem', textDecoration: 'underline', color: 'error.main' }}>
+                                Upload ads data for this range
+                              </Box>
                             )}
 
                             <Box sx={{ overflowX: 'auto' }}>
@@ -1706,7 +1679,7 @@ export default function SettlementDetailPage() {
                             {adsSkuProfitabilityPreview && adsSkuProfitabilityPreview.lines.length > 0 && (
                               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                                 <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                                  SKU contribution after ads allocation
+                                  Contribution analysis
                                 </Typography>
                                 <Box sx={{ overflowX: 'auto' }}>
                                   <Table>
@@ -1798,18 +1771,7 @@ export default function SettlementDetailPage() {
                               </Box>
                             )}
 
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <Box
-                                component={Link}
-                                href="/data-sources"
-                                sx={{ fontSize: '0.75rem', textDecoration: 'underline', color: 'text.secondary' }}
-                              >
-                                Manage Ads Data
-                              </Box>
-                              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                                Weight source: {adsAllocation.weightSource}
-                              </Typography>
-                            </Box>
+                            <Box sx={{ height: 4 }} />
                           </>
                         )}
                       </Box>
@@ -1831,43 +1793,23 @@ export default function SettlementDetailPage() {
                 )}
 
                 {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
-                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No audit data uploaded</Typography>
-                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Upload Audit Data on the{' '}
-                        <Box
-                          component={Link}
-                          href="/audit-data"
-                          sx={{ color: '#008f87', '&:hover': { textDecoration: 'underline' } }}
-                        >
-                          Audit Data
-                        </Box>{' '}
-                        page first.
-                      </Typography>
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 0.5 }}>No audit data</Typography>
+                    <Box component={Link} href="/audit-data" sx={{ fontSize: '0.875rem', color: '#008f87', '&:hover': { textDecoration: 'underline' } }}>
+                      Upload Audit Data
                     </Box>
                   </Box>
                 )}
 
                 {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && auditData?.invoices?.length && marketplaceAuditInvoices.length === 0 && (
-                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>No invoices for this marketplace</Typography>
-                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Audit data exists, but none of the uploaded invoices match {settlement.marketplace.id}.
-                      </Typography>
-                    </Box>
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No invoices for {settlement.marketplace.id}</Typography>
                   </Box>
                 )}
 
                 {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !isPreviewLoading && marketplaceAuditInvoices.length > 0 && !previewInvoiceId && (
-                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4 }}>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}>
-                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>Select an invoice</Typography>
-                      <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Choose a Preview invoice above to compute a settlement preview.
-                      </Typography>
-                    </Box>
+                  <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Select an invoice above</Typography>
                   </Box>
                 )}
 
@@ -1948,31 +1890,11 @@ export default function SettlementDetailPage() {
                     </Box>
 
                     {/* Summary cards */}
-                    <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: 'repeat(4, 1fr)' } }}>
-                      <Card sx={{ border: 1, borderColor: 'divider' }}>
-                        <CardContent sx={{ p: 1.5 }}>
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales</Typography>
-                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.sales.length}</Typography>
-                        </CardContent>
-                      </Card>
-                      <Card sx={{ border: 1, borderColor: 'divider' }}>
-                        <CardContent sx={{ p: 1.5 }}>
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Returns</Typography>
-                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.returns.length}</Typography>
-                        </CardContent>
-                      </Card>
-                      <Card sx={{ border: 1, borderColor: 'divider' }}>
-                        <CardContent sx={{ p: 1.5 }}>
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>COGS Lines</Typography>
-                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.cogsJournalEntry.lines.length}</Typography>
-                        </CardContent>
-                      </Card>
-                      <Card sx={{ border: 1, borderColor: 'divider' }}>
-                        <CardContent sx={{ p: 1.5 }}>
-                          <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>P&amp;L Lines</Typography>
-                          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>{previewData.pnlJournalEntry.lines.length}</Typography>
-                        </CardContent>
-                      </Card>
+                    <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' } }}>
+                      <StatCard label="Sales" value={previewData.sales.length} />
+                      <StatCard label="Returns" value={previewData.returns.length} />
+                      <StatCard label="COGS Lines" value={previewData.cogsJournalEntry.lines.length} />
+                      <StatCard label="P&L Lines" value={previewData.pnlJournalEntry.lines.length} />
                     </Box>
 
                     {/* Blocks */}
