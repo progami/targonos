@@ -1,0 +1,19 @@
+name: Portal DB Ownership Audit
+
+on:
+  schedule:
+    - cron: "25 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  portal-db-audit:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 10
+    steps:
+      - name: Run portal ownership and privilege audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${TARGONOS_DEV_DIR:?Set TARGONOS_DEV_DIR on the self-hosted runner}"
+          cd "$TARGONOS_DEV_DIR"
+          bash scripts/db/check-portal-ownership.sh
