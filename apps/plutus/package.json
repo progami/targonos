@@ -4,7 +4,7 @@
   "private": true,
   "description": "Plutus – finance workspace for custom financials from QuickBooks Online",
   "scripts": {
-    "dev": "next dev -p 3012",
+    "dev": "node ../../scripts/run-dev-with-logs.js plutus -- next dev",
     "clean": "rm -rf .next out dist",
     "build": "prisma generate --schema prisma/schema.prisma && next build",
     "start": "next start -p 3012",
