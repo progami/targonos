@@ -176,6 +176,10 @@ export interface QboBill {
     value: string;
     name: string;
   };
+  APAccountRef?: {
+    value: string;
+    name?: string;
+  };
   Line?: Array<{
     Id: string;
     Amount: number;
