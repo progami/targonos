@@ -2,7 +2,7 @@ import { Prisma } from '@targon/prisma-talos'
 import { withAuth } from '@/lib/api/auth-wrapper'
 import { ApiResponses } from '@/lib/api/responses'
 import { ERD_V10_ENTITIES, ERD_V10_ENTITY_COLUMNS, type ErdV10Entity } from '@/lib/erd/v10'
-import { getTenantPrisma } from '@/lib/tenant/server'
+import { getCurrentTenantSchema, getTenantPrisma } from '@/lib/tenant/server'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,12 +21,13 @@ type EntityCompliance = {
 
 export const GET = withAuth(async () => {
   const prisma = await getTenantPrisma()
+  const schema = await getCurrentTenantSchema()
   const entityValues = ERD_V10_ENTITIES.map(entity => Prisma.sql`${entity}`)
 
   const rows = await prisma.$queryRaw<ColumnRow[]>(Prisma.sql`
     SELECT table_name, column_name
     FROM information_schema.columns
-    WHERE table_schema = current_schema()
+    WHERE table_schema = ${schema}
       AND table_name IN (${Prisma.join(entityValues)})
   `)
 
@@ -64,4 +65,3 @@ export const GET = withAuth(async () => {
     entities,
   })
 })
-
