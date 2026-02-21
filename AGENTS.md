@@ -2,19 +2,25 @@
 
 ## Database
 
-All apps share `portal_db` on localhost:5432 with separate schemas per app. Connection strings are in each app's `.env.local` file.
+Main and dev run against **separate Postgres databases** on localhost:5432:
 
-| App | Schema |
-|-----|--------|
-| talos | dev_talos_us, dev_talos_uk |
-| atlas | dev_atlas |
-| xplan | dev_xplan |
-| kairos | chronos |
-| sso | auth |
-| plutus | plutus |
+- Main: `portal_db`
+- Dev: `portal_db_dev`
 
-Talos also has main schemas: `main_talos_us`, `main_talos_uk`.
-Atlas also has main schema: `atlas`.
+Apps use separate schemas per app (and sometimes per tenant). Connection strings are in each app's `.env.local` file.
+
+| App | Main schema(s) | Dev schema(s) |
+|-----|---------------|---------------|
+| talos | main_talos_us, main_talos_uk | dev_talos_us, dev_talos_uk |
+| atlas | atlas | dev_atlas |
+| xplan | xplan | dev_xplan |
+| kairos | kairos | kairos |
+| sso (auth) | auth | auth_dev |
+| plutus | plutus | plutus_dev |
+| argus | main_argus | argus_dev |
+| hermes | main_hermes | dev_hermes |
+
+To seed/refresh dev from main, use `scripts/db/refresh-dev-from-main.sh`.
 
 Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
