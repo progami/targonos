@@ -8,6 +8,8 @@ import { isRefundPrincipal, isSalePrincipal, normalizeSku } from './settlement-v
 const ADS_REPORT_TYPE = 'SP_ADVERTISED_PRODUCT';
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
 
+type AwdFeeType = 'STORAGE_FEE' | 'PROCESSING_FEE' | 'TRANSPORTATION_FEE';
+
 function parseIsoDay(value: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     throw new Error(`Invalid ISO day: ${value}`);
@@ -60,6 +62,40 @@ function daysInRange(start: string, end: string): number {
 
 function centsFromNet(value: number): number {
   return Math.round(value * 100);
+}
+
+function awdFeeTypeFromDescription(description: string): AwdFeeType | null {
+  const normalized = description.trim().toLowerCase();
+  if (!normalized.includes('awd')) return null;
+  if (normalized.includes('storage fee')) return 'STORAGE_FEE';
+  if (normalized.includes('processing fee')) return 'PROCESSING_FEE';
+  if (normalized.includes('transportation fee')) return 'TRANSPORTATION_FEE';
+  return null;
+}
+
+function buildRequiredAwdFeeTypes(rows: LmbAuditRow[]): {
+  feeTypes: AwdFeeType[];
+  unknownDescriptions: string[];
+} {
+  const feeTypes = new Set<AwdFeeType>();
+  const unknownDescriptions = new Set<string>();
+
+  for (const row of rows) {
+    if (classifyPnlBucket(row.description) !== 'warehousingAwd') continue;
+    if (row.sku.trim() !== '') continue;
+
+    const feeType = awdFeeTypeFromDescription(row.description);
+    if (feeType === null) {
+      unknownDescriptions.add(row.description.trim());
+      continue;
+    }
+    feeTypes.add(feeType);
+  }
+
+  return {
+    feeTypes: Array.from(feeTypes).sort(),
+    unknownDescriptions: Array.from(unknownDescriptions).sort(),
+  };
 }
 
 function isoDayAddDays(value: string, deltaDays: number): string {
@@ -187,7 +223,7 @@ const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
   amazonFbaInventoryReimbursement:
     'Missing deterministic source for SKU-less Amazon FBA Inventory Reimbursement. Provide reimbursement detail report/API data at SKU level.',
   warehousingAwd:
-    'Missing deterministic source for SKU-less AWD fees. Upload AWD monthly fee report covering the invoice range.',
+    'Missing deterministic source for SKU-less AWD fees. Upload AWD fee report covering the invoice range and matching fee types (e.g., STORAGE_FEE / PROCESSING_FEE / TRANSPORTATION_FEE).',
 };
 
 export function deterministicSourceGuidanceForBucket(bucket: PnlBucketKey): string {
@@ -423,25 +459,10 @@ export async function buildDeterministicSkuAllocations(input: {
 
     const upload = chooseBestUpload(adsUploads);
     if (upload === null) {
-      const weightsBySku = pickSkuWeightsForSkuLessBucket({
-        rows: input.rows,
+      issues.push({
         bucket: 'amazonAdvertisingCosts',
-        principalWeightsBySku,
-        fallbackWeightsBySku,
+        message: 'Missing Ads Data upload covering invoice date range',
       });
-      const allocated = allocateSignedByWeight({
-        totalCents: adsSkuLessTotal,
-        weightsBySku,
-      });
-
-      if (Object.keys(allocated).length > 0) {
-        skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
-      } else {
-        issues.push({
-          bucket: 'amazonAdvertisingCosts',
-          message: 'Missing Ads Data upload covering invoice date range',
-        });
-      }
     } else {
       const grouped = await db.adsDataRow.groupBy({
         by: ['sku'],
@@ -478,25 +499,10 @@ export async function buildDeterministicSkuAllocations(input: {
       const expected = Math.abs(adsSkuLessTotal);
       const weightsTotal = sumRecordValues(bySku);
       if (weightsTotal !== expected) {
-        const weightsBySku = pickSkuWeightsForSkuLessBucket({
-          rows: input.rows,
+        issues.push({
           bucket: 'amazonAdvertisingCosts',
-          principalWeightsBySku,
-          fallbackWeightsBySku,
+          message: `Ads report total mismatch (${weightsTotal} vs ${expected})`,
         });
-        const fallbackAllocated = allocateSignedByWeight({
-          totalCents: adsSkuLessTotal,
-          weightsBySku,
-        });
-
-        if (Object.keys(fallbackAllocated).length > 0) {
-          skuAllocationsByBucket.amazonAdvertisingCosts = fallbackAllocated;
-        } else {
-          issues.push({
-            bucket: 'amazonAdvertisingCosts',
-            message: `Ads report total mismatch (${weightsTotal} vs ${expected})`,
-          });
-        }
       } else {
         skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
       }
@@ -505,6 +511,19 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const awdSkuLessTotal = skuLessTotalsByBucket.warehousingAwd;
   if (awdSkuLessTotal !== undefined && awdSkuLessTotal !== 0) {
+    const awdFeeTypes = buildRequiredAwdFeeTypes(input.rows);
+    if (awdFeeTypes.unknownDescriptions.length > 0) {
+      issues.push({
+        bucket: 'warehousingAwd',
+        message: `Unrecognized AWD fee descriptions: ${awdFeeTypes.unknownDescriptions.join(', ')}`,
+      });
+    } else if (awdFeeTypes.feeTypes.length === 0) {
+      issues.push({
+        bucket: 'warehousingAwd',
+        message: 'Cannot determine required AWD fee types from SKU-less rows',
+      });
+    }
+
     const awdUploads = await db.awdDataUpload.findMany({
       where: {
         reportType: AWD_REPORT_TYPE,
@@ -523,30 +542,19 @@ export async function buildDeterministicSkuAllocations(input: {
 
     const upload = chooseBestUpload(awdUploads);
     if (upload === null) {
-      const weightsBySku = pickSkuWeightsForSkuLessBucket({
-        rows: input.rows,
+      issues.push({
         bucket: 'warehousingAwd',
-        principalWeightsBySku,
-        fallbackWeightsBySku,
+        message: 'Missing AWD report upload covering invoice date range',
       });
-      const allocated = allocateSignedByWeight({
-        totalCents: awdSkuLessTotal,
-        weightsBySku,
-      });
-
-      if (Object.keys(allocated).length > 0) {
-        skuAllocationsByBucket.warehousingAwd = allocated;
-      } else {
-        issues.push({
-          bucket: 'warehousingAwd',
-          message: 'Missing AWD report upload covering invoice date range',
-        });
-      }
-    } else {
+    } else if (awdFeeTypes.unknownDescriptions.length === 0 && awdFeeTypes.feeTypes.length > 0) {
       const rows = await db.awdDataRow.findMany({
-        where: { uploadId: upload.id },
+        where: {
+          uploadId: upload.id,
+          feeType: { in: awdFeeTypes.feeTypes },
+        },
         select: {
           sku: true,
+          feeType: true,
           feeCents: true,
           monthStartDate: true,
           monthEndDate: true,
@@ -554,6 +562,7 @@ export async function buildDeterministicSkuAllocations(input: {
       });
 
       const weightsBySku: Record<string, number> = {};
+      const seenFeeTypes = new Set<string>();
       for (const row of rows) {
         const overlap = overlapDays({
           startA: input.invoiceStartDate,
@@ -564,6 +573,7 @@ export async function buildDeterministicSkuAllocations(input: {
         if (overlap <= 0) {
           continue;
         }
+        seenFeeTypes.add(row.feeType);
         const monthDays = daysInRange(row.monthStartDate, row.monthEndDate);
         if (monthDays <= 0) {
           continue;
@@ -581,18 +591,29 @@ export async function buildDeterministicSkuAllocations(input: {
         }
       }
 
-      const allocated = allocateSignedByWeight({
-        totalCents: awdSkuLessTotal,
-        weightsBySku,
-      });
+      for (const feeType of awdFeeTypes.feeTypes) {
+        if (!seenFeeTypes.has(feeType)) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `AWD report is missing required fee type ${feeType}`,
+          });
+        }
+      }
 
-      if (Object.keys(allocated).length === 0) {
-        issues.push({
-          bucket: 'warehousingAwd',
-          message: 'AWD report has no overlapping SKU weights for invoice range',
+      if (awdFeeTypes.feeTypes.every((feeType) => seenFeeTypes.has(feeType))) {
+        const allocated = allocateSignedByWeight({
+          totalCents: awdSkuLessTotal,
+          weightsBySku,
         });
-      } else {
-        skuAllocationsByBucket.warehousingAwd = allocated;
+
+        if (Object.keys(allocated).length === 0) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: 'AWD report has no overlapping SKU weights for invoice range',
+          });
+        } else {
+          skuAllocationsByBucket.warehousingAwd = allocated;
+        }
       }
     }
   }
