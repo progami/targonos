@@ -96,7 +96,10 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 ## Data/services
 
 - PostgreSQL runs locally (Homebrew `postgresql@14`), exposed on `localhost:5432` and optionally via `db.targonglobal.com` through the tunnel.
-- Schemas are per-app (and per-environment): `auth`, `talos`, `xplan`, `atlas`, `plutus` (dev schemas may be prefixed `dev_*` depending on env).
+- Main and dev use separate databases:
+  - Main: `portal_db`
+  - Dev: `portal_db_dev`
+- Schemas are per-app (and sometimes per-tenant): `auth`, `main_talos_us`, `main_talos_uk`, `xplan`, `atlas`, `plutus`, etc. Dev schemas are typically prefixed `dev_*` or suffixed `*_dev`.
 - Prisma clients are generated into `packages/prisma-*` and imported by apps (e.g., `@targon/prisma-talos`).
 - Redis runs locally (Homebrew `redis`) and is used by Talos.
 

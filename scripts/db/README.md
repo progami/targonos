@@ -2,6 +2,22 @@
 
 These scripts enforce schema ownership and external-role DDL restrictions in `portal_db`.
 
+## Dev DB refresh (seed dev from main)
+
+Dev runs against a separate local database (`portal_db_dev`) so schema changes and test data never touch main. To seed or refresh dev from main:
+
+```bash
+bash scripts/db/refresh-dev-from-main.sh --yes-wipe-dev
+```
+
+Defaults (override via env vars if needed):
+
+- Main DB: `PORTAL_MAIN_DB_NAME=portal_db`
+- Dev DB: `PORTAL_DEV_DB_NAME=portal_db_dev`
+- Dev role: `PORTAL_DEV_DB_ROLE=portal_dev_external`
+
+The refresh script creates `portal_db_dev` if it doesn't exist and ensures `pgcrypto` is installed (Talos uses `gen_random_uuid()`).
+
 ## Portal-wide scripts
 
 - `scripts/db/apply-portal-hardening.sh`
