@@ -5,7 +5,6 @@ import { classifyPnlBucket } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { isRefundPrincipal, isSalePrincipal, normalizeSku } from './settlement-validation';
 
-const ADS_REPORT_TYPE = 'SP_ADVERTISED_PRODUCT';
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
 
 type AwdFeeType = 'STORAGE_FEE' | 'PROCESSING_FEE' | 'TRANSPORTATION_FEE';
@@ -481,76 +480,6 @@ export async function buildDeterministicSkuAllocations(input: {
 
     if (Object.keys(allocated).length > 0) {
       skuAllocationsByBucket.amazonFbaInventoryReimbursement = allocated;
-    }
-  }
-
-  const adsSkuLessTotal = skuLessTotalsByBucket.amazonAdvertisingCosts;
-  if (adsSkuLessTotal !== undefined && adsSkuLessTotal !== 0) {
-    const adsUploads = await db.adsDataUpload.findMany({
-      where: {
-        reportType: ADS_REPORT_TYPE,
-        marketplace: input.marketplace,
-        startDate: { lte: input.invoiceStartDate },
-        endDate: { gte: input.invoiceEndDate },
-      },
-      select: {
-        id: true,
-        startDate: true,
-        endDate: true,
-        uploadedAt: true,
-      },
-      orderBy: { uploadedAt: 'desc' },
-    });
-
-    const upload = chooseBestUpload(adsUploads);
-    if (upload === null) {
-      issues.push({
-        bucket: 'amazonAdvertisingCosts',
-        message: 'Missing Ads Data upload covering invoice date range',
-      });
-    } else {
-      const grouped = await db.adsDataRow.groupBy({
-        by: ['sku'],
-        where: {
-          uploadId: upload.id,
-          date: { gte: input.invoiceStartDate, lte: input.invoiceEndDate },
-        },
-        _sum: { spendCents: true },
-      });
-
-      const bySku: Record<string, number> = {};
-      for (const row of grouped) {
-        const sku = normalizeSku(row.sku);
-        const rawWeight = row._sum.spendCents;
-        if (rawWeight === null) {
-          continue;
-        }
-        if (!Number.isInteger(rawWeight) || rawWeight <= 0) {
-          continue;
-        }
-        const existing = bySku[sku];
-        if (existing === undefined) {
-          bySku[sku] = rawWeight;
-        } else {
-          bySku[sku] = existing + rawWeight;
-        }
-      }
-
-      const allocated = allocateSignedByWeight({
-        totalCents: adsSkuLessTotal,
-        weightsBySku: bySku,
-      });
-
-      const expected = Math.abs(adsSkuLessTotal);
-      const weightsTotal = sumRecordValues(bySku);
-      if (weightsTotal !== expected) {
-        issues.push({
-          bucket: 'amazonAdvertisingCosts',
-          message: `Ads report total mismatch (${weightsTotal} vs ${expected})`,
-        });
-      } else {
-        skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
-      }
     }
   }
 
