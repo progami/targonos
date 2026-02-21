@@ -271,6 +271,37 @@ test('parseAwdFeeCsv parses monthly SKU fee rows', () => {
   assert.equal(parsed.rows[0]?.feeCents, 1178);
 });
 
+test('parseAwdFeeCsv prefers total_charged_amount over fee_amount', () => {
+  const csv = [
+    'month_of_charge,year_of_charge,msku,country_c,fee_type,fee_amount,total_charged_amount,currency',
+    'January,2026,cs-007,US,STORAGE_FEE,11.78,7.50,USD',
+  ].join('\n');
+
+  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
+  assert.equal(parsed.rows.length, 1);
+  assert.equal(parsed.rows[0]?.feeCents, 750);
+});
+
+test('parseAwdFeeCsv parses charged_amount and charge_type', () => {
+  const csv = [
+    'month_of_charge,year_of_charge,msku,country_c,fee_type,charge_type,charged_amount,currency',
+    'December,2025,cs-007,US,PROCESSING_FEE,inbound,1.23,USD',
+    'December,2025,cs-007,US,PROCESSING_FEE,Inbound,2.00,USD',
+    'December,2025,cs-007,US,PROCESSING_FEE,Outbound,4.56,USD',
+  ].join('\n');
+
+  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
+  assert.equal(parsed.rawRowCount, 3);
+  assert.equal(parsed.skuCount, 1);
+  assert.equal(parsed.minDate, '2025-12-01');
+  assert.equal(parsed.maxDate, '2025-12-31');
+  assert.equal(parsed.rows.length, 2);
+  assert.equal(parsed.rows[0]?.chargeType, 'Inbound');
+  assert.equal(parsed.rows[0]?.feeCents, 323);
+  assert.equal(parsed.rows[1]?.chargeType, 'Outbound');
+  assert.equal(parsed.rows[1]?.feeCents, 456);
+});
+
 test('computePnlAllocation leaves SKU-less fees unallocated without deterministic source', () => {
   const rows = [
     {
