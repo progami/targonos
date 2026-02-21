@@ -1384,7 +1384,7 @@ export default function SettlementDetailPage() {
             <BackButton />
             {settlement && (
               <>
-                <Box sx={{ height: 16, width: 1, bgcolor: 'divider' }} />
+                <Box sx={{ height: 16, width: '1px', bgcolor: 'divider', flexShrink: 0 }} />
                 <Chip
                   label={settlement.marketplace.region}
                   size="small"
