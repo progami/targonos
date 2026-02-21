@@ -77,6 +77,7 @@ export async function POST(req: Request) {
               monthEndDate: row.monthEndDate,
               sku: row.sku,
               feeType: row.feeType,
+              chargeType: row.chargeType,
               feeCents: row.feeCents,
               currency: row.currency,
             })),
