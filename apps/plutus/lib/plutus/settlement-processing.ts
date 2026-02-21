@@ -222,6 +222,7 @@ export async function computeSettlementPreview(input: {
   const existingSettlement = await db.settlementProcessing.findUnique({
     where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
   });
+  const skipOrderIdempotencyChecks = existingSettlement !== null;
   if (existingSettlement) {
     blocks.push({
       code: 'ALREADY_PROCESSED',
@@ -267,9 +268,8 @@ export async function computeSettlementPreview(input: {
     }
   }
 
-  const alreadyProcessedOrConflictCodes = new Set(['ALREADY_PROCESSED', 'INVOICE_CONFLICT']);
-  const hasAlreadyProcessedOrConflict = blocks.some((b) => alreadyProcessedOrConflictCodes.has(b.code));
-  if (hasAlreadyProcessedOrConflict) {
+  const hasInvoiceConflict = blocks.some((b) => b.code === 'INVOICE_CONFLICT');
+  if (hasInvoiceConflict) {
     return {
       preview: buildEmptyPreview({
         marketplace,
@@ -579,6 +579,9 @@ export async function computeSettlementPreview(input: {
     });
 
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
+      if (issue.bucket === 'amazonAdvertisingCosts') {
+        continue;
+      }
       blocks.push({
         code: 'PNL_ALLOCATION_ERROR',
         message: `Cannot allocate SKU-less bucket amount. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
@@ -608,7 +611,7 @@ export async function computeSettlementPreview(input: {
   // Check existing OrderSales
   const salePairs = Array.from(saleGroups.values()).map((s) => ({ orderId: s.orderId, sku: s.sku }));
   const existingSalesSet = new Set<string>();
-  if (salePairs.length > 0) {
+  if (!skipOrderIdempotencyChecks && salePairs.length > 0) {
     const existingSales = await db.orderSale.findMany({
       where: {
         marketplace,
@@ -619,14 +622,16 @@ export async function computeSettlementPreview(input: {
       existingSalesSet.add(`${sale.orderId}::${normalizeSku(sale.sku)}`);
     }
   }
-  for (const sale of saleGroups.values()) {
-    const key = `${sale.orderId}::${sale.sku}`;
-    if (existingSalesSet.has(key)) {
-      blocks.push({
-        code: 'ORDER_ALREADY_PROCESSED',
-        message: 'Order already processed by Plutus',
-        details: { orderId: sale.orderId, sku: sale.sku },
-      });
+  if (!skipOrderIdempotencyChecks) {
+    for (const sale of saleGroups.values()) {
+      const key = `${sale.orderId}::${sale.sku}`;
+      if (existingSalesSet.has(key)) {
+        blocks.push({
+          code: 'ORDER_ALREADY_PROCESSED',
+          message: 'Order already processed by Plutus',
+          details: { orderId: sale.orderId, sku: sale.sku },
+        });
+      }
     }
   }
 
