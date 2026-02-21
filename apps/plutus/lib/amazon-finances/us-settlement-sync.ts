@@ -68,10 +68,22 @@ function computePostedAfterIso(startDate: string): string {
 }
 
 function computePostedBeforeIso(endDate: string | undefined): string {
-  if (endDate !== undefined) {
-    return `${endDate}T23:59:59.999Z`;
+  const maxNow = new Date(Date.now() - 5 * 60 * 1000);
+
+  if (endDate === undefined) {
+    return maxNow.toISOString();
   }
-  return new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+  const requested = new Date(`${endDate}T23:59:59.999Z`);
+  if (Number.isNaN(requested.getTime())) {
+    throw new Error(`Invalid endDate: ${endDate}`);
+  }
+
+  if (requested > maxNow) {
+    return maxNow.toISOString();
+  }
+
+  return requested.toISOString();
 }
 
 function computeGroupStartedAfterIso(startDate: string): string {
@@ -339,6 +351,20 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
 
     for (const jeDraft of jeDrafts) {
       try {
+        if (jeDraft.lines.length === 0) {
+          segments.push({
+            settlementId: bundle.settlementId,
+            eventGroupId: bundle.eventGroupId,
+            docNumber: jeDraft.docNumber,
+            txnDate: jeDraft.txnDate,
+            qboJournalEntryId: null,
+            qboAction: 'skipped',
+            processed: false,
+            reason: 'No non-zero lines (empty settlement segment)',
+          });
+          continue;
+        }
+
         const existingLookup = await findExistingJournalEntryIdByDocNumber(activeConnection, jeDraft.docNumber);
         if (existingLookup.updatedConnection) {
           activeConnection = existingLookup.updatedConnection;

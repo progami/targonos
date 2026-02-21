@@ -583,28 +583,28 @@ test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
     {
       Id: '186',
       SyncToken: '0',
-      Name: 'Amazon Advertising Costs',
+      Name: 'Amazon Seller Fees',
       AccountType: 'Expense',
       AccountSubType: 'AdvertisingPromotional',
     },
     {
       Id: '199',
       SyncToken: '0',
-      Name: 'Amazon Advertising Costs - US-PDS',
+      Name: 'Amazon Seller Fees - US-PDS',
       AccountType: 'Expense',
       AccountSubType: 'AdvertisingPromotional',
-      ParentRef: { value: '186', name: 'Amazon Advertising Costs' },
+      ParentRef: { value: '186', name: 'Amazon Seller Fees' },
     },
   ];
 
   const lines = buildPnlJournalLines(
-    { amazonAdvertisingCosts: { 'US-PDS': -12345 } },
-    { amazonAdvertisingCosts: '186' },
+    { amazonSellerFees: { 'US-PDS': -12345 } },
+    { amazonSellerFees: '186' },
     accounts,
     'INV-3',
     blocks,
     {
-      amazonAdvertisingCosts: {
+      amazonSellerFees: {
         'US-PDS': {
           'SKU-A': -8230,
           'SKU-B': -4115,
