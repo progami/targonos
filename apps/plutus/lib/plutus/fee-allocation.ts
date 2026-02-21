@@ -47,21 +47,21 @@ function chooseBestUpload<T extends { startDate: string; endDate: string; upload
   return best.upload;
 }
 
-function overlapDays(input: { startA: string; endA: string; startB: string; endB: string }): number {
-  const start = input.startA > input.startB ? input.startA : input.startB;
-  const end = input.endA < input.endB ? input.endA : input.endB;
-  if (start > end) {
-    return 0;
-  }
-  return diffDays(start, end) + 1;
-}
-
-function daysInRange(start: string, end: string): number {
-  return diffDays(start, end) + 1;
-}
-
 function centsFromNet(value: number): number {
   return Math.round(value * 100);
+}
+
+function monthWindowOffsetForIsoDay(value: string, deltaMonths: number): { monthStart: string; monthEnd: string } {
+  const date = parseIsoDay(value);
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+  start.setUTCMonth(start.getUTCMonth() + deltaMonths);
+
+  const monthStart = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const monthEnd = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+  return {
+    monthStart: monthStart.toISOString().slice(0, 10),
+    monthEnd: monthEnd.toISOString().slice(0, 10),
+  };
 }
 
 function awdFeeTypeFromDescription(description: string): AwdFeeType | null {
@@ -73,11 +73,11 @@ function awdFeeTypeFromDescription(description: string): AwdFeeType | null {
   return null;
 }
 
-function buildRequiredAwdFeeTypes(rows: LmbAuditRow[]): {
-  feeTypes: AwdFeeType[];
+function sumSkuLessAwdFeeTotals(rows: LmbAuditRow[]): {
+  totalsByFeeType: Partial<Record<AwdFeeType, number>>;
   unknownDescriptions: string[];
 } {
-  const feeTypes = new Set<AwdFeeType>();
+  const totalsByFeeType: Partial<Record<AwdFeeType, number>> = {};
   const unknownDescriptions = new Set<string>();
 
   for (const row of rows) {
@@ -89,13 +89,58 @@ function buildRequiredAwdFeeTypes(rows: LmbAuditRow[]): {
       unknownDescriptions.add(row.description.trim());
       continue;
     }
-    feeTypes.add(feeType);
+    const cents = centsFromNet(row.net);
+    const existing = totalsByFeeType[feeType];
+    totalsByFeeType[feeType] = (existing === undefined ? 0 : existing) + cents;
   }
 
   return {
-    feeTypes: Array.from(feeTypes).sort(),
+    totalsByFeeType,
     unknownDescriptions: Array.from(unknownDescriptions).sort(),
   };
+}
+
+function monthOffsetForAwdFeeType(feeType: AwdFeeType): number {
+  if (feeType === 'STORAGE_FEE') return -1;
+  return 0;
+}
+
+function sumChargeTypeTotals(rows: Array<{ chargeType: string | null; sku: string; feeCents: number }>): Map<
+  string | null,
+  { totalCents: number; feeCentsBySku: Record<string, number> }
+> {
+  const byChargeType = new Map<string | null, { totalCents: number; feeCentsBySku: Record<string, number> }>();
+
+  for (const row of rows) {
+    const chargeType = row.chargeType;
+    const existing = byChargeType.get(chargeType);
+    const sku = normalizeSku(row.sku);
+    if (sku === '') continue;
+
+    if (existing === undefined) {
+      byChargeType.set(chargeType, {
+        totalCents: row.feeCents,
+        feeCentsBySku: { [sku]: row.feeCents },
+      });
+      continue;
+    }
+
+    existing.totalCents += row.feeCents;
+    const current = existing.feeCentsBySku[sku];
+    existing.feeCentsBySku[sku] = (current === undefined ? 0 : current) + row.feeCents;
+  }
+
+  return byChargeType;
+}
+
+function buildChargeTypeBreakdownString(byChargeType: Map<string | null, { totalCents: number }>): string {
+  const parts: string[] = [];
+  for (const [chargeType, totals] of byChargeType.entries()) {
+    const label = chargeType === null ? 'Unspecified' : chargeType;
+    parts.push(`${label}=${totals.totalCents}`);
+  }
+  parts.sort();
+  return parts.join(', ');
 }
 
 function isoDayAddDays(value: string, deltaDays: number): string {
@@ -511,108 +556,198 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const awdSkuLessTotal = skuLessTotalsByBucket.warehousingAwd;
   if (awdSkuLessTotal !== undefined && awdSkuLessTotal !== 0) {
-    const awdFeeTypes = buildRequiredAwdFeeTypes(input.rows);
-    if (awdFeeTypes.unknownDescriptions.length > 0) {
+    const awdFeeTotals = sumSkuLessAwdFeeTotals(input.rows);
+    const awdIssueStart = issues.length;
+
+    if (awdFeeTotals.unknownDescriptions.length > 0) {
       issues.push({
         bucket: 'warehousingAwd',
-        message: `Unrecognized AWD fee descriptions: ${awdFeeTypes.unknownDescriptions.join(', ')}`,
+        message: `Unrecognized AWD fee descriptions: ${awdFeeTotals.unknownDescriptions.join(', ')}`,
       });
-    } else if (awdFeeTypes.feeTypes.length === 0) {
+    }
+
+    const requiredFeeTypes = (Object.keys(awdFeeTotals.totalsByFeeType) as AwdFeeType[]).filter((feeType) => {
+      const total = awdFeeTotals.totalsByFeeType[feeType];
+      return total !== undefined && total !== 0;
+    });
+
+    if (requiredFeeTypes.length === 0) {
       issues.push({
         bucket: 'warehousingAwd',
         message: 'Cannot determine required AWD fee types from SKU-less rows',
       });
     }
 
-    const awdUploads = await db.awdDataUpload.findMany({
-      where: {
-        reportType: AWD_REPORT_TYPE,
-        marketplace: input.marketplace,
-        startDate: { lte: input.invoiceStartDate },
-        endDate: { gte: input.invoiceEndDate },
-      },
-      select: {
-        id: true,
-        startDate: true,
-        endDate: true,
-        uploadedAt: true,
-      },
-      orderBy: { uploadedAt: 'desc' },
-    });
+    if (issues.length === awdIssueStart && requiredFeeTypes.length > 0) {
+      const awdAllocationsBySku: Record<string, number> = {};
 
-    const upload = chooseBestUpload(awdUploads);
-    if (upload === null) {
-      issues.push({
-        bucket: 'warehousingAwd',
-        message: 'Missing AWD report upload covering invoice date range',
-      });
-    } else if (awdFeeTypes.unknownDescriptions.length === 0 && awdFeeTypes.feeTypes.length > 0) {
-      const rows = await db.awdDataRow.findMany({
-        where: {
-          uploadId: upload.id,
-          feeType: { in: awdFeeTypes.feeTypes },
-        },
-        select: {
-          sku: true,
-          feeType: true,
-          feeCents: true,
-          monthStartDate: true,
-          monthEndDate: true,
-        },
-      });
+      for (const feeType of requiredFeeTypes) {
+        const expectedTotal = awdFeeTotals.totalsByFeeType[feeType];
+        if (expectedTotal === undefined || expectedTotal === 0) continue;
 
-      const weightsBySku: Record<string, number> = {};
-      const seenFeeTypes = new Set<string>();
-      for (const row of rows) {
-        const overlap = overlapDays({
-          startA: input.invoiceStartDate,
-          endA: input.invoiceEndDate,
-          startB: row.monthStartDate,
-          endB: row.monthEndDate,
+        const monthWindow = monthWindowOffsetForIsoDay(input.invoiceEndDate, monthOffsetForAwdFeeType(feeType));
+        const monthStart = monthWindow.monthStart;
+        const monthEnd = monthWindow.monthEnd;
+
+        const awdUploads = await db.awdDataUpload.findMany({
+          where: {
+            reportType: AWD_REPORT_TYPE,
+            marketplace: input.marketplace,
+            startDate: { lte: monthStart },
+            endDate: { gte: monthEnd },
+            rows: { some: { feeType } },
+          },
+          select: {
+            id: true,
+            startDate: true,
+            endDate: true,
+            uploadedAt: true,
+          },
+          orderBy: { uploadedAt: 'desc' },
         });
-        if (overlap <= 0) {
+
+        const upload = chooseBestUpload(awdUploads);
+        if (upload === null) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `Missing AWD report upload for ${feeType} covering ${monthStart}..${monthEnd}`,
+          });
           continue;
         }
-        seenFeeTypes.add(row.feeType);
-        const monthDays = daysInRange(row.monthStartDate, row.monthEndDate);
-        if (monthDays <= 0) {
+
+        const awdRows = await db.awdDataRow.findMany({
+          where: {
+            uploadId: upload.id,
+            feeType,
+            monthStartDate: monthStart,
+            monthEndDate: monthEnd,
+          },
+          select: {
+            sku: true,
+            feeCents: true,
+            chargeType: true,
+          },
+        });
+
+        if (awdRows.length === 0) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `AWD report has no rows for ${feeType} covering ${monthStart}..${monthEnd}`,
+          });
           continue;
         }
-        const sku = normalizeSku(row.sku);
-        const scaledWeight = Math.round((row.feeCents * overlap * 1000) / monthDays);
-        if (scaledWeight <= 0) {
-          continue;
-        }
-        const existing = weightsBySku[sku];
-        if (existing === undefined) {
-          weightsBySku[sku] = scaledWeight;
+
+        const expectedAbs = Math.abs(expectedTotal);
+        const sign = expectedTotal < 0 ? -1 : 1;
+
+        const byChargeType = sumChargeTypeTotals(awdRows);
+        const chargeTypeBreakdown = buildChargeTypeBreakdownString(byChargeType);
+
+        let selectedFeeCentsBySku: Record<string, number> | null = null;
+
+        if (byChargeType.size === 1) {
+          const entry = Array.from(byChargeType.values())[0];
+          if (!entry) throw new Error('Missing AWD charge type aggregation');
+          if (entry.totalCents !== expectedAbs) {
+            issues.push({
+              bucket: 'warehousingAwd',
+              message: `AWD ${feeType} total mismatch for ${monthStart}..${monthEnd} (${entry.totalCents} vs ${expectedAbs})`,
+            });
+            continue;
+          }
+          selectedFeeCentsBySku = entry.feeCentsBySku;
         } else {
-          weightsBySku[sku] = existing + scaledWeight;
+          const matching: Array<{ totalCents: number; feeCentsBySku: Record<string, number> }> = [];
+          for (const entry of byChargeType.values()) {
+            if (entry.totalCents === expectedAbs) {
+              matching.push(entry);
+            }
+          }
+
+          if (matching.length === 1) {
+            selectedFeeCentsBySku = matching[0]!.feeCentsBySku;
+          } else if (matching.length > 1) {
+            issues.push({
+              bucket: 'warehousingAwd',
+              message: `Ambiguous AWD ${feeType} charge type match for ${monthStart}..${monthEnd} (${chargeTypeBreakdown})`,
+            });
+            continue;
+          } else {
+            let totalAll = 0;
+            for (const entry of byChargeType.values()) {
+              totalAll += entry.totalCents;
+            }
+            if (totalAll !== expectedAbs) {
+              issues.push({
+                bucket: 'warehousingAwd',
+                message: `AWD ${feeType} total mismatch for ${monthStart}..${monthEnd} (${chargeTypeBreakdown} vs ${expectedAbs})`,
+              });
+              continue;
+            }
+
+            const merged: Record<string, number> = {};
+            for (const entry of byChargeType.values()) {
+              for (const [sku, cents] of Object.entries(entry.feeCentsBySku)) {
+                const current = merged[sku];
+                merged[sku] = (current === undefined ? 0 : current) + cents;
+              }
+            }
+            selectedFeeCentsBySku = merged;
+          }
+        }
+
+        if (selectedFeeCentsBySku === null) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `Failed to select AWD rows for ${feeType} covering ${monthStart}..${monthEnd}`,
+          });
+          continue;
+        }
+
+        const missingSkus: string[] = [];
+        for (const sku of Object.keys(selectedFeeCentsBySku)) {
+          if (!input.skuToBrand.has(sku)) {
+            missingSkus.push(sku);
+          }
+        }
+        if (missingSkus.length > 0) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `AWD report contains SKUs not mapped to brand (${missingSkus.slice(0, 10).join(', ')}${
+              missingSkus.length > 10 ? ', ...' : ''
+            })`,
+          });
+          continue;
+        }
+
+        let selectedTotal = 0;
+        for (const cents of Object.values(selectedFeeCentsBySku)) {
+          selectedTotal += cents;
+        }
+        if (selectedTotal !== expectedAbs) {
+          issues.push({
+            bucket: 'warehousingAwd',
+            message: `AWD ${feeType} allocation total mismatch for ${monthStart}..${monthEnd} (${selectedTotal} vs ${expectedAbs})`,
+          });
+          continue;
+        }
+
+        for (const [sku, cents] of Object.entries(selectedFeeCentsBySku)) {
+          const signed = sign * cents;
+          const current = awdAllocationsBySku[sku];
+          awdAllocationsBySku[sku] = (current === undefined ? 0 : current) + signed;
         }
       }
 
-      for (const feeType of awdFeeTypes.feeTypes) {
-        if (!seenFeeTypes.has(feeType)) {
+      if (issues.length === awdIssueStart) {
+        const allocatedTotal = sumRecordValues(awdAllocationsBySku);
+        if (allocatedTotal !== awdSkuLessTotal) {
           issues.push({
             bucket: 'warehousingAwd',
-            message: `AWD report is missing required fee type ${feeType}`,
-          });
-        }
-      }
-
-      if (awdFeeTypes.feeTypes.every((feeType) => seenFeeTypes.has(feeType))) {
-        const allocated = allocateSignedByWeight({
-          totalCents: awdSkuLessTotal,
-          weightsBySku,
-        });
-
-        if (Object.keys(allocated).length === 0) {
-          issues.push({
-            bucket: 'warehousingAwd',
-            message: 'AWD report has no overlapping SKU weights for invoice range',
+            message: `AWD allocation total mismatch (${allocatedTotal} vs ${awdSkuLessTotal})`,
           });
         } else {
-          skuAllocationsByBucket.warehousingAwd = allocated;
+          skuAllocationsByBucket.warehousingAwd = awdAllocationsBySku;
         }
       }
     }

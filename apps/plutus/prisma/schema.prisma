@@ -458,6 +458,8 @@ model AwdDataRow {
   monthEndDate    String // YYYY-MM-DD
   sku             String
   feeType         String
+  /// Optional charge type for fee rows that distinguish inbound vs outbound charges (e.g., processing fees).
+  chargeType      String?
   feeCents        Int
   currency        String
 
@@ -465,6 +467,7 @@ model AwdDataRow {
 
   @@index([uploadId])
   @@index([uploadId, monthStartDate, monthEndDate])
+  @@index([uploadId, feeType, chargeType])
   @@index([sku])
 }
 

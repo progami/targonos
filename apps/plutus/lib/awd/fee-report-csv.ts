@@ -5,6 +5,7 @@ export type AwdFeeRow = {
   monthEndDate: string;
   sku: string;
   feeType: string;
+  chargeType: string | null;
   feeCents: number;
   currency: string;
 };
@@ -139,11 +140,14 @@ function findHeaderLine(lines: string[]): { headerIndex: number; columns: string
     const hasSku = normalized.includes('msku') || normalized.includes('sku');
     const hasMonth = normalized.includes('month') || normalized.includes('monthof') || normalized.includes('monthofcharge');
     const hasYear = normalized.includes('year') || normalized.includes('yearofch') || normalized.includes('yearofcharge');
-    const hasFeeAmount =
+    const hasFeeType = normalized.includes('feetype');
+    const hasAmount =
+      normalized.includes('totalchargedamount') ||
+      normalized.includes('chargedamount') ||
       normalized.includes('feeamount') ||
       normalized.includes('feeamoun') ||
       normalized.includes('monthlyamount');
-    if (hasSku && hasMonth && hasYear && hasFeeAmount) {
+    if (hasSku && hasMonth && hasYear && hasFeeType && hasAmount) {
       return { headerIndex: i, columns: cols };
     }
   }
@@ -194,8 +198,20 @@ export function parseAwdFeeCsv(csvText: string, options?: ParseAwdFeeCsvOptions)
   const skuIdx = getRequiredColumnIndex(columns, ['msku', 'sku'], 'MSKU');
   const monthIdx = getRequiredColumnIndex(columns, ['month', 'monthof', 'monthofcharge'], 'Month');
   const yearIdx = getRequiredColumnIndex(columns, ['year', 'yearofch', 'yearofcharge'], 'Year');
-  const feeTypeIdx = getOptionalColumnIndex(columns, ['feetype']);
-  const feeAmountIdx = getRequiredColumnIndex(columns, ['feeamount', 'feeamoun', 'monthlyamount'], 'Fee Amount');
+  const feeTypeIdx = getRequiredColumnIndex(columns, ['feetype'], 'Fee Type');
+  const chargeTypeIdx = getOptionalColumnIndex(columns, ['chargetype']);
+  const totalChargedAmountIdx = getOptionalColumnIndex(columns, ['totalchargedamount']);
+  const chargedAmountIdx = getOptionalColumnIndex(columns, ['chargedamount']);
+  const feeAmountIdx = getOptionalColumnIndex(columns, ['feeamount', 'feeamoun', 'monthlyamount']);
+  let amountIdx: number | null = null;
+  if (totalChargedAmountIdx !== null) {
+    amountIdx = totalChargedAmountIdx;
+  } else if (chargedAmountIdx !== null) {
+    amountIdx = chargedAmountIdx;
+  } else if (feeAmountIdx !== null) {
+    amountIdx = feeAmountIdx;
+  }
+  if (amountIdx === null) throw new Error('Missing required column: Total Charged Amount / Charged Amount / Fee Amount');
   const currencyIdx = getOptionalColumnIndex(columns, ['currency']);
   const countryIdx = getOptionalColumnIndex(columns, ['country', 'countryc', 'countrycode']);
 
@@ -243,10 +259,21 @@ export function parseAwdFeeCsv(csvText: string, options?: ParseAwdFeeCsvOptions)
     if (minDate === undefined || monthStartDate < minDate) minDate = monthStartDate;
     if (maxDate === undefined || monthEndDate > maxDate) maxDate = monthEndDate;
 
-    const feeTypeRaw = feeTypeIdx === null ? '' : cols[feeTypeIdx];
-    const feeType = feeTypeRaw ? feeTypeRaw.trim() : '';
+    const feeTypeRaw = cols[feeTypeIdx];
+    const feeType = feeTypeRaw ? feeTypeRaw.trim().toUpperCase().replace(/[\s-]+/g, '_') : '';
 
-    const feeAmountRaw = cols[feeAmountIdx];
+    const chargeTypeRaw = chargeTypeIdx === null ? '' : cols[chargeTypeIdx];
+    const chargeTypeValue = chargeTypeRaw ? chargeTypeRaw.trim() : '';
+    const chargeType =
+      chargeTypeValue === ''
+        ? null
+        : chargeTypeValue.toLowerCase() === 'inbound'
+          ? 'Inbound'
+          : chargeTypeValue.toLowerCase() === 'outbound'
+            ? 'Outbound'
+            : chargeTypeValue;
+
+    const feeAmountRaw = cols[amountIdx];
     const feeCents = parseMoneyToCents(feeAmountRaw ? feeAmountRaw : '');
     if (feeCents <= 0) {
       continue;
@@ -255,7 +282,7 @@ export function parseAwdFeeCsv(csvText: string, options?: ParseAwdFeeCsvOptions)
     const currencyRaw = currencyIdx === null ? 'USD' : cols[currencyIdx];
     const currency = currencyRaw ? currencyRaw.trim().toUpperCase() : 'USD';
 
-    const key = `${monthStartDate}::${monthEndDate}::${sku}::${feeType}::${currency}`;
+    const key = `${monthStartDate}::${monthEndDate}::${sku}::${feeType}::${currency}::${chargeType ? chargeType : ''}`;
     const existing = aggregated.get(key);
     if (existing === undefined) {
       aggregated.set(key, {
@@ -263,6 +290,7 @@ export function parseAwdFeeCsv(csvText: string, options?: ParseAwdFeeCsvOptions)
         monthEndDate,
         sku,
         feeType,
+        chargeType,
         feeCents,
         currency,
       });
@@ -288,6 +316,7 @@ export function parseAwdFeeCsv(csvText: string, options?: ParseAwdFeeCsvOptions)
     if (a.monthStartDate !== b.monthStartDate) return a.monthStartDate.localeCompare(b.monthStartDate);
     if (a.sku !== b.sku) return a.sku.localeCompare(b.sku);
     if (a.feeType !== b.feeType) return a.feeType.localeCompare(b.feeType);
+    if (a.chargeType !== b.chargeType) return String(a.chargeType).localeCompare(String(b.chargeType));
     return a.currency.localeCompare(b.currency);
   });
 
