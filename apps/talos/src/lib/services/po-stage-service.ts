@@ -3438,11 +3438,11 @@ export async function generatePurchaseOrderShippingMarks(params: {
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src 'self' data:; base-uri 'none'; form-action 'none'">
     <title>Shipping Marks</title>
     <style>
       body { font-family: Arial, Helvetica, sans-serif; padding: 20px; background: #f6f7fb; color: #000; }
       .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-      .print-btn { background: #0ea5a4; color: white; border: none; padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer; }
       .meta { color: #475569; font-size: 12px; }
       .labels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
       .label { background: white; border: 2px solid #000; padding: 16px; break-inside: avoid; }
@@ -3470,7 +3470,6 @@ export async function generatePurchaseOrderShippingMarks(params: {
   </head>
   <body>
     <div class="toolbar">
-      <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
       <div class="meta">Generated ${generatedAt.toISOString()} by ${escapeHtml(params.user.name)}</div>
     </div>
     <div class="labels">

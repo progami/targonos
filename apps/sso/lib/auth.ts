@@ -225,11 +225,11 @@ const baseAuthOptions: NextAuthConfig = {
       ;(session as any).entitlements_ver = (token as any).entitlements_ver
       return session
     },
-    async redirect({ url, baseUrl }) {
-      const allowValue = String(process.env.ALLOW_CALLBACK_REDIRECT || '').toLowerCase()
-      const allowCallbackExplicit = ['1', 'true', 'yes', 'on'].includes(allowValue)
-      const allowCallbackDefault = process.env.NODE_ENV !== 'production' && allowValue === ''
-      const allowCallback = allowCallbackExplicit || allowCallbackDefault
+	    async redirect({ url, baseUrl }) {
+	      const allowValue = String(process.env.ALLOW_CALLBACK_REDIRECT || '').toLowerCase()
+	      const allowCallbackExplicit = ['1', 'true', 'yes', 'on'].includes(allowValue)
+	      const allowCallbackDefault = process.env.NODE_ENV !== 'production' && allowValue === ''
+	      const allowCallback = allowCallbackExplicit || allowCallbackDefault
       if (!allowCallback) {
         return baseUrl
       }
@@ -257,14 +257,17 @@ const baseAuthOptions: NextAuthConfig = {
           }
           return baseUrl
         }
-
-        const cookieDomain = resolvedCookieDomain.replace(/^\./, '')
-        if (cookieDomain && target.hostname.endsWith(cookieDomain)) {
-          const relay = new URL('/auth/relay', base)
-          relay.searchParams.set('to', target.toString())
-          return relay.toString()
-        }
-      } catch {}
+	
+	        const cookieDomain = resolvedCookieDomain.replace(/^\./, '').toLowerCase()
+	        const targetHostname = target.hostname.toLowerCase()
+	        const isAllowedHost = cookieDomain.length > 0
+	          && (targetHostname === cookieDomain || targetHostname.endsWith(`.${cookieDomain}`))
+	        if (isAllowedHost) {
+	          const relay = new URL('/auth/relay', base)
+	          relay.searchParams.set('to', target.toString())
+	          return relay.toString()
+	        }
+	      } catch {}
       return baseUrl
     },
   },
