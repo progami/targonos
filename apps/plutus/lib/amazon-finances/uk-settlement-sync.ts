@@ -7,7 +7,7 @@ import {
 } from '@/lib/amazon-finances/sp-api-finances';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
-import { normalizeSku } from '@/lib/plutus/settlement-validation';
+import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { createJournalEntry, fetchJournalEntries, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
@@ -17,6 +17,20 @@ type SettlementDraftBundle = {
   eventGroupId: string;
   draft: ReturnType<typeof buildUkSettlementDraftFromSpApiFinances>;
 };
+
+function computeDraftSegmentHash(segment: SettlementDraftBundle['draft']['segments'][number]): string {
+  const rows = segment.auditRows.map((r) => ({
+    invoiceId: r.invoiceId,
+    market: r.market,
+    date: r.date,
+    orderId: r.orderId,
+    sku: r.sku,
+    quantity: r.quantity,
+    description: r.description,
+    net: fromCents(r.netCents),
+  }));
+  return computeProcessingHash(rows);
+}
 
 export type UkSpApiSettlementSyncInput = {
   startDate: string; // YYYY-MM-DD
@@ -342,6 +356,28 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
     bundles.push({ settlementId, eventGroupId, draft });
   }
 
+  const allInvoiceIds = Array.from(
+    new Set(
+      bundles.flatMap((b) => b.draft.segments.map((s) => s.docNumber)),
+    ),
+  ).sort();
+
+  const existingProcessings = allInvoiceIds.length === 0
+    ? []
+    : await db.settlementProcessing.findMany({
+        where: {
+          marketplace: 'amazon.co.uk',
+          invoiceId: { in: allInvoiceIds },
+        },
+        select: {
+          id: true,
+          invoiceId: true,
+          processingHash: true,
+        },
+      });
+
+  const processingByInvoiceId = new Map(existingProcessings.map((p) => [p.invoiceId, p]));
+
   const mapping = await loadUkSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
 
   const segments: UkSpApiSettlementSyncSegmentResult[] = [];
@@ -349,41 +385,62 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   for (const bundle of bundles) {
     const uploadFilename = `spapi-finances-settlement-${bundle.settlementId}.json`;
 
-    const invoiceIds = bundle.draft.segments.map((s) => s.docNumber);
-    await db.auditDataRow.deleteMany({
-      where: {
-        invoiceId: { in: invoiceIds },
-        market: { equals: 'uk', mode: 'insensitive' },
-      },
+    const segmentMeta = bundle.draft.segments.map((segment) => {
+      const hash = computeDraftSegmentHash(segment);
+      const existing = processingByInvoiceId.get(segment.docNumber);
+      if (!existing) {
+        return { segment, hash, alreadyProcessed: false as const };
+      }
+      if (existing.processingHash !== hash) {
+        throw new Error(
+          `INVOICE_CONFLICT: ${segment.docNumber} already processed with different data (hash mismatch). Roll back invoice first. settlementProcessingId=${existing.id}`,
+        );
+      }
+      return { segment, hash, alreadyProcessed: true as const };
     });
 
-    const uploadRows = bundle.draft.segments.flatMap((s) => s.auditRows);
+    const segmentByDocNumber = new Map(segmentMeta.map((m) => [m.segment.docNumber, m]));
 
-    const upload = await db.auditDataUpload.create({
-      data: {
-        filename: uploadFilename,
-        rowCount: uploadRows.length,
-        invoiceCount: bundle.draft.segments.length,
-        rows: {
-          createMany: {
-            data: uploadRows.map((r) => ({
-              invoiceId: r.invoiceId,
-              market: r.market,
-              date: r.date,
-              orderId: r.orderId,
-              sku: r.sku,
-              quantity: r.quantity,
-              description: r.description,
-              net: r.netCents,
-            })),
-          },
-        },
-      },
-    });
+    const invoiceIdsToRefresh = segmentMeta.filter((m) => !m.alreadyProcessed).map((m) => m.segment.docNumber);
+    const uploadRows = segmentMeta.filter((m) => !m.alreadyProcessed).flatMap((m) => m.segment.auditRows);
+
+    const upload =
+      uploadRows.length === 0
+        ? null
+        : await (async () => {
+            await db.auditDataRow.deleteMany({
+              where: {
+                invoiceId: { in: invoiceIdsToRefresh },
+                market: { equals: 'uk', mode: 'insensitive' },
+              },
+            });
+
+            return db.auditDataUpload.create({
+              data: {
+                filename: uploadFilename,
+                rowCount: uploadRows.length,
+                invoiceCount: invoiceIdsToRefresh.length,
+                rows: {
+                  createMany: {
+                    data: uploadRows.map((r) => ({
+                      invoiceId: r.invoiceId,
+                      market: r.market,
+                      date: r.date,
+                      orderId: r.orderId,
+                      sku: r.sku,
+                      quantity: r.quantity,
+                      description: r.description,
+                      net: r.netCents,
+                    })),
+                  },
+                },
+              },
+            });
+          })();
 
     const jeDrafts = buildQboJournalEntriesFromUkSettlementDraft({
       draft: bundle.draft,
-      privateNote: `Plutus (SP-API Finances) | Region: UK | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId} | Upload: ${upload.id}`,
+      privateNote: `Plutus (SP-API Finances) | Region: UK | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId}${upload ? ` | Upload: ${upload.id}` : ''}`,
       bankAccountId: mapping.bankAccountId,
       paymentAccountId: mapping.paymentAccountId,
       accountIdByMemo: mapping.accountIdByMemo,
@@ -391,6 +448,12 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
 
     for (const jeDraft of jeDrafts) {
       try {
+        const docNumber = jeDraft.docNumber;
+        const meta = segmentByDocNumber.get(docNumber);
+        if (!meta) {
+          throw new Error(`Missing segment metadata for ${docNumber}`);
+        }
+
         if (jeDraft.lines.length === 0) {
           segments.push({
             settlementId: bundle.settlementId,
@@ -412,6 +475,24 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
 
         let qboJournalEntryId: string | null = existingLookup.journalEntryId;
         let qboAction: 'existing' | 'posted' | 'skipped' = 'existing';
+
+        if (meta.alreadyProcessed) {
+          if (qboJournalEntryId === null) {
+            throw new Error(`Settlement JE missing for already-processed invoice: ${docNumber}`);
+          }
+
+          segments.push({
+            settlementId: bundle.settlementId,
+            eventGroupId: bundle.eventGroupId,
+            docNumber,
+            txnDate: jeDraft.txnDate,
+            qboJournalEntryId,
+            qboAction,
+            processed: true,
+            reason: 'Already processed (hash match)',
+          });
+          continue;
+        }
 
         if (qboJournalEntryId === null) {
           if (!postToQbo) {
