@@ -20,7 +20,6 @@ import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
 import { PageHeader } from '@/components/page-header';
-import { ThemeToggle } from '@/components/theme-toggle';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -441,18 +440,6 @@ export default function SettingsPage() {
                 >
                   {autopostMutation.isPending ? 'Saving…' : 'Save'}
                 </Button>
-              </Box>
-            </CardContent>
-          </Card>
-
-          <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-              <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                Appearance
-              </Typography>
-              <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
-                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Theme</Typography>
-                <ThemeToggle />
               </Box>
             </CardContent>
           </Card>

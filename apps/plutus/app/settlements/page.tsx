@@ -118,27 +118,6 @@ function formatMoney(amount: number, currency: string): string {
   return formatted;
 }
 
-function StatusPill({ status }: { status: SettlementRow['qboStatus'] }) {
-  if (status === 'Posted')
-    return (
-      <Chip
-        label="Posted"
-        size="small"
-        color="success"
-        variant="filled"
-        sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
-      />
-    );
-  return (
-    <Chip
-      label={status}
-      size="small"
-      color="default"
-      variant="filled"
-      sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
-    />
-  );
-}
 
 function displaySettlementDocNumber(docNumber: string): string {
   const raw = docNumber.trim();
@@ -239,7 +218,7 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   if (status === 'Processed')
     return (
       <Chip
-        label="Plutus Processed"
+        label="Processed"
         size="small"
         color="success"
         variant="filled"
@@ -249,7 +228,7 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   if (status === 'RolledBack')
     return (
       <Chip
-        label="Plutus Rolled Back"
+        label="Rolled Back"
         size="small"
         color="default"
         variant="filled"
@@ -259,7 +238,7 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   if (status === 'Blocked')
     return (
       <Chip
-        label="Plutus Blocked"
+        label="Blocked"
         size="small"
         color="error"
         variant="filled"
@@ -268,29 +247,16 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
     );
   return (
     <Chip
-      label="Plutus Pending"
+      label="Pending"
       size="small"
-      color="error"
       variant="filled"
-      sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
+      sx={{ ...chipBase, bgcolor: 'rgba(245, 158, 11, 0.12)', color: '#b45309' }}
     />
   );
 }
 
 function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
-  if (!match) {
-    return (
-      <Chip
-        label="—"
-        size="small"
-        color="default"
-        variant="outlined"
-        sx={chipBase}
-      />
-    );
-  }
-
-  if (match.kind === 'match') {
+  if (match?.kind === 'match') {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
         <Chip
@@ -305,7 +271,7 @@ function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
     );
   }
 
-  if (match.kind === 'ambiguous') {
+  if (match?.kind === 'ambiguous') {
     const count = match.candidateInvoiceIds.length;
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
@@ -321,21 +287,9 @@ function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
     );
   }
 
-  if (match.kind === 'missing_period') {
-    return (
-      <Chip
-        label="Unknown"
-        size="small"
-        color="default"
-        variant="outlined"
-        sx={chipBase}
-      />
-    );
-  }
-
   return (
     <Chip
-      label="No Audit"
+      label="—"
       size="small"
       color="default"
       variant="outlined"
@@ -605,12 +559,10 @@ export default function SettlementsPage() {
   // Compute KPI stats from loaded data
   const stats = useMemo(() => {
     const total = data?.pagination.totalCount ?? 0;
-    const processed = settlements.filter((s) => s.plutusStatus === 'Processed').length;
-    const pending = settlements.filter((s) => s.plutusStatus === 'Pending').length;
     const hasAnyTotal = settlements.some((s) => s.settlementTotal !== null);
     const totalAmount = settlements.reduce((sum, s) => sum + (s.settlementTotal ?? 0), 0);
     const primaryCurrency = settlements[0]?.marketplace.currency ?? 'USD';
-    return { total, processed, pending, hasAnyTotal, totalAmount, primaryCurrency };
+    return { total, hasAnyTotal, totalAmount, primaryCurrency };
   }, [data, settlements]);
 
   const [syncOpen, setSyncOpen] = useState(false);
@@ -702,26 +654,24 @@ export default function SettlementsPage() {
 
   return (
     <Box component="main" sx={{ flex: 1 }}>
-      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '72rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Process settlement journal entries posted to QBO. Prereqs: sync from Amazon and map Bills so Plutus can compute COGS + allocate fees by brand."
+            description="Review and post settlement data from Amazon to QuickBooks."
             variant="accent"
           />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {(marketplace === 'US' || marketplace === 'UK') && (
-              <MuiButton
-                variant="outlined"
-                disableElevation
-                onClick={() => openSyncDialog({ region: marketplace })}
-                disabled={syncMutation.isPending}
-                startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
-                sx={{ ...outlineSx, ...defaultSize }}
-              >
-                {syncMutation.isPending ? 'Syncing…' : 'Sync from Amazon'}
-              </MuiButton>
-            )}
+            <MuiButton
+              variant="outlined"
+              disableElevation
+              onClick={() => openSyncDialog({ region: marketplace === 'all' ? 'US' : marketplace })}
+              disabled={syncMutation.isPending}
+              startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
+              sx={{ ...outlineSx, ...defaultSize }}
+            >
+              {syncMutation.isPending ? 'Syncing…' : 'Sync from Amazon'}
+            </MuiButton>
             <MuiButton
               variant="outlined"
               disableElevation
@@ -737,9 +687,9 @@ export default function SettlementsPage() {
 
         {/* KPI Strip */}
         {!isLoading && data && (
-          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 1.5 }}>
+          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' }, gap: 1.5 }}>
             <StatCard
-              label="Total"
+              label="Total Settlements"
               value={stats.total}
               icon={
                 <svg style={{ height: 20, width: 20 }} viewBox="0 0 20 20" fill="none">
@@ -751,16 +701,6 @@ export default function SettlementsPage() {
             <StatCard
               label="Settlement Value"
               value={stats.hasAnyTotal ? formatMoney(stats.totalAmount, stats.primaryCurrency) : 'No data'}
-            />
-            <StatCard
-              label="Processed"
-              value={stats.processed}
-              dotColor="bg-emerald-500"
-            />
-            <StatCard
-              label="Pending"
-              value={stats.pending}
-              dotColor="bg-amber-500"
             />
           </Box>
         )}
@@ -868,9 +808,8 @@ export default function SettlementsPage() {
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Audit Data</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus</MuiTableCell>
+                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Status</MuiTableCell>
                     </MuiTableRow>
                   </MuiTableHead>
                   <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -878,7 +817,7 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <MuiTableRow key={idx} sx={rowHoverSx}>
-                            <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 2 }}>
+                            <MuiTableCell colSpan={5} sx={{ ...tdSx, py: 2 }}>
                               <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
                             </MuiTableCell>
                           </MuiTableRow>
@@ -888,7 +827,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={6} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
+                        <MuiTableCell colSpan={5} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
                         </MuiTableCell>
                       </MuiTableRow>
@@ -896,7 +835,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && !error && settlements.length === 0 && (
                       <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={6} sx={tdSx}>
+                        <MuiTableCell colSpan={5} sx={tdSx}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
@@ -927,6 +866,17 @@ export default function SettlementsPage() {
                                 <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
                                   {displaySettlementDocNumber(s.docNumber)}
                                 </Box>
+                                <Box
+                                  component="a"
+                                  href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                                  sx={{ mt: 0.25, display: 'inline-flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'text.disabled', fontSize: '0.75rem', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }}
+                                >
+                                  QBO
+                                  <OpenInNewIcon sx={{ fontSize: 10 }} />
+                                </Box>
                               </Box>
                             </Box>
                           </MuiTableCell>
@@ -942,19 +892,6 @@ export default function SettlementsPage() {
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
                           </MuiTableCell>
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
-                            <Box
-                              component="a"
-                              href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                              sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, textDecoration: 'none' }}
-                            >
-                              <StatusPill status={s.qboStatus} />
-                              <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }} />
-                            </Box>
-                          </MuiTableCell>
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                             <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
                           </MuiTableCell>
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
@@ -963,7 +900,7 @@ export default function SettlementsPage() {
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
-                                  { label: 'QBO Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
+                                  { label: 'Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
                                   { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
                                   ...(settlementId !== null
                                     ? [
@@ -981,7 +918,7 @@ export default function SettlementsPage() {
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
-                                Action
+                                View
                               </SplitButton>
                             </Box>
                           </MuiTableCell>

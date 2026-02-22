@@ -14,6 +14,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControl from '@mui/material/FormControl';
@@ -231,9 +232,9 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
 }
 
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
-  if (status === 'Processed') return <Chip label="Plutus Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
-  if (status === 'RolledBack') return <Chip label="Plutus Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
-  return <Chip label="Plutus Pending" size="small" color="error" />;
+  if (status === 'Processed') return <Chip label="Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
+  if (status === 'RolledBack') return <Chip label="Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
+  return <Chip label="Pending" size="small" sx={{ bgcolor: 'rgba(245, 158, 11, 0.12)', color: '#b45309' }} />;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -815,6 +816,8 @@ export default function SettlementDetailPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
   const [pendingPreviewInvoiceId, setPendingPreviewInvoiceId] = useState<string>('');
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
+  const [rollbackDialogLines, setRollbackDialogLines] = useState<string[]>([]);
 
   useEffect(() => {
     setPendingPreviewInvoiceId('');
@@ -927,7 +930,7 @@ export default function SettlementDetailPage() {
     return <NotConnectedScreen title="Settlement Details" error={connection.error} />;
   }
 
-  async function handleRollback() {
+  async function initiateRollback() {
     setActionError(null);
 
     let latest: SettlementDetailResponse;
@@ -950,28 +953,22 @@ export default function SettlementDetailPage() {
     const hasQboPnlJe = isQboJournalEntryId(pnlId);
     const hasNoopJournals = isNoopJournalEntryId(cogsId) || isNoopJournalEntryId(pnlId);
 
-    const confirmationLines = ['Rollback Plutus processing?', ''];
+    const lines: string[] = [];
     if (hasQboCogsJe || hasQboPnlJe) {
-      confirmationLines.push('Void these Journal Entries in QBO first:');
-      if (hasQboCogsJe) {
-        confirmationLines.push(`- COGS JE: ${cogsId}`);
-      }
-      if (hasQboPnlJe) {
-        confirmationLines.push(`- P&L Reclass JE: ${pnlId}`);
-      }
-      confirmationLines.push('');
+      lines.push('Void these Journal Entries in QBO first:');
+      if (hasQboCogsJe) lines.push(`COGS JE: ${cogsId}`);
+      if (hasQboPnlJe) lines.push(`P&L Reclass JE: ${pnlId}`);
     } else if (hasNoopJournals) {
-      confirmationLines.push('No Plutus JEs were posted for this settlement (fees-only).');
-      confirmationLines.push('');
+      lines.push('No Plutus JEs were posted for this settlement (fees-only).');
     }
-    confirmationLines.push('Then click OK to mark this settlement as Pending in Plutus.');
+    lines.push('Then click Confirm to mark this settlement as Pending in Plutus.');
 
-    const confirmed = window.confirm(
-      confirmationLines.join('\n'),
-    );
+    setRollbackDialogLines(lines);
+    setRollbackDialogOpen(true);
+  }
 
-    if (!confirmed) return;
-
+  async function executeRollback() {
+    setRollbackDialogOpen(false);
     setIsRollingBack(true);
     try {
       const res = await fetch(`${basePath}/api/plutus/settlements/${settlementId}`, {
@@ -1054,7 +1051,7 @@ export default function SettlementDetailPage() {
                 />
               )}
               {data?.processing && (
-                <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void handleRollback()} disabled={isRollingBack}>
+                <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void initiateRollback()} disabled={isRollingBack}>
                   {isRollingBack ? 'Rolling back...' : 'Rollback'}
                 </Button>
               )}
@@ -1231,7 +1228,7 @@ export default function SettlementDetailPage() {
                   <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 0.5 }}>No transaction data</Typography>
                     <Box component={Link} href="/settlements" sx={{ fontSize: '0.875rem', color: '#008f87', '&:hover': { textDecoration: 'underline' } }}>
-                      Sync from Amazon
+                      Back to Settlements
                     </Box>
                   </Box>
                 )}
@@ -1496,6 +1493,40 @@ export default function SettlementDetailPage() {
           </CardContent>
         </Card>
       </Box>
+
+      {/* Rollback confirmation dialog */}
+      <Dialog
+        open={rollbackDialogOpen}
+        onClose={() => setRollbackDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+      >
+        <DialogTitle>Rollback Plutus Processing?</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {rollbackDialogLines.map((line, i) => (
+            <Typography key={i} sx={{ fontSize: '0.875rem', color: i === rollbackDialogLines.length - 1 ? 'text.primary' : 'text.secondary', fontFamily: line.startsWith('COGS JE') || line.startsWith('P&L') ? 'monospace' : undefined }}>
+              {line}
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setRollbackDialogOpen(false)}
+            sx={{ borderColor: 'divider', color: 'text.primary', borderRadius: '8px', textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void executeRollback()}
+            sx={{ bgcolor: 'error.main', color: 'error.contrastText', borderRadius: '8px', textTransform: 'none', '&:hover': { bgcolor: 'error.dark' } }}
+          >
+            Confirm Rollback
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
