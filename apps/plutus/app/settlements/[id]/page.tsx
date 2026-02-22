@@ -1379,49 +1379,37 @@ export default function SettlementDetailPage() {
 
                 {previewData && previewData.cogsJournalEntry && (
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {/* Header */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <Box>
-                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                          Invoice {previewData.invoiceId}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontFamily: 'monospace' }}>
-                          {previewData.minDate} &rarr; {previewData.maxDate}
-                        </Typography>
-                      </Box>
+                    {/* QBO JE links */}
+                    {data?.processing && (isQboJournalEntryId(data.processing.qboCogsJournalEntryId) || isQboJournalEntryId(data.processing.qboPnlReclassJournalEntryId)) && (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        {data?.processing && (
-                          <>
-                            {isQboJournalEntryId(data.processing.qboCogsJournalEntryId) && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{ borderColor: 'divider', color: 'text.primary' }}
-                                component="a"
-                                href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
-                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                              >
-                                COGS JE
-                              </Button>
-                            )}
-                            {isQboJournalEntryId(data.processing.qboPnlReclassJournalEntryId) && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                sx={{ borderColor: 'divider', color: 'text.primary' }}
-                                component="a"
-                                href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
-                                {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
-                                endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
-                              >
-                                P&amp;L JE
-                              </Button>
-                            )}
-                          </>
+                        {isQboJournalEntryId(data.processing.qboCogsJournalEntryId) && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            sx={{ borderColor: 'divider', color: 'text.primary' }}
+                            component="a"
+                            href={getQboJournalHref(data.processing.qboCogsJournalEntryId)}
+                            {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                            endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                          >
+                            COGS JE
+                          </Button>
+                        )}
+                        {isQboJournalEntryId(data.processing.qboPnlReclassJournalEntryId) && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            sx={{ borderColor: 'divider', color: 'text.primary' }}
+                            component="a"
+                            href={getQboJournalHref(data.processing.qboPnlReclassJournalEntryId)}
+                            {...{ target: '_blank', rel: 'noopener noreferrer' } as any}
+                            endIcon={<OpenInNewIcon sx={{ fontSize: 12 }} />}
+                          >
+                            P&amp;L JE
+                          </Button>
                         )}
                       </Box>
-                    </Box>
+                    )}
 
                     {/* Summary cards */}
                     <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' } }}>

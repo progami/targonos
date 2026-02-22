@@ -24,29 +24,6 @@ export function resolveAppOrigin(request: Pick<NextRequest, 'headers' | 'nextUrl
     }
   }
 
-  const forwardedHost = request.headers.get('x-forwarded-host')
-  let proto = request.nextUrl.protocol
-  const forwardedProtoHeader = request.headers.get('x-forwarded-proto')
-  if (forwardedProtoHeader) {
-    const value = forwardedProtoHeader.split(',')[0]?.trim()
-    if (value) {
-      proto = value
-    }
-  }
-  proto = normalizeProtocol(proto)
-
-  if (forwardedHost) {
-    const host = forwardedHost.split(',')[0]?.trim()
-    if (host) {
-      return `${proto}://${host}`
-    }
-  }
-
-  const hostHeader = request.headers.get('host')
-  if (hostHeader) {
-    return `${proto}://${hostHeader}`
-  }
-
-  return request.nextUrl.origin
+  void request
+  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
 }
-
