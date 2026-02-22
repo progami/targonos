@@ -2,12 +2,13 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 import type { QboAccount } from '@/lib/qbo/api';
-import { fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
+import { deleteJournalEntry, fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementTotalFromJournalEntry, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 
 const logger = createLogger({ name: 'plutus-settlement-detail' });
 
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
+    let activeConnection = connection;
 
     const body = await req.json();
     if (!body || body.action !== 'rollback') {
@@ -170,6 +172,17 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     if (!existing) {
       return NextResponse.json({ error: 'Settlement not processed' }, { status: 404 });
+    }
+
+    // Delete the COGS + P&L reclass journal entries created by Plutus so rollback is a true undo.
+    // We only delete IDs that look like QBO JournalEntry IDs (digits). NOOP ids are left alone.
+    if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
+      const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
+      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+    }
+    if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
+      const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
+      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
     }
 
     await db.settlementRollback.create({
@@ -206,8 +219,16 @@ export async function POST(req: NextRequest, context: RouteContext) {
       },
     });
 
+    if (activeConnection !== connection) {
+      await saveServerQboConnection(activeConnection);
+    }
+
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    if (error instanceof QboAuthError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     logger.error('Failed to rollback settlement processing', { error });
     return NextResponse.json(
       {
