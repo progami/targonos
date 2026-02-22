@@ -52,7 +52,7 @@ function requireChannel(value: string | null): Channel {
     return { id: value, label: 'Targon US', region: 'US', docNumberContains: 'US-' };
   }
   if (value === 'targon-uk') {
-    return { id: value, label: 'Targon UK', region: 'UK', docNumberContains: 'LMB-UK-' };
+    return { id: value, label: 'Targon UK', region: 'UK', docNumberContains: 'UK-' };
   }
   throw new Error('Invalid channel');
 }
@@ -256,6 +256,22 @@ export async function GET(req: NextRequest) {
       await saveServerQboConnection(activeConnection);
     }
 
+    const months = monthKeys.map((key) => {
+      const totals = totalsByMonth.get(key);
+      if (!totals) {
+        throw new Error(`Missing totals for month ${key}`);
+      }
+      return {
+        month: key,
+        ...totals,
+      };
+    });
+
+    const periodTotals = totalsByMonth.get(period.key);
+    if (!periodTotals) {
+      throw new Error(`Missing totals for month ${period.key}`);
+    }
+
     return NextResponse.json({
       channel,
       range: {
@@ -264,11 +280,8 @@ export async function GET(req: NextRequest) {
         startDate,
         endDate,
       },
-      months: monthKeys.map((key) => ({
-        month: key,
-        ...totalsByMonth.get(key),
-      })),
-      settlementsInPeriod: totalsByMonth.get(period.key)?.settlements ?? 0,
+      months,
+      settlementsInPeriod: periodTotals.settlements,
       totalCount,
     });
   } catch (error) {

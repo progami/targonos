@@ -4,7 +4,7 @@ import { createLogger } from '@targon/logger';
 import type { Prisma } from '@targon/prisma-plutus';
 
 import { db } from '@/lib/db';
-import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
+import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   fetchAccounts,
   fetchJournalEntries,
@@ -175,7 +175,7 @@ async function fetchSettlementHistoryForChannel(input: {
 
       let periodEnd: string | null = null;
       try {
-        const parsed = parseLmbSettlementDocNumber(docNumber);
+        const parsed = parseSettlementDocNumber(docNumber);
         periodEnd = parsed.periodEnd;
       } catch (error) {
         input.warnings.push({
@@ -610,7 +610,7 @@ export async function generateCashflowSnapshot(): Promise<CashflowSnapshotPayloa
           connection,
           startDate: lookbackStart,
           endDate: asOfDate,
-          docNumberContains: 'LMB-UK-',
+          docNumberContains: 'UK-',
           channel: 'UK',
           cashAccountIdSet,
           warnings,

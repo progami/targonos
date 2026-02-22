@@ -1,5 +1,7 @@
 import { promises as fs } from 'node:fs';
 
+import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+
 type CliOptions = {
   startDate: string;
   endDate: string | undefined;
@@ -148,9 +150,15 @@ function classifyDocNumber(docNumber: string): TargetKind {
   const first = trimmed[0] ? trimmed[0].toUpperCase() : '';
   if (first === 'C') return 'cogs';
   if (first === 'P') return 'pnl';
-  if (/^US-/i.test(trimmed) || /^LMB-US-/i.test(trimmed) || /#LMB-US-/i.test(trimmed)) return 'settlement';
-  if (/US-/i.test(trimmed)) return 'unknown';
-  return 'unknown';
+
+  if (!isSettlementDocNumber(trimmed)) {
+    if (/US-/i.test(trimmed)) return 'unknown';
+    return 'unknown';
+  }
+
+  const meta = parseSettlementDocNumber(trimmed);
+  if (meta.marketplace.id !== 'amazon.com') return 'unknown';
+  return 'settlement';
 }
 
 type DeletionTarget = {
@@ -207,13 +215,13 @@ async function main(): Promise<void> {
   const processingRows = await db.settlementProcessing.findMany({
     where: {
       marketplace: 'amazon.com',
-      lmbDocNumber: { contains: 'US-' },
-      lmbPostedDate: { gte: rangeStart, lte: rangeEnd },
+      settlementDocNumber: { contains: 'US-' },
+      settlementPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
       id: true,
       invoiceId: true,
-      lmbDocNumber: true,
+      settlementDocNumber: true,
       qboSettlementJournalEntryId: true,
       qboCogsJournalEntryId: true,
       qboPnlReclassJournalEntryId: true,
@@ -223,13 +231,13 @@ async function main(): Promise<void> {
   const rollbackRows = await db.settlementRollback.findMany({
     where: {
       marketplace: 'amazon.com',
-      lmbDocNumber: { contains: 'US-' },
-      lmbPostedDate: { gte: rangeStart, lte: rangeEnd },
+      settlementDocNumber: { contains: 'US-' },
+      settlementPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
       id: true,
       invoiceId: true,
-      lmbDocNumber: true,
+      settlementDocNumber: true,
       qboSettlementJournalEntryId: true,
       qboCogsJournalEntryId: true,
       qboPnlReclassJournalEntryId: true,
@@ -249,7 +257,7 @@ async function main(): Promise<void> {
       qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
     }
     invoiceIdsToDelete.add(row.invoiceId);
-    invoiceIdsToDelete.add(row.lmbDocNumber);
+    invoiceIdsToDelete.add(row.settlementDocNumber);
   }
 
   for (const row of rollbackRows) {
@@ -261,12 +269,12 @@ async function main(): Promise<void> {
       qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
     }
     invoiceIdsToDelete.add(row.invoiceId);
-    invoiceIdsToDelete.add(row.lmbDocNumber);
+    invoiceIdsToDelete.add(row.settlementDocNumber);
   }
 
   // QBO search by DocNumber contains "US-" catches:
-  // - settlement JEs (US-... and legacy LMB-US-...)
-  // - processing JEs when invoiceId is a settlement doc number (CUS-... / PUS-... and legacy CLMB-US-... / PLMB-US-...)
+  // - settlement JEs (DocNumber contains a US settlement id)
+  // - processing JEs when invoiceId embeds a settlement id (e.g. CUS-... / PUS-...)
   // It does NOT catch processing JEs for numeric invoiceIds (e.g. C18299627).
   const qboSearchResults: Array<{ id: string; txnDate: string; docNumber: string }> = [];
 

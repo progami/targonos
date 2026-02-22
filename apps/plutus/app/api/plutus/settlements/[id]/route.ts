@@ -4,7 +4,7 @@ import { createLogger } from '@targon/logger';
 import type { QboAccount } from '@/lib/qbo/api';
 import { fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
-import { computeSettlementTotalFromJournalEntry, parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
+import { computeSettlementTotalFromJournalEntry, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
@@ -48,7 +48,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       accountsById.set(account.Id, account);
     }
 
-    const meta = parseLmbSettlementDocNumber(je.DocNumber);
+    const meta = parseSettlementDocNumber(je.DocNumber);
     const settlementTotal = computeSettlementTotalFromJournalEntry(je, accountsById);
 
     const processing = await db.settlementProcessing.findUnique({
@@ -73,7 +73,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         periodStart: meta.periodStart,
         periodEnd: meta.periodEnd,
         settlementTotal,
-        lmbStatus: 'Posted',
+        qboStatus: 'Posted',
         plutusStatus,
         lines: je.Line.map((line) => {
           const accountId = line.JournalEntryLineDetail.AccountRef.value;
@@ -156,8 +156,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       select: {
         marketplace: true,
         qboSettlementJournalEntryId: true,
-        lmbDocNumber: true,
-        lmbPostedDate: true,
+        settlementDocNumber: true,
+        settlementPostedDate: true,
         invoiceId: true,
         processingHash: true,
         sourceFilename: true,
@@ -176,8 +176,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       data: {
         marketplace: existing.marketplace,
         qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
-        lmbDocNumber: existing.lmbDocNumber,
-        lmbPostedDate: existing.lmbPostedDate,
+        settlementDocNumber: existing.settlementDocNumber,
+        settlementPostedDate: existing.settlementPostedDate,
         invoiceId: existing.invoiceId,
         processingHash: existing.processingHash,
         sourceFilename: existing.sourceFilename,

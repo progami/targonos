@@ -2,9 +2,8 @@ import { createLogger } from '@targon/logger';
 
 import { db } from '@/lib/db';
 import { fromCents } from '@/lib/inventory/money';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
-import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
+import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   fetchJournalEntries,
   QboAuthError,
@@ -12,11 +11,11 @@ import {
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import {
-  normalizeAuditMarketToMarketplaceId,
   selectAuditInvoiceForSettlement,
   type AuditInvoiceSummary,
   type MarketplaceId,
 } from '@/lib/plutus/audit-invoice-matching';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 
 const logger = createLogger({ name: 'plutus-autopost-check' });
 
@@ -52,8 +51,8 @@ async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
   const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
     SELECT "invoiceId",
            CASE
-             WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
-             WHEN LOWER("market") = 'uk' OR LOWER("market") LIKE '%amazon.co.uk%' THEN 'amazon.co.uk'
+             WHEN LOWER("market") = 'us' THEN 'amazon.com'
+             WHEN LOWER("market") = 'uk' THEN 'amazon.co.uk'
              ELSE NULL
            END AS "marketplaceId",
            COUNT(*)::bigint AS "rowCount",
@@ -91,21 +90,29 @@ async function fetchProcessedInvoiceKeys(): Promise<Set<string>> {
 async function loadAuditRowsForInvoice(input: {
   invoiceId: string;
   marketplace: MarketplaceId;
-}): Promise<{ rows: LmbAuditRow[]; sourceFilename: string } | null> {
+}): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string } | null> {
+  const market =
+    input.marketplace === 'amazon.com'
+      ? 'us'
+      : input.marketplace === 'amazon.co.uk'
+        ? 'uk'
+        : (() => {
+            const exhaustive: never = input.marketplace;
+            throw new Error(`Unsupported marketplace: ${exhaustive}`);
+          })();
+
   const dbRows = await db.auditDataRow.findMany({
-    where: { invoiceId: input.invoiceId },
+    where: {
+      invoiceId: input.invoiceId,
+      market: { equals: market, mode: 'insensitive' },
+    },
     include: { upload: { select: { filename: true } } },
   });
 
   if (dbRows.length === 0) return null;
 
-  const scoped = dbRows.filter((r) => normalizeAuditMarketToMarketplaceId(r.market) === input.marketplace);
-  if (scoped.length === 0) {
-    return null;
-  }
-
-  const rows: LmbAuditRow[] = scoped.map((r) => ({
-    invoice: r.invoiceId,
+  const rows: SettlementAuditRow[] = dbRows.map((r) => ({
+    invoiceId: r.invoiceId,
     market: r.market,
     date: r.date,
     orderId: r.orderId,
@@ -115,7 +122,7 @@ async function loadAuditRowsForInvoice(input: {
     net: fromCents(r.net),
   }));
 
-  const sourceFilename = scoped[0]!.upload.filename;
+  const sourceFilename = dbRows[0]!.upload.filename;
   return { rows, sourceFilename };
 }
 
@@ -252,7 +259,7 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
     let periodEnd: string | null;
     let normalizedDocNumber: string;
     try {
-      const meta = parseLmbSettlementDocNumber(trimmedDocNumber);
+      const meta = parseSettlementDocNumber(trimmedDocNumber);
       marketplace = meta.marketplace.id;
       periodStart = meta.periodStart;
       periodEnd = meta.periodEnd;

@@ -1,14 +1,14 @@
 import type { QboAccount, QboJournalEntry } from '@/lib/qbo/api';
 
-export type LmbMarketplace = {
+export type SettlementMarketplace = {
   id: 'amazon.com' | 'amazon.co.uk';
   label: 'Amazon.com' | 'Amazon.co.uk';
   currency: 'USD' | 'GBP';
   region: 'US' | 'UK';
 };
 
-type LmbDocMeta = {
-  marketplace: LmbMarketplace;
+type SettlementDocMeta = {
+  marketplace: SettlementMarketplace;
   periodStart: string | null;
   periodEnd: string | null;
 };
@@ -28,31 +28,30 @@ const MONTHS: Record<string, number> = {
   DEC: 12,
 };
 
+const SETTLEMENT_DOC_NUMBER_RE = /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i;
+
 function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
-export function getMarketplaceFromRegion(region: string): LmbMarketplace {
+export function getMarketplaceFromRegion(region: string): SettlementMarketplace {
   if (region === 'US') return { id: 'amazon.com', label: 'Amazon.com', currency: 'USD', region: 'US' };
   if (region === 'UK') return { id: 'amazon.co.uk', label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' };
   throw new Error(`Unsupported settlement region: ${region}`);
 }
 
-export function normalizeLmbDocNumber(docNumber: string): string {
+export function isSettlementDocNumber(docNumber: string): boolean {
+  return SETTLEMENT_DOC_NUMBER_RE.test(docNumber.trim());
+}
+
+export function normalizeSettlementDocNumber(docNumber: string): string {
   const trimmed = docNumber.trim();
-  if (/^LMB-(US|UK)-/i.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^(US|UK)-/i.test(trimmed)) {
-    return trimmed;
+  const match = trimmed.match(SETTLEMENT_DOC_NUMBER_RE);
+  if (!match) {
+    throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
   }
 
-  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
-  if (hashMatch) {
-    return hashMatch[1]!;
-  }
-
-  throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
+  return match[0].toUpperCase();
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
@@ -77,24 +76,22 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
   return { day: Number(dayMonth[1]), month };
 }
 
-function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
+function parseSettlementPeriod(normalizedDocNumber: string): SettlementDocMeta {
   const tokens = normalizedDocNumber.split('-').map((t) => t.trim());
 
-  const isLmb = tokens[0] === 'LMB';
-  const region = isLmb ? tokens[1] : tokens[0];
-  if (!region) {
+  const region = tokens[0];
+  if (region !== 'US' && region !== 'UK') {
     throw new Error(`Missing settlement region in doc number: ${normalizedDocNumber}`);
   }
 
   const marketplace = getMarketplaceFromRegion(region);
-  const rangeStartIndex = isLmb ? 2 : 1;
 
-  if (tokens.length < rangeStartIndex + 4) {
+  if (tokens.length < 5) {
     return { marketplace, periodStart: null, periodEnd: null };
   }
 
   const yearToken = tokens[tokens.length - 2];
-  const rangeTokens = tokens.slice(rangeStartIndex, tokens.length - 2);
+  const rangeTokens = tokens.slice(1, tokens.length - 2);
 
   if (!yearToken) {
     throw new Error(`Invalid settlement doc number format: ${normalizedDocNumber}`);
@@ -111,7 +108,6 @@ function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
   }
 
   const endYear = yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken);
-
   if (!Number.isFinite(endYear)) {
     throw new Error(`Invalid year in settlement doc number: ${normalizedDocNumber}`);
   }
@@ -134,8 +130,8 @@ function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
   return { marketplace, periodStart, periodEnd };
 }
 
-export function parseLmbSettlementDocNumber(docNumber: string): LmbDocMeta & { normalizedDocNumber: string } {
-  const normalizedDocNumber = normalizeLmbDocNumber(docNumber);
+export function parseSettlementDocNumber(docNumber: string): SettlementDocMeta & { normalizedDocNumber: string } {
+  const normalizedDocNumber = normalizeSettlementDocNumber(docNumber);
   return { ...parseSettlementPeriod(normalizedDocNumber), normalizedDocNumber };
 }
 
@@ -171,3 +167,4 @@ export function computeSettlementTotalFromJournalEntry(
 
   return total;
 }
+

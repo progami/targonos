@@ -53,35 +53,6 @@ type DataSourceConfig = {
 
 const DATA_SOURCES: DataSourceConfig[] = [
   {
-    key: 'audit',
-    label: 'Audit Data (UK)',
-    description: 'Upload Audit Data (CSV or ZIP). For UK, this is the Link My Books Audit Data export. For US, Audit Data is generated automatically when syncing settlements from Amazon.',
-    dropLabel: 'Drop your Audit Data file here',
-    accept: '.csv,.zip',
-    hint: 'CSV or ZIP',
-    uploadEndpoint: '/api/plutus/audit-data/upload',
-    listEndpoint: '/api/plutus/audit-data',
-    queryKey: 'audit-data-uploads',
-    fields: [],
-    mapUpload: () => ({ marketplace: 'Mixed', range: '—' }),
-  },
-  {
-    key: 'ads',
-    label: 'Amazon Ads Report',
-    description: 'Upload Sponsored Products advertised product report. Set marketplace and date range before uploading.',
-    dropLabel: 'Drop your SP report here',
-    accept: '.csv,.zip,.xlsx',
-    hint: 'CSV, ZIP, or XLSX',
-    uploadEndpoint: '/api/plutus/ads-data/upload',
-    listEndpoint: '/api/plutus/ads-data',
-    queryKey: 'ads-data-uploads',
-    fields: [{ type: 'marketplace' }, { type: 'dateRange' }],
-    mapUpload: (u) => ({
-      marketplace: u.marketplace === 'amazon.com' ? 'US' : 'UK',
-      range: `${u.startDate} – ${u.endDate}`,
-    }),
-  },
-  {
     key: 'awd',
     label: 'AWD Monthly Fee Report',
     description: 'Upload AWD fee report for warehousing cost allocation. Select marketplace before uploading.',

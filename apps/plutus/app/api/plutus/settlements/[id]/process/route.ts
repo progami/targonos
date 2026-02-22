@@ -5,9 +5,8 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import type { MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
-import { unzipSync, strFromU8 } from 'fflate';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
 
@@ -17,25 +16,15 @@ const logger = createLogger({ name: 'plutus-settlement-process' });
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function toUint8Array(buf: ArrayBuffer): Uint8Array {
-  return new Uint8Array(buf);
-}
-
 function buildMarketWhere(marketplace: MarketplaceId) {
   if (marketplace === 'amazon.com') {
     return {
-      OR: [
-        { market: { equals: 'US', mode: 'insensitive' as const } },
-        { market: { contains: 'amazon.com', mode: 'insensitive' as const } },
-      ],
+      market: { equals: 'us', mode: 'insensitive' as const },
     };
   }
   if (marketplace === 'amazon.co.uk') {
     return {
-      OR: [
-        { market: { equals: 'UK', mode: 'insensitive' as const } },
-        { market: { contains: 'amazon.co.uk', mode: 'insensitive' as const } },
-      ],
+      market: { equals: 'uk', mode: 'insensitive' as const },
     };
   }
 
@@ -43,36 +32,10 @@ function buildMarketWhere(marketplace: MarketplaceId) {
   throw new Error(`Unsupported marketplace: ${exhaustive}`);
 }
 
-async function readAuditCsvText(file: File): Promise<{ csvText: string; sourceFilename: string }> {
-  const bytes = toUint8Array(await file.arrayBuffer());
-  const lowerName = file.name.toLowerCase();
-
-  if (lowerName.endsWith('.zip')) {
-    const unzipped = unzipSync(bytes);
-    const csvEntries = Object.entries(unzipped).filter(([name]) => name.toLowerCase().endsWith('.csv'));
-    if (csvEntries.length !== 1) {
-      throw new Error(`ZIP must contain exactly one .csv (found ${csvEntries.length})`);
-    }
-
-    const entry = csvEntries[0];
-    if (!entry) {
-      throw new Error('ZIP is missing CSV entry');
-    }
-
-    return { csvText: strFromU8(entry[1]), sourceFilename: file.name };
-  }
-
-  if (lowerName.endsWith('.csv')) {
-    return { csvText: strFromU8(bytes), sourceFilename: file.name };
-  }
-
-  throw new Error('Unsupported file type. Upload a .zip or .csv');
-}
-
 async function loadAuditRowsFromDb(input: {
   invoiceId: string;
   marketplace: MarketplaceId;
-}): Promise<{ rows: LmbAuditRow[]; sourceFilename: string }> {
+}): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string }> {
   const dbRows = await db.auditDataRow.findMany({
     where: {
       invoiceId: input.invoiceId,
@@ -85,8 +48,8 @@ async function loadAuditRowsFromDb(input: {
     throw new Error(`No stored audit data found for invoice ${input.invoiceId} (${input.marketplace})`);
   }
 
-  const rows: LmbAuditRow[] = dbRows.map((r) => ({
-    invoice: r.invoiceId,
+  const rows: SettlementAuditRow[] = dbRows.map((r) => ({
+    invoiceId: r.invoiceId,
     market: r.market,
     date: r.date,
     orderId: r.orderId,
@@ -111,54 +74,32 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
 
     const contentType = req.headers.get('content-type') ?? '';
-
-    let processed;
-
-    if (contentType.includes('application/json')) {
-      // JSON path: read stored audit data from DB
-      const body = await req.json();
-      const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId.trim() : '';
-      const marketplace = typeof body.marketplace === 'string' ? body.marketplace.trim() : '';
-      if (invoiceId === '') {
-        return NextResponse.json({ error: 'Missing invoiceId' }, { status: 400 });
-      }
-      if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
-        return NextResponse.json({ error: 'Missing marketplace' }, { status: 400 });
-      }
-
-      const { rows, sourceFilename } = await loadAuditRowsFromDb({
-        invoiceId,
-        marketplace: marketplace as MarketplaceId,
-      });
-
-      processed = await processSettlement({
-        connection,
-        settlementJournalEntryId,
-        auditRows: rows,
-        sourceFilename,
-        invoiceId,
-      });
-    } else {
-      // FormData path: legacy file upload
-      const formData = await req.formData();
-      const file = formData.get('file');
-      const invoiceRaw = formData.get('invoice');
-
-      if (!(file instanceof File)) {
-        return NextResponse.json({ error: 'Missing file' }, { status: 400 });
-      }
-
-      const invoiceId = typeof invoiceRaw === 'string' ? invoiceRaw.trim() : undefined;
-      const { csvText, sourceFilename } = await readAuditCsvText(file);
-
-      processed = await processSettlement({
-        connection,
-        settlementJournalEntryId,
-        auditCsvText: csvText,
-        sourceFilename,
-        invoiceId,
-      });
+    if (!contentType.includes('application/json')) {
+      return NextResponse.json({ error: 'Unsupported content type (expected application/json)' }, { status: 415 });
     }
+
+    const body = await req.json();
+    const invoiceId = typeof body.invoiceId === 'string' ? body.invoiceId.trim() : '';
+    const marketplace = typeof body.marketplace === 'string' ? body.marketplace.trim() : '';
+    if (invoiceId === '') {
+      return NextResponse.json({ error: 'Missing invoiceId' }, { status: 400 });
+    }
+    if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
+      return NextResponse.json({ error: 'Missing marketplace' }, { status: 400 });
+    }
+
+    const { rows, sourceFilename } = await loadAuditRowsFromDb({
+      invoiceId,
+      marketplace: marketplace as MarketplaceId,
+    });
+
+    const processed = await processSettlement({
+      connection,
+      settlementJournalEntryId,
+      auditRows: rows,
+      sourceFilename,
+      invoiceId,
+    });
 
     if (processed.updatedConnection) {
       await saveServerQboConnection(processed.updatedConnection);

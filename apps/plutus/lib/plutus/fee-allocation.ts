@@ -1,9 +1,9 @@
 import { allocateByWeight } from '@/lib/inventory/money';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
 import type { PnlBucketKey } from '@/lib/pnl-allocation';
 import { classifyPnlBucket } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { isRefundPrincipal, isSalePrincipal, normalizeSku } from './settlement-validation';
+import type { SettlementAuditRow } from './settlement-audit';
 
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
 
@@ -72,7 +72,7 @@ function awdFeeTypeFromDescription(description: string): AwdFeeType | null {
   return null;
 }
 
-function sumSkuLessAwdFeeTotals(rows: LmbAuditRow[]): {
+function sumSkuLessAwdFeeTotals(rows: SettlementAuditRow[]): {
   totalsByFeeType: Partial<Record<AwdFeeType, number>>;
   unknownDescriptions: string[];
 } {
@@ -142,13 +142,7 @@ function buildChargeTypeBreakdownString(byChargeType: Map<string | null, { total
   return parts.join(', ');
 }
 
-function isoDayAddDays(value: string, deltaDays: number): string {
-  const date = parseIsoDay(value);
-  date.setUTCDate(date.getUTCDate() + deltaDays);
-  return date.toISOString().slice(0, 10);
-}
-
-function sumSkuAbsCentsByBucket(rows: LmbAuditRow[], bucket: PnlBucketKey): Record<string, number> {
+function sumSkuAbsCentsByBucket(rows: SettlementAuditRow[], bucket: PnlBucketKey): Record<string, number> {
   const weightsBySku: Record<string, number> = {};
   for (const row of rows) {
     if (classifyPnlBucket(row.description) !== bucket) continue;
@@ -164,7 +158,7 @@ function sumSkuAbsCentsByBucket(rows: LmbAuditRow[], bucket: PnlBucketKey): Reco
   return weightsBySku;
 }
 
-function sumSkuAbsPrincipalCents(rows: LmbAuditRow[]): Record<string, number> {
+function sumSkuAbsPrincipalCents(rows: SettlementAuditRow[]): Record<string, number> {
   const weightsBySku: Record<string, number> = {};
   for (const row of rows) {
     const description = row.description.trim();
@@ -182,10 +176,9 @@ function sumSkuAbsPrincipalCents(rows: LmbAuditRow[]): Record<string, number> {
 }
 
 function pickSkuWeightsForSkuLessBucket(input: {
-  rows: LmbAuditRow[];
+  rows: SettlementAuditRow[];
   bucket: PnlBucketKey;
   principalWeightsBySku: Record<string, number>;
-  fallbackWeightsBySku: Record<string, number>;
 }): Record<string, number> {
   const rows = input.rows;
   const bucket = input.bucket;
@@ -199,10 +192,10 @@ function pickSkuWeightsForSkuLessBucket(input: {
     return input.principalWeightsBySku;
   }
 
-  return input.fallbackWeightsBySku;
+  return {};
 }
 
-function sumSkuLessTotalsByBucket(rows: LmbAuditRow[]): Partial<Record<PnlBucketKey, number>> {
+function sumSkuLessTotalsByBucket(rows: SettlementAuditRow[]): Partial<Record<PnlBucketKey, number>> {
   const totals: Partial<Record<PnlBucketKey, number>> = {};
   for (const row of rows) {
     const bucket = classifyPnlBucket(row.description);
@@ -261,7 +254,7 @@ const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
   amazonStorageFees:
     'Missing deterministic source for SKU-less Amazon Storage Fees. Provide storage fee detail report/API data at SKU level.',
   amazonAdvertisingCosts:
-    'Missing deterministic source for SKU-less Amazon Advertising Costs. Upload Ads Data that covers the invoice range and ties to billed amount.',
+    'Amazon Advertising Costs are posted without SKU-level allocation.',
   amazonPromotions:
     'Missing deterministic source for SKU-less Amazon Promotions. Provide promotions chargeback detail report/API data at SKU level.',
   amazonFbaInventoryReimbursement:
@@ -274,78 +267,8 @@ export function deterministicSourceGuidanceForBucket(bucket: PnlBucketKey): stri
   return DETERMINISTIC_SOURCE_GUIDANCE[bucket];
 }
 
-function marketCodeForMarketplace(marketplace: 'amazon.com' | 'amazon.co.uk'): 'us' | 'uk' {
-  if (marketplace === 'amazon.com') return 'us';
-  return 'uk';
-}
-
-async function loadTrailingPrincipalWeightsBySku(input: {
-  marketplace: 'amazon.com' | 'amazon.co.uk';
-  invoiceEndDate: string;
-  lookbackDays: number;
-  skuToBrand: Map<string, string>;
-}): Promise<Record<string, number>> {
-  const market = marketCodeForMarketplace(input.marketplace);
-  const startDate = isoDayAddDays(input.invoiceEndDate, -input.lookbackDays);
-
-  const saleRows = await db.auditDataRow.findMany({
-    where: {
-      market: { equals: market, mode: 'insensitive' },
-      date: { gte: startDate, lte: input.invoiceEndDate },
-      description: { startsWith: 'Amazon Sales - Principal' },
-      sku: { not: '' },
-    },
-    select: { sku: true, net: true },
-  });
-
-  const refundRows = await db.auditDataRow.findMany({
-    where: {
-      market: { equals: market, mode: 'insensitive' },
-      date: { gte: startDate, lte: input.invoiceEndDate },
-      description: { startsWith: 'Amazon Refunds - Refunded Principal' },
-      sku: { not: '' },
-    },
-    select: { sku: true, net: true },
-  });
-
-  const weightsBySku: Record<string, number> = {};
-  for (const row of [...saleRows, ...refundRows]) {
-    const skuRaw = row.sku.trim();
-    if (skuRaw === '') continue;
-    const sku = normalizeSku(skuRaw);
-    if (!input.skuToBrand.has(sku)) continue;
-    const cents = row.net;
-    if (!Number.isFinite(cents) || !Number.isInteger(cents)) {
-      throw new Error(`Invalid audit net cents for trailing principal weights: ${String(cents)}`);
-    }
-    const weight = Math.abs(cents);
-    if (weight <= 0) continue;
-    const existing = weightsBySku[sku];
-    weightsBySku[sku] = (existing === undefined ? 0 : existing) + weight;
-  }
-
-  return weightsBySku;
-}
-
-function buildEqualBrandWeightsBySku(skuToBrand: Map<string, string>): Record<string, number> {
-  const minSkuByBrand = new Map<string, string>();
-  for (const [sku, brand] of skuToBrand.entries()) {
-    const existing = minSkuByBrand.get(brand);
-    if (existing === undefined || sku < existing) {
-      minSkuByBrand.set(brand, sku);
-    }
-  }
-
-  const weightsBySku: Record<string, number> = {};
-  for (const sku of Array.from(minSkuByBrand.values()).sort()) {
-    weightsBySku[sku] = 1;
-  }
-
-  return weightsBySku;
-}
-
 export async function buildDeterministicSkuAllocations(input: {
-  rows: LmbAuditRow[];
+  rows: SettlementAuditRow[];
   marketplace: 'amazon.com' | 'amazon.co.uk';
   invoiceStartDate: string;
   invoiceEndDate: string;
@@ -359,47 +282,12 @@ export async function buildDeterministicSkuAllocations(input: {
   const skuLessTotalsByBucket = sumSkuLessTotalsByBucket(input.rows);
   const principalWeightsBySku = sumSkuAbsPrincipalCents(input.rows);
 
-  let fallbackWeightsBySku: Record<string, number> = {};
-  const needsFallbackWeights =
-    Object.keys(principalWeightsBySku).length === 0 &&
-    Object.entries(skuLessTotalsByBucket).some((entry) => {
-      const total = entry[1];
-      return total !== undefined && total !== 0;
-    });
-
-  if (needsFallbackWeights) {
-    const trailing90 = await loadTrailingPrincipalWeightsBySku({
-      marketplace: input.marketplace,
-      invoiceEndDate: input.invoiceEndDate,
-      lookbackDays: 90,
-      skuToBrand: input.skuToBrand,
-    });
-
-    if (Object.keys(trailing90).length > 0) {
-      fallbackWeightsBySku = trailing90;
-    } else {
-      const trailing365 = await loadTrailingPrincipalWeightsBySku({
-        marketplace: input.marketplace,
-        invoiceEndDate: input.invoiceEndDate,
-        lookbackDays: 365,
-        skuToBrand: input.skuToBrand,
-      });
-
-      if (Object.keys(trailing365).length > 0) {
-        fallbackWeightsBySku = trailing365;
-      } else {
-        fallbackWeightsBySku = buildEqualBrandWeightsBySku(input.skuToBrand);
-      }
-    }
-  }
-
   const sellerFeesSkuLessTotal = skuLessTotalsByBucket.amazonSellerFees;
   if (sellerFeesSkuLessTotal !== undefined && sellerFeesSkuLessTotal !== 0) {
     const weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonSellerFees',
       principalWeightsBySku,
-      fallbackWeightsBySku,
     });
     const allocated = allocateSignedByWeight({
       totalCents: sellerFeesSkuLessTotal,
@@ -417,7 +305,6 @@ export async function buildDeterministicSkuAllocations(input: {
       rows: input.rows,
       bucket: 'amazonFbaFees',
       principalWeightsBySku,
-      fallbackWeightsBySku,
     });
     const allocated = allocateSignedByWeight({
       totalCents: fbaFeesSkuLessTotal,
@@ -435,7 +322,6 @@ export async function buildDeterministicSkuAllocations(input: {
       rows: input.rows,
       bucket: 'amazonStorageFees',
       principalWeightsBySku,
-      fallbackWeightsBySku,
     });
     const allocated = allocateSignedByWeight({
       totalCents: storageFeesSkuLessTotal,
@@ -453,7 +339,6 @@ export async function buildDeterministicSkuAllocations(input: {
       rows: input.rows,
       bucket: 'amazonPromotions',
       principalWeightsBySku,
-      fallbackWeightsBySku,
     });
     const allocated = allocateSignedByWeight({
       totalCents: promotionsSkuLessTotal,
@@ -471,7 +356,6 @@ export async function buildDeterministicSkuAllocations(input: {
       rows: input.rows,
       bucket: 'amazonFbaInventoryReimbursement',
       principalWeightsBySku,
-      fallbackWeightsBySku,
     });
     const allocated = allocateSignedByWeight({
       totalCents: reimbursementSkuLessTotal,

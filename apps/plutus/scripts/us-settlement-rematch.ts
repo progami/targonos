@@ -2,8 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { db } from '@/lib/db';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
-import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import {
   normalizeAuditMarketToMarketplaceId,
   selectAuditInvoiceForSettlement,
@@ -12,6 +11,7 @@ import {
 } from '@/lib/plutus/audit-invoice-matching';
 import { computeSettlementPreview, processSettlement } from '@/lib/plutus/settlement-processing';
 import { isBlockingProcessingBlock } from '@/lib/plutus/settlement-types';
+import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { fetchJournalEntries } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -216,10 +216,9 @@ async function main(): Promise<void> {
       const docNumber = entry.DocNumber;
       if (!docNumber) return false;
       const trimmed = docNumber.trim();
-      if (/^US-/i.test(trimmed)) return true;
-      if (/^LMB-US-/i.test(trimmed)) return true;
-      if (/#LMB-US-/i.test(trimmed)) return true;
-      return false;
+      if (!isSettlementDocNumber(trimmed)) return false;
+      const meta = parseSettlementDocNumber(trimmed);
+      return meta.marketplace.id === 'amazon.com';
     })
     .filter((entry) => !processedSettlementIds.has(entry.Id))
     .sort((a, b) => b.TxnDate.localeCompare(a.TxnDate));
@@ -240,7 +239,7 @@ async function main(): Promise<void> {
     {
       invoiceId: string;
       sourceFilename: string;
-      scopedRows: LmbAuditRow[];
+      scopedRows: SettlementAuditRow[];
     }
   >();
 
@@ -256,7 +255,7 @@ async function main(): Promise<void> {
       continue;
     }
 
-    const meta = parseLmbSettlementDocNumber(settlement.DocNumber);
+    const meta = parseSettlementDocNumber(settlement.DocNumber);
     const match = selectAuditInvoiceForSettlement({
       settlementMarketplace: meta.marketplace.id,
       settlementPeriodStart: meta.periodStart,
@@ -308,10 +307,10 @@ async function main(): Promise<void> {
       include: { upload: { select: { filename: true } } },
     });
 
-    const scopedRows: LmbAuditRow[] = rows
+    const scopedRows: SettlementAuditRow[] = rows
       .filter((r) => normalizeAuditMarketToMarketplaceId(r.market) === meta.marketplace.id)
       .map((r) => ({
-        invoice: r.invoiceId,
+        invoiceId: r.invoiceId,
         market: r.market,
         date: r.date,
         orderId: r.orderId,

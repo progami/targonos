@@ -1,4 +1,4 @@
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { toCents } from '@/lib/inventory/money';
 
 export type PnlBucketKey =
@@ -56,7 +56,7 @@ function addSkuCents(target: Record<string, Record<string, number>>, brand: stri
 }
 
 export function computePnlAllocation(
-  rows: LmbAuditRow[],
+  rows: SettlementAuditRow[],
   brandResolver: BrandResolver,
   options?: PnlAllocationOptions,
 ): PnlAllocation {
@@ -64,9 +64,9 @@ export function computePnlAllocation(
     throw new Error('No rows provided');
   }
 
-  const invoiceId = rows[0].invoice;
+  const invoiceId = rows[0].invoiceId;
   for (const row of rows) {
-    if (row.invoice !== invoiceId) {
+    if (row.invoiceId !== invoiceId) {
       throw new Error('All rows must have the same Invoice');
     }
   }

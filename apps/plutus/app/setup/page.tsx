@@ -260,7 +260,7 @@ const PRODUCT_EXPENSES_ACCOUNTS = [
   { key: 'productExpenses', label: 'Product Expenses', type: 'Expense' },
 ];
 
-const LMB_ACCOUNTS = [
+const AMAZON_REVENUE_FEE_ACCOUNTS = [
   { key: 'amazonSales', label: 'Amazon Sales', type: 'Income' },
   { key: 'amazonRefunds', label: 'Amazon Refunds', type: 'Income' },
   { key: 'amazonFbaInventoryReimbursement', label: 'FBA Reimbursement', type: 'Other Income' },
@@ -271,7 +271,13 @@ const LMB_ACCOUNTS = [
   { key: 'amazonPromotions', label: 'Promotions', type: 'Cost of Goods Sold' },
 ];
 
-const ALL_ACCOUNTS = [...INVENTORY_ACCOUNTS, ...COGS_ACCOUNTS, ...WAREHOUSING_ACCOUNTS, ...PRODUCT_EXPENSES_ACCOUNTS, ...LMB_ACCOUNTS];
+const ALL_ACCOUNTS = [
+  ...INVENTORY_ACCOUNTS,
+  ...COGS_ACCOUNTS,
+  ...WAREHOUSING_ACCOUNTS,
+  ...PRODUCT_EXPENSES_ACCOUNTS,
+  ...AMAZON_REVENUE_FEE_ACCOUNTS,
+];
 
 // Sidebar
 function Sidebar({
@@ -699,7 +705,7 @@ function AccountsSection({
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-lmb-plan`, {
+      const res = await fetch(`${basePath}/api/qbo/accounts/create-plutus-qbo-plan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -894,7 +900,7 @@ function AccountsSection({
         {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
         {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
         {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
-        {renderAccountGroup('Amazon Revenue & Fees', LMB_ACCOUNTS)}
+        {renderAccountGroup('Amazon Revenue & Fees', AMAZON_REVENUE_FEE_ACCOUNTS)}
       </Box>
 
       {error && (

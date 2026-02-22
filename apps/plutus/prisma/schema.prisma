@@ -65,7 +65,7 @@ model SetupConfig {
   warehousingAmazonFc String?
   warehousingAwd      String?
   
-  // LMB Revenue/Fee accounts
+  // Amazon revenue/fee accounts
   amazonSales                      String?
   amazonRefunds                    String?
   amazonFbaInventoryReimbursement  String?
@@ -106,14 +106,17 @@ model SettlementPostingConfig {
   /// Maps settlement memo strings to QBO account ids.
   accountIdByMemo Json @db.JsonB
 
+  /// Maps settlement memo strings to QBO tax code ids (or null when explicitly not applicable).
+  taxCodeIdByMemo Json? @db.JsonB
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([marketplace])
 }
 
-/// AuditDataUpload tracks a single LMB Audit Data CSV upload.
-/// One CSV may contain rows for multiple settlements (Invoice groups).
+/// AuditDataUpload tracks a single transaction/audit data import.
+/// One import may contain rows for multiple settlements (invoice groups).
 model AuditDataUpload {
   id        String   @id @default(cuid())
   filename  String
@@ -124,8 +127,8 @@ model AuditDataUpload {
   rows AuditDataRow[]
 }
 
-/// AuditDataRow stores a single parsed row from an LMB Audit Data CSV.
-/// Rows are grouped by invoiceId which maps to one LMB settlement.
+/// AuditDataRow stores a single transaction row used for settlement processing.
+/// Rows are grouped by invoiceId which maps to one settlement doc number (e.g. US-... or UK-...).
 model AuditDataRow {
   id        String   @id @default(cuid())
 
@@ -146,15 +149,15 @@ model AuditDataRow {
   @@index([uploadId, invoiceId])
 }
 
-/// SettlementProcessing tracks Plutus processing for a single LMB settlement invoice group.
+/// SettlementProcessing tracks Plutus processing for a single settlement invoice group.
 /// Used for idempotency, history, and settlement list status.
 model SettlementProcessing {
   id String @id @default(cuid())
 
   marketplace              String // e.g., "amazon.com", "amazon.co.uk"
   qboSettlementJournalEntryId String
-  lmbDocNumber             String
-  lmbPostedDate            DateTime
+  settlementDocNumber      String
+  settlementPostedDate     DateTime
 
   invoiceId       String
   processingHash  String
@@ -185,8 +188,8 @@ model SettlementRollback {
 
   marketplace                String
   qboSettlementJournalEntryId String
-  lmbDocNumber               String
-  lmbPostedDate              DateTime
+  settlementDocNumber        String
+  settlementPostedDate       DateTime
 
   invoiceId      String
   processingHash String

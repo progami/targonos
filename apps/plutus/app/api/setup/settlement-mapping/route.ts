@@ -5,21 +5,33 @@ import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
 
-const UsSettlementMappingSchema = z.object({
+const SettlementMappingSchema = z.object({
   usSettlementBankAccountId: z.string().nullable().optional(),
   usSettlementPaymentAccountId: z.string().nullable().optional(),
   usSettlementAccountIdByMemo: z.record(z.string(), z.string()).optional(),
+  usSettlementTaxCodeIdByMemo: z.record(z.string(), z.string().nullable()).optional(),
+  ukSettlementBankAccountId: z.string().nullable().optional(),
+  ukSettlementPaymentAccountId: z.string().nullable().optional(),
+  ukSettlementAccountIdByMemo: z.record(z.string(), z.string()).optional(),
+  ukSettlementTaxCodeIdByMemo: z.record(z.string(), z.string().nullable()).optional(),
 });
 
 export async function GET() {
   try {
-    const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
-    const memoMapping = config?.accountIdByMemo;
+    const [usConfig, ukConfig] = await Promise.all([
+      db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } }),
+      db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.co.uk' } }),
+    ]);
 
     return NextResponse.json({
-      usSettlementBankAccountId: config?.bankAccountId ?? null,
-      usSettlementPaymentAccountId: config?.paymentAccountId ?? null,
-      usSettlementAccountIdByMemo: typeof memoMapping === 'object' && memoMapping !== null ? memoMapping : {},
+      usSettlementBankAccountId: usConfig?.bankAccountId ?? null,
+      usSettlementPaymentAccountId: usConfig?.paymentAccountId ?? null,
+      usSettlementAccountIdByMemo: typeof usConfig?.accountIdByMemo === 'object' && usConfig.accountIdByMemo !== null ? usConfig.accountIdByMemo : {},
+      usSettlementTaxCodeIdByMemo: typeof usConfig?.taxCodeIdByMemo === 'object' && usConfig.taxCodeIdByMemo !== null ? usConfig.taxCodeIdByMemo : {},
+      ukSettlementBankAccountId: ukConfig?.bankAccountId ?? null,
+      ukSettlementPaymentAccountId: ukConfig?.paymentAccountId ?? null,
+      ukSettlementAccountIdByMemo: typeof ukConfig?.accountIdByMemo === 'object' && ukConfig.accountIdByMemo !== null ? ukConfig.accountIdByMemo : {},
+      ukSettlementTaxCodeIdByMemo: typeof ukConfig?.taxCodeIdByMemo === 'object' && ukConfig.taxCodeIdByMemo !== null ? ukConfig.taxCodeIdByMemo : {},
     });
   } catch (error) {
     console.error('Failed to fetch settlement mapping:', error);
@@ -30,39 +42,104 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const parsed = UsSettlementMappingSchema.parse(body);
+    const parsed = SettlementMappingSchema.parse(body);
 
-    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+    const [existingUs, existingUk] = await Promise.all([
+      db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } }),
+      db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.co.uk' } }),
+    ]);
 
-    const nextBank =
+    const writeUs =
+      existingUs !== null ||
+      parsed.usSettlementBankAccountId !== undefined ||
+      parsed.usSettlementPaymentAccountId !== undefined ||
+      parsed.usSettlementAccountIdByMemo !== undefined ||
+      parsed.usSettlementTaxCodeIdByMemo !== undefined;
+
+    const writeUk =
+      existingUk !== null ||
+      parsed.ukSettlementBankAccountId !== undefined ||
+      parsed.ukSettlementPaymentAccountId !== undefined ||
+      parsed.ukSettlementAccountIdByMemo !== undefined ||
+      parsed.ukSettlementTaxCodeIdByMemo !== undefined;
+
+    const nextUsBank =
       parsed.usSettlementBankAccountId === undefined
-        ? existing?.bankAccountId ?? null
+        ? existingUs?.bankAccountId ?? null
         : parsed.usSettlementBankAccountId;
 
-    const nextPayment =
+    const nextUsPayment =
       parsed.usSettlementPaymentAccountId === undefined
-        ? existing?.paymentAccountId ?? null
+        ? existingUs?.paymentAccountId ?? null
         : parsed.usSettlementPaymentAccountId;
 
-    const nextMemoMapping =
+    const nextUsMemoMapping =
       parsed.usSettlementAccountIdByMemo === undefined
-        ? existing?.accountIdByMemo ?? {}
+        ? existingUs?.accountIdByMemo ?? {}
         : parsed.usSettlementAccountIdByMemo;
 
-    await db.settlementPostingConfig.upsert({
-      where: { marketplace: 'amazon.com' },
-      update: {
-        bankAccountId: nextBank,
-        paymentAccountId: nextPayment,
-        accountIdByMemo: nextMemoMapping,
-      },
-      create: {
-        marketplace: 'amazon.com',
-        bankAccountId: nextBank,
-        paymentAccountId: nextPayment,
-        accountIdByMemo: nextMemoMapping,
-      },
-    });
+    const nextUsTaxMapping =
+      parsed.usSettlementTaxCodeIdByMemo === undefined
+        ? existingUs?.taxCodeIdByMemo ?? {}
+        : parsed.usSettlementTaxCodeIdByMemo;
+
+    const nextUkBank =
+      parsed.ukSettlementBankAccountId === undefined
+        ? existingUk?.bankAccountId ?? null
+        : parsed.ukSettlementBankAccountId;
+
+    const nextUkPayment =
+      parsed.ukSettlementPaymentAccountId === undefined
+        ? existingUk?.paymentAccountId ?? null
+        : parsed.ukSettlementPaymentAccountId;
+
+    const nextUkMemoMapping =
+      parsed.ukSettlementAccountIdByMemo === undefined
+        ? existingUk?.accountIdByMemo ?? {}
+        : parsed.ukSettlementAccountIdByMemo;
+
+    const nextUkTaxMapping =
+      parsed.ukSettlementTaxCodeIdByMemo === undefined
+        ? existingUk?.taxCodeIdByMemo ?? {}
+        : parsed.ukSettlementTaxCodeIdByMemo;
+
+    if (writeUs) {
+      await db.settlementPostingConfig.upsert({
+        where: { marketplace: 'amazon.com' },
+        update: {
+          bankAccountId: nextUsBank,
+          paymentAccountId: nextUsPayment,
+          accountIdByMemo: nextUsMemoMapping,
+          taxCodeIdByMemo: nextUsTaxMapping,
+        },
+        create: {
+          marketplace: 'amazon.com',
+          bankAccountId: nextUsBank,
+          paymentAccountId: nextUsPayment,
+          accountIdByMemo: nextUsMemoMapping,
+          taxCodeIdByMemo: nextUsTaxMapping,
+        },
+      });
+    }
+
+    if (writeUk) {
+      await db.settlementPostingConfig.upsert({
+        where: { marketplace: 'amazon.co.uk' },
+        update: {
+          bankAccountId: nextUkBank,
+          paymentAccountId: nextUkPayment,
+          accountIdByMemo: nextUkMemoMapping,
+          taxCodeIdByMemo: nextUkTaxMapping,
+        },
+        create: {
+          marketplace: 'amazon.co.uk',
+          bankAccountId: nextUkBank,
+          paymentAccountId: nextUkPayment,
+          accountIdByMemo: nextUkMemoMapping,
+          taxCodeIdByMemo: nextUkTaxMapping,
+        },
+      });
+    }
 
     const user = await getCurrentUser();
     await logAudit({
@@ -71,7 +148,10 @@ export async function POST(request: NextRequest) {
       action: 'CONFIG_UPDATED',
       entityType: 'SettlementPostingConfig',
       details: {
-        usSettlementMemoMappings: Object.keys(nextMemoMapping ?? {}).length,
+        ...(writeUs ? { usSettlementMemoMappings: Object.keys(nextUsMemoMapping ?? {}).length } : {}),
+        ...(writeUs ? { usSettlementTaxMemoMappings: Object.keys(nextUsTaxMapping ?? {}).length } : {}),
+        ...(writeUk ? { ukSettlementMemoMappings: Object.keys(nextUkMemoMapping ?? {}).length } : {}),
+        ...(writeUk ? { ukSettlementTaxMemoMappings: Object.keys(nextUkTaxMapping ?? {}).length } : {}),
       },
     });
 

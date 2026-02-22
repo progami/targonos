@@ -27,15 +27,6 @@ const AMAZON_DUPLICATE_ACCOUNTS = [
   'Amazon Sales Tax Collected',
 ] as const;
 
-const LMB_PNL_DUPLICATE_ACCOUNTS = [
-  'Amazon Sales (LMB)',
-  'Amazon Refunds (LMB)',
-  'Amazon Seller Fees (LMB)',
-  'Amazon FBA Fees (LMB)',
-  'Amazon Storage Fees (LMB)',
-  'Amazon Advertising Costs (LMB)',
-] as const;
-
 type QboConnection = {
   realmId: string;
   accessToken: string;
@@ -50,8 +41,7 @@ function printUsage(): void {
   console.log('  connection:show');
   console.log('  accounts:deactivate <name...>');
   console.log('  accounts:deactivate-amazon-duplicates');
-  console.log('  accounts:deactivate-lmb-pnl-duplicates');
-  console.log('  accounts:create-plutus-qbo-lmb-plan');
+  console.log('  accounts:create-plutus-qbo-plan');
   console.log('');
 }
 
@@ -144,14 +134,6 @@ async function deactivateAmazonDuplicateAccounts(): Promise<void> {
   await deactivateAccountsByName([...AMAZON_DUPLICATE_ACCOUNTS], { dryRun: false });
 }
 
-async function deactivateLmbPnlDuplicateAccounts(): Promise<void> {
-  await deactivateAccountsByName([...LMB_PNL_DUPLICATE_ACCOUNTS], { dryRun: false });
-}
-
-async function deactivateLmbPnlDuplicateAccountsDryRun(): Promise<void> {
-  await deactivateAccountsByName([...LMB_PNL_DUPLICATE_ACCOUNTS], { dryRun: true });
-}
-
 async function deactivateAccountsByName(
   accountNames: string[],
   options: { dryRun: boolean },
@@ -206,7 +188,7 @@ type AccountPlanSpec = {
   parentFullyQualifiedName?: string;
 };
 
-const PLUTUS_QBO_LMB_PLAN_ACCOUNTS: AccountPlanSpec[] = [
+const PLUTUS_QBO_PLAN_ACCOUNTS: AccountPlanSpec[] = [
   {
     name: 'Mfg Accessories',
     accountType: 'Cost of Goods Sold',
@@ -505,7 +487,7 @@ function getPlannedFullyQualifiedName(spec: AccountPlanSpec): string {
   return spec.name;
 }
 
-async function createPlutusQboLmbPlanAccounts(): Promise<void> {
+async function createPlutusQboPlanAccounts(): Promise<void> {
   let connection = await requireServerConnection();
 
   const { fetchAccountsByFullyQualifiedName, createAccount } = await import('@/lib/qbo/api');
@@ -536,7 +518,7 @@ async function createPlutusQboLmbPlanAccounts(): Promise<void> {
 
   const results: Array<{ action: 'created' | 'skipped'; fullyQualifiedName: string; id?: string }> = [];
 
-  for (const spec of PLUTUS_QBO_LMB_PLAN_ACCOUNTS) {
+  for (const spec of PLUTUS_QBO_PLAN_ACCOUNTS) {
     const fullyQualifiedName = getPlannedFullyQualifiedName(spec);
     const existingResult = await fetchAccountsByFullyQualifiedName(connection, fullyQualifiedName);
     if (existingResult.updatedConnection) {
@@ -609,20 +591,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === 'accounts:deactivate-lmb-pnl-duplicates') {
-    await deactivateLmbPnlDuplicateAccountsDryRun();
-
-    if (process.env.CONFIRM !== '1') {
-      console.log('Dry run complete. Re-run with CONFIRM=1 to deactivate.');
-      return;
-    }
-
-    await deactivateLmbPnlDuplicateAccounts();
-    return;
-  }
-
-  if (command === 'accounts:create-plutus-qbo-lmb-plan') {
-    await createPlutusQboLmbPlanAccounts();
+  if (command === 'accounts:create-plutus-qbo-plan') {
+    await createPlutusQboPlanAccounts();
     return;
   }
 
