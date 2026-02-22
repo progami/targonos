@@ -1,17 +1,69 @@
-import { db } from '@/lib/db';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { fromCents } from '@/lib/inventory/money';
 import { isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
-import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { computeProcessingHash } from '@/lib/plutus/settlement-validation';
 import { deleteJournalEntry, fetchJournalEntries, QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+
+type DbClient = typeof import('@/lib/db').db;
 
 type CliOptions = {
   marketplace: 'amazon.com' | 'amazon.co.uk';
   apply: boolean;
   max: number | null;
 };
+
+function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
+  let line = rawLine.trim();
+  if (line === '') return null;
+  if (line.startsWith('#')) return null;
+
+  if (line.startsWith('export ')) {
+    line = line.slice('export '.length).trim();
+  }
+
+  const equalsIndex = line.indexOf('=');
+  if (equalsIndex === -1) return null;
+
+  const key = line.slice(0, equalsIndex).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) return null;
+
+  let value = line.slice(equalsIndex + 1).trim();
+  if (value.startsWith("'") && value.endsWith("'")) {
+    value = value.slice(1, -1);
+  }
+  if (value.startsWith('"') && value.endsWith('"')) {
+    value = value.slice(1, -1);
+  }
+
+  return { key, value };
+}
+
+async function loadEnvFile(filePath: string): Promise<void> {
+  let raw: string;
+  try {
+    raw = await fs.readFile(filePath, 'utf8');
+  } catch (error) {
+    const nodeError = error as NodeJS.ErrnoException;
+    if (nodeError.code === 'ENOENT') return;
+    throw error;
+  }
+
+  for (const line of raw.split(/\r?\n/)) {
+    const parsed = parseDotenvLine(line);
+    if (!parsed) continue;
+    process.env[parsed.key] = parsed.value;
+  }
+}
+
+async function loadPlutusEnv(): Promise<void> {
+  const cwd = process.cwd();
+  await loadEnvFile(path.join(cwd, '.env.local'));
+  await loadEnvFile(path.join(cwd, '.env'));
+}
 
 function parseArgs(argv: string[]): CliOptions {
   let marketplace: CliOptions['marketplace'] = 'amazon.com';
@@ -130,20 +182,39 @@ async function findInvoiceJournalEntryIds(input: {
 }
 
 async function loadAuditRowsFromDb(input: {
+  db: DbClient;
   invoiceId: string;
   marketplace: CliOptions['marketplace'];
+  sourceFilename: string;
+  processedAt: Date;
 }): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string }> {
   const market = inferMarketCode(input.marketplace);
-  const dbRows = await db.auditDataRow.findMany({
+
+  const uploads = await input.db.auditDataUpload.findMany({
+    where: { filename: input.sourceFilename },
+    orderBy: { uploadedAt: 'desc' },
+    select: { id: true, filename: true, uploadedAt: true },
+  });
+
+  const chosen = uploads.find((u) => u.uploadedAt <= input.processedAt) ?? null;
+  if (!chosen) {
+    throw new Error(
+      `No audit upload found for ${input.invoiceId} (${input.marketplace}) with filename=${input.sourceFilename} at or before ${input.processedAt.toISOString()}`,
+    );
+  }
+
+  const dbRows = await input.db.auditDataRow.findMany({
     where: {
+      uploadId: chosen.id,
       invoiceId: input.invoiceId,
       market: { equals: market, mode: 'insensitive' },
     },
-    include: { upload: { select: { filename: true } } },
   });
 
   if (dbRows.length === 0) {
-    throw new Error(`No stored audit rows found for invoice ${input.invoiceId} (${input.marketplace})`);
+    throw new Error(
+      `No stored audit rows found for invoice ${input.invoiceId} (${input.marketplace}) in upload ${chosen.id} (${chosen.filename})`,
+    );
   }
 
   const rows: SettlementAuditRow[] = dbRows.map((r) => ({
@@ -157,12 +228,14 @@ async function loadAuditRowsFromDb(input: {
     net: fromCents(r.net),
   }));
 
-  const sourceFilename = dbRows[0]!.upload.filename;
-  return { rows, sourceFilename };
+  return { rows, sourceFilename: chosen.filename };
 }
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  await loadPlutusEnv();
+
+  const { db } = await import('@/lib/db');
 
   const connection = await getQboConnection();
   if (!connection) {
@@ -200,7 +273,13 @@ async function main(): Promise<void> {
   }> = [];
 
   for (const processing of processings) {
-    const audit = await loadAuditRowsFromDb({ invoiceId: processing.invoiceId, marketplace: options.marketplace });
+    const audit = await loadAuditRowsFromDb({
+      db,
+      invoiceId: processing.invoiceId,
+      marketplace: options.marketplace,
+      sourceFilename: processing.sourceFilename,
+      processedAt: processing.uploadedAt,
+    });
     const hash = computeProcessingHash(audit.rows);
     if (hash !== processing.processingHash) {
       conflicts.push({
@@ -219,6 +298,8 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ options, totals: { processed: processings.length, conflicts: conflicts.length }, conflicts }, null, 2));
     return;
   }
+
+  const { processSettlement } = await import('@/lib/plutus/settlement-processing');
 
   const toFix = options.max === null ? conflicts : conflicts.slice(0, options.max);
   for (const conflict of toFix) {
@@ -242,7 +323,13 @@ async function main(): Promise<void> {
       throw new Error(`SettlementProcessing not found: ${conflict.settlementProcessingId}`);
     }
 
-    const audit = await loadAuditRowsFromDb({ invoiceId: existing.invoiceId, marketplace: options.marketplace });
+    const audit = await loadAuditRowsFromDb({
+      db,
+      invoiceId: existing.invoiceId,
+      marketplace: options.marketplace,
+      sourceFilename: existing.sourceFilename,
+      processedAt: existing.uploadedAt,
+    });
     const actualHash = computeProcessingHash(audit.rows);
     if (actualHash === existing.processingHash) {
       continue;

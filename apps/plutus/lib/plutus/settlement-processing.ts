@@ -294,6 +294,7 @@ export async function computeSettlementPreview(input: {
     where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
   });
   const skipOrderIdempotencyChecks = existingSettlement !== null;
+  const excludeSettlementProcessingId = existingSettlement ? existingSettlement.id : null;
   if (existingSettlement) {
     blocks.push({
       code: 'ALREADY_PROCESSED',
@@ -724,6 +725,9 @@ export async function computeSettlementPreview(input: {
     const refundSaleRecords = await db.orderSale.findMany({
       where: {
         marketplace,
+        ...(excludeSettlementProcessingId
+          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
+          : {}),
         OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
       },
     });
@@ -734,6 +738,9 @@ export async function computeSettlementPreview(input: {
     const existingReturns = await db.orderReturn.findMany({
       where: {
         marketplace,
+        ...(excludeSettlementProcessingId
+          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
+          : {}),
         OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
       },
     });
@@ -769,12 +776,18 @@ export async function computeSettlementPreview(input: {
       where: {
         marketplace,
         saleDate: { lte: maxDateObj },
+        ...(excludeSettlementProcessingId
+          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
+          : {}),
       },
     });
     const knownReturnRecords = await db.orderReturn.findMany({
       where: {
         marketplace,
         returnDate: { lte: maxDateObj },
+        ...(excludeSettlementProcessingId
+          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
+          : {}),
       },
     });
 
