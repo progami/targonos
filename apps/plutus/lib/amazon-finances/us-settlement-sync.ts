@@ -134,49 +134,49 @@ async function findExistingJournalEntryIdByDocNumber(
   return { journalEntryId: exact.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
-function requireMemoAccountMapping(value: unknown): Record<string, string> {
+type MemoMappingEntry = { accountId: string; taxCodeId: string | null };
+
+function requireMemoMapping(value: unknown): Record<string, MemoMappingEntry> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('US settlement memo mapping must be an object');
   }
 
   const obj = value as Record<string, unknown>;
-  const result: Record<string, string> = {};
+  const result: Record<string, MemoMappingEntry> = {};
 
-  for (const [memo, accountIdRaw] of Object.entries(obj)) {
+  for (const [memo, raw] of Object.entries(obj)) {
+    if (typeof raw === 'string') {
+      const accountId = raw.trim();
+      if (accountId === '') {
+        throw new Error(`Invalid account id for memo mapping: ${memo}`);
+      }
+      result[memo] = { accountId, taxCodeId: null };
+      continue;
+    }
+
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      throw new Error(`Invalid memo mapping entry: ${memo}`);
+    }
+
+    const entry = raw as Record<string, unknown>;
+    const accountIdRaw = entry.accountId;
     if (typeof accountIdRaw !== 'string' || accountIdRaw.trim() === '') {
       throw new Error(`Invalid account id for memo mapping: ${memo}`);
     }
-    result[memo] = accountIdRaw;
-  }
+    const accountId = accountIdRaw.trim();
 
-  return result;
-}
-
-function requireMemoTaxMapping(value: unknown): Record<string, string | null> {
-  if (value === null || value === undefined) {
-    return {};
-  }
-
-  if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('US settlement tax mapping must be an object');
-  }
-
-  const obj = value as Record<string, unknown>;
-  const result: Record<string, string | null> = {};
-
-  for (const [memo, taxCodeRaw] of Object.entries(obj)) {
-    if (taxCodeRaw === null) {
-      result[memo] = null;
-      continue;
-    }
-    if (typeof taxCodeRaw !== 'string') {
+    const taxRaw = entry.taxCodeId;
+    let taxCodeId: string | null = null;
+    if (taxRaw === null || taxRaw === undefined) {
+      taxCodeId = null;
+    } else if (typeof taxRaw === 'string') {
+      const trimmed = taxRaw.trim();
+      taxCodeId = trimmed === '' ? null : trimmed;
+    } else {
       throw new Error(`Invalid tax code id for memo mapping: ${memo}`);
     }
-    const trimmed = taxCodeRaw.trim();
-    if (trimmed === '') {
-      throw new Error(`Invalid tax code id for memo mapping: ${memo}`);
-    }
-    result[memo] = trimmed;
+
+    result[memo] = { accountId, taxCodeId };
   }
 
   return result;
@@ -200,11 +200,13 @@ async function loadUsSettlementPostingMapping(input: {
   const bankAccountId = config.bankAccountId ? config.bankAccountId.trim() : '';
   const paymentAccountId = config.paymentAccountId ? config.paymentAccountId.trim() : '';
 
-  const memoMapping = requireMemoAccountMapping(config.accountIdByMemo);
-  const accountIdByMemo = new Map<string, string>(Object.entries(memoMapping));
-
-  const taxMapping = requireMemoTaxMapping(config.taxCodeIdByMemo);
-  const taxCodeIdByMemo = new Map<string, string | null>(Object.entries(taxMapping));
+  const memoMapping = requireMemoMapping(config.accountIdByMemo);
+  const accountIdByMemo = new Map<string, string>();
+  const taxCodeIdByMemo = new Map<string, string | null>();
+  for (const [memo, entry] of Object.entries(memoMapping)) {
+    accountIdByMemo.set(memo, entry.accountId);
+    taxCodeIdByMemo.set(memo, entry.taxCodeId);
+  }
 
   const missingMemos = Array.from(input.requiredMemos).filter((memo) => !accountIdByMemo.has(memo)).sort();
   if (missingMemos.length > 0) {

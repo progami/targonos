@@ -106,9 +106,6 @@ model SettlementPostingConfig {
   /// Maps settlement memo strings to QBO account ids.
   accountIdByMemo Json @db.JsonB
 
-  /// Maps settlement memo strings to QBO tax code ids (or null when explicitly not applicable).
-  taxCodeIdByMemo Json? @db.JsonB
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
