@@ -88,7 +88,10 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 ## Authentication model (Portal as the source of truth)
 
 - The portal (`apps/sso`) is the canonical NextAuth app; other apps validate the portal session.
-- Cookie domain is shared (`COOKIE_DOMAIN=.targonglobal.com`) so a user signs in once and can use multiple apps.
+- Cookie domain is shared **per environment** so a user signs in once and can use multiple apps:
+  - Main: `COOKIE_DOMAIN=.os.targonglobal.com`
+  - Dev: `COOKIE_DOMAIN=.dev-os.targonglobal.com`
+  - Avoid `.targonglobal.com` here or dev/main will overwrite each other’s sessions in the same browser.
 - Shared secret: `PORTAL_AUTH_SECRET` (and/or `NEXTAUTH_SECRET`) must match across apps.
 - Reverse proxy support: nginx forwards `X-Forwarded-Host` / `X-Forwarded-Proto`; NextAuth v5 requires `AUTH_TRUST_HOST=true` behind a proxy.
 - The shared library `@targon/auth` includes helpers for consistent cookie naming and session checks (JWT decode + portal `/api/auth/session` probe).
@@ -344,4 +347,4 @@ scripts/install-cloudflared-watchdog-macos.sh
 
 - `502 Bad Gateway`: check nginx (`brew services list`) and the target PM2 process (`pm2 status`, `pm2 logs <name>`).
 - NextAuth `UntrustedHost`: set `AUTH_TRUST_HOST=true` and ensure nginx forwards `X-Forwarded-*` headers.
-- Cookies not shared across apps: ensure `COOKIE_DOMAIN=.targonglobal.com` and that all apps share `PORTAL_AUTH_SECRET`.
+- Cookies not shared across apps: ensure `COOKIE_DOMAIN` matches the portal environment scope (`.os.targonglobal.com` for main, `.dev-os.targonglobal.com` for dev) and that all apps share `PORTAL_AUTH_SECRET`.

@@ -6,7 +6,7 @@ Portal-managed authentication and app launcher for all TargonOS apps.
 Goals
 -----
 
-- Single sign-on across `*.targonglobal.com` subdomains
+- Single sign-on across apps within an environment (`*.os.targonglobal.com` for main, `*.dev-os.targonglobal.com` for dev)
 - One login page at `https://os.targonglobal.com/login`
 - Show a per-user app catalog with deep links
 - Issue a secure, httpOnly, domain-scoped NextAuth session cookie
@@ -15,7 +15,7 @@ How it works
 ------------
 
 - NextAuth (JWT sessions) runs only in this app.
-- Session cookie name: `__Secure-next-auth.session-token` (prod) scoped to domain `.targonglobal.com`.
+- Session cookie name: `__Secure-next-auth.session-token` (prod) scoped to the environment domain (`.os.targonglobal.com` for main, `.dev-os.targonglobal.com` for dev).
 - Other apps verify the cookie with `next-auth/jwt` in their middleware and do not render their own login.
 - Google OAuth handles primary authentication; any verified `@targonglobal.com` account can complete sign-in.
 - On first successful sign-in, the portal upserts a corresponding portal user record.
@@ -26,7 +26,7 @@ Environment
 -----------
 
 - NEXTAUTH_SECRET: strong secret shared by all apps (required)
-- COOKIE_DOMAIN: `.targonglobal.com`
+- COOKIE_DOMAIN: `.os.targonglobal.com` (main) / `.dev-os.targonglobal.com` (dev)
 - NEXTAUTH_URL: `https://os.targonglobal.com`
 - PORTAL_DB_URL: `postgresql://portal_auth:***@localhost:5432/portal_db?schema=auth`
 - GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET: OAuth credentials from the Google Cloud console
