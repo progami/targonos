@@ -160,6 +160,76 @@ function summarizeLedgerBlocks(blocks: LedgerBlock[]): LedgerBlock[] {
   return result;
 }
 
+function summarizeRefundAdjustmentBlocks(blocks: ProcessingBlock[]): ProcessingBlock[] {
+  const matching = blocks.filter((block) => block.code === 'REFUND_ADJUSTMENT');
+  const threshold = 10;
+  if (matching.length <= threshold) {
+    return blocks;
+  }
+
+  const countBySku = new Map<string, number>();
+  const uniqueKeys = new Set<string>();
+  const examples: string[] = [];
+
+  for (const block of matching) {
+    const details = block.details;
+    const skuValue = details ? details.sku : undefined;
+    const sku = typeof skuValue === 'string' ? skuValue : '';
+    if (sku !== '') {
+      const current = countBySku.get(sku);
+      countBySku.set(sku, (current === undefined ? 0 : current) + 1);
+    }
+
+    const orderIdValue = details ? details.orderId : undefined;
+    const orderId = typeof orderIdValue === 'string' ? orderIdValue : '';
+    const key = orderId !== '' && sku !== '' ? `${orderId}::${sku}` : '';
+    if (key !== '' && !uniqueKeys.has(key)) {
+      uniqueKeys.add(key);
+      if (examples.length < 10) {
+        examples.push(key);
+      }
+    }
+  }
+
+  const skuBreakdown = Array.from(countBySku.entries())
+    .sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, 8)
+    .map(([sku, count]) => `${sku}=${count}`)
+    .join(', ');
+
+  const exampleList = examples.length === 0 ? '' : examples.join(', ');
+
+  const summaryBlock: ProcessingBlock = {
+    code: 'REFUND_ADJUSTMENT',
+    message: `Refund exceeds remaining sale quantity for ${matching.length} order lines; treated as a financial adjustment (no additional inventory return)`,
+    details: {
+      count: matching.length,
+      uniqueOrderSkuPairs: uniqueKeys.size,
+      ...(skuBreakdown !== '' ? { skuBreakdown } : {}),
+      ...(exampleList !== '' ? { examples: exampleList } : {}),
+    },
+  };
+
+  const summarized: ProcessingBlock[] = [];
+  let insertedSummary = false;
+  for (const block of blocks) {
+    if (block.code !== 'REFUND_ADJUSTMENT') {
+      summarized.push(block);
+      continue;
+    }
+
+    if (!insertedSummary) {
+      summarized.push(summaryBlock);
+      insertedSummary = true;
+    }
+  }
+
+  return summarized;
+}
+
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
@@ -911,6 +981,8 @@ export async function computeSettlementPreview(input: {
     lines: pnlLines,
   };
 
+  const summarizedBlocks = summarizeRefundAdjustmentBlocks(blocks);
+
   const preview: SettlementProcessingPreview = {
     marketplace,
     settlementJournalEntryId: settlement.Id,
@@ -920,7 +992,7 @@ export async function computeSettlementPreview(input: {
     processingHash,
     minDate,
     maxDate,
-    blocks,
+    blocks: summarizedBlocks,
     sales: computedSales,
     returns: matchedReturns,
     cogsByBrandComponentCents: netCogsByBrand,

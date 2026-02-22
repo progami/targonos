@@ -30,13 +30,41 @@ type ResolvedAdsTotal = {
   adsDataUpload: AdsDataUploadSelection | null;
 };
 
+type AdsAllocationIssueCode = 'INVALID_INVOICE' | 'MISSING_UPLOAD' | 'ZERO_SPEND' | 'TOTAL_MISMATCH';
+
+type SerializedAdsDataUpload = {
+  id: string;
+  filename: string;
+  startDate: string;
+  endDate: string;
+  uploadedAt: string;
+};
+
+type UnavailableAdsAllocationResponse = {
+  kind: 'unavailable';
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  totalAdsCents: number;
+  totalSource: AdsTotalSource;
+  weightSource: string;
+  weightUnit: string;
+  adsDataUpload: SerializedAdsDataUpload | null;
+  issue: { code: Exclude<AdsAllocationIssueCode, 'INVALID_INVOICE'>; message: string };
+  lines: [];
+  skuProfitability: null;
+};
+
 class AllocationApiError extends Error {
   status: number;
+  code: AdsAllocationIssueCode;
 
-  constructor(message: string, status: number) {
+  constructor(code: AdsAllocationIssueCode, message: string, status: number) {
     super(message);
     this.name = 'AllocationApiError';
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -107,6 +135,13 @@ function chooseBestUpload<T extends { startDate: string; endDate: string; upload
   return best ? best.upload : null;
 }
 
+function serializeUpload(upload: AdsDataUploadSelection | null): SerializedAdsDataUpload | null {
+  if (!upload) {
+    return null;
+  }
+  return { ...upload, uploadedAt: upload.uploadedAt.toISOString() };
+}
+
 async function loadInvoiceDateRange(input: { invoiceId: string; marketplace: 'amazon.com' | 'amazon.co.uk' }) {
   const result = await db.auditDataRow.aggregate({
     where: {
@@ -120,7 +155,7 @@ async function loadInvoiceDateRange(input: { invoiceId: string; marketplace: 'am
   const start = result._min.date;
   const end = result._max.date;
   if (typeof start !== 'string' || typeof end !== 'string') {
-    throw new AllocationApiError(`Audit invoice not found: ${input.marketplace} ${input.invoiceId}`, 400);
+    throw new AllocationApiError('INVALID_INVOICE', `Audit invoice not found: ${input.marketplace} ${input.invoiceId}`, 400);
   }
 
   return { startDate: start, endDate: end };
@@ -216,6 +251,7 @@ async function requireCoveringUpload(input: {
 
   if (!upload) {
     throw new AllocationApiError(
+      'MISSING_UPLOAD',
       `No Ads Data upload fully covers ${input.marketplace} ${input.invoiceId} (${input.invoiceStartDate}–${input.invoiceEndDate}). Upload a Sponsored Products report that covers the full invoice range.`,
       400,
     );
@@ -270,13 +306,18 @@ async function computeAllocation(input: {
   let totalWeight = 0;
   for (const w of weights) totalWeight += w.weight;
   if (totalWeight <= 0) {
-    throw new AllocationApiError(`Ads report has zero spend for ${input.invoiceStartDate}–${input.invoiceEndDate}`, 400);
+    throw new AllocationApiError(
+      'ZERO_SPEND',
+      `Ads report has zero spend for ${input.invoiceStartDate}–${input.invoiceEndDate}`,
+      400,
+    );
   }
 
   const sign = input.totalAdsCents < 0 ? -1 : 1;
   const absTotal = Math.abs(input.totalAdsCents);
   if (totalWeight !== absTotal) {
     throw new AllocationApiError(
+      'TOTAL_MISMATCH',
       `Ads Data total (${formatCentsAmount(totalWeight)}) does not match billed Amazon Advertising Costs (${formatCentsAmount(absTotal)}) for invoice ${input.invoiceId}. Upload data that matches billing exactly.`,
       400,
     );
@@ -393,14 +434,37 @@ export async function GET(req: NextRequest, context: RouteContext) {
         invoiceEndDate: invoiceRange.endDate,
       });
 
-      const computed = await computeAllocation({
-        marketplace,
-        invoiceId,
-        invoiceStartDate: invoiceRange.startDate,
-        invoiceEndDate: invoiceRange.endDate,
-        totalAdsCents: resolvedTotal.totalAdsCents,
-        adsDataUpload: resolvedTotal.adsDataUpload,
-      });
+      let computed;
+      try {
+        computed = await computeAllocation({
+          marketplace,
+          invoiceId,
+          invoiceStartDate: invoiceRange.startDate,
+          invoiceEndDate: invoiceRange.endDate,
+          totalAdsCents: resolvedTotal.totalAdsCents,
+          adsDataUpload: resolvedTotal.adsDataUpload,
+        });
+      } catch (error) {
+        if (error instanceof AllocationApiError && error.code !== 'INVALID_INVOICE') {
+          const unavailable: UnavailableAdsAllocationResponse = {
+            kind: 'unavailable',
+            marketplace,
+            invoiceId,
+            invoiceStartDate: invoiceRange.startDate,
+            invoiceEndDate: invoiceRange.endDate,
+            totalAdsCents: resolvedTotal.totalAdsCents,
+            totalSource: resolvedTotal.totalSource,
+            weightSource: WEIGHT_SOURCE,
+            weightUnit: WEIGHT_UNIT,
+            adsDataUpload: serializeUpload(resolvedTotal.adsDataUpload),
+            issue: { code: error.code, message: error.message },
+            lines: [],
+            skuProfitability: null,
+          };
+          return NextResponse.json(unavailable);
+        }
+        throw error;
+      }
 
       return NextResponse.json({
         kind: 'computed',
@@ -412,12 +476,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         totalSource: resolvedTotal.totalSource,
         weightSource: WEIGHT_SOURCE,
         weightUnit: WEIGHT_UNIT,
-        adsDataUpload: computed.adsDataUpload
-          ? {
-              ...computed.adsDataUpload,
-              uploadedAt: computed.adsDataUpload.uploadedAt.toISOString(),
-            }
-          : null,
+        adsDataUpload: serializeUpload(computed.adsDataUpload),
         lines: computed.lines,
         skuProfitability: null,
       });
@@ -470,12 +529,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       lines = existing.lines
         .map((l) => ({ sku: l.sku, weight: l.weight, allocatedCents: l.allocatedCents }))
         .sort((a, b) => a.sku.localeCompare(b.sku));
-      adsDataUpload = existing.adsDataUpload
-        ? {
-            ...existing.adsDataUpload,
-            uploadedAt: existing.adsDataUpload.uploadedAt.toISOString(),
-          }
-        : null;
+      adsDataUpload = existing.adsDataUpload ? serializeUpload(existing.adsDataUpload) : null;
     } else {
       kind = 'computed';
       totalAdsCents = resolvedTotal.totalAdsCents;
@@ -483,22 +537,40 @@ export async function GET(req: NextRequest, context: RouteContext) {
       weightSource = WEIGHT_SOURCE;
       weightUnit = WEIGHT_UNIT;
 
-      const computed = await computeAllocation({
-        marketplace,
-        invoiceId,
-        invoiceStartDate: invoiceRange.startDate,
-        invoiceEndDate: invoiceRange.endDate,
-        totalAdsCents,
-        adsDataUpload: resolvedTotal.adsDataUpload,
-      });
+      let computed;
+      try {
+        computed = await computeAllocation({
+          marketplace,
+          invoiceId,
+          invoiceStartDate: invoiceRange.startDate,
+          invoiceEndDate: invoiceRange.endDate,
+          totalAdsCents,
+          adsDataUpload: resolvedTotal.adsDataUpload,
+        });
+      } catch (error) {
+        if (error instanceof AllocationApiError && error.code !== 'INVALID_INVOICE') {
+          const unavailable: UnavailableAdsAllocationResponse = {
+            kind: 'unavailable',
+            marketplace,
+            invoiceId,
+            invoiceStartDate: invoiceRange.startDate,
+            invoiceEndDate: invoiceRange.endDate,
+            totalAdsCents,
+            totalSource,
+            weightSource,
+            weightUnit,
+            adsDataUpload: serializeUpload(resolvedTotal.adsDataUpload),
+            issue: { code: error.code, message: error.message },
+            lines: [],
+            skuProfitability: null,
+          };
+          return NextResponse.json(unavailable);
+        }
+        throw error;
+      }
 
       lines = computed.lines;
-      adsDataUpload = computed.adsDataUpload
-        ? {
-            ...computed.adsDataUpload,
-            uploadedAt: computed.adsDataUpload.uploadedAt.toISOString(),
-          }
-        : null;
+      adsDataUpload = serializeUpload(computed.adsDataUpload);
     }
 
     const skuProfitability = await loadSettlementSkuProfitability({
