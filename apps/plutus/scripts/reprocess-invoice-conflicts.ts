@@ -4,7 +4,7 @@ import { isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { computeProcessingHash } from '@/lib/plutus/settlement-validation';
-import { deleteJournalEntry, QboAuthError } from '@/lib/qbo/api';
+import { deleteJournalEntry, fetchJournalEntries, QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type CliOptions = {
@@ -60,6 +60,73 @@ function parseArgs(argv: string[]): CliOptions {
 function inferMarketCode(marketplace: CliOptions['marketplace']): 'us' | 'uk' {
   if (marketplace === 'amazon.com') return 'us';
   return 'uk';
+}
+
+function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
+  const base = `${kind}${invoiceId}`;
+  if (base.length <= 21) return base;
+  return `${kind}${invoiceId.slice(-20)}`;
+}
+
+function isQboNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes('Object Not Found') && error.message.includes('"code":"610"');
+}
+
+async function findInvoiceJournalEntryIds(input: {
+  connection: QboConnection;
+  invoiceId: string;
+}): Promise<{
+  updatedConnection?: QboConnection;
+  settlementJournalEntryId: string | null;
+  cogsJournalEntryId: string | null;
+  pnlJournalEntryId: string | null;
+}> {
+  const query = await fetchJournalEntries(input.connection, {
+    docNumberContains: input.invoiceId,
+    maxResults: 50,
+    startPosition: 1,
+  });
+
+  const settlementDocNumber = input.invoiceId.trim();
+  const cogsDocNumber = buildProcessingDocNumber('C', settlementDocNumber);
+  const pnlDocNumber = buildProcessingDocNumber('P', settlementDocNumber);
+
+  const matches = query.journalEntries.map((je) => ({
+    id: je.Id,
+    txnDate: je.TxnDate,
+    docNumber: je.DocNumber ? je.DocNumber.trim() : '',
+    privateNote: je.PrivateNote ? je.PrivateNote : '',
+  }));
+
+  const pick = (docNumber: string): { id: string; privateNote: string } | null => {
+    const exact = matches.filter((m) => m.docNumber.toUpperCase() === docNumber.toUpperCase());
+    if (exact.length === 0) return null;
+    exact.sort((a, b) => {
+      if (a.txnDate !== b.txnDate) return b.txnDate.localeCompare(a.txnDate);
+      return b.id.localeCompare(a.id);
+    });
+    const best = exact[0]!;
+    return { id: best.id, privateNote: best.privateNote };
+  };
+
+  const settlement = pick(settlementDocNumber);
+  const cogs = pick(cogsDocNumber);
+  const pnl = pick(pnlDocNumber);
+
+  if (cogs && !cogs.privateNote.includes('Plutus')) {
+    throw new Error(`Refusing to delete COGS JE ${cogs.id} (${cogsDocNumber}) — missing Plutus private note`);
+  }
+  if (pnl && !pnl.privateNote.includes('Plutus')) {
+    throw new Error(`Refusing to delete P&L JE ${pnl.id} (${pnlDocNumber}) — missing Plutus private note`);
+  }
+
+  return {
+    updatedConnection: query.updatedConnection,
+    settlementJournalEntryId: settlement ? settlement.id : null,
+    cogsJournalEntryId: cogs ? cogs.id : null,
+    pnlJournalEntryId: pnl ? pnl.id : null,
+  };
 }
 
 async function loadAuditRowsFromDb(input: {
@@ -181,13 +248,37 @@ async function main(): Promise<void> {
       continue;
     }
 
-    if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
-      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+    const invoiceJournals = await findInvoiceJournalEntryIds({
+      connection: activeConnection,
+      invoiceId: existing.invoiceId,
+    });
+    if (invoiceJournals.updatedConnection) {
+      activeConnection = invoiceJournals.updatedConnection;
     }
-    if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
-      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+
+    const settlementJournalEntryId = invoiceJournals.settlementJournalEntryId;
+    if (!settlementJournalEntryId) {
+      throw new Error(`Missing settlement Journal Entry in QBO for invoice ${existing.invoiceId} (${options.marketplace})`);
+    }
+
+    if (invoiceJournals.cogsJournalEntryId) {
+      try {
+        const deleted = await deleteJournalEntry(activeConnection, invoiceJournals.cogsJournalEntryId);
+        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      } catch (error) {
+        if (!isQboNotFoundError(error)) throw error;
+        console.warn(`COGS Journal Entry already missing in QBO; skipping delete: ${invoiceJournals.cogsJournalEntryId}`);
+      }
+    }
+
+    if (invoiceJournals.pnlJournalEntryId) {
+      try {
+        const deleted = await deleteJournalEntry(activeConnection, invoiceJournals.pnlJournalEntryId);
+        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      } catch (error) {
+        if (!isQboNotFoundError(error)) throw error;
+        console.warn(`P&L Reclass Journal Entry already missing in QBO; skipping delete: ${invoiceJournals.pnlJournalEntryId}`);
+      }
     }
 
     await db.settlementRollback.create({
@@ -213,7 +304,7 @@ async function main(): Promise<void> {
 
     const processed = await processSettlement({
       connection: activeConnection,
-      settlementJournalEntryId: existing.qboSettlementJournalEntryId,
+      settlementJournalEntryId,
       auditRows: audit.rows,
       sourceFilename: audit.sourceFilename,
       invoiceId: existing.invoiceId,
@@ -240,4 +331,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-

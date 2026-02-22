@@ -14,6 +14,11 @@ const logger = createLogger({ name: 'plutus-settlement-detail' });
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+function isQboNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes('Object Not Found') && error.message.includes('"code":"610"');
+}
+
 export async function GET(_req: NextRequest, context: RouteContext) {
   try {
     const connection = await getQboConnection();
@@ -177,12 +182,28 @@ export async function POST(req: NextRequest, context: RouteContext) {
     // Delete the COGS + P&L reclass journal entries created by Plutus so rollback is a true undo.
     // We only delete IDs that look like QBO JournalEntry IDs (digits). NOOP ids are left alone.
     if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
-      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      try {
+        const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
+        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      } catch (error) {
+        if (!isQboNotFoundError(error)) throw error;
+        logger.warn('COGS Journal Entry already missing in QBO; skipping delete during rollback', {
+          journalEntryId: existing.qboCogsJournalEntryId,
+          settlementId,
+        });
+      }
     }
     if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
-      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      try {
+        const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
+        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+      } catch (error) {
+        if (!isQboNotFoundError(error)) throw error;
+        logger.warn('P&L Reclass Journal Entry already missing in QBO; skipping delete during rollback', {
+          journalEntryId: existing.qboPnlReclassJournalEntryId,
+          settlementId,
+        });
+      }
     }
 
     await db.settlementRollback.create({
