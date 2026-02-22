@@ -13,7 +13,6 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import ChecklistIcon from '@mui/icons-material/Checklist';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -121,13 +120,7 @@ const NAV_ITEMS: NavItem[] = [
       { href: '/chart-of-accounts', label: 'Chart of Accounts' },
     ],
   },
-  {
-    label: 'Cost Management',
-    icon: InventoryIcon,
-    items: [
-      { href: '/data-sources', label: 'Data Sources' },
-    ],
-  },
+  { href: '/data-sources', label: 'Data Sources', icon: InventoryIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -205,7 +198,6 @@ function NavDropdown({ item, pathname }: { item: Extract<NavItem, { items: any[]
 export function AppHeader() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notifAnchor, setNotifAnchor] = useState<HTMLElement | null>(null);
 
   return (
     <Box
@@ -309,35 +301,6 @@ export function AppHeader() {
           <Box sx={{ display: { xs: 'none', lg: 'block' } }}>
             <MarketplaceSelector />
           </Box>
-
-          {/* Notification bell */}
-          <IconButton
-            onClick={(e) => setNotifAnchor(e.currentTarget)}
-            size="small"
-            sx={{
-              width: 36,
-              height: 36,
-              borderRadius: 2,
-              color: 'text.secondary',
-              '&:hover': { bgcolor: 'action.hover' },
-            }}
-            aria-label="Notifications"
-          >
-            <NotificationsIcon sx={{ fontSize: 18 }} />
-          </IconButton>
-          <Menu
-            anchorEl={notifAnchor}
-            open={Boolean(notifAnchor)}
-            onClose={() => setNotifAnchor(null)}
-            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-            slotProps={{ paper: { sx: { width: 288, mt: 0.75, p: 0.5 } } }}
-          >
-            <Typography variant="caption" sx={{ display: 'block', px: 1, py: 0.75, fontWeight: 600, color: 'text.secondary' }}>
-              Notifications
-            </Typography>
-            <MenuItem disabled>No notifications</MenuItem>
-          </Menu>
 
           <Suspense fallback={<QboStatusFallback />}>
             <QboStatusIndicator />
