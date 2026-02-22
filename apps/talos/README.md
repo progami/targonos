@@ -24,7 +24,7 @@ Required:
 - `NEXTAUTH_SECRET` (or `PORTAL_AUTH_SECRET`)
 - `PORTAL_AUTH_URL`
 - `NEXT_PUBLIC_PORTAL_AUTH_URL`
-- `COOKIE_DOMAIN` (`localhost` locally, `.targonglobal.com` in shared envs)
+- `COOKIE_DOMAIN` (`localhost` locally, `.os.targonglobal.com` in main, `.dev-os.targonglobal.com` in dev)
 - `DATABASE_URL`
 - `PRISMA_SCHEMA`
 
