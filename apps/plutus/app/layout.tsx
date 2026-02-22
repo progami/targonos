@@ -67,21 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href={versionHref}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            position: 'fixed',
-            bottom: 12,
-            right: 12,
-            zIndex: 50,
-            borderRadius: 9999,
-            border: '1px solid rgba(226, 232, 240, 1)',
-            backgroundColor: 'rgba(255, 255, 255, 0.8)',
-            padding: '4px 12px',
-            fontSize: '0.75rem',
-            color: '#475569',
-            boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-            backdropFilter: 'blur(4px)',
-            textDecoration: 'none',
-          }}
+          className="plutus-version-badge"
           aria-label={`Plutus version v${version}`}
         >
           Plutus v{version}
