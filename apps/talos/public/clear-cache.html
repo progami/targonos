@@ -50,7 +50,21 @@
     <script>
         async function clearAllData() {
             const statusEl = document.getElementById('status');
-            statusEl.innerHTML = 'Clearing cache...';
+            statusEl.className = 'status';
+            statusEl.replaceChildren('Clearing cache...');
+
+            const appendLine = (text) => {
+                statusEl.appendChild(document.createElement('br'));
+                statusEl.appendChild(document.createTextNode(text));
+            };
+
+            const appendEmphasis = (text) => {
+                statusEl.appendChild(document.createElement('br'));
+                statusEl.appendChild(document.createElement('br'));
+                const strong = document.createElement('strong');
+                strong.textContent = text;
+                statusEl.appendChild(strong);
+            };
             
             try {
                 // Clear service workers
@@ -59,7 +73,7 @@
                     for (let registration of registrations) {
                         await registration.unregister();
                     }
-                    statusEl.innerHTML += '<br>✓ Service workers cleared';
+                    appendLine('✓ Service workers cleared');
                 }
                 
                 // Clear caches
@@ -68,25 +82,25 @@
                     await Promise.all(
                         cacheNames.map(cacheName => caches.delete(cacheName))
                     );
-                    statusEl.innerHTML += '<br>✓ Caches cleared';
+                    appendLine('✓ Caches cleared');
                 }
                 
                 // Clear local storage
                 localStorage.clear();
-                statusEl.innerHTML += '<br>✓ Local storage cleared';
+                appendLine('✓ Local storage cleared');
                 
                 // Clear session storage
                 sessionStorage.clear();
-                statusEl.innerHTML += '<br>✓ Session storage cleared';
+                appendLine('✓ Session storage cleared');
                 
                 // Clear cookies for localhost
                 document.cookie.split(";").forEach(function(c) { 
                     document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
                 });
-                statusEl.innerHTML += '<br>✓ Cookies cleared';
+                appendLine('✓ Cookies cleared');
                 
                 statusEl.className = 'status success';
-                statusEl.innerHTML += '<br><br><strong>All cache cleared! Redirecting to home page in 3 seconds...</strong>';
+                appendEmphasis('All cache cleared! Redirecting to home page in 3 seconds...');
                 
                 // Redirect after 3 seconds
                 setTimeout(() => {
@@ -95,7 +109,8 @@
                 
             } catch (error) {
                 statusEl.className = 'status error';
-                statusEl.innerHTML = 'Error clearing cache: ' + error.message;
+                const message = error instanceof Error ? error.message : String(error);
+                statusEl.replaceChildren('Error clearing cache: ' + message);
             }
         }
     </script>

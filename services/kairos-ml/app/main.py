@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import warnings
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 # Suppress verbose logging from libraries
@@ -34,6 +35,24 @@ app = FastAPI(title="Kairos ML Service", version="1.0.0")
 # Supported models
 ModelName = Literal["ETS", "PROPHET", "ARIMA", "THETA", "NEURALPROPHET"]
 
+MAX_SERIES_POINTS = 10_000
+MAX_HORIZON = 2_000
+MAX_BATCH_ITEMS = 200
+
+KAIROS_ML_AUTH_TOKEN = os.getenv("KAIROS_ML_AUTH_TOKEN")
+
+
+def require_ml_auth(request: Request) -> None:
+    if not KAIROS_ML_AUTH_TOKEN:
+        return
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    token = auth_header[len("Bearer ") :]
+    if not secrets.compare_digest(token, KAIROS_ML_AUTH_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 # ============================================================================
 # Pydantic Models
 # ============================================================================
@@ -41,9 +60,14 @@ ModelName = Literal["ETS", "PROPHET", "ARIMA", "THETA", "NEURALPROPHET"]
 
 class ForecastRequest(BaseModel):
     model: ModelName
-    ds: List[int] = Field(..., description="Epoch seconds (UTC).")
-    y: List[float]
-    horizon: int = Field(..., ge=1)
+    ds: List[int] = Field(
+        ...,
+        description="Epoch seconds (UTC).",
+        min_length=2,
+        max_length=MAX_SERIES_POINTS,
+    )
+    y: List[float] = Field(..., min_length=2, max_length=MAX_SERIES_POINTS)
+    horizon: int = Field(..., ge=1, le=MAX_HORIZON)
     config: Optional[Dict[str, Any]] = None
     regressors: Optional[Dict[str, List[float]]] = Field(
         None, description="Optional exogenous regressors aligned to ds."
@@ -90,7 +114,7 @@ class BatchForecastRequestItem(ForecastRequest):
 
 
 class BatchForecastRequest(BaseModel):
-    items: List[BatchForecastRequestItem]
+    items: List[BatchForecastRequestItem] = Field(..., min_length=1, max_length=MAX_BATCH_ITEMS)
 
 
 class BatchForecastResponseItem(BaseModel):
@@ -544,7 +568,7 @@ def list_models() -> Dict[str, List[Dict[str, Any]]]:
     }
 
 
-@app.post("/v1/forecast", response_model=ForecastResponse)
+@app.post("/v1/forecast", response_model=ForecastResponse, dependencies=[Depends(require_ml_auth)])
 def forecast(req: ForecastRequest) -> ForecastResponse:
     """
     Run forecasting model on time series data.
@@ -554,7 +578,11 @@ def forecast(req: ForecastRequest) -> ForecastResponse:
     return run_forecast(req)
 
 
-@app.post("/v1/forecast/batch", response_model=BatchForecastResponse)
+@app.post(
+    "/v1/forecast/batch",
+    response_model=BatchForecastResponse,
+    dependencies=[Depends(require_ml_auth)],
+)
 def forecast_batch(req: BatchForecastRequest) -> BatchForecastResponse:
     return BatchForecastResponse(
         items=[
@@ -631,7 +659,7 @@ def run_forecast(req: ForecastRequest) -> ForecastResponse:
 
     except Exception as e:
         logging.exception(f"Forecast failed for model {req.model}")
-        raise HTTPException(status_code=500, detail=f"Forecast failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Forecast failed.")
 
     # Build response points
     points: List[ForecastPoint] = []
