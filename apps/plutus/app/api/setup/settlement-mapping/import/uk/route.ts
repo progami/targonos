@@ -143,20 +143,30 @@ export async function POST() {
     const nextBankAccountId = imported.result.bankAccountId ?? existing?.bankAccountId ?? null;
     const nextPaymentAccountId = imported.result.paymentAccountId ?? existing?.paymentAccountId ?? null;
 
+    const combinedMemoMappings = Object.fromEntries(
+      Object.entries(imported.result.memoMappings).map(([memo, accountId]) => [
+        memo,
+        {
+          accountId,
+          taxCodeId: Object.prototype.hasOwnProperty.call(imported.result.taxCodeMappings, memo)
+            ? imported.result.taxCodeMappings[memo]
+            : null,
+        },
+      ]),
+    );
+
     await db.settlementPostingConfig.upsert({
       where: { marketplace: 'amazon.co.uk' },
       update: {
         bankAccountId: nextBankAccountId,
         paymentAccountId: nextPaymentAccountId,
-        accountIdByMemo: imported.result.memoMappings,
-        taxCodeIdByMemo: imported.result.taxCodeMappings,
+        accountIdByMemo: combinedMemoMappings,
       },
       create: {
         marketplace: 'amazon.co.uk',
         bankAccountId: nextBankAccountId,
         paymentAccountId: nextPaymentAccountId,
-        accountIdByMemo: imported.result.memoMappings,
-        taxCodeIdByMemo: imported.result.taxCodeMappings,
+        accountIdByMemo: combinedMemoMappings,
       },
     });
 
