@@ -192,39 +192,23 @@ type AdsSkuProfitabilityTotals = {
   contributionAfterAdsCents: number;
 };
 
-type AdsAllocationResponse =
-  | {
-      kind: 'saved' | 'computed';
-      marketplace: 'amazon.com' | 'amazon.co.uk';
-      invoiceId: string;
-      invoiceStartDate: string;
-      invoiceEndDate: string;
-      totalAdsCents: number;
-      totalSource: 'AUDIT_DATA' | 'ADS_REPORT' | 'NONE' | 'SAVED';
-      weightSource: string;
-      weightUnit: string;
-      adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
-      lines: AdsAllocationLine[];
-      skuProfitability: null | {
-        lines: AdsSkuProfitabilityLine[];
-        totals: AdsSkuProfitabilityTotals;
-      };
-    }
-  | {
-      kind: 'unavailable';
-      marketplace: 'amazon.com' | 'amazon.co.uk';
-      invoiceId: string;
-      invoiceStartDate: string;
-      invoiceEndDate: string;
-      totalAdsCents: number;
-      totalSource: 'AUDIT_DATA' | 'ADS_REPORT' | 'NONE' | 'SAVED';
-      weightSource: string;
-      weightUnit: string;
-      adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
-      issue: { code: 'MISSING_UPLOAD' | 'ZERO_SPEND' | 'TOTAL_MISMATCH'; message: string };
-      lines: [];
-      skuProfitability: null;
-    };
+type AdsAllocationResponse = {
+  kind: 'saved' | 'computed';
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  totalAdsCents: number;
+  totalSource: 'AUDIT_DATA' | 'ADS_REPORT' | 'NONE' | 'SAVED';
+  weightSource: string;
+  weightUnit: string;
+  adsDataUpload: null | { id: string; filename: string; startDate: string; endDate: string; uploadedAt: string };
+  lines: AdsAllocationLine[];
+  skuProfitability: null | {
+    lines: AdsSkuProfitabilityLine[];
+    totals: AdsSkuProfitabilityTotals;
+  };
+};
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -1057,7 +1041,6 @@ export default function SettlementDetailPage() {
 
   useEffect(() => {
     if (!adsAllocation) return;
-    if (adsAllocation.kind === 'unavailable') return;
     if (adsDirty) return;
 
     setAdsEditLines(
@@ -1079,7 +1062,7 @@ export default function SettlementDetailPage() {
   }
 
   const adsAllocationPreview = useMemo(() => {
-    if (!adsAllocation || adsAllocation.kind === 'unavailable' || adsAllocation.totalAdsCents === 0) {
+    if (!adsAllocation || adsAllocation.totalAdsCents === 0) {
       return { ok: false as const, lines: [] as Array<{ sku: string; weightInput: string; allocatedCents: number | null }>, error: null as string | null };
     }
     if (!settlement) {
@@ -1139,9 +1122,6 @@ export default function SettlementDetailPage() {
 
   const baseAdsSkuProfitability = useMemo(() => {
     if (!adsAllocation) {
-      return null;
-    }
-    if (adsAllocation.kind === 'unavailable') {
       return null;
     }
 
@@ -1777,18 +1757,7 @@ export default function SettlementDetailPage() {
                       </Box>
                     )}
 
-                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && adsAllocation.kind === 'unavailable' && (
-                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5 }}>
-                        <Typography sx={{ fontSize: '0.875rem', color: 'warning.dark' }}>
-                          {adsAllocation.issue.message}
-                        </Typography>
-                        <Box component={Link} href={adsUploadHref} sx={{ display: 'inline-flex', mt: 1, fontSize: '0.75rem', textDecoration: 'underline', color: 'warning.main' }}>
-                          Upload Sponsored Products report
-                        </Box>
-                      </Box>
-                    )}
-
-                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && adsAllocation.kind !== 'unavailable' && adsAllocation.totalAdsCents !== 0 && (
+                    {!isAdsAllocationLoading && !adsAllocationError && adsAllocation && adsAllocation.totalAdsCents !== 0 && (
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
