@@ -15,10 +15,23 @@ DB_PORT="${PGPORT:-5432}"
 MAIN_DB_NAME="${PORTAL_MAIN_DB_NAME:-portal_db}"
 DEV_DB_NAME="${PORTAL_DEV_DB_NAME:-portal_db_dev}"
 DEV_DB_ROLE="${PORTAL_DEV_DB_ROLE:-portal_dev_external}"
+PORTAL_TALOS_ROLE="${PORTAL_TALOS_ROLE:-portal_talos}"
 
 rewrite_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/rewrite-pgdump-schema.mjs"
 
 log() { printf '\e[36m[refresh-dev]\e[0m %s\n' "$*"; }
+
+grant_schema_access_sql() {
+  local schema="$1"
+  local role="$2"
+
+  cat <<SQL
+GRANT USAGE, CREATE ON SCHEMA "$schema" TO $role;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA "$schema" TO $role;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA "$schema" TO $role;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA "$schema" TO $role;
+SQL
+}
 
 refuse_if_unsafe_target() {
   if [[ "$DEV_DB_NAME" == "$MAIN_DB_NAME" ]]; then
@@ -49,6 +62,34 @@ ensure_dev_database() {
   psql -h "$DB_HOST" -p "$DB_PORT" -d postgres -v ON_ERROR_STOP=1 -c "GRANT CONNECT ON DATABASE \"$DEV_DB_NAME\" TO $DEV_DB_ROLE;"
 }
 
+cleanup_portal_talos_access() {
+  local schema="$1"
+
+  psql -h "$DB_HOST" -p "$DB_PORT" -d "$DEV_DB_NAME" -v ON_ERROR_STOP=1 \
+    -v deprecated_role="$PORTAL_TALOS_ROLE" \
+    -v target_schema="$schema" <<'SQL'
+DO $$
+DECLARE
+  deprecated_role text := :'deprecated_role';
+  target_schema text := :'target_schema';
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = deprecated_role) THEN
+    RETURN;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = target_schema) THEN
+    RETURN;
+  END IF;
+
+  EXECUTE format('REVOKE USAGE, CREATE ON SCHEMA %I FROM %I', target_schema, deprecated_role);
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %I FROM %I', target_schema, deprecated_role);
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %I FROM %I', target_schema, deprecated_role);
+  EXECUTE format('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA %I FROM %I', target_schema, deprecated_role);
+END
+$$;
+SQL
+}
+
 clone_schema() {
   local from_schema="$1"
   local to_schema="$2"
@@ -60,13 +101,32 @@ clone_schema() {
     | node "$rewrite_script" "$from_schema" "$to_schema" \
     | psql -h "$DB_HOST" -p "$DB_PORT" -d "$DEV_DB_NAME" -v ON_ERROR_STOP=1
 
-  # Restores are run as the local OS user, so re-grant schema/object privileges back to the app DB role.
+  # Restores are run as the local OS user, so re-grant schema/object privileges back to app DB roles.
+  local grant_roles=("$DEV_DB_ROLE")
+  case "$to_schema" in
+    auth_dev)
+      grant_roles+=("portal_auth")
+      ;;
+    dev_atlas)
+      grant_roles+=("portal_atlas")
+      ;;
+    dev_xplan)
+      grant_roles+=("portal_xplan")
+      ;;
+    dev_talos_us|dev_talos_uk)
+      grant_roles+=("portal_talos")
+      ;;
+    plutus_dev)
+      grant_roles+=("portal_plutus")
+      ;;
+  esac
+
+  log "Grant privileges on schema $to_schema -> ${grant_roles[*]}"
   psql -h "$DB_HOST" -p "$DB_PORT" -d "$DEV_DB_NAME" -v ON_ERROR_STOP=1 <<SQL
-GRANT USAGE, CREATE ON SCHEMA "$to_schema" TO $DEV_DB_ROLE;
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA "$to_schema" TO $DEV_DB_ROLE;
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA "$to_schema" TO $DEV_DB_ROLE;
-GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA "$to_schema" TO $DEV_DB_ROLE;
+$(for role in "${grant_roles[@]}"; do grant_schema_access_sql "$to_schema" "$role"; done)
 SQL
+
+  cleanup_portal_talos_access "$to_schema"
 }
 
 ensure_dev_database
