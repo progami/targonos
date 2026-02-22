@@ -623,7 +623,7 @@ test('isBlockingProcessingCode treats PNL allocation as blocking', () => {
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), false);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
-  assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), false);
+  assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
 });
 

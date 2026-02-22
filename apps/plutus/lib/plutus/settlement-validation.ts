@@ -16,7 +16,7 @@ export function dateToIsoDay(date: Date): string {
 
 export function computeProcessingHash(rows: SettlementAuditRow[]): string {
   const normalized = rows.map((row) => ({
-    invoiceId: row.invoiceId.trim(),
+    invoice: row.invoiceId.trim(),
     market: row.market.trim(),
     date: row.date.trim(),
     orderId: row.orderId.trim(),
@@ -27,7 +27,7 @@ export function computeProcessingHash(rows: SettlementAuditRow[]): string {
   }));
 
   normalized.sort((a, b) => {
-    if (a.invoiceId !== b.invoiceId) return a.invoiceId.localeCompare(b.invoiceId);
+    if (a.invoice !== b.invoice) return a.invoice.localeCompare(b.invoice);
     if (a.market !== b.market) return a.market.localeCompare(b.market);
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     if (a.orderId !== b.orderId) return a.orderId.localeCompare(b.orderId);
