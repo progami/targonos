@@ -38,7 +38,7 @@ interface Account {
   parentName: string | null;
   depth: number;
   isFirstInGroup?: boolean;
-  source: 'lmb' | 'qbo';
+  source: 'plutus' | 'qbo';
 }
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -366,8 +366,8 @@ export default function ChartOfAccountsPage() {
 
   const sourceCounts = useMemo(() => {
     const qbo = accounts.filter((a) => a.source === 'qbo').length;
-    const lmb = accounts.filter((a) => a.source === 'lmb').length;
-    return { qbo, lmb, all: accounts.length };
+    const plutus = accounts.filter((a) => a.source === 'plutus').length;
+    return { qbo, plutus, all: accounts.length };
   }, [accounts]);
 
   const filteredAccounts = useMemo(() => {
@@ -416,7 +416,7 @@ export default function ChartOfAccountsPage() {
           {/* Source Tabs */}
           <MuiTabs
             value={sourceFilter}
-            onChange={(_, v) => setSourceFilter(v as 'all' | 'qbo' | 'lmb')}
+            onChange={(_, v) => setSourceFilter(v as 'all' | 'qbo' | 'plutus')}
             sx={{
               minHeight: 40,
               bgcolor: 'action.hover',
@@ -454,11 +454,11 @@ export default function ChartOfAccountsPage() {
               }}
             />
             <MuiTab
-              value="lmb"
+              value="plutus"
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  Template
-                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.lmb}</Box>
+                  Plutus
+                  <Box component="span" sx={{ ml: 0.75, fontSize: '0.75rem', fontVariantNumeric: 'tabular-nums', opacity: 0.6 }}>{sourceCounts.plutus}</Box>
                 </Box>
               }
               sx={{
@@ -651,9 +651,9 @@ export default function ChartOfAccountsPage() {
                               >
                                 {account.name}
                               </Box>
-                              {account.source === 'lmb' && (
+                              {account.source === 'plutus' && (
                                 <Chip
-                                  label="Template"
+                                  label="Plutus"
                                   size="small"
                                   sx={{
                                     ml: 1,

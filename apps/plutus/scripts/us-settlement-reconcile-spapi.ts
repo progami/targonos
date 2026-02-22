@@ -8,6 +8,7 @@ import {
 } from '@/lib/amazon-finances/sp-api-finances';
 import type { SpApiFinancialEvents } from '@/lib/amazon-finances/types';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
+import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { fetchJournalEntries, fetchJournalEntryById, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -311,10 +312,10 @@ function parseArgs(argv: string[]): CliOptions {
   return { startDate, amazonEnvPath, plutusEnvPath, onlySettlementIds, maxMismatchLines };
 }
 
-async function fetchLmbUsJournalEntries(input: {
-  connection: any;
+async function fetchUsSettlementJournalEntries(input: {
+  connection: QboConnection;
   startDate: string;
-}): Promise<{ journalEntries: Array<{ id: string; docNumber: string; txnDate: string }>; updatedConnection?: any }> {
+}): Promise<{ journalEntries: Array<{ id: string; docNumber: string; txnDate: string }>; updatedConnection?: QboConnection }> {
   const pageSize = 100;
   let startPosition = 1;
   let settlementJournals: Array<{ Id: string; DocNumber?: string; TxnDate: string }> = [];
@@ -342,10 +343,9 @@ async function fetchLmbUsJournalEntries(input: {
       const docNumber = entry.DocNumber;
       if (typeof docNumber !== 'string') return false;
       const trimmed = docNumber.trim();
-      if (/^US-/i.test(trimmed)) return true;
-      if (/^LMB-US-/i.test(trimmed)) return true;
-      if (/#LMB-US-/i.test(trimmed)) return true;
-      return false;
+      if (!isSettlementDocNumber(trimmed)) return false;
+      const meta = parseSettlementDocNumber(trimmed);
+      return meta.marketplace.id === 'amazon.com';
     })
     .map((entry) => ({ id: entry.Id, docNumber: entry.DocNumber!.trim(), txnDate: entry.TxnDate }));
 
@@ -364,7 +364,7 @@ async function main(): Promise<void> {
   if (!maybeConnection) throw new Error('Not connected to QBO');
   let connection: QboConnection = maybeConnection;
 
-  const fetched = await fetchLmbUsJournalEntries({ connection, startDate: options.startDate });
+  const fetched = await fetchUsSettlementJournalEntries({ connection, startDate: options.startDate });
   if (fetched.updatedConnection) {
     connection = fetched.updatedConnection as QboConnection;
   }

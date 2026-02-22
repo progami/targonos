@@ -1,10 +1,10 @@
 import type { QboAccount } from '@/lib/qbo/api';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
 import type { InventoryComponent } from '@/lib/inventory/ledger';
 import { toCents } from '@/lib/inventory/money';
 import { removeProportionalComponents } from '@/lib/inventory/money';
 import { createHash } from 'crypto';
 import type { ProcessingBlock, ProcessingReturn } from './settlement-types';
+import type { SettlementAuditRow } from './settlement-audit';
 
 export function normalizeSku(raw: string): string {
   return raw.trim().replace(/\s+/g, '-').toUpperCase();
@@ -14,9 +14,9 @@ export function dateToIsoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-export function computeProcessingHash(rows: LmbAuditRow[]): string {
+export function computeProcessingHash(rows: SettlementAuditRow[]): string {
   const normalized = rows.map((row) => ({
-    invoice: row.invoice.trim(),
+    invoiceId: row.invoiceId.trim(),
     market: row.market.trim(),
     date: row.date.trim(),
     orderId: row.orderId.trim(),
@@ -27,7 +27,7 @@ export function computeProcessingHash(rows: LmbAuditRow[]): string {
   }));
 
   normalized.sort((a, b) => {
-    if (a.invoice !== b.invoice) return a.invoice.localeCompare(b.invoice);
+    if (a.invoiceId !== b.invoiceId) return a.invoiceId.localeCompare(b.invoiceId);
     if (a.market !== b.market) return a.market.localeCompare(b.market);
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     if (a.orderId !== b.orderId) return a.orderId.localeCompare(b.orderId);
@@ -40,19 +40,6 @@ export function computeProcessingHash(rows: LmbAuditRow[]): string {
   return createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
 }
 
-export function groupByInvoice(rows: LmbAuditRow[]): Map<string, LmbAuditRow[]> {
-  const invoiceGroups = new Map<string, LmbAuditRow[]>();
-  for (const row of rows) {
-    const group = invoiceGroups.get(row.invoice);
-    if (!group) {
-      invoiceGroups.set(row.invoice, [row]);
-    } else {
-      group.push(row);
-    }
-  }
-  return invoiceGroups;
-}
-
 export function isSalePrincipal(description: string): boolean {
   return description.trim().startsWith('Amazon Sales - Principal');
 }
@@ -62,7 +49,7 @@ export function isRefundPrincipal(description: string): boolean {
 }
 
 export function buildPrincipalGroups(
-  rows: LmbAuditRow[],
+  rows: SettlementAuditRow[],
   predicate: (description: string) => boolean,
 ): Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }> {
   const groups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();

@@ -1,94 +1,38 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
+
 import type { QboAccount, QboJournalEntry } from '@/lib/qbo/api';
 import { fetchAccounts, fetchJournalEntries, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { db } from '@/lib/db';
+import {
+  computeSettlementTotalFromJournalEntry,
+  isSettlementDocNumber,
+  normalizeSettlementDocNumber,
+  parseSettlementDocNumber,
+  type SettlementMarketplace,
+} from '@/lib/plutus/settlement-doc-number';
 
 const logger = createLogger({ name: 'plutus-settlements' });
-
-type Marketplace = {
-  id: 'amazon.com' | 'amazon.co.uk';
-  label: 'Amazon.com' | 'Amazon.co.uk';
-  currency: 'USD' | 'GBP';
-  region: 'US' | 'UK';
-};
 
 type SettlementRow = {
   id: string;
   docNumber: string;
   postedDate: string;
   memo: string;
-  marketplace: Marketplace;
+  marketplace: SettlementMarketplace;
   periodStart: string | null;
   periodEnd: string | null;
   settlementTotal: number | null;
-  lmbStatus: 'Posted';
+  qboStatus: 'Posted';
   plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
 };
 
-type LmbDocMeta = {
-  marketplace: Marketplace;
-  periodStart: string | null;
-  periodEnd: string | null;
-};
-
-const MONTHS: Record<string, number> = {
-  JAN: 1,
-  FEB: 2,
-  MAR: 3,
-  APR: 4,
-  MAY: 5,
-  JUN: 6,
-  JUL: 7,
-  AUG: 8,
-  SEP: 9,
-  OCT: 10,
-  NOV: 11,
-  DEC: 12,
-};
-
-function pad2(value: number): string {
-  return value < 10 ? `0${value}` : String(value);
-}
-
-function getMarketplaceFromRegion(region: string): Marketplace {
-  if (region === 'US') return { id: 'amazon.com', label: 'Amazon.com', currency: 'USD', region: 'US' };
-  if (region === 'UK') return { id: 'amazon.co.uk', label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' };
-  throw new Error(`Unsupported settlement region: ${region}`);
-}
-
-function isSettlementDocNumber(docNumber: string): boolean {
-  const trimmed = docNumber.trim();
-  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
-  if (/^(US|UK)-/i.test(trimmed)) return true;
-  if (/#LMB-(US|UK)-/i.test(trimmed)) return true;
-  return false;
-}
-
 function isCanonicalSettlementDocNumber(docNumber: string): boolean {
-  const trimmed = docNumber.trim();
-  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
-  if (/^(US|UK)-/i.test(trimmed)) return true;
-  return false;
-}
-
-function normalizeSettlementDocNumber(docNumber: string): string {
-  const trimmed = docNumber.trim();
-  if (/^LMB-(US|UK)-/i.test(trimmed)) {
-    return trimmed;
-  }
-  if (/^(US|UK)-/i.test(trimmed)) {
-    return trimmed;
-  }
-
-  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
-  if (hashMatch) {
-    return hashMatch[1]!;
-  }
-
-  throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
+  const trimmedUpper = docNumber.trim().toUpperCase();
+  if (!isSettlementDocNumber(trimmedUpper)) return false;
+  return trimmedUpper === normalizeSettlementDocNumber(trimmedUpper);
 }
 
 function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
@@ -106,118 +50,6 @@ function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): Q
   }
 
   return a.Id > b.Id ? a : b;
-}
-
-function parseDayMonth(token: string): { day: number; month: number | null } {
-  const trimmed = token.trim().toUpperCase();
-
-  const dayOnly = trimmed.match(/^\d{2}$/);
-  if (dayOnly) {
-    return { day: Number(trimmed), month: null };
-  }
-
-  const dayMonth = trimmed.match(/^(\d{2})([A-Z]{3})$/);
-  if (!dayMonth) {
-    throw new Error(`Unrecognized settlement date token: ${token}`);
-  }
-
-  const monthRaw = dayMonth[2];
-  const month = MONTHS[monthRaw];
-  if (!month) {
-    throw new Error(`Unrecognized month in settlement date token: ${token}`);
-  }
-
-  return { day: Number(dayMonth[1]), month };
-}
-
-function parseSettlementPeriod(normalizedDocNumber: string): LmbDocMeta {
-  const tokens = normalizedDocNumber.split('-').map((t) => t.trim());
-  const isLmb = tokens[0] === 'LMB';
-  const region = isLmb ? tokens[1] : tokens[0];
-  if (!region) {
-    throw new Error(`Missing settlement region in doc number: ${normalizedDocNumber}`);
-  }
-
-  const marketplace = getMarketplaceFromRegion(region);
-  const rangeStartIndex = isLmb ? 2 : 1;
-
-  if (tokens.length < rangeStartIndex + 4) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
-
-  const seqToken = tokens[tokens.length - 1];
-  const yearToken = tokens[tokens.length - 2];
-  const rangeTokens = tokens.slice(rangeStartIndex, tokens.length - 2);
-
-  if (!seqToken || !yearToken) {
-    throw new Error(`Invalid settlement doc number format: ${normalizedDocNumber}`);
-  }
-
-  if (rangeTokens.length !== 2) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
-
-  const startToken = rangeTokens[0];
-  const endToken = rangeTokens[1];
-  if (!startToken || !endToken) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
-
-  const endYear =
-    yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken);
-
-  if (!Number.isFinite(endYear)) {
-    throw new Error(`Invalid year in settlement doc number: ${normalizedDocNumber}`);
-  }
-
-  const start = parseDayMonth(startToken);
-  const end = parseDayMonth(endToken);
-
-  const endMonth = end.month;
-  const startMonth = start.month === null ? endMonth : start.month;
-
-  if (startMonth === null || endMonth === null) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
-
-  const startYear = startMonth > endMonth ? endYear - 1 : endYear;
-
-  const periodStart = `${startYear}-${pad2(startMonth)}-${pad2(start.day)}`;
-  const periodEnd = `${endYear}-${pad2(endMonth)}-${pad2(end.day)}`;
-
-  return { marketplace, periodStart, periodEnd };
-}
-
-function computeSettlementTotal(
-  entry: QboJournalEntry,
-  accountsById: Map<string, QboAccount>,
-): number | null {
-  let total = 0;
-  let found = false;
-  let hasAnyLine = false;
-
-  for (const line of entry.Line) {
-    const amount = line.Amount;
-    if (amount === undefined) continue;
-
-    const accountId = line.JournalEntryLineDetail.AccountRef.value;
-    const account = accountsById.get(accountId);
-    if (!account) continue;
-
-    hasAnyLine = true;
-
-    if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
-
-    found = true;
-    const signed = line.JournalEntryLineDetail.PostingType === 'Debit' ? amount : -amount;
-    total += signed;
-  }
-
-  if (!found) {
-    return hasAnyLine ? 0 : null;
-  }
-
-  return total;
 }
 
 export async function GET(req: NextRequest) {
@@ -242,23 +74,16 @@ export async function GET(req: NextRequest) {
     const page = parseInt(rawPage === null ? '1' : rawPage, 10);
     const pageSize = parseInt(rawPageSize === null ? '25' : rawPageSize, 10);
 
-    const docNumberContains = search !== undefined
-      ? search
-      : marketplaceFilter !== null
-        ? `${marketplaceFilter}-`
-        : null;
+    const docNumberContains = search !== undefined ? search : marketplaceFilter !== null ? `${marketplaceFilter}-` : null;
 
     let activeConnection = connection;
-    let startPosition = 1;
     const queryPageSize = 100;
     const allJournalEntries: QboJournalEntry[] = [];
 
-    const docNumberQueries = docNumberContains
-      ? [docNumberContains]
-      : ['US-', 'UK-'];
+    const docNumberQueries = docNumberContains ? [docNumberContains] : ['US-', 'UK-'];
 
     for (const docQuery of docNumberQueries) {
-      startPosition = 1;
+      let startPosition = 1;
       let fetchedForQuery = 0;
       while (true) {
         const pageResult = await fetchJournalEntries(activeConnection, {
@@ -284,7 +109,7 @@ export async function GET(req: NextRequest) {
       if (!isSettlementDocNumber(je.DocNumber)) return false;
       if (marketplaceFilter === null) return true;
       const normalized = normalizeSettlementDocNumber(je.DocNumber);
-      return normalized.startsWith(`${marketplaceFilter}-`) || normalized.startsWith(`LMB-${marketplaceFilter}-`);
+      return normalized.startsWith(`${marketplaceFilter}-`);
     });
 
     const dedupedByNormalizedDocNumber = new Map<string, QboJournalEntry>();
@@ -314,9 +139,7 @@ export async function GET(req: NextRequest) {
       includeInactive: true,
     });
 
-    activeConnection = accountsResult.updatedConnection
-      ? accountsResult.updatedConnection
-      : activeConnection;
+    activeConnection = accountsResult.updatedConnection ? accountsResult.updatedConnection : activeConnection;
 
     if (activeConnection !== connection) {
       await saveServerQboConnection(activeConnection);
@@ -344,8 +167,7 @@ export async function GET(req: NextRequest) {
         throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
       }
 
-      const normalized = normalizeSettlementDocNumber(je.DocNumber);
-      const meta = parseSettlementPeriod(normalized);
+      const meta = parseSettlementDocNumber(je.DocNumber);
 
       let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';
       if (processedSet.has(je.Id)) {
@@ -362,8 +184,8 @@ export async function GET(req: NextRequest) {
         marketplace: meta.marketplace,
         periodStart: meta.periodStart,
         periodEnd: meta.periodEnd,
-        settlementTotal: computeSettlementTotal(je, accountsById),
-        lmbStatus: 'Posted',
+        settlementTotal: computeSettlementTotalFromJournalEntry(je, accountsById),
+        qboStatus: 'Posted',
         plutusStatus,
       };
     });
@@ -392,3 +214,4 @@ export async function GET(req: NextRequest) {
     );
   }
 }
+

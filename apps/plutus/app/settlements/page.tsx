@@ -38,6 +38,7 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
 import { selectAuditInvoiceForSettlement, type AuditInvoiceSummary } from '@/lib/plutus/audit-invoice-matching';
+import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -58,7 +59,7 @@ type SettlementRow = {
   periodStart: string | null;
   periodEnd: string | null;
   settlementTotal: number | null;
-  lmbStatus: 'Posted';
+  qboStatus: 'Posted';
   plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
 };
 
@@ -75,6 +76,7 @@ type SettlementsResponse = {
 type ConnectionStatus = { connected: boolean; error?: string };
 type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
 type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
+type Region = SettlementRow['marketplace']['region'];
 
 /* ── shared chip styles ── */
 const chipBase = { height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px' } as const;
@@ -116,7 +118,7 @@ function formatMoney(amount: number, currency: string): string {
   return formatted;
 }
 
-function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
+function StatusPill({ status }: { status: SettlementRow['qboStatus'] }) {
   if (status === 'Posted')
     return (
       <Chip
@@ -140,16 +142,13 @@ function StatusPill({ status }: { status: SettlementRow['lmbStatus'] }) {
 
 function displaySettlementDocNumber(docNumber: string): string {
   const raw = docNumber.trim();
-  const normalized = raw.replace(/^.*#(LMB-[A-Z]{2}-)/, '$1');
-  return normalized.startsWith('LMB-') ? normalized.slice('LMB-'.length) : normalized;
+  if (!isSettlementDocNumber(raw)) return raw;
+  return normalizeSettlementDocNumber(raw);
 }
 
 function extractSettlementIdFromMemo(memo: string): string | null {
   const matchSpapi = memo.match(/Settlement:\s*([0-9]+)/);
   if (matchSpapi) return matchSpapi[1]!;
-
-  const matchLmb = memo.match(/downloadAuditFile\/\d+-([0-9]+)/);
-  if (matchLmb) return matchLmb[1]!;
 
   return null;
 }
@@ -163,7 +162,7 @@ function isoDaySubtractDays(isoDay: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-type UsSpApiSettlementSyncSegmentResult = {
+type SpApiSettlementSyncSegmentResult = {
   settlementId: string;
   eventGroupId: string;
   docNumber: string;
@@ -175,7 +174,7 @@ type UsSpApiSettlementSyncSegmentResult = {
   error?: string;
 };
 
-type UsSpApiSettlementSyncResult = {
+type SpApiSettlementSyncResult = {
   totals: {
     settlements: number;
     segments: number;
@@ -185,7 +184,7 @@ type UsSpApiSettlementSyncResult = {
     skipped: number;
     errors: number;
   };
-  segments: UsSpApiSettlementSyncSegmentResult[];
+  segments: SpApiSettlementSyncSegmentResult[];
 };
 
 function readStringField(payload: unknown, key: string): string | null {
@@ -196,13 +195,16 @@ function readStringField(payload: unknown, key: string): string | null {
   return trimmed === '' ? null : trimmed;
 }
 
-async function syncUsSettlementsFromAmazon(input: {
+async function syncSettlementsFromAmazon(input: {
+  region: Region;
   startDate: string;
   endDate: string | null;
   settlementIds: string[];
   postToQbo: boolean;
   process: boolean;
-}): Promise<UsSpApiSettlementSyncResult> {
+}): Promise<SpApiSettlementSyncResult> {
+  const endpoint = input.region === 'US' ? 'us' : 'uk';
+
   const payload: Record<string, unknown> = {
     startDate: input.startDate,
     postToQbo: input.postToQbo,
@@ -211,7 +213,7 @@ async function syncUsSettlementsFromAmazon(input: {
   if (input.endDate !== null) payload.endDate = input.endDate;
   if (input.settlementIds.length > 0) payload.settlementIds = input.settlementIds;
 
-  const res = await fetch(`${basePath}/api/plutus/settlements/spapi/us/sync`, {
+  const res = await fetch(`${basePath}/api/plutus/settlements/spapi/${endpoint}/sync`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
@@ -230,7 +232,7 @@ async function syncUsSettlementsFromAmazon(input: {
 
     throw new Error('Sync failed');
   }
-  return data as UsSpApiSettlementSyncResult;
+  return data as SpApiSettlementSyncResult;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
@@ -617,14 +619,15 @@ export default function SettlementsPage() {
     date.setUTCDate(date.getUTCDate() - 30);
     return date.toISOString().slice(0, 10);
   });
+  const [syncRegion, setSyncRegion] = useState<Region>('US');
   const [syncEndDate, setSyncEndDate] = useState<string>('');
   const [syncSettlementIds, setSyncSettlementIds] = useState<string>('');
   const [syncPostToQbo, setSyncPostToQbo] = useState(true);
   const [syncProcess, setSyncProcess] = useState(false);
-  const [syncResult, setSyncResult] = useState<UsSpApiSettlementSyncResult | null>(null);
+  const [syncResult, setSyncResult] = useState<SpApiSettlementSyncResult | null>(null);
 
   const syncMutation = useMutation({
-    mutationFn: syncUsSettlementsFromAmazon,
+    mutationFn: syncSettlementsFromAmazon,
     onSuccess: (result) => {
       setSyncResult(result);
       queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
@@ -657,8 +660,9 @@ export default function SettlementsPage() {
     },
   });
 
-  const openSyncDialog = (options?: { settlementId?: string; postedDate?: string }) => {
+  const openSyncDialog = (options: { region: Region; settlementId?: string; postedDate?: string }) => {
     setSyncResult(null);
+    setSyncRegion(options.region);
 
     const settlementId = options?.settlementId ? options.settlementId.trim() : '';
     setSyncSettlementIds(settlementId);
@@ -683,6 +687,7 @@ export default function SettlementsPage() {
       .filter((id) => id !== '');
 
     syncMutation.mutate({
+      region: syncRegion,
       startDate: syncStartDate.trim(),
       endDate: syncEndDate.trim() === '' ? null : syncEndDate.trim(),
       settlementIds,
@@ -701,15 +706,15 @@ export default function SettlementsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Process settlement journal entries posted to QBO. Prereqs: upload Audit Data (or sync from Amazon for US) and map Bills so Plutus can compute COGS + allocate fees by brand."
+            description="Process settlement journal entries posted to QBO. Prereqs: sync from Amazon and map Bills so Plutus can compute COGS + allocate fees by brand."
             variant="accent"
           />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {marketplace === 'US' && (
+            {(marketplace === 'US' || marketplace === 'UK') && (
               <MuiButton
                 variant="outlined"
                 disableElevation
-                onClick={() => openSyncDialog()}
+                onClick={() => openSyncDialog({ region: marketplace })}
                 disabled={syncMutation.isPending}
                 startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
                 sx={{ ...outlineSx, ...defaultSize }}
@@ -945,7 +950,7 @@ export default function SettlementsPage() {
                               onClick={(e: React.MouseEvent) => e.stopPropagation()}
                               sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, textDecoration: 'none' }}
                             >
-                              <StatusPill status={s.lmbStatus} />
+                              <StatusPill status={s.qboStatus} />
                               <OpenInNewIcon sx={{ fontSize: 12, color: 'text.disabled', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }} />
                             </Box>
                           </MuiTableCell>
@@ -960,12 +965,13 @@ export default function SettlementsPage() {
                                 dropdownItems={[
                                   { label: 'QBO Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
                                   { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
-                                  ...(s.marketplace.region === 'US' && settlementId !== null
+                                  ...(settlementId !== null
                                     ? [
                                         {
                                           label: 'Sync from Amazon',
                                           onClick: () =>
                                             openSyncDialog({
+                                              region: s.marketplace.region,
                                               settlementId,
                                               postedDate: s.postedDate,
                                             }),
@@ -1049,7 +1055,7 @@ export default function SettlementsPage() {
             fullWidth
             slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
           >
-            <DialogTitle>Sync from Amazon (US)</DialogTitle>
+            <DialogTitle>Sync from Amazon ({syncRegion})</DialogTitle>
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
                 Pulls settlements from Amazon SP-API Finances, generates settlement JEs + Audit Data, and optionally processes them in Plutus.

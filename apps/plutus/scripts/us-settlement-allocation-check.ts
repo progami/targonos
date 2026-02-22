@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 
 type CliOptions = {
   invoiceId: string;
@@ -132,8 +132,8 @@ async function main(): Promise<void> {
     throw new Error(`No AuditDataRow found for invoiceId=${options.invoiceId} marketplace=${options.marketplace}`);
   }
 
-  const auditRows: LmbAuditRow[] = scopedRows.map((r) => ({
-    invoice: r.invoiceId,
+  const auditRows: SettlementAuditRow[] = scopedRows.map((r) => ({
+    invoiceId: r.invoiceId,
     market: r.market,
     date: r.date,
     orderId: r.orderId,

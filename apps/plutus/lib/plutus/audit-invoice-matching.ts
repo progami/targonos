@@ -47,22 +47,15 @@ export function dateRangesOverlapIsoDay(
 }
 
 function isSettlementInvoiceId(value: string): boolean {
-  const trimmed = value.trim();
-  if (/^LMB-(US|UK)-/i.test(trimmed)) return true;
-  if (/^(US|UK)-/i.test(trimmed)) return true;
-  return false;
+  return /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i.test(value.trim());
 }
 
 function normalizeSettlementDocNumberForInvoiceId(value: string): string {
   const trimmed = value.trim();
   if (trimmed === '') return trimmed;
 
-  const hashMatch = trimmed.match(/#(LMB-(US|UK)-.*)$/i);
-  if (hashMatch) {
-    return hashMatch[1]!;
-  }
-
-  return trimmed;
+  const match = trimmed.match(/\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i);
+  return match ? match[0]!.toUpperCase() : trimmed;
 }
 
 function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { fetchAccounts, QboAuthError } from '@/lib/qbo/api';
 import { createLogger } from '@targon/logger';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
-import { getAccountSource } from '@/lib/lmb/default-accounts';
+import { getAccountSource } from '@/lib/plutus/default-accounts';
 import { randomUUID } from 'crypto';
 
 const logger = createLogger({ name: 'qbo-accounts' });

@@ -126,7 +126,6 @@ const NAV_ITEMS: NavItem[] = [
     icon: InventoryIcon,
     items: [
       { href: '/data-sources', label: 'Data Sources' },
-      { href: '/reconciliation', label: 'Reconciliation' },
     ],
   },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },

@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-type SourceFilter = 'all' | 'qbo' | 'lmb';
+type SourceFilter = 'all' | 'qbo' | 'plutus';
 
 type ChartOfAccountsState = {
   search: string;
@@ -54,4 +54,3 @@ export const useChartOfAccountsStore = create<ChartOfAccountsState>()(
     },
   ),
 );
-

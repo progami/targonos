@@ -1,4 +1,4 @@
-import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
+import { buildQboJournalEntriesFromUkSettlementDraft, buildUkSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/uk-settlement-builder';
 import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
@@ -15,10 +15,10 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 type SettlementDraftBundle = {
   settlementId: string;
   eventGroupId: string;
-  draft: ReturnType<typeof buildUsSettlementDraftFromSpApiFinances>;
+  draft: ReturnType<typeof buildUkSettlementDraftFromSpApiFinances>;
 };
 
-export type UsSpApiSettlementSyncInput = {
+export type UkSpApiSettlementSyncInput = {
   startDate: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD (optional)
   settlementIds?: string[];
@@ -26,7 +26,7 @@ export type UsSpApiSettlementSyncInput = {
   process: boolean;
 };
 
-export type UsSpApiSettlementSyncSegmentResult = {
+export type UkSpApiSettlementSyncSegmentResult = {
   settlementId: string;
   eventGroupId: string;
   docNumber: string;
@@ -38,8 +38,8 @@ export type UsSpApiSettlementSyncSegmentResult = {
   error?: string;
 };
 
-export type UsSpApiSettlementSyncResult = {
-  options: UsSpApiSettlementSyncInput;
+export type UkSpApiSettlementSyncResult = {
+  options: UkSpApiSettlementSyncInput;
   totals: {
     settlements: number;
     segments: number;
@@ -49,7 +49,7 @@ export type UsSpApiSettlementSyncResult = {
     skipped: number;
     errors: number;
   };
-  segments: UsSpApiSettlementSyncSegmentResult[];
+  segments: UkSpApiSettlementSyncSegmentResult[];
 };
 
 function requireIsoDay(value: unknown, label: string): string {
@@ -106,7 +106,7 @@ async function buildSkuToBrandName(): Promise<Map<string, string>> {
   const skus = await db.sku.findMany({ include: { brand: true } });
   const skuToBrandName = new Map<string, string>();
   for (const row of skus) {
-    if (row.brand.marketplace !== 'amazon.com') continue;
+    if (row.brand.marketplace !== 'amazon.co.uk') continue;
     skuToBrandName.set(normalizeSku(row.sku), row.brand.name);
   }
   return skuToBrandName;
@@ -136,7 +136,7 @@ async function findExistingJournalEntryIdByDocNumber(
 
 function requireMemoAccountMapping(value: unknown): Record<string, string> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error('US settlement memo mapping must be an object');
+    throw new Error('Settlement memo mapping must be an object');
   }
 
   const obj = value as Record<string, unknown>;
@@ -158,7 +158,7 @@ function requireMemoTaxMapping(value: unknown): Record<string, string | null> {
   }
 
   if (typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('US settlement tax mapping must be an object');
+    throw new Error('Settlement tax mapping must be an object');
   }
 
   const obj = value as Record<string, unknown>;
@@ -182,7 +182,7 @@ function requireMemoTaxMapping(value: unknown): Record<string, string | null> {
   return result;
 }
 
-async function loadUsSettlementPostingMapping(input: {
+async function loadUkSettlementPostingMapping(input: {
   requiredMemos: Set<string>;
   needBankAccount: boolean;
   needPaymentAccount: boolean;
@@ -192,7 +192,7 @@ async function loadUsSettlementPostingMapping(input: {
   bankAccountId: string;
   paymentAccountId: string;
 }> {
-  const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+  const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.co.uk' } });
   if (!config) {
     throw new Error('Missing settlement mapping: configure Settlement Mapping first');
   }
@@ -211,6 +211,11 @@ async function loadUsSettlementPostingMapping(input: {
     throw new Error(`Missing account mappings for memos: ${missingMemos.join(' | ')}`);
   }
 
+  const missingTaxMemos = Array.from(input.requiredMemos).filter((memo) => !taxCodeIdByMemo.has(memo)).sort();
+  if (missingTaxMemos.length > 0) {
+    throw new Error(`Missing tax mappings for memos: ${missingTaxMemos.join(' | ')}`);
+  }
+
   if (input.needBankAccount && bankAccountId === '') {
     throw new Error("Missing 'Transfer to Bank' account id (configure it in Settlement Mapping)");
   }
@@ -226,7 +231,7 @@ async function loadUsSettlementPostingMapping(input: {
   };
 }
 
-export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlementSyncInput): Promise<UsSpApiSettlementSyncResult> {
+export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlementSyncInput): Promise<UkSpApiSettlementSyncResult> {
   const startDate = requireIsoDay(input.startDate, 'startDate');
   const endDate = input.endDate === undefined ? undefined : requireIsoDay(input.endDate, 'endDate');
 
@@ -253,7 +258,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     settlementToGroupId = new Map<string, string>();
     for (const settlementId of Array.from(new Set(settlementIds)).sort()) {
       const eventGroupId = await findFinancialEventGroupIdForSettlementId({
-        tenantCode: 'US',
+        tenantCode: 'UK',
         settlementId,
         postedAfterIso,
         postedBeforeIso,
@@ -262,7 +267,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     }
   } else {
     settlementToGroupId = await listSettlementEventGroupsFromTransactions({
-      tenantCode: 'US',
+      tenantCode: 'UK',
       postedAfterIso,
       postedBeforeIso,
     });
@@ -270,7 +275,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
 
   const groupStartedAfterIso = computeGroupStartedAfterIso(startDate);
   const eventGroups = await listAllFinancialEventGroups({
-    tenantCode: 'US',
+    tenantCode: 'UK',
     startedAfterIso: groupStartedAfterIso,
     startedBeforeIso: postedBeforeIso,
   });
@@ -314,9 +319,9 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
       throw new Error(`Event group not found for settlement ${settlementId}: ${eventGroupId}`);
     }
 
-    const events = await fetchAllFinancialEventsByGroupId({ tenantCode: 'US', eventGroupId });
+    const events = await fetchAllFinancialEventsByGroupId({ tenantCode: 'UK', eventGroupId });
 
-    const draft = buildUsSettlementDraftFromSpApiFinances({
+    const draft = buildUkSettlementDraftFromSpApiFinances({
       settlementId,
       eventGroupId,
       eventGroup,
@@ -337,9 +342,9 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     bundles.push({ settlementId, eventGroupId, draft });
   }
 
-  const mapping = await loadUsSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
+  const mapping = await loadUkSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
 
-  const segments: UsSpApiSettlementSyncSegmentResult[] = [];
+  const segments: UkSpApiSettlementSyncSegmentResult[] = [];
 
   for (const bundle of bundles) {
     const uploadFilename = `spapi-finances-settlement-${bundle.settlementId}.json`;
@@ -348,7 +353,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
     await db.auditDataRow.deleteMany({
       where: {
         invoiceId: { in: invoiceIds },
-        market: { equals: 'us', mode: 'insensitive' },
+        market: { equals: 'uk', mode: 'insensitive' },
       },
     });
 
@@ -376,9 +381,9 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
       },
     });
 
-    const jeDrafts = buildQboJournalEntriesFromUsSettlementDraft({
+    const jeDrafts = buildQboJournalEntriesFromUkSettlementDraft({
       draft: bundle.draft,
-      privateNote: `Plutus (SP-API Finances) | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId} | Upload: ${upload.id}`,
+      privateNote: `Plutus (SP-API Finances) | Region: UK | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId} | Upload: ${upload.id}`,
       bankAccountId: mapping.bankAccountId,
       paymentAccountId: mapping.paymentAccountId,
       accountIdByMemo: mapping.accountIdByMemo,

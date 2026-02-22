@@ -66,7 +66,7 @@ $61,795 in inventory sits on the balance sheet. Revenue of $55K has been generat
 - **Hobby loss risk** — consecutive years of losses with negative gross margin
 
 ### 5. 244 Accounts, 224 With Zero Balance (Bookkeeper)
-91.8% of accounts are unused. 40 CDS sub-accounts are completely empty. 6 duplicate "(LMB)" accounts exist. Target: reduce to ~120 active accounts.
+91.8% of accounts are unused. 40 CDS sub-accounts are completely empty. 6 duplicate legacy accounts exist. Target: reduce to ~120 active accounts.
 
 ### 6. Cash Runway: 2.5-6 Months (Financial Analyst)
 - Conservative: 2.8 months ($8K/mo burn)

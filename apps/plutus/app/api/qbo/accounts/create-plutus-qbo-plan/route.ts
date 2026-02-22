@@ -1,27 +1,27 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createLogger } from '@targon/logger';
+import { randomUUID } from 'crypto';
+
 import { QboAuthError } from '@/lib/qbo/api';
-import { ensurePlutusQboLmbPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-lmb-plan';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { invalidateCache } from '@/lib/qbo/cache';
-import { randomUUID } from 'crypto';
+import { ensurePlutusQboPlanAccounts, type AccountMappings } from '@/lib/qbo/plutus-qbo-plan';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
 
-const logger = createLogger({ name: 'qbo-create-plutus-lmb-accounts' });
+const logger = createLogger({ name: 'qbo-create-plutus-plan-accounts' });
 
 export async function POST(request: NextRequest) {
   const requestId = randomUUID();
 
   try {
     const connection = await getQboConnection();
-
     if (!connection) {
       logger.info('Missing qbo_connection', { requestId });
       return NextResponse.json({ error: 'Not connected to QBO', requestId }, { status: 401 });
     }
 
-    logger.info('Ensuring Plutus LMB plan accounts', {
+    logger.info('Ensuring Plutus plan accounts', {
       requestId,
       realmId: connection.realmId,
       expiresAt: connection.expiresAt,
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       accountMappings: AccountMappings;
     };
 
-    const result = await ensurePlutusQboLmbPlanAccounts(connection, {
+    const result = await ensurePlutusQboPlanAccounts(connection, {
       brandNames: body.brandNames,
       accountMappings: body.accountMappings,
     });
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       await saveServerQboConnection(result.updatedConnection);
     }
 
-    logger.info('Plutus LMB plan accounts ensured', {
+    logger.info('Plutus plan accounts ensured', {
       requestId,
       created: result.created.length,
       skipped: result.skipped.length,
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message, requestId }, { status: 401 });
     }
 
-    logger.error('Failed to create Plutus LMB plan accounts', { requestId, error });
+    logger.error('Failed to create Plutus plan accounts', { requestId, error });
     return NextResponse.json(
       {
         error: 'Failed to create accounts',
@@ -95,3 +95,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

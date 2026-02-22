@@ -36,6 +36,7 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
+import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -57,7 +58,7 @@ type SettlementDetailResponse = {
     periodStart: string | null;
     periodEnd: string | null;
     settlementTotal: number | null;
-    lmbStatus: 'Posted';
+    qboStatus: 'Posted';
     plutusStatus: 'Pending' | 'Processed' | 'RolledBack';
     lines: Array<{
       id?: string;
@@ -208,8 +209,8 @@ function formatMoney(amount: number, currency: string): string {
 
 function displaySettlementDocNumber(docNumber: string): string {
   const raw = docNumber.trim();
-  const normalized = raw.replace(/^.*#(LMB-[A-Z]{2}-)/, '$1');
-  return normalized.startsWith('LMB-') ? normalized.slice('LMB-'.length) : normalized;
+  if (!isSettlementDocNumber(raw)) return raw;
+  return normalizeSettlementDocNumber(raw);
 }
 
 function formatBlockDetails(details: Record<string, string | number> | undefined): string | null {
@@ -544,7 +545,7 @@ function ProcessSettlementDialog({
 
           {!isLoadingAuditData && invoices.length === 0 && (
             <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 3, mt: 2, textAlign: 'center' }}>
-              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No audit data available</Typography>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>No transaction data available</Typography>
             </Box>
           )}
 
@@ -558,12 +559,12 @@ function ProcessSettlementDialog({
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
               {invoiceRecommendation.kind === 'ambiguous' && (
                 <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5, fontSize: '0.875rem', color: 'warning.dark' }}>
-                  Multiple audit invoices match this settlement period. Select the correct invoice manually.
+                  Multiple invoices match this settlement period. Select the correct invoice manually.
                 </Box>
               )}
               {invoiceRecommendation.kind === 'none' && (
                 <Box sx={{ borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5, fontSize: '0.875rem', color: 'warning.dark' }}>
-                  No audit invoice matches this settlement period. Upload the correct Audit Data file or choose an invoice manually.
+                  No invoice matches this settlement period. Sync from Amazon to refresh transaction data, or choose an invoice manually.
                 </Box>
               )}
 
@@ -787,11 +788,8 @@ function parseSettlementTab(tab: string | null): SettlementDetailTab {
   if (tab === 'settlement') return 'sales';
   if (tab === 'qbo-settlement') return 'sales';
   if (tab === 'plutus') return 'plutus-preview';
-  if (tab === 'lmb-preview') return 'plutus-preview';
-  if (tab === 'lmb-settlement') return 'sales';
   if (tab === 'plutus-settlement') return 'plutus-preview';
   if (tab === 'history') return 'plutus-preview';
-  if (tab === 'ads-allocation') return 'plutus-preview';
   if (tab === 'analysis') return 'plutus-preview';
   if (tab === 'plutus-preview') return 'plutus-preview';
   return 'sales';
@@ -1231,9 +1229,9 @@ export default function SettlementDetailPage() {
 
                 {settlement?.plutusStatus === 'Pending' && !isLoadingAudit && !auditData?.invoices?.length && (
                   <Box sx={{ borderRadius: 3, border: 1, borderStyle: 'dashed', borderColor: 'divider', bgcolor: 'background.paper', p: 4, textAlign: 'center' }}>
-                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 0.5 }}>No audit data</Typography>
-                    <Box component={Link} href="/audit-data" sx={{ fontSize: '0.875rem', color: '#008f87', '&:hover': { textDecoration: 'underline' } }}>
-                      Upload Audit Data
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 0.5 }}>No transaction data</Typography>
+                    <Box component={Link} href="/settlements" sx={{ fontSize: '0.875rem', color: '#008f87', '&:hover': { textDecoration: 'underline' } }}>
+                      Sync from Amazon
                     </Box>
                   </Box>
                 )}

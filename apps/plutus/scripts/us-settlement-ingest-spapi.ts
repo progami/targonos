@@ -227,14 +227,14 @@ function getLineAccountIdByDescription(je: QboJournalEntry, description: string)
   return null;
 }
 
-async function findAccountIdInRecentLmbUsSettlementJournals(input: {
-  connection: any;
+async function findAccountIdInRecentUsSettlementJournals(input: {
+  connection: QboConnection;
   startDate: string;
   description: string;
-}): Promise<{ accountId: string; updatedConnection?: any }> {
+}): Promise<{ accountId: string; updatedConnection?: QboConnection }> {
   const pageSize = 100;
   let startPosition = 1;
-  let connection = input.connection;
+  let connection: QboConnection = input.connection;
 
   while (true) {
     const page = await fetchJournalEntries(connection, {
@@ -326,7 +326,7 @@ async function main(): Promise<void> {
   let paymentAccountId = templateMapping.paymentAccountId;
 
   if (bankAccountId === '') {
-    const found = await findAccountIdInRecentLmbUsSettlementJournals({
+    const found = await findAccountIdInRecentUsSettlementJournals({
       connection,
       startDate: options.startDate,
       description: 'Transfer to Bank',
@@ -336,7 +336,7 @@ async function main(): Promise<void> {
   }
 
   if (paymentAccountId === '') {
-    const found = await findAccountIdInRecentLmbUsSettlementJournals({
+    const found = await findAccountIdInRecentUsSettlementJournals({
       connection,
       startDate: options.startDate,
       description: 'Payment to Amazon',
@@ -474,7 +474,7 @@ async function main(): Promise<void> {
         if (!jeId) throw new Error(`Missing posted JE id for segment ${segment.docNumber}`);
 
         const auditRows = segment.auditRows.map((r) => ({
-          invoice: r.invoiceId,
+          invoiceId: r.invoiceId,
           market: r.market,
           date: r.date,
           orderId: r.orderId,
