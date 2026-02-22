@@ -9,7 +9,7 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 
 export const runtime = 'nodejs';
 
-const logger = createLogger({ name: 'plutus-settlement-mapping-import-us' });
+const logger = createLogger({ name: 'plutus-settlement-mapping-import-uk' });
 
 type ImportResult = {
   bankAccountId: string | null;
@@ -31,7 +31,7 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
 
   while (true) {
     const page = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'US-',
+      docNumberContains: 'UK-',
       maxResults: pageSize,
       startPosition,
     });
@@ -107,7 +107,7 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
   }
 
   if (memoMappings.size === 0) {
-    throw new Error("No settlements found in QBO history (DocNumber contains 'US-')");
+    throw new Error("No settlements found in QBO history (DocNumber contains 'UK-')");
   }
 
   const memoEntries = Array.from(memoMappings.entries()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -139,7 +139,7 @@ export async function POST() {
       await saveServerQboConnection(imported.updatedConnection);
     }
 
-    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
+    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.co.uk' } });
     const nextBankAccountId = imported.result.bankAccountId ?? existing?.bankAccountId ?? null;
     const nextPaymentAccountId = imported.result.paymentAccountId ?? existing?.paymentAccountId ?? null;
 
@@ -156,14 +156,14 @@ export async function POST() {
     );
 
     await db.settlementPostingConfig.upsert({
-      where: { marketplace: 'amazon.com' },
+      where: { marketplace: 'amazon.co.uk' },
       update: {
         bankAccountId: nextBankAccountId,
         paymentAccountId: nextPaymentAccountId,
         accountIdByMemo: combinedMemoMappings,
       },
       create: {
-        marketplace: 'amazon.com',
+        marketplace: 'amazon.co.uk',
         bankAccountId: nextBankAccountId,
         paymentAccountId: nextPaymentAccountId,
         accountIdByMemo: combinedMemoMappings,
@@ -177,10 +177,10 @@ export async function POST() {
       action: 'CONFIG_UPDATED',
       entityType: 'SettlementPostingConfig',
       details: {
-        usSettlementMemoMappings: Object.keys(imported.result.memoMappings).length,
-        usSettlementTaxMemoMappings: Object.keys(imported.result.taxCodeMappings).length,
-        usSettlementBankAccountId: nextBankAccountId,
-        usSettlementPaymentAccountId: nextPaymentAccountId,
+        ukSettlementMemoMappings: Object.keys(imported.result.memoMappings).length,
+        ukSettlementTaxMemoMappings: Object.keys(imported.result.taxCodeMappings).length,
+        ukSettlementBankAccountId: nextBankAccountId,
+        ukSettlementPaymentAccountId: nextPaymentAccountId,
       },
     });
 
@@ -193,10 +193,10 @@ export async function POST() {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
 
-    logger.error('Failed to import US settlement memo mapping from QBO', { error });
+    logger.error('Failed to import UK settlement memo mapping from QBO', { error });
     return NextResponse.json(
       {
-        error: 'Failed to import US settlement memo mapping from QBO',
+        error: 'Failed to import UK settlement memo mapping from QBO',
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },

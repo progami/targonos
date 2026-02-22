@@ -1,11 +1,11 @@
-# Plutus UI/UX - LMB Reference
+# Plutus UI/UX Notes
 
-This folder contains UI/UX documentation for replicating Link My Books (LMB) patterns while adapting to the Targon design system.
+This folder contains UI/UX documentation for Plutus components and layout patterns within the Targon design system.
 
 ## Implementation Checklist
 
 ### Components
-- [x] SplitButton - LMB-style action button with dropdown
+- [x] SplitButton - Action button with dropdown
 - [x] FilterBar - Styled filter row with dropdowns
 - [x] SelectionCard - Card selection with badge support
 - [ ] TreeTable - Expandable rows with tree lines (deferred)
@@ -32,9 +32,9 @@ This folder contains UI/UX documentation for replicating Link My Books (LMB) pat
 
 ---
 
-## Color Mapping (LMB to Targon)
+## Color Mapping
 
-| LMB Color | LMB Usage | Targon Equivalent |
+| Reference Color | Usage | Targon Equivalent |
 |-----------|-----------|-------------------|
 | #E86C3A (coral) | Page titles, links | `text-accent-500` |
 | #38B2AC (teal) | CTAs, badges | `bg-brand-teal-500` |
@@ -45,7 +45,7 @@ This folder contains UI/UX documentation for replicating Link My Books (LMB) pat
 ## Components Built
 
 ### 1. SplitButton (`ui/split-button.tsx`)
-LMB-style split action button with primary action and dropdown.
+Split action button with primary action and dropdown.
 
 ```tsx
 <SplitButton
@@ -60,7 +60,7 @@ LMB-style split action button with primary action and dropdown.
 ```
 
 ### 2. FilterBar (`ui/filter-bar.tsx`)
-LMB-style filter row with dropdowns and filter button.
+Filter row with dropdowns and filter button.
 
 ```tsx
 <FilterBar
@@ -96,7 +96,7 @@ Dark/light mode toggle button.
 
 ## Page Title Pattern
 
-LMB uses coral/orange for page titles. In Targon, use:
+Use coral/orange for page titles:
 ```tsx
 <h1 className="text-2xl font-semibold text-accent-500">Settlements</h1>
 ```
@@ -133,57 +133,6 @@ Accounts & Taxes ▾   (dropdown)
   ├── Setup Wizard
   └── Chart of Accounts
 Cost Management ▾    (dropdown)
-  ├── Audit Data      ← NEW: bulk audit data upload
-  └── Bills
-  └── Reconciliation  ← NEW: Amazon vs LMB compare
+  └── Data Sources
 Settings             (top-level link)
 ```
-
-## Audit Data Page (`/audit-data`)
-
-**Purpose:** Single place to upload LMB Audit Data CSVs. One CSV covers multiple settlements — Plutus splits by Invoice and matches to known settlements automatically.
-
-**Location in nav:** Cost Management → Audit Data
-
-### Upload Flow
-1. User drags/clicks to upload a CSV (or ZIP containing a CSV)
-2. Plutus parses and shows a summary table:
-   - Invoice ID, matched settlement doc number, date range, row count, status
-   - Statuses: "Matched" (linked to a known settlement), "Unmatched" (no QBO settlement found)
-3. User confirms → audit data is stored and linked to settlements
-4. Re-uploading overlapping data is safe (idempotent)
-
-### Page Layout
-- **Header:** "Audit Data" (accent variant)
-- **Upload zone:** Drag-and-drop area with file picker fallback
-- **Upload history table:**
-  - Columns: Filename, Uploaded, Settlements, Rows, Status
-  - Expandable rows showing per-Invoice breakdown
-- **Empty state:** Instructions pointing user to download audit data from LMB
-
-### Design Notes
-- Upload zone: dashed border, teal accent on hover/drag, file icon
-- Success state: green checkmark with matched settlement count
-- Warning state: amber for unmatched invoices (settlement not yet posted by LMB)
-- The Settlements page should show an "Audit Data" indicator column (including ambiguous/none states) so the user knows which settlements have data ready for processing
-
-## LMB Patterns Reference
-
-### Settlements List
-- Filter bar with dropdowns (Period, Total, Status)
-- Split action button per row
-- Status badges ("Posted" in teal pill)
-- Country flags next to marketplace
-- Audit data availability indicator per row (including ambiguous/none states)
-
-### Account Taxes
-- Tree table with expand/collapse
-- Orange connecting lines for tree structure
-- Column labels above dropdowns (teal, uppercase)
-- Grouped by category
-
-### Setup Wizard
-- Left sidebar with step indicator
-- Radio buttons with dashed connecting lines
-- Card selection with badges
-- Progress status bar at bottom

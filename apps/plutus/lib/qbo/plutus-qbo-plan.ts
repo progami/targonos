@@ -1,7 +1,7 @@
 import { createLogger } from '@targon/logger';
 import { createAccount, fetchAccounts, type QboAccount, type QboConnection } from './api';
 
-const logger = createLogger({ name: 'plutus-qbo-lmb-plan' });
+const logger = createLogger({ name: 'plutus-qbo-plan' });
 
 type EnsureResult = {
   created: QboAccount[];
@@ -104,7 +104,7 @@ export type AccountMappings = {
   // Product Expenses
   productExpenses: string;
 
-  // LMB Revenue/Fee accounts
+  // Amazon revenue/fee accounts
   amazonSales: string;
   amazonRefunds: string;
   amazonFbaInventoryReimbursement: string;
@@ -115,7 +115,7 @@ export type AccountMappings = {
   amazonPromotions: string;
 };
 
-export async function ensurePlutusQboLmbPlanAccounts(
+export async function ensurePlutusQboPlanAccounts(
   connection: QboConnection,
   input: {
     brandNames: string[];
@@ -159,7 +159,7 @@ export async function ensurePlutusQboLmbPlanAccounts(
     // Product Expenses
     productExpenses: requireAccountById(accounts, mappings.productExpenses, 'Product Expenses'),
 
-    // LMB
+    // Amazon
     amazonSales: requireAccountById(accounts, mappings.amazonSales, 'Amazon Sales'),
     amazonRefunds: requireAccountById(accounts, mappings.amazonRefunds, 'Amazon Refunds'),
     amazonFbaInventoryReimbursement: requireAccountById(
@@ -196,7 +196,7 @@ export async function ensurePlutusQboLmbPlanAccounts(
     // Product Expenses
     { label: 'Product Expenses', parent: parents.productExpenses },
 
-    // LMB P&L
+    // Amazon P&L
     { label: 'Amazon Sales', parent: parents.amazonSales },
     { label: 'Amazon Refunds', parent: parents.amazonRefunds },
     { label: 'Amazon FBA Inventory Reimbursement', parent: parents.amazonFbaInventoryReimbursement },

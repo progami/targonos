@@ -32,6 +32,7 @@ if (basePath === undefined) {
 }
 
 type ConnectionStatus = { connected: boolean; error?: string };
+type Region = 'US' | 'UK';
 
 type QboAccount = {
   id: string;
@@ -45,13 +46,19 @@ type SettlementMappingResponse = {
   usSettlementBankAccountId: string | null;
   usSettlementPaymentAccountId: string | null;
   usSettlementAccountIdByMemo: Record<string, string>;
+  usSettlementTaxCodeIdByMemo: Record<string, string | null>;
+  ukSettlementBankAccountId: string | null;
+  ukSettlementPaymentAccountId: string | null;
+  ukSettlementAccountIdByMemo: Record<string, string>;
+  ukSettlementTaxCodeIdByMemo: Record<string, string | null>;
 };
 
-type ImportUsSettlementMappingResponse = {
+type ImportSettlementMappingResponse = {
   success: true;
   bankAccountId: string | null;
   paymentAccountId: string | null;
   memoMappings: Record<string, string>;
+  taxCodeMappings: Record<string, string | null>;
 };
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -82,6 +89,23 @@ function accountLabel(account: QboAccount): string {
   return account.acctNum ? `${account.acctNum} · ${account.fullyQualifiedName}` : account.fullyQualifiedName;
 }
 
+function normalizeTaxCodeMappings(input: {
+  memoMappings: Record<string, string>;
+  taxCodeMappings: Record<string, string | null>;
+}): Record<string, string | null> {
+  const result: Record<string, string | null> = {};
+  for (const memo of Object.keys(input.memoMappings)) {
+    const raw = input.taxCodeMappings[memo];
+    if (raw === null || raw === undefined) {
+      result[memo] = null;
+      continue;
+    }
+    const trimmed = raw.trim();
+    result[memo] = trimmed === '' ? null : trimmed;
+  }
+  return result;
+}
+
 export default function SettlementMappingPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
@@ -105,19 +129,39 @@ export default function SettlementMappingPage() {
     staleTime: 30 * 1000,
   });
 
-  const [bankAccountId, setBankAccountId] = useState<string>('');
-  const [paymentAccountId, setPaymentAccountId] = useState<string>('');
-  const [memoMappings, setMemoMappings] = useState<Record<string, string>>({});
+  type RegionState = {
+    bankAccountId: string;
+    paymentAccountId: string;
+    memoMappings: Record<string, string>;
+    taxCodeMappings: Record<string, string | null>;
+  };
+  const [region, setRegion] = useState<Region>('US');
+  const [byRegion, setByRegion] = useState<Record<Region, RegionState>>({
+    US: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
+    UK: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
+  });
   const [search, setSearch] = useState('');
   const [newMemo, setNewMemo] = useState('');
   const [newAccountId, setNewAccountId] = useState('');
+  const [newTaxCodeId, setNewTaxCodeId] = useState('');
 
   useEffect(() => {
     if (!mappingData) return;
 
-    setBankAccountId(mappingData.usSettlementBankAccountId ?? '');
-    setPaymentAccountId(mappingData.usSettlementPaymentAccountId ?? '');
-    setMemoMappings(mappingData.usSettlementAccountIdByMemo ?? {});
+    setByRegion({
+      US: {
+        bankAccountId: mappingData.usSettlementBankAccountId ?? '',
+        paymentAccountId: mappingData.usSettlementPaymentAccountId ?? '',
+        memoMappings: mappingData.usSettlementAccountIdByMemo ?? {},
+        taxCodeMappings: mappingData.usSettlementTaxCodeIdByMemo ?? {},
+      },
+      UK: {
+        bankAccountId: mappingData.ukSettlementBankAccountId ?? '',
+        paymentAccountId: mappingData.ukSettlementPaymentAccountId ?? '',
+        memoMappings: mappingData.ukSettlementAccountIdByMemo ?? {},
+        taxCodeMappings: mappingData.ukSettlementTaxCodeIdByMemo ?? {},
+      },
+    });
   }, [mappingData]);
 
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
@@ -125,6 +169,12 @@ export default function SettlementMappingPage() {
   const bankAndCardAccounts = useMemo(() => {
     return accounts.filter((a) => a.type === 'Bank' || a.type === 'Credit Card');
   }, [accounts]);
+
+  const active = byRegion[region];
+  const bankAccountId = active.bankAccountId;
+  const paymentAccountId = active.paymentAccountId;
+  const memoMappings = active.memoMappings;
+  const taxCodeMappings = active.taxCodeMappings;
 
   const memoRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -139,9 +189,20 @@ export default function SettlementMappingPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          usSettlementBankAccountId: bankAccountId.trim() === '' ? null : bankAccountId.trim(),
-          usSettlementPaymentAccountId: paymentAccountId.trim() === '' ? null : paymentAccountId.trim(),
-          usSettlementAccountIdByMemo: memoMappings,
+          usSettlementBankAccountId: byRegion.US.bankAccountId.trim() === '' ? null : byRegion.US.bankAccountId.trim(),
+          usSettlementPaymentAccountId: byRegion.US.paymentAccountId.trim() === '' ? null : byRegion.US.paymentAccountId.trim(),
+          usSettlementAccountIdByMemo: byRegion.US.memoMappings,
+          usSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
+            memoMappings: byRegion.US.memoMappings,
+            taxCodeMappings: byRegion.US.taxCodeMappings,
+          }),
+          ukSettlementBankAccountId: byRegion.UK.bankAccountId.trim() === '' ? null : byRegion.UK.bankAccountId.trim(),
+          ukSettlementPaymentAccountId: byRegion.UK.paymentAccountId.trim() === '' ? null : byRegion.UK.paymentAccountId.trim(),
+          ukSettlementAccountIdByMemo: byRegion.UK.memoMappings,
+          ukSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
+            memoMappings: byRegion.UK.memoMappings,
+            taxCodeMappings: byRegion.UK.taxCodeMappings,
+          }),
         }),
       });
       const data = (await res.json()) as unknown;
@@ -163,8 +224,9 @@ export default function SettlementMappingPage() {
   });
 
   const importMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`${basePath}/api/setup/settlement-mapping/import/us`, {
+    mutationFn: async (region: Region) => {
+      const endpoint = region === 'US' ? 'us' : 'uk';
+      const res = await fetch(`${basePath}/api/setup/settlement-mapping/import/${endpoint}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
       });
@@ -176,13 +238,23 @@ export default function SettlementMappingPage() {
             : 'Failed to import mapping from QBO';
         throw new Error(message);
       }
-      return data as ImportUsSettlementMappingResponse;
+      return data as ImportSettlementMappingResponse;
     },
-    onSuccess: (data) => {
-      setBankAccountId(data.bankAccountId ?? '');
-      setPaymentAccountId(data.paymentAccountId ?? '');
-      setMemoMappings(data.memoMappings);
-      enqueueSnackbar(`Imported ${Object.keys(data.memoMappings).length} memo mappings from QBO`, { variant: 'success' });
+    onSuccess: (data, importedRegion) => {
+      setByRegion((prev) => ({
+        ...prev,
+        [importedRegion]: {
+          ...prev[importedRegion],
+          bankAccountId: data.bankAccountId ?? '',
+          paymentAccountId: data.paymentAccountId ?? '',
+          memoMappings: data.memoMappings,
+          taxCodeMappings: data.taxCodeMappings,
+        },
+      }));
+      enqueueSnackbar(
+        `Imported ${Object.keys(data.memoMappings).length} memo mappings + ${Object.keys(data.taxCodeMappings).length} tax mappings from QBO`,
+        { variant: 'success' },
+      );
     },
     onError: (error) => {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
@@ -194,21 +266,41 @@ export default function SettlementMappingPage() {
     const accountId = newAccountId.trim();
     if (memo === '' || accountId === '') return;
 
+    const taxCodeId = newTaxCodeId.trim();
+    const taxCodeValue = taxCodeId === '' ? null : taxCodeId;
+
     if (memoMappings[memo] !== undefined) {
       enqueueSnackbar('Memo already exists in mapping', { variant: 'warning' });
       return;
     }
 
-    setMemoMappings((prev) => ({ ...prev, [memo]: accountId }));
+    setByRegion((prev) => ({
+      ...prev,
+      [region]: {
+        ...prev[region],
+        memoMappings: { ...prev[region].memoMappings, [memo]: accountId },
+        taxCodeMappings: { ...prev[region].taxCodeMappings, [memo]: taxCodeValue },
+      },
+    }));
     setNewMemo('');
     setNewAccountId('');
+    setNewTaxCodeId('');
   };
 
   const onDeleteMemoMapping = (memo: string) => {
-    setMemoMappings((prev) => {
-      const next = { ...prev };
+    setByRegion((prev) => {
+      const next = { ...prev[region].memoMappings };
       delete next[memo];
-      return next;
+      const nextTax = { ...prev[region].taxCodeMappings };
+      delete nextTax[memo];
+      return {
+        ...prev,
+        [region]: {
+          ...prev[region],
+          memoMappings: next,
+          taxCodeMappings: nextTax,
+        },
+      };
     });
   };
 
@@ -224,19 +316,29 @@ export default function SettlementMappingPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
           <PageHeader
             title="Settlement Mapping"
-            description="Used by the US SP-API settlement sync to post journal entries that exactly match your existing QBO settlement structure."
+            description="Used by the SP-API settlement sync to post journal entries that exactly match your existing QBO settlement structure."
             variant="accent"
           />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <Select
+                value={region}
+                onChange={(e) => setRegion(e.target.value as Region)}
+                sx={{ borderRadius: 2 }}
+              >
+                <MenuItem value="US">US</MenuItem>
+                <MenuItem value="UK">UK</MenuItem>
+              </Select>
+            </FormControl>
             <Button
               variant="outlined"
               disableElevation
-              onClick={() => importMutation.mutate()}
+              onClick={() => importMutation.mutate(region)}
               disabled={importMutation.isPending || connectionStatus?.connected !== true}
               startIcon={<CloudDownloadIcon sx={{ fontSize: 16 }} />}
               sx={{ borderRadius: 2, textTransform: 'none' }}
             >
-              {importMutation.isPending ? 'Importing…' : 'Import from QBO (US)'}
+              {importMutation.isPending ? 'Importing…' : `Import from QBO (${region})`}
             </Button>
             <Button
               variant="contained"
@@ -255,7 +357,7 @@ export default function SettlementMappingPage() {
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                US payout accounts
+                {region} payout accounts
               </Typography>
               <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                 These are used for the settlement payout line on the last segment.
@@ -269,7 +371,12 @@ export default function SettlementMappingPage() {
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
                     <Select
                       value={bankAccountId}
-                      onChange={(e) => setBankAccountId(e.target.value as string)}
+                      onChange={(e) =>
+                        setByRegion((prev) => ({
+                          ...prev,
+                          [region]: { ...prev[region], bankAccountId: e.target.value as string },
+                        }))
+                      }
                       displayEmpty
                       renderValue={(sel) => {
                         if (!sel) return <span style={{ color: '#94a3b8' }}>Select bank account...</span>;
@@ -293,7 +400,12 @@ export default function SettlementMappingPage() {
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
                     <Select
                       value={paymentAccountId}
-                      onChange={(e) => setPaymentAccountId(e.target.value as string)}
+                      onChange={(e) =>
+                        setByRegion((prev) => ({
+                          ...prev,
+                          [region]: { ...prev[region], paymentAccountId: e.target.value as string },
+                        }))
+                      }
                       displayEmpty
                       renderValue={(sel) => {
                         if (!sel) return <span style={{ color: '#94a3b8' }}>Select payment account...</span>;
@@ -318,7 +430,7 @@ export default function SettlementMappingPage() {
               <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                    US settlement memo → account mapping
+                    {region} settlement memo → account mapping
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
                     Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then adjust as needed.
@@ -335,7 +447,7 @@ export default function SettlementMappingPage() {
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1.2fr 1fr auto' }, alignItems: { md: 'end' } }}>
+              <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1.2fr 1fr 1fr auto' }, alignItems: { md: 'end' } }}>
                 <Box>
                   <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
                     Add memo
@@ -374,6 +486,20 @@ export default function SettlementMappingPage() {
                   </FormControl>
                 </Box>
 
+                <Box>
+                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
+                    Tax code (optional)
+                  </Typography>
+                  <TextField
+                    value={newTaxCodeId}
+                    onChange={(e) => setNewTaxCodeId(e.target.value)}
+                    placeholder="QBO TaxCodeRef id (or blank)"
+                    size="small"
+                    fullWidth
+                    sx={{ mt: 0.75 }}
+                  />
+                </Box>
+
                 <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
                   <Button
                     variant="outlined"
@@ -397,13 +523,16 @@ export default function SettlementMappingPage() {
                       <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                         QBO account
                       </TableCell>
+                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                        Tax code
+                      </TableCell>
                       <TableCell sx={{ width: 52 }} />
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {isLoading && (
                       <TableRow>
-                        <TableCell colSpan={3} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={4} sx={{ py: 3, color: 'text.secondary' }}>
                           Loading…
                         </TableCell>
                       </TableRow>
@@ -411,50 +540,82 @@ export default function SettlementMappingPage() {
 
                     {!isLoading && memoRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={3} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={4} sx={{ py: 3, color: 'text.secondary' }}>
                           No memo mappings found.
                         </TableCell>
                       </TableRow>
                     )}
 
                     {!isLoading &&
-                      memoRows.map(([memo, accountId]) => (
-                        <TableRow key={memo} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                          <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'text.primary' }}>
-                            {memo}
-                          </TableCell>
-                          <TableCell>
-                            <FormControl size="small" fullWidth>
-                              <Select
-                                value={accountId}
+                      memoRows.map(([memo, accountId]) => {
+                        const taxCodeId = taxCodeMappings[memo] ?? null;
+
+                        return (
+                          <TableRow key={memo} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'text.primary' }}>
+                              {memo}
+                            </TableCell>
+                            <TableCell>
+                              <FormControl size="small" fullWidth>
+                                <Select
+                                  value={accountId}
+                                  onChange={(e) => {
+                                    const nextAccountId = e.target.value as string;
+                                    setByRegion((prev) => ({
+                                      ...prev,
+                                      [region]: {
+                                        ...prev[region],
+                                        memoMappings: { ...prev[region].memoMappings, [memo]: nextAccountId },
+                                      },
+                                    }));
+                                  }}
+                                  renderValue={(sel) => {
+                                    const found = accounts.find((a) => a.id === sel);
+                                    return found ? accountLabel(found) : (sel as string);
+                                  }}
+                                >
+                                  {accounts.map((a) => (
+                                    <MenuItem key={a.id} value={a.id}>
+                                      {accountLabel(a)}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            </TableCell>
+                            <TableCell>
+                              <TextField
+                                value={taxCodeId ?? ''}
                                 onChange={(e) => {
-                                  const nextAccountId = e.target.value as string;
-                                  setMemoMappings((prev) => ({ ...prev, [memo]: nextAccountId }));
+                                  const trimmed = e.target.value.trim();
+                                  setByRegion((prev) => ({
+                                    ...prev,
+                                    [region]: {
+                                      ...prev[region],
+                                      taxCodeMappings: {
+                                        ...prev[region].taxCodeMappings,
+                                        [memo]: trimmed === '' ? null : trimmed,
+                                      },
+                                    },
+                                  }));
                                 }}
-                                renderValue={(sel) => {
-                                  const found = accounts.find((a) => a.id === sel);
-                                  return found ? accountLabel(found) : (sel as string);
-                                }}
+                                placeholder="(none)"
+                                size="small"
+                                fullWidth
+                                inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.8125rem' } }}
+                              />
+                            </TableCell>
+                            <TableCell sx={{ textAlign: 'right' }}>
+                              <IconButton
+                                size="small"
+                                onClick={() => onDeleteMemoMapping(memo)}
+                                title="Delete"
                               >
-                                {accounts.map((a) => (
-                                  <MenuItem key={a.id} value={a.id}>
-                                    {accountLabel(a)}
-                                  </MenuItem>
-                                ))}
-                              </Select>
-                            </FormControl>
-                          </TableCell>
-                          <TableCell sx={{ textAlign: 'right' }}>
-                            <IconButton
-                              size="small"
-                              onClick={() => onDeleteMemoMapping(memo)}
-                              title="Delete"
-                            >
-                              <DeleteOutlineIcon sx={{ fontSize: 18 }} />
-                            </IconButton>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                                <DeleteOutlineIcon sx={{ fontSize: 18 }} />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </TableBody>
                 </Table>
               </Box>
@@ -469,7 +630,7 @@ export default function SettlementMappingPage() {
               <Box sx={{ mt: 1, display: 'grid', gap: 0.75, fontSize: '0.875rem', color: 'text.secondary' }}>
                 <Box>1) Import while your historical US settlements still exist in QBO.</Box>
                 <Box>2) Plutus will fail if a memo is missing from the mapping (to prevent mis-posts).</Box>
-                <Box>3) This mapping does not modify QBO tax rates; taxes are handled as explicit settlement lines.</Box>
+                <Box>3) Tax code mapping mirrors the TaxCodeRef used on historical settlement JEs (import from QBO first, then edit if needed).</Box>
               </Box>
             </CardContent>
           </Card>
@@ -478,4 +639,3 @@ export default function SettlementMappingPage() {
     </Box>
   );
 }
-

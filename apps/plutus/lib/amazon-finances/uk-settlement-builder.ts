@@ -12,7 +12,7 @@ import type {
   SpApiTaxWithheldComponent,
 } from './types';
 
-export type UsSettlementSegmentDraft = {
+export type UkSettlementSegmentDraft = {
   seq: number;
   yearMonth: string;
   startIsoDay: string;
@@ -20,12 +20,12 @@ export type UsSettlementSegmentDraft = {
   txnDate: string;
   docNumber: string;
   memoTotalsCents: Map<string, number>;
-  auditRows: UsSettlementAuditRowDraft[];
+  auditRows: UkSettlementAuditRowDraft[];
 };
 
-export type UsSettlementAuditRowDraft = {
+export type UkSettlementAuditRowDraft = {
   invoiceId: string;
-  market: 'us';
+  market: 'uk';
   date: string; // YYYY-MM-DD (local)
   orderId: string;
   sku: string;
@@ -34,15 +34,15 @@ export type UsSettlementAuditRowDraft = {
   netCents: number;
 };
 
-export type UsSettlementDraft = {
+export type UkSettlementDraft = {
   settlementId: string;
   eventGroupId: string;
   timeZone: string;
   originalTotalCents: number;
-  segments: UsSettlementSegmentDraft[];
+  segments: UkSettlementSegmentDraft[];
 };
 
-const US_TIME_ZONE = 'America/Los_Angeles';
+const UK_TIME_ZONE = 'Europe/London';
 
 const MONTH_ABBR: Record<number, string> = {
   1: 'JAN',
@@ -63,7 +63,7 @@ function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
 }
 
-function buildUsSettlementDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
+function buildUkSettlementDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
   const start = parseIsoDayParts(input.startIsoDay, 'segment start');
   const end = parseIsoDayParts(input.endIsoDay, 'segment end');
 
@@ -76,7 +76,7 @@ function buildUsSettlementDocNumber(input: { startIsoDay: string; endIsoDay: str
   const endToken = `${pad2(end.day)}${month}`;
   const yearToken = String(end.year).slice(-2);
 
-  return `US-${startToken}-${endToken}-${yearToken}-${input.seq}`;
+  return `UK-${startToken}-${endToken}-${yearToken}-${input.seq}`;
 }
 
 function addCents(map: Map<string, number>, key: string, cents: number): void {
@@ -224,7 +224,7 @@ function toWithheldComponents(list: unknown): SpApiTaxWithheldComponent[] {
 }
 
 function resolveSegmentIndexByYearMonth(
-  segments: UsSettlementSegmentDraft[],
+  segments: UkSettlementSegmentDraft[],
   yearMonth: string,
   options?: { allowAfterEndToLast?: boolean },
 ): number {
@@ -246,7 +246,7 @@ function requireEventGroupField(value: string | undefined, field: string, settle
   return value;
 }
 
-export function buildUsSettlementDraftFromSpApiFinances(input: {
+export function buildUkSettlementDraftFromSpApiFinances(input: {
   settlementId: string;
   eventGroupId: string;
   eventGroup: SpApiFinancialEventGroup;
@@ -254,8 +254,8 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
   skuToBrandName: Map<string, string>;
   brandLabelByBrandName?: Map<string, string>;
   timeZone?: string;
-}): UsSettlementDraft {
-  const timeZone = input.timeZone === undefined ? US_TIME_ZONE : input.timeZone;
+}): UkSettlementDraft {
+  const timeZone = input.timeZone === undefined ? UK_TIME_ZONE : input.timeZone;
 
   const groupStartTs = requireEventGroupField(input.eventGroup.FinancialEventGroupStart, 'FinancialEventGroupStart', input.settlementId);
   const groupEndTs = requireEventGroupField(input.eventGroup.FinancialEventGroupEnd, 'FinancialEventGroupEnd', input.settlementId);
@@ -282,7 +282,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     endParts = parseIsoDayParts(endIsoDay, 'group end day');
   }
 
-  const segments: UsSettlementSegmentDraft[] = [];
+  const segments: UkSettlementSegmentDraft[] = [];
   let year = startParts.year;
   let month = startParts.month;
   let seq = 1;
@@ -293,7 +293,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     const segEndDay = year === endParts.year && month === endParts.month ? endParts.day : lastDayOfMonth(year, month);
     const segStartIsoDay = `${year}-${pad2(month)}-${pad2(segStartDay)}`;
     const segEndIsoDay = `${year}-${pad2(month)}-${pad2(segEndDay)}`;
-    const docNumber = buildUsSettlementDocNumber({ startIsoDay: segStartIsoDay, endIsoDay: segEndIsoDay, seq });
+    const docNumber = buildUkSettlementDocNumber({ startIsoDay: segStartIsoDay, endIsoDay: segEndIsoDay, seq });
 
     segments.push({
       seq,
@@ -356,7 +356,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         if (chargeType === 'Principal') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
-            market: 'us',
+            market: 'uk',
             date: localIsoDay,
             orderId,
             sku: skuRaw,
@@ -394,7 +394,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         if (skuRaw !== '') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
-            market: 'us',
+            market: 'uk',
             date: localIsoDay,
             orderId,
             sku: skuRaw,
@@ -458,7 +458,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         if (chargeType === 'Principal') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
-            market: 'us',
+            market: 'uk',
             date: localIsoDay,
             orderId,
             sku: skuRaw,
@@ -496,7 +496,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         if (skuRaw !== '') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
-            market: 'us',
+            market: 'uk',
             date: localIsoDay,
             orderId,
             sku: skuRaw,
@@ -546,7 +546,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     addCents(segment.memoTotalsCents, memo, cents);
     segment.auditRows.push({
       invoiceId: segment.docNumber,
-      market: 'us',
+      market: 'uk',
       date: localIsoDay,
       orderId: '',
       sku: '',
@@ -577,7 +577,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     addCents(segment.memoTotalsCents, memo, cents);
     segment.auditRows.push({
       invoiceId: segment.docNumber,
-      market: 'us',
+      market: 'uk',
       date: localIsoDay,
       orderId: '',
       sku: '',
@@ -604,7 +604,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
       addCents(lastSegment.memoTotalsCents, memo, cents);
       lastSegment.auditRows.push({
         invoiceId: lastSegment.docNumber,
-        market: 'us',
+        market: 'uk',
         date: lastSegment.endIsoDay,
         orderId: '',
         sku: '',
@@ -636,7 +636,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     addCents(segment.memoTotalsCents, memo, cents);
     segment.auditRows.push({
       invoiceId: segment.docNumber,
-      market: 'us',
+      market: 'uk',
       date: localIsoDay,
       orderId: '',
       sku: '',
@@ -656,7 +656,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         addCents(lastSegment.memoTotalsCents, 'Amazon Reserved Balances - Successful charge', cents);
         lastSegment.auditRows.push({
           invoiceId: lastSegment.docNumber,
-          market: 'us',
+          market: 'uk',
           date: lastSegment.endIsoDay,
           orderId: '',
           sku: '',
@@ -683,7 +683,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
       addCents(lastSegment.memoTotalsCents, 'Amazon Reserved Balances - Repayment of negative Amazon balance', cents);
       lastSegment.auditRows.push({
         invoiceId: lastSegment.docNumber,
-        market: 'us',
+        market: 'uk',
         date: lastSegment.endIsoDay,
         orderId: '',
         sku: '',
@@ -751,8 +751,8 @@ function postingForNonBank(cents: number): { postingType: 'Debit' | 'Credit'; am
   return cents > 0 ? { postingType: 'Credit', amount } : { postingType: 'Debit', amount };
 }
 
-export function buildQboJournalEntriesFromUsSettlementDraft(input: {
-  draft: UsSettlementDraft;
+export function buildQboJournalEntriesFromUkSettlementDraft(input: {
+  draft: UkSettlementDraft;
   privateNote: string;
   bankAccountId: string;
   paymentAccountId: string;

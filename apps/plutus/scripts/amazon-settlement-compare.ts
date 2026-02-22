@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
 import { parseAmazonUnifiedTransactionCsv } from '@/lib/amazon-payments/unified-transaction-csv';
+import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 type CsvRow = string[];
 
@@ -69,8 +70,12 @@ function parseMoney(raw: string): number {
   return n;
 }
 
+function normalizeAccountName(value: string): string {
+  return value.trim().replace(/\s*\([^)]*\)\s*$/, '').trim();
+}
+
 function normalizeLedgerAccount(account: string): string {
-  const trimmed = account.trim();
+  const trimmed = normalizeAccountName(account);
   if (trimmed.startsWith('Amazon Sales - ')) return 'Amazon Sales';
   if (trimmed.startsWith('Amazon Refunds - ')) return 'Amazon Refunds';
   return trimmed;
@@ -113,9 +118,10 @@ function loadSettlementIdByDocNumberFromTransactionListByDateCsv(content: string
     const txnType = row[idxTxnType]?.trim();
     if (txnType !== 'Journal Entry') continue;
 
-    const docNumber = row[idxNum]?.trim();
-    if (!docNumber) continue;
-    if (!docNumber.startsWith('LMB-')) continue;
+    const docNumberRaw = row[idxNum]?.trim();
+    if (!docNumberRaw) continue;
+    if (!isSettlementDocNumber(docNumberRaw)) continue;
+    const docNumber = normalizeSettlementDocNumber(docNumberRaw);
 
     const memo = row[idxMemo] ?? '';
     const match = memo.match(auditUrlPattern);
@@ -372,14 +378,14 @@ function computeExpectedTotalsBySettlementId(csvTexts: string[]): Map<string, Ex
     const refundedWithheldPrincipal = -refundsTaxPrincipal;
     const withheldShipping = -salesTaxShipping;
 
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Sales Tax (Principal)', salesTaxPrincipal);
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Refund - Item Price - Tax', refundsTaxPrincipal);
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Sales Tax (Shipping)', salesTaxShipping);
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Marketplace Facilitator Tax - (Principal)', withheldPrincipal);
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Principal)', refundedWithheldPrincipal);
-    memoTotals.set('Amazon Sales Tax (LMB)::Amazon Sales Tax - Marketplace Facilitator Tax - (Shipping)', withheldShipping);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Sales Tax (Principal)', salesTaxPrincipal);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Refund - Item Price - Tax', refundsTaxPrincipal);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Sales Tax (Shipping)', salesTaxShipping);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Marketplace Facilitator Tax - (Principal)', withheldPrincipal);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Principal)', refundedWithheldPrincipal);
+    memoTotals.set('Amazon Sales Tax::Amazon Sales Tax - Marketplace Facilitator Tax - (Shipping)', withheldShipping);
 
-    accountTotals.set('Amazon Sales Tax (LMB)', 0);
+    accountTotals.set('Amazon Sales Tax', 0);
 
     result.set(settlementId, { accountTotals, memoTotals });
   }
@@ -495,4 +501,3 @@ function run() {
 }
 
 run();
-

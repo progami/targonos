@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { classifyPnlBucket, computePnlAllocation, type PnlBucketKey } from '@/lib/pnl-allocation';
-import type { LmbAuditRow } from '@/lib/lmb/audit-csv';
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { buildCogsJournalLines, buildPnlJournalLines } from '@/lib/plutus/journal-builder';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
@@ -257,7 +257,7 @@ async function loadAuditRowsForProcessing(input: {
   marketplace: string;
   sourceFilename: string;
   processedAt: Date;
-}): Promise<{ upload: { id: string; filename: string; uploadedAt: Date } | null; rows: LmbAuditRow[] }> {
+}): Promise<{ upload: { id: string; filename: string; uploadedAt: Date } | null; rows: SettlementAuditRow[] }> {
   const uploads = await input.db.auditDataUpload.findMany({
     where: { filename: input.sourceFilename },
     orderBy: { uploadedAt: 'desc' },
@@ -297,13 +297,13 @@ async function loadAuditRowsForProcessing(input: {
     },
   });
 
-  const scoped: LmbAuditRow[] = [];
+  const scoped: SettlementAuditRow[] = [];
   for (const row of storedRows) {
     const marketplaceId = normalizeAuditMarketToMarketplaceId(row.market);
     if (marketplaceId !== input.marketplace) continue;
 
     scoped.push({
-      invoice: row.invoiceId,
+      invoiceId: row.invoiceId,
       market: row.market,
       date: row.date,
       orderId: row.orderId,
@@ -330,8 +330,8 @@ async function auditSettlementProcessingRow(input: {
     qboSettlementJournalEntryId: string;
     qboCogsJournalEntryId: string;
     qboPnlReclassJournalEntryId: string;
-    lmbDocNumber: string;
-    lmbPostedDate: Date;
+    settlementDocNumber: string;
+    settlementPostedDate: Date;
   };
   connection: QboConnection;
   accounts: QboAccount[];
@@ -345,8 +345,8 @@ async function auditSettlementProcessingRow(input: {
 
   const { processing } = input;
 
-  const expectedSettlementDocNumber = processing.lmbDocNumber;
-  const expectedSettlementTxnDate = datePartFromUtcDate(processing.lmbPostedDate);
+  const expectedSettlementDocNumber = processing.settlementDocNumber;
+  const expectedSettlementTxnDate = datePartFromUtcDate(processing.settlementPostedDate);
 
   const settlementRes = await fetchJournalEntryById(connection, processing.qboSettlementJournalEntryId);
   if (settlementRes.updatedConnection) connection = settlementRes.updatedConnection;
@@ -785,8 +785,8 @@ async function main(): Promise<void> {
           qboSettlementJournalEntryId: true,
           qboCogsJournalEntryId: true,
           qboPnlReclassJournalEntryId: true,
-          lmbDocNumber: true,
-          lmbPostedDate: true,
+          settlementDocNumber: true,
+          settlementPostedDate: true,
         },
       })
     : null;
@@ -805,8 +805,8 @@ async function main(): Promise<void> {
           qboSettlementJournalEntryId: true,
           qboCogsJournalEntryId: true,
           qboPnlReclassJournalEntryId: true,
-          lmbDocNumber: true,
-          lmbPostedDate: true,
+          settlementDocNumber: true,
+          settlementPostedDate: true,
         },
       });
 

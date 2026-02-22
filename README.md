@@ -82,7 +82,7 @@ All product apps are Next.js 16 + React 19 and are designed to run either standa
 | Talos | `@targon/talos` | `/talos` | Uses `apps/talos/server.js`, Redis, and S3 presigned uploads |
 | xplan | `@targon/xplan` | `/xplan` | Prisma schema `xplan`; vitest tests |
 | Atlas | `@targon/atlas` | `/atlas` | Prisma schema `atlas`; Playwright tests |
-| Plutus | `@targon/plutus` | `/plutus` | LMB + QBO finance workspace (settlements, bills, analytics) |
+| Plutus | `@targon/plutus` | `/plutus` | Amazon + QBO finance workspace (settlements, bills, analytics) |
 | Website | `@targon/website` | `/` | Separate hostname (`targonglobal.com`) |
 
 ## Authentication model (Portal as the source of truth)

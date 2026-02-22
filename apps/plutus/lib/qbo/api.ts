@@ -301,6 +301,10 @@ export interface QboJournalEntryLine {
       value: string;
       name?: string;
     };
+    TaxCodeRef?: {
+      value: string;
+      name?: string;
+    };
   };
 }
 
@@ -419,6 +423,7 @@ export async function createJournalEntry(
       postingType: 'Debit' | 'Credit';
       accountId: string;
       description?: string;
+      taxCodeId?: string;
     }>;
   },
 ): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
@@ -432,15 +437,23 @@ export async function createJournalEntry(
     DocNumber: input.docNumber,
     PrivateNote: input.privateNote,
     Line: input.lines.map((line) => ({
-      DetailType: 'JournalEntryLineDetail',
-      Amount: line.amount,
-      Description: line.description,
-      JournalEntryLineDetail: {
-        PostingType: line.postingType,
-        AccountRef: {
-          value: line.accountId,
-        },
-      },
+      ...(() => {
+        const detail: Record<string, unknown> = {
+          PostingType: line.postingType,
+          AccountRef: {
+            value: line.accountId,
+          },
+        };
+        if (line.taxCodeId) {
+          detail.TaxCodeRef = { value: line.taxCodeId };
+        }
+        return {
+          DetailType: 'JournalEntryLineDetail',
+          Amount: line.amount,
+          Description: line.description,
+          JournalEntryLineDetail: detail,
+        };
+      })(),
     })),
   };
 

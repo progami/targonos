@@ -1,7 +1,6 @@
 import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
 import { createJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
-import { parseLmbAuditCsv, type LmbAuditRow } from '@/lib/lmb/audit-csv';
-import { parseLmbSettlementDocNumber } from '@/lib/lmb/settlements';
+import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
 import {
   replayInventoryLedger,
@@ -11,7 +10,6 @@ import {
 import { fromCents } from '@/lib/inventory/money';
 import { computePnlAllocation } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
-import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import {
   buildDeterministicSkuAllocations,
@@ -22,7 +20,6 @@ import {
   normalizeSku,
   dateToIsoDay,
   computeProcessingHash,
-  groupByInvoice,
   isSalePrincipal,
   isRefundPrincipal,
   buildPrincipalGroups,
@@ -33,6 +30,7 @@ import {
   mergeBrandComponentCents,
   mergeBrandComponentSkuCents,
 } from './settlement-validation';
+import type { SettlementAuditRow } from './settlement-audit';
 
 import { buildCogsJournalLines, buildPnlJournalLines } from './journal-builder';
 import {
@@ -233,10 +231,9 @@ function summarizeRefundAdjustmentBlocks(blocks: ProcessingBlock[]): ProcessingB
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
-  auditCsvText?: string;
-  auditRows?: LmbAuditRow[];
   sourceFilename: string;
-  invoiceId?: string;
+  invoiceId: string;
+  auditRows: SettlementAuditRow[];
 }): Promise<{ preview: SettlementProcessingPreview; updatedConnection?: QboConnection }> {
   const blocks: ProcessingBlock[] = [];
 
@@ -246,36 +243,40 @@ export async function computeSettlementPreview(input: {
     throw new Error(`Missing DocNumber on journal entry ${settlement.Id}`);
   }
 
-  const meta = parseLmbSettlementDocNumber(settlement.DocNumber);
+  const meta = parseSettlementDocNumber(settlement.DocNumber);
   const marketplace = meta.marketplace.id;
 
-  const parsedAudit = input.auditRows
-    ? { headers: [] as string[], rows: input.auditRows }
-    : parseLmbAuditCsv(input.auditCsvText!);
-  const invoiceGroups = groupByInvoice(parsedAudit.rows);
-
-  const requestedInvoice = input.invoiceId ? input.invoiceId.trim() : '';
-  let invoiceId = requestedInvoice;
+  const invoiceId = input.invoiceId.trim();
   if (invoiceId === '') {
-    if (invoiceGroups.size !== 1) {
-      throw new Error(`Audit file contains multiple Invoices (${invoiceGroups.size}). Select one.`);
-    }
-    const only = Array.from(invoiceGroups.keys())[0];
-    if (!only) {
-      throw new Error('Audit file has no invoices');
-    }
-    invoiceId = only;
+    throw new Error('Missing invoiceId');
   }
 
-  const invoiceRows = invoiceGroups.get(invoiceId);
-  if (!invoiceRows) {
-    throw new Error(`Invoice not found in audit file: ${invoiceId}`);
+  const expectedMarket =
+    marketplace === 'amazon.com'
+      ? 'us'
+      : marketplace === 'amazon.co.uk'
+        ? 'uk'
+        : (() => {
+            const exhaustive: never = marketplace;
+            throw new Error(`Unsupported marketplace: ${exhaustive}`);
+          })();
+
+  if (input.auditRows.length === 0) {
+    throw new Error(`No audit rows provided for invoice ${invoiceId}`);
   }
 
-  const scopedInvoiceRows = invoiceRows.filter((r) => normalizeAuditMarketToMarketplaceId(r.market) === marketplace);
-  if (scopedInvoiceRows.length === 0) {
-    throw new Error(`No audit rows for marketplace ${marketplace} in invoice ${invoiceId}`);
+  for (const row of input.auditRows) {
+    if (row.invoiceId !== invoiceId) {
+      throw new Error(`All audit rows must have the same invoiceId (${invoiceId})`);
+    }
+
+    const marketValue = row.market.trim().toLowerCase();
+    if (marketValue !== expectedMarket) {
+      throw new Error(`Audit row market mismatch for invoice ${invoiceId}: ${row.market}`);
+    }
   }
+
+  const scopedInvoiceRows = input.auditRows;
 
   const processingHash = computeProcessingHash(scopedInvoiceRows);
 
@@ -1010,10 +1011,9 @@ export async function computeSettlementPreview(input: {
 export async function processSettlement(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
-  auditCsvText?: string;
-  auditRows?: LmbAuditRow[];
   sourceFilename: string;
-  invoiceId?: string;
+  invoiceId: string;
+  auditRows: SettlementAuditRow[];
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
 
@@ -1092,8 +1092,8 @@ export async function processSettlement(input: {
       data: {
         marketplace: computed.preview.marketplace,
         qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId,
-        lmbDocNumber: computed.preview.settlementDocNumber,
-        lmbPostedDate: new Date(`${computed.preview.settlementPostedDate}T00:00:00Z`),
+        settlementDocNumber: computed.preview.settlementDocNumber,
+        settlementPostedDate: new Date(`${computed.preview.settlementPostedDate}T00:00:00Z`),
         invoiceId: computed.preview.invoiceId,
         processingHash: computed.preview.processingHash,
         sourceFilename: input.sourceFilename,
