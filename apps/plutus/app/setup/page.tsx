@@ -415,7 +415,7 @@ function BrandsSection({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Brands</Typography>
       </Box>
@@ -433,21 +433,21 @@ function BrandsSection({
                   }}
                 >
                   <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
-                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Marketplace</TableCell>
-                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Currency</TableCell>
-                    <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
+                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
+                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Marketplace</TableCell>
+                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Currency</TableCell>
+                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
                   {brands.map((brand, i) => (
                     <TableRow key={i} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>{brand.name}</TableCell>
-                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>
+                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>{brand.name}</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>
                         {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
                       </TableCell>
-                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>{brand.currency}</TableCell>
-                      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>{brand.currency}</TableCell>
+                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
                         <IconButton
                           onClick={() => removeBrand(i)}
                           aria-label={`Remove brand ${brand.name}`}
@@ -484,7 +484,7 @@ function BrandsSection({
                   input: {
                     sx: {
                       fontSize: '0.875rem',
-                      height: 36,
+                      height: 32,
                     },
                   },
                 }}
@@ -591,10 +591,10 @@ function AccountRow({
 
   return (
     <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>
+      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>
         {label}
       </TableCell>
-      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
         <FormControl size="small" fullWidth>
           <Select
             value={accountId}
@@ -639,7 +639,7 @@ function AccountRow({
           </Select>
         </FormControl>
       </TableCell>
-      <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', width: 48, textAlign: 'right' }}>
+      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', width: 48, textAlign: 'right' }}>
         {selected && <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />}
       </TableCell>
     </TableRow>
@@ -811,7 +811,7 @@ function AccountsSection({
             borderColor: 'divider',
             bgcolor: 'action.hover',
             px: 2,
-            py: 1.5,
+            py: 1,
           }}
         >
           <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>{title}</Box>
@@ -827,9 +827,9 @@ function AccountsSection({
               }}
             >
               <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Category</TableCell>
-                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>QBO parent account</TableCell>
-                <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
+                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Category</TableCell>
+                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>QBO parent account</TableCell>
+                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
               </TableRow>
             </TableHead>
             <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -851,7 +851,7 @@ function AccountsSection({
   );
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Account Mapping</Typography>
       </Box>
@@ -1096,7 +1096,7 @@ function SkusSection({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box>
         <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Inventory</Typography>
       </Box>
@@ -1130,12 +1130,12 @@ function SkusSection({
                 }}
               >
                 <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>SKU</TableCell>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Product name</TableCell>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>ASIN</TableCell>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Country</TableCell>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
-                  <TableCell component="th" sx={{ height: 44, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>SKU</TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Product name</TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>ASIN</TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Country</TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -1149,8 +1149,8 @@ function SkusSection({
                     .sort((a, b) => a.key.localeCompare(b.key))
                     .map(({ sku, key, country }) => (
                       <TableRow key={key} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
                           <TextField
                             value={sku.productName}
                             onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
@@ -1162,7 +1162,7 @@ function SkusSection({
                               input: {
                                 sx: {
                                   fontSize: '0.875rem',
-                                  height: 36,
+                                  height: 32,
                                 },
                               },
                             }}
@@ -1175,7 +1175,7 @@ function SkusSection({
                             }}
                           />
                         </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 170 }}>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 170 }}>
                           <TextField
                             value={sku.asin ? sku.asin : ''}
                             onChange={(e) =>
@@ -1192,7 +1192,7 @@ function SkusSection({
                               input: {
                                 sx: {
                                   fontSize: '0.875rem',
-                                  height: 36,
+                                  height: 32,
                                 },
                               },
                             }}
@@ -1205,7 +1205,7 @@ function SkusSection({
                             }}
                           />
                         </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
                           <Box
                             component="span"
                             sx={{
@@ -1224,7 +1224,7 @@ function SkusSection({
                             {country}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
                           <FormControl size="small" fullWidth>
                             <Select
                               value={sku.brand}
@@ -1262,7 +1262,7 @@ function SkusSection({
                             </Select>
                           </FormControl>
                         </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 1.5, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
+                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
                           <IconButton
                             onClick={() => handleRemoveConfiguredSku(key)}
                             aria-label={`Remove SKU ${sku.sku}`}
@@ -1284,7 +1284,7 @@ function SkusSection({
             </Table>
           </Box>
 
-          <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 2, py: 2 }}>
+          <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 2, py: 1.5 }}>
             <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.2fr 2fr 1.2fr 1.2fr auto' }, alignItems: { md: 'end' } }}>
               <Box>
                 <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>SKU</Box>
@@ -1299,7 +1299,7 @@ function SkusSection({
                     input: {
                       sx: {
                         fontSize: '0.875rem',
-                        height: 36,
+                        height: 32,
                       },
                     },
                   }}
@@ -1325,7 +1325,7 @@ function SkusSection({
                     input: {
                       sx: {
                         fontSize: '0.875rem',
-                        height: 36,
+                        height: 32,
                       },
                     },
                   }}
@@ -1351,7 +1351,7 @@ function SkusSection({
                     input: {
                       sx: {
                         fontSize: '0.875rem',
-                        height: 36,
+                        height: 32,
                       },
                     },
                   }}
@@ -1466,7 +1466,7 @@ function SkusSection({
 // Status Bar
 function StatusBar({ brands, mappedAccounts, totalAccounts, skus }: { brands: number; mappedAccounts: number; totalAccounts: number; skus: number }) {
   return (
-    <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 3, py: 1.5 }}>
+    <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 3, py: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: '0.875rem' }}>
         <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: brands > 0 ? '#16a34a' : 'text.secondary' }}>
           <Box component="span" sx={{ width: 8, height: 8, borderRadius: 99, bgcolor: brands > 0 ? '#22c55e' : 'text.disabled' }} />
@@ -1711,7 +1711,7 @@ export default function SetupPage() {
                 skusComplete={state.skus.length > 0}
               />
 
-              <Box sx={{ flex: 1, p: 3 }}>
+              <Box sx={{ flex: 1, p: 2 }}>
                 <Box sx={{ maxWidth: 896 }}>
                   {state.section === 'brands' && <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />}
                   {state.section === 'accounts' && (
