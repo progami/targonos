@@ -43,6 +43,14 @@ function resolveKairosMlBaseUrl(): string | null {
   }
 }
 
+function resolveKairosMlAuthToken(): string | null {
+  const raw = process.env.KAIROS_ML_AUTH_TOKEN;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed;
+}
+
 async function readResponseBody(response: Response): Promise<string> {
   try {
     return await response.text();
@@ -65,10 +73,16 @@ export async function runMlForecast(args: {
     throw new Error('KAIROS_ML_URL is not configured.');
   }
 
+  const authToken = resolveKairosMlAuthToken();
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (authToken) {
+    headers.authorization = `Bearer ${authToken}`;
+  }
+
   const endpoint = new URL('/v1/forecast', baseUrl).toString();
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: args.model,
       ds: args.ds,
@@ -122,10 +136,16 @@ export async function runMlBatchForecast(args: {
     throw new Error('KAIROS_ML_URL is not configured.');
   }
 
+  const authToken = resolveKairosMlAuthToken();
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (authToken) {
+    headers.authorization = `Bearer ${authToken}`;
+  }
+
   const endpoint = new URL('/v1/forecast/batch', baseUrl).toString();
   const response = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers,
     body: JSON.stringify({
       items: args.items.map((item) => ({
         id: item.id,

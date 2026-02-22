@@ -425,17 +425,8 @@ function normalizeOrigin(raw: string | undefined | null): string | undefined {
 
 function originFromRequestLike(request: PortalUrlRequestLike | undefined): string | undefined {
   if (!request) return undefined;
-  const headers = request.headers;
-  const forwardedProto = headers.get('x-forwarded-proto');
-  const forwardedHost = headers.get('x-forwarded-host');
-  const primaryHost = forwardedHost ? forwardedHost.split(',')[0]?.trim() : undefined;
-  const host = primaryHost || headers.get('host');
   const url = request.url ? new URL(request.url) : null;
-
-  const fallbackProto = url?.protocol ? url.protocol.replace(/:$/, '') : undefined;
-  const protocol = forwardedProto?.split(',')[0]?.trim() || fallbackProto || 'http';
-  const candidate = host ? `${protocol}://${host}` : url?.origin;
-  return normalizeOrigin(candidate ?? undefined);
+  return normalizeOrigin(url?.origin ?? undefined);
 }
 
 function originFromGlobalScope(): string | undefined {
