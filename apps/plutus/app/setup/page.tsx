@@ -508,7 +508,8 @@ function BrandsSection({
                   displayEmpty
                   renderValue={(selected) => {
                     if (!selected) return <span style={{ color: '#94a3b8' }}>Select marketplace...</span>;
-                    return selected as string;
+                    const mp = MARKETPLACES.find((m) => m.id === selected);
+                    return mp ? mp.label : (selected as string);
                   }}
                   sx={{
                     borderRadius: '8px',
@@ -601,7 +602,9 @@ function AccountRow({
             displayEmpty
             renderValue={(sel) => {
               if (!sel) return <span style={{ color: '#94a3b8' }}>Select parent account...</span>;
-              return sel as string;
+              const account = accounts.find((a) => a.id === sel);
+              if (!account) return sel as string;
+              return account.acctNum ? `${account.acctNum} · ${account.fullyQualifiedName}` : account.fullyQualifiedName;
             }}
             sx={{
               borderRadius: '8px',
