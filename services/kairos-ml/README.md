@@ -44,6 +44,10 @@ uvicorn app.main:app --host 0.0.0.0 --port 8050 --reload
 
 Set `KAIROS_ML_URL=http://localhost:8050` for the Kairos app server environment.
 
+## Optional auth
+
+- If `KAIROS_ML_AUTH_TOKEN` is set in the ML service environment, requests to `/v1/*` must include `Authorization: Bearer <token>`.
+
 ## Notes
 
 - The initial implementation is intentionally minimal; model implementations will evolve as Kairos moves toward heavier ML workflows.

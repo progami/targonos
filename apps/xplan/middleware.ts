@@ -8,22 +8,39 @@ function normalizeBasePath(value?: string | null) {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
-function callbackUrlForRequest(request: NextRequest, appBasePath: string): string {
-  const forwardedProto = request.headers.get('x-forwarded-proto')
-  const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')
+function resolveAppOrigin(): string {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.BASE_URL,
+    process.env.NEXTAUTH_URL,
+  ]
 
-  const protocol = (forwardedProto?.split(',')[0]?.trim() || request.nextUrl.protocol.replace(':', '') || 'https')
-  const host = forwardedHost?.split(',')[0]?.trim() || request.nextUrl.host
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const trimmed = candidate.trim()
+    if (!trimmed) continue
+    try {
+      return new URL(trimmed).origin
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
+}
+
+function callbackUrlForRequest(request: NextRequest, appBasePath: string): string {
+  const origin = resolveAppOrigin()
 
   const pathname = request.nextUrl.pathname.startsWith(appBasePath) || !appBasePath
     ? request.nextUrl.pathname
     : `${appBasePath}${request.nextUrl.pathname}`
 
-  return `${protocol}://${host}${pathname}${request.nextUrl.search}`
+  return new URL(pathname + request.nextUrl.search, origin).toString()
 }
 
 export async function middleware(request: NextRequest) {
-  const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH)
+  const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? process.env.BASE_PATH)
   const pathname = request.nextUrl.pathname
 
   if (appBasePath && pathname.startsWith(`${appBasePath}${appBasePath}`)) {

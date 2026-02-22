@@ -138,6 +138,10 @@ function renderOrderDocumentHtml(params: {
     .split(',')
     .map(s => s.trim())
     .filter(line => line.length > 0)
+  const buyerAddressLine1 = escapeHtml(buyerAddressLines.slice(0, 2).join(', '))
+  const buyerAddressLine2 = escapeHtml(buyerAddressLines.slice(2).join(', '))
+  const buyerPhone = params.buyerPhone?.trim() ?? ''
+  const buyerPhoneHtml = buyerPhone ? `<br>Phone: ${escapeHtml(buyerPhone)}` : ''
   const supplierAddressHtml = params.supplierAddress
     ? escapeHtml(params.supplierAddress).replace(/\n/g, '<br>')
     : ''
@@ -236,10 +240,9 @@ function renderOrderDocumentHtml(params: {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; font-src 'self' data:; base-uri 'none'; form-action 'none'">
   <title>Purchase Order ${escapeHtml(params.documentNumber)}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
     * {
       margin: 0;
       padding: 0;
@@ -635,8 +638,6 @@ function renderOrderDocumentHtml(params: {
   </style>
 </head>
   <body>
-  <button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button>
-
   <!-- Page 1 -->
   <div class="page">
     <div class="page-content">
@@ -644,9 +645,9 @@ function renderOrderDocumentHtml(params: {
         <div class="logo-section">
           <img class="logo" src="${logoSrc}" alt="Targon" />
           <div class="company-address">
-            ${buyerAddressLines.slice(0, 2).join(', ')}<br>
-            ${buyerAddressLines.slice(2).join(', ')}
-            ${params.buyerPhone ? `<br>Phone: ${params.buyerPhone}` : ''}
+            ${buyerAddressLine1}<br>
+            ${buyerAddressLine2}
+            ${buyerPhoneHtml}
           </div>
         </div>
         <div class="po-title-section">

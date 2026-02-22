@@ -11,6 +11,27 @@ applyDevAuthDefaults({
   appId: 'targon',
 })
 
+function resolveAppOrigin(): string {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.BASE_URL,
+    process.env.NEXTAUTH_URL,
+  ]
+
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    const trimmed = candidate.trim()
+    if (!trimmed) continue
+    try {
+      return new URL(trimmed).origin
+    } catch {
+      continue
+    }
+  }
+
+  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
@@ -90,38 +111,31 @@ export async function middleware(request: NextRequest) {
       return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
     }
 
-    if (decision.status === 'forbidden') {
-      const url = request.nextUrl.clone()
-      url.pathname = '/no-access'
-      url.search = ''
-      return NextResponse.redirect(url)
-    }
+	    if (decision.status === 'forbidden') {
+	      const url = request.nextUrl.clone()
+	      url.pathname = '/no-access'
+	      url.search = ''
+	      return NextResponse.redirect(url)
+	    }
 
-    const forwardedProtoHeader = request.headers.get('x-forwarded-proto')
-    const forwardedProto = ((forwardedProtoHeader || request.nextUrl.protocol || 'http')
-      .split(',')[0]
-      .trim()
-      .replace(/:$/, '')) || 'http'
+	    const origin = resolveAppOrigin()
 
-    const forwardedHostHeader = request.headers.get('x-forwarded-host') || request.headers.get('host')
-    const forwardedHost = (forwardedHostHeader ? forwardedHostHeader.split(',')[0]?.trim() : '') || request.nextUrl.host
+	    const rawBasePath = (process.env.BASE_PATH ?? '').trim()
+	    const normalizedBasePath = rawBasePath && rawBasePath !== '/'
+	      ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
+	      : ''
+	    const appBasePath = normalizedBasePath.endsWith('/')
+	      ? normalizedBasePath.slice(0, -1)
+	      : normalizedBasePath
+	    const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
+	      ? `${appBasePath}${pathname}`
+	      : pathname
+	    const callbackUrl = new URL(callbackPath + request.nextUrl.search, origin).toString()
 
-    const rawBasePath = (process.env.BASE_PATH || '').trim()
-    const normalizedBasePath = rawBasePath && rawBasePath !== '/'
-      ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
-      : ''
-    const appBasePath = normalizedBasePath.endsWith('/')
-      ? normalizedBasePath.slice(0, -1)
-      : normalizedBasePath
-    const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
-      ? `${appBasePath}${pathname}`
-      : pathname
-    const callbackUrl = `${forwardedProto}://${forwardedHost}${callbackPath}${request.nextUrl.search}`
-
-    const redirect = portalUrl('/login', request)
-    redirect.searchParams.set('callbackUrl', callbackUrl)
-    return NextResponse.redirect(redirect)
-  }
+	    const redirect = portalUrl('/login', request)
+	    redirect.searchParams.set('callbackUrl', callbackUrl)
+	    return NextResponse.redirect(redirect)
+	  }
 
   const tenantCookie = request.cookies.get(TENANT_COOKIE_NAME)?.value
   const hasTenant = isValidTenantCode(tenantCookie)
