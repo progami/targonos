@@ -37,7 +37,6 @@ import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import { useSettlementsListStore } from '@/lib/store/settlements';
-import { selectAuditInvoiceForSettlement, type AuditInvoiceSummary } from '@/lib/plutus/audit-invoice-matching';
 import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -74,8 +73,6 @@ type SettlementsResponse = {
 };
 
 type ConnectionStatus = { connected: boolean; error?: string };
-type AuditDataResponse = { invoices: AuditInvoiceSummary[] };
-type AuditMatch = ReturnType<typeof selectAuditInvoiceForSettlement>;
 type Region = SettlementRow['marketplace']['region'];
 
 /* ── shared chip styles ── */
@@ -255,49 +252,6 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
   );
 }
 
-function AuditDataPill({ match }: { match: AuditMatch | undefined }) {
-  if (match?.kind === 'match') {
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
-        <Chip
-          label="Audit Ready"
-          size="small"
-          color="success"
-          variant="filled"
-          sx={{ ...chipBase, bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
-        />
-        <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>{match.invoiceId}</Box>
-      </Box>
-    );
-  }
-
-  if (match?.kind === 'ambiguous') {
-    const count = match.candidateInvoiceIds.length;
-    return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
-        <Chip
-          label={`Multiple (${count})`}
-          size="small"
-          color="default"
-          variant="filled"
-          sx={{ ...chipBase, bgcolor: 'rgba(251, 191, 36, 0.1)', color: '#b45309' }}
-        />
-        <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Select in detail</Box>
-      </Box>
-    );
-  }
-
-  return (
-    <Chip
-      label="—"
-      size="small"
-      color="default"
-      variant="outlined"
-      sx={chipBase}
-    />
-  );
-}
-
 function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
   if (region === 'US') {
     return (
@@ -351,15 +305,6 @@ function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
-}
-
-async function fetchAuditData(): Promise<AuditDataResponse> {
-  const res = await fetch(`${basePath}/api/plutus/audit-data`);
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
-  }
   return res.json();
 }
 
@@ -518,13 +463,6 @@ export default function SettlementsPage() {
     staleTime: 30 * 1000,
   });
 
-  const { data: auditData } = useQuery({
-    queryKey: ['plutus-audit-data'],
-    queryFn: fetchAuditData,
-    enabled: connection !== undefined && connection.connected === true,
-    staleTime: 60 * 1000,
-  });
-
   const { data, isLoading, error } = useQuery({
     queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace],
     queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace }),
@@ -536,25 +474,6 @@ export default function SettlementsPage() {
     if (!data) return [];
     return data.settlements;
   }, [data]);
-
-  const auditInvoices = useMemo(() => auditData?.invoices ?? [], [auditData?.invoices]);
-
-  const auditMatchBySettlementId = useMemo(() => {
-    const map = new Map<string, ReturnType<typeof selectAuditInvoiceForSettlement>>();
-    for (const settlement of settlements) {
-      map.set(
-        settlement.id,
-        selectAuditInvoiceForSettlement({
-          settlementMarketplace: settlement.marketplace.id,
-          settlementPeriodStart: settlement.periodStart,
-          settlementPeriodEnd: settlement.periodEnd,
-          settlementDocNumber: settlement.docNumber,
-          invoices: auditInvoices,
-        }),
-      );
-    }
-    return map;
-  }, [auditInvoices, settlements]);
 
   // Compute KPI stats from loaded data
   const stats = useMemo(() => {
@@ -583,7 +502,6 @@ export default function SettlementsPage() {
     onSuccess: (result) => {
       setSyncResult(result);
       queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      queryClient.invalidateQueries({ queryKey: ['plutus-audit-data'] });
       enqueueSnackbar(`Synced ${result.totals.segments} segment${result.totals.segments === 1 ? '' : 's'}`, { variant: 'success' });
     },
     onError: (err) => {
@@ -808,7 +726,6 @@ export default function SettlementsPage() {
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Audit Data</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Status</MuiTableCell>
                     </MuiTableRow>
                   </MuiTableHead>
@@ -817,7 +734,7 @@ export default function SettlementsPage() {
                       <>
                         {Array.from({ length: 6 }).map((_, idx) => (
                           <MuiTableRow key={idx} sx={rowHoverSx}>
-                            <MuiTableCell colSpan={5} sx={{ ...tdSx, py: 2 }}>
+                            <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 2 }}>
                               <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
                             </MuiTableCell>
                           </MuiTableRow>
@@ -827,7 +744,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && error && (
                       <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={5} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
+                        <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
                           {error instanceof Error ? error.message : String(error)}
                         </MuiTableCell>
                       </MuiTableRow>
@@ -835,7 +752,7 @@ export default function SettlementsPage() {
 
                     {!isLoading && !error && settlements.length === 0 && (
                       <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={5} sx={tdSx}>
+                        <MuiTableCell colSpan={4} sx={tdSx}>
                           <EmptyState
                             icon={<SettlementsEmptyIcon />}
                             title="No settlements found"
@@ -890,9 +807,6 @@ export default function SettlementsPage() {
                           </MuiTableCell>
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
                             {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                          </MuiTableCell>
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
-                            <AuditDataPill match={auditMatchBySettlementId.get(s.id)} />
                           </MuiTableCell>
                           <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
@@ -995,7 +909,7 @@ export default function SettlementsPage() {
             <DialogTitle>Sync from Amazon ({syncRegion})</DialogTitle>
             <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                Pulls settlements from Amazon SP-API Finances, generates settlement JEs + Audit Data, and optionally processes them in Plutus.
+                Pulls settlements from Amazon SP-API Finances, generates settlement JEs, and optionally processes them in Plutus.
               </Typography>
 
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
