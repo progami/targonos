@@ -31,20 +31,72 @@ function buildMarketWhere(marketplace: MarketplaceId) {
   throw new Error(`Unsupported marketplace: ${exhaustive}`);
 }
 
-async function loadAuditRowsFromDb(input: {
+async function chooseAuditUploadForInvoice(input: {
+  settlementJournalEntryId: string;
   invoiceId: string;
   marketplace: MarketplaceId;
-}): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string }> {
-  const dbRows = await db.auditDataRow.findMany({
+}): Promise<{ uploadId: string; sourceFilename: string }> {
+  const processing = await db.settlementProcessing.findUnique({
+    where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
+    select: { sourceFilename: true, uploadedAt: true },
+  });
+
+  if (processing) {
+    const uploads = await db.auditDataUpload.findMany({
+      where: { filename: processing.sourceFilename },
+      orderBy: { uploadedAt: 'desc' },
+      select: { id: true, filename: true, uploadedAt: true },
+    });
+
+    const chosen = uploads.find((u) => u.uploadedAt <= processing.uploadedAt);
+    if (!chosen) {
+      throw new Error(
+        `No audit upload found for processed settlement ${input.settlementJournalEntryId} (filename=${processing.sourceFilename})`,
+      );
+    }
+
+    return { uploadId: chosen.id, sourceFilename: chosen.filename };
+  }
+
+  const latestRow = await db.auditDataRow.findFirst({
     where: {
       invoiceId: input.invoiceId,
       ...buildMarketWhere(input.marketplace),
     },
-    include: { upload: { select: { filename: true } } },
+    orderBy: { upload: { uploadedAt: 'desc' } },
+    select: { uploadId: true, upload: { select: { filename: true } } },
+  });
+
+  if (!latestRow) {
+    throw new Error(`No stored audit data found for invoice ${input.invoiceId} (${input.marketplace})`);
+  }
+
+  return { uploadId: latestRow.uploadId, sourceFilename: latestRow.upload.filename };
+}
+
+async function loadAuditRowsFromDb(input: {
+  settlementJournalEntryId: string;
+  invoiceId: string;
+  marketplace: MarketplaceId;
+}): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string }> {
+  const chosen = await chooseAuditUploadForInvoice({
+    settlementJournalEntryId: input.settlementJournalEntryId,
+    invoiceId: input.invoiceId,
+    marketplace: input.marketplace,
+  });
+
+  const dbRows = await db.auditDataRow.findMany({
+    where: {
+      uploadId: chosen.uploadId,
+      invoiceId: input.invoiceId,
+      ...buildMarketWhere(input.marketplace),
+    },
   });
 
   if (dbRows.length === 0) {
-    throw new Error(`No stored audit data found for invoice ${input.invoiceId} (${input.marketplace})`);
+    throw new Error(
+      `No stored audit data found for invoice ${input.invoiceId} (${input.marketplace}) in upload ${chosen.uploadId}`,
+    );
   }
 
   const rows: SettlementAuditRow[] = dbRows.map((r) => ({
@@ -58,9 +110,7 @@ async function loadAuditRowsFromDb(input: {
     net: fromCents(r.net),
   }));
 
-  const sourceFilename = dbRows[0]!.upload.filename;
-
-  return { rows, sourceFilename };
+  return { rows, sourceFilename: chosen.sourceFilename };
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
@@ -88,6 +138,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
 
     const { rows, sourceFilename } = await loadAuditRowsFromDb({
+      settlementJournalEntryId,
       invoiceId,
       marketplace: marketplace as MarketplaceId,
     });
