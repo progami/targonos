@@ -30,7 +30,7 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-const STORAGE_KEY = 'plutus-setup-v5'; // Bump version for DB-backed state
+const STORAGE_KEY = 'plutus-setup-v6'; // Bump when wizard sections change
 
 const MARKETPLACES = [
   { id: 'amazon.com', label: 'Amazon.com', currency: 'USD' },
@@ -46,7 +46,7 @@ type Brand = { name: string; marketplace: string; currency: string };
 type Sku = { sku: string; productName: string; brand: string; asin?: string };
 
 type SetupState = {
-  section: 'brands' | 'accounts' | 'settlement' | 'skus';
+  section: 'brands' | 'accounts' | 'settlement';
   brands: Brand[];
   accountMappings: Record<string, string>;
   accountsCreated: boolean;
@@ -329,23 +329,20 @@ const ALL_ACCOUNTS = [
 function Sidebar({
   section,
   onSectionChange,
-  brandsComplete,
+  catalogComplete,
   accountsComplete,
   settlementComplete,
-  skusComplete,
 }: {
   section: string;
-  onSectionChange: (s: 'brands' | 'accounts' | 'settlement' | 'skus') => void;
-  brandsComplete: boolean;
+  onSectionChange: (s: 'brands' | 'accounts' | 'settlement') => void;
+  catalogComplete: boolean;
   accountsComplete: boolean;
   settlementComplete: boolean;
-  skusComplete: boolean;
 }) {
   const items = [
-    { id: 'brands' as const, label: 'Brands', complete: brandsComplete },
+    { id: 'brands' as const, label: 'Brands & Inventory', complete: catalogComplete },
     { id: 'accounts' as const, label: 'Chart of accounts', complete: accountsComplete },
     { id: 'settlement' as const, label: 'Settlement posting', complete: settlementComplete },
-    { id: 'skus' as const, label: 'Inventory', complete: skusComplete },
   ];
 
   return (
@@ -2212,15 +2209,19 @@ export default function SetupPage() {
               <Sidebar
                 section={state.section}
                 onSectionChange={(s) => saveState({ section: s })}
-                brandsComplete={state.brands.length > 0}
+                catalogComplete={state.brands.length > 0 && state.skus.length > 0}
                 accountsComplete={state.accountsCreated && mappedCount === ALL_ACCOUNTS.length}
                 settlementComplete={settlementComplete}
-                skusComplete={state.skus.length > 0}
               />
 
               <Box sx={{ flex: 1, p: 2 }}>
                 <Box sx={{ maxWidth: 896 }}>
-                  {state.section === 'brands' && <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />}
+                  {state.section === 'brands' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />
+                      <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />
+                    </Box>
+                  )}
                   {state.section === 'accounts' && (
                     <AccountsSection
                       isQboConnected={connectionStatus?.connected === true}
@@ -2243,7 +2244,6 @@ export default function SetupPage() {
                       brands={state.brands}
                     />
                   )}
-                  {state.section === 'skus' && <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />}
                 </Box>
               </Box>
             </Box>
