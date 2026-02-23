@@ -41,6 +41,7 @@ function printUsage(): void {
   console.log('  connection:show');
   console.log('  accounts:deactivate <name...>');
   console.log('  accounts:deactivate-amazon-duplicates');
+  console.log('  accounts:rename-lmb-to-plutus [--dry-run]');
   console.log('  accounts:migrate-warehousing-prefix');
   console.log('  accounts:create-plutus-qbo-plan');
   console.log('');
@@ -271,6 +272,80 @@ async function migrateWarehousingPrefixAccounts(): Promise<void> {
         ),
       );
     }
+  }
+
+  const renamedCount = results.filter((r) => r.action === 'renamed').length;
+  const skippedCount = results.length - renamedCount;
+  console.log(JSON.stringify({ total: results.length, renamed: renamedCount, skipped: skippedCount }, null, 2));
+}
+
+async function renameLmbAccountsToPlutus(input: { dryRun: boolean }): Promise<void> {
+  let connection = await requireServerConnection();
+
+  const { fetchAccounts, updateAccountActive } = await import('@/lib/qbo/api');
+  const { accounts, updatedConnection } = await fetchAccounts(connection, { includeInactive: true });
+  if (updatedConnection) {
+    connection = updatedConnection;
+    await saveServerQboConnection(updatedConnection);
+  }
+
+  const byLowerName = new Map<string, { id: string; name: string }>();
+  for (const account of accounts) {
+    byLowerName.set(account.Name.toLowerCase(), { id: account.Id, name: account.Name });
+  }
+
+  const targets = accounts
+    .filter((account) => account.Name.includes('(LMB)'))
+    .sort((a, b) => a.Name.localeCompare(b.Name));
+
+  const results: Array<{ action: 'renamed' | 'skipped'; id: string; fromName: string; toName: string }> = [];
+
+  for (const account of targets) {
+    if (account.Active !== true && account.Active !== false) {
+      throw new Error(`Missing Active flag for QBO account (id=${account.Id} name="${account.Name}").`);
+    }
+
+    const baseName = account.Name.replace(/\s*\(LMB\)\s*$/, '').trim();
+    if (baseName === '') {
+      throw new Error(`Invalid LMB account name (id=${account.Id} name="${account.Name}").`);
+    }
+
+    const nextName = `Plutus ${baseName}`;
+    const existing = byLowerName.get(nextName.toLowerCase());
+    if (existing && existing.id !== account.Id) {
+      throw new Error(
+        `Cannot rename LMB account; target name already exists (from="${account.Name}" to="${nextName}" existingId=${existing.id}).`,
+      );
+    }
+
+    if (input.dryRun) {
+      results.push({ action: 'skipped', id: account.Id, fromName: account.Name, toName: nextName });
+      console.log(JSON.stringify({ wouldRename: account.Name, to: nextName, id: account.Id }, null, 2));
+      continue;
+    }
+
+    const { account: updatedAccount, updatedConnection: renamedConnection } = await updateAccountActive(
+      connection,
+      account.Id,
+      account.SyncToken,
+      nextName,
+      account.Active,
+    );
+    if (renamedConnection) {
+      connection = renamedConnection;
+      await saveServerQboConnection(renamedConnection);
+    }
+
+    const idx = accounts.findIndex((a) => a.Id === updatedAccount.Id);
+    if (idx >= 0) {
+      accounts[idx] = updatedAccount;
+    }
+
+    byLowerName.delete(account.Name.toLowerCase());
+    byLowerName.set(updatedAccount.Name.toLowerCase(), { id: updatedAccount.Id, name: updatedAccount.Name });
+
+    results.push({ action: 'renamed', id: updatedAccount.Id, fromName: account.Name, toName: updatedAccount.Name });
+    console.log(JSON.stringify({ renamed: account.Name, to: updatedAccount.Name, id: updatedAccount.Id }, null, 2));
   }
 
   const renamedCount = results.filter((r) => r.action === 'renamed').length;
@@ -685,6 +760,13 @@ async function main(): Promise<void> {
 
   if (command === 'accounts:deactivate-amazon-duplicates') {
     await deactivateAmazonDuplicateAccounts();
+    return;
+  }
+
+  if (command === 'accounts:rename-lmb-to-plutus') {
+    const args = process.argv.slice(3);
+    const dryRun = args.includes('--dry-run');
+    await renameLmbAccountsToPlutus({ dryRun });
     return;
   }
 
