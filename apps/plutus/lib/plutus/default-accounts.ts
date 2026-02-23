@@ -50,6 +50,11 @@ export const PLUTUS_BRAND_ACCOUNT_PREFIXES = [
   'Inventory Shrinkage -',
   'Product Expenses -',
 
+  // Warehousing buckets
+  '3PL -',
+  'Amazon FC -',
+  'AWD -',
+
   // Other Income sub-accounts
   'Amazon FBA Inventory Reimbursement -',
 ] as const;
@@ -75,7 +80,7 @@ function splitAccountPath(accountPath: string): { full: string; leaf: string } {
 export function isPlutusDefaultAccount(accountPath: string): boolean {
   const { full, leaf } = splitAccountPath(accountPath);
 
-  // Special-case: Warehousing buckets use brand leaf names (e.g. "Warehousing:3PL:US-Dust Sheets")
+  // Special-case: Warehousing buckets are always part of the Plutus workflow (e.g. "Warehousing:3PL:3PL - US-PDS")
   if (
     full.startsWith('Warehousing:3PL:') ||
     full.startsWith('Warehousing:Amazon FC:') ||

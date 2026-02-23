@@ -413,7 +413,7 @@ test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
   assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
 });
 
-test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
+test('buildPnlJournalLines uses prefixed leaf accounts under AWD parent', () => {
   const blocks: ProcessingBlock[] = [];
   const accounts: QboAccount[] = [
     {
@@ -426,7 +426,7 @@ test('buildPnlJournalLines uses brand leaf accounts under AWD parent', () => {
     {
       Id: '245',
       SyncToken: '0',
-      Name: 'US-PDS',
+      Name: 'AWD - US-PDS',
       AccountType: 'Cost of Goods Sold',
       AccountSubType: 'ShippingFreightDeliveryCos',
       ParentRef: { value: '238', name: 'AWD' },

@@ -1,10 +1,12 @@
 import { createLogger } from '@targon/logger';
-import { createAccount, fetchAccounts, type QboAccount, type QboConnection } from './api';
+import { createAccount, fetchAccounts, updateAccountActive, type QboAccount, type QboConnection } from './api';
+import { PLUTUS_BRAND_ACCOUNT_PREFIXES } from '@/lib/plutus/default-accounts';
 
 const logger = createLogger({ name: 'plutus-qbo-plan' });
 
 type EnsureResult = {
   created: QboAccount[];
+  renamed: Array<{ accountId: string; fromName: string; toName: string; parentName: string }>;
   skipped: Array<{ name: string; parentName?: string }>;
   updatedConnection?: QboConnection;
 };
@@ -15,6 +17,31 @@ function requireAccountById(accounts: QboAccount[], id: string, label: string): 
     throw new Error(`Missing required QBO account for ${label} (id=${id}).`);
   }
   return found;
+}
+
+function isBrandLeafAccountName(name: string, brandNames: string[]): boolean {
+  for (const prefix of PLUTUS_BRAND_ACCOUNT_PREFIXES) {
+    if (name.startsWith(prefix)) return true;
+  }
+
+  for (const brandName of brandNames) {
+    if (name === brandName) return true;
+  }
+
+  return false;
+}
+
+function requireParentAccountById(accounts: QboAccount[], id: string, label: string, brandNames: string[]): QboAccount {
+  const account = requireAccountById(accounts, id, label);
+
+  if (isBrandLeafAccountName(account.Name, brandNames)) {
+    const fullyQualifiedName = account.FullyQualifiedName ? account.FullyQualifiedName : account.Name;
+    throw new Error(
+      `Invalid QBO mapping for ${label}: "${fullyQualifiedName}" looks like a brand sub-account. Select the parent account instead.`,
+    );
+  }
+
+  return account;
 }
 
 function findSubAccountByParentId(
@@ -30,10 +57,46 @@ async function ensureSubAccount(
   accounts: QboAccount[],
   parent: QboAccount,
   subAccountName: string,
-): Promise<{ account?: QboAccount; created: boolean; updatedConnection?: QboConnection }> {
+  options?: { legacyNames?: string[] },
+): Promise<{ account?: QboAccount; created: boolean; renamedFrom?: string; updatedConnection?: QboConnection }> {
   const existing = findSubAccountByParentId(accounts, parent.Id, subAccountName);
   if (existing) {
     return { account: existing, created: false };
+  }
+
+  if (options?.legacyNames) {
+    for (const legacyName of options.legacyNames) {
+      const legacy = findSubAccountByParentId(accounts, parent.Id, legacyName);
+      if (!legacy) continue;
+
+      if (legacy.Active !== true && legacy.Active !== false) {
+        throw new Error(`Missing Active flag for QBO account (id=${legacy.Id} name="${legacy.Name}").`);
+      }
+
+      logger.info('Renaming QBO sub-account', {
+        parentName: parent.Name,
+        from: legacy.Name,
+        to: subAccountName,
+        accountId: legacy.Id,
+      });
+
+      const { account: updatedAccount, updatedConnection } = await updateAccountActive(
+        connection,
+        legacy.Id,
+        legacy.SyncToken,
+        subAccountName,
+        legacy.Active,
+      );
+
+      const idx = accounts.findIndex((a) => a.Id === updatedAccount.Id);
+      if (idx >= 0) {
+        accounts[idx] = updatedAccount;
+      } else {
+        accounts.push(updatedAccount);
+      }
+
+      return { account: updatedAccount, created: false, renamedFrom: legacy.Name, updatedConnection };
+    }
   }
 
   logger.info('Creating sub-account in QBO', {
@@ -134,44 +197,46 @@ export async function ensurePlutusQboPlanAccounts(
   }
 
   const created: QboAccount[] = [];
+  const renamed: EnsureResult['renamed'] = [];
   const skipped: Array<{ name: string; parentName?: string }> = [];
 
   // Resolve all parent accounts from mappings
   const parents = {
     // Inventory
-    invManufacturing: requireAccountById(accounts, mappings.invManufacturing, 'Inventory Manufacturing'),
-    invFreight: requireAccountById(accounts, mappings.invFreight, 'Inventory Freight'),
-    invDuty: requireAccountById(accounts, mappings.invDuty, 'Inventory Duty'),
-    invMfgAccessories: requireAccountById(accounts, mappings.invMfgAccessories, 'Inventory Mfg Accessories'),
+    invManufacturing: requireParentAccountById(accounts, mappings.invManufacturing, 'Inventory Manufacturing', brandNames),
+    invFreight: requireParentAccountById(accounts, mappings.invFreight, 'Inventory Freight', brandNames),
+    invDuty: requireParentAccountById(accounts, mappings.invDuty, 'Inventory Duty', brandNames),
+    invMfgAccessories: requireParentAccountById(accounts, mappings.invMfgAccessories, 'Inventory Mfg Accessories', brandNames),
 
     // COGS
-    cogsManufacturing: requireAccountById(accounts, mappings.cogsManufacturing, 'COGS Manufacturing'),
-    cogsFreight: requireAccountById(accounts, mappings.cogsFreight, 'COGS Freight'),
-    cogsDuty: requireAccountById(accounts, mappings.cogsDuty, 'COGS Duty'),
-    cogsMfgAccessories: requireAccountById(accounts, mappings.cogsMfgAccessories, 'COGS Mfg Accessories'),
-    cogsShrinkage: requireAccountById(accounts, mappings.cogsShrinkage, 'COGS Shrinkage'),
+    cogsManufacturing: requireParentAccountById(accounts, mappings.cogsManufacturing, 'COGS Manufacturing', brandNames),
+    cogsFreight: requireParentAccountById(accounts, mappings.cogsFreight, 'COGS Freight', brandNames),
+    cogsDuty: requireParentAccountById(accounts, mappings.cogsDuty, 'COGS Duty', brandNames),
+    cogsMfgAccessories: requireParentAccountById(accounts, mappings.cogsMfgAccessories, 'COGS Mfg Accessories', brandNames),
+    cogsShrinkage: requireParentAccountById(accounts, mappings.cogsShrinkage, 'COGS Shrinkage', brandNames),
 
     // Warehousing buckets
-    warehousing3pl: requireAccountById(accounts, mappings.warehousing3pl, 'Warehousing 3PL'),
-    warehousingAmazonFc: requireAccountById(accounts, mappings.warehousingAmazonFc, 'Warehousing Amazon FC'),
-    warehousingAwd: requireAccountById(accounts, mappings.warehousingAwd, 'Warehousing AWD'),
+    warehousing3pl: requireParentAccountById(accounts, mappings.warehousing3pl, 'Warehousing 3PL', brandNames),
+    warehousingAmazonFc: requireParentAccountById(accounts, mappings.warehousingAmazonFc, 'Warehousing Amazon FC', brandNames),
+    warehousingAwd: requireParentAccountById(accounts, mappings.warehousingAwd, 'Warehousing AWD', brandNames),
 
     // Product Expenses
-    productExpenses: requireAccountById(accounts, mappings.productExpenses, 'Product Expenses'),
+    productExpenses: requireParentAccountById(accounts, mappings.productExpenses, 'Product Expenses', brandNames),
 
     // Amazon
-    amazonSales: requireAccountById(accounts, mappings.amazonSales, 'Amazon Sales'),
-    amazonRefunds: requireAccountById(accounts, mappings.amazonRefunds, 'Amazon Refunds'),
-    amazonFbaInventoryReimbursement: requireAccountById(
+    amazonSales: requireParentAccountById(accounts, mappings.amazonSales, 'Amazon Sales', brandNames),
+    amazonRefunds: requireParentAccountById(accounts, mappings.amazonRefunds, 'Amazon Refunds', brandNames),
+    amazonFbaInventoryReimbursement: requireParentAccountById(
       accounts,
       mappings.amazonFbaInventoryReimbursement,
       'Amazon FBA Inventory Reimbursement',
+      brandNames,
     ),
-    amazonSellerFees: requireAccountById(accounts, mappings.amazonSellerFees, 'Amazon Seller Fees'),
-    amazonFbaFees: requireAccountById(accounts, mappings.amazonFbaFees, 'Amazon FBA Fees'),
-    amazonStorageFees: requireAccountById(accounts, mappings.amazonStorageFees, 'Amazon Storage Fees'),
-    amazonAdvertisingCosts: requireAccountById(accounts, mappings.amazonAdvertisingCosts, 'Amazon Advertising Costs'),
-    amazonPromotions: requireAccountById(accounts, mappings.amazonPromotions, 'Amazon Promotions'),
+    amazonSellerFees: requireParentAccountById(accounts, mappings.amazonSellerFees, 'Amazon Seller Fees', brandNames),
+    amazonFbaFees: requireParentAccountById(accounts, mappings.amazonFbaFees, 'Amazon FBA Fees', brandNames),
+    amazonStorageFees: requireParentAccountById(accounts, mappings.amazonStorageFees, 'Amazon Storage Fees', brandNames),
+    amazonAdvertisingCosts: requireParentAccountById(accounts, mappings.amazonAdvertisingCosts, 'Amazon Advertising Costs', brandNames),
+    amazonPromotions: requireParentAccountById(accounts, mappings.amazonPromotions, 'Amazon Promotions', brandNames),
   };
 
   const accountSpecs: Array<{ label: string; parent: QboAccount }> = [
@@ -188,7 +253,7 @@ export async function ensurePlutusQboPlanAccounts(
     { label: 'Mfg Accessories', parent: parents.cogsMfgAccessories },
     { label: 'Inventory Shrinkage', parent: parents.cogsShrinkage },
 
-    // Warehousing buckets (brand leaf accounts are just the brand name)
+    // Warehousing buckets
     { label: 'Warehousing:3PL', parent: parents.warehousing3pl },
     { label: 'Warehousing:Amazon FC', parent: parents.warehousingAmazonFc },
     { label: 'Warehousing:AWD', parent: parents.warehousingAwd },
@@ -210,14 +275,30 @@ export async function ensurePlutusQboPlanAccounts(
   // For each brand, create sub-accounts under each mapped parent
   for (const brandName of brandNames) {
     for (const spec of accountSpecs) {
-      const subAccountName = spec.label.startsWith('Warehousing:') ? brandName : `${spec.label} - ${brandName}`;
-      const result = await ensureSubAccount(currentConnection, accounts, spec.parent, subAccountName);
+      const isWarehousing = spec.label.startsWith('Warehousing:');
+      const prefixLabel = isWarehousing ? spec.label.split(':').at(-1) : spec.label;
+      if (!prefixLabel) {
+        throw new Error(`Invalid account spec label: "${spec.label}".`);
+      }
+
+      const subAccountName = `${prefixLabel} - ${brandName}`;
+      const legacyNames = isWarehousing ? [brandName] : undefined;
+      const result = await ensureSubAccount(currentConnection, accounts, spec.parent, subAccountName, {
+        legacyNames,
+      });
 
       if (result.created && result.account) {
         created.push(result.account);
       }
 
-      if (!result.created) {
+      if (result.renamedFrom && result.account) {
+        renamed.push({
+          accountId: result.account.Id,
+          fromName: result.renamedFrom,
+          toName: subAccountName,
+          parentName: spec.parent.Name,
+        });
+      } else if (!result.created) {
         skipped.push({ name: subAccountName, parentName: spec.parent.Name });
       }
 
@@ -229,6 +310,7 @@ export async function ensurePlutusQboPlanAccounts(
 
   return {
     created,
+    renamed,
     skipped,
     updatedConnection: currentConnection === connection ? undefined : currentConnection,
   };

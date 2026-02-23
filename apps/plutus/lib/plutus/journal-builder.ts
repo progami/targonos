@@ -207,7 +207,7 @@ export function buildPnlJournalLines(
     },
     warehousingAwd: {
       label: 'AWD',
-      buildSubAccountName: (brand) => brand,
+      buildSubAccountName: (brand) => `AWD - ${brand}`,
     },
   };
 

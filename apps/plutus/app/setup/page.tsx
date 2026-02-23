@@ -14,6 +14,7 @@ import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import TextField from '@mui/material/TextField';
 import FormControl from '@mui/material/FormControl';
+import FormHelperText from '@mui/material/FormHelperText';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Table from '@mui/material/Table';
@@ -22,6 +23,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { PageHeader } from '@/components/page-header';
+import { PLUTUS_BRAND_ACCOUNT_PREFIXES } from '@/lib/plutus/default-accounts';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -66,6 +68,32 @@ function normalizeForMatch(value: string): string {
 
 function accountDepth(account: QboAccount): number {
   return account.fullyQualifiedName.split(':').length - 1;
+}
+
+function leafAccountName(account: QboAccount): string {
+  const parts = account.fullyQualifiedName.split(':');
+  const leaf = parts[parts.length - 1]!;
+  return leaf.trim();
+}
+
+function parentFullyQualifiedName(account: QboAccount): string | null {
+  const parts = account.fullyQualifiedName.split(':');
+  if (parts.length <= 1) return null;
+  return parts.slice(0, -1).join(':');
+}
+
+function isPlutusBrandLeafAccount(account: QboAccount, brandNames: string[]): boolean {
+  const leaf = leafAccountName(account);
+
+  for (const prefix of PLUTUS_BRAND_ACCOUNT_PREFIXES) {
+    if (leaf.startsWith(prefix)) return true;
+  }
+
+  if (accountDepth(account) > 0 && brandNames.includes(leaf)) {
+    return true;
+  }
+
+  return false;
 }
 
 function findAccountByExactName(
@@ -579,15 +607,24 @@ function AccountRow({
   accounts,
   onChange,
   type,
+  brandNames,
 }: {
   label: string;
   accountId: string;
   accounts: QboAccount[];
   onChange: (id: string) => void;
   type?: string;
+  brandNames: string[];
 }) {
-  const filtered = type ? accounts.filter((a) => a.type === type) : accounts;
   const selected = accounts.find((a) => a.id === accountId);
+  const selectedIsBrandLeaf = selected ? isPlutusBrandLeafAccount(selected, brandNames) : false;
+  const selectedParentPath = selected ? parentFullyQualifiedName(selected) : null;
+  const selectedParent =
+    selectedIsBrandLeaf && selectedParentPath ? accounts.find((a) => a.fullyQualifiedName === selectedParentPath) : undefined;
+
+  const filtered = (type ? accounts.filter((a) => a.type === type) : accounts).filter(
+    (account) => !isPlutusBrandLeafAccount(account, brandNames),
+  );
 
   return (
     <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
@@ -595,7 +632,7 @@ function AccountRow({
         {label}
       </TableCell>
       <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
-        <FormControl size="small" fullWidth>
+        <FormControl size="small" fullWidth error={selectedIsBrandLeaf}>
           <Select
             value={accountId}
             onChange={(e) => onChange(e.target.value as string)}
@@ -638,10 +675,28 @@ function AccountRow({
               );
             })}
           </Select>
+          {selectedIsBrandLeaf && (
+            <FormHelperText sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <span>
+                Selected account is a brand sub-account. Choose the parent account instead
+                {selectedParentPath ? ` (e.g. ${selectedParentPath})` : ''}.
+              </span>
+              {selectedParent && (
+                <Button variant="text" size="small" onClick={() => onChange(selectedParent.id)} sx={{ p: 0, minWidth: 0 }}>
+                  Use parent
+                </Button>
+              )}
+            </FormHelperText>
+          )}
         </FormControl>
       </TableCell>
       <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', width: 48, textAlign: 'right' }}>
-        {selected && <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />}
+        {selected &&
+          (selectedIsBrandLeaf ? (
+            <CloseIcon sx={{ fontSize: 16, color: 'error.main' }} />
+          ) : (
+            <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />
+          ))}
       </TableCell>
     </TableRow>
   );
@@ -669,7 +724,8 @@ function AccountsSection({
 }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastEnsureSummary, setLastEnsureSummary] = useState<{ created: number; skipped: number } | null>(null);
+  const [lastEnsureSummary, setLastEnsureSummary] = useState<{ created: number; renamed: number; skipped: number } | null>(null);
+  const brandNames = useMemo(() => brands.map((b) => b.name), [brands]);
 
   const mappedCount = ALL_ACCOUNTS.filter((a) => accountMappings[a.key]).length;
   const allMapped = mappedCount === ALL_ACCOUNTS.length;
@@ -723,11 +779,11 @@ function AccountsSection({
         throw new Error(message);
       }
 
-      if (!Array.isArray(data.created) || !Array.isArray(data.skipped)) {
+      if (!Array.isArray(data.created) || !Array.isArray(data.renamed) || !Array.isArray(data.skipped)) {
         throw new Error('Unexpected response from account creation endpoint');
       }
 
-      setLastEnsureSummary({ created: data.created.length, skipped: data.skipped.length });
+      setLastEnsureSummary({ created: data.created.length, renamed: data.renamed.length, skipped: data.skipped.length });
       onAccountsCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create accounts');
@@ -827,10 +883,53 @@ function AccountsSection({
                 '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
               }}
             >
-              <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Category</TableCell>
-                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>QBO parent account</TableCell>
-                <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
+              <TableRow
+                sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}
+              >
+                <TableCell
+                  component="th"
+                  sx={{
+                    height: 36,
+                    px: 1.5,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'text.secondary',
+                  }}
+                >
+                  Category
+                </TableCell>
+                <TableCell
+                  component="th"
+                  sx={{
+                    height: 36,
+                    px: 1.5,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'text.secondary',
+                  }}
+                >
+                  QBO parent account
+                </TableCell>
+                <TableCell
+                  component="th"
+                  sx={{
+                    height: 36,
+                    px: 1.5,
+                    fontSize: '0.75rem',
+                    fontWeight: 600,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    color: 'text.secondary',
+                    width: 48,
+                    textAlign: 'right',
+                  }}
+                >
+                  {' '}
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -842,105 +941,117 @@ function AccountsSection({
                   accounts={accounts}
                   onChange={(id) => updateAccount(acc.key, id)}
                   type={acc.type}
+                  brandNames={brandNames}
                 />
               ))}
             </TableBody>
-          </Table>
+            </Table>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box>
+          <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Account Mapping</Typography>
+          <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+            Select parent accounts only. Brand sub-accounts are hidden to prevent accidental mis-mapping.
+          </Typography>
         </Box>
-      </CardContent>
-    </Card>
-  );
 
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box>
-        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Account Mapping</Typography>
-      </Box>
-
-      {accountsCreated && (
-        <Box
-          sx={{
-            borderRadius: 3,
-            border: 1,
-            borderColor: 'rgba(16,185,129,0.2)',
-            bgcolor: 'rgba(16,185,129,0.05)',
-            p: 2,
-            fontSize: '0.875rem',
-            color: '#065f46',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-            <Box
-              sx={{
-                mt: 0.25,
-                display: 'flex',
-                height: 32,
-                width: 32,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: 2,
-                bgcolor: 'rgba(255,255,255,0.8)',
-                color: '#047857',
-                border: 1,
-                borderColor: 'rgba(16,185,129,0.2)',
-              }}
-            >
-              <CheckIcon sx={{ fontSize: 16 }} />
-            </Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Box sx={{ fontWeight: 600 }}>Sub-accounts ensured in QBO</Box>
-              <Box sx={{ mt: 0.25, color: 'rgba(6,95,70,0.8)' }}>
-                {lastEnsureSummary
-                  ? `Created ${lastEnsureSummary.created}, skipped ${lastEnsureSummary.skipped}.`
-                  : `Ready for ${brands.length} brand${brands.length > 1 ? 's' : ''}.`}
+        {accountsCreated && (
+          <Box
+            sx={{
+              borderRadius: 3,
+              border: 1,
+              borderColor: 'rgba(16,185,129,0.2)',
+              bgcolor: 'rgba(16,185,129,0.05)',
+              p: 2,
+              fontSize: '0.875rem',
+              color: '#065f46',
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box
+                sx={{
+                  mt: 0.25,
+                  display: 'flex',
+                  height: 32,
+                  width: 32,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 2,
+                  bgcolor: 'rgba(255,255,255,0.8)',
+                  color: '#047857',
+                  border: 1,
+                  borderColor: 'rgba(16,185,129,0.2)',
+                }}
+              >
+                <CheckIcon sx={{ fontSize: 16 }} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ fontWeight: 600 }}>Sub-accounts ensured in QBO</Box>
+                <Box sx={{ mt: 0.25, color: 'rgba(6,95,70,0.8)' }}>
+                  {lastEnsureSummary
+                    ? `Created ${lastEnsureSummary.created}, renamed ${lastEnsureSummary.renamed}, skipped ${lastEnsureSummary.skipped}.`
+                    : `Ready for ${brands.length} brand${brands.length > 1 ? 's' : ''}.`}
+                </Box>
               </Box>
             </Box>
           </Box>
-        </Box>
-      )}
+        )}
 
-      <Box sx={{ display: 'grid', gap: 2 }}>
-        {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
-        {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
-        {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
-        {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
-        {renderAccountGroup('Amazon Revenue & Fees', AMAZON_REVENUE_FEE_ACCOUNTS)}
+        <Box sx={{ display: 'grid', gap: 2 }}>
+          {renderAccountGroup('Inventory Asset', INVENTORY_ACCOUNTS)}
+          {renderAccountGroup('Cost of Goods Sold', COGS_ACCOUNTS)}
+          {renderAccountGroup('Warehousing', WAREHOUSING_ACCOUNTS)}
+          {renderAccountGroup('Product Expenses', PRODUCT_EXPENSES_ACCOUNTS)}
+          {renderAccountGroup('Amazon Revenue & Fees', AMAZON_REVENUE_FEE_ACCOUNTS)}
+        </Box>
+
+        {error && (
+          <Box
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              bgcolor: 'rgba(239,68,68,0.05)',
+              border: 1,
+              borderColor: 'rgba(239,68,68,0.2)',
+            }}
+          >
+            <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{error}</Typography>
+          </Box>
+        )}
+
+        <Button
+          variant="contained"
+          disableElevation
+          onClick={createAccounts}
+          disabled={!allMapped || creating}
+          sx={{
+            borderRadius: '8px',
+            textTransform: 'none',
+            fontWeight: 500,
+            gap: 1,
+            whiteSpace: 'nowrap',
+            '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
+            '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
+            height: 36,
+            px: 2,
+            fontSize: '0.875rem',
+            bgcolor: '#00C2B9',
+            color: '#fff',
+            '&:hover': { bgcolor: '#00a89f' },
+            '&:active': { bgcolor: '#008f87' },
+            width: '100%',
+          }}
+        >
+          {creating ? 'Ensuring...' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
+        </Button>
       </Box>
-
-      {error && (
-        <Box sx={{ p: 1.5, borderRadius: 2, bgcolor: 'rgba(239,68,68,0.05)', border: 1, borderColor: 'rgba(239,68,68,0.2)' }}>
-          <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>{error}</Typography>
-        </Box>
-      )}
-
-      <Button
-        variant="contained"
-        disableElevation
-        onClick={createAccounts}
-        disabled={!allMapped || creating}
-        sx={{
-          borderRadius: '8px',
-          textTransform: 'none',
-          fontWeight: 500,
-          gap: 1,
-          whiteSpace: 'nowrap',
-          '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
-          '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
-          height: 36,
-          px: 2,
-          fontSize: '0.875rem',
-          bgcolor: '#00C2B9',
-          color: '#fff',
-          '&:hover': { bgcolor: '#00a89f' },
-          '&:active': { bgcolor: '#008f87' },
-          width: '100%',
-        }}
-      >
-        {creating ? 'Ensuring...' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
-      </Button>
-    </Box>
-  );
-}
+    );
+  }
 
 // Marketplace to country mapping for SKU scoping
 const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
