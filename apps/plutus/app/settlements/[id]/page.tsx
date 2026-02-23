@@ -815,9 +815,14 @@ export default function SettlementDetailPage() {
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [isRollingBack, setIsRollingBack] = useState(false);
+  const [isRepairing, setIsRepairing] = useState(false);
   const [pendingPreviewInvoiceId, setPendingPreviewInvoiceId] = useState<string>('');
   const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false);
   const [rollbackDialogLines, setRollbackDialogLines] = useState<string[]>([]);
+  const [repairDialogOpen, setRepairDialogOpen] = useState(false);
+  const [repairDialogLines, setRepairDialogLines] = useState<string[]>([]);
+  const [repairInvoiceId, setRepairInvoiceId] = useState<string | null>(null);
+  const [repairMarketplaceId, setRepairMarketplaceId] = useState<MarketplaceId | null>(null);
 
   useEffect(() => {
     setPendingPreviewInvoiceId('');
@@ -924,7 +929,7 @@ export default function SettlementDetailPage() {
   const isProcessedPreview = settlement?.plutusStatus === 'Processed';
   const previewBlockingCount = previewBlockingBlocks.length;
   const previewWarningCount = previewWarningBlocks.length;
-  const previewIssueCount = isProcessedPreview ? visiblePreviewBlocks.length : previewBlockingCount;
+  const hasInvoiceConflict = visiblePreviewBlocks.some((block) => block.code === 'INVOICE_CONFLICT');
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlement Details" error={connection.error} />;
@@ -955,16 +960,64 @@ export default function SettlementDetailPage() {
 
     const lines: string[] = [];
     if (hasQboCogsJe || hasQboPnlJe) {
-      lines.push('Void these Journal Entries in QBO first:');
+      lines.push('This will delete the following Plutus Journal Entries in QBO:');
       if (hasQboCogsJe) lines.push(`COGS JE: ${cogsId}`);
       if (hasQboPnlJe) lines.push(`P&L Reclass JE: ${pnlId}`);
     } else if (hasNoopJournals) {
       lines.push('No Plutus JEs were posted for this settlement (fees-only).');
     }
-    lines.push('Then click Confirm to mark this settlement as Pending in Plutus.');
+    lines.push('Click Confirm to mark this settlement as Pending in Plutus.');
 
     setRollbackDialogLines(lines);
     setRollbackDialogOpen(true);
+  }
+
+  async function initiateRepair() {
+    setActionError(null);
+
+    let latest: SettlementDetailResponse;
+    try {
+      latest = await queryClient.fetchQuery({
+        queryKey: ['plutus-settlement', settlementId],
+        queryFn: () => fetchSettlement(settlementId),
+      });
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+
+    const processing = latest.processing;
+    if (!processing) return;
+
+    const invoiceId = processing.invoiceId.trim();
+    const marketplaceId = latest.settlement.marketplace.id;
+    if (invoiceId === '') {
+      setActionError('Missing invoiceId for repair');
+      return;
+    }
+
+    setRepairInvoiceId(invoiceId);
+    setRepairMarketplaceId(marketplaceId);
+
+    const cogsId = processing.qboCogsJournalEntryId;
+    const pnlId = processing.qboPnlReclassJournalEntryId;
+    const hasQboCogsJe = isQboJournalEntryId(cogsId);
+    const hasQboPnlJe = isQboJournalEntryId(pnlId);
+    const hasNoopJournals = isNoopJournalEntryId(cogsId) || isNoopJournalEntryId(pnlId);
+
+    const lines: string[] = [];
+    lines.push(`Invoice: ${invoiceId}`);
+    if (hasQboCogsJe || hasQboPnlJe) {
+      lines.push('This will delete the existing Plutus Journal Entries in QBO:');
+      if (hasQboCogsJe) lines.push(`COGS JE: ${cogsId}`);
+      if (hasQboPnlJe) lines.push(`P&L Reclass JE: ${pnlId}`);
+    } else if (hasNoopJournals) {
+      lines.push('No Plutus JEs were posted for this settlement (fees-only).');
+    }
+    lines.push('Then Plutus will reprocess the settlement using the latest stored audit rows.');
+
+    setRepairDialogLines(lines);
+    setRepairDialogOpen(true);
   }
 
   async function executeRollback() {
@@ -989,6 +1042,62 @@ export default function SettlementDetailPage() {
       setActionError(e instanceof Error ? e.message : String(e));
     } finally {
       setIsRollingBack(false);
+    }
+  }
+
+  async function executeRepair() {
+    const invoiceId = repairInvoiceId;
+    const marketplaceId = repairMarketplaceId;
+    if (!invoiceId || !marketplaceId) {
+      setActionError('Missing repair parameters');
+      return;
+    }
+
+    setRepairDialogOpen(false);
+    setIsRepairing(true);
+    try {
+      const rollbackRes = await fetch(`${basePath}/api/plutus/settlements/${settlementId}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'rollback' }),
+      });
+
+      const rollbackPayload = await rollbackRes.json();
+      if (!rollbackRes.ok) {
+        throw new Error(readApiErrorMessage(rollbackPayload, 'Failed to rollback settlement'));
+      }
+
+      const processRes = await fetch(`${basePath}/api/plutus/settlements/${settlementId}/process`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ invoiceId, marketplace: marketplaceId }),
+      });
+
+      const processPayload = await processRes.json();
+      if (!processRes.ok) {
+        if (isSettlementProcessingPreview(processPayload)) {
+          const blockingCodes = processPayload.blocks.filter((b) => isBlockingPreviewBlock(b)).map((b) => b.code);
+          throw new Error(
+            blockingCodes.length > 0
+              ? `Reprocess blocked (${blockingCodes.join(', ')}). Open Plutus Settlement tab for details.`
+              : 'Reprocess blocked. Open Plutus Settlement tab for details.',
+          );
+        }
+        throw new Error(readApiErrorMessage(processPayload, 'Failed to reprocess settlement'));
+      }
+
+      enqueueSnackbar('Settlement repaired and reposted to QBO', { variant: 'success' });
+
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement', settlementId] });
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+      await queryClient.invalidateQueries({ queryKey: ['plutus-settlement-preview', settlementId] });
+      setTab('sales');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setActionError(message);
+      enqueueSnackbar(message, { variant: 'error' });
+    } finally {
+      setIsRepairing(false);
     }
   }
 
@@ -1050,8 +1159,25 @@ export default function SettlementDetailPage() {
                   onProcessed={() => void handleProcessed()}
                 />
               )}
+              {data?.processing && settlement.plutusStatus === 'Processed' && hasInvoiceConflict && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
+                  onClick={() => void initiateRepair()}
+                  disabled={isRepairing || isRollingBack}
+                >
+                  {isRepairing ? 'Repairing…' : 'Repair'}
+                </Button>
+              )}
               {data?.processing && (
-                <Button variant="outlined" size="small" sx={{ borderColor: 'divider', color: 'text.primary' }} onClick={() => void initiateRollback()} disabled={isRollingBack}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  sx={{ borderColor: 'divider', color: 'text.primary' }}
+                  onClick={() => void initiateRollback()}
+                  disabled={isRollingBack || isRepairing}
+                >
                   {isRollingBack ? 'Rolling back...' : 'Rollback'}
                 </Button>
               )}
@@ -1294,16 +1420,40 @@ export default function SettlementDetailPage() {
                     </Box>
 
                     {/* Blocks */}
-                    {isProcessedPreview && previewIssueCount > 0 && (
+                    {isProcessedPreview && previewBlockingCount > 0 && (
+                      <Box sx={{ borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 2 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <WarningIcon sx={{ fontSize: 16, color: 'error.main' }} />
+                          <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'error.dark' }}>
+                            {previewBlockingCount} blocking issue{previewBlockingCount === 1 ? '' : 's'}
+                          </Box>
+                        </Box>
+                        <Box component="ul" sx={{ fontSize: '0.875rem', color: 'error.dark', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          {previewBlockingBlocks.map((b, idx) => (
+                            <li key={idx}>
+                              <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
+                              {b.details && 'error' in b.details && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{String(b.details.error)}</Typography>
+                              )}
+                              {formatBlockDetails(b.details) && (
+                                <Typography sx={{ fontSize: '0.75rem', opacity: 0.75, mt: 0.25, fontFamily: 'monospace' }}>{formatBlockDetails(b.details)}</Typography>
+                              )}
+                            </li>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {isProcessedPreview && previewWarningCount > 0 && (
                       <Box sx={{ borderRadius: 2, p: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50' }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                           <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
                           <Box component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'warning.dark' }}>
-                            {previewIssueCount} review issue{previewIssueCount === 1 ? '' : 's'}
+                            {previewWarningCount} review issue{previewWarningCount === 1 ? '' : 's'}
                           </Box>
                         </Box>
                         <Box component="ul" sx={{ fontSize: '0.875rem', display: 'flex', flexDirection: 'column', gap: 0.5, color: 'warning.dark' }}>
-                          {visiblePreviewBlocks.map((b, idx) => (
+                          {previewWarningBlocks.map((b, idx) => (
                             <li key={idx}>
                               <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{b.code}</Box>: {b.message}
                               {b.details && 'error' in b.details && (
@@ -1481,6 +1631,48 @@ export default function SettlementDetailPage() {
           </CardContent>
         </Card>
       </Box>
+
+      {/* Repair confirmation dialog */}
+      <Dialog
+        open={repairDialogOpen}
+        onClose={() => setRepairDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
+      >
+        <DialogTitle>Repair Settlement Processing?</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {repairDialogLines.map((line, i) => (
+            <Typography
+              key={i}
+              sx={{
+                fontSize: '0.875rem',
+                color: i === repairDialogLines.length - 1 ? 'text.primary' : 'text.secondary',
+                fontFamily: line.startsWith('COGS JE') || line.startsWith('P&L') ? 'monospace' : undefined,
+              }}
+            >
+              {line}
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setRepairDialogOpen(false)}
+            sx={{ borderColor: 'divider', color: 'text.primary', borderRadius: '8px', textTransform: 'none' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void executeRepair()}
+            disabled={isRepairing}
+            sx={{ bgcolor: '#00C2B9', color: '#fff', borderRadius: '8px', textTransform: 'none', '&:hover': { bgcolor: '#00a89f' } }}
+          >
+            Confirm Repair
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Rollback confirmation dialog */}
       <Dialog
