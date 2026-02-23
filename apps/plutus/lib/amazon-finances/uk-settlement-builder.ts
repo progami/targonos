@@ -113,80 +113,71 @@ function brandLabelForName(brandName: string, brandLabelByBrandName?: Map<string
   return label ? label : brandName;
 }
 
-function chargeTypeMemoForShipment(input: { chargeType: string; brandLabel: string }): string | null {
-  if (input.chargeType === 'Principal') return `Amazon Sales - Principal - ${input.brandLabel}`;
-  if (input.chargeType === 'ShippingCharge') return `Amazon Sales - Shipping - ${input.brandLabel}`;
-  if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Sales Tax (Principal)';
-  if (input.chargeType === 'ShippingTax') return 'Amazon Sales Tax - Sales Tax (Shipping)';
-  if (input.chargeType === 'GiftWrap') return null;
-  if (input.chargeType === 'GiftWrapTax') return null;
-  return null;
-}
+type OrderScope = 'Domestic Orders' | 'International Orders';
 
-function promotionMemoForShipment(brandLabel: string): string {
-  return `Amazon Sales - Shipping Promotion - ${brandLabel}`;
-}
-
-function feeTypeMemoForShipment(feeType: string): string | null {
-  if (feeType === 'Commission') return 'Amazon Seller Fees - Commission';
-  if (feeType === 'FBAPerUnitFulfillmentFee') return 'Amazon FBA Fees - FBA Per Unit Fulfilment Fee';
-  if (feeType === 'ShippingChargeback') return 'Amazon FBA Fees - Shipping Chargeback';
-  if (feeType === 'DigitalServicesFee') return null;
-  if (feeType === 'SalesTaxCollectionFee') return null;
-  if (feeType === 'FixedClosingFee') return null;
-  if (feeType === 'VariableClosingFee') return null;
-  if (feeType === 'GiftwrapChargeback') return null;
-  if (feeType === 'FBAPerOrderFulfillmentFee') return null;
-  if (feeType === 'FBAWeightBasedFee') return null;
-  return null;
-}
-
-function withheldChargeMemo(chargeType: string, context: 'shipment' | 'refund'): string | null {
-  if (chargeType === 'MarketplaceFacilitatorTax-Principal') {
-    return context === 'shipment'
-      ? 'Amazon Sales Tax - Marketplace Facilitator Tax - (Principal)'
-      : 'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Principal)';
+function orderScopeFromMarketplaceName(marketplaceName: unknown): OrderScope {
+  if (typeof marketplaceName !== 'string' || marketplaceName.trim() === '') {
+    return 'Domestic Orders';
   }
-  if (chargeType === 'MarketplaceFacilitatorTax-Shipping') {
-    return context === 'shipment'
-      ? 'Amazon Sales Tax - Marketplace Facilitator Tax - (Shipping)'
-      : 'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Shipping)';
-  }
+  const normalized = marketplaceName.trim().toLowerCase();
+  if (normalized === 'amazon.co.uk') return 'Domestic Orders';
+  return 'International Orders';
+}
+
+function salesMemo(input: {
+  kind: 'Principal' | 'Shipping' | 'Shipping Promotion' | 'Promotional Discounts';
+  brandLabel: string;
+  marketplaceVatResponsible: boolean;
+}): string {
+  const suffix = input.marketplaceVatResponsible ? ' (Marketplace VAT Responsible)' : '';
+  return `Amazon Sales - ${input.kind}${suffix} - ${input.brandLabel}`;
+}
+
+function refundMemo(input: {
+  kind: 'Refunded Principal' | 'Refunded Shipping' | 'Refunded Shipping Promotion' | 'Refunded Promotional Discounts';
+  brandLabel: string;
+  marketplaceVatResponsible: boolean;
+}): string {
+  const suffix = input.marketplaceVatResponsible ? ' (Marketplace VAT Responsible)' : '';
+  return `Amazon Refunds - ${input.kind}${suffix} - ${input.brandLabel}`;
+}
+
+function feeTypeMemoForShipment(input: { feeType: string; scope: OrderScope }): string | null {
+  if (input.feeType === 'Commission') return 'Amazon Seller Fees - Commission';
+  if (input.feeType === 'DigitalServicesFee' || input.feeType === 'DigitalServicesFeeFBA')
+    return 'Amazon Seller Fees - Digital Services Fee';
+  if (input.feeType === 'FBAPerUnitFulfillmentFee') return `Amazon FBA Fees - FBA Per Unit Fulfilment Fee - ${input.scope}`;
+  if (input.feeType === 'ShippingChargeback') return `Amazon FBA Fees - Shipping Chargeback - ${input.scope}`;
+  if (input.feeType === 'SalesTaxCollectionFee') return null;
+  if (input.feeType === 'FixedClosingFee') return null;
+  if (input.feeType === 'VariableClosingFee') return null;
+  if (input.feeType === 'GiftwrapChargeback') return null;
+  if (input.feeType === 'FBAPerOrderFulfillmentFee') return null;
+  if (input.feeType === 'FBAWeightBasedFee') return null;
   return null;
 }
 
-function chargeTypeMemoForRefund(input: { chargeType: string; brandLabel: string }): string | null {
-  if (input.chargeType === 'Principal') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
-  if (input.chargeType === 'ShippingCharge') return `Amazon Refunds - Refunded Shipping - ${input.brandLabel}`;
-  if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
-  if (input.chargeType === 'ShippingTax') return null;
-  if (input.chargeType === 'GiftWrap') return null;
-  if (input.chargeType === 'GiftWrapTax') return null;
-  return null;
-}
-
-function promotionMemoForRefund(brandLabel: string): string {
-  return `Amazon Refunds - Refunded Shipping Promotion - ${brandLabel}`;
-}
-
-function feeTypeMemoForRefund(feeType: string): string | null {
-  if (feeType === 'Commission') return 'Amazon Seller Fees - Refunded Commission';
-  if (feeType === 'RefundCommission') return 'Amazon Seller Fees - Refund Commission';
-  if (feeType === 'ShippingChargeback') return 'Amazon FBA Fees - Shipping Chargeback';
-  if (feeType === 'DigitalServicesFee') return null;
-  if (feeType === 'SalesTaxCollectionFee') return null;
-  if (feeType === 'FixedClosingFee') return null;
-  if (feeType === 'VariableClosingFee') return null;
-  if (feeType === 'GiftwrapChargeback') return null;
+function feeTypeMemoForRefund(input: { feeType: string; scope: OrderScope }): string | null {
+  if (input.feeType === 'Commission') return 'Amazon Seller Fees - Refunded Commission';
+  if (input.feeType === 'RefundCommission') return 'Amazon Seller Fees - Refund Commission';
+  if (input.feeType === 'DigitalServicesFee' || input.feeType === 'DigitalServicesFeeFBA')
+    return 'Amazon Seller Fees - Refunded Digital Services Fee';
+  if (input.feeType === 'ShippingChargeback') return `Amazon FBA Fees - Refunded Shipping Chargeback - ${input.scope}`;
+  if (input.feeType === 'SalesTaxCollectionFee') return null;
+  if (input.feeType === 'FixedClosingFee') return null;
+  if (input.feeType === 'VariableClosingFee') return null;
+  if (input.feeType === 'GiftwrapChargeback') return null;
   return null;
 }
 
 function serviceFeeMemo(feeType: string): string | null {
   if (feeType === 'Subscription') return 'Amazon Seller Fees - Subscription Fee';
-  if (feeType === 'FBAInboundTransportationFee') return 'Amazon FBA Fees - FBA Inbound Transportation Fee';
+  if (feeType === 'FBAInboundTransportationFee') return 'Amazon FBA Fees - FBA Inbound Transportation Fee - Domestic Orders';
+  if (feeType === 'FBAInboundTransportationProgramFee')
+    return 'Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders';
   if (feeType === 'AmazonUpstreamProcessingFee') return 'Amazon FBA Fees - AWD Processing Fee';
   if (feeType === 'AmazonUpstreamStorageTransportationFee') return 'Amazon FBA Fees - AWD Transportation Fee';
-  if (feeType === 'FBAPerUnitFulfillmentFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment';
+  if (feeType === 'FBAPerUnitFulfillmentFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment - Domestic Orders';
   if (feeType === 'FBAStorageFee') return 'Amazon Storage Fees - Storage Fee';
   if (feeType === 'STARStorageFee') return 'Amazon Storage Fees - AWD Storage Fee';
   if (feeType === 'FBAWeightBasedFee') return null;
@@ -199,6 +190,8 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
   if (type === 'ReserveDebit') return 'Amazon Reserved Balances - Current Reserve Amount';
   if (type === 'WAREHOUSE_DAMAGE') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Warehouse Damage';
   if (type === 'MISSING_FROM_INBOUND') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Missing From Inbound';
+  if (type === 'REVERSAL_REIMBURSEMENT')
+    return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';
   return null;
 }
 
@@ -221,6 +214,75 @@ function toPromotions(list: unknown): SpApiPromotion[] {
 
 function toWithheldComponents(list: unknown): SpApiTaxWithheldComponent[] {
   return Array.isArray(list) ? (list as SpApiTaxWithheldComponent[]) : [];
+}
+
+type MarketplaceVatWithheldSummary = {
+  marketplaceVatResponsible: boolean;
+  withheldVatPrincipalCents: number;
+  withheldVatShippingCents: number;
+};
+
+function computeMarketplaceVatWithheldSummary(input: {
+  withheldComponents: SpApiTaxWithheldComponent[];
+  context: string;
+}): MarketplaceVatWithheldSummary {
+  let marketplaceVatResponsible = false;
+  let withheldVatPrincipalCents = 0;
+  let withheldVatShippingCents = 0;
+
+  for (const withheld of input.withheldComponents) {
+    const model = (withheld as { TaxCollectionModel?: unknown }).TaxCollectionModel;
+    if (model === 'MarketplaceFacilitator') {
+      marketplaceVatResponsible = true;
+    }
+
+    for (const w of toChargeComponents(withheld.TaxesWithheld)) {
+      const chargeType = typeof w.ChargeType === 'string' ? w.ChargeType : '';
+      const chargeAmount = w.ChargeAmount;
+      if (!chargeAmount) continue;
+      const cents = moneyToCents(chargeAmount, `${input.context} withheld tax ${chargeType}`);
+      if (cents === 0) continue;
+
+      if (chargeType === 'MarketplaceFacilitatorVAT-Principal' || chargeType === 'MarketplaceFacilitatorTax-Principal') {
+        withheldVatPrincipalCents += cents;
+        continue;
+      }
+      if (chargeType === 'MarketplaceFacilitatorVAT-Shipping' || chargeType === 'MarketplaceFacilitatorTax-Shipping') {
+        withheldVatShippingCents += cents;
+        continue;
+      }
+
+      throw new Error(`Unhandled withheld tax charge type: ${chargeType}`);
+    }
+  }
+
+  return {
+    marketplaceVatResponsible: marketplaceVatResponsible || withheldVatPrincipalCents !== 0 || withheldVatShippingCents !== 0,
+    withheldVatPrincipalCents,
+    withheldVatShippingCents,
+  };
+}
+
+function removeOneMatchingCents(values: number[], target: number): boolean {
+  const idx = values.findIndex((v) => v === target);
+  if (idx === -1) return false;
+  values.splice(idx, 1);
+  return true;
+}
+
+function splitPromotionCentsByShipping(input: {
+  promoTotalCents: number;
+  shippingCents: number;
+}): { shippingPromoCents: number; discountPromoCents: number } {
+  const promoTotalCents = input.promoTotalCents;
+  if (promoTotalCents === 0) return { shippingPromoCents: 0, discountPromoCents: 0 };
+
+  const promoAbs = Math.abs(promoTotalCents);
+  const shippingAbs = Math.abs(input.shippingCents);
+  const shippingPromoAbs = Math.min(promoAbs, shippingAbs);
+  const sign = promoTotalCents < 0 ? -1 : 1;
+  const shippingPromoCents = sign * shippingPromoAbs;
+  return { shippingPromoCents, discountPromoCents: promoTotalCents - shippingPromoCents };
 }
 
 function resolveSegmentIndexByYearMonth(
@@ -332,12 +394,18 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
 
     const orderId = typeof shipment.AmazonOrderId === 'string' ? shipment.AmazonOrderId : '';
     const items = shipment.ShipmentItemList ?? [];
+    const scope = orderScopeFromMarketplaceName((shipment as { MarketplaceName?: unknown }).MarketplaceName);
 
     for (const item of items) {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qty = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
       const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
+
+      let principalCents = 0;
+      let taxCents = 0;
+      let shippingCents = 0;
+      let shippingTaxCents = 0;
 
       for (const charge of toChargeComponents(item.ItemChargeList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';
@@ -346,36 +414,118 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(chargeAmount, `Shipment charge ${chargeType}`);
         if (cents === 0) continue;
 
-        const memo = chargeTypeMemoForShipment({ chargeType, brandLabel });
-        if (!memo) {
-          throw new Error(`Unhandled shipment charge type: ${chargeType}`);
-        }
-
-        addCents(segment.memoTotalsCents, memo, cents);
-
         if (chargeType === 'Principal') {
-          segment.auditRows.push({
-            invoiceId: segment.docNumber,
-            market: 'uk',
-            date: localIsoDay,
-            orderId,
-            sku: skuRaw,
-            quantity: qty,
-            description: memo,
-            netCents: cents,
-          });
+          principalCents += cents;
+          continue;
         }
+        if (chargeType === 'Tax') {
+          taxCents += cents;
+          continue;
+        }
+        if (chargeType === 'ShippingCharge') {
+          shippingCents += cents;
+          continue;
+        }
+        if (chargeType === 'ShippingTax') {
+          shippingTaxCents += cents;
+          continue;
+        }
+
+        throw new Error(`Unhandled shipment charge type: ${chargeType}`);
       }
 
-      let promoCents = 0;
-      for (const promo of toPromotions(item.PromotionList)) {
-        const amount = promo.PromotionAmount;
-        if (!amount) continue;
-        promoCents += moneyToCents(amount, 'Shipment promotion');
+      const withheldSummary = computeMarketplaceVatWithheldSummary({
+        withheldComponents: toWithheldComponents(item.ItemTaxWithheldList),
+        context: 'Shipment',
+      });
+      const marketplaceVatResponsible = withheldSummary.marketplaceVatResponsible;
+
+      const promoCentsList = toPromotions(item.PromotionList)
+        .map((promo) => {
+          const amount = promo.PromotionAmount;
+          return amount ? moneyToCents(amount, 'Shipment promotion') : 0;
+        })
+        .filter((cents) => cents !== 0);
+
+      const promoWorkingCentsList = promoCentsList.slice();
+      let taxPromoCents = 0;
+      let shippingTaxPromoCents = 0;
+
+      if (marketplaceVatResponsible) {
+        if (taxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -taxCents)) {
+          taxPromoCents = -taxCents;
+        }
+        if (shippingTaxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -shippingTaxCents)) {
+          shippingTaxPromoCents = -shippingTaxCents;
+        }
+
+        const principalVatDelta = taxCents + taxPromoCents + withheldSummary.withheldVatPrincipalCents;
+        if (principalVatDelta !== 0) {
+          throw new Error(
+            `Marketplace VAT mismatch (Principal): tax=${taxCents} promo=${taxPromoCents} withheld=${withheldSummary.withheldVatPrincipalCents} orderId=${orderId} sku=${skuRaw}`,
+          );
+        }
+
+        const shippingVatDelta = shippingTaxCents + shippingTaxPromoCents + withheldSummary.withheldVatShippingCents;
+        if (shippingVatDelta !== 0) {
+          throw new Error(
+            `Marketplace VAT mismatch (Shipping): tax=${shippingTaxCents} promo=${shippingTaxPromoCents} withheld=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
+          );
+        }
+      } else if (withheldSummary.withheldVatPrincipalCents !== 0 || withheldSummary.withheldVatShippingCents !== 0) {
+        throw new Error(
+          `Unexpected withheld VAT for non-marketplace-VAT order: principal=${withheldSummary.withheldVatPrincipalCents} shipping=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
+        );
       }
-      if (promoCents !== 0) {
-        const memo = promotionMemoForShipment(brandLabel);
-        addCents(segment.memoTotalsCents, memo, promoCents);
+
+      const principalNetCents = marketplaceVatResponsible ? principalCents : principalCents + taxCents;
+      const shippingNetCents = marketplaceVatResponsible ? shippingCents : shippingCents + shippingTaxCents;
+
+      if (brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
+        throw new Error(`Missing SKU/brand for shipment item with non-zero charges (orderId=${orderId})`);
+      }
+
+      if (principalNetCents !== 0) {
+        const memo = salesMemo({ kind: 'Principal', brandLabel, marketplaceVatResponsible });
+        addCents(segment.memoTotalsCents, memo, principalNetCents);
+        segment.auditRows.push({
+          invoiceId: segment.docNumber,
+          market: 'uk',
+          date: localIsoDay,
+          orderId,
+          sku: skuRaw,
+          quantity: qty,
+          description: memo,
+          netCents: principalNetCents,
+        });
+      }
+
+      if (shippingNetCents !== 0) {
+        const memo = salesMemo({ kind: 'Shipping', brandLabel, marketplaceVatResponsible });
+        addCents(segment.memoTotalsCents, memo, shippingNetCents);
+      }
+
+      if (promoWorkingCentsList.length > 0) {
+        const promoTotalCents = promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
+        if (promoTotalCents !== 0) {
+          const split = splitPromotionCentsByShipping({ promoTotalCents, shippingCents: shippingNetCents });
+
+          if (split.shippingPromoCents !== 0) {
+            addCents(
+              segment.memoTotalsCents,
+              salesMemo({ kind: 'Shipping Promotion', brandLabel, marketplaceVatResponsible }),
+              split.shippingPromoCents,
+            );
+          }
+
+          if (split.discountPromoCents !== 0) {
+            addCents(
+              segment.memoTotalsCents,
+              salesMemo({ kind: 'Promotional Discounts', brandLabel, marketplaceVatResponsible }),
+              split.discountPromoCents,
+            );
+          }
+        }
       }
 
       for (const fee of toFeeComponents(item.ItemFeeList)) {
@@ -385,7 +535,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(feeAmount, `Shipment fee ${feeType}`);
         if (cents === 0) continue;
 
-        const memo = feeTypeMemoForShipment(feeType);
+        const memo = feeTypeMemoForShipment({ feeType, scope });
         if (!memo) {
           throw new Error(`Unhandled shipment fee type: ${feeType}`);
         }
@@ -404,22 +554,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           });
         }
       }
-
-      for (const withheld of toWithheldComponents(item.ItemTaxWithheldList)) {
-        for (const w of toChargeComponents(withheld.TaxesWithheld)) {
-          const chargeType = typeof w.ChargeType === 'string' ? w.ChargeType : '';
-          const chargeAmount = w.ChargeAmount;
-          if (!chargeAmount) continue;
-          const cents = moneyToCents(chargeAmount, `Withheld tax ${chargeType}`);
-          if (cents === 0) continue;
-
-          const memo = withheldChargeMemo(chargeType, 'shipment');
-          if (!memo) {
-            throw new Error(`Unhandled withheld tax charge type: ${chargeType}`);
-          }
-          addCents(segment.memoTotalsCents, memo, cents);
-        }
-      }
     }
   }
 
@@ -433,6 +567,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
 
     const orderId = typeof refund.AmazonOrderId === 'string' ? refund.AmazonOrderId : '';
     const items = refund.ShipmentItemAdjustmentList ?? [];
+    const scope = orderScopeFromMarketplaceName((refund as { MarketplaceName?: unknown }).MarketplaceName);
 
     for (const item of items) {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
@@ -441,6 +576,11 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
       const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
 
+      let principalCents = 0;
+      let taxCents = 0;
+      let shippingCents = 0;
+      let shippingTaxCents = 0;
+
       for (const charge of toChargeComponents(item.ItemChargeAdjustmentList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';
         const chargeAmount = charge.ChargeAmount;
@@ -448,36 +588,118 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(chargeAmount, `Refund charge ${chargeType}`);
         if (cents === 0) continue;
 
-        const memo = chargeTypeMemoForRefund({ chargeType, brandLabel });
-        if (!memo) {
-          throw new Error(`Unhandled refund charge type: ${chargeType}`);
-        }
-
-        addCents(segment.memoTotalsCents, memo, cents);
-
         if (chargeType === 'Principal') {
-          segment.auditRows.push({
-            invoiceId: segment.docNumber,
-            market: 'uk',
-            date: localIsoDay,
-            orderId,
-            sku: skuRaw,
-            quantity: qty,
-            description: memo,
-            netCents: cents,
-          });
+          principalCents += cents;
+          continue;
         }
+        if (chargeType === 'Tax') {
+          taxCents += cents;
+          continue;
+        }
+        if (chargeType === 'ShippingCharge') {
+          shippingCents += cents;
+          continue;
+        }
+        if (chargeType === 'ShippingTax') {
+          shippingTaxCents += cents;
+          continue;
+        }
+
+        throw new Error(`Unhandled refund charge type: ${chargeType}`);
       }
 
-      let promoCents = 0;
-      for (const promo of toPromotions(item.PromotionAdjustmentList)) {
-        const amount = promo.PromotionAmount;
-        if (!amount) continue;
-        promoCents += moneyToCents(amount, 'Refund promotion');
+      const withheldSummary = computeMarketplaceVatWithheldSummary({
+        withheldComponents: toWithheldComponents(item.ItemTaxWithheldList),
+        context: 'Refund',
+      });
+      const marketplaceVatResponsible = withheldSummary.marketplaceVatResponsible;
+
+      const promoCentsList = toPromotions(item.PromotionAdjustmentList)
+        .map((promo) => {
+          const amount = promo.PromotionAmount;
+          return amount ? moneyToCents(amount, 'Refund promotion') : 0;
+        })
+        .filter((cents) => cents !== 0);
+
+      const promoWorkingCentsList = promoCentsList.slice();
+      let taxPromoCents = 0;
+      let shippingTaxPromoCents = 0;
+
+      if (marketplaceVatResponsible) {
+        if (taxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -taxCents)) {
+          taxPromoCents = -taxCents;
+        }
+        if (shippingTaxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -shippingTaxCents)) {
+          shippingTaxPromoCents = -shippingTaxCents;
+        }
+
+        const principalVatDelta = taxCents + taxPromoCents + withheldSummary.withheldVatPrincipalCents;
+        if (principalVatDelta !== 0) {
+          throw new Error(
+            `Marketplace VAT mismatch (Principal): tax=${taxCents} promo=${taxPromoCents} withheld=${withheldSummary.withheldVatPrincipalCents} orderId=${orderId} sku=${skuRaw}`,
+          );
+        }
+
+        const shippingVatDelta = shippingTaxCents + shippingTaxPromoCents + withheldSummary.withheldVatShippingCents;
+        if (shippingVatDelta !== 0) {
+          throw new Error(
+            `Marketplace VAT mismatch (Shipping): tax=${shippingTaxCents} promo=${shippingTaxPromoCents} withheld=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
+          );
+        }
+      } else if (withheldSummary.withheldVatPrincipalCents !== 0 || withheldSummary.withheldVatShippingCents !== 0) {
+        throw new Error(
+          `Unexpected withheld VAT for non-marketplace-VAT refund: principal=${withheldSummary.withheldVatPrincipalCents} shipping=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
+        );
       }
-      if (promoCents !== 0) {
-        const memo = promotionMemoForRefund(brandLabel);
-        addCents(segment.memoTotalsCents, memo, promoCents);
+
+      const principalNetCents = marketplaceVatResponsible ? principalCents : principalCents + taxCents;
+      const shippingNetCents = marketplaceVatResponsible ? shippingCents : shippingCents + shippingTaxCents;
+
+      if (brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
+        throw new Error(`Missing SKU/brand for refund item with non-zero charges (orderId=${orderId})`);
+      }
+
+      if (principalNetCents !== 0) {
+        const memo = refundMemo({ kind: 'Refunded Principal', brandLabel, marketplaceVatResponsible });
+        addCents(segment.memoTotalsCents, memo, principalNetCents);
+        segment.auditRows.push({
+          invoiceId: segment.docNumber,
+          market: 'uk',
+          date: localIsoDay,
+          orderId,
+          sku: skuRaw,
+          quantity: qty,
+          description: memo,
+          netCents: principalNetCents,
+        });
+      }
+
+      if (shippingNetCents !== 0) {
+        const memo = refundMemo({ kind: 'Refunded Shipping', brandLabel, marketplaceVatResponsible });
+        addCents(segment.memoTotalsCents, memo, shippingNetCents);
+      }
+
+      if (promoWorkingCentsList.length > 0) {
+        const promoTotalCents = promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
+        if (promoTotalCents !== 0) {
+          const split = splitPromotionCentsByShipping({ promoTotalCents, shippingCents: shippingNetCents });
+
+          if (split.shippingPromoCents !== 0) {
+            addCents(
+              segment.memoTotalsCents,
+              refundMemo({ kind: 'Refunded Shipping Promotion', brandLabel, marketplaceVatResponsible }),
+              split.shippingPromoCents,
+            );
+          }
+
+          if (split.discountPromoCents !== 0) {
+            addCents(
+              segment.memoTotalsCents,
+              refundMemo({ kind: 'Refunded Promotional Discounts', brandLabel, marketplaceVatResponsible }),
+              split.discountPromoCents,
+            );
+          }
+        }
       }
 
       for (const fee of toFeeComponents(item.ItemFeeAdjustmentList)) {
@@ -487,7 +709,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(feeAmount, `Refund fee ${feeType}`);
         if (cents === 0) continue;
 
-        const memo = feeTypeMemoForRefund(feeType);
+        const memo = feeTypeMemoForRefund({ feeType, scope });
         if (!memo) {
           throw new Error(`Unhandled refund fee type: ${feeType}`);
         }
@@ -504,22 +726,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
             description: memo,
             netCents: cents,
           });
-        }
-      }
-
-      for (const withheld of toWithheldComponents(item.ItemTaxWithheldList)) {
-        for (const w of toChargeComponents(withheld.TaxesWithheld)) {
-          const chargeType = typeof w.ChargeType === 'string' ? w.ChargeType : '';
-          const chargeAmount = w.ChargeAmount;
-          if (!chargeAmount) continue;
-          const cents = moneyToCents(chargeAmount, `Refund withheld tax ${chargeType}`);
-          if (cents === 0) continue;
-
-          const memo = withheldChargeMemo(chargeType, 'refund');
-          if (!memo) {
-            throw new Error(`Unhandled refund withheld tax charge type: ${chargeType}`);
-          }
-          addCents(segment.memoTotalsCents, memo, cents);
         }
       }
     }

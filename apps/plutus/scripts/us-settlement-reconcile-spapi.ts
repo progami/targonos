@@ -134,11 +134,7 @@ function requireSettlementIdFromPrivateNote(input: { docNumber: string; privateN
     return matchSpapi[1]!;
   }
 
-  const match = privateNote.match(/downloadAuditFile\/\d+-([0-9]+)/);
-  if (!match) {
-    throw new Error(`Missing settlementId in PrivateNote for ${input.docNumber}`);
-  }
-  return match[1]!;
+  throw new Error(`Missing SP-API settlementId in PrivateNote for ${input.docNumber}`);
 }
 
 function extractBrandLabelFromMemo(description: string): string | null {

@@ -322,7 +322,7 @@ $4,161 in legal for a startup e-commerce business is high. This likely includes:
 | Expense | Amount | Assessment |
 |---------|--------|------------|
 | **IDFL** | $2,425 | Product testing/certification lab - necessary but expensive |
-| **Software** | $1,281 | Likely LinkMyBooks + other tools |
+| **Software** | $1,281 | Likely bookkeeping + other tools |
 | **Bank fees** | $433 | Normal |
 | **Memberships** | $517 | What memberships? Review necessity |
 | **Best Buy** | $646 | Equipment purchases |

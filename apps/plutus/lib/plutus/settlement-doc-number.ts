@@ -28,7 +28,7 @@ const MONTHS: Record<string, number> = {
   DEC: 12,
 };
 
-const SETTLEMENT_DOC_NUMBER_RE = /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i;
+const SETTLEMENT_DOC_NUMBER_RE = /^(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+$/i;
 
 function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
@@ -167,4 +167,3 @@ export function computeSettlementTotalFromJournalEntry(
 
   return total;
 }
-
