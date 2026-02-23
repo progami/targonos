@@ -609,6 +609,7 @@ function AccountRow({
             sx={{
               borderRadius: '8px',
               fontSize: '0.875rem',
+              height: 32,
               bgcolor: 'background.paper',
               '& .MuiOutlinedInput-notchedOutline': {
                 borderColor: selected ? '#00C2B9' : 'divider',
@@ -1237,6 +1238,7 @@ function SkusSection({
                               sx={{
                                 borderRadius: '8px',
                                 fontSize: '0.875rem',
+                                height: 32,
                                 width: 220,
                                 '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
                                 '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
