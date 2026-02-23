@@ -46,7 +46,7 @@ type Brand = { name: string; marketplace: string; currency: string };
 type Sku = { sku: string; productName: string; brand: string; asin?: string };
 
 type SetupState = {
-  section: 'brands' | 'accounts' | 'skus';
+  section: 'brands' | 'accounts' | 'settlement' | 'skus';
   brands: Brand[];
   accountMappings: Record<string, string>;
   accountsCreated: boolean;
@@ -62,6 +62,17 @@ type QboAccount = {
   active: boolean;
 };
 
+type SettlementMappingResponse = {
+  usSettlementBankAccountId: string | null;
+  usSettlementPaymentAccountId: string | null;
+  usSettlementAccountIdByMemo: Record<string, string>;
+  usSettlementTaxCodeIdByMemo: Record<string, string | null>;
+  ukSettlementBankAccountId: string | null;
+  ukSettlementPaymentAccountId: string | null;
+  ukSettlementAccountIdByMemo: Record<string, string>;
+  ukSettlementTaxCodeIdByMemo: Record<string, string | null>;
+};
+
 function normalizeForMatch(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -74,6 +85,13 @@ function leafAccountName(account: QboAccount): string {
   const parts = account.fullyQualifiedName.split(':');
   const leaf = parts[parts.length - 1]!;
   return leaf.trim();
+}
+
+function qboAccountLabel(accounts: QboAccount[], accountId: string | null): string | null {
+  if (accountId === null) return null;
+  const found = accounts.find((a) => a.id === accountId);
+  if (!found) return accountId;
+  return found.acctNum ? `${found.acctNum} · ${found.fullyQualifiedName}` : found.fullyQualifiedName;
 }
 
 function parentFullyQualifiedName(account: QboAccount): string | null {
@@ -313,17 +331,20 @@ function Sidebar({
   onSectionChange,
   brandsComplete,
   accountsComplete,
+  settlementComplete,
   skusComplete,
 }: {
   section: string;
-  onSectionChange: (s: 'brands' | 'accounts' | 'skus') => void;
+  onSectionChange: (s: 'brands' | 'accounts' | 'settlement' | 'skus') => void;
   brandsComplete: boolean;
   accountsComplete: boolean;
+  settlementComplete: boolean;
   skusComplete: boolean;
 }) {
   const items = [
     { id: 'brands' as const, label: 'Brands', complete: brandsComplete },
-    { id: 'accounts' as const, label: 'Map accounts', complete: accountsComplete },
+    { id: 'accounts' as const, label: 'Chart of accounts', complete: accountsComplete },
+    { id: 'settlement' as const, label: 'Settlement posting', complete: settlementComplete },
     { id: 'skus' as const, label: 'Inventory', complete: skusComplete },
   ];
 
@@ -956,9 +977,42 @@ function AccountsSection({
         <Box>
           <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Account Mapping</Typography>
           <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+            Plutus uses these parent accounts to create brand sub-accounts (e.g. <strong>Manufacturing - US-PDS</strong>).
             Select parent accounts only. Brand sub-accounts are hidden to prevent accidental mis-mapping.
           </Typography>
         </Box>
+
+        <Card sx={{ border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+              <Box
+                sx={{
+                  mt: 0.25,
+                  display: 'flex',
+                  height: 32,
+                  width: 32,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  color: 'text.secondary',
+                }}
+              >
+                <InfoOutlinedIcon sx={{ fontSize: 16 }} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>What this step controls</Box>
+                <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                  <Box component="ul" sx={{ m: 0, pl: 2, '& > li': { mb: 0.5 } }}>
+                    <li><strong>Inventory Asset</strong> is balance sheet (capitalized costs).</li>
+                    <li><strong>COGS / Warehousing / Amazon Fees</strong> are P&amp;L (reclass when processed).</li>
+                    <li><strong>Reserve / rollovers / sales tax</strong> are configured in <strong>Settlement posting</strong>.</li>
+                  </Box>
+                </Box>
+              </Box>
+            </Box>
+          </CardContent>
+        </Card>
 
         {accountsCreated && (
           <Box
@@ -1050,8 +1104,304 @@ function AccountsSection({
           {creating ? 'Ensuring...' : `Ensure Sub-Accounts for ${brands.length} Brand${brands.length > 1 ? 's' : ''}`}
         </Button>
       </Box>
+  );
+}
+
+function SettlementSection({
+  isQboConnected,
+  isLoadingAccounts,
+  accounts,
+  mapping,
+  isLoadingMapping,
+  brands,
+}: {
+  isQboConnected: boolean;
+  isLoadingAccounts: boolean;
+  accounts: QboAccount[];
+  mapping: SettlementMappingResponse | undefined;
+  isLoadingMapping: boolean;
+  brands: Brand[];
+}) {
+  const hasUs = brands.some((b) => b.marketplace === 'amazon.com');
+  const hasUk = brands.some((b) => b.marketplace === 'amazon.co.uk');
+
+  const reservedMemos = [
+    'Amazon Reserved Balances - Current Reserve Amount',
+    'Amazon Reserved Balances - Previous Reserve Amount Balance',
+    'Amazon Reserved Balances - Successful charge',
+    'Amazon Reserved Balances - Repayment of negative Amazon balance',
+  ];
+
+  const splitMonthMemos = [
+    'Split month settlement - balance of this invoice rolled forward',
+    'Split month settlement - balance of previous invoice(s) rolled forward',
+  ];
+
+  const salesTaxMemos = [
+    'Amazon Sales Tax - Sales Tax (Principal)',
+    'Amazon Sales Tax - Marketplace Facilitator Tax - (Principal)',
+    'Amazon Sales Tax - Sales Tax (Shipping)',
+    'Amazon Sales Tax - Marketplace Facilitator Tax - (Shipping)',
+    'Amazon Sales Tax - Refund - Item Price - Tax',
+    'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Principal)',
+    'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Shipping)',
+  ];
+
+  const handleOpenSettlementMapping = () => {
+    window.location.href = `${basePath}/settlement-mapping`;
+  };
+
+  if (brands.length === 0) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>Add brands first before configuring settlement posting.</Typography>
+      </Box>
     );
   }
+
+  if (!isQboConnected) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+        <Card sx={{ maxWidth: 520, width: '100%', border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 3, textAlign: 'center', '&:last-child': { pb: 3 } }}>
+            <Box
+              sx={{
+                mx: 'auto',
+                display: 'flex',
+                height: 48,
+                width: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 4,
+                bgcolor: 'action.hover',
+                color: 'text.secondary',
+              }}
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 20 }} />
+            </Box>
+            <Box sx={{ mt: 2, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Connect QuickBooks to view settlement accounts</Box>
+            <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+              Plutus posts Amazon settlements as journal entries and needs QBO accounts selected.
+            </Box>
+            <Box sx={{ mt: 2.5 }}>
+              <Button
+                variant="contained"
+                disableElevation
+                onClick={() => {
+                  window.location.href = `${basePath}/api/qbo/connect`;
+                }}
+                sx={{
+                  width: '100%',
+                  borderRadius: 3,
+                  bgcolor: '#00C2B9',
+                  color: '#fff',
+                  '&:hover': { bgcolor: '#00a89f' },
+                  boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
+                }}
+              >
+                Connect to QuickBooks
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  }
+
+  if (isLoadingAccounts || isLoadingMapping) {
+    return (
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography sx={{ color: 'text.secondary' }}>Loading settlement mapping...</Typography>
+      </Box>
+    );
+  }
+
+  const renderRegion = (input: {
+    title: string;
+    bankAccountId: string | null;
+    paymentAccountId: string | null;
+    memoMappings: Record<string, string>;
+  }) => {
+    const memoCount = Object.keys(input.memoMappings).length;
+
+    const memoAccountIds = (memos: string[]): string[] => {
+      const ids = new Set<string>();
+      for (const memo of memos) {
+        const id = input.memoMappings[memo];
+        if (typeof id === 'string' && id.trim() !== '') {
+          ids.add(id.trim());
+        }
+      }
+      return Array.from(ids).sort();
+    };
+
+    const rowValue = (label: string, ids: string[], missingCount: number): { value: string; ok: boolean } => {
+      if (ids.length === 1 && missingCount === 0) {
+        const accountLabel = qboAccountLabel(accounts, ids[0] ? ids[0] : null);
+        return { value: accountLabel ? accountLabel : ids[0]!, ok: true };
+      }
+      if (ids.length === 0) {
+        return { value: missingCount > 0 ? `Not set (${missingCount} memo${missingCount === 1 ? '' : 's'})` : 'Not set', ok: false };
+      }
+      return { value: `Multiple accounts (${label})`, ok: false };
+    };
+
+    const reservedIds = memoAccountIds(reservedMemos);
+    const reservedMissing = reservedMemos.filter((memo) => !input.memoMappings[memo]).length;
+    const splitIds = memoAccountIds(splitMonthMemos);
+    const splitMissing = splitMonthMemos.filter((memo) => !input.memoMappings[memo]).length;
+    const taxIds = memoAccountIds(salesTaxMemos);
+    const taxMissing = salesTaxMemos.filter((memo) => !input.memoMappings[memo]).length;
+
+    const bankLabel = qboAccountLabel(accounts, input.bankAccountId);
+    const paymentLabel = qboAccountLabel(accounts, input.paymentAccountId);
+
+    const reservedRow = rowValue('reserved', reservedIds, reservedMissing);
+    const splitRow = rowValue('split month', splitIds, splitMissing);
+    const taxRow = rowValue('sales tax', taxIds, taxMissing);
+
+    const bankOk = bankLabel !== null && bankLabel.trim() !== '';
+    const paymentOk = paymentLabel !== null && paymentLabel.trim() !== '';
+
+    return (
+      <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              borderBottom: 1,
+              borderColor: 'divider',
+              bgcolor: 'action.hover',
+              px: 2,
+              py: 1.5,
+            }}
+          >
+            <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+              {input.title}
+            </Box>
+            <Box sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{memoCount} memos mapped</Box>
+          </Box>
+
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+              <TableHead
+                sx={{
+                  bgcolor: 'rgba(245, 245, 245, 0.8)',
+                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                }}
+              >
+                <TableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                    Category
+                  </TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                    QBO account
+                  </TableCell>
+                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}>
+                    {' '}
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
+                {[
+                  { label: 'Transfer to bank', value: bankLabel ?? 'Not set', ok: bankOk },
+                  { label: 'Payment to Amazon', value: paymentLabel ?? 'Not set', ok: paymentOk },
+                  { label: `Reserved balances (${reservedMemos.length})`, value: reservedRow.value, ok: reservedRow.ok },
+                  { label: `Split month rollovers (${splitMonthMemos.length})`, value: splitRow.value, ok: splitRow.ok },
+                  { label: `Sales tax (${salesTaxMemos.length})`, value: taxRow.value, ok: taxRow.ok },
+                ].map((row) => (
+                  <TableRow key={row.label} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontSize: '0.875rem', fontWeight: 500 }}>
+                      {row.label}
+                    </TableCell>
+                    <TableCell sx={{ px: 1.5, py: 0.75, color: row.ok ? 'text.primary' : 'text.secondary', fontSize: '0.875rem' }}>
+                      {row.value}
+                    </TableCell>
+                    <TableCell sx={{ px: 1.5, py: 0.75, width: 48, textAlign: 'right' }}>
+                      {row.ok ? (
+                        <CheckIcon sx={{ fontSize: 16, color: '#22c55e' }} />
+                      ) : (
+                        <CloseIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Box>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const usMapping = mapping
+    ? {
+        title: 'Amazon.com settlement',
+        bankAccountId: mapping.usSettlementBankAccountId,
+        paymentAccountId: mapping.usSettlementPaymentAccountId,
+        memoMappings: mapping.usSettlementAccountIdByMemo,
+      }
+    : null;
+
+  const ukMapping = mapping
+    ? {
+        title: 'Amazon.co.uk settlement',
+        bankAccountId: mapping.ukSettlementBankAccountId,
+        paymentAccountId: mapping.ukSettlementPaymentAccountId,
+        memoMappings: mapping.ukSettlementAccountIdByMemo,
+      }
+    : null;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Settlement posting</Typography>
+        <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+          Plutus posts Amazon settlements as journal entries using a memo-to-account mapping (including balance sheet lines like reserves and split-month rollovers).
+        </Typography>
+      </Box>
+
+      <Box sx={{ display: 'grid', gap: 2 }}>
+        {hasUs && usMapping && renderRegion(usMapping)}
+        {hasUk && ukMapping && renderRegion(ukMapping)}
+        {!hasUs && !hasUk && (
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                Settlement mapping is currently shown for Amazon.com and Amazon.co.uk brands.
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
+      </Box>
+
+      <Button
+        variant="contained"
+        disableElevation
+        onClick={handleOpenSettlementMapping}
+        sx={{
+          borderRadius: '8px',
+          textTransform: 'none',
+          fontWeight: 500,
+          height: 36,
+          px: 2,
+          fontSize: '0.875rem',
+          bgcolor: '#00C2B9',
+          color: '#fff',
+          '&:hover': { bgcolor: '#00a89f' },
+          '&:active': { bgcolor: '#008f87' },
+          width: '100%',
+        }}
+      >
+        Open full Settlement Mapping
+      </Button>
+    </Box>
+  );
+}
 
 // Marketplace to country mapping for SKU scoping
 const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
@@ -1751,8 +2101,51 @@ export default function SetupPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: settlementMappingData, isLoading: isLoadingSettlementMapping } = useQuery({
+    queryKey: ['setup-settlement-mapping'],
+    queryFn: async () => {
+      const res = await fetch(`${basePath}/api/setup/settlement-mapping`);
+      if (!res.ok) throw new Error('Failed to fetch settlement mapping');
+      return res.json() as Promise<SettlementMappingResponse>;
+    },
+    staleTime: 30 * 1000,
+  });
+
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
+
+  const settlementComplete = useMemo(() => {
+    if (connectionStatus?.connected !== true) return false;
+    if (!settlementMappingData) return false;
+
+    const needsUs = state.brands.some((b) => b.marketplace === 'amazon.com');
+    const needsUk = state.brands.some((b) => b.marketplace === 'amazon.co.uk');
+
+    const isConfigured = (input: { bank: string | null; payment: string | null; memoMappings: Record<string, string> }) => {
+      const bankOk = typeof input.bank === 'string' ? input.bank.trim() !== '' : false;
+      const paymentOk = typeof input.payment === 'string' ? input.payment.trim() !== '' : false;
+      const memoOk = Object.keys(input.memoMappings).length > 0;
+      return bankOk && paymentOk && memoOk;
+    };
+
+    const usOk = needsUs
+      ? isConfigured({
+          bank: settlementMappingData.usSettlementBankAccountId,
+          payment: settlementMappingData.usSettlementPaymentAccountId,
+          memoMappings: settlementMappingData.usSettlementAccountIdByMemo,
+        })
+      : true;
+
+    const ukOk = needsUk
+      ? isConfigured({
+          bank: settlementMappingData.ukSettlementBankAccountId,
+          payment: settlementMappingData.ukSettlementPaymentAccountId,
+          memoMappings: settlementMappingData.ukSettlementAccountIdByMemo,
+        })
+      : true;
+
+    return usOk && ukOk;
+  }, [connectionStatus?.connected, settlementMappingData, state.brands]);
 
   // Show loading while checking connection or loading setup
   if (isCheckingConnection || isLoadingSetup) {
@@ -1821,6 +2214,7 @@ export default function SetupPage() {
                 onSectionChange={(s) => saveState({ section: s })}
                 brandsComplete={state.brands.length > 0}
                 accountsComplete={state.accountsCreated && mappedCount === ALL_ACCOUNTS.length}
+                settlementComplete={settlementComplete}
                 skusComplete={state.skus.length > 0}
               />
 
@@ -1837,6 +2231,16 @@ export default function SetupPage() {
                       onAccountsCreated={markAccountsCreated}
                       accountsCreated={state.accountsCreated}
                       isLoadingAccounts={isLoadingAccounts}
+                    />
+                  )}
+                  {state.section === 'settlement' && (
+                    <SettlementSection
+                      isQboConnected={connectionStatus?.connected === true}
+                      isLoadingAccounts={isLoadingAccounts}
+                      accounts={accounts}
+                      mapping={settlementMappingData}
+                      isLoadingMapping={isLoadingSettlementMapping}
+                      brands={state.brands}
                     />
                   )}
                   {state.section === 'skus' && <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />}
