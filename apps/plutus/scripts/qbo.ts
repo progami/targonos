@@ -41,6 +41,7 @@ function printUsage(): void {
   console.log('  connection:show');
   console.log('  accounts:deactivate <name...>');
   console.log('  accounts:deactivate-amazon-duplicates');
+  console.log('  accounts:migrate-warehousing-prefix');
   console.log('  accounts:create-plutus-qbo-plan');
   console.log('');
 }
@@ -179,6 +180,102 @@ async function deactivateAccountsByName(
   if (missing.length > 0) {
     console.log(JSON.stringify({ missing }, null, 2));
   }
+}
+
+async function migrateWarehousingPrefixAccounts(): Promise<void> {
+  let connection = await requireServerConnection();
+
+  const { fetchAccounts, updateAccountActive } = await import('@/lib/qbo/api');
+  const { accounts, updatedConnection } = await fetchAccounts(connection, { includeInactive: true });
+  if (updatedConnection) {
+    connection = updatedConnection;
+    await saveServerQboConnection(updatedConnection);
+  }
+
+  const buckets: Array<{ parentFullyQualifiedName: string; prefix: string }> = [
+    { parentFullyQualifiedName: 'Warehousing:3PL', prefix: '3PL' },
+    { parentFullyQualifiedName: 'Warehousing:Amazon FC', prefix: 'Amazon FC' },
+    { parentFullyQualifiedName: 'Warehousing:AWD', prefix: 'AWD' },
+  ];
+
+  const parents = buckets.map((bucket) => {
+    const parent = accounts.find((account) => account.FullyQualifiedName === bucket.parentFullyQualifiedName);
+    if (!parent) {
+      throw new Error(`Missing warehousing parent account in QBO: ${bucket.parentFullyQualifiedName}`);
+    }
+    return { ...bucket, parent };
+  });
+
+  const results: Array<{ action: 'renamed' | 'skipped'; parent: string; fromName: string; toName: string; id: string }> = [];
+
+  for (const bucket of parents) {
+    const children = accounts.filter((account) => account.ParentRef?.value === bucket.parent.Id);
+
+    for (const child of children) {
+      if (child.Active !== true && child.Active !== false) {
+        throw new Error(`Missing Active flag for QBO account (id=${child.Id} name="${child.Name}").`);
+      }
+
+      const expectedPrefix = `${bucket.prefix} - `;
+      if (child.Name.startsWith(expectedPrefix)) {
+        results.push({ action: 'skipped', parent: bucket.parentFullyQualifiedName, fromName: child.Name, toName: child.Name, id: child.Id });
+        continue;
+      }
+
+      if (child.Name.includes(' - ')) {
+        throw new Error(
+          `Unexpected warehousing child account name (parent=${bucket.parentFullyQualifiedName} id=${child.Id} name="${child.Name}").`,
+        );
+      }
+
+      const nextName = `${bucket.prefix} - ${child.Name}`;
+      const existing = children.find((account) => account.Name === nextName);
+      if (existing) {
+        throw new Error(
+          `Cannot migrate warehousing account name; target already exists (parent=${bucket.parentFullyQualifiedName} from="${child.Name}" to="${nextName}").`,
+        );
+      }
+
+      const { account: updatedAccount, updatedConnection: renamedConnection } = await updateAccountActive(
+        connection,
+        child.Id,
+        child.SyncToken,
+        nextName,
+        child.Active,
+      );
+      if (renamedConnection) {
+        connection = renamedConnection;
+        await saveServerQboConnection(renamedConnection);
+      }
+
+      const idx = accounts.findIndex((a) => a.Id === updatedAccount.Id);
+      if (idx >= 0) {
+        accounts[idx] = updatedAccount;
+      } else {
+        accounts.push(updatedAccount);
+      }
+
+      results.push({
+        action: 'renamed',
+        parent: bucket.parentFullyQualifiedName,
+        fromName: child.Name,
+        toName: updatedAccount.Name,
+        id: updatedAccount.Id,
+      });
+
+      console.log(
+        JSON.stringify(
+          { renamed: `${bucket.parentFullyQualifiedName}:${child.Name}`, to: `${bucket.parentFullyQualifiedName}:${updatedAccount.Name}` },
+          null,
+          2,
+        ),
+      );
+    }
+  }
+
+  const renamedCount = results.filter((r) => r.action === 'renamed').length;
+  const skippedCount = results.length - renamedCount;
+  console.log(JSON.stringify({ total: results.length, renamed: renamedCount, skipped: skippedCount }, null, 2));
 }
 
 type AccountPlanSpec = {
@@ -429,39 +526,39 @@ const PLUTUS_QBO_PLAN_ACCOUNTS: AccountPlanSpec[] = [
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Freight & Custom Duty',
   },
-  // Warehousing buckets (leaf accounts are the brand name)
+  // Warehousing buckets
   {
-    name: 'US-Dust Sheets',
+    name: '3PL - US-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
-    name: 'UK-Dust Sheets',
+    name: '3PL - UK-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:3PL',
   },
   {
-    name: 'US-Dust Sheets',
+    name: 'Amazon FC - US-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:Amazon FC',
   },
   {
-    name: 'UK-Dust Sheets',
+    name: 'Amazon FC - UK-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:Amazon FC',
   },
   {
-    name: 'US-Dust Sheets',
+    name: 'AWD - US-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:AWD',
   },
   {
-    name: 'UK-Dust Sheets',
+    name: 'AWD - UK-Dust Sheets',
     accountType: 'Cost of Goods Sold',
     accountSubType: 'ShippingFreightDeliveryCos',
     parentFullyQualifiedName: 'Warehousing:AWD',
@@ -588,6 +685,11 @@ async function main(): Promise<void> {
 
   if (command === 'accounts:deactivate-amazon-duplicates') {
     await deactivateAmazonDuplicateAccounts();
+    return;
+  }
+
+  if (command === 'accounts:migrate-warehousing-prefix') {
+    await migrateWarehousingPrefixAccounts();
     return;
   }
 

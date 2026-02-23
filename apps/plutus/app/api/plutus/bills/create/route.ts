@@ -48,9 +48,11 @@ function getBrandSubAccountName(component: BillComponent, brandName: string): st
     case 'mfgAccessories':
       return `Mfg Accessories - ${brandName}`;
     case 'warehousing3pl':
+      return `3PL - ${brandName}`;
     case 'warehouseAmazonFc':
+      return `Amazon FC - ${brandName}`;
     case 'warehouseAwd':
-      return brandName;
+      return `AWD - ${brandName}`;
     case 'productExpenses':
       return `Product Expenses - ${brandName}`;
   }
