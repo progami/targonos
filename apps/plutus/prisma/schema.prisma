@@ -153,8 +153,8 @@ model SettlementProcessing {
 
   marketplace              String // e.g., "amazon.com", "amazon.co.uk"
   qboSettlementJournalEntryId String
-  settlementDocNumber      String
-  settlementPostedDate     DateTime
+  settlementDocNumber      String   @map("lmbDocNumber")
+  settlementPostedDate     DateTime @map("lmbPostedDate")
 
   invoiceId       String
   processingHash  String
@@ -185,8 +185,8 @@ model SettlementRollback {
 
   marketplace                String
   qboSettlementJournalEntryId String
-  settlementDocNumber        String
-  settlementPostedDate       DateTime
+  settlementDocNumber        String   @map("lmbDocNumber")
+  settlementPostedDate       DateTime @map("lmbPostedDate")
 
   invoiceId      String
   processingHash String
