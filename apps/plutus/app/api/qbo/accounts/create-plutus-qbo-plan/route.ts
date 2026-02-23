@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
     logger.info('Plutus plan accounts ensured', {
       requestId,
       created: result.created.length,
+      renamed: result.renamed.length,
       skipped: result.skipped.length,
     });
 
@@ -63,6 +64,7 @@ export async function POST(request: NextRequest) {
       entityType: 'QboAccount',
       details: {
         createdCount: result.created.length,
+        renamedCount: result.renamed.length,
         skippedCount: result.skipped.length,
         brandNames: body.brandNames,
       },
@@ -76,6 +78,7 @@ export async function POST(request: NextRequest) {
         accountType: a.AccountType,
         accountSubType: a.AccountSubType,
       })),
+      renamed: result.renamed,
       skipped: result.skipped,
       requestId,
     });
@@ -95,4 +98,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
