@@ -266,6 +266,19 @@ pnpm --filter @targon/xplan dev
 2. Sign in with your `@targonglobal.com` Google account
 3. Navigate to the app you're working on (e.g., `http://localhost:3001` for Talos)
 
+### 7. Optional local auth bypass (localhost only)
+
+When you want to work on an app UI/API flow without logging in through SSO each time, set one of these in that app's `.env.local`:
+
+```env
+ALLOW_DEV_AUTH_SESSION_BYPASS=1
+# or
+ALLOW_DEV_AUTH_DEFAULTS=true
+```
+
+Then restart the app's dev server. In non-production, app middleware will skip portal entry checks when either flag is enabled.
+This only affects local development because the bypass is gated by `NODE_ENV !== 'production'`.
+
 ### Troubleshooting
 
 | Problem | Cause | Fix |

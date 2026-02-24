@@ -4,6 +4,28 @@ import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
 import { getOrCreatePortalUserByEmail, getUserAuthz, getUserByEmail } from '@targon/auth/server'
 
+const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'on'])
+
+applyDevAuthDefaults({
+  appId: 'targon',
+  allowDefaults: true,
+  baseUrl:
+    process.env.NEXTAUTH_URL ||
+    process.env.PORTAL_AUTH_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    'http://localhost:3200',
+  portalUrl:
+    process.env.PORTAL_AUTH_URL ||
+    process.env.NEXTAUTH_URL ||
+    'http://localhost:3200',
+  publicPortalUrl:
+    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL ||
+    process.env.PORTAL_AUTH_URL ||
+    process.env.NEXTAUTH_URL ||
+    'http://localhost:3200',
+  cookieDomain: process.env.COOKIE_DOMAIN || 'localhost',
+})
+
 if (!process.env.NEXTAUTH_URL) {
   throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
 }
@@ -16,9 +38,6 @@ if (!process.env.NEXT_PUBLIC_PORTAL_AUTH_URL) {
 if (!process.env.COOKIE_DOMAIN) {
   throw new Error('COOKIE_DOMAIN must be defined for portal authentication.')
 }
-applyDevAuthDefaults({
-  appId: 'targon',
-})
 
 const ORG_EMAIL_DOMAIN = 'targonglobal.com'
 
@@ -45,6 +64,15 @@ function sanitizeBaseUrl(raw?: string | null): string | undefined {
   }
 }
 
+function isLocalCookieHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/\.$/, '')
+  if (!normalized) return false
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
+    return true
+  }
+  return /^\d+\.\d+\.\d+\.\d+$/.test(normalized)
+}
+
 function resolveCookieDomain(explicit: string | undefined, baseUrl: string | undefined): string {
   const trimmed = explicit?.trim()
   if (baseUrl) {
@@ -53,18 +81,30 @@ function resolveCookieDomain(explicit: string | undefined, baseUrl: string | und
       const normalizedHost = hostname.replace(/\.$/, '')
       if (trimmed && trimmed !== '') {
         const normalizedExplicit = trimmed.startsWith('.') ? trimmed.slice(1) : trimmed
+        if (isLocalCookieHost(normalizedExplicit)) {
+          return normalizedExplicit
+        }
+        if (isLocalCookieHost(normalizedHost)) {
+          return normalizedHost
+        }
         if (normalizedHost && !normalizedHost.endsWith(normalizedExplicit)) {
           return `.${normalizedHost}`
         }
         return trimmed.startsWith('.') ? trimmed : `.${trimmed}`
       }
       if (normalizedHost) {
+        if (isLocalCookieHost(normalizedHost)) {
+          return normalizedHost
+        }
         return `.${normalizedHost}`
       }
     } catch {
       // fall back to default domain below
     }
   } else if (trimmed && trimmed !== '') {
+    if (isLocalCookieHost(trimmed)) {
+      return trimmed
+    }
     return trimmed.startsWith('.') ? trimmed : `.${trimmed}`
   }
   return '.targonglobal.com'
@@ -92,18 +132,26 @@ if (sharedSecret) {
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const hasGoogleOAuth = Boolean(googleClientId && googleClientSecret)
+const allowDevAuthBypass =
+  process.env.NODE_ENV !== 'production' &&
+  (TRUTHY_VALUES.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS || '').toLowerCase()) ||
+    TRUTHY_VALUES.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS || '').toLowerCase()))
 
-if (!hasGoogleOAuth) {
+if (!hasGoogleOAuth && !allowDevAuthBypass) {
   throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured for Targon auth.')
 }
 
-const providers: NextAuthConfig['providers'] = [
-  Google({
-    clientId: googleClientId || '',
-    clientSecret: googleClientSecret || '',
-    authorization: { params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' } },
-  }),
-]
+const providers: NextAuthConfig['providers'] = hasGoogleOAuth
+  ? [
+      Google({
+        clientId: googleClientId || '',
+        clientSecret: googleClientSecret || '',
+        authorization: {
+          params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' },
+        },
+      }),
+    ]
+  : []
 
 const ENTITLEMENTS_REFRESH_INTERVAL_MS = 60_000
 
