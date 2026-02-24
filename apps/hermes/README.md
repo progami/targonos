@@ -104,7 +104,7 @@ Notes:
 
 ## Running Hermes (local dev)
 
-- Web: `pnpm dev` (default port `3014`)
+- Web: `pnpm exec next dev -p 3214`
 - Orders backfill (CLI): `pnpm orders:backfill -- --days 45` (use `--schema main_hermes` for main/prod)
 - Workers:
   - `pnpm worker:orders-sync`

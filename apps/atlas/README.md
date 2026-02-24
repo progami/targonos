@@ -68,10 +68,10 @@ pnpm -F @targon/atlas db:studio
 ### Run
 
 ```bash
-pnpm -F @targon/atlas dev
+pnpm -F @targon/atlas exec next dev --webpack -p 3206
 ```
 
-Default port: 3006 (main), 3106 (dev branch)
+Local standalone profile port: `3206`
 
 ## Seeding Data
 

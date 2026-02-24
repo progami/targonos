@@ -1,13 +1,13 @@
 {
   "host": "http://localhost",
   "apps": {
-    "talos": 3001,
-    "atlas": 3006,
-    "website": 3005,
-    "xplan": 3008,
-    "kairos": 3010,
-    "plutus": 3012,
-    "hermes": 3014,
-    "argus": 3016
+    "talos": 3201,
+    "atlas": 3206,
+    "website": 3205,
+    "xplan": 3208,
+    "kairos": 3210,
+    "plutus": 3212,
+    "hermes": 3214,
+    "argus": 3216
   }
 }

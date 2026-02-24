@@ -175,17 +175,28 @@ Each app needs its own `.env.local` file (gitignored). Ask a team member for the
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth credentials for SSO
 - Database credentials — username and password for the shared dev DB user
 
+Local port profile in this guide is strictly `32xx`:
+- SSO `3200`
+- Talos `3201`
+- Website `3205`
+- Atlas `3206`
+- XPlan `3208`
+- Kairos `3210`
+- Plutus `3212`
+- Hermes `3214`
+- Argus `3216`
+
 #### `apps/sso/.env.local`
 
 ```env
 NODE_ENV=development
-PORT=3000
+PORT=3200
 HOST=0.0.0.0
 AUTH_TRUST_HOST=true
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3200
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 PORTAL_APPS_CONFIG=dev.local.apps.json
 PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=auth_dev
@@ -197,11 +208,12 @@ ALLOW_CALLBACK_REDIRECT=true
 
 #### Google OAuth checklist (prevents `Error 400: redirect_uri_mismatch`)
 
-Your `GOOGLE_CLIENT_ID` in `apps/sso/.env.local` must come from an OAuth client that has an authorized redirect URI matching your `NEXTAUTH_URL`.
+Your `GOOGLE_CLIENT_ID` in `apps/sso/.env.local` must come from an OAuth client that has an authorized redirect URI matching your `NEXTAUTH_URL` (32xx profile).
 
 - Required redirect URI format: `<NEXTAUTH_URL>/api/auth/callback/google`
-- Standard local setup: `http://localhost:3000/api/auth/callback/google`
-- Alternate 32xx local setup: `http://localhost:3200/api/auth/callback/google`
+- Required local callbacks:
+  - `http://localhost:3200/api/auth/callback/google`
+  - `http://127.0.0.1:3200/api/auth/callback/google`
 - If you run SSO on a different port/host, add that exact callback URI in Google Cloud Console.
 
 If this is not configured, Google sign-in will fail before callback with `redirect_uri_mismatch`.
@@ -210,15 +222,15 @@ If this is not configured, Google sign-in will fail before callback with `redire
 
 ```env
 NODE_ENV=development
-PORT=3001
+PORT=3201
 HOST=0.0.0.0
-NEXTAUTH_URL=http://localhost:3001
+NEXTAUTH_URL=http://localhost:3201
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
-NEXT_PUBLIC_APP_URL=http://localhost:3001
-CSRF_ALLOWED_ORIGINS=http://localhost:3001
+NEXT_PUBLIC_APP_URL=http://localhost:3201
+CSRF_ALLOWED_ORIGINS=http://localhost:3201
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev
 REDIS_URL=redis://localhost:6379
 S3_BUCKET_NAME=ci-talos-bucket
@@ -234,15 +246,15 @@ DATABASE_URL_UK=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_de
 
 ```env
 NODE_ENV=development
-PORT=3006
+PORT=3206
 HOST=0.0.0.0
 BASE_PATH=/atlas
 NEXT_PUBLIC_BASE_PATH=/atlas
-NEXT_PUBLIC_APP_URL=http://localhost:3006/atlas
-NEXTAUTH_URL=http://localhost:3006/atlas
+NEXT_PUBLIC_APP_URL=http://localhost:3206/atlas
+NEXTAUTH_URL=http://localhost:3206/atlas
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 COOKIE_DOMAIN=localhost
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_atlas
@@ -252,15 +264,15 @@ DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?s
 
 ```env
 NODE_ENV=development
-PORT=3008
+PORT=3208
 HOST=0.0.0.0
 BASE_PATH=/xplan
 NEXT_PUBLIC_BASE_PATH=/xplan
-NEXT_PUBLIC_APP_URL=http://localhost:3008/xplan
-NEXTAUTH_URL=http://localhost:3008/xplan
+NEXT_PUBLIC_APP_URL=http://localhost:3208/xplan
+NEXTAUTH_URL=http://localhost:3208/xplan
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 COOKIE_DOMAIN=localhost
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_xplan
@@ -273,15 +285,15 @@ DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?s
 
 ```env
 NODE_ENV=development
-PORT=3010
+PORT=3210
 HOST=0.0.0.0
 BASE_PATH=/kairos
 NEXT_PUBLIC_BASE_PATH=/kairos
-NEXT_PUBLIC_APP_URL=http://localhost:3010/kairos
-NEXTAUTH_URL=http://localhost:3010/kairos
+NEXT_PUBLIC_APP_URL=http://localhost:3210/kairos
+NEXTAUTH_URL=http://localhost:3210/kairos
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 COOKIE_DOMAIN=localhost
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=kairos
@@ -291,15 +303,15 @@ DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?s
 
 ```env
 NODE_ENV=development
-PORT=3012
+PORT=3212
 HOST=0.0.0.0
 BASE_PATH=/plutus
 NEXT_PUBLIC_BASE_PATH=/plutus
-NEXT_PUBLIC_APP_URL=http://localhost:3012/plutus
-NEXTAUTH_URL=http://localhost:3012/plutus
+NEXT_PUBLIC_APP_URL=http://localhost:3212/plutus
+NEXTAUTH_URL=http://localhost:3212/plutus
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 COOKIE_DOMAIN=localhost
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=plutus_dev
@@ -307,7 +319,7 @@ DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?s
 # Required only for QBO connect/sync features
 # QBO_CLIENT_ID=
 # QBO_CLIENT_SECRET=
-# QBO_REDIRECT_URI=http://localhost:3012/plutus/api/qbo/callback
+# QBO_REDIRECT_URI=http://localhost:3212/plutus/api/qbo/callback
 # QBO_SANDBOX=true
 ```
 
@@ -315,15 +327,15 @@ DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?s
 
 ```env
 NODE_ENV=development
-PORT=3014
+PORT=3214
 HOST=0.0.0.0
 BASE_PATH=/hermes
 NEXT_PUBLIC_BASE_PATH=/hermes
-NEXT_PUBLIC_APP_URL=http://localhost:3014/hermes
-NEXTAUTH_URL=http://localhost:3014/hermes
+NEXT_PUBLIC_APP_URL=http://localhost:3214/hermes
+NEXTAUTH_URL=http://localhost:3214/hermes
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 COOKIE_DOMAIN=localhost
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_hermes
@@ -335,14 +347,15 @@ Use the same pattern across apps: keep shared auth secrets aligned with SSO, and
 
 | App | Workspace | Port | DB Schema |
 |-----|-----------|------|-----------|
-| SSO (Portal) | `@targon/sso` | 3000 | `auth_dev` |
-| Talos | `@targon/talos` | 3001 | `dev_talos_us` / `dev_talos_uk` |
-| Website | `@targon/website` | 3005 | — |
-| Atlas | `@targon/atlas` | 3006 | `dev_atlas` |
-| X-Plan | `@targon/xplan` | 3008 | `dev_xplan` |
-| Kairos | `@targon/kairos` | 3010 | `kairos` |
-| Plutus | `@targon/plutus` | 3012 | `plutus_dev` |
-| Hermes | `@targon/hermes` | 3014 | `dev_hermes` |
+| SSO (Portal) | `@targon/sso` | 3200 | `auth_dev` |
+| Talos | `@targon/talos` | 3201 | `dev_talos_us` / `dev_talos_uk` |
+| Website | `@targon/website` | 3205 | — |
+| Atlas | `@targon/atlas` | 3206 | `dev_atlas` |
+| X-Plan | `@targon/xplan` | 3208 | `dev_xplan` |
+| Kairos | `@targon/kairos` | 3210 | `kairos` |
+| Plutus | `@targon/plutus` | 3212 | `plutus_dev` |
+| Hermes | `@targon/hermes` | 3214 | `dev_hermes` |
+| Argus | `@targon/argus` | 3216 | `argus_dev` |
 
 For local-only UI/API work (without SSO login), set one of these in each app's `.env.local`:
 
@@ -372,25 +385,25 @@ pnpm --filter @targon/argus exec prisma generate
 SSO must be running for authentication to work. Start it first, then any app you're working on:
 
 ```bash
-# Terminal 1 — SSO (must start first)
-pnpm --filter @targon/sso dev
+# Terminal 1 — SSO (must start first, on 3200)
+pnpm --filter @targon/sso exec next dev -p 3200
 
 # Terminal 2 — whichever app you're working on
-pnpm --filter @targon/talos dev
-pnpm --filter @targon/atlas dev
-pnpm --filter @targon/xplan dev
-pnpm --filter @targon/kairos dev
-pnpm --filter @targon/plutus dev
-pnpm --filter @targon/hermes dev
-pnpm --filter @targon/argus dev
-pnpm --filter @targon/website dev
+pnpm --filter @targon/talos exec next dev -p 3201
+pnpm --filter @targon/website exec next dev -p 3205
+pnpm --filter @targon/atlas exec next dev --webpack -p 3206
+pnpm --filter @targon/xplan exec next dev -p 3208
+pnpm --filter @targon/kairos exec next dev -p 3210
+pnpm --filter @targon/plutus exec next dev -p 3212
+pnpm --filter @targon/hermes exec next dev -p 3214
+pnpm --filter @targon/argus exec next dev -p 3216
 ```
 
 ### 6. Access
 
-1. Open `http://localhost:3000` — SSO login page
+1. Open `http://localhost:3200` — SSO login page
 2. Sign in with your `@targonglobal.com` Google account
-3. Navigate to the app you're working on (e.g., `http://localhost:3001` for Talos)
+3. Navigate to the app you're working on (e.g., `http://localhost:3201/talos` for Talos)
 
 ### 7. Optional local auth bypass (localhost only)
 

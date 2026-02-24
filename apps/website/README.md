@@ -4,7 +4,7 @@ Marketing site and landing hub for the Targon platform.
 
 ## Local Development
 - Install dependencies once from the repo root with `pnpm install`.
-- Start the app with `pnpm --filter @targon/website dev` (runs on port 3005 by default).
+- Start the app with `pnpm --filter @targon/website exec next dev -p 3205`.
 - Run linting and static checks with `pnpm --filter @targon/website lint` and `pnpm --filter @targon/website type-check`.
 
 ## Production Workflow
