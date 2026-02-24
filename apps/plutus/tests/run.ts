@@ -42,6 +42,7 @@ import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-pro
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
+import { isSettlementDocNumber, normalizeSettlementDocNumber, parseSettlementDocNumber } from '../lib/plutus/settlement-doc-number';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
@@ -61,6 +62,19 @@ test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('US'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('UK'), 'amazon.co.uk');
   assert.equal(normalizeAuditMarketToMarketplaceId('unknown'), null);
+});
+
+test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
+  assert.equal(isSettlementDocNumber('UK-16-30JAN-26-1'), true);
+  assert.equal(isSettlementDocNumber('LMB-UK-16-30JAN-26-1'), true);
+  assert.equal(normalizeSettlementDocNumber('UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
+  assert.equal(normalizeSettlementDocNumber('LMB-UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
+
+  const meta = parseSettlementDocNumber('LMB-UK-16-30JAN-26-1');
+  assert.equal(meta.normalizedDocNumber, 'UK-16-30JAN-26-1');
+  assert.equal(meta.marketplace.id, 'amazon.co.uk');
+  assert.equal(meta.periodStart, '2026-01-16');
+  assert.equal(meta.periodEnd, '2026-01-30');
 });
 
 test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
