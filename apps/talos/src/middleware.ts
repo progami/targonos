@@ -82,60 +82,73 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
+  const allowDevAuthBypass =
+    process.env.NODE_ENV !== 'production' &&
+    (
+      ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase(),
+      ) ||
+      ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase(),
+      )
+    )
+
   const cookieNames = Array.from(new Set([
     ...getCandidateSessionCookieNames('targon'),
     ...getCandidateSessionCookieNames('talos'),
   ]))
 
-  const decision = await requireAppEntry({
-    request,
-    appId: 'talos',
-    lifecycle: 'active',
-    entryPolicy: 'role_gated',
-    cookieNames,
-  })
-
-  if (!decision.allowed) {
-    console.info('[authz][talos] denied', {
-      path: normalizedPath,
-      status: decision.status,
-      reason: decision.reason,
+  if (!allowDevAuthBypass) {
+    const decision = await requireAppEntry({
+      request,
+      appId: 'talos',
+      lifecycle: 'active',
+      entryPolicy: 'role_gated',
+      cookieNames,
     })
 
-    if (normalizedPath.startsWith('/api/')) {
-      const status = decision.status === 'unauthenticated' ? 401 : 403
-      const errorMsg = decision.status === 'unauthenticated'
-        ? 'Authentication required'
-        : 'No access to Talos'
+    if (!decision.allowed) {
+      console.info('[authz][talos] denied', {
+        path: normalizedPath,
+        status: decision.status,
+        reason: decision.reason,
+      })
 
-      return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
+      if (normalizedPath.startsWith('/api/')) {
+        const status = decision.status === 'unauthenticated' ? 401 : 403
+        const errorMsg = decision.status === 'unauthenticated'
+          ? 'Authentication required'
+          : 'No access to Talos'
+
+        return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
+      }
+
+      if (decision.status === 'forbidden') {
+        const url = request.nextUrl.clone()
+        url.pathname = '/no-access'
+        url.search = ''
+        return NextResponse.redirect(url)
+      }
+
+      const origin = resolveAppOrigin()
+
+      const rawBasePath = (process.env.BASE_PATH ?? '').trim()
+      const normalizedBasePath = rawBasePath && rawBasePath !== '/'
+        ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
+        : ''
+      const appBasePath = normalizedBasePath.endsWith('/')
+        ? normalizedBasePath.slice(0, -1)
+        : normalizedBasePath
+      const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
+        ? `${appBasePath}${pathname}`
+        : pathname
+      const callbackUrl = new URL(callbackPath + request.nextUrl.search, origin).toString()
+
+      const redirect = portalUrl('/login', request)
+      redirect.searchParams.set('callbackUrl', callbackUrl)
+      return NextResponse.redirect(redirect)
     }
-
-	    if (decision.status === 'forbidden') {
-	      const url = request.nextUrl.clone()
-	      url.pathname = '/no-access'
-	      url.search = ''
-	      return NextResponse.redirect(url)
-	    }
-
-	    const origin = resolveAppOrigin()
-
-	    const rawBasePath = (process.env.BASE_PATH ?? '').trim()
-	    const normalizedBasePath = rawBasePath && rawBasePath !== '/'
-	      ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
-	      : ''
-	    const appBasePath = normalizedBasePath.endsWith('/')
-	      ? normalizedBasePath.slice(0, -1)
-	      : normalizedBasePath
-	    const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
-	      ? `${appBasePath}${pathname}`
-	      : pathname
-	    const callbackUrl = new URL(callbackPath + request.nextUrl.search, origin).toString()
-
-	    const redirect = portalUrl('/login', request)
-	    redirect.searchParams.set('callbackUrl', callbackUrl)
-	    return NextResponse.redirect(redirect)
-	  }
+  }
 
   const tenantCookie = request.cookies.get(TENANT_COOKIE_NAME)?.value
   const hasTenant = isValidTenantCode(tenantCookie)

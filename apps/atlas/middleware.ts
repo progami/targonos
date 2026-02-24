@@ -32,7 +32,18 @@ export async function middleware(request: NextRequest) {
     PUBLIC_ROUTES.includes(normalizedPath) ||
     PUBLIC_PREFIXES.some((p) => normalizedPath.startsWith(p))
 
-  if (!isPublic) {
+  const allowDevAuthBypass =
+    process.env.NODE_ENV !== 'production' &&
+    (
+      ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase(),
+      ) ||
+      ['1', 'true', 'yes', 'on'].includes(
+        String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase(),
+      )
+    )
+
+  if (!isPublic && !allowDevAuthBypass) {
     const cookieNames = Array.from(new Set([
       ...getCandidateSessionCookieNames('targon'),
       ...getCandidateSessionCookieNames('atlas'),
