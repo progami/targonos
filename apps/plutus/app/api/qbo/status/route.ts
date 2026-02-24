@@ -72,6 +72,8 @@ export async function GET() {
 
     // Also fetch preferences to get home currency
     let homeCurrency: string | undefined;
+    let usingSalesTax: boolean | undefined;
+    let partnerTaxEnabled: boolean | undefined;
     try {
       const prefsResponse = await fetch(`${baseUrl}/v3/company/${connection.realmId}/preferences`, {
         headers: {
@@ -82,6 +84,8 @@ export async function GET() {
       if (prefsResponse.ok) {
         const prefsData = (await prefsResponse.json()) as { Preferences: QboPreferences };
         homeCurrency = prefsData.Preferences?.CurrencyPrefs?.HomeCurrency?.value;
+        usingSalesTax = prefsData.Preferences?.TaxPrefs?.UsingSalesTax;
+        partnerTaxEnabled = prefsData.Preferences?.TaxPrefs?.PartnerTaxEnabled;
       }
     } catch (prefsError) {
       logger.warn('Failed to fetch preferences', {
@@ -94,6 +98,8 @@ export async function GET() {
       realmId: connection.realmId,
       companyName: companyInfo?.CompanyName,
       homeCurrency,
+      usingSalesTax,
+      partnerTaxEnabled,
     });
   } catch (error) {
     // Network error - assume still connected, just can't verify
