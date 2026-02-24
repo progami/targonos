@@ -17,7 +17,7 @@ nginx (local reverse proxy; hostname + path routing)
   ↓
 PM2 (process manager)
   ↓
-Next.js apps (ports 30xx main / 31xx dev)
+Next.js apps (ports 30xx main / 31xx dev / 32xx standalone local dev)
   ↓
 PostgreSQL (5432) + Redis (6379) + external APIs (S3, etc.)
 ```
@@ -128,6 +128,8 @@ Portal app-link configuration:
 
 This section covers how to set up the repo on your own machine for local development, connecting to the shared dev database.
 
+Local standalone convention: use `32xx` ports (`3200` portal, `3201` talos, `3205` website, `3206` atlas, `3208` xplan, `3210` kairos, `3212` plutus, `3214` hermes).
+
 ### Prerequisites
 
 - **Node.js >= 20** (repo uses Node 20 in CI)
@@ -179,13 +181,13 @@ Each app needs its own `.env.local` file (gitignored). Ask a team member for the
 
 ```env
 NODE_ENV=development
-PORT=3000
+PORT=3200
 HOST=0.0.0.0
 AUTH_TRUST_HOST=true
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:3200
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 PORTAL_APPS_CONFIG=dev.local.apps.json
 PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=auth_dev
@@ -199,15 +201,15 @@ ALLOW_CALLBACK_REDIRECT=true
 
 ```env
 NODE_ENV=development
-PORT=3001
+PORT=3201
 HOST=0.0.0.0
-NEXTAUTH_URL=http://localhost:3001
+NEXTAUTH_URL=http://localhost:3201
 NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3000
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_URL=http://localhost:3200
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
 PORTAL_AUTH_SECRET=<ask team for shared secret>
-NEXT_PUBLIC_APP_URL=http://localhost:3001
-CSRF_ALLOWED_ORIGINS=http://localhost:3001
+NEXT_PUBLIC_APP_URL=http://localhost:3201
+CSRF_ALLOWED_ORIGINS=http://localhost:3201
 DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db
 REDIS_URL=redis://localhost:6379
 S3_BUCKET_NAME=ci-talos-bucket
@@ -225,14 +227,14 @@ Use the same pattern — point `DATABASE_URL` to `localhost:6432` with the appro
 
 | App | Workspace | Port | DB Schema |
 |-----|-----------|------|-----------|
-| SSO (Portal) | `@targon/sso` | 3000 | `auth_dev` |
-| Talos | `@targon/talos` | 3001 | `dev_talos_us` / `dev_talos_uk` |
-| Website | `@targon/website` | 3005 | — |
-| Atlas | `@targon/atlas` | 3006 | `dev_atlas` |
-| X-Plan | `@targon/xplan` | 3008 | `dev_xplan` |
-| Kairos | `@targon/kairos` | 3010 | `kairos` |
-| Plutus | `@targon/plutus` | 3012 | — (uses QuickBooks API) |
-| Hermes | `@targon/hermes` | 3014 | `dev_hermes` |
+| SSO (Portal) | `@targon/sso` | 3200 | `auth_dev` |
+| Talos | `@targon/talos` | 3201 | `dev_talos_us` / `dev_talos_uk` |
+| Website | `@targon/website` | 3205 | — |
+| Atlas | `@targon/atlas` | 3206 | `dev_atlas` |
+| X-Plan | `@targon/xplan` | 3208 | `dev_xplan` |
+| Kairos | `@targon/kairos` | 3210 | `kairos` |
+| Plutus | `@targon/plutus` | 3212 | — (uses QuickBooks API) |
+| Hermes | `@targon/hermes` | 3214 | `dev_hermes` |
 
 ### 4. Generate Prisma clients
 
@@ -262,9 +264,9 @@ pnpm --filter @targon/xplan dev
 
 ### 6. Access
 
-1. Open `http://localhost:3000` — SSO login page
+1. Open `http://localhost:3200` — SSO login page
 2. Sign in with your `@targonglobal.com` Google account
-3. Navigate to the app you're working on (e.g., `http://localhost:3001` for Talos)
+3. Navigate to the app you're working on (e.g., `http://localhost:3201` for Talos)
 
 ### Troubleshooting
 

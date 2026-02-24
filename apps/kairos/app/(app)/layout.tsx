@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const canEnter = hasCapability({ session, appId: 'kairos', capability: 'enter' });
-  if (!session || !canEnter) {
+  if (!canEnter) {
     redirect('/no-access');
   }
 

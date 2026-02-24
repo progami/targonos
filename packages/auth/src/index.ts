@@ -315,6 +315,50 @@ export interface DecodePortalSessionOptions {
   debug?: boolean;
 }
 
+function buildDevBypassSessionPayload(appId?: string): PortalJwtPayload {
+  const rawBypassUserId = process.env.DEV_AUTH_BYPASS_USER_ID;
+  const bypassUserId = rawBypassUserId && rawBypassUserId.trim() !== ''
+    ? rawBypassUserId.trim()
+    : 'dev-bypass-user';
+
+  const rawBypassEmail = process.env.DEV_AUTH_BYPASS_EMAIL;
+  const bypassEmail = rawBypassEmail && rawBypassEmail.trim() !== ''
+    ? rawBypassEmail.trim().toLowerCase()
+    : 'dev-bypass@targonglobal.com';
+
+  const rawBypassName = process.env.DEV_AUTH_BYPASS_NAME;
+  const bypassName = rawBypassName && rawBypassName.trim() !== ''
+    ? rawBypassName.trim()
+    : 'Dev Bypass';
+
+  const authz = buildDevBypassAuthz(appId);
+  return {
+    sub: bypassUserId,
+    email: bypassEmail,
+    name: bypassName,
+    authz,
+    roles: authz.apps,
+    globalRoles: authz.globalRoles,
+    authzVersion: authz.version,
+    apps: Object.keys(authz.apps),
+  };
+}
+
+function resolveDevBypassSessionPayload(options: {
+  appId?: string;
+  debug: boolean;
+  reason: string;
+}): PortalJwtPayload | null {
+  if (!isDevAuthBypassEnabled()) {
+    return null;
+  }
+
+  if (options.debug) {
+    console.warn('[auth] decodePortalSession: returning dev bypass session payload', options.reason);
+  }
+  return buildDevBypassSessionPayload(options.appId);
+}
+
 export async function decodePortalSession(options: DecodePortalSessionOptions = {}): Promise<PortalJwtPayload | null> {
   const {
     cookieHeader,
@@ -328,6 +372,14 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
   if (!header) {
     if (debug) {
       console.warn('[auth] decodePortalSession: missing cookie header');
+    }
+    const bypassPayload = resolveDevBypassSessionPayload({
+      appId,
+      debug,
+      reason: 'missing cookie header',
+    });
+    if (bypassPayload) {
+      return bypassPayload;
     }
     return null;
   }
@@ -343,6 +395,14 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
   if (!resolvedSecret) {
     if (debug) {
       console.warn('[auth] decodePortalSession: missing shared secret');
+    }
+    const bypassPayload = resolveDevBypassSessionPayload({
+      appId,
+      debug,
+      reason: 'missing shared secret',
+    });
+    if (bypassPayload) {
+      return bypassPayload;
     }
     return null;
   }
@@ -374,6 +434,15 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
         }
       }
     }
+  }
+
+  const bypassPayload = resolveDevBypassSessionPayload({
+    appId,
+    debug,
+    reason: 'unable to decode any session token',
+  });
+  if (bypassPayload) {
+    return bypassPayload;
   }
 
   return null;
@@ -574,10 +643,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
       return true;
     }
 
-    const allowDevProbeBypass =
-      process.env.NODE_ENV !== 'production' &&
-      (truthyValues.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase()) ||
-        truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase()));
+    const allowDevProbeBypass = isDevAuthBypassEnabled();
 
     if (allowDevProbeBypass) {
       if (debug) {
@@ -745,6 +811,32 @@ function normalizeAuthzApiResponse(value: unknown): PortalAuthz | null {
   return normalizePortalAuthz(value);
 }
 
+function isDevAuthBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
+
+  const allowSessionBypass = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase());
+  const allowDefaults = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase());
+  return allowSessionBypass || allowDefaults;
+}
+
+function buildDevBypassAuthz(appId?: string): PortalAuthz {
+  const apps: Record<string, AuthzAppGrant> = {};
+  if (appId) {
+    apps[appId] = {
+      role: 'viewer',
+      departments: [],
+    };
+  }
+
+  return {
+    version: 1,
+    globalRoles: ['platform_admin'],
+    apps,
+  };
+}
+
 async function fetchPortalAuthz(options: {
   request: Request;
   cookieHeader: string;
@@ -853,6 +945,13 @@ export async function getCurrentAuthz(
       return authzFromPortalWithoutDecode;
     }
 
+    if (isDevAuthBypassEnabled()) {
+      if (debug) {
+        console.warn('[auth] returning dev bypass authz because no authenticated portal session was found');
+      }
+      return buildDevBypassAuthz(options?.appId);
+    }
+
     throw new Error('AUTH_UNAUTHENTICATED');
   }
 
@@ -868,6 +967,12 @@ export async function getCurrentAuthz(
 
   const authz = authzFromPortal ?? normalizeAuthzFromClaims(decoded);
   if (!authz) {
+    if (isDevAuthBypassEnabled()) {
+      if (debug) {
+        console.warn('[auth] returning dev bypass authz because authenticated session had no authz payload');
+      }
+      return buildDevBypassAuthz(options?.appId);
+    }
     throw new Error('AUTH_MISSING_AUTHZ');
   }
 
@@ -986,7 +1091,9 @@ export function hasCapability(options: {
   capability: string;
 }): boolean {
   const authz = normalizeAuthzFromSessionLike(options.session);
-  if (!authz) return false;
+  if (!authz) {
+    return isDevAuthBypassEnabled();
+  }
 
   if (authz.globalRoles.includes('platform_admin')) {
     return true;

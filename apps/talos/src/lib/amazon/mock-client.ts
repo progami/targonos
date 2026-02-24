@@ -93,7 +93,7 @@ export async function getInboundShipments(
 
 export async function getOrders(_createdAfter?: Date) {
  // console.log('Mock: Fetching orders')
- return { orders: [] }
+ return { Orders: [] }
 }
 
 export async function getCatalogItem(_asin: string) {
