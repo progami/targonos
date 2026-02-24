@@ -6,7 +6,6 @@ import { useSnackbar } from 'notistack';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
-import AddIcon from '@mui/icons-material/Add';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -178,9 +177,6 @@ export default function SettlementMappingPage() {
     UK: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
   });
   const [search, setSearch] = useState('');
-  const [newMemo, setNewMemo] = useState('');
-  const [newAccountId, setNewAccountId] = useState('');
-  const [newTaxCodeId, setNewTaxCodeId] = useState('');
 
   useEffect(() => {
     if (!mappingData) return;
@@ -200,11 +196,6 @@ export default function SettlementMappingPage() {
       },
     });
   }, [mappingData]);
-
-  useEffect(() => {
-    if (taxEngineEnabled) return;
-    setNewTaxCodeId('');
-  }, [taxEngineEnabled]);
 
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const taxCodes = useMemo(() => (taxCodesData ? taxCodesData.taxCodes : []), [taxCodesData]);
@@ -309,34 +300,6 @@ export default function SettlementMappingPage() {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
     },
   });
-
-  const onAddMemoMapping = () => {
-    const memo = newMemo.trim();
-    const accountId = newAccountId.trim();
-    if (memo === '' || accountId === '') return;
-
-    const taxCodeValue =
-      taxEngineEnabled && newTaxCodeId.trim() !== '' ? newTaxCodeId.trim() : null;
-
-    if (memoMappings[memo] !== undefined) {
-      enqueueSnackbar('Memo already exists in mapping', { variant: 'warning' });
-      return;
-    }
-
-    setByRegion((prev) => ({
-      ...prev,
-      [region]: {
-        ...prev[region],
-        memoMappings: { ...prev[region].memoMappings, [memo]: accountId },
-        taxCodeMappings: { ...prev[region].taxCodeMappings, [memo]: taxCodeValue },
-      },
-    }));
-    setNewMemo('');
-    setNewAccountId('');
-    if (taxEngineEnabled) {
-      setNewTaxCodeId('');
-    }
-  };
 
   const onDeleteMemoMapping = (memo: string) => {
     setByRegion((prev) => {
@@ -506,7 +469,7 @@ export default function SettlementMappingPage() {
                     {region} settlement memo → account mapping
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then adjust as needed.
+                    Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed.
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -517,95 +480,6 @@ export default function SettlementMappingPage() {
                     size="small"
                     sx={{ width: 220 }}
                   />
-                </Box>
-              </Box>
-
-              <Box
-                sx={{
-                  mt: 2,
-                  display: 'grid',
-                  gap: 1.5,
-                  gridTemplateColumns: taxEngineEnabled
-                    ? { xs: '1fr', md: '1.2fr 1fr 1fr auto' }
-                    : { xs: '1fr', md: '1.6fr 1fr auto' },
-                  alignItems: { md: 'end' },
-                }}
-              >
-                <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Add memo
-                  </Typography>
-                  <TextField
-                    value={newMemo}
-                    onChange={(e) => setNewMemo(e.target.value)}
-                    placeholder="e.g. Amazon Seller Fees - Commission"
-                    size="small"
-                    fullWidth
-                    sx={{ mt: 0.75 }}
-                  />
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Account
-                  </Typography>
-                  <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
-                    <Select
-                      value={newAccountId}
-                      onChange={(e) => setNewAccountId(e.target.value as string)}
-                      displayEmpty
-                      renderValue={(sel) => {
-                        if (!sel) return <span style={{ color: '#94a3b8' }}>Select account...</span>;
-                        const found = accounts.find((a) => a.id === sel);
-                        return found ? accountLabel(found) : (sel as string);
-                      }}
-                    >
-                      {accounts.map((a) => (
-                        <MenuItem key={a.id} value={a.id}>
-                          {accountLabel(a)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                {taxEngineEnabled && (
-                  <Box>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                      Tax code (optional)
-                    </Typography>
-                    <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
-                      <Select
-                        value={newTaxCodeId}
-                        onChange={(e) => setNewTaxCodeId(e.target.value as string)}
-                        displayEmpty
-                        renderValue={(sel) => {
-                          if (!sel) return <span style={{ color: '#94a3b8' }}>No tax code</span>;
-                          const found = activeTaxCodes.find((taxCode) => taxCode.id === sel);
-                          return found ? found.name : (sel as string);
-                        }}
-                      >
-                        <MenuItem value="">No tax code</MenuItem>
-                        {activeTaxCodes.map((taxCode) => (
-                          <MenuItem key={taxCode.id} value={taxCode.id}>
-                            {taxCode.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Box>
-                )}
-
-                <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
-                  <Button
-                    variant="outlined"
-                    onClick={onAddMemoMapping}
-                    disabled={newMemo.trim() === '' || newAccountId.trim() === ''}
-                    startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                    sx={{ borderRadius: 2, textTransform: 'none', height: 40 }}
-                  >
-                    Add
-                  </Button>
                 </Box>
               </Box>
 
