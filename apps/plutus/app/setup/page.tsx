@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -8,6 +8,8 @@ import CheckIcon from '@mui/icons-material/Check';
 import AddIcon from '@mui/icons-material/Add';
 import CloseIcon from '@mui/icons-material/Close';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Card from '@mui/material/Card';
@@ -42,7 +44,12 @@ const MARKETPLACES = [
   { id: 'amazon.it', label: 'Amazon.it', currency: 'EUR' },
 ] as const;
 
-type Brand = { name: string; marketplace: string; currency: string };
+const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
+  'amazon.com': 'US',
+  'amazon.co.uk': 'UK',
+};
+
+type Brand ={ name: string; marketplace: string; currency: string };
 type Sku = { sku: string; productName: string; brand: string; asin?: string };
 
 type SetupState = {
@@ -71,6 +78,12 @@ type SettlementMappingResponse = {
   ukSettlementPaymentAccountId: string | null;
   ukSettlementAccountIdByMemo: Record<string, string>;
   ukSettlementTaxCodeIdByMemo: Record<string, string | null>;
+};
+
+type ConnectionStatus = {
+  connected: boolean;
+  usingSalesTax?: boolean;
+  partnerTaxEnabled?: boolean;
 };
 
 function normalizeForMatch(value: string): string {
@@ -340,7 +353,7 @@ function Sidebar({
   settlementComplete: boolean;
 }) {
   const items = [
-    { id: 'brands' as const, label: 'Brands & Inventory', complete: catalogComplete },
+    { id: 'brands' as const, label: 'Brands & SKUs', complete: catalogComplete },
     { id: 'accounts' as const, label: 'Chart of accounts', complete: accountsComplete },
     { id: 'settlement' as const, label: 'Settlement posting', complete: settlementComplete },
   ];
@@ -436,184 +449,487 @@ function Sidebar({
   );
 }
 
-// Brands Section
-function BrandsSection({
+// Brands & SKUs Section (combined)
+function BrandsInventorySection({
   brands,
+  skus,
   onBrandsChange,
+  onSkusChange,
 }: {
   brands: Brand[];
+  skus: Sku[];
   onBrandsChange: (brands: Brand[]) => void;
+  onSkusChange: (skus: Sku[]) => void;
 }) {
-  const [newName, setNewName] = useState('');
-  const [newMarketplace, setNewMarketplace] = useState('amazon.com');
+  const normalizeSkuKey = useCallback(
+    (raw: string) => raw.trim().replace(/\s+/g, '-').toUpperCase(),
+    [],
+  );
 
-  const addBrand = () => {
-    const name = newName.trim();
+  const [expandedBrands, setExpandedBrands] = useState<Set<string>>(() => new Set<string>());
+  const [draftSkus, setDraftSkus] = useState<Sku[]>(skus);
+  const [newBrandName, setNewBrandName] = useState('');
+  const [newBrandMarketplace, setNewBrandMarketplace] = useState('amazon.com');
+  const [newSkuForms, setNewSkuForms] = useState<Record<string, { sku: string; productName: string; asin: string }>>({});
+
+  useEffect(() => {
+    setDraftSkus(skus);
+  }, [skus]);
+
+  const toggleBrand = useCallback((name: string) => {
+    setExpandedBrands((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }, []);
+
+  const handleAddBrand = useCallback(() => {
+    const name = newBrandName.trim();
     if (!name || brands.some((b) => b.name === name)) return;
-    const mp = MARKETPLACES.find((m) => m.id === newMarketplace);
+    const mp = MARKETPLACES.find((m) => m.id === newBrandMarketplace);
     if (!mp) return;
     onBrandsChange([...brands, { name, marketplace: mp.id, currency: mp.currency }]);
-    setNewName('');
+    setNewBrandName('');
+    setExpandedBrands((prev) => new Set([...prev, name]));
+  }, [brands, newBrandMarketplace, newBrandName, onBrandsChange]);
+
+  const handleRemoveBrand = useCallback(
+    (name: string) => {
+      onBrandsChange(brands.filter((b) => b.name !== name));
+      setDraftSkus((prev) => prev.filter((s) => s.brand !== name));
+    },
+    [brands, onBrandsChange],
+  );
+
+  const skusForBrand = useCallback(
+    (brandName: string) => draftSkus.filter((s) => s.brand === brandName),
+    [draftSkus],
+  );
+
+  const handleUpdateSku = useCallback(
+    (brandName: string, skuId: string, patch: Partial<Sku>) => {
+      setDraftSkus((prev) =>
+        prev.map((s) => (s.brand === brandName && s.sku === skuId ? { ...s, ...patch } : s)),
+      );
+    },
+    [],
+  );
+
+  const handleRemoveSku = useCallback(
+    (brandName: string, skuId: string) => {
+      const next = draftSkus.filter((s) => !(s.brand === brandName && s.sku === skuId));
+      setDraftSkus(next);
+      onSkusChange(next);
+    },
+    [draftSkus, onSkusChange],
+  );
+
+  const handleAddSku = useCallback(
+    (brandName: string) => {
+      const form = newSkuForms[brandName] ?? { sku: '', productName: '', asin: '' };
+      const skuRaw = form.sku.trim();
+      if (skuRaw === '') return;
+      const brand = brands.find((b) => b.name === brandName);
+      if (!brand) return;
+      const country = MARKETPLACE_COUNTRY[brand.marketplace];
+      if (!country) return;
+      const normalizedKey = `${country}::${normalizeSkuKey(skuRaw)}`;
+      const isDuplicate = draftSkus.some((s) => {
+        const b = brands.find((b2) => b2.name === s.brand);
+        if (!b) return false;
+        const c = MARKETPLACE_COUNTRY[b.marketplace];
+        return `${c}::${normalizeSkuKey(s.sku)}` === normalizedKey;
+      });
+      if (isDuplicate) return;
+      const productName = form.productName.trim() !== '' ? form.productName.trim() : skuRaw;
+      const asin = form.asin.trim() !== '' ? form.asin.trim() : undefined;
+      const next = [...draftSkus, { sku: skuRaw, productName, asin, brand: brandName }];
+      setDraftSkus(next);
+      onSkusChange(next);
+      setNewSkuForms((prev) => ({ ...prev, [brandName]: { sku: '', productName: '', asin: '' } }));
+    },
+    [brands, draftSkus, newSkuForms, normalizeSkuKey, onSkusChange],
+  );
+
+  const handleSaveSkus = useCallback(() => {
+    onSkusChange(draftSkus);
+  }, [draftSkus, onSkusChange]);
+
+  const isDirty = useMemo(() => {
+    if (draftSkus.length !== skus.length) return true;
+    return draftSkus.some((ds, i) => {
+      const s = skus[i];
+      return !s || ds.productName !== s.productName || ds.asin !== s.asin || ds.sku !== s.sku || ds.brand !== s.brand;
+    });
+  }, [draftSkus, skus]);
+
+  const thSx = {
+    height: 36,
+    px: 1.5,
+    fontSize: '0.75rem' as const,
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    color: 'text.secondary',
   };
 
-  const removeBrand = (index: number) => {
-    onBrandsChange(brands.filter((_, i) => i !== index));
+  const inputSx = {
+    '& .MuiOutlinedInput-root': {
+      borderRadius: '8px',
+      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
+      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+    },
+  };
+
+  const inputSlotProps = { input: { sx: { fontSize: '0.875rem', height: 32 } } };
+
+  const selectSx = {
+    borderRadius: '8px',
+    fontSize: '0.875rem',
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
+  };
+
+  const menuProps = {
+    PaperProps: {
+      sx: {
+        borderRadius: 3,
+        border: 1,
+        borderColor: 'divider',
+        boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
+        mt: 0.5,
+      },
+    },
+  };
+
+  const btnSx = {
+    borderRadius: '8px',
+    textTransform: 'none' as const,
+    fontWeight: 500,
+    height: 36,
+    px: 2,
+    fontSize: '0.875rem',
+    bgcolor: '#00C2B9',
+    color: '#fff',
+    '&:hover': { bgcolor: '#00a89f' },
+    '&:active': { bgcolor: '#008f87' },
+    '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' as const },
+    whiteSpace: 'nowrap' as const,
   };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box>
-        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Brands</Typography>
-      </Box>
+      <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>
+        Brands & SKUs
+      </Typography>
 
-      {brands.length > 0 && (
-        <Card sx={{ border: 1, borderColor: 'divider' }}>
-          <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-            <Box sx={{ overflowX: 'auto' }}>
-              <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
-                <TableHead
-                  sx={{
-                    bgcolor: 'rgba(245, 245, 245, 0.8)',
-                    '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
-                    '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
-                  }}
-                >
-                  <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
-                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Marketplace</TableCell>
-                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Currency</TableCell>
-                    <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
-                  {brands.map((brand, i) => (
-                    <TableRow key={i} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem', fontWeight: 500 }}>{brand.name}</TableCell>
-                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>
-                        {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
-                      </TableCell>
-                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', fontSize: '0.875rem' }}>{brand.currency}</TableCell>
-                      <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
-                        <IconButton
-                          onClick={() => removeBrand(i)}
-                          aria-label={`Remove brand ${brand.name}`}
-                          sx={{ height: 36, width: 36, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
-                        >
-                          <CloseIcon sx={{ fontSize: 16 }} />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card sx={{ border: 1, borderColor: 'divider' }}>
-        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { sm: '1fr 240px auto' }, alignItems: { sm: 'end' } }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                Brand name
-              </Box>
-              <TextField
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => (e.key === 'Enter' ? addBrand() : undefined)}
-                placeholder="US-Dust Sheets"
-                size="small"
-                variant="outlined"
-                fullWidth
-                slotProps={{
-                  input: {
-                    sx: {
-                      fontSize: '0.875rem',
-                      height: 32,
-                    },
-                  },
-                }}
+      <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
+        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
+          <Box sx={{ overflowX: 'auto' }}>
+            <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
+              <TableHead
                 sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: '8px',
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                  },
-                }}
-              />
-            </Box>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                Marketplace
-              </Box>
-              <FormControl size="small" fullWidth>
-                <Select
-                  value={newMarketplace}
-                  onChange={(e) => setNewMarketplace(e.target.value as string)}
-                  displayEmpty
-                  renderValue={(selected) => {
-                    if (!selected) return <span style={{ color: '#94a3b8' }}>Select marketplace...</span>;
-                    const mp = MARKETPLACES.find((m) => m.id === selected);
-                    return mp ? mp.label : (selected as string);
-                  }}
-                  sx={{
-                    borderRadius: '8px',
-                    fontSize: '0.875rem',
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                  }}
-                  MenuProps={{
-                    PaperProps: {
-                      sx: {
-                        borderRadius: 3,
-                        border: 1,
-                        borderColor: 'divider',
-                        boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
-                        mt: 0.5,
-                      },
-                    },
-                  }}
-                >
-                  {MARKETPLACES.map((m) => (
-                    <MenuItem key={m.id} value={m.id} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
-                      {m.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button
-                variant="contained"
-                disableElevation
-                onClick={addBrand}
-                disabled={!newName.trim()}
-                startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                sx={{
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  gap: 1,
-                  whiteSpace: 'nowrap',
-                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
-                  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
-                  height: 36,
-                  px: 2,
-                  fontSize: '0.875rem',
-                  bgcolor: '#00C2B9',
-                  color: '#fff',
-                  '&:hover': { bgcolor: '#00a89f' },
-                  '&:active': { bgcolor: '#008f87' },
+                  bgcolor: 'rgba(245, 245, 245, 0.8)',
+                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                 }}
               >
-                Add Brand
-              </Button>
-            </Box>
+                <TableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
+                  <TableCell component="th" sx={{ ...thSx, width: 40, p: 0 }} />
+                  <TableCell component="th" sx={thSx}>Brand / SKU</TableCell>
+                  <TableCell component="th" sx={thSx}>Marketplace / Product Name</TableCell>
+                  <TableCell component="th" sx={thSx}>Currency / ASIN</TableCell>
+                  <TableCell component="th" sx={{ ...thSx, width: 48, textAlign: 'right' }} />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {brands.map((brand) => {
+                  const expanded = expandedBrands.has(brand.name);
+                  const brandSkus = skusForBrand(brand.name);
+                  const newSkuForm = newSkuForms[brand.name] ?? { sku: '', productName: '', asin: '' };
+
+                  return (
+                    <Fragment key={brand.name}>
+                      {/* Brand row */}
+                      <TableRow
+                        sx={{
+                          borderBottom: 1,
+                          borderColor: 'divider',
+                          cursor: 'pointer',
+                          transition: 'background-color 0.15s',
+                          '&:hover': { bgcolor: 'action.hover' },
+                        }}
+                        onClick={() => toggleBrand(brand.name)}
+                      >
+                        <TableCell sx={{ p: 0, pl: 0.5, width: 40 }}>
+                          <IconButton size="small" tabIndex={-1} sx={{ color: 'text.secondary', pointerEvents: 'none' }}>
+                            {expanded
+                              ? <KeyboardArrowDownIcon sx={{ fontSize: 18 }} />
+                              : <KeyboardArrowRightIcon sx={{ fontSize: 18 }} />}
+                          </IconButton>
+                        </TableCell>
+                        <TableCell sx={{ px: 1.5, py: 1, color: 'text.primary', fontSize: '0.875rem', fontWeight: 600 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {brand.name}
+                            <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.disabled', fontWeight: 400 }}>
+                              {brandSkus.length} SKU{brandSkus.length !== 1 ? 's' : ''}
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: '0.875rem' }}>
+                          {MARKETPLACES.find((m) => m.id === brand.marketplace)?.label}
+                        </TableCell>
+                        <TableCell sx={{ px: 1.5, py: 1, color: 'text.secondary', fontSize: '0.875rem' }}>
+                          {brand.currency}
+                        </TableCell>
+                        <TableCell
+                          sx={{ px: 1.5, py: 0.5, textAlign: 'right' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <IconButton
+                            onClick={() => handleRemoveBrand(brand.name)}
+                            size="small"
+                            aria-label={`Remove brand ${brand.name}`}
+                            sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
+                          >
+                            <CloseIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* SKU sub-rows */}
+                      {expanded && brandSkus.map((sku) => (
+                        <TableRow
+                          key={`sku-${sku.sku}`}
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            bgcolor: 'rgba(245, 245, 245, 0.5)',
+                            '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.02)' },
+                            transition: 'background-color 0.15s',
+                            '&:hover': { bgcolor: 'action.hover' },
+                          }}
+                        >
+                          <TableCell sx={{ p: 0, width: 40 }} />
+                          <TableCell sx={{ pl: 3.5, pr: 1.5, py: 0.75, color: 'text.primary', fontFamily: 'monospace', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+                            {sku.sku}
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, minWidth: 220 }}>
+                            <TextField
+                              value={sku.productName}
+                              onChange={(e) => handleUpdateSku(brand.name, sku.sku, { productName: e.target.value })}
+                              placeholder="Product name"
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              slotProps={inputSlotProps}
+                              sx={inputSx}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, minWidth: 170 }}>
+                            <TextField
+                              value={sku.asin ?? ''}
+                              onChange={(e) =>
+                                handleUpdateSku(
+                                  brand.name,
+                                  sku.sku,
+                                  e.target.value.trim() === '' ? { asin: undefined } : { asin: e.target.value },
+                                )
+                              }
+                              placeholder="ASIN"
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              slotProps={inputSlotProps}
+                              sx={inputSx}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, textAlign: 'right' }}>
+                            <IconButton
+                              onClick={() => handleRemoveSku(brand.name, sku.sku)}
+                              size="small"
+                              aria-label={`Remove SKU ${sku.sku}`}
+                              sx={{ color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
+                            >
+                              <CloseIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+
+                      {/* Add SKU row (shown when brand is expanded) */}
+                      {expanded && (
+                        <TableRow
+                          key={`add-sku-${brand.name}`}
+                          sx={{
+                            borderBottom: 1,
+                            borderColor: 'divider',
+                            bgcolor: 'rgba(0, 194, 185, 0.03)',
+                          }}
+                        >
+                          <TableCell sx={{ p: 0, width: 40 }} />
+                          <TableCell sx={{ pl: 3.5, pr: 1.5, py: 0.75, minWidth: 140 }}>
+                            <TextField
+                              value={newSkuForm.sku}
+                              onChange={(e) =>
+                                setNewSkuForms((prev) => ({
+                                  ...prev,
+                                  [brand.name]: { ...newSkuForm, sku: e.target.value },
+                                }))
+                              }
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSku(brand.name); }}
+                              placeholder="New SKU"
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              slotProps={inputSlotProps}
+                              sx={inputSx}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, minWidth: 220 }}>
+                            <TextField
+                              value={newSkuForm.productName}
+                              onChange={(e) =>
+                                setNewSkuForms((prev) => ({
+                                  ...prev,
+                                  [brand.name]: { ...newSkuForm, productName: e.target.value },
+                                }))
+                              }
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSku(brand.name); }}
+                              placeholder="Product name (optional)"
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              slotProps={inputSlotProps}
+                              sx={inputSx}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, minWidth: 170 }}>
+                            <TextField
+                              value={newSkuForm.asin}
+                              onChange={(e) =>
+                                setNewSkuForms((prev) => ({
+                                  ...prev,
+                                  [brand.name]: { ...newSkuForm, asin: e.target.value },
+                                }))
+                              }
+                              onKeyDown={(e) => { if (e.key === 'Enter') handleAddSku(brand.name); }}
+                              placeholder="ASIN (optional)"
+                              size="small"
+                              variant="outlined"
+                              fullWidth
+                              slotProps={inputSlotProps}
+                              sx={inputSx}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ px: 1.5, py: 0.75, textAlign: 'right' }}>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => handleAddSku(brand.name)}
+                              disabled={newSkuForm.sku.trim() === ''}
+                              startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                              sx={{
+                                borderRadius: '8px',
+                                textTransform: 'none',
+                                fontWeight: 500,
+                                height: 32,
+                                px: 1.5,
+                                fontSize: '0.8125rem',
+                                borderColor: '#00C2B9',
+                                color: '#00C2B9',
+                                '&:hover': { borderColor: '#00a89f', bgcolor: 'rgba(0,194,185,0.04)' },
+                                '&.Mui-disabled': { opacity: 0.4 },
+                                whiteSpace: 'nowrap',
+                                '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 14 } },
+                              }}
+                            >
+                              Add SKU
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  );
+                })}
+
+                {/* Add Brand row */}
+                <TableRow
+                  sx={{
+                    bgcolor: 'rgba(245, 245, 245, 0.5)',
+                    '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.02)' },
+                  }}
+                >
+                  <TableCell sx={{ p: 0, width: 40 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', pt: 0.5 }}>
+                      <AddIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ px: 1.5, py: 1 }}>
+                    <TextField
+                      value={newBrandName}
+                      onChange={(e) => setNewBrandName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddBrand(); }}
+                      placeholder="Brand name"
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      slotProps={inputSlotProps}
+                      sx={inputSx}
+                    />
+                  </TableCell>
+                  <TableCell sx={{ px: 1.5, py: 1 }}>
+                    <FormControl size="small" fullWidth>
+                      <Select
+                        value={newBrandMarketplace}
+                        onChange={(e) => setNewBrandMarketplace(e.target.value as string)}
+                        sx={selectSx}
+                        MenuProps={menuProps}
+                      >
+                        {MARKETPLACES.map((m) => (
+                          <MenuItem key={m.id} value={m.id} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
+                            {m.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </TableCell>
+                  <TableCell sx={{ px: 1.5, py: 1 }}>
+                    <Box sx={{ fontSize: '0.875rem', color: 'text.disabled', height: 32, display: 'flex', alignItems: 'center' }}>
+                      {MARKETPLACES.find((m) => m.id === newBrandMarketplace)?.currency ?? ''}
+                    </Box>
+                  </TableCell>
+                  <TableCell sx={{ px: 1.5, py: 1, textAlign: 'right' }}>
+                    <Button
+                      variant="contained"
+                      disableElevation
+                      onClick={handleAddBrand}
+                      disabled={!newBrandName.trim()}
+                      sx={btnSx}
+                    >
+                      Add Brand
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           </Box>
         </CardContent>
       </Card>
+
+      {isDirty && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+          <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+            Unsaved changes to product names or ASINs
+          </Typography>
+          <Button variant="contained" disableElevation onClick={handleSaveSkus} sx={btnSx}>
+            Save changes
+          </Button>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -1111,6 +1427,7 @@ function SettlementSection({
   mapping,
   isLoadingMapping,
   brands,
+  taxEngineEnabled,
 }: {
   isQboConnected: boolean;
   isLoadingAccounts: boolean;
@@ -1118,6 +1435,7 @@ function SettlementSection({
   mapping: SettlementMappingResponse | undefined;
   isLoadingMapping: boolean;
   brands: Brand[];
+  taxEngineEnabled: boolean;
 }) {
   const hasUs = brands.some((b) => b.marketplace === 'amazon.com');
   const hasUk = brands.some((b) => b.marketplace === 'amazon.co.uk');
@@ -1309,7 +1627,7 @@ function SettlementSection({
                   { label: 'Payment to Amazon', value: paymentLabel ?? 'Not set', ok: paymentOk },
                   { label: `Reserved balances (${reservedMemos.length})`, value: reservedRow.value, ok: reservedRow.ok },
                   { label: `Split month rollovers (${splitMonthMemos.length})`, value: splitRow.value, ok: splitRow.ok },
-                  { label: `Sales tax (${salesTaxMemos.length})`, value: taxRow.value, ok: taxRow.ok },
+                  { label: `Sales tax memos (${salesTaxMemos.length})`, value: taxRow.value, ok: taxRow.ok },
                 ].map((row) => (
                   <TableRow key={row.label} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
                     <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontSize: '0.875rem', fontWeight: 500 }}>
@@ -1363,6 +1681,23 @@ function SettlementSection({
       </Box>
 
       <Box sx={{ display: 'grid', gap: 2 }}>
+        <Card sx={{ border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+              Tax behavior
+            </Typography>
+            {taxEngineEnabled ? (
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                QBO sales tax is enabled. Settlement tax code mapping is available in Full Settlement Mapping and uses tax code names.
+              </Typography>
+            ) : (
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                QBO sales tax is disabled for this company. Plutus posts net settlement amounts and does not apply TaxCodeRef on settlement journal lines.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+
         {hasUs && usMapping && renderRegion(usMapping)}
         {hasUk && ukMapping && renderRegion(ukMapping)}
         {!hasUs && !hasUk && (
@@ -1396,529 +1731,6 @@ function SettlementSection({
       >
         Open full Settlement Mapping
       </Button>
-    </Box>
-  );
-}
-
-// Marketplace to country mapping for SKU scoping
-const MARKETPLACE_COUNTRY: Record<string, 'US' | 'UK'> = {
-  'amazon.com': 'US',
-  'amazon.co.uk': 'UK',
-};
-
-// SKUs Section
-function SkusSection({
-  skus,
-  onSkusChange,
-  brands,
-}: {
-  skus: Sku[];
-  onSkusChange: (skus: Sku[]) => void;
-  brands: Brand[];
-}) {
-  const normalizeSkuKey = useCallback((raw: string) => raw.trim().replace(/\s+/g, '-').toUpperCase(), []);
-
-  // Derive unique countries from brands
-  const countries = useMemo(() => {
-    const set = new Set<'US' | 'UK'>();
-    for (const b of brands) {
-      const country = MARKETPLACE_COUNTRY[b.marketplace];
-      if (country) set.add(country);
-    }
-    return Array.from(set);
-  }, [brands]);
-
-  const [draftSkus, setDraftSkus] = useState<Sku[]>(skus);
-
-  useEffect(() => {
-    setDraftSkus(skus);
-  }, [skus]);
-
-  // Get brands for a given country
-  const brandsForCountry = useCallback((country: 'US' | 'UK') => {
-    return brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] === country);
-  }, [brands]);
-
-  const brandByName = useMemo(() => new Map(brands.map((b) => [b.name, b])), [brands]);
-
-  const keyForSku = useCallback(
-    (sku: Sku) => {
-      const brand = brandByName.get(sku.brand);
-      if (!brand) {
-        throw new Error(`Unknown brand: ${sku.brand}`);
-      }
-      const country = MARKETPLACE_COUNTRY[brand.marketplace];
-      if (!country) {
-        throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
-      }
-  return `${country}::${normalizeSkuKey(sku.sku)}`;
-    },
-    [brandByName, normalizeSkuKey],
-  );
-
-  const draftByKey = useMemo(() => {
-    const map = new Map<string, Sku>();
-    for (const sku of draftSkus) {
-      map.set(keyForSku(sku), sku);
-    }
-    return map;
-  }, [draftSkus, keyForSku]);
-
-  const handleRemoveConfiguredSku = useCallback(
-    (key: string) => {
-      setDraftSkus((prev) => prev.filter((sku) => keyForSku(sku) !== key));
-    },
-    [keyForSku],
-  );
-
-  const handleUpdateConfiguredSku = useCallback(
-    (key: string, patch: Partial<Sku>) => {
-      setDraftSkus((prev) => {
-        const next = [...prev];
-        const index = next.findIndex((sku) => keyForSku(sku) === key);
-        if (index === -1) return prev;
-
-        const current = next[index];
-        if (!current) return prev;
-
-        next[index] = { ...current, ...patch };
-        return next;
-      });
-    },
-    [keyForSku],
-  );
-
-  const supportedBrands = useMemo(
-    () => brands.filter((b) => MARKETPLACE_COUNTRY[b.marketplace] !== undefined),
-    [brands],
-  );
-
-  const [manualSku, setManualSku] = useState<{ sku: string; productName: string; asin: string; brand: string }>({
-    sku: '',
-    productName: '',
-    asin: '',
-    brand: '',
-  });
-
-  const handleAddManualSku = useCallback(() => {
-    const sku = manualSku.sku.trim();
-    if (sku === '') return;
-    if (manualSku.brand.trim() === '') return;
-
-    const brand = brandByName.get(manualSku.brand);
-    if (!brand) {
-      throw new Error(`Unknown brand: ${manualSku.brand}`);
-    }
-    const country = MARKETPLACE_COUNTRY[brand.marketplace];
-    if (!country) {
-      throw new Error(`Unsupported marketplace for brand: ${brand.marketplace}`);
-    }
-
-    const key = `${country}::${normalizeSkuKey(sku)}`;
-    if (draftByKey.has(key)) return;
-
-    const productName = manualSku.productName.trim() === '' ? sku : manualSku.productName.trim();
-    const asin = manualSku.asin.trim() === '' ? undefined : manualSku.asin.trim();
-
-    setDraftSkus((prev) => [
-      ...prev,
-      {
-        sku,
-        productName,
-        asin,
-        brand: manualSku.brand.trim(),
-      },
-    ]);
-
-    setManualSku({ sku: '', productName: '', asin: '', brand: manualSku.brand });
-  }, [brandByName, draftByKey, manualSku, normalizeSkuKey]);
-
-  // Save configured SKUs
-  const handleSave = useCallback(() => {
-    onSkusChange(draftSkus);
-  }, [draftSkus, onSkusChange]);
-
-  if (brands.length === 0) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography sx={{ color: 'text.secondary' }}>Add brands first before adding SKUs.</Typography>
-      </Box>
-    );
-  }
-
-  if (countries.length === 0) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography sx={{ color: 'text.secondary' }}>No supported marketplaces found. Add US or UK brands first.</Typography>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box>
-        <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>Inventory</Typography>
-      </Box>
-
-      <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-        <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 1.5,
-              borderBottom: 1,
-              borderColor: 'divider',
-              bgcolor: 'action.hover',
-              px: 2,
-              py: 1.5,
-            }}
-          >
-            <Box sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Configured SKUs</Box>
-            <Box sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{draftSkus.length} total</Box>
-          </Box>
-
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
-              <TableHead
-                sx={{
-                  bgcolor: 'rgba(245, 245, 245, 0.8)',
-                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
-                  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
-                }}
-              >
-                <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>SKU</TableCell>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Product name</TableCell>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>ASIN</TableCell>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Country</TableCell>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>Brand</TableCell>
-                  <TableCell component="th" sx={{ height: 36, px: 1.5, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', width: 48, textAlign: 'right' }}> </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
-                {draftSkus.length > 0 ? (
-                  draftSkus
-                    .map((sku) => {
-                      const key = keyForSku(sku);
-                      const [country] = key.split('::');
-                      return { sku, key, country: country as 'US' | 'UK' };
-                    })
-                    .sort((a, b) => a.key.localeCompare(b.key))
-                    .map(({ sku, key, country }) => (
-                      <TableRow key={key} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', fontFamily: 'monospace', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{sku.sku}</TableCell>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
-                          <TextField
-                            value={sku.productName}
-                            onChange={(e) => handleUpdateConfiguredSku(key, { productName: e.target.value })}
-                            placeholder="Product name"
-                            size="small"
-                            variant="outlined"
-                            fullWidth
-                            slotProps={{
-                              input: {
-                                sx: {
-                                  fontSize: '0.875rem',
-                                  height: 32,
-                                },
-                              },
-                            }}
-                            sx={{
-                              '& .MuiOutlinedInput-root': {
-                                borderRadius: '8px',
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                              },
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 170 }}>
-                          <TextField
-                            value={sku.asin ? sku.asin : ''}
-                            onChange={(e) =>
-                              handleUpdateConfiguredSku(
-                                key,
-                                e.target.value.trim() === '' ? { asin: undefined } : { asin: e.target.value },
-                              )
-                            }
-                            placeholder="ASIN"
-                            size="small"
-                            variant="outlined"
-                            fullWidth
-                            slotProps={{
-                              input: {
-                                sx: {
-                                  fontSize: '0.875rem',
-                                  height: 32,
-                                },
-                              },
-                            }}
-                            sx={{
-                              '& .MuiOutlinedInput-root': {
-                                borderRadius: '8px',
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                              },
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
-                          <Box
-                            component="span"
-                            sx={{
-                              display: 'inline-flex',
-                              height: 24,
-                              width: 24,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              borderRadius: 99,
-                              bgcolor: 'action.hover',
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              color: 'text.secondary',
-                            }}
-                          >
-                            {country}
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', minWidth: 220 }}>
-                          <FormControl size="small" fullWidth>
-                            <Select
-                              value={sku.brand}
-                              onChange={(e) => handleUpdateConfiguredSku(key, { brand: e.target.value as string })}
-                              displayEmpty
-                              renderValue={(selected) => {
-                                if (!selected) return <span style={{ color: '#94a3b8' }}>Select brand...</span>;
-                                return selected as string;
-                              }}
-                              sx={{
-                                borderRadius: '8px',
-                                fontSize: '0.875rem',
-                                height: 32,
-                                width: 220,
-                                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                              }}
-                              MenuProps={{
-                                PaperProps: {
-                                  sx: {
-                                    borderRadius: 3,
-                                    border: 1,
-                                    borderColor: 'divider',
-                                    boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
-                                    mt: 0.5,
-                                  },
-                                },
-                              }}
-                            >
-                              {brandsForCountry(country).map((b) => (
-                                <MenuItem key={b.name} value={b.name} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
-                                  {b.name}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        </TableCell>
-                        <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>
-                          <IconButton
-                            onClick={() => handleRemoveConfiguredSku(key)}
-                            aria-label={`Remove SKU ${sku.sku}`}
-                            sx={{ height: 36, width: 36, color: 'text.secondary', '&:hover': { bgcolor: 'action.hover', color: 'text.primary' } }}
-                          >
-                            <CloseIcon sx={{ fontSize: 16 }} />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                ) : (
-                  <TableRow sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
-                    <TableCell colSpan={6} sx={{ px: 1.5, py: 5, color: 'text.secondary', fontVariantNumeric: 'tabular-nums', textAlign: 'center', fontSize: '0.875rem' }}>
-                      No SKUs configured yet.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Box>
-
-          <Box sx={{ borderTop: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 2, py: 1.5 }}>
-            <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.2fr 2fr 1.2fr 1.2fr auto' }, alignItems: { md: 'end' } }}>
-              <Box>
-                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>SKU</Box>
-                <TextField
-                  value={manualSku.sku}
-                  onChange={(e) => setManualSku((prev) => ({ ...prev, sku: e.target.value }))}
-                  placeholder="e.g. CSTDS001002"
-                  size="small"
-                  variant="outlined"
-                  fullWidth
-                  slotProps={{
-                    input: {
-                      sx: {
-                        fontSize: '0.875rem',
-                        height: 32,
-                      },
-                    },
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                    },
-                  }}
-                />
-              </Box>
-              <Box>
-                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Product name</Box>
-                <TextField
-                  value={manualSku.productName}
-                  onChange={(e) => setManualSku((prev) => ({ ...prev, productName: e.target.value }))}
-                  placeholder="Optional"
-                  size="small"
-                  variant="outlined"
-                  fullWidth
-                  slotProps={{
-                    input: {
-                      sx: {
-                        fontSize: '0.875rem',
-                        height: 32,
-                      },
-                    },
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                    },
-                  }}
-                />
-              </Box>
-              <Box>
-                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>ASIN</Box>
-                <TextField
-                  value={manualSku.asin}
-                  onChange={(e) => setManualSku((prev) => ({ ...prev, asin: e.target.value }))}
-                  placeholder="Optional"
-                  size="small"
-                  variant="outlined"
-                  fullWidth
-                  slotProps={{
-                    input: {
-                      sx: {
-                        fontSize: '0.875rem',
-                        height: 32,
-                      },
-                    },
-                  }}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      borderRadius: '8px',
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                    },
-                  }}
-                />
-              </Box>
-              <Box>
-                <Box sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.secondary', mb: 0.5 }}>Brand</Box>
-                <FormControl size="small" fullWidth>
-                  <Select
-                    value={manualSku.brand}
-                    onChange={(e) => setManualSku((prev) => ({ ...prev, brand: e.target.value as string }))}
-                    displayEmpty
-                    renderValue={(selected) => {
-                      if (!selected) return <span style={{ color: '#94a3b8' }}>Select brand...</span>;
-                      return selected as string;
-                    }}
-                    sx={{
-                      borderRadius: '8px',
-                      fontSize: '0.875rem',
-                      '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-                    }}
-                    MenuProps={{
-                      PaperProps: {
-                        sx: {
-                          borderRadius: 3,
-                          border: 1,
-                          borderColor: 'divider',
-                          boxShadow: '0 4px 16px -4px rgba(0, 0, 0, 0.12), 0 8px 24px -8px rgba(0, 0, 0, 0.08)',
-                          mt: 0.5,
-                        },
-                      },
-                    }}
-                  >
-                    {supportedBrands.map((b) => (
-                      <MenuItem key={b.name} value={b.name} sx={{ borderRadius: 2, mx: 0.5, fontSize: '0.875rem' }}>
-                        {b.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-              <Button
-                variant="contained"
-                disableElevation
-                onClick={handleAddManualSku}
-                disabled={manualSku.sku.trim() === '' || manualSku.brand.trim() === ''}
-                sx={{
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  gap: 1,
-                  whiteSpace: 'nowrap',
-                  '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
-                  '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
-                  height: 36,
-                  px: 2,
-                  fontSize: '0.875rem',
-                  bgcolor: '#00C2B9',
-                  color: '#fff',
-                  '&:hover': { bgcolor: '#00a89f' },
-                  '&:active': { bgcolor: '#008f87' },
-                }}
-              >
-                Add SKU
-              </Button>
-            </Box>
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-          {draftSkus.length} configured SKU{draftSkus.length !== 1 ? 's' : ''}
-        </Typography>
-        <Button
-          variant="contained"
-          disableElevation
-          onClick={handleSave}
-          sx={{
-            borderRadius: '8px',
-            textTransform: 'none',
-            fontWeight: 500,
-            gap: 1,
-            whiteSpace: 'nowrap',
-            '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
-            '& .MuiButton-startIcon, & .MuiButton-endIcon': { '& > *': { fontSize: 16 } },
-            height: 36,
-            px: 2,
-            fontSize: '0.875rem',
-            bgcolor: '#00C2B9',
-            color: '#fff',
-            '&:hover': { bgcolor: '#00a89f' },
-            '&:active': { bgcolor: '#008f87' },
-          }}
-        >
-          Save SKUs
-        </Button>
-      </Box>
     </Box>
   );
 }
@@ -2081,7 +1893,7 @@ export default function SetupPage() {
     queryKey: ['qbo-status'],
     queryFn: async () => {
       const res = await fetch(`${basePath}/api/qbo/status`);
-      return res.json() as Promise<{ connected: boolean }>;
+      return res.json() as Promise<ConnectionStatus>;
     },
     staleTime: 30 * 1000,
   });
@@ -2110,6 +1922,8 @@ export default function SetupPage() {
 
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
+  const taxEngineEnabled =
+    connectionStatus?.usingSalesTax === true ? true : connectionStatus?.partnerTaxEnabled === true;
 
   const settlementComplete = useMemo(() => {
     if (connectionStatus?.connected !== true) return false;
@@ -2195,7 +2009,7 @@ export default function SetupPage() {
                 <Box sx={{ minWidth: 0 }}>
                   <Box sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Not connected to QuickBooks</Box>
                   <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    You can still add brands and inventory. Connect QBO to map accounts and use dashboards.
+                    You can still add brands and SKUs. Connect QBO to map accounts and use dashboards.
                   </Box>
                 </Box>
               </Box>
@@ -2218,8 +2032,7 @@ export default function SetupPage() {
                 <Box sx={{ maxWidth: 896 }}>
                   {state.section === 'brands' && (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      <BrandsSection brands={state.brands} onBrandsChange={saveBrands} />
-                      <SkusSection skus={state.skus} onSkusChange={saveSkus} brands={state.brands} />
+                      <BrandsInventorySection brands={state.brands} skus={state.skus} onBrandsChange={saveBrands} onSkusChange={saveSkus} />
                     </Box>
                   )}
                   {state.section === 'accounts' && (
@@ -2242,6 +2055,7 @@ export default function SetupPage() {
                       mapping={settlementMappingData}
                       isLoadingMapping={isLoadingSettlementMapping}
                       brands={state.brands}
+                      taxEngineEnabled={taxEngineEnabled}
                     />
                   )}
                 </Box>

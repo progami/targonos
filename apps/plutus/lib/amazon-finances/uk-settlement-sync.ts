@@ -9,6 +9,7 @@ import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
+import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { createJournalEntry, fetchJournalEntries, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -140,12 +141,19 @@ async function findExistingJournalEntryIdByDocNumber(
     activeConnection = existing.updatedConnection;
   }
 
-  const exact = existing.journalEntries.find((je) => je.DocNumber === docNumber);
-  if (!exact) {
+  const normalizedTarget = normalizeSettlementDocNumber(docNumber);
+  const match = existing.journalEntries.find((je) => {
+    const candidateDocNumber = je.DocNumber;
+    if (typeof candidateDocNumber !== 'string') return false;
+    if (!isSettlementDocNumber(candidateDocNumber)) return false;
+    return normalizeSettlementDocNumber(candidateDocNumber) === normalizedTarget;
+  });
+
+  if (!match) {
     return { journalEntryId: null, updatedConnection: activeConnection === connection ? undefined : activeConnection };
   }
 
-  return { journalEntryId: exact.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
+  return { journalEntryId: match.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
 type MemoMappingEntry = { accountId: string; taxCodeId: string | null };

@@ -38,6 +38,10 @@ export interface QboPreferences {
     };
     MultiCurrencyEnabled?: boolean;
   };
+  TaxPrefs?: {
+    UsingSalesTax?: boolean;
+    PartnerTaxEnabled?: boolean;
+  };
   VendorAndPurchasePrefs?: {
     POCustomField?: {
       CustomField?: Array<{
@@ -163,6 +167,8 @@ export interface QboConnectionStatus {
   realmId?: string;
   companyName?: string;
   homeCurrency?: string;
+  usingSalesTax?: boolean;
+  partnerTaxEnabled?: boolean;
   subscription?: string;
   lastSyncAt?: Date;
   error?: string;
