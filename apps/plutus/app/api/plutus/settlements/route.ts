@@ -106,9 +106,9 @@ export async function GET(req: NextRequest) {
 
     const filteredJournalEntries = allJournalEntries.filter((je) => {
       if (!je.DocNumber) return false;
-      if (!isCanonicalSettlementDocNumber(je.DocNumber)) return false;
-      if (marketplaceFilter === null) return true;
+      if (!isSettlementDocNumber(je.DocNumber)) return false;
       const normalized = normalizeSettlementDocNumber(je.DocNumber);
+      if (marketplaceFilter === null) return true;
       return normalized.startsWith(`${marketplaceFilter}-`);
     });
 

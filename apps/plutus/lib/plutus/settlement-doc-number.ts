@@ -28,7 +28,12 @@ const MONTHS: Record<string, number> = {
   DEC: 12,
 };
 
-const SETTLEMENT_DOC_NUMBER_RE = /^(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+$/i;
+// Canonical settlement DocNumber format (no prefix/suffix; entire string is the settlement id).
+const SETTLEMENT_DOC_NUMBER_EXACT_RE = /^(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+$/i;
+
+// Settlement ids can appear inside prefixed DocNumbers (e.g. "LMB-UK-16-30JAN-26-1").
+// We still normalize/parse based on the embedded settlement id.
+const SETTLEMENT_DOC_NUMBER_MATCH_RE = /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i;
 
 function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
@@ -41,15 +46,16 @@ export function getMarketplaceFromRegion(region: string): SettlementMarketplace 
 }
 
 export function isSettlementDocNumber(docNumber: string): boolean {
-  return SETTLEMENT_DOC_NUMBER_RE.test(docNumber.trim());
+  return SETTLEMENT_DOC_NUMBER_MATCH_RE.test(docNumber.trim());
 }
 
 export function normalizeSettlementDocNumber(docNumber: string): string {
   const trimmed = docNumber.trim();
-  const match = trimmed.match(SETTLEMENT_DOC_NUMBER_RE);
-  if (!match) {
-    throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
-  }
+  const exact = trimmed.match(SETTLEMENT_DOC_NUMBER_EXACT_RE);
+  if (exact) return exact[0].toUpperCase();
+
+  const match = trimmed.match(SETTLEMENT_DOC_NUMBER_MATCH_RE);
+  if (!match) throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
 
   return match[0].toUpperCase();
 }
