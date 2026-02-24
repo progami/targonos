@@ -188,12 +188,23 @@ PORTAL_AUTH_URL=http://localhost:3000
 NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 PORTAL_APPS_CONFIG=dev.local.apps.json
-PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=auth_dev
+PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=auth_dev
 GOOGLE_CLIENT_ID=<ask team for Google OAuth client ID>
 GOOGLE_CLIENT_SECRET=<ask team for Google OAuth client secret>
 GOOGLE_ALLOWED_EMAILS=@targonglobal.com
 ALLOW_CALLBACK_REDIRECT=true
 ```
+
+#### Google OAuth checklist (prevents `Error 400: redirect_uri_mismatch`)
+
+Your `GOOGLE_CLIENT_ID` in `apps/sso/.env.local` must come from an OAuth client that has an authorized redirect URI matching your `NEXTAUTH_URL`.
+
+- Required redirect URI format: `<NEXTAUTH_URL>/api/auth/callback/google`
+- Standard local setup: `http://localhost:3000/api/auth/callback/google`
+- Alternate 32xx local setup: `http://localhost:3200/api/auth/callback/google`
+- If you run SSO on a different port/host, add that exact callback URI in Google Cloud Console.
+
+If this is not configured, Google sign-in will fail before callback with `redirect_uri_mismatch`.
 
 #### `apps/talos/.env.local`
 
@@ -208,20 +219,119 @@ NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
 PORTAL_AUTH_SECRET=<ask team for shared secret>
 NEXT_PUBLIC_APP_URL=http://localhost:3001
 CSRF_ALLOWED_ORIGINS=http://localhost:3001
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev
 REDIS_URL=redis://localhost:6379
 S3_BUCKET_NAME=ci-talos-bucket
 S3_BUCKET_REGION=us-east-1
-DATABASE_URL_US=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=dev_talos_us
-DATABASE_URL_UK=postgresql://<db_user>:<db_password>@localhost:6432/portal_db?schema=dev_talos_uk
+DATABASE_URL_US=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_talos_us
+DATABASE_URL_UK=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_talos_uk
 ```
 
 > **Do NOT set `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH`, or `PRISMA_SCHEMA`** in local dev.
 > `BASE_PATH` causes double-path issues with `next dev`. `PRISMA_SCHEMA` overrides all tenant schemas globally and breaks multi-tenant routing.
 
-#### Other apps
+#### `apps/atlas/.env.local`
 
-Use the same pattern — point `DATABASE_URL` to `localhost:6432` with the appropriate schema:
+```env
+NODE_ENV=development
+PORT=3006
+HOST=0.0.0.0
+BASE_PATH=/atlas
+NEXT_PUBLIC_BASE_PATH=/atlas
+NEXT_PUBLIC_APP_URL=http://localhost:3006/atlas
+NEXTAUTH_URL=http://localhost:3006/atlas
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+COOKIE_DOMAIN=localhost
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_atlas
+```
+
+#### `apps/xplan/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3008
+HOST=0.0.0.0
+BASE_PATH=/xplan
+NEXT_PUBLIC_BASE_PATH=/xplan
+NEXT_PUBLIC_APP_URL=http://localhost:3008/xplan
+NEXTAUTH_URL=http://localhost:3008/xplan
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+COOKIE_DOMAIN=localhost
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_xplan
+
+# Optional (for strategy assignee directory)
+# PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=auth_dev
+```
+
+#### `apps/kairos/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3010
+HOST=0.0.0.0
+BASE_PATH=/kairos
+NEXT_PUBLIC_BASE_PATH=/kairos
+NEXT_PUBLIC_APP_URL=http://localhost:3010/kairos
+NEXTAUTH_URL=http://localhost:3010/kairos
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+COOKIE_DOMAIN=localhost
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=kairos
+```
+
+#### `apps/plutus/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3012
+HOST=0.0.0.0
+BASE_PATH=/plutus
+NEXT_PUBLIC_BASE_PATH=/plutus
+NEXT_PUBLIC_APP_URL=http://localhost:3012/plutus
+NEXTAUTH_URL=http://localhost:3012/plutus
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+COOKIE_DOMAIN=localhost
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=plutus_dev
+
+# Required only for QBO connect/sync features
+# QBO_CLIENT_ID=
+# QBO_CLIENT_SECRET=
+# QBO_REDIRECT_URI=http://localhost:3012/plutus/api/qbo/callback
+# QBO_SANDBOX=true
+```
+
+#### `apps/hermes/.env.local`
+
+```env
+NODE_ENV=development
+PORT=3014
+HOST=0.0.0.0
+BASE_PATH=/hermes
+NEXT_PUBLIC_BASE_PATH=/hermes
+NEXT_PUBLIC_APP_URL=http://localhost:3014/hermes
+NEXTAUTH_URL=http://localhost:3014/hermes
+NEXTAUTH_SECRET=<ask team for shared secret>
+PORTAL_AUTH_URL=http://localhost:3000
+NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3000
+PORTAL_AUTH_SECRET=<ask team for shared secret>
+COOKIE_DOMAIN=localhost
+DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_hermes
+```
+
+#### App summary
+
+Use the same pattern across apps: keep shared auth secrets aligned with SSO, and point `DATABASE_URL` to `localhost:6432` with the correct schema.
 
 | App | Workspace | Port | DB Schema |
 |-----|-----------|------|-----------|
@@ -231,8 +341,16 @@ Use the same pattern — point `DATABASE_URL` to `localhost:6432` with the appro
 | Atlas | `@targon/atlas` | 3006 | `dev_atlas` |
 | X-Plan | `@targon/xplan` | 3008 | `dev_xplan` |
 | Kairos | `@targon/kairos` | 3010 | `kairos` |
-| Plutus | `@targon/plutus` | 3012 | — (uses QuickBooks API) |
+| Plutus | `@targon/plutus` | 3012 | `plutus_dev` |
 | Hermes | `@targon/hermes` | 3014 | `dev_hermes` |
+
+For local-only UI/API work (without SSO login), set one of these in each app's `.env.local`:
+
+```env
+ALLOW_DEV_AUTH_SESSION_BYPASS=1
+# or
+ALLOW_DEV_AUTH_DEFAULTS=true
+```
 
 ### 4. Generate Prisma clients
 
@@ -244,6 +362,9 @@ pnpm --filter @targon/sso exec prisma generate
 pnpm --filter @targon/talos exec prisma generate
 pnpm --filter @targon/atlas exec prisma generate
 pnpm --filter @targon/xplan exec prisma generate
+pnpm --filter @targon/kairos exec prisma generate
+pnpm --filter @targon/plutus exec prisma generate
+pnpm --filter @targon/argus exec prisma generate
 ```
 
 ### 5. Run the apps
@@ -258,6 +379,11 @@ pnpm --filter @targon/sso dev
 pnpm --filter @targon/talos dev
 pnpm --filter @targon/atlas dev
 pnpm --filter @targon/xplan dev
+pnpm --filter @targon/kairos dev
+pnpm --filter @targon/plutus dev
+pnpm --filter @targon/hermes dev
+pnpm --filter @targon/argus dev
+pnpm --filter @targon/website dev
 ```
 
 ### 6. Access
