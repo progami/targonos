@@ -11,6 +11,7 @@ import { fromCents } from '@/lib/inventory/money';
 import { computePnlAllocation } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import {
   buildDeterministicSkuAllocations,
   deterministicSourceGuidanceForBucket,
@@ -251,16 +252,6 @@ export async function computeSettlementPreview(input: {
     throw new Error('Missing invoiceId');
   }
 
-  const expectedMarket =
-    marketplace === 'amazon.com'
-      ? 'us'
-      : marketplace === 'amazon.co.uk'
-        ? 'uk'
-        : (() => {
-            const exhaustive: never = marketplace;
-            throw new Error(`Unsupported marketplace: ${exhaustive}`);
-          })();
-
   if (input.auditRows.length === 0) {
     throw new Error(`No audit rows provided for invoice ${invoiceId}`);
   }
@@ -270,8 +261,11 @@ export async function computeSettlementPreview(input: {
       throw new Error(`All audit rows must have the same invoiceId (${invoiceId})`);
     }
 
-    const marketValue = row.market.trim().toLowerCase();
-    if (marketValue !== expectedMarket) {
+    const rowMarketplace = normalizeAuditMarketToMarketplaceId(row.market);
+    if (rowMarketplace === null) {
+      throw new Error(`Unrecognized audit row market for invoice ${invoiceId}: ${row.market}`);
+    }
+    if (rowMarketplace !== marketplace) {
       throw new Error(`Audit row market mismatch for invoice ${invoiceId}: ${row.market}`);
     }
   }

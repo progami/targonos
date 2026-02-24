@@ -6,7 +6,6 @@ import { useSnackbar } from 'notistack';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
-import AddIcon from '@mui/icons-material/Add';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -31,7 +30,12 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ConnectionStatus = { connected: boolean; error?: string };
+type ConnectionStatus = {
+  connected: boolean;
+  error?: string;
+  usingSalesTax?: boolean;
+  partnerTaxEnabled?: boolean;
+};
 type Region = 'US' | 'UK';
 
 type QboAccount = {
@@ -40,6 +44,13 @@ type QboAccount = {
   acctNum?: string | null;
   type: string;
   active: boolean;
+};
+
+type QboTaxCode = {
+  id: string;
+  name: string;
+  active: boolean;
+  taxable: boolean;
 };
 
 type SettlementMappingResponse = {
@@ -85,6 +96,16 @@ async function fetchSettlementMapping(): Promise<SettlementMappingResponse> {
   return res.json();
 }
 
+async function fetchTaxCodes(): Promise<{ taxCodes: QboTaxCode[] }> {
+  const res = await fetch(`${basePath}/api/qbo/tax-codes`);
+  if (!res.ok) {
+    const data = (await res.json()) as { error?: string };
+    throw new Error(data.error ? data.error : 'Failed to fetch tax codes');
+  }
+  const data = (await res.json()) as { taxCodes: QboTaxCode[] };
+  return { taxCodes: data.taxCodes };
+}
+
 function accountLabel(account: QboAccount): string {
   return account.acctNum ? `${account.acctNum} · ${account.fullyQualifiedName}` : account.fullyQualifiedName;
 }
@@ -92,9 +113,14 @@ function accountLabel(account: QboAccount): string {
 function normalizeTaxCodeMappings(input: {
   memoMappings: Record<string, string>;
   taxCodeMappings: Record<string, string | null>;
+  taxEngineEnabled: boolean;
 }): Record<string, string | null> {
   const result: Record<string, string | null> = {};
   for (const memo of Object.keys(input.memoMappings)) {
+    if (!input.taxEngineEnabled) {
+      result[memo] = null;
+      continue;
+    }
     const raw = input.taxCodeMappings[memo];
     if (raw === null || raw === undefined) {
       result[memo] = null;
@@ -129,6 +155,16 @@ export default function SettlementMappingPage() {
     staleTime: 30 * 1000,
   });
 
+  const taxEngineEnabled =
+    connectionStatus?.usingSalesTax === true ? true : connectionStatus?.partnerTaxEnabled === true;
+
+  const { data: taxCodesData, isLoading: isLoadingTaxCodes } = useQuery({
+    queryKey: ['qbo-tax-codes'],
+    queryFn: fetchTaxCodes,
+    enabled: connectionStatus?.connected === true && taxEngineEnabled,
+    staleTime: 5 * 60 * 1000,
+  });
+
   type RegionState = {
     bankAccountId: string;
     paymentAccountId: string;
@@ -141,9 +177,6 @@ export default function SettlementMappingPage() {
     UK: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
   });
   const [search, setSearch] = useState('');
-  const [newMemo, setNewMemo] = useState('');
-  const [newAccountId, setNewAccountId] = useState('');
-  const [newTaxCodeId, setNewTaxCodeId] = useState('');
 
   useEffect(() => {
     if (!mappingData) return;
@@ -165,10 +198,13 @@ export default function SettlementMappingPage() {
   }, [mappingData]);
 
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
+  const taxCodes = useMemo(() => (taxCodesData ? taxCodesData.taxCodes : []), [taxCodesData]);
 
   const bankAndCardAccounts = useMemo(() => {
     return accounts.filter((a) => a.type === 'Bank' || a.type === 'Credit Card');
   }, [accounts]);
+
+  const activeTaxCodes = useMemo(() => taxCodes.filter((taxCode) => taxCode.active), [taxCodes]);
 
   const active = byRegion[region];
   const bankAccountId = active.bankAccountId;
@@ -195,6 +231,7 @@ export default function SettlementMappingPage() {
           usSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
             memoMappings: byRegion.US.memoMappings,
             taxCodeMappings: byRegion.US.taxCodeMappings,
+            taxEngineEnabled,
           }),
           ukSettlementBankAccountId: byRegion.UK.bankAccountId.trim() === '' ? null : byRegion.UK.bankAccountId.trim(),
           ukSettlementPaymentAccountId: byRegion.UK.paymentAccountId.trim() === '' ? null : byRegion.UK.paymentAccountId.trim(),
@@ -202,6 +239,7 @@ export default function SettlementMappingPage() {
           ukSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
             memoMappings: byRegion.UK.memoMappings,
             taxCodeMappings: byRegion.UK.taxCodeMappings,
+            taxEngineEnabled,
           }),
         }),
       });
@@ -251,41 +289,17 @@ export default function SettlementMappingPage() {
           taxCodeMappings: data.taxCodeMappings,
         },
       }));
-      enqueueSnackbar(
-        `Imported ${Object.keys(data.memoMappings).length} memo mappings + ${Object.keys(data.taxCodeMappings).length} tax mappings from QBO`,
-        { variant: 'success' },
-      );
+      const memoCount = Object.keys(data.memoMappings).length;
+      const taxCount = Object.keys(data.taxCodeMappings).length;
+      const message = taxEngineEnabled
+        ? `Imported ${memoCount} memo mappings + ${taxCount} tax mappings from QBO`
+        : `Imported ${memoCount} memo mappings from QBO`;
+      enqueueSnackbar(message, { variant: 'success' });
     },
     onError: (error) => {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
     },
   });
-
-  const onAddMemoMapping = () => {
-    const memo = newMemo.trim();
-    const accountId = newAccountId.trim();
-    if (memo === '' || accountId === '') return;
-
-    const taxCodeId = newTaxCodeId.trim();
-    const taxCodeValue = taxCodeId === '' ? null : taxCodeId;
-
-    if (memoMappings[memo] !== undefined) {
-      enqueueSnackbar('Memo already exists in mapping', { variant: 'warning' });
-      return;
-    }
-
-    setByRegion((prev) => ({
-      ...prev,
-      [region]: {
-        ...prev[region],
-        memoMappings: { ...prev[region].memoMappings, [memo]: accountId },
-        taxCodeMappings: { ...prev[region].taxCodeMappings, [memo]: taxCodeValue },
-      },
-    }));
-    setNewMemo('');
-    setNewAccountId('');
-    setNewTaxCodeId('');
-  };
 
   const onDeleteMemoMapping = (memo: string) => {
     setByRegion((prev) => {
@@ -308,7 +322,11 @@ export default function SettlementMappingPage() {
     return <NotConnectedScreen title="Settlement Mapping" error={connectionStatus.error} />;
   }
 
-  const isLoading = isCheckingConnection || isLoadingAccounts || isLoadingMapping;
+  const isLoading =
+    isCheckingConnection ||
+    isLoadingAccounts ||
+    isLoadingMapping ||
+    (taxEngineEnabled && isLoadingTaxCodes);
 
   return (
     <Box component="main" sx={{ flex: 1 }}>
@@ -354,6 +372,24 @@ export default function SettlementMappingPage() {
         </Box>
 
         <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
+          <Card sx={{ border: 1, borderColor: 'divider' }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+                Tax behavior
+              </Typography>
+              {taxEngineEnabled ? (
+                <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                  QBO sales tax is enabled. Settlement tax code mapping is available below and uses tax code names.
+                </Typography>
+              ) : (
+                <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                  QBO sales tax is disabled for this company. Plutus posts net settlement amounts and does not apply
+                  TaxCodeRef on settlement journal lines.
+                </Typography>
+              )}
+            </CardContent>
+          </Card>
+
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
@@ -433,7 +469,7 @@ export default function SettlementMappingPage() {
                     {region} settlement memo → account mapping
                   </Typography>
                   <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then adjust as needed.
+                    Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed.
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -447,72 +483,6 @@ export default function SettlementMappingPage() {
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1.2fr 1fr 1fr auto' }, alignItems: { md: 'end' } }}>
-                <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Add memo
-                  </Typography>
-                  <TextField
-                    value={newMemo}
-                    onChange={(e) => setNewMemo(e.target.value)}
-                    placeholder="e.g. Amazon Seller Fees - Commission"
-                    size="small"
-                    fullWidth
-                    sx={{ mt: 0.75 }}
-                  />
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Account
-                  </Typography>
-                  <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
-                    <Select
-                      value={newAccountId}
-                      onChange={(e) => setNewAccountId(e.target.value as string)}
-                      displayEmpty
-                      renderValue={(sel) => {
-                        if (!sel) return <span style={{ color: '#94a3b8' }}>Select account...</span>;
-                        const found = accounts.find((a) => a.id === sel);
-                        return found ? accountLabel(found) : (sel as string);
-                      }}
-                    >
-                      {accounts.map((a) => (
-                        <MenuItem key={a.id} value={a.id}>
-                          {accountLabel(a)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Tax code (optional)
-                  </Typography>
-                  <TextField
-                    value={newTaxCodeId}
-                    onChange={(e) => setNewTaxCodeId(e.target.value)}
-                    placeholder="QBO TaxCodeRef id (or blank)"
-                    size="small"
-                    fullWidth
-                    sx={{ mt: 0.75 }}
-                  />
-                </Box>
-
-                <Box sx={{ display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
-                  <Button
-                    variant="outlined"
-                    onClick={onAddMemoMapping}
-                    disabled={newMemo.trim() === '' || newAccountId.trim() === ''}
-                    startIcon={<AddIcon sx={{ fontSize: 16 }} />}
-                    sx={{ borderRadius: 2, textTransform: 'none', height: 40 }}
-                  >
-                    Add
-                  </Button>
-                </Box>
-              </Box>
-
               <Box sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
                 <Table size="small">
                   <TableHead sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
@@ -523,16 +493,18 @@ export default function SettlementMappingPage() {
                       <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
                         QBO account
                       </TableCell>
-                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                        Tax code
-                      </TableCell>
+                      {taxEngineEnabled && (
+                        <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                          Tax code
+                        </TableCell>
+                      )}
                       <TableCell sx={{ width: 52 }} />
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {isLoading && (
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={taxEngineEnabled ? 4 : 3} sx={{ py: 3, color: 'text.secondary' }}>
                           Loading…
                         </TableCell>
                       </TableRow>
@@ -540,7 +512,7 @@ export default function SettlementMappingPage() {
 
                     {!isLoading && memoRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={taxEngineEnabled ? 4 : 3} sx={{ py: 3, color: 'text.secondary' }}>
                           No memo mappings found.
                         </TableCell>
                       </TableRow>
@@ -582,28 +554,41 @@ export default function SettlementMappingPage() {
                                 </Select>
                               </FormControl>
                             </TableCell>
-                            <TableCell>
-                              <TextField
-                                value={taxCodeId ?? ''}
-                                onChange={(e) => {
-                                  const trimmed = e.target.value.trim();
-                                  setByRegion((prev) => ({
-                                    ...prev,
-                                    [region]: {
-                                      ...prev[region],
-                                      taxCodeMappings: {
-                                        ...prev[region].taxCodeMappings,
-                                        [memo]: trimmed === '' ? null : trimmed,
-                                      },
-                                    },
-                                  }));
-                                }}
-                                placeholder="(none)"
-                                size="small"
-                                fullWidth
-                                inputProps={{ style: { fontFamily: 'monospace', fontSize: '0.8125rem' } }}
-                              />
-                            </TableCell>
+                            {taxEngineEnabled && (
+                              <TableCell>
+                                <FormControl size="small" fullWidth>
+                                  <Select
+                                    value={taxCodeId ?? ''}
+                                    onChange={(e) => {
+                                      const nextTaxCodeId = e.target.value as string;
+                                      setByRegion((prev) => ({
+                                        ...prev,
+                                        [region]: {
+                                          ...prev[region],
+                                          taxCodeMappings: {
+                                            ...prev[region].taxCodeMappings,
+                                            [memo]: nextTaxCodeId === '' ? null : nextTaxCodeId,
+                                          },
+                                        },
+                                      }));
+                                    }}
+                                    displayEmpty
+                                    renderValue={(sel) => {
+                                      if (!sel) return <span style={{ color: '#94a3b8' }}>No tax code</span>;
+                                      const found = activeTaxCodes.find((taxCode) => taxCode.id === sel);
+                                      return found ? found.name : (sel as string);
+                                    }}
+                                  >
+                                    <MenuItem value="">No tax code</MenuItem>
+                                    {activeTaxCodes.map((taxCode) => (
+                                      <MenuItem key={taxCode.id} value={taxCode.id}>
+                                        {taxCode.name}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+                              </TableCell>
+                            )}
                             <TableCell sx={{ textAlign: 'right' }}>
                               <IconButton
                                 size="small"
@@ -630,7 +615,11 @@ export default function SettlementMappingPage() {
               <Box sx={{ mt: 1, display: 'grid', gap: 0.75, fontSize: '0.875rem', color: 'text.secondary' }}>
                 <Box>1) Import while your historical US settlements still exist in QBO.</Box>
                 <Box>2) Plutus will fail if a memo is missing from the mapping (to prevent mis-posts).</Box>
-                <Box>3) Tax code mapping mirrors the TaxCodeRef used on historical settlement JEs (import from QBO first, then edit if needed).</Box>
+                {taxEngineEnabled ? (
+                  <Box>3) Tax code mapping mirrors TaxCodeRef used on historical settlement JEs (import first, then edit if needed).</Box>
+                ) : (
+                  <Box>3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef and tax mapping stays hidden.</Box>
+                )}
               </Box>
             </CardContent>
           </Card>
