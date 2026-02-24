@@ -19,12 +19,18 @@ type RouteContext = { params: Promise<{ id: string }> };
 function buildMarketWhere(marketplace: MarketplaceId) {
   if (marketplace === 'amazon.com') {
     return {
-      market: { equals: 'us', mode: 'insensitive' as const },
+      OR: [
+        { market: { equals: 'us', mode: 'insensitive' as const } },
+        { market: { contains: 'amazon.com', mode: 'insensitive' as const } },
+      ],
     };
   }
   if (marketplace === 'amazon.co.uk') {
     return {
-      market: { equals: 'uk', mode: 'insensitive' as const },
+      OR: [
+        { market: { equals: 'uk', mode: 'insensitive' as const } },
+        { market: { contains: 'amazon.co.uk', mode: 'insensitive' as const } },
+      ],
     };
   }
 
