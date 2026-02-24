@@ -40,7 +40,7 @@ Dev
   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` copied from the Google Cloud project (`targon-sso`).
   - test account must be a verified `@targonglobal.com` user.
   - `NEXTAUTH_SECRET` (and optionally `NEXTAUTH_URL=http://localhost:3000`) so the NextAuth session behavior matches production.
-- Auth bootstrap now fails immediately when required env vars are missing. Ensure `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` are defined before running dev servers. For ad-hoc local runs you can export `ALLOW_DEV_AUTH_DEFAULTS=true` to re-enable localhost fallbacks.
+- Auth bootstrap now fails immediately when required env vars are missing. Ensure `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` are defined before running dev servers. For ad-hoc local runs you can export `ALLOW_DEV_AUTH_DEFAULTS=true` to re-enable localhost fallbacks. Child app middleware also honors `ALLOW_DEV_AUTH_SESSION_BYPASS=1` (or `ALLOW_DEV_AUTH_DEFAULTS=true`) in local non-production runs.
 - Set `PORTAL_DB_URL` to the shared auth schema in `.env.local`, e.g. `postgresql://portal_auth:***@localhost:5432/portal_db?schema=auth`.
 
 Extending claims
