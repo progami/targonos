@@ -5,7 +5,7 @@ Talos powers inventory, billing, and operations for Targon.
 ## Local Development
 
 - Install workspace dependencies from the monorepo root: `pnpm install`
-- Run Talos: `pnpm --filter @targon/talos dev` (default port `3001`)
+- Run Talos (local 32xx profile): `pnpm --filter @targon/talos exec next dev -p 3201`
 - Keep Prisma schema in sync: `pnpm --filter @targon/talos db:push`
 - Regenerate Prisma client: `pnpm --filter @targon/talos db:generate`
 

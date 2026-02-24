@@ -114,7 +114,7 @@ const BASE_APPS: AppBase[] = [
     description: 'Forecasting workspace for marketplace signals and statistical models.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/kairos'),
     category: 'Product',
-    devUrl: 'http://localhost:3010',
+    devUrl: 'http://localhost:3210',
   },
   {
     id: 'xplan',
@@ -122,7 +122,7 @@ const BASE_APPS: AppBase[] = [
     description: 'Collaborative planning workspace for sales, operations, and finance.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-strategies'),
     category: 'Product',
-    devUrl: 'http://localhost:3008',
+    devUrl: 'http://localhost:3208',
   },
   {
     id: 'plutus',
@@ -131,7 +131,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
     category: 'Finance',
     devPath: '/plutus',
-    devUrl: 'http://localhost:3012',
+    devUrl: 'http://localhost:3212',
   },
   {
     id: 'hermes',
@@ -140,7 +140,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/hermes'),
     category: 'Account / Listing',
     devPath: '/hermes',
-    devUrl: 'http://localhost:3014',
+    devUrl: 'http://localhost:3214',
   },
   {
     id: 'argus',
@@ -150,7 +150,7 @@ const BASE_APPS: AppBase[] = [
     entryPolicy: 'public',
     category: 'Account / Listing',
     devPath: '/argus',
-    devUrl: 'http://localhost:3016',
+    devUrl: 'http://localhost:3216',
   },
 ]
 
@@ -276,8 +276,11 @@ type DevConfig = { host?: string; apps?: Record<string, number | string> }
 
 function tryLoadRootDevConfig(): DevConfig | null {
   try {
-    // Look for dev.apps.json in likely root locations relative to app cwd
+    // Prefer local-port mapping for standalone dev, then fallback to legacy dev.apps.json
     const candidates = [
+      path.resolve(process.cwd(), '../../dev.local.apps.json'),
+      path.resolve(process.cwd(), '../dev.local.apps.json'),
+      path.resolve(process.cwd(), 'dev.local.apps.json'),
       path.resolve(process.cwd(), '../../dev.apps.json'),
       path.resolve(process.cwd(), '../dev.apps.json'),
       path.resolve(process.cwd(), 'dev.apps.json'),

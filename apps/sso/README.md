@@ -37,11 +37,11 @@ Dev
 - In dev, cookie name becomes `targon.next-auth.session-token` to avoid collisions.
 - Apps attempt `next-auth.session-token`, `targon.next-auth.session-token`, and their legacy cookie name.
 - To test Google SSO locally, create `apps/sso/.env.local` (gitignored) with:
-  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` copied from the Google Cloud project (`targon-sso`).
+  - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` copied from the Google Cloud project (`ecomos-sso`).
   - test account must be a verified `@targonglobal.com` user.
-  - `NEXTAUTH_SECRET` (and optionally `NEXTAUTH_URL=http://localhost:3000`) so the NextAuth session behavior matches production.
+  - `NEXTAUTH_SECRET` (and optionally `NEXTAUTH_URL=http://localhost:3200`) so the NextAuth session behavior matches production.
 - Make sure the OAuth client used by `GOOGLE_CLIENT_ID` includes the local callback URI:
-  - `http://localhost:3000/api/auth/callback/google` (or `<NEXTAUTH_URL>/api/auth/callback/google` for your custom local port)
+  - `http://localhost:3200/api/auth/callback/google` (or `<NEXTAUTH_URL>/api/auth/callback/google` for your custom local port)
   - If this is missing, Google will fail with `Error 400: redirect_uri_mismatch`.
 - Auth bootstrap now fails immediately when required env vars are missing. Ensure `NEXTAUTH_SECRET`, `COOKIE_DOMAIN`, `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, and `NEXT_PUBLIC_APP_URL` are defined before running dev servers. For ad-hoc local runs you can export `ALLOW_DEV_AUTH_DEFAULTS=true` to re-enable localhost fallbacks. Child app middleware also honors `ALLOW_DEV_AUTH_SESSION_BYPASS=1` (or `ALLOW_DEV_AUTH_DEFAULTS=true`) in local non-production runs.
 - Set `PORTAL_DB_URL` to the shared auth schema in `.env.local`, e.g. `postgresql://portal_auth:***@localhost:6432/portal_db_dev?schema=auth_dev`.
@@ -63,12 +63,13 @@ Files
 
 - In development, app links shown on the portal home will prefer localhost ports instead of production domains.
 - The resolution order for an app id like `talos` is:
-  1. `process.env.DEV_APP_URL_TALOS` if set (e.g., `http://localhost:3001`)
+  1. `process.env.DEV_APP_URL_TALOS` if set (e.g., `http://localhost:3201`)
   2. `process.env.DEV_TALOS_PORT` or `process.env.TALOS_PORT` (builds `http://localhost:<port>`; host overridable via `DEV_APPS_HOST`)
-  3. `dev.apps.json` at the repo root (example added with common defaults)
-  4. Fallback to the production URL defined in `lib/apps.ts`
+  3. `dev.local.apps.json` at the repo root (preferred for local `32xx` mapping)
+  4. `dev.apps.json` at the repo root (legacy hosted dev mapping)
+  5. Fallback to the production URL defined in `lib/apps.ts`
 
-Edit the root `dev.apps.json` or export env vars to point apps to your running local ports.
+Edit the root `dev.local.apps.json` or export env vars to point apps to your running local ports.
 
 ## Optional: callback redirect behavior
 
