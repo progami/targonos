@@ -347,7 +347,7 @@ function Sidebar({
   settlementComplete: boolean;
 }) {
   const items = [
-    { id: 'brands' as const, label: 'Brands & Inventory', complete: catalogComplete },
+    { id: 'brands' as const, label: 'Brands & SKUs', complete: catalogComplete },
     { id: 'accounts' as const, label: 'Chart of accounts', complete: accountsComplete },
     { id: 'settlement' as const, label: 'Settlement posting', complete: settlementComplete },
   ];
@@ -443,7 +443,7 @@ function Sidebar({
   );
 }
 
-// Brands & Inventory Section (combined)
+// Brands & SKUs Section (combined)
 function BrandsInventorySection({
   brands,
   skus,
@@ -617,7 +617,7 @@ function BrandsInventorySection({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 600, color: 'text.primary' }}>
-        Brands & Inventory
+        Brands & SKUs
       </Typography>
 
       <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
@@ -1982,7 +1982,7 @@ export default function SetupPage() {
                 <Box sx={{ minWidth: 0 }}>
                   <Box sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Not connected to QuickBooks</Box>
                   <Box sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    You can still add brands and inventory. Connect QBO to map accounts and use dashboards.
+                    You can still add brands and SKUs. Connect QBO to map accounts and use dashboards.
                   </Box>
                 </Box>
               </Box>
