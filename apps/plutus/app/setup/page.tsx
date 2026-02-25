@@ -80,6 +80,12 @@ type SettlementMappingResponse = {
   ukSettlementTaxCodeIdByMemo: Record<string, string | null>;
 };
 
+type ConnectionStatus = {
+  connected: boolean;
+  usingSalesTax?: boolean;
+  partnerTaxEnabled?: boolean;
+};
+
 function normalizeForMatch(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -1421,6 +1427,7 @@ function SettlementSection({
   mapping,
   isLoadingMapping,
   brands,
+  taxEngineEnabled,
 }: {
   isQboConnected: boolean;
   isLoadingAccounts: boolean;
@@ -1428,6 +1435,7 @@ function SettlementSection({
   mapping: SettlementMappingResponse | undefined;
   isLoadingMapping: boolean;
   brands: Brand[];
+  taxEngineEnabled: boolean;
 }) {
   const hasUs = brands.some((b) => b.marketplace === 'amazon.com');
   const hasUk = brands.some((b) => b.marketplace === 'amazon.co.uk');
@@ -1619,7 +1627,7 @@ function SettlementSection({
                   { label: 'Payment to Amazon', value: paymentLabel ?? 'Not set', ok: paymentOk },
                   { label: `Reserved balances (${reservedMemos.length})`, value: reservedRow.value, ok: reservedRow.ok },
                   { label: `Split month rollovers (${splitMonthMemos.length})`, value: splitRow.value, ok: splitRow.ok },
-                  { label: `Sales tax (${salesTaxMemos.length})`, value: taxRow.value, ok: taxRow.ok },
+                  { label: `Sales tax memos (${salesTaxMemos.length})`, value: taxRow.value, ok: taxRow.ok },
                 ].map((row) => (
                   <TableRow key={row.label} sx={{ borderBottom: 1, borderColor: 'divider', transition: 'background-color 0.15s', '&:hover': { bgcolor: 'action.hover' } }}>
                     <TableCell sx={{ px: 1.5, py: 0.75, color: 'text.primary', fontSize: '0.875rem', fontWeight: 500 }}>
@@ -1673,6 +1681,23 @@ function SettlementSection({
       </Box>
 
       <Box sx={{ display: 'grid', gap: 2 }}>
+        <Card sx={{ border: 1, borderColor: 'divider' }}>
+          <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+              Tax behavior
+            </Typography>
+            {taxEngineEnabled ? (
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                QBO sales tax is enabled. Settlement tax code mapping is available in Full Settlement Mapping and uses tax code names.
+              </Typography>
+            ) : (
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                QBO sales tax is disabled for this company. Plutus posts net settlement amounts and does not apply TaxCodeRef on settlement journal lines.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+
         {hasUs && usMapping && renderRegion(usMapping)}
         {hasUk && ukMapping && renderRegion(ukMapping)}
         {!hasUs && !hasUk && (
@@ -1868,7 +1893,7 @@ export default function SetupPage() {
     queryKey: ['qbo-status'],
     queryFn: async () => {
       const res = await fetch(`${basePath}/api/qbo/status`);
-      return res.json() as Promise<{ connected: boolean }>;
+      return res.json() as Promise<ConnectionStatus>;
     },
     staleTime: 30 * 1000,
   });
@@ -1897,6 +1922,8 @@ export default function SetupPage() {
 
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const mappedCount = ALL_ACCOUNTS.filter((a) => state.accountMappings[a.key]).length;
+  const taxEngineEnabled =
+    connectionStatus?.usingSalesTax === true ? true : connectionStatus?.partnerTaxEnabled === true;
 
   const settlementComplete = useMemo(() => {
     if (connectionStatus?.connected !== true) return false;
@@ -2028,6 +2055,7 @@ export default function SetupPage() {
                       mapping={settlementMappingData}
                       isLoadingMapping={isLoadingSettlementMapping}
                       brands={state.brands}
+                      taxEngineEnabled={taxEngineEnabled}
                     />
                   )}
                 </Box>

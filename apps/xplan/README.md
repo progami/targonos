@@ -68,10 +68,10 @@ xplan seeds required week rows as you create strategies, products, and purchase 
 ### 7. Run the dev server
 
 ```bash
-pnpm --filter @targon/xplan dev
+pnpm --filter @targon/xplan exec next dev -p 3208
 ```
 
-The app serves at http://localhost:3008 and reuses the shared `@targon/auth` flow for sign-in.
+The app serves at `http://localhost:3208/xplan` and reuses the shared `@targon/auth` flow for sign-in.
 
 ## Test & Quality Gates
 
@@ -106,7 +106,7 @@ All edits persist automatically via the debounced save handlers—watch for the 
 | `PORTAL_DB_URL` | Portal auth database connection string (needed for strategy assignee directory) |
 | `NEXTAUTH_URL` | Public URL for the app (used by NextAuth) |
 | `NEXTAUTH_SECRET` | Shared auth secret (should match the portal) |
-| `PORTAL_AUTH_URL` | Base URL for the portal auth service (defaults to `http://localhost:3000` in dev) |
+| `PORTAL_AUTH_URL` | Base URL for the portal auth service (defaults to `http://localhost:3200` in dev) |
 | `XPLAN_SUPER_ADMIN_EMAILS` | Optional comma/space list of super admin emails (defaults to `jarrar@targonglobal.com`) |
 
 See `apps/xplan/.env.dev.ci` for quick-start values.
