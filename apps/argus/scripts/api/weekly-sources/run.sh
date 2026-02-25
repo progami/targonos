@@ -14,6 +14,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/weekly-api-sources.log"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 DRY_FLAG=""
 if [ "${1:-}" = "--dry-run" ]; then
@@ -23,6 +24,11 @@ fi
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
 log "=== Weekly API Sources run starting ${DRY_FLAG:-live} ==="
+
+if ! NODE_BIN="$(command -v node)"; then
+  log "FAILED: Node.js not found in PATH=$PATH"
+  exit 1
+fi
 
 FAILED=0
 
@@ -38,10 +44,10 @@ run_step() {
   fi
 }
 
-run_step "SP-API" "node \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG"
+run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG"
 run_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG"
-run_step "Datadive API" "node \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
-run_step "Sellerboard API" "node \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG"
+run_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
+run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG"
 
 log "=== Weekly API Sources run done (failures=$FAILED) ==="
 
