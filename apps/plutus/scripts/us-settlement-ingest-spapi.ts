@@ -7,6 +7,7 @@ import {
   listAllFinancialEventGroups,
 } from '@/lib/amazon-finances/sp-api-finances';
 import { fromCents } from '@/lib/inventory/money';
+import { stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { createJournalEntry, fetchJournalEntries, fetchJournalEntryById, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
@@ -249,7 +250,8 @@ async function findAccountIdInRecentUsSettlementJournals(input: {
 
     for (const je of page.journalEntries) {
       const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
-      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      const stripped = stripPlutusDocPrefix(docNumber);
+      const first = stripped[0] ? stripped[0].toUpperCase() : '';
       if (first === 'C' || first === 'P') {
         continue;
       }
@@ -309,7 +311,8 @@ async function main(): Promise<void> {
 
     const template = page.journalEntries.find((je) => {
       const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
-      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      const stripped = stripPlutusDocPrefix(docNumber);
+      const first = stripped[0] ? stripped[0].toUpperCase() : '';
       return first !== 'C' && first !== 'P';
     });
 

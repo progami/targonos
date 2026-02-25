@@ -334,11 +334,11 @@ export default function SettlementMappingPage() {
             </Tooltip>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <FormControl size="small" sx={{ width: 80 }}>
+            <FormControl size="small" sx={{ width: 80, flexShrink: 0 }}>
               <Select
                 value={region}
                 onChange={(e) => setRegion(e.target.value as Region)}
-                sx={{ borderRadius: 2 }}
+                sx={{ borderRadius: 2, maxWidth: 80 }}
               >
                 <MenuItem value="US">US</MenuItem>
                 <MenuItem value="UK">UK</MenuItem>
@@ -368,7 +368,7 @@ export default function SettlementMappingPage() {
               onClick={() => importMutation.mutate(region)}
               disabled={importMutation.isPending || connectionStatus?.connected !== true}
               startIcon={<CloudDownloadIcon sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 2, textTransform: 'none' }}
+              sx={{ borderRadius: 2, textTransform: 'none', flexShrink: 0 }}
             >
               {importMutation.isPending ? 'Importing…' : 'Import from QBO'}
             </Button>
@@ -378,7 +378,7 @@ export default function SettlementMappingPage() {
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
               startIcon={<SaveIcon sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 2, textTransform: 'none', bgcolor: '#00C2B9', '&:hover': { bgcolor: '#00a89f' } }}
+              sx={{ borderRadius: 2, textTransform: 'none', flexShrink: 0, bgcolor: '#00C2B9', '&:hover': { bgcolor: '#00a89f' } }}
             >
               {saveMutation.isPending ? 'Saving…' : 'Save'}
             </Button>
