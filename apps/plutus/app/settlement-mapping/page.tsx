@@ -309,7 +309,7 @@ export default function SettlementMappingPage() {
 
   return (
     <Box component="main" sx={{ flex: 1 }}>
-      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
+      <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4, overflow: 'hidden' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PageHeader
@@ -333,8 +333,8 @@ export default function SettlementMappingPage() {
               <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'help' }} />
             </Tooltip>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 80 }}>
               <Select
                 value={region}
                 onChange={(e) => setRegion(e.target.value as Region)}
@@ -368,7 +368,7 @@ export default function SettlementMappingPage() {
               onClick={() => importMutation.mutate(region)}
               disabled={importMutation.isPending || connectionStatus?.connected !== true}
               startIcon={<CloudDownloadIcon sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 2, textTransform: 'none', whiteSpace: 'nowrap' }}
+              sx={{ borderRadius: 2, textTransform: 'none' }}
             >
               {importMutation.isPending ? 'Importing…' : 'Import from QBO'}
             </Button>
