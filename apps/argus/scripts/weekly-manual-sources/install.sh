@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install launchd plists for:
-#   1. Seller Central session keepalive (every 55 minutes)
+#   1. Session keepalive — SC + ScaleInsights (every 55 min)
 #   2. Weekly manual sources collection (Monday 3 AM CT)
 #   3. Daily Account Health collector (3 AM CT daily)
 #   4. Hourly Listing Attributes (API) collector (every hour)
