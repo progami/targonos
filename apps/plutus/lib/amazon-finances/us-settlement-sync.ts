@@ -185,29 +185,31 @@ async function ensureJournalEntryHasSettlementEvidenceAttachments(
   const attachments = [
     {
       fileName: buildSettlementAuditFilename(input.docNumber),
-      bytes: buildSettlementAuditCsvBytes(input.auditRows),
+      buildBytes: () => buildSettlementAuditCsvBytes(input.auditRows),
     },
     {
       fileName: buildSettlementFullAuditTrailFilename(input.docNumber),
-      bytes: buildSettlementFullAuditTrailCsvBytes({
-        invoiceId: input.docNumber,
-        countryCode: 'US',
-        accountIdByMemo: input.accountIdByMemo,
-        taxCodeIdByMemo: input.taxCodeIdByMemo,
-        rows: input.auditRows,
-      }),
+      buildBytes: () =>
+        buildSettlementFullAuditTrailCsvBytes({
+          invoiceId: input.docNumber,
+          countryCode: 'US',
+          accountIdByMemo: input.accountIdByMemo,
+          taxCodeIdByMemo: input.taxCodeIdByMemo,
+          rows: input.auditRows,
+        }),
     },
     {
       fileName: buildSettlementMtdDailySummaryFilename(input.docNumber),
-      bytes: buildSettlementMtdDailySummaryCsvBytes({
-        marketplaceName: 'Amazon.com',
-        currencyCode: 'USD',
-        startIsoDay: input.startIsoDay,
-        endIsoDay: input.endIsoDay,
-        accountIdByMemo: input.accountIdByMemo,
-        taxCodeIdByMemo: input.taxCodeIdByMemo,
-        rows: input.auditRows,
-      }),
+      buildBytes: () =>
+        buildSettlementMtdDailySummaryCsvBytes({
+          marketplaceName: 'Amazon.com',
+          currencyCode: 'USD',
+          startIsoDay: input.startIsoDay,
+          endIsoDay: input.endIsoDay,
+          accountIdByMemo: input.accountIdByMemo,
+          taxCodeIdByMemo: input.taxCodeIdByMemo,
+          rows: input.auditRows,
+        }),
     },
   ];
 
@@ -229,7 +231,7 @@ async function ensureJournalEntryHasSettlementEvidenceAttachments(
       journalEntryId: input.journalEntryId,
       fileName: attachment.fileName,
       contentType: 'text/csv',
-      bytes: attachment.bytes,
+      bytes: attachment.buildBytes(),
     });
     if (uploadResult.updatedConnection) {
       activeConnection = uploadResult.updatedConnection;
