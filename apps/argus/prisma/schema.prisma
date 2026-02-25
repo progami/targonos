@@ -241,6 +241,85 @@ model ListingImageVersionSlot {
   @@index([blobSha256])
 }
 
+// ─── Tracking enums ─────────────────────────────────────────────
+
+enum TrackingOwnership {
+  OURS
+  COMPETITOR
+}
+
+enum FetchRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+// ─── Tracking models ────────────────────────────────────────────
+
+model TrackedAsin {
+  id          String            @id @default(cuid())
+  asin        String
+  marketplace Marketplace       @default(US)
+  ownership   TrackingOwnership @default(OURS)
+  label       String
+  brand       String?
+  imageUrl    String?
+  enabled     Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  snapshots TrackingSnapshot[]
+
+  @@unique([marketplace, asin])
+  @@index([ownership])
+  @@index([enabled])
+}
+
+model TrackingSnapshot {
+  id             String     @id @default(cuid())
+  trackedAsinId  String
+  trackedAsin    TrackedAsin @relation(fields: [trackedAsinId], references: [id], onDelete: Cascade)
+  capturedAt     DateTime   @default(now())
+
+  // Pricing
+  landedPriceCents   Int?
+  listingPriceCents  Int?
+  shippingPriceCents Int?
+  currencyCode       String?
+  offerCount         Int?
+
+  // BSR
+  bsrRoot         Int?
+  bsrRootCategory String?
+  bsrSub          Int?
+  bsrSubCategory  String?
+
+  // Catalog
+  title String?
+  brand String?
+
+  // Debug
+  rawPricing Json?
+  rawCatalog Json?
+
+  @@index([trackedAsinId, capturedAt])
+  @@index([capturedAt])
+}
+
+model TrackingFetchRun {
+  id          String         @id @default(cuid())
+  startedAt   DateTime       @default(now())
+  finishedAt  DateTime?
+  status      FetchRunStatus @default(RUNNING)
+  asinCount   Int            @default(0)
+  errorCount  Int            @default(0)
+  errors      Json?
+  triggeredBy String?
+
+  @@index([startedAt])
+  @@index([status])
+}
+
 // ─── Version control enums ───────────────────────────────────────
 
 enum RevisionOrigin {
