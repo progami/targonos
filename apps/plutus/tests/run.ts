@@ -39,7 +39,14 @@ import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
 import { buildUkSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/uk-settlement-builder';
-import { buildSettlementAuditCsvBytes, buildSettlementAuditFilename } from '../lib/amazon-finances/settlement-evidence';
+import {
+  buildSettlementAuditCsvBytes,
+  buildSettlementAuditFilename,
+  buildSettlementFullAuditTrailCsvBytes,
+  buildSettlementFullAuditTrailFilename,
+  buildSettlementMtdDailySummaryCsvBytes,
+  buildSettlementMtdDailySummaryFilename,
+} from '../lib/amazon-finances/settlement-evidence';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
@@ -214,6 +221,14 @@ test('buildSettlementAuditFilename prefixes settlement evidence files', () => {
   assert.equal(buildSettlementAuditFilename('UK-16-30JAN-26-1'), 'plutus-settlement-audit-UK-16-30JAN-26-1.csv');
 });
 
+test('buildSettlementFullAuditTrailFilename prefixes full audit trail files', () => {
+  assert.equal(buildSettlementFullAuditTrailFilename('UK-16-30JAN-26-1'), 'plutus-full-audit-trail-UK-16-30JAN-26-1.csv');
+});
+
+test('buildSettlementMtdDailySummaryFilename prefixes mtd summary files', () => {
+  assert.equal(buildSettlementMtdDailySummaryFilename('UK-16-30JAN-26-1'), 'plutus-mtd-daily-summary-UK-16-30JAN-26-1.csv');
+});
+
 test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
   const bytes = buildSettlementAuditCsvBytes([
     {
@@ -232,6 +247,95 @@ test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
   const expected = [
     'invoiceId,market,date,orderId,sku,quantity,description,net',
     'UK-16-30JAN-26-1,uk,2026-01-16,123-123,SKU-1,2,"Amazon fee, ""test""",-10.50',
+  ].join('\n');
+
+  assert.equal(csv, expected);
+});
+
+test('buildSettlementFullAuditTrailCsvBytes serializes settlement lines with account and tax columns', () => {
+  const bytes = buildSettlementFullAuditTrailCsvBytes({
+    invoiceId: 'UK-16-30JAN-26-1',
+    countryCode: 'GB',
+    accountIdByMemo: new Map([['Amazon fee, "test"', '184']]),
+    taxCodeIdByMemo: new Map([['Amazon fee, "test"', null]]),
+    rows: [
+      {
+        invoiceId: 'UK-16-30JAN-26-1',
+        market: 'uk',
+        date: '2026-01-16',
+        orderId: '123-123',
+        sku: 'SKU-1',
+        quantity: 2,
+        description: 'Amazon fee, "test"',
+        netCents: -1050,
+      },
+    ],
+  });
+
+  const csv = Buffer.from(bytes).toString('utf8');
+  const expected = [
+    'date,Order Id,Sku,Sku Name,Quantity,LMB Line Description,Account Name,Tax Rate,Tax Name,Gross,Tax,Net,Country,Invoice',
+    '2026-01-16,123-123,SKU-1,,2,"Amazon fee, ""test""",184,0,No Tax Rate Applicable,-10.50,0.00,-10.50,GB,UK-16-30JAN-26-1',
+  ].join('\n');
+
+  assert.equal(csv, expected);
+});
+
+test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () => {
+  const bytes = buildSettlementMtdDailySummaryCsvBytes({
+    marketplaceName: 'Amazon.co.uk',
+    currencyCode: 'GBP',
+    startIsoDay: '2026-01-16',
+    endIsoDay: '2026-01-17',
+    accountIdByMemo: new Map([
+      ['Amazon Sales - Principal - UK-PDS', '188'],
+      ['Amazon Seller Fees - Commission', '183'],
+    ]),
+    taxCodeIdByMemo: new Map([
+      ['Amazon Sales - Principal - UK-PDS', null],
+      ['Amazon Seller Fees - Commission', null],
+    ]),
+    rows: [
+      {
+        invoiceId: 'UK-16-30JAN-26-1',
+        market: 'uk',
+        date: '2026-01-16',
+        orderId: 'o-1',
+        sku: 'SKU-1',
+        quantity: 1,
+        description: 'Amazon Sales - Principal - UK-PDS',
+        netCents: 1000,
+      },
+      {
+        invoiceId: 'UK-16-30JAN-26-1',
+        market: 'uk',
+        date: '2026-01-17',
+        orderId: 'o-2',
+        sku: 'SKU-2',
+        quantity: 1,
+        description: 'Amazon Sales - Principal - UK-PDS',
+        netCents: 500,
+      },
+      {
+        invoiceId: 'UK-16-30JAN-26-1',
+        market: 'uk',
+        date: '2026-01-17',
+        orderId: 'o-3',
+        sku: 'SKU-3',
+        quantity: 1,
+        description: 'Amazon Seller Fees - Commission',
+        netCents: -250,
+      },
+    ],
+  });
+
+  const csv = Buffer.from(bytes).toString('utf8');
+  const expected = [
+    'Marketplace,Amazon.co.uk,Currency,GBP,Start Date,2026-01-16,End Date,2026-01-17',
+    '',
+    'Description,Tax Code,Account Code,Total,2026-01-16,2026-01-17',
+    'Amazon Sales - Principal - UK-PDS,No Tax Rate Applicable,188,15.00,10.00,5.00',
+    'Amazon Seller Fees - Commission,No Tax Rate Applicable,183,-2.50,0.00,-2.50',
   ].join('\n');
 
   assert.equal(csv, expected);

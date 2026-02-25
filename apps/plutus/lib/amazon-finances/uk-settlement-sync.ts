@@ -5,7 +5,14 @@ import {
   listAllFinancialEventGroups,
   listSettlementEventGroupsFromTransactions,
 } from '@/lib/amazon-finances/sp-api-finances';
-import { buildSettlementAuditCsvBytes, buildSettlementAuditFilename } from '@/lib/amazon-finances/settlement-evidence';
+import {
+  buildSettlementAuditCsvBytes,
+  buildSettlementAuditFilename,
+  buildSettlementFullAuditTrailCsvBytes,
+  buildSettlementFullAuditTrailFilename,
+  buildSettlementMtdDailySummaryCsvBytes,
+  buildSettlementMtdDailySummaryFilename,
+} from '@/lib/amazon-finances/settlement-evidence';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
@@ -163,35 +170,72 @@ async function findExistingJournalEntryIdByDocNumber(
   return { journalEntryId: match.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
-async function ensureJournalEntryHasSettlementEvidenceAttachment(
+async function ensureJournalEntryHasSettlementEvidenceAttachments(
   connection: QboConnection,
   input: {
     journalEntryId: string;
     docNumber: string;
+    startIsoDay: string;
+    endIsoDay: string;
     auditRows: SettlementDraftBundle['draft']['segments'][number]['auditRows'];
+    accountIdByMemo: ReadonlyMap<string, string>;
+    taxCodeIdByMemo: ReadonlyMap<string, string | null>;
   },
 ): Promise<{ updatedConnection?: QboConnection }> {
-  const fileName = buildSettlementAuditFilename(input.docNumber);
+  const attachments = [
+    {
+      fileName: buildSettlementAuditFilename(input.docNumber),
+      buildBytes: () => buildSettlementAuditCsvBytes(input.auditRows),
+    },
+    {
+      fileName: buildSettlementFullAuditTrailFilename(input.docNumber),
+      buildBytes: () =>
+        buildSettlementFullAuditTrailCsvBytes({
+          invoiceId: input.docNumber,
+          countryCode: 'GB',
+          accountIdByMemo: input.accountIdByMemo,
+          taxCodeIdByMemo: input.taxCodeIdByMemo,
+          rows: input.auditRows,
+        }),
+    },
+    {
+      fileName: buildSettlementMtdDailySummaryFilename(input.docNumber),
+      buildBytes: () =>
+        buildSettlementMtdDailySummaryCsvBytes({
+          marketplaceName: 'Amazon.co.uk',
+          currencyCode: 'GBP',
+          startIsoDay: input.startIsoDay,
+          endIsoDay: input.endIsoDay,
+          accountIdByMemo: input.accountIdByMemo,
+          taxCodeIdByMemo: input.taxCodeIdByMemo,
+          rows: input.auditRows,
+        }),
+    },
+  ];
 
-  const existingLookup = await findJournalEntryAttachmentIdByFileName(connection, {
-    journalEntryId: input.journalEntryId,
-    fileName,
-  });
-  let activeConnection = existingLookup.updatedConnection ? existingLookup.updatedConnection : connection;
+  let activeConnection = connection;
+  for (const attachment of attachments) {
+    const existingLookup = await findJournalEntryAttachmentIdByFileName(activeConnection, {
+      journalEntryId: input.journalEntryId,
+      fileName: attachment.fileName,
+    });
+    if (existingLookup.updatedConnection) {
+      activeConnection = existingLookup.updatedConnection;
+    }
 
-  if (existingLookup.attachableId !== null) {
-    return { updatedConnection: activeConnection === connection ? undefined : activeConnection };
-  }
+    if (existingLookup.attachableId !== null) {
+      continue;
+    }
 
-  const bytes = buildSettlementAuditCsvBytes(input.auditRows);
-  const uploadResult = await uploadJournalEntryAttachment(activeConnection, {
-    journalEntryId: input.journalEntryId,
-    fileName,
-    contentType: 'text/csv',
-    bytes,
-  });
-  if (uploadResult.updatedConnection) {
-    activeConnection = uploadResult.updatedConnection;
+    const uploadResult = await uploadJournalEntryAttachment(activeConnection, {
+      journalEntryId: input.journalEntryId,
+      fileName: attachment.fileName,
+      contentType: 'text/csv',
+      bytes: attachment.buildBytes(),
+    });
+    if (uploadResult.updatedConnection) {
+      activeConnection = uploadResult.updatedConnection;
+    }
   }
 
   return { updatedConnection: activeConnection === connection ? undefined : activeConnection };
@@ -531,10 +575,14 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
           }
 
           if (postToQbo) {
-            const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachment(activeConnection, {
+            const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachments(activeConnection, {
               journalEntryId: qboJournalEntryId,
               docNumber: jeDraft.docNumber,
+              startIsoDay: meta.segment.startIsoDay,
+              endIsoDay: meta.segment.endIsoDay,
               auditRows: meta.segment.auditRows,
+              accountIdByMemo: mapping.accountIdByMemo,
+              taxCodeIdByMemo: mapping.taxCodeIdByMemo,
             });
             if (attachmentResult.updatedConnection) {
               activeConnection = attachmentResult.updatedConnection;
@@ -595,10 +643,14 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
         }
 
         if (postToQbo) {
-          const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachment(activeConnection, {
+          const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachments(activeConnection, {
             journalEntryId: qboJournalEntryId,
             docNumber: jeDraft.docNumber,
+            startIsoDay: meta.segment.startIsoDay,
+            endIsoDay: meta.segment.endIsoDay,
             auditRows: meta.segment.auditRows,
+            accountIdByMemo: mapping.accountIdByMemo,
+            taxCodeIdByMemo: mapping.taxCodeIdByMemo,
           });
           if (attachmentResult.updatedConnection) {
             activeConnection = attachmentResult.updatedConnection;
