@@ -38,6 +38,7 @@ import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
+import { buildSettlementAuditCsvBytes, buildSettlementAuditFilename } from '../lib/amazon-finances/settlement-evidence';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
@@ -196,6 +197,33 @@ test('parseAmazonUnifiedTransactionCsv parses Monthly Unified Transaction report
   assert.equal(parsed.rows[1]?.sellingFees, -1.5);
   assert.equal(parsed.rows[1]?.fbaFees, -3);
   assert.equal(parsed.rows[1]?.total, 5.5);
+});
+
+test('buildSettlementAuditFilename prefixes settlement evidence files', () => {
+  assert.equal(buildSettlementAuditFilename('UK-16-30JAN-26-1'), 'plutus-settlement-audit-UK-16-30JAN-26-1.csv');
+});
+
+test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
+  const bytes = buildSettlementAuditCsvBytes([
+    {
+      invoiceId: 'UK-16-30JAN-26-1',
+      market: 'uk',
+      date: '2026-01-16',
+      orderId: '123-123',
+      sku: 'SKU-1',
+      quantity: 2,
+      description: 'Amazon fee, "test"',
+      netCents: -1050,
+    },
+  ]);
+
+  const csv = Buffer.from(bytes).toString('utf8');
+  const expected = [
+    'invoiceId,market,date,orderId,sku,quantity,description,net',
+    'UK-16-30JAN-26-1,uk,2026-01-16,123-123,SKU-1,2,"Amazon fee, ""test""",-10.50',
+  ].join('\n');
+
+  assert.equal(csv, expected);
 });
 
 test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settlements to month-end', () => {

@@ -5,12 +5,19 @@ import {
   listAllFinancialEventGroups,
   listSettlementEventGroupsFromTransactions,
 } from '@/lib/amazon-finances/sp-api-finances';
+import { buildSettlementAuditCsvBytes, buildSettlementAuditFilename } from '@/lib/amazon-finances/settlement-evidence';
 import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
-import { createJournalEntry, fetchJournalEntries, type QboConnection } from '@/lib/qbo/api';
+import {
+  createJournalEntry,
+  fetchJournalEntries,
+  findJournalEntryAttachmentIdByFileName,
+  uploadJournalEntryAttachment,
+  type QboConnection,
+} from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type SettlementDraftBundle = {
@@ -154,6 +161,40 @@ async function findExistingJournalEntryIdByDocNumber(
   }
 
   return { journalEntryId: match.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
+}
+
+async function ensureJournalEntryHasSettlementEvidenceAttachment(
+  connection: QboConnection,
+  input: {
+    journalEntryId: string;
+    docNumber: string;
+    auditRows: SettlementDraftBundle['draft']['segments'][number]['auditRows'];
+  },
+): Promise<{ updatedConnection?: QboConnection }> {
+  const fileName = buildSettlementAuditFilename(input.docNumber);
+
+  const existingLookup = await findJournalEntryAttachmentIdByFileName(connection, {
+    journalEntryId: input.journalEntryId,
+    fileName,
+  });
+  let activeConnection = existingLookup.updatedConnection ? existingLookup.updatedConnection : connection;
+
+  if (existingLookup.attachableId !== null) {
+    return { updatedConnection: activeConnection === connection ? undefined : activeConnection };
+  }
+
+  const bytes = buildSettlementAuditCsvBytes(input.auditRows);
+  const uploadResult = await uploadJournalEntryAttachment(activeConnection, {
+    journalEntryId: input.journalEntryId,
+    fileName,
+    contentType: 'text/csv',
+    bytes,
+  });
+  if (uploadResult.updatedConnection) {
+    activeConnection = uploadResult.updatedConnection;
+  }
+
+  return { updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
 type MemoMappingEntry = { accountId: string; taxCodeId: string | null };
@@ -489,6 +530,17 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
             throw new Error(`Settlement JE missing for already-processed invoice: ${docNumber}`);
           }
 
+          if (postToQbo) {
+            const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachment(activeConnection, {
+              journalEntryId: qboJournalEntryId,
+              docNumber: jeDraft.docNumber,
+              auditRows: meta.segment.auditRows,
+            });
+            if (attachmentResult.updatedConnection) {
+              activeConnection = attachmentResult.updatedConnection;
+            }
+          }
+
           segments.push({
             settlementId: bundle.settlementId,
             eventGroupId: bundle.eventGroupId,
@@ -542,6 +594,17 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
           qboAction = 'posted';
         }
 
+        if (postToQbo) {
+          const attachmentResult = await ensureJournalEntryHasSettlementEvidenceAttachment(activeConnection, {
+            journalEntryId: qboJournalEntryId,
+            docNumber: jeDraft.docNumber,
+            auditRows: meta.segment.auditRows,
+          });
+          if (attachmentResult.updatedConnection) {
+            activeConnection = attachmentResult.updatedConnection;
+          }
+        }
+
         if (!process) {
           segments.push({
             settlementId: bundle.settlementId,
@@ -556,10 +619,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
           continue;
         }
 
-        const segmentDraft = bundle.draft.segments.find((s) => s.docNumber === jeDraft.docNumber);
-        if (!segmentDraft) {
-          throw new Error(`Missing segment draft for ${jeDraft.docNumber}`);
-        }
+        const segmentDraft = meta.segment;
 
         const auditRows = segmentDraft.auditRows.map((r) => ({
           invoiceId: r.invoiceId,
