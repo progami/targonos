@@ -108,15 +108,21 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
     const forwardingEntries: Array<Prisma.CostLedgerCreateManyInput & { currency: string }> = []
     for (const cost of forwardingCosts) {
       const resolvedCurrency = normalizePoCostCurrency(cost.currency) ?? tenantCurrency
-      const builtEntries = buildPoForwardingCostLedgerEntries({
-        costName: cost.costName,
-        totalCost: Number(cost.totalCost),
-        lines,
-        warehouseCode,
-        warehouseName,
-        createdAt: order.receivedDate!,
-        createdByName: params.createdByName,
-      })
+      let builtEntries: Prisma.CostLedgerCreateManyInput[] = []
+      try {
+        builtEntries = buildPoForwardingCostLedgerEntries({
+          costName: cost.costName,
+          totalCost: Number(cost.totalCost),
+          lines,
+          warehouseCode,
+          warehouseName,
+          createdAt: order.receivedDate!,
+          createdByName: params.createdByName,
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Cost allocation failed'
+        throw new ValidationError(message)
+      }
 
       for (const entry of builtEntries) {
         forwardingEntries.push({
