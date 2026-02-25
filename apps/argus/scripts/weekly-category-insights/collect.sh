@@ -48,7 +48,7 @@ tell application "Google Chrome"
   end tell
 end tell
 '
-sleep 3
+sleep 5
 
 # Click the dropdown suggestion
 osascript -e '
@@ -66,7 +66,7 @@ tell application "Google Chrome"
   end tell
 end tell
 '
-sleep 10
+sleep 20
 
 # Extract the page data
 TEXT=$(osascript -e '

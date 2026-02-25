@@ -29,7 +29,7 @@ tell application "Google Chrome"
   end tell
 end tell
 '
-sleep 15
+sleep 20
 
 PAGE_URL=$(osascript -e '
 tell application "Google Chrome"
