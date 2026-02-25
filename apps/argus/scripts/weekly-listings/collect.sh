@@ -1,11 +1,11 @@
 #!/bin/bash
-# Weekly Listing Screenshots
+# Weekly Listing Screenshots (manual fallback visuals)
 # Captures product listing pages for Caelum Star + competitors via screencapture.
 # Runs Monday 3 AM CT via launchd.
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Listings"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Visuals"
 LOG="/tmp/weekly-listings.log"
 
 EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
@@ -21,6 +21,8 @@ log "Starting weekly listing screenshots: $PREFIX"
 if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
+
+mkdir -p "$DEST/Caelum Star" "$DEST/Axgatoxe" "$DEST/Ecotez"
 
 capture_listing() {
   local asin="$1"

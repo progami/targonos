@@ -15,8 +15,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ENV_PATH = REPO_ROOT / '.env.local'
 
-DEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console (API)/SP - Sponsored Products (API)')
-MANIFEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console (API)')
+DEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)')
+MANIFEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console')
 
 POLL_INTERVAL_SEC = 15
 MAX_WAIT_SECONDS = 40 * 60
