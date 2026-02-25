@@ -72,7 +72,13 @@ function isoHoursAgo(hours: number): string {
 
 function pickNextToken(body: any): string | null {
   const payload = body?.payload ?? body;
-  return payload?.NextToken ?? payload?.nextToken ?? payload?.next_token ?? null;
+  return (
+    payload?.pagination?.nextToken ??
+    payload?.NextToken ??
+    payload?.nextToken ??
+    payload?.next_token ??
+    null
+  );
 }
 
 function maxDateIso(a: string, b?: string | null): string {
