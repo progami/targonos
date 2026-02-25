@@ -222,6 +222,10 @@ function uniq(values) {
   return out
 }
 
+function sortedPipe(values) {
+  return uniq(values).sort().join('|')
+}
+
 function extractStrings(node) {
   const out = []
 
@@ -597,6 +601,7 @@ async function collectRows(sp, marketplaceId, sellerId) {
     const identifiers = parseIdentifiers(catalog)
     const relationships = parseRelationships(catalog)
     const relatedAsins = uniq([...relationships.parentAsins, ...relationships.childAsins])
+    const statusValues = Array.isArray(listingSummary?.status) ? uniq(listingSummary.status).sort() : []
 
     rows.push({
       snapshot_timestamp_utc: snapshotTimestampUtc,
@@ -606,7 +611,7 @@ async function collectRows(sp, marketplaceId, sellerId) {
       owner_type: ownerType,
       seller_sku: sellerSku,
       belongs_to_requester: pricing.belongsToRequester,
-      status: Array.isArray(listingSummary?.status) ? listingSummary.status.join('|') : '',
+      status: statusValues.join('|'),
       title,
       brand,
       manufacturer,
@@ -639,9 +644,9 @@ async function collectRows(sp, marketplaceId, sellerId) {
       upc: identifiers.upc,
       ean: identifiers.ean,
       isbn: identifiers.isbn,
-      parent_asins: relationships.parentAsins.join('|'),
-      child_asins: relationships.childAsins.join('|'),
-      related_asins: relatedAsins.join('|'),
+      parent_asins: sortedPipe(relationships.parentAsins),
+      child_asins: sortedPipe(relationships.childAsins),
+      related_asins: sortedPipe(relatedAsins),
       item_dimensions: JSON.stringify(attributes.item_dimensions || []),
       item_package_dimensions: JSON.stringify(attributes.item_package_dimensions || []),
       item_weight: JSON.stringify(attributes.item_weight || []),
