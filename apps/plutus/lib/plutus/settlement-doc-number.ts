@@ -34,6 +34,7 @@ const SETTLEMENT_DOC_NUMBER_EXACT_RE = /^(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]
 // Settlement ids can appear inside prefixed DocNumbers (e.g. "LMB-UK-16-30JAN-26-1").
 // We still normalize/parse based on the embedded settlement id.
 const SETTLEMENT_DOC_NUMBER_MATCH_RE = /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i;
+const PLUTUS_DOC_PREFIX = 'PLT-';
 
 function pad2(value: number): string {
   return value < 10 ? `0${value}` : String(value);
@@ -49,8 +50,16 @@ export function isSettlementDocNumber(docNumber: string): boolean {
   return SETTLEMENT_DOC_NUMBER_MATCH_RE.test(docNumber.trim());
 }
 
-export function normalizeSettlementDocNumber(docNumber: string): string {
+export function stripPlutusDocPrefix(docNumber: string): string {
   const trimmed = docNumber.trim();
+  if (trimmed.toUpperCase().startsWith(PLUTUS_DOC_PREFIX)) {
+    return trimmed.slice(PLUTUS_DOC_PREFIX.length);
+  }
+  return trimmed;
+}
+
+export function normalizeSettlementDocNumber(docNumber: string): string {
+  const trimmed = stripPlutusDocPrefix(docNumber);
   const exact = trimmed.match(SETTLEMENT_DOC_NUMBER_EXACT_RE);
   if (exact) return exact[0].toUpperCase();
 
@@ -58,6 +67,10 @@ export function normalizeSettlementDocNumber(docNumber: string): string {
   if (!match) throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
 
   return match[0].toUpperCase();
+}
+
+export function buildPlutusSettlementDocNumber(docNumber: string): string {
+  return `${PLUTUS_DOC_PREFIX}${normalizeSettlementDocNumber(docNumber)}`;
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
