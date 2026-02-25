@@ -81,7 +81,9 @@ jobs:
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
   build-test-github-hosted:
-    if: vars.USE_SELF_HOSTED != 'true'
+    needs:
+      - build-test-self-hosted
+    if: always() && (vars.USE_SELF_HOSTED != 'true' || needs.build-test-self-hosted.result != 'success')
     runs-on: ubuntu-latest
     steps: *build-test-steps
   build-test:
