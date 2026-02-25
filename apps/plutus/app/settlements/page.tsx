@@ -9,6 +9,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import SearchIcon from '@mui/icons-material/Search';
 import Checkbox from '@mui/material/Checkbox';
 import Box from '@mui/material/Box';
@@ -16,11 +17,13 @@ import MuiButton from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import Popper from '@mui/material/Popper';
 import Skeleton from '@mui/material/Skeleton';
 import MuiTable from '@mui/material/Table';
 import MuiTableBody from '@mui/material/TableBody';
@@ -31,6 +34,7 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import { EmptyState } from '@/components/ui/empty-state';
+import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { PageHeader } from '@/components/page-header';
 import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
@@ -246,60 +250,9 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
     <Chip
       label="Pending"
       size="small"
-      variant="filled"
-      sx={{ ...chipBase, bgcolor: 'rgba(245, 158, 11, 0.12)', color: '#b45309' }}
+      variant="outlined"
+      sx={{ ...chipBase, borderColor: 'rgba(34, 197, 94, 0.5)', color: 'success.dark', bgcolor: 'rgba(34, 197, 94, 0.05)' }}
     />
-  );
-}
-
-function MarketplaceFlag({ region }: { region: 'US' | 'UK' }) {
-  if (region === 'US') {
-    return (
-      <Box
-        component="span"
-        title="United States"
-        sx={{
-          display: 'inline-flex',
-          height: 24,
-          width: 24,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: 99,
-          bgcolor: 'rgba(59, 130, 246, 0.05)',
-          fontSize: '0.75rem',
-        }}
-      >
-        <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
-          <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#2563eb" />
-          <path d="M1 5h14M1 7h14M1 9h14M1 11h14" stroke="white" strokeWidth="0.6" />
-          <rect x="1" y="3" width="6" height="5" fill="#1e40af" />
-        </svg>
-      </Box>
-    );
-  }
-  return (
-    <Box
-      component="span"
-      title="United Kingdom"
-      sx={{
-        display: 'inline-flex',
-        height: 24,
-        width: 24,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: 99,
-        bgcolor: 'rgba(239, 68, 68, 0.05)',
-        fontSize: '0.75rem',
-      }}
-    >
-      <svg style={{ height: 14, width: 14 }} viewBox="0 0 16 16" fill="none">
-        <rect x="1" y="3" width="14" height="10" rx="1.5" fill="#1d4ed8" />
-        <path d="M1 3l14 10M15 3L1 13" stroke="white" strokeWidth="1.5" />
-        <path d="M1 3l14 10M15 3L1 13" stroke="#dc2626" strokeWidth="0.8" />
-        <path d="M8 3v10M1 8h14" stroke="white" strokeWidth="2.5" />
-        <path d="M8 3v10M1 8h14" stroke="#dc2626" strokeWidth="1.5" />
-      </svg>
-    </Box>
   );
 }
 
@@ -314,12 +267,18 @@ async function fetchSettlements({
   startDate,
   endDate,
   marketplace,
+  status,
+  totalMin,
+  totalMax,
 }: {
   page: number;
   search: string;
   startDate: string | null;
   endDate: string | null;
   marketplace: Marketplace;
+  status: string[];
+  totalMin: string;
+  totalMax: string;
 }): Promise<SettlementsResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
@@ -328,6 +287,9 @@ async function fetchSettlements({
   if (startDate !== null && startDate.trim() !== '') params.set('startDate', startDate.trim());
   if (endDate !== null && endDate.trim() !== '') params.set('endDate', endDate.trim());
   if (marketplace !== 'all') params.set('marketplace', marketplace);
+  if (status.length > 0) params.set('status', status.join(','));
+  if (totalMin.trim() !== '') params.set('totalMin', totalMin.trim());
+  if (totalMax.trim() !== '') params.set('totalMax', totalMax.trim());
 
   const res = await fetch(`${basePath}/api/plutus/settlements?${params.toString()}`);
   if (!res.ok) {
@@ -439,12 +401,20 @@ export default function SettlementsPage() {
   const page = useSettlementsListStore((s) => s.page);
   const startDate = useSettlementsListStore((s) => s.startDate);
   const endDate = useSettlementsListStore((s) => s.endDate);
+  const statusFilter = useSettlementsListStore((s) => s.statusFilter);
+  const totalMin = useSettlementsListStore((s) => s.totalMin);
+  const totalMax = useSettlementsListStore((s) => s.totalMax);
   const setSearchInput = useSettlementsListStore((s) => s.setSearchInput);
   const setSearch = useSettlementsListStore((s) => s.setSearch);
   const setPage = useSettlementsListStore((s) => s.setPage);
   const setStartDate = useSettlementsListStore((s) => s.setStartDate);
   const setEndDate = useSettlementsListStore((s) => s.setEndDate);
+  const setStatusFilter = useSettlementsListStore((s) => s.setStatusFilter);
+  const setTotalMin = useSettlementsListStore((s) => s.setTotalMin);
+  const setTotalMax = useSettlementsListStore((s) => s.setTotalMax);
   const clear = useSettlementsListStore((s) => s.clear);
+
+  const [statusAnchorEl, setStatusAnchorEl] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -464,8 +434,8 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace],
-    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace }),
+    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace, statusFilter, totalMin, totalMax],
+    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace, status: statusFilter, totalMin, totalMax }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 5 * 60 * 1000,
   });
@@ -627,84 +597,185 @@ export default function SettlementsPage() {
           {/* Filter Bar */}
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr auto' }, alignItems: { md: 'end' } }}>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                    Search
-                  </Typography>
-                  <Box sx={{ position: 'relative' }}>
-                    <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {/* Row 1: Search + Date Range */}
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr' }, alignItems: { md: 'end' } }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+                      Search
+                    </Typography>
+                    <Box sx={{ position: 'relative' }}>
+                      <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+                      <TextField
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Doc number, memo…"
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        slotProps={textFieldInputSlotProps}
+                        sx={{
+                          ...textFieldSx,
+                          '& .MuiOutlinedInput-root': {
+                            ...textFieldSx['& .MuiOutlinedInput-root'],
+                            '& input': { pl: 4.5 },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+                      Start date
+                    </Typography>
                     <TextField
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      placeholder="Doc number, memo…"
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => {
+                        const value = e.target.value.trim();
+                        setStartDate(value);
+                        setPage(1);
+                      }}
                       size="small"
                       variant="outlined"
                       fullWidth
                       slotProps={textFieldInputSlotProps}
-                      sx={{
-                        ...textFieldSx,
-                        '& .MuiOutlinedInput-root': {
-                          ...textFieldSx['& .MuiOutlinedInput-root'],
-                          '& input': { pl: 4.5 },
-                        },
+                      sx={textFieldSx}
+                    />
+                  </Box>
+
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+                      End date
+                    </Typography>
+                    <TextField
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => {
+                        const value = e.target.value.trim();
+                        setEndDate(value);
+                        setPage(1);
                       }}
+                      size="small"
+                      variant="outlined"
+                      fullWidth
+                      slotProps={textFieldInputSlotProps}
+                      sx={textFieldSx}
                     />
                   </Box>
                 </Box>
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                    Start date
-                  </Typography>
-                  <TextField
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => {
-                      const value = e.target.value.trim();
-                      setStartDate(value);
-                      setPage(1);
-                    }}
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    slotProps={textFieldInputSlotProps}
-                    sx={textFieldSx}
-                  />
-                </Box>
+                {/* Row 2: Settlement Total + Status + Filter + Clear */}
+                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1fr 1fr auto auto' }, alignItems: { md: 'end' } }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+                      Settlement Total
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        value={totalMin}
+                        onChange={(e) => setTotalMin(e.target.value)}
+                        placeholder="Min"
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        slotProps={textFieldInputSlotProps}
+                        sx={textFieldSx}
+                      />
+                      <TextField
+                        value={totalMax}
+                        onChange={(e) => setTotalMax(e.target.value)}
+                        placeholder="Max"
+                        size="small"
+                        variant="outlined"
+                        fullWidth
+                        slotProps={textFieldInputSlotProps}
+                        sx={textFieldSx}
+                      />
+                    </Box>
+                  </Box>
 
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                    End date
-                  </Typography>
-                  <TextField
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => {
-                      const value = e.target.value.trim();
-                      setEndDate(value);
-                      setPage(1);
-                    }}
-                    size="small"
-                    variant="outlined"
-                    fullWidth
-                    slotProps={textFieldInputSlotProps}
-                    sx={textFieldSx}
-                  />
-                </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+                      Settlement Status
+                    </Typography>
+                    <Box>
+                      <MuiButton
+                        variant="outlined"
+                        disableElevation
+                        onClick={(e) => setStatusAnchorEl(statusAnchorEl ? null : e.currentTarget)}
+                        sx={{
+                          ...outlineSx,
+                          ...defaultSize,
+                          width: '100%',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
+                        </Box>
+                        <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>&#9662;</Box>
+                      </MuiButton>
+                      <Popper open={Boolean(statusAnchorEl)} anchorEl={statusAnchorEl} placement="bottom-start" sx={{ zIndex: 1300 }}>
+                        <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
+                          <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
+                            {(['Pending', 'Processed', 'Blocked', 'RolledBack'] as const).map((status) => (
+                              <FormControlLabel
+                                key={status}
+                                control={
+                                  <Checkbox
+                                    size="small"
+                                    checked={statusFilter.includes(status)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setStatusFilter([...statusFilter, status]);
+                                      } else {
+                                        setStatusFilter(statusFilter.filter((s) => s !== status));
+                                      }
+                                      setPage(1);
+                                    }}
+                                    sx={{ py: 0.25 }}
+                                  />
+                                }
+                                label={<Typography sx={{ fontSize: '0.875rem' }}>{status === 'RolledBack' ? 'Rolled Back' : status}</Typography>}
+                                sx={{ display: 'flex', mx: 0 }}
+                              />
+                            ))}
+                          </Card>
+                        </ClickAwayListener>
+                      </Popper>
+                    </Box>
+                  </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <MuiButton
-                    variant="outlined"
-                    disableElevation
-                    onClick={() => {
-                      clear();
-                    }}
-                    disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === ''}
-                    sx={{ ...outlineSx, ...defaultSize }}
-                  >
-                    Clear
-                  </MuiButton>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+                    <MuiButton
+                      variant="contained"
+                      disableElevation
+                      onClick={() => {
+                        setPage(1);
+                        queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+                      }}
+                      startIcon={<FilterListIcon sx={{ fontSize: 14 }} />}
+                      sx={{ ...defaultBtnSx, ...defaultSize }}
+                    >
+                      Filter
+                    </MuiButton>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
+                    <MuiButton
+                      variant="outlined"
+                      disableElevation
+                      onClick={() => {
+                        clear();
+                      }}
+                      disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && statusFilter.length === 0 && totalMin.trim() === '' && totalMax.trim() === ''}
+                      sx={{ ...outlineSx, ...defaultSize }}
+                    >
+                      Clear
+                    </MuiButton>
+                  </Box>
                 </Box>
               </Box>
             </CardContent>
@@ -814,8 +885,8 @@ export default function SettlementsPage() {
                               <SplitButton
                                 onClick={() => router.push(`/settlements/${s.id}`)}
                                 dropdownItems={[
-                                  { label: 'Settlement JE', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
-                                  { label: 'Plutus Settlement', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
+                                  { label: 'Sales & Fees', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
+                                  { label: 'Processing', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
                                   ...(settlementId !== null
                                     ? [
                                         {
@@ -832,7 +903,7 @@ export default function SettlementsPage() {
                                   { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
                                 ]}
                               >
-                                View
+                                Action
                               </SplitButton>
                             </Box>
                           </MuiTableCell>
