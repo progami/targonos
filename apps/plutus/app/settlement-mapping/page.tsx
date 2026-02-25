@@ -310,7 +310,7 @@ export default function SettlementMappingPage() {
   return (
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PageHeader
               title="Account Taxes"
@@ -333,7 +333,7 @@ export default function SettlementMappingPage() {
               <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'help' }} />
             </Tooltip>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
                 value={region}
@@ -368,7 +368,7 @@ export default function SettlementMappingPage() {
               onClick={() => importMutation.mutate(region)}
               disabled={importMutation.isPending || connectionStatus?.connected !== true}
               startIcon={<CloudDownloadIcon sx={{ fontSize: 16 }} />}
-              sx={{ borderRadius: 2, textTransform: 'none' }}
+              sx={{ borderRadius: 2, textTransform: 'none', whiteSpace: 'nowrap' }}
             >
               {importMutation.isPending ? 'Importing…' : `Import from QBO (${region})`}
             </Button>
