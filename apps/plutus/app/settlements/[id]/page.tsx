@@ -32,6 +32,7 @@ import MuiTabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
+import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
@@ -234,7 +235,7 @@ function isBlockingPreviewBlock(block: PreviewBlock): boolean {
 function PlutusPill({ status }: { status: SettlementDetailResponse['settlement']['plutusStatus'] }) {
   if (status === 'Processed') return <Chip label="Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
   if (status === 'RolledBack') return <Chip label="Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
-  return <Chip label="Pending" size="small" sx={{ bgcolor: 'rgba(245, 158, 11, 0.12)', color: '#b45309' }} />;
+  return <Chip label="Pending" size="small" variant="outlined" sx={{ borderColor: 'rgba(34, 197, 94, 0.5)', color: 'success.dark', bgcolor: 'rgba(34, 197, 94, 0.05)' }} />;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -788,8 +789,11 @@ type SettlementDetailTab = 'sales' | 'plutus-preview';
 function parseSettlementTab(tab: string | null): SettlementDetailTab {
   if (tab === 'settlement') return 'sales';
   if (tab === 'qbo-settlement') return 'sales';
+  if (tab === 'sales-fees') return 'sales';
+  if (tab === 'sales') return 'sales';
   if (tab === 'plutus') return 'plutus-preview';
   if (tab === 'plutus-settlement') return 'plutus-preview';
+  if (tab === 'processing') return 'plutus-preview';
   if (tab === 'history') return 'plutus-preview';
   if (tab === 'analysis') return 'plutus-preview';
   if (tab === 'plutus-preview') return 'plutus-preview';
@@ -1185,29 +1189,73 @@ export default function SettlementDetailPage() {
           )}
         </Box>
 
-        {/* Summary Stats */}
+        {/* Invoice Header */}
         {settlement ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5, mt: 2 }}>
-            <StatCard
-              label="Settlement"
-              value={settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
-            />
-            <StatCard
-              label="Period"
-              value={formatPeriod(settlement.periodStart, settlement.periodEnd)}
-            />
-            <StatCard
-              label="Posted"
-              value={new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-            />
-            <StatCard label="JE Lines" value={settlement.lines.length} />
-          </Box>
+          <Card sx={{ border: 1, borderColor: 'divider', mt: 2 }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(6, 1fr)' }, gap: 2 }}>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Channel
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <MarketplaceFlag region={settlement.marketplace.region} />
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                      {settlement.marketplace.label}
+                    </Typography>
+                  </Box>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Currency
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                    {settlement.marketplace.currency}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Entry Date
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                    {new Date(`${settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Period Covered
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary' }}>
+                    {formatPeriod(settlement.periodStart, settlement.periodEnd)}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Status
+                  </Typography>
+                  <PlutusPill status={settlement.plutusStatus} />
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                    Settlement Total
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+                    {settlement.settlementTotal === null ? '—' : formatMoney(settlement.settlementTotal, settlement.marketplace.currency)}
+                  </Typography>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
         ) : isLoading ? (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1.5, mt: 2 }}>
-            {[0, 1, 2, 3].map((i) => (
-              <Skeleton key={i} sx={{ height: 80, borderRadius: 3 }} />
-            ))}
-          </Box>
+          <Card sx={{ border: 1, borderColor: 'divider', mt: 2 }}>
+            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(6, 1fr)' }, gap: 2 }}>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} sx={{ height: 40, borderRadius: 1 }} />
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
         ) : null}
 
         {actionError && (
@@ -1221,9 +1269,9 @@ export default function SettlementDetailPage() {
             <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1.5 }}>
               <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' } }}>
                 <MuiTabs value={tab} onChange={handleTabChange} sx={tabsSx}>
-                  <MuiTab value="sales" label="Settlement JE" sx={tabSx} />
+                  <MuiTab value="sales" label="Sales & Fees" sx={tabSx} />
                   {(settlement?.plutusStatus === 'Pending' || settlement?.plutusStatus === 'Processed') && (
-                    <MuiTab value="plutus-preview" label="Plutus Settlement" sx={tabSx} />
+                    <MuiTab value="plutus-preview" label="Processing" sx={tabSx} />
                   )}
                 </MuiTabs>
 

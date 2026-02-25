@@ -69,6 +69,13 @@ export async function GET(req: NextRequest) {
     const search = rawSearch === null ? undefined : rawSearch.trim();
     const marketplaceFilter = rawMarketplace === 'US' || rawMarketplace === 'UK' ? rawMarketplace : null;
 
+    const rawStatus = searchParams.get('status');
+    const rawTotalMin = searchParams.get('totalMin');
+    const rawTotalMax = searchParams.get('totalMax');
+    const statusFilter = rawStatus ? rawStatus.split(',').filter((s) => s !== '') : null;
+    const totalMin = rawTotalMin ? parseFloat(rawTotalMin) : null;
+    const totalMax = rawTotalMax ? parseFloat(rawTotalMax) : null;
+
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
     const page = parseInt(rawPage === null ? '1' : rawPage, 10);
@@ -131,10 +138,6 @@ export async function GET(req: NextRequest) {
       return aDoc.localeCompare(bDoc);
     });
 
-    const totalCount = uniqueJournalEntries.length;
-    const pageStart = (page - 1) * pageSize;
-    const pagedJournalEntries = uniqueJournalEntries.slice(pageStart, pageStart + pageSize);
-
     const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
     });
@@ -150,19 +153,21 @@ export async function GET(req: NextRequest) {
       accountsById.set(account.Id, account);
     }
 
+    const allJeIds = uniqueJournalEntries.map((je) => je.Id);
+
     const processed = await db.settlementProcessing.findMany({
-      where: { qboSettlementJournalEntryId: { in: pagedJournalEntries.map((je) => je.Id) } },
+      where: { qboSettlementJournalEntryId: { in: allJeIds } },
       select: { qboSettlementJournalEntryId: true },
     });
     const processedSet = new Set(processed.map((p) => p.qboSettlementJournalEntryId));
 
     const rolledBack = await db.settlementRollback.findMany({
-      where: { qboSettlementJournalEntryId: { in: pagedJournalEntries.map((je) => je.Id) } },
+      where: { qboSettlementJournalEntryId: { in: allJeIds } },
       select: { qboSettlementJournalEntryId: true },
     });
     const rolledBackSet = new Set(rolledBack.map((r) => r.qboSettlementJournalEntryId));
 
-    const rows: SettlementRow[] = pagedJournalEntries.map((je) => {
+    const allRows: SettlementRow[] = uniqueJournalEntries.map((je) => {
       if (!je.DocNumber) {
         throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
       }
@@ -189,6 +194,24 @@ export async function GET(req: NextRequest) {
         plutusStatus,
       };
     });
+
+    // Apply status and total filters before pagination
+    const filteredRows = allRows.filter((row) => {
+      if (statusFilter && statusFilter.length > 0) {
+        if (!statusFilter.includes(row.plutusStatus)) return false;
+      }
+      if (totalMin !== null && Number.isFinite(totalMin)) {
+        if (row.settlementTotal === null || row.settlementTotal < totalMin) return false;
+      }
+      if (totalMax !== null && Number.isFinite(totalMax)) {
+        if (row.settlementTotal === null || row.settlementTotal > totalMax) return false;
+      }
+      return true;
+    });
+
+    const totalCount = filteredRows.length;
+    const pageStart = (page - 1) * pageSize;
+    const rows = filteredRows.slice(pageStart, pageStart + pageSize);
 
     return NextResponse.json({
       settlements: rows,
