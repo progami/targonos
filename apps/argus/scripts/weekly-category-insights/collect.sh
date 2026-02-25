@@ -34,46 +34,33 @@ end tell
 '
 sleep 20
 
-# Navigate to the right category: Tools & Home Improvement > Building Material > Painting Drop Cloths Plastic Sheeting
-# Use JS to click through the category tree
+# Use search box to navigate to the right category
+# Type into search input, wait for dropdown, click the suggestion
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
     execute javascript "
-      // Click Tools & Home Improvement in the category list
-      const cats = document.querySelectorAll(\"[class*=\\\"category\\\"] span, [class*=\\\"node\\\"] span, td span, li span\");
-      for (const el of cats) {
-        if (el.textContent.trim() === \"Tools & Home...\") { el.click(); break; }
-      }
+      var input = document.querySelector(\"input[placeholder*=\\\"Search categories\\\"]\");
+      input.focus();
+      input.value = \"Painting Drop Cloths\";
+      input.dispatchEvent(new Event(\"input\", {bubbles: true}));
     "
   end tell
 end tell
 '
-sleep 5
+sleep 3
 
-# Try clicking through the subcategories
+# Click the dropdown suggestion
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
     execute javascript "
-      const items = document.querySelectorAll(\"span, a, div\");
-      for (const el of items) {
-        const t = el.textContent.trim();
-        if (t === \"Building Material\" || t === \"Building Materials\") { el.click(); break; }
-      }
-    "
-  end tell
-end tell
-'
-sleep 5
-
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    execute javascript "
-      const items = document.querySelectorAll(\"span, a, div\");
-      for (const el of items) {
-        if (el.textContent.trim().includes(\"Painting Drop Cloths\")) { el.click(); break; }
+      var all = document.querySelectorAll(\"div.list-item\");
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].textContent.indexOf(\"Painting Drop\") !== -1) {
+          all[i].click();
+          break;
+        }
       }
     "
   end tell

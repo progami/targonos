@@ -59,11 +59,9 @@ run_script() {
   sleep 5
 }
 
-run_script "Account Health" "$PARENT_DIR/weekly-account-health/collect.sh"
 run_script "Category Insights" "$PARENT_DIR/weekly-category-insights/collect.sh"
 run_script "Product Opportunity Explorer" "$PARENT_DIR/weekly-poe/collect.sh"
 run_script "ScaleInsights" "$PARENT_DIR/weekly-scaleinsights/collect.sh"
-run_script "Listings" "$PARENT_DIR/weekly-listings/collect.sh"
 
 log "=== Weekly Master Run Done ($FAILED failures) ==="
 
