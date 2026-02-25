@@ -44,9 +44,20 @@ run_step() {
   fi
 }
 
+run_optional_step() {
+  local name="$1"
+  local cmd="$2"
+  log "Running: $name"
+  if eval "$cmd" >> "$LOG" 2>&1; then
+    log "OK: $name"
+  else
+    log "WARN: $name unavailable (non-blocking)"
+  fi
+}
+
 run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG"
 run_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG"
-run_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
+run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
 run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG"
 
 log "=== Weekly API Sources run done (failures=$FAILED) ==="
