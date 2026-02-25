@@ -10,7 +10,7 @@ import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
-import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { buildPlutusSettlementDocNumber, isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   createJournalEntry,
   fetchJournalEntries,
@@ -568,7 +568,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
 
           const res = await createJournalEntry(activeConnection, {
             txnDate: jeDraft.txnDate,
-            docNumber: jeDraft.docNumber,
+            docNumber: buildPlutusSettlementDocNumber(jeDraft.docNumber),
             privateNote: jeDraft.privateNote,
             lines: jeDraft.lines.map((l) => ({
               amount: l.amount,

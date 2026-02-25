@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 
-import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 
 type CliOptions = {
   startDate: string;
@@ -147,16 +147,17 @@ function classifyDocNumber(docNumber: string): TargetKind {
   const trimmed = docNumber.trim();
   if (trimmed === '') return 'unknown';
 
-  const first = trimmed[0] ? trimmed[0].toUpperCase() : '';
+  const stripped = stripPlutusDocPrefix(trimmed);
+  const first = stripped[0] ? stripped[0].toUpperCase() : '';
   if (first === 'C') return 'cogs';
   if (first === 'P') return 'pnl';
 
-  if (!isSettlementDocNumber(trimmed)) {
-    if (/US-/i.test(trimmed)) return 'unknown';
+  if (!isSettlementDocNumber(stripped)) {
+    if (/US-/i.test(stripped)) return 'unknown';
     return 'unknown';
   }
 
-  const meta = parseSettlementDocNumber(trimmed);
+  const meta = parseSettlementDocNumber(stripped);
   if (meta.marketplace.id !== 'amazon.com') return 'unknown';
   return 'settlement';
 }
