@@ -38,6 +38,7 @@ import { computePnlAllocation } from '../lib/pnl-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
+import { buildUkSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/uk-settlement-builder';
 import { buildSettlementAuditCsvBytes, buildSettlementAuditFilename } from '../lib/amazon-finances/settlement-evidence';
 import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
@@ -254,6 +255,163 @@ test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settle
   assert.equal(cents, -100);
 
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+});
+
+test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order level for shipments', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'UK-SET-1',
+    eventGroupId: 'UK-GROUP-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
+      FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 30 },
+    },
+    events: {
+      ShipmentEventList: [
+        {
+          PostedDate: '2026-01-16T12:00:00.000Z',
+          AmazonOrderId: 'ORDER-1',
+          ShipmentItemList: [
+            {
+              SellerSKU: 'SKU-1',
+              QuantityShipped: 1,
+              ItemChargeList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 10 } },
+                { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 1.17 } },
+              ],
+            },
+            {
+              SellerSKU: 'SKU-1',
+              QuantityShipped: 1,
+              ItemChargeList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 20 } },
+                { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 2.34 } },
+              ],
+              ItemTaxWithheldList: [
+                {
+                  TaxCollectionModel: 'MarketplaceFacilitator',
+                  TaxesWithheld: [
+                    {
+                      ChargeType: 'MarketplaceFacilitatorVAT-Principal',
+                      ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -3.51 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map([['SKU-1', 'UK-BRAND']]),
+  });
+
+  const principalMemo = 'Amazon Sales - Principal (Marketplace VAT Responsible) - UK-BRAND';
+  const principalCents = draft.segments[0]?.memoTotalsCents.get(principalMemo);
+  assert.equal(principalCents, 3000);
+});
+
+test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order level for refunds', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'UK-SET-2',
+    eventGroupId: 'UK-GROUP-2',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
+      FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -30 },
+    },
+    events: {
+      RefundEventList: [
+        {
+          PostedDate: '2026-01-16T12:00:00.000Z',
+          AmazonOrderId: 'ORDER-2',
+          ShipmentItemAdjustmentList: [
+            {
+              SellerSKU: 'SKU-2',
+              QuantityShipped: 1,
+              ItemChargeAdjustmentList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -10 } },
+                { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -1.17 } },
+              ],
+            },
+            {
+              SellerSKU: 'SKU-2',
+              QuantityShipped: 1,
+              ItemChargeAdjustmentList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -20 } },
+                { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -2.34 } },
+              ],
+              ItemTaxWithheldList: [
+                {
+                  TaxCollectionModel: 'MarketplaceFacilitator',
+                  TaxesWithheld: [
+                    {
+                      ChargeType: 'MarketplaceFacilitatorVAT-Principal',
+                      ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 3.51 },
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map([['SKU-2', 'UK-BRAND']]),
+  });
+
+  const principalMemo = 'Amazon Refunds - Refunded Principal (Marketplace VAT Responsible) - UK-BRAND';
+  const principalCents = draft.segments[0]?.memoTotalsCents.get(principalMemo);
+  assert.equal(principalCents, -3000);
+});
+
+test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch', () => {
+  assert.throws(() =>
+    buildUkSettlementDraftFromSpApiFinances({
+      settlementId: 'UK-SET-3',
+      eventGroupId: 'UK-GROUP-3',
+      eventGroup: {
+        FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
+        FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+        OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 20 },
+      },
+      events: {
+        ShipmentEventList: [
+          {
+            PostedDate: '2026-01-16T12:00:00.000Z',
+            AmazonOrderId: 'ORDER-3',
+            ShipmentItemList: [
+              {
+                SellerSKU: 'SKU-3',
+                QuantityShipped: 1,
+                ItemChargeList: [
+                  { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 10 } },
+                  { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 1 } },
+                ],
+              },
+              {
+                SellerSKU: 'SKU-3',
+                QuantityShipped: 1,
+                ItemChargeList: [{ ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: 10 } }],
+                ItemTaxWithheldList: [
+                  {
+                    TaxCollectionModel: 'MarketplaceFacilitator',
+                    TaxesWithheld: [
+                      {
+                        ChargeType: 'MarketplaceFacilitatorVAT-Principal',
+                        ChargeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -0.5 },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      skuToBrandName: new Map([['SKU-3', 'UK-BRAND']]),
+    }),
+  );
 });
 
 test('parseSpAdvertisedProductCsv filters rows by selected country', () => {
