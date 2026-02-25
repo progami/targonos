@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install launchd plists for:
-#   1. Seller Central session keepalive (every 4 hours)
+#   1. Seller Central session keepalive (every 55 minutes)
 #   2. Weekly manual sources collection (Monday 3 AM CT)
 #   3. Daily Account Health collector (3 AM CT daily)
 #   4. Hourly Listing Attributes (API) collector (every hour)
@@ -48,7 +48,7 @@ fi
 
 echo "Installing launchd agents..."
 
-# 1. Keepalive — every 4 hours
+# 1. Keepalive — every 55 minutes
 cat > "$KEEPALIVE_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -62,7 +62,7 @@ cat > "$KEEPALIVE_PLIST" <<PLIST
     <string>${SCRIPT_DIR}/keepalive.sh</string>
   </array>
   <key>StartInterval</key>
-  <integer>14400</integer>
+  <integer>3300</integer>
   <key>RunAtLoad</key>
   <false/>
   <key>StandardOutPath</key>
@@ -207,7 +207,7 @@ launchctl load "$WEEKLY_API_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Keepalive:        $KEEPALIVE_PLIST (every 4 hours)"
+echo "  Keepalive:        $KEEPALIVE_PLIST (every 55 min)"
 echo "  Weekly run:       $WEEKLY_PLIST (Monday 3:00 AM CT)"
 echo "  Daily Acct Health: $DAILY_AH_PLIST (daily 3:00 AM CT)"
 echo "  Hourly Listings API: $HOURLY_LISTINGS_API_PLIST (every 1 hour)"
