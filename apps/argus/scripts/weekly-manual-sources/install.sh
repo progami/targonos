@@ -1,7 +1,7 @@
 #!/bin/bash
 # Install launchd plists for:
 #   1. Seller Central session keepalive (every 4 hours)
-#   2. Weekly manual sources collection (Monday 9 AM)
+#   2. Weekly manual sources collection (Monday 3 AM CT)
 #
 # Usage: bash apps/argus/scripts/weekly-manual-sources/install.sh
 # To uninstall: bash apps/argus/scripts/weekly-manual-sources/install.sh --uninstall
@@ -55,7 +55,7 @@ cat > "$KEEPALIVE_PLIST" <<PLIST
 </plist>
 PLIST
 
-# 2. Weekly manual sources — Monday 9:00 AM local
+# 2. Weekly manual sources — Monday 3:00 AM CT
 cat > "$WEEKLY_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -73,7 +73,7 @@ cat > "$WEEKLY_PLIST" <<PLIST
     <key>Weekday</key>
     <integer>1</integer>
     <key>Hour</key>
-    <integer>9</integer>
+    <integer>3</integer>
     <key>Minute</key>
     <integer>0</integer>
   </dict>
@@ -96,7 +96,7 @@ launchctl load "$WEEKLY_PLIST"
 echo ""
 echo "Installed and loaded:"
 echo "  Keepalive:  $KEEPALIVE_PLIST (every 4 hours)"
-echo "  Weekly run: $WEEKLY_PLIST (Monday 9:00 AM)"
+echo "  Weekly run: $WEEKLY_PLIST (Monday 3:00 AM CT)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
