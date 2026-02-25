@@ -5,7 +5,8 @@
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Account Health"
+DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health Dashboard"
+DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Voice of the Customer"
 LOG="/tmp/weekly-account-health.log"
 
 # Week calculation: BA weeks run Sun-Sat, W01 starts Dec 28 2025
@@ -24,10 +25,12 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
 
+mkdir -p "$DEST_AH" "$DEST_VOC"
+
 capture() {
   local url="$1"
   local filename="$2"
-  local subfolder="$3"
+  local dest_dir="$3"
   local wait_secs="${4:-20}"
 
   osascript -e "
@@ -48,17 +51,17 @@ end tell
   y1=$(echo "$bounds" | cut -d',' -f2 | tr -d ' ')
   x2=$(echo "$bounds" | cut -d',' -f3 | tr -d ' ')
   y2=$(echo "$bounds" | cut -d',' -f4 | tr -d ' ')
-  screencapture -x -R"${x1},${y1},$((x2-x1)),$((y2-y1))" "$DEST/$subfolder/$filename"
-  log "Captured: $subfolder/$filename"
+  screencapture -x -R"${x1},${y1},$((x2-x1)),$((y2-y1))" "$dest_dir/$filename"
+  log "Captured: $dest_dir/$filename"
 }
 
 # Dashboard
 capture "https://sellercentral.amazon.com/performance/dashboard" \
-  "${PREFIX}_AH-Dashboard.png" "Dashboard" 20
+  "${PREFIX}_AH-Dashboard.png" "$DEST_AH" 20
 
 # VoC Overview
 capture "https://sellercentral.amazon.com/voice-of-the-customer/ref=xx_voc_dnav_xx" \
-  "${PREFIX}_AH-VoC-Overview.png" "VoC" 25
+  "${PREFIX}_AH-VoC-Overview.png" "$DEST_VOC" 25
 
 # VoC Details (scroll down on same page)
 osascript -e '
@@ -74,8 +77,8 @@ x1=$(echo "$bounds" | cut -d',' -f1 | tr -d ' ')
 y1=$(echo "$bounds" | cut -d',' -f2 | tr -d ' ')
 x2=$(echo "$bounds" | cut -d',' -f3 | tr -d ' ')
 y2=$(echo "$bounds" | cut -d',' -f4 | tr -d ' ')
-screencapture -x -R"${x1},${y1},$((x2-x1)),$((y2-y1))" "$DEST/VoC/${PREFIX}_AH-VoC-Details.png"
-log "Captured: VoC/${PREFIX}_AH-VoC-Details.png"
+screencapture -x -R"${x1},${y1},$((x2-x1)),$((y2-y1))" "$DEST_VOC/${PREFIX}_AH-VoC-Details.png"
+log "Captured: $DEST_VOC/${PREFIX}_AH-VoC-Details.png"
 
 log "Done"
 tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

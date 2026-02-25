@@ -1,8 +1,8 @@
 #!/bin/bash
 # Hourly Listing Attributes (API) collector
-# Runs SP-API listing + catalog tracking and writes:
-#   - YYYY-MM-DD_HHmm_Listings-Snapshot.csv
-#   - YYYY-MM-DD_HHmm_Listings-Changes.csv
+# Runs SP-API listing + catalog tracking and appends to:
+#   - Listings-Snapshot-History.csv
+#   - Listings-Changes-History.csv
 #   - latest_state.json
 #
 # Destination:
