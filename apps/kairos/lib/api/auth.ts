@@ -12,15 +12,77 @@ export type KairosAuthedHandler<TContext = unknown> = (
 
 const truthyValues = new Set(['1', 'true', 'yes', 'on']);
 
-function isDevBypassEnabled(): boolean {
+function isLoopbackHostname(rawHostname: string): boolean {
+  const hostname = rawHostname.trim().toLowerCase().replace(/\.$/, '');
+  if (!hostname) return false;
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    hostname === '0.0.0.0' ||
+    hostname.endsWith('.localhost')
+  );
+}
+
+function isLocalhostOrigin(raw: string | undefined): boolean {
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    return isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function hasLocalhostBypassContext(request: Request): boolean {
+  const envCandidates = [
+    process.env.NEXTAUTH_URL,
+    process.env.PORTAL_AUTH_URL,
+    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
+    process.env.NEXT_PUBLIC_APP_URL,
+  ];
+
+  if (envCandidates.some((candidate) => isLocalhostOrigin(candidate))) {
+    return true;
+  }
+
+  try {
+    const requestUrl = new URL(request.url);
+    if (isLoopbackHostname(requestUrl.hostname)) {
+      return true;
+    }
+  } catch {
+    // continue to host header checks
+  }
+
+  const hostHeader = request.headers.get('host');
+  if (!hostHeader) {
+    return false;
+  }
+
+  try {
+    const hostUrl = new URL(`http://${hostHeader}`);
+    return isLoopbackHostname(hostUrl.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isDevBypassEnabled(request: Request): boolean {
   if (process.env.NODE_ENV === 'production') {
     return false;
   }
 
-  return (
+  const allowBypass =
     truthyValues.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase()) ||
-    truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase())
-  );
+    truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase());
+
+  if (!allowBypass) {
+    return false;
+  }
+
+  return hasLocalhostBypassContext(request);
 }
 
 function buildDevBypassSession(): Session {
@@ -63,7 +125,7 @@ function buildDevBypassSession(): Session {
 export function withKairosAuth<TContext = unknown>(handler: KairosAuthedHandler<TContext>) {
   return async (request: Request, context: TContext) => {
     let session = await auth();
-    if (!session && isDevBypassEnabled()) {
+    if (!session && isDevBypassEnabled(request)) {
       session = buildDevBypassSession();
     }
 
