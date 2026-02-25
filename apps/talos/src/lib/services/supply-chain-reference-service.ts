@@ -4,7 +4,7 @@ import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
 import { Prisma } from '@targon/prisma-talos'
 
 const PO_REFERENCE_REGEX = /^PO-(\d+)-([A-Z0-9]+)$/
-const LEGACY_PO_REFERENCE_REGEX = /^INV-(\d+)[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$/
+const LEGACY_PO_REFERENCE_REGEX = /^(?:INV|PO)-(\d+)[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$/
 const LEGACY_TENANT_PO_REFERENCE_REGEX = /^TG-[A-Z]{2}-(\d+)$/
 const CI_REFERENCE_REGEX = /^CI-(\d+)-([A-Z0-9]+)$/
 const GRN_REFERENCE_REGEX = /^GRN-(\d+)-([A-Z0-9]+)$/
