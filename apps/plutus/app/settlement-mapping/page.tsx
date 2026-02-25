@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
+import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
@@ -18,6 +20,7 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
@@ -313,11 +316,28 @@ export default function SettlementMappingPage() {
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ mx: 'auto', maxWidth: '80rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-          <PageHeader
-            title="Settlement Mapping"
-            description="Used by the SP-API settlement sync to post journal entries that exactly match your existing QBO settlement structure."
-            variant="accent"
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PageHeader
+              title="Settlement Mapping"
+              variant="accent"
+            />
+            <Tooltip
+              title={
+                <>
+                  <div>1) Import while your historical US settlements still exist in QBO.</div>
+                  <div style={{ marginTop: 4 }}>2) Plutus will fail if a memo is missing from the mapping (to prevent mis-posts).</div>
+                  <div style={{ marginTop: 4 }}>
+                    {taxEngineEnabled
+                      ? '3) Tax code mapping mirrors TaxCodeRef used on historical settlement JEs (import first, then edit if needed).'
+                      : '3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef and tax mapping stays hidden.'}
+                  </div>
+                </>
+              }
+              arrow
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', cursor: 'help' }} />
+            </Tooltip>
+          </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select
@@ -329,6 +349,24 @@ export default function SettlementMappingPage() {
                 <MenuItem value="UK">UK</MenuItem>
               </Select>
             </FormControl>
+            <Tooltip
+              title={
+                taxEngineEnabled
+                  ? 'QBO sales tax is enabled. Settlement tax code mapping is available below and uses tax code names.'
+                  : 'QBO sales tax is disabled for this company. Plutus posts net settlement amounts and does not apply TaxCodeRef on settlement journal lines.'
+              }
+              arrow
+            >
+              <Chip
+                label={taxEngineEnabled ? 'Tax: On' : 'Tax: Off'}
+                size="small"
+                sx={{
+                  fontWeight: 600,
+                  bgcolor: taxEngineEnabled ? 'rgba(0, 194, 185, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+                  color: taxEngineEnabled ? '#00C2B9' : 'text.secondary',
+                }}
+              />
+            </Tooltip>
             <Button
               variant="outlined"
               disableElevation
@@ -356,35 +394,19 @@ export default function SettlementMappingPage() {
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                Tax behavior
-              </Typography>
-              {taxEngineEnabled ? (
-                <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                  QBO sales tax is enabled. Settlement tax code mapping is available below and uses tax code names.
-                </Typography>
-              ) : (
-                <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                  QBO sales tax is disabled for this company. Plutus posts net settlement amounts and does not apply
-                  TaxCodeRef on settlement journal lines.
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                 {region} payout accounts
-              </Typography>
-              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                These are used for the settlement payout line on the last segment.
               </Typography>
 
               <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Transfer to Bank
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
+                      Transfer to Bank
+                    </Typography>
+                    <Tooltip title="The bank account that receives the settlement payout on the last segment of the journal entry." arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary', cursor: 'help' }} />
+                    </Tooltip>
+                  </Box>
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
                     <Select
                       value={bankAccountId}
@@ -411,9 +433,14 @@ export default function SettlementMappingPage() {
                 </Box>
 
                 <Box>
-                  <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                    Payment to Amazon
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
+                      Payment to Amazon
+                    </Typography>
+                    <Tooltip title="The account used when Amazon deducts payment from your settlement balance." arrow>
+                      <InfoOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary', cursor: 'help' }} />
+                    </Tooltip>
+                  </Box>
                   <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
                     <Select
                       value={paymentAccountId}
@@ -444,14 +471,14 @@ export default function SettlementMappingPage() {
 
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
-                <Box sx={{ minWidth: 0 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                     {region} settlement memo → account mapping
                   </Typography>
-                  <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed.
-                  </Typography>
+                  <Tooltip title="Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed." arrow>
+                    <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
+                  </Tooltip>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <TextField
@@ -578,22 +605,6 @@ export default function SettlementMappingPage() {
             </CardContent>
           </Card>
 
-          <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                Notes
-              </Typography>
-              <Box sx={{ mt: 1, display: 'grid', gap: 0.75, fontSize: '0.875rem', color: 'text.secondary' }}>
-                <Box>1) Import while your historical US settlements still exist in QBO.</Box>
-                <Box>2) Plutus will fail if a memo is missing from the mapping (to prevent mis-posts).</Box>
-                {taxEngineEnabled ? (
-                  <Box>3) Tax code mapping mirrors TaxCodeRef used on historical settlement JEs (import first, then edit if needed).</Box>
-                ) : (
-                  <Box>3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef and tax mapping stays hidden.</Box>
-                )}
-              </Box>
-            </CardContent>
-          </Card>
         </Box>
       </Box>
     </Box>
