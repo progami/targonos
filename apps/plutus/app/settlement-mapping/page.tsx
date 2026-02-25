@@ -14,11 +14,6 @@ import Chip from '@mui/material/Chip';
 import FormControl from '@mui/material/FormControl';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -255,7 +250,7 @@ export default function SettlementMappingPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['setup-settlement-mapping'] });
-      enqueueSnackbar('Saved settlement mapping', { variant: 'success' });
+      enqueueSnackbar('Saved account taxes', { variant: 'success' });
     },
     onError: (error) => {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
@@ -303,7 +298,7 @@ export default function SettlementMappingPage() {
   });
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Settlement Mapping" error={connectionStatus.error} />;
+    return <NotConnectedScreen title="Account Taxes" error={connectionStatus.error} />;
   }
 
   const isLoading =
@@ -318,7 +313,7 @@ export default function SettlementMappingPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PageHeader
-              title="Settlement Mapping"
+              title="Account Taxes"
               variant="accent"
             />
             <Tooltip
@@ -394,7 +389,7 @@ export default function SettlementMappingPage() {
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                {region} payout accounts
+                {region} Bank Accounts
               </Typography>
 
               <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
@@ -474,7 +469,7 @@ export default function SettlementMappingPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                    {region} settlement memo → account mapping
+                    {region} Transaction Categories
                   </Typography>
                   <Tooltip title="Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed." arrow>
                     <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
@@ -491,50 +486,33 @@ export default function SettlementMappingPage() {
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-                <Table size="small">
-                  <TableHead sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
-                    <TableRow>
-                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                        Memo
-                      </TableCell>
-                      <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                        QBO account
-                      </TableCell>
-                      {taxEngineEnabled && (
-                        <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                          Tax code
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {isLoading && (
-                      <TableRow>
-                        <TableCell colSpan={taxEngineEnabled ? 3 : 2} sx={{ py: 3, color: 'text.secondary' }}>
-                          Loading…
-                        </TableCell>
-                      </TableRow>
-                    )}
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {isLoading && (
+                  <Typography sx={{ py: 3, color: 'text.secondary' }}>Loading…</Typography>
+                )}
 
-                    {!isLoading && memoRows.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={taxEngineEnabled ? 3 : 2} sx={{ py: 3, color: 'text.secondary' }}>
-                          No memo mappings found.
-                        </TableCell>
-                      </TableRow>
-                    )}
+                {!isLoading && memoRows.length === 0 && (
+                  <Typography sx={{ py: 3, color: 'text.secondary' }}>No transaction category mappings found.</Typography>
+                )}
 
-                    {!isLoading &&
-                      memoRows.map(([memo, accountId]) => {
-                        const taxCodeId = taxCodeMappings[memo] ?? null;
+                {!isLoading &&
+                  memoRows.map(([memo, accountId]) => {
+                    const taxCodeId = taxCodeMappings[memo] ?? null;
 
-                        return (
-                          <TableRow key={memo} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                            <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', color: 'text.primary' }}>
-                              {memo}
-                            </TableCell>
-                            <TableCell>
+                    return (
+                      <Card key={memo} sx={{ border: 1, borderColor: 'divider', '&:hover': { borderColor: 'rgba(0, 194, 185, 0.3)' }, transition: 'border-color 0.15s' }}>
+                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9', mb: 0.5 }}>
+                            Transaction Category
+                          </Typography>
+                          <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 1.5 }}>
+                            {memo}
+                          </Typography>
+                          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: taxEngineEnabled ? { xs: '1fr', md: '1fr 1fr' } : '1fr' }}>
+                            <Box>
+                              <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                                Account Name
+                              </Typography>
                               <FormControl size="small" fullWidth>
                                 <Select
                                   value={accountId}
@@ -560,9 +538,12 @@ export default function SettlementMappingPage() {
                                   ))}
                                 </Select>
                               </FormControl>
-                            </TableCell>
+                            </Box>
                             {taxEngineEnabled && (
-                              <TableCell>
+                              <Box>
+                                <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
+                                  Tax Rate
+                                </Typography>
                                 <FormControl size="small" fullWidth>
                                   <Select
                                     value={taxCodeId ?? ''}
@@ -594,13 +575,13 @@ export default function SettlementMappingPage() {
                                     ))}
                                   </Select>
                                 </FormControl>
-                              </TableCell>
+                              </Box>
                             )}
-                          </TableRow>
-                        );
-                      })}
-                  </TableBody>
-                </Table>
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
               </Box>
             </CardContent>
           </Card>
