@@ -1,6 +1,7 @@
 import crypto from "crypto";
 
 import { getPgPool } from "../db/pool";
+import { isOrderRefundedOrReturned } from "./review-eligibility";
 
 export type HermesOrder = {
   orderId: string;
@@ -275,6 +276,10 @@ export async function enqueueRequestReviewsForOrders(params: {
       }
     }
 
+    if (isOrderRefundedOrReturned({ orderStatus: o.orderStatus, raw: o.raw })) {
+      continue;
+    }
+
     const { scheduledAt, expiresAt, policyAnchor } = computeScheduleForOrder(o, params.schedule);
 
     if (expiresAt && expiresAt.getTime() <= Date.now()) {
@@ -377,6 +382,7 @@ export async function listShippedOrdersMissingDispatch(params: {
     earliest_delivery_date: string | null;
     latest_delivery_date: string | null;
     latest_ship_date: string | null;
+    raw: unknown;
   }>(
     `
     SELECT
@@ -388,7 +394,8 @@ export async function listShippedOrdersMissingDispatch(params: {
       o.fulfillment_channel,
       o.earliest_delivery_date::text,
       o.latest_delivery_date::text,
-      o.latest_ship_date::text
+      o.latest_ship_date::text,
+      o.raw
     FROM hermes_orders o
     LEFT JOIN hermes_dispatches d
       ON d.connection_id = o.connection_id
@@ -413,6 +420,7 @@ export async function listShippedOrdersMissingDispatch(params: {
     earliestDeliveryDate: row.earliest_delivery_date,
     latestDeliveryDate: row.latest_delivery_date,
     latestShipDate: row.latest_ship_date,
+    raw: row.raw,
   }));
 }
 

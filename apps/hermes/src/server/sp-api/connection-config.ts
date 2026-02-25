@@ -11,6 +11,19 @@ type HermesConnectionMapping = {
   userAgent?: string;
 };
 
+function hasNonEmptyEnv(name: string): boolean {
+  const value = process.env[name];
+  if (typeof value !== "string") return false;
+  return value.trim().length > 0;
+}
+
+function hasMappedRefreshToken(mappings: HermesConnectionMapping[]): boolean {
+  return mappings.some((mapping) => {
+    if (typeof mapping?.lwaRefreshToken !== "string") return false;
+    return mapping.lwaRefreshToken.trim().length > 0;
+  });
+}
+
 function getEnvOrThrow(name: string): string {
   const v = process.env[name];
   if (!v) throw new Error(`${name} is required for Hermes SP-API calls`);
@@ -39,6 +52,29 @@ function parseConnectionMappings(): HermesConnectionMapping[] | null {
   }
 
   return parsed as HermesConnectionMapping[];
+}
+
+export function assertSpApiEnvConfiguredForHermes(): void {
+  const required = [
+    "SPAPI_LWA_CLIENT_ID",
+    "SPAPI_LWA_CLIENT_SECRET",
+    "SPAPI_AWS_ACCESS_KEY_ID",
+    "SPAPI_AWS_SECRET_ACCESS_KEY",
+  ];
+
+  const missing = required.filter((name) => !hasNonEmptyEnv(name));
+
+  const mappings = parseConnectionMappings();
+  const usesMappedRefreshToken = mappings !== null && hasMappedRefreshToken(mappings);
+  if (!usesMappedRefreshToken && !hasNonEmptyEnv("SPAPI_LWA_REFRESH_TOKEN")) {
+    missing.push("SPAPI_LWA_REFRESH_TOKEN");
+  }
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing Hermes SP-API env vars: ${missing.join(", ")}`
+    );
+  }
 }
 
 /**

@@ -20,6 +20,15 @@ export function buildPoForwardingCostLedgerEntries(params: {
     return []
   }
 
+  const attributableLines = params.lines.filter(line => {
+    const cartons = Number(line.cartons)
+    return Number.isFinite(cartons) && cartons > 0
+  })
+
+  if (attributableLines.length === 0) {
+    return []
+  }
+
   if (!Number.isFinite(params.totalCost) || params.totalCost <= 0) {
     return []
   }
@@ -29,12 +38,12 @@ export function buildPoForwardingCostLedgerEntries(params: {
     return []
   }
 
-  const lineVolumes = params.lines.map(line => {
+  const lineVolumes = attributableLines.map(line => {
     const volumeCm3 = computeLineVolumeCm3(line)
     return {
       transactionId: line.transactionId,
       skuCode: line.skuCode,
-      cartons: line.cartons,
+      cartons: Number(line.cartons),
       volumeCm3,
     }
   })
