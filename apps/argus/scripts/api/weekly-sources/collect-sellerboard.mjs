@@ -28,20 +28,65 @@ function csvEscape(value) {
   return text
 }
 
+function normalizeCsvInput(text) {
+  if (!text) return ''
+  return text.replace(/^\uFEFF/, '')
+}
+
+function detectCsvDelimiter(text) {
+  const firstNewLineIndex = text.indexOf('\n')
+  const firstLine = firstNewLineIndex === -1 ? text : text.slice(0, firstNewLineIndex)
+  const counts = { ',': 0, ';': 0, '\t': 0 }
+  let inQuotes = false
+
+  for (let index = 0; index < firstLine.length; index += 1) {
+    const char = firstLine[index]
+
+    if (char === '"') {
+      const nextChar = firstLine[index + 1]
+      if (inQuotes && nextChar === '"') {
+        index += 1
+        continue
+      }
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (inQuotes) continue
+    if (char === ',' || char === ';' || char === '\t') {
+      counts[char] += 1
+    }
+  }
+
+  let delimiter = ','
+  let delimiterCount = counts[delimiter]
+
+  for (const candidate of [';', '\t']) {
+    if (counts[candidate] > delimiterCount) {
+      delimiter = candidate
+      delimiterCount = counts[candidate]
+    }
+  }
+
+  return delimiterCount > 0 ? delimiter : ','
+}
+
 function parseCsv(text) {
-  if (!text) return { headers: [], rows: [] }
+  const normalizedText = normalizeCsvInput(text)
+  if (!normalizedText) return { headers: [], rows: [] }
+  const delimiter = detectCsvDelimiter(normalizedText)
 
   const parsedRows = []
   let row = []
   let field = ''
   let inQuotes = false
 
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index]
+  for (let index = 0; index < normalizedText.length; index += 1) {
+    const char = normalizedText[index]
 
     if (inQuotes) {
       if (char === '"') {
-        if (text[index + 1] === '"') {
+        if (normalizedText[index + 1] === '"') {
           field += '"'
           index += 1
         } else {
@@ -57,7 +102,7 @@ function parseCsv(text) {
       inQuotes = true
       continue
     }
-    if (char === ',') {
+    if (char === delimiter) {
       row.push(field)
       field = ''
       continue
