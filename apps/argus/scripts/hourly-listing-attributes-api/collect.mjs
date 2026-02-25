@@ -710,12 +710,6 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
     const addedImages = hasBaseline ? currentImages.filter((imageUrl) => !previousSet.has(imageUrl)) : []
     const removedImages = hasBaseline ? previousImages.filter((imageUrl) => !currentSet.has(imageUrl)) : []
 
-    const previousCommon = hasBaseline ? previousImages.filter((imageUrl) => currentSet.has(imageUrl)) : []
-    const currentCommon = hasBaseline ? currentImages.filter((imageUrl) => previousSet.has(imageUrl)) : []
-    const imageOrderChanged = hasBaseline
-      ? previousCommon.join('||') !== currentCommon.join('||')
-      : false
-
     const changedFields = []
     const perAttributeChanges = {}
     for (const field of compareFields) {
@@ -725,7 +719,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       }
 
       const fieldChanged = field === 'image_urls'
-        ? Boolean(addedImages.length || removedImages.length || imageOrderChanged)
+        ? Boolean(addedImages.length || removedImages.length)
         : normalizeCompareValue(previousRow[field]) !== normalizeCompareValue(row[field])
 
       perAttributeChanges[`${field}_changed`] = fieldChanged ? 'yes' : 'no'
@@ -755,7 +749,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       changed_field_count: hasBaseline ? String(changedFields.length) : '',
       added_images: hasBaseline ? addedImages.join(' | ') : '',
       removed_images: hasBaseline ? removedImages.join(' | ') : '',
-      image_order_changed: hasBaseline ? (imageOrderChanged ? 'true' : 'false') : '',
+      image_order_changed: '',
       ...perAttributeChanges,
     })
   }
