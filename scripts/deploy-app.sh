@@ -721,10 +721,20 @@ set -e
 if [[ "$build_status" -ne 0 ]]; then
   error "Build failed (exit code $build_status)"
 
-  if [[ "$install_mode" == "auto_skip" ]]; then
-    warn "Retrying once after running pnpm install (initial install was auto-skipped)"
+  should_retry_with_install="false"
+  if [[ "$install_mode" == "auto_skip" || "$install_mode" == "explicit_skip" ]]; then
+    should_retry_with_install="true"
+  fi
+
+  if [[ "$should_retry_with_install" == "true" ]]; then
+    if [[ "$install_mode" == "auto_skip" ]]; then
+      warn "Retrying once after running pnpm install (initial install was auto-skipped)"
+    else
+      warn "Retrying once after running pnpm install (initial install was explicitly skipped)"
+    fi
     cd "$REPO_DIR"
     pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+    install_mode="run"
 
     if ! is_truthy "$clear_caches"; then
       warn "Clearing caches before retry"
