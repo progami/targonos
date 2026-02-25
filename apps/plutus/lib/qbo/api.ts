@@ -321,6 +321,26 @@ export interface QboJournalEntry {
   };
 }
 
+export type QboAttachableEntityType = 'Bill' | 'JournalEntry';
+
+export interface QboAttachableRef {
+  EntityRef?: {
+    type?: QboAttachableEntityType | string;
+    value?: string;
+  };
+}
+
+export interface QboAttachable {
+  Id: string;
+  FileName?: string;
+  ContentType?: string;
+  AttachableRef?: QboAttachableRef[];
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
 export async function fetchJournalEntries(
   connection: QboConnection,
   params: {
@@ -550,6 +570,7 @@ export interface QboQueryResponse {
     RecurringTransaction?: QboRecurringTransaction[];
     Account?: QboAccount[];
     JournalEntry?: QboJournalEntry[];
+    Attachable?: QboAttachable[];
     Vendor?: QboVendor[];
     Term?: QboTerm[];
     Currency?: QboCurrency[];
@@ -1941,6 +1962,127 @@ export async function uploadBillAttachment(
     bytes: Uint8Array;
   },
 ): Promise<{ attachableId: string; updatedConnection?: QboConnection }> {
+  return uploadEntityAttachment(connection, {
+    entityType: 'Bill',
+    entityId: input.billId,
+    fileName: input.fileName,
+    contentType: input.contentType,
+    bytes: input.bytes,
+  });
+}
+
+export async function uploadJournalEntryAttachment(
+  connection: QboConnection,
+  input: {
+    journalEntryId: string;
+    fileName: string;
+    contentType: string;
+    bytes: Uint8Array;
+  },
+): Promise<{ attachableId: string; updatedConnection?: QboConnection }> {
+  return uploadEntityAttachment(connection, {
+    entityType: 'JournalEntry',
+    entityId: input.journalEntryId,
+    fileName: input.fileName,
+    contentType: input.contentType,
+    bytes: input.bytes,
+  });
+}
+
+export async function findAttachableIdByEntityAndFileName(
+  connection: QboConnection,
+  input: {
+    entityType: QboAttachableEntityType;
+    entityId: string;
+    fileName: string;
+    maxResults?: number;
+  },
+): Promise<{ attachableId: string | null; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const activeConnection = updatedConnection ? updatedConnection : connection;
+  const baseUrl = getApiBaseUrl();
+
+  const maxResults = input.maxResults === undefined ? 200 : input.maxResults;
+  let startPosition = 1;
+
+  while (true) {
+    const query = `SELECT * FROM Attachable WHERE FileName = '${escapeSoql(input.fileName)}' STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const queryUrl = `${baseUrl}/v3/company/${activeConnection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+    const response = await fetchWithRetry(queryUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      logger.error('Failed to fetch attachables', {
+        entityType: input.entityType,
+        entityId: input.entityId,
+        fileName: input.fileName,
+        status: response.status,
+        error: errorText,
+      });
+      throw new Error(`Failed to fetch attachables: ${response.status} ${errorText}`);
+    }
+
+    const data = (await response.json()) as QboQueryResponse;
+    const attachables = data.QueryResponse.Attachable;
+    if (!attachables || attachables.length === 0) {
+      return { attachableId: null, updatedConnection };
+    }
+
+    for (const attachable of attachables) {
+      if (attachable.FileName !== input.fileName) continue;
+
+      const refs = attachable.AttachableRef;
+      if (!refs || refs.length === 0) continue;
+
+      for (const ref of refs) {
+        const entityRef = ref.EntityRef;
+        if (!entityRef) continue;
+        if (entityRef.type !== input.entityType) continue;
+        if (entityRef.value !== input.entityId) continue;
+        return { attachableId: attachable.Id, updatedConnection };
+      }
+    }
+
+    if (attachables.length < maxResults) {
+      return { attachableId: null, updatedConnection };
+    }
+
+    startPosition += attachables.length;
+  }
+}
+
+export async function findJournalEntryAttachmentIdByFileName(
+  connection: QboConnection,
+  input: {
+    journalEntryId: string;
+    fileName: string;
+    maxResults?: number;
+  },
+): Promise<{ attachableId: string | null; updatedConnection?: QboConnection }> {
+  return findAttachableIdByEntityAndFileName(connection, {
+    entityType: 'JournalEntry',
+    entityId: input.journalEntryId,
+    fileName: input.fileName,
+    maxResults: input.maxResults,
+  });
+}
+
+async function uploadEntityAttachment(
+  connection: QboConnection,
+  input: {
+    entityType: QboAttachableEntityType;
+    entityId: string;
+    fileName: string;
+    contentType: string;
+    bytes: Uint8Array;
+  },
+): Promise<{ attachableId: string; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const activeConnection = updatedConnection ? updatedConnection : connection;
   const baseUrl = getApiBaseUrl();
@@ -1950,8 +2092,8 @@ export async function uploadBillAttachment(
     AttachableRef: [
       {
         EntityRef: {
-          type: 'Bill',
-          value: input.billId,
+          type: input.entityType,
+          value: input.entityId,
         },
       },
     ],
@@ -1980,13 +2122,14 @@ export async function uploadBillAttachment(
 
   if (!response.ok) {
     const errorText = await response.text();
-    logger.error('Failed to upload bill attachment', {
-      billId: input.billId,
+    logger.error('Failed to upload QBO attachment', {
+      entityType: input.entityType,
+      entityId: input.entityId,
       fileName: input.fileName,
       status: response.status,
       error: errorText,
     });
-    throw new Error(`Failed to upload bill attachment: ${response.status} ${errorText}`);
+    throw new Error(`Failed to upload QBO attachment: ${response.status} ${errorText}`);
   }
 
   const data = (await response.json()) as {
