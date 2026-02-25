@@ -6,8 +6,6 @@ import gzip
 import json
 from pathlib import Path
 
-import ijson
-
 
 def open_maybe_gzip(path: Path):
     with path.open('rb') as f:
@@ -44,6 +42,76 @@ def flatten(value, prefix='', out=None):
     return out
 
 
+def iter_tst_items(stream):
+    key = '"dataByDepartmentAndSearchTerm"'
+    decoder = json.JSONDecoder()
+    buffer = ''
+    found_key = False
+    in_array = False
+
+    while True:
+        chunk = stream.read(65536)
+        if not chunk:
+            break
+        buffer += chunk
+
+        if not in_array:
+            if not found_key:
+                key_index = buffer.find(key)
+                if key_index == -1:
+                    tail = len(key) + 32
+                    if len(buffer) > tail:
+                        buffer = buffer[-tail:]
+                    continue
+                buffer = buffer[key_index + len(key):]
+                found_key = True
+
+            array_index = buffer.find('[')
+            if array_index == -1:
+                if len(buffer) > 1024:
+                    buffer = buffer[-1024:]
+                continue
+            buffer = buffer[array_index + 1:]
+            in_array = True
+
+        while True:
+            stripped = buffer.lstrip()
+            if not stripped:
+                buffer = ''
+                break
+            buffer = stripped
+
+            if buffer[0] == ',':
+                buffer = buffer[1:]
+                continue
+            if buffer[0] == ']':
+                return
+
+            try:
+                item, end_index = decoder.raw_decode(buffer)
+            except json.JSONDecodeError:
+                break
+
+            yield item
+            buffer = buffer[end_index:]
+
+    if not found_key:
+        raise RuntimeError('Missing dataByDepartmentAndSearchTerm in report payload')
+    if not in_array:
+        raise RuntimeError('Malformed report payload: missing array for dataByDepartmentAndSearchTerm')
+
+    buffer = buffer.lstrip()
+    while buffer:
+        if buffer[0] == ',':
+            buffer = buffer[1:].lstrip()
+            continue
+        if buffer[0] == ']':
+            return
+        item, end_index = decoder.raw_decode(buffer)
+        yield item
+        buffer = buffer[end_index:].lstrip()
+
+
 def main():
     parser = argparse.ArgumentParser(description='Filter TST report by keyword and write CSV.')
     parser.add_argument('--input', required=True, help='Path to raw JSON or JSON.GZ report')
@@ -60,7 +128,7 @@ def main():
     header_set = set()
 
     with open_maybe_gzip(input_path) as stream:
-        for item in ijson.items(stream, 'dataByDepartmentAndSearchTerm.item'):
+        for item in iter_tst_items(stream):
             search_term = str(item.get('searchTerm', '')).lower()
             if keyword not in search_term:
                 continue
