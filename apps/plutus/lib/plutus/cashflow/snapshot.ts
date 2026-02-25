@@ -4,7 +4,7 @@ import { createLogger } from '@targon/logger';
 import type { Prisma } from '@targon/prisma-plutus';
 
 import { db } from '@/lib/db';
-import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import {
   fetchAccounts,
   fetchJournalEntries,
@@ -168,14 +168,15 @@ async function fetchSettlementHistoryForChannel(input: {
       }
 
       const docNumber = journalEntry.DocNumber.trim();
-      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      const strippedDocNumber = stripPlutusDocPrefix(docNumber);
+      const first = strippedDocNumber[0] ? strippedDocNumber[0].toUpperCase() : '';
       if (first === 'C' || first === 'P') {
         continue;
       }
 
       let periodEnd: string | null = null;
       try {
-        const parsed = parseSettlementDocNumber(docNumber);
+        const parsed = parseSettlementDocNumber(strippedDocNumber);
         periodEnd = parsed.periodEnd;
       } catch (error) {
         input.warnings.push({

@@ -4,6 +4,7 @@ import { createLogger } from '@targon/logger';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import { fetchJournalEntries, fetchJournalEntryById, QboAuthError, type QboConnection } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -41,7 +42,8 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
 
     for (const je of page.journalEntries) {
       const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
-      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      const strippedDocNumber = stripPlutusDocPrefix(docNumber);
+      const first = strippedDocNumber[0] ? strippedDocNumber[0].toUpperCase() : '';
       if (first === 'C' || first === 'P') {
         continue;
       }

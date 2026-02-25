@@ -3,6 +3,7 @@ import { createLogger } from '@targon/logger';
 import { fetchAccounts, fetchJournalEntries, QboAuthError, type QboAccount, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { db } from '@/lib/db';
+import { stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 
 const logger = createLogger({ name: 'plutus-analytics' });
 
@@ -215,7 +216,8 @@ export async function GET(req: NextRequest) {
 
     for (const entry of journalEntries) {
       const docNumber = entry.DocNumber ? entry.DocNumber.trim() : '';
-      const first = docNumber[0] ? docNumber[0].toUpperCase() : '';
+      const strippedDocNumber = stripPlutusDocPrefix(docNumber);
+      const first = strippedDocNumber[0] ? strippedDocNumber[0].toUpperCase() : '';
       if (first === 'C' || first === 'P') {
         continue;
       }

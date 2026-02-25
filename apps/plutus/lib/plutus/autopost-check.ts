@@ -3,7 +3,7 @@ import { createLogger } from '@targon/logger';
 import { db } from '@/lib/db';
 import { fromCents } from '@/lib/inventory/money';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
-import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import {
   fetchJournalEntries,
   QboAuthError,
@@ -249,7 +249,8 @@ export async function runAutopostCheck(): Promise<AutopostResult> {
     }
 
     const trimmedDocNumber = settlement.DocNumber.trim();
-    const first = trimmedDocNumber[0] ? trimmedDocNumber[0].toUpperCase() : '';
+    const strippedDocNumber = stripPlutusDocPrefix(trimmedDocNumber);
+    const first = strippedDocNumber[0] ? strippedDocNumber[0].toUpperCase() : '';
     if (first === 'C' || first === 'P') {
       continue;
     }
