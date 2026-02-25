@@ -14,6 +14,7 @@
  */
 
 import { maybeAutoMigrate } from "../db/migrate";
+import { assertSpApiEnvConfiguredForHermes } from "../sp-api/connection-config";
 import {
   fetchDueBuyerMessages,
   processBuyerMessageDispatch,
@@ -46,6 +47,7 @@ async function main() {
     return;
   }
 
+  assertSpApiEnvConfiguredForHermes();
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);
