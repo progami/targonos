@@ -370,7 +370,7 @@ export default function SettlementMappingPage() {
               startIcon={<CloudDownloadIcon sx={{ fontSize: 16 }} />}
               sx={{ borderRadius: 2, textTransform: 'none', whiteSpace: 'nowrap' }}
             >
-              {importMutation.isPending ? 'Importing…' : `Import from QBO (${region})`}
+              {importMutation.isPending ? 'Importing…' : 'Import from QBO'}
             </Button>
             <Button
               variant="contained"
