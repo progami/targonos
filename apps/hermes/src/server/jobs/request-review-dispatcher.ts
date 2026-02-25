@@ -29,13 +29,14 @@ import {
   type DispatchRow,
 } from "../dispatch/ledger";
 import { SpApiClient } from "../sp-api/client";
-import { loadSpApiConfigForConnection } from "../sp-api/connection-config";
+import { assertSpApiEnvConfiguredForHermes, loadSpApiConfigForConnection } from "../sp-api/connection-config";
 import {
   createProductReviewAndSellerFeedbackSolicitation,
   getSolicitationActionsForOrder,
 } from "../sp-api/solicitations";
 import { isHermesDryRun } from "../env/flags";
 import { loadHermesEnv } from "./load-env";
+import { isOrderRefundedOrReturned } from "../orders/review-eligibility";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -137,6 +138,26 @@ async function hasSentAttempt(dispatchId: string): Promise<boolean> {
   return (res.rows[0]?.n ?? 0) > 0;
 }
 
+async function getOrderSnapshot(params: {
+  connectionId: string;
+  orderId: string;
+}): Promise<{ orderStatus: string | null; raw: unknown } | null> {
+  const pool = getPgPool();
+  const res = await pool.query<{ order_status: string | null; raw: unknown }>(
+    `
+    SELECT order_status, raw
+      FROM hermes_orders
+     WHERE connection_id = $1
+       AND order_id = $2
+     LIMIT 1;
+    `,
+    [params.connectionId, params.orderId]
+  );
+  const row = res.rows[0];
+  if (!row) return null;
+  return { orderStatus: row.order_status, raw: row.raw };
+}
+
 async function rescheduleDispatch(params: {
   dispatchId: string;
   delayMs: number;
@@ -216,6 +237,25 @@ async function processDispatch(row: DispatchRow, opts: {
   // never attempt to send again.
   if (await hasSentAttempt(row.id)) {
     await markDispatchSent(row.id);
+    return;
+  }
+
+  const orderSnapshot = await getOrderSnapshot({
+    connectionId: row.connection_id,
+    orderId: row.order_id,
+  });
+  if (orderSnapshot && isOrderRefundedOrReturned(orderSnapshot)) {
+    const attemptNo = await getAttemptNo(row.id);
+    const orderStatusLabel =
+      orderSnapshot.orderStatus === null ? "null" : orderSnapshot.orderStatus;
+    await appendAttempt({
+      dispatchId: row.id,
+      attemptNo,
+      status: "ineligible",
+      errorCode: "ORDER_REFUNDED_OR_RETURNED",
+      errorMessage: `Order flagged as refunded/returned (order_status=${orderStatusLabel})`,
+    });
+    await markDispatchSkipped(row.id, "order_refunded_or_returned");
     return;
   }
 
@@ -394,6 +434,7 @@ async function main() {
     return;
   }
 
+  assertSpApiEnvConfiguredForHermes();
   await maybeAutoMigrate();
 
   const loopMs = getInt("HERMES_WORKER_LOOP_MS", 1500);

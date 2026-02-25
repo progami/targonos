@@ -18,7 +18,7 @@
 import { maybeAutoMigrate } from "../db/migrate";
 import { getPgPool } from "../db/pool";
 import { SpApiClient } from "../sp-api/client";
-import { loadSpApiConfigForConnection } from "../sp-api/connection-config";
+import { assertSpApiEnvConfiguredForHermes, loadSpApiConfigForConnection } from "../sp-api/connection-config";
 import { listConnectionTargets } from "../sp-api/connection-list";
 import { getItemReviewTopics, getItemReviewTrends } from "../sp-api/customer-feedback";
 import { getOrders } from "../sp-api/orders";
@@ -461,6 +461,8 @@ async function syncAllConnectionsOnce(): Promise<void> {
     );
     return;
   }
+
+  assertSpApiEnvConfiguredForHermes();
 
   const lockKey = getInt("HERMES_ORDERS_SYNC_LOCK_KEY", 707001);
   const lock = await acquireAdvisoryLock(lockKey);

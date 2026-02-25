@@ -11,6 +11,8 @@ const REPO_ROOT = path.resolve(__dirname, '../../../../')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 
 const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Listing Attributes (API)'
+const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
+const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
 const OUR_ASINS = ['B09HXC3NL8', 'B0CR1GSBQ9', 'B0FLKJ7WWM', 'B0FP66CWQ6']
 const COMPETITOR_SEED_ASINS = ['B0DQDWV1SV', 'B0CWS3848Y']
@@ -72,18 +74,138 @@ function csvEscape(value) {
   return text
 }
 
-function writeCsv(file, rows) {
+function writeCsv(file, rows, headersInput = null) {
   if (!rows.length) {
     fs.writeFileSync(file, '')
     return
   }
 
-  const headers = Object.keys(rows[0])
+  const headers = Array.isArray(headersInput) && headersInput.length
+    ? headersInput
+    : Object.keys(rows[0])
   const lines = [headers.join(',')]
   for (const row of rows) {
     lines.push(headers.map((header) => csvEscape(row[header])).join(','))
   }
   fs.writeFileSync(file, `${lines.join('\n')}\n`)
+}
+
+function appendCsv(file, rows) {
+  if (!rows.length) return
+
+  const newHeaders = Object.keys(rows[0])
+  if (!fs.existsSync(file)) {
+    writeCsv(file, rows, newHeaders)
+    return
+  }
+
+  const existingText = fs.readFileSync(file, 'utf8')
+  if (!existingText.trim()) {
+    writeCsv(file, rows, newHeaders)
+    return
+  }
+
+  const firstLine = existingText.split(/\r?\n/, 1)[0] || ''
+  const existingHeaders = firstLine.split(',').map((field) => field.trim())
+
+  const headerMatches = existingHeaders.length === newHeaders.length
+    && existingHeaders.every((field, index) => field === newHeaders[index])
+
+  if (!headerMatches) {
+    const existingRows = parseCsv(file)
+    const mergedHeaders = [...existingHeaders]
+    for (const header of newHeaders) {
+      if (!mergedHeaders.includes(header)) mergedHeaders.push(header)
+    }
+    writeCsv(file, [...existingRows, ...rows], mergedHeaders)
+    return
+  }
+
+  const lines = rows.map((row) => newHeaders.map((header) => csvEscape(row[header])).join(','))
+  const prefix = existingText.endsWith('\n') ? '' : '\n'
+  fs.appendFileSync(file, `${prefix}${lines.join('\n')}\n`)
+}
+
+function parseCsv(file) {
+  if (!fs.existsSync(file)) return []
+
+  const input = fs.readFileSync(file, 'utf8')
+  if (!input) return []
+
+  const rows = []
+  let row = []
+  let field = ''
+  let inQuotes = false
+
+  for (let index = 0; index < input.length; index += 1) {
+    const char = input[index]
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (input[index + 1] === '"') {
+          field += '"'
+          index += 1
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+      continue
+    }
+    if (char === ',') {
+      row.push(field)
+      field = ''
+      continue
+    }
+    if (char === '\n') {
+      row.push(field)
+      rows.push(row)
+      row = []
+      field = ''
+      continue
+    }
+    if (char === '\r') continue
+
+    field += char
+  }
+
+  if (field.length || row.length) {
+    row.push(field)
+    rows.push(row)
+  }
+
+  if (!rows.length) return []
+
+  const headers = rows[0]
+  const parsedRows = []
+  for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+    const values = rows[rowIndex]
+    if (!values.length || (values.length === 1 && values[0] === '')) continue
+
+    const parsed = {}
+    for (let index = 0; index < headers.length; index += 1) {
+      parsed[headers[index]] = values[index] ?? ''
+    }
+    parsedRows.push(parsed)
+  }
+
+  return parsedRows
+}
+
+function normalizeCompareValue(value) {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) return ''
+    return String(value)
+  }
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  return String(value)
 }
 
 function uniq(values) {
@@ -295,6 +417,26 @@ function sortDiffs(diffs) {
     }
     return a.asin.localeCompare(b.asin)
   })
+}
+
+function loadPreviousRowsByAsin(previousState) {
+  if (!previousState || typeof previousState !== 'object') {
+    return {
+      byAsin: new Map(),
+      baselineTimestampUtc: '',
+    }
+  }
+
+  const byAsin = new Map()
+  for (const [asin, row] of Object.entries(previousState.by_asin || {})) {
+    if (!asin || !row || typeof row !== 'object') continue
+    byAsin.set(asin, row)
+  }
+
+  return {
+    byAsin,
+    baselineTimestampUtc: String(previousState.timestamp_utc || ''),
+  }
 }
 
 async function fetchCatalog(sp, marketplaceId, asin, includedData) {
@@ -526,66 +668,38 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
     ? JSON.parse(fs.readFileSync(statePath, 'utf8'))
     : null
 
-  const compareFields = [
-    'title',
-    'bullet_points',
-    'description',
-    'backend_terms',
-    'landed_price',
-    'listing_price',
-    'shipping_price',
-    'offers_any',
-    'offers_new',
-    'root_bsr_rank',
-    'sub_bsr_rank',
-  ]
+  const {
+    byAsin: previousRowsByAsin,
+    baselineTimestampUtc,
+  } = loadPreviousRowsByAsin(previousState)
+
+  const compareFields = rows.length
+    ? Object.keys(rows[0]).filter((field) => ![
+      'snapshot_timestamp_utc',
+      'snapshot_date',
+      'snapshot_time_local',
+      'asin',
+    ].includes(field))
+    : []
 
   const diffs = []
   const nextState = {
     timestamp_utc: snapshotTimestampUtc,
-    snapshot_file: `${snapshotDate}_${snapshotTimeLocal}_Listings-Snapshot.csv`,
+    snapshot_file: SNAPSHOT_HISTORY_FILE_NAME,
     by_asin: {},
   }
 
   for (const row of rows) {
-    const previousRow = previousState?.by_asin?.[row.asin]
+    const previousRow = previousRowsByAsin.get(row.asin)
+    const hasBaseline = Boolean(previousRow)
+
     const currentImages = String(row.image_urls || '')
       .split(' | ')
       .map((imageUrl) => imageUrl.trim())
       .filter(Boolean)
-    const currentImageSet = [...new Set(currentImages)].sort()
-
-    const normalized = {}
-    for (const field of compareFields) normalized[field] = row[field]
-    normalized.image_urls_set = currentImageSet.join(' | ')
-    normalized.image_urls_ordered = String(row.image_urls || '')
-
-    nextState.by_asin[row.asin] = {
-      state_key: JSON.stringify(normalized),
-      ...normalized,
-    }
-
-    if (!previousRow) {
-      diffs.push({
-        snapshot_timestamp_utc: snapshotTimestampUtc,
-        asin: row.asin,
-        owner_type: row.owner_type,
-        baseline_timestamp_utc: '',
-        changed: 'no_baseline',
-        changed_fields: '',
-        added_images: '',
-        removed_images: '',
-        image_order_changed: '',
-      })
-      continue
-    }
-
-    const changedFields = []
-    for (const field of compareFields) {
-      if ((previousRow[field] ?? '') !== (row[field] ?? '')) changedFields.push(field)
-    }
-
-    const previousImagesText = String(previousRow.image_urls_ordered ?? previousRow.image_urls ?? '')
+    const previousImagesText = hasBaseline
+      ? String(previousRow.image_urls_ordered ?? previousRow.image_urls ?? '')
+      : ''
     const previousImages = previousImagesText
       .split(' | ')
       .map((imageUrl) => imageUrl.trim())
@@ -593,25 +707,50 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
 
     const previousSet = new Set(previousImages)
     const currentSet = new Set(currentImages)
-    const addedImages = currentImages.filter((imageUrl) => !previousSet.has(imageUrl))
-    const removedImages = previousImages.filter((imageUrl) => !currentSet.has(imageUrl))
+    const addedImages = hasBaseline ? currentImages.filter((imageUrl) => !previousSet.has(imageUrl)) : []
+    const removedImages = hasBaseline ? previousImages.filter((imageUrl) => !currentSet.has(imageUrl)) : []
 
-    const previousCommon = previousImages.filter((imageUrl) => currentSet.has(imageUrl))
-    const currentCommon = currentImages.filter((imageUrl) => previousSet.has(imageUrl))
-    const imageOrderChanged = previousCommon.join('||') !== currentCommon.join('||')
+    const changedFields = []
+    const perAttributeChanges = {}
+    for (const field of compareFields) {
+      if (!hasBaseline) {
+        perAttributeChanges[`${field}_changed`] = 'no_baseline'
+        continue
+      }
 
-    if (addedImages.length || removedImages.length) changedFields.push('image_urls')
+      const fieldChanged = field === 'image_urls'
+        ? Boolean(addedImages.length || removedImages.length)
+        : normalizeCompareValue(previousRow[field]) !== normalizeCompareValue(row[field])
+
+      perAttributeChanges[`${field}_changed`] = fieldChanged ? 'yes' : 'no'
+      if (fieldChanged) changedFields.push(field)
+    }
+
+    const currentImageSet = [...new Set(currentImages)].sort()
+    const normalized = {}
+    for (const field of compareFields) normalized[field] = normalizeCompareValue(row[field])
+    normalized.image_urls_set = currentImageSet.join(' | ')
+    normalized.image_urls_ordered = normalizeCompareValue(row.image_urls)
+
+    nextState.by_asin[row.asin] = {
+      state_key: JSON.stringify(normalized),
+      ...normalized,
+    }
 
     diffs.push({
       snapshot_timestamp_utc: snapshotTimestampUtc,
       asin: row.asin,
       owner_type: row.owner_type,
-      baseline_timestamp_utc: previousState?.timestamp_utc || '',
-      changed: changedFields.length ? 'yes' : 'no',
-      changed_fields: changedFields.join(','),
-      added_images: addedImages.join(' | '),
-      removed_images: removedImages.join(' | '),
-      image_order_changed: imageOrderChanged ? 'true' : 'false',
+      baseline_timestamp_utc: hasBaseline
+        ? normalizeCompareValue(previousRow.snapshot_timestamp_utc || baselineTimestampUtc)
+        : '',
+      changed: hasBaseline ? (changedFields.length ? 'yes' : 'no') : 'no_baseline',
+      changed_fields: hasBaseline ? changedFields.join(',') : '',
+      changed_field_count: hasBaseline ? String(changedFields.length) : '',
+      added_images: hasBaseline ? addedImages.join(' | ') : '',
+      removed_images: hasBaseline ? removedImages.join(' | ') : '',
+      image_order_changed: '',
+      ...perAttributeChanges,
     })
   }
 
@@ -668,18 +807,18 @@ async function main() {
     statePath,
   } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal)
 
-  const snapshotFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, `${snapshotDate}_${snapshotTimeLocal}_Listings-Snapshot.csv`)
-  const changesFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, `${snapshotDate}_${snapshotTimeLocal}_Listings-Changes.csv`)
+  const snapshotHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, SNAPSHOT_HISTORY_FILE_NAME)
+  const changesHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, CHANGES_HISTORY_FILE_NAME)
 
-  writeCsv(snapshotFile, rows)
-  writeCsv(changesFile, diffs)
+  appendCsv(snapshotHistoryFile, rows)
+  appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
 
   console.log('Hourly listing attributes collection complete')
   console.log(`competitor_variations=${competitorAsinCount}`)
   console.log(`asin_rows=${rows.length}`)
-  console.log(`snapshot_file=${snapshotFile}`)
-  console.log(`changes_file=${changesFile}`)
+  console.log(`snapshot_history_file=${snapshotHistoryFile}`)
+  console.log(`changes_history_file=${changesHistoryFile}`)
 }
 
 main().catch((error) => {

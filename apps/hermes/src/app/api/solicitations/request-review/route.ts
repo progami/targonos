@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { maybeAutoMigrate } from "@/server/db/migrate";
+import { getPgPool } from "@/server/db/pool";
 import { queueRequestReview } from "@/server/dispatch/ledger";
 import { withApiLogging } from "@/server/api-logging";
 import { isHermesDryRun } from "@/server/env/flags";
+import { isOrderRefundedOrReturned } from "@/server/orders/review-eligibility";
 
 export const runtime = "nodejs";
 
@@ -54,6 +56,31 @@ async function handlePost(req: Request) {
   }
 
   try {
+    const pool = getPgPool();
+    const orderRes = await pool.query<{ order_status: string | null; raw: unknown }>(
+      `
+      SELECT order_status, raw
+        FROM hermes_orders
+       WHERE connection_id = $1
+         AND order_id = $2
+       LIMIT 1;
+      `,
+      [parsed.data.connectionId, parsed.data.orderId]
+    );
+    const orderRow = orderRes.rows[0];
+    if (
+      orderRow &&
+      isOrderRefundedOrReturned({
+        orderStatus: orderRow.order_status,
+        raw: orderRow.raw,
+      })
+    ) {
+      return NextResponse.json(
+        { ok: false, error: "Review requests are blocked for refunded or returned orders." },
+        { status: 409 }
+      );
+    }
+
     const res = await queueRequestReview({
       connectionId: parsed.data.connectionId,
       orderId: parsed.data.orderId,
