@@ -4,14 +4,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Table from '@mui/material/Table';
@@ -301,23 +299,6 @@ export default function SettlementMappingPage() {
     },
   });
 
-  const onDeleteMemoMapping = (memo: string) => {
-    setByRegion((prev) => {
-      const next = { ...prev[region].memoMappings };
-      delete next[memo];
-      const nextTax = { ...prev[region].taxCodeMappings };
-      delete nextTax[memo];
-      return {
-        ...prev,
-        [region]: {
-          ...prev[region],
-          memoMappings: next,
-          taxCodeMappings: nextTax,
-        },
-      };
-    });
-  };
-
   if (!isCheckingConnection && connectionStatus?.connected === false) {
     return <NotConnectedScreen title="Settlement Mapping" error={connectionStatus.error} />;
   }
@@ -498,13 +479,12 @@ export default function SettlementMappingPage() {
                           Tax code
                         </TableCell>
                       )}
-                      <TableCell sx={{ width: 52 }} />
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {isLoading && (
                       <TableRow>
-                        <TableCell colSpan={taxEngineEnabled ? 4 : 3} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={taxEngineEnabled ? 3 : 2} sx={{ py: 3, color: 'text.secondary' }}>
                           Loading…
                         </TableCell>
                       </TableRow>
@@ -512,7 +492,7 @@ export default function SettlementMappingPage() {
 
                     {!isLoading && memoRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={taxEngineEnabled ? 4 : 3} sx={{ py: 3, color: 'text.secondary' }}>
+                        <TableCell colSpan={taxEngineEnabled ? 3 : 2} sx={{ py: 3, color: 'text.secondary' }}>
                           No memo mappings found.
                         </TableCell>
                       </TableRow>
@@ -589,15 +569,6 @@ export default function SettlementMappingPage() {
                                 </FormControl>
                               </TableCell>
                             )}
-                            <TableCell sx={{ textAlign: 'right' }}>
-                              <IconButton
-                                size="small"
-                                onClick={() => onDeleteMemoMapping(memo)}
-                                title="Delete"
-                              >
-                                <DeleteOutlineIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                            </TableCell>
                           </TableRow>
                         );
                       })}
