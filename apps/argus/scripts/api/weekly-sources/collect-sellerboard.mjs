@@ -21,6 +21,156 @@ function parseArgs() {
   }
 }
 
+function csvEscape(value) {
+  if (value === null || value === undefined) return ''
+  const text = String(value)
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`
+  return text
+}
+
+function normalizeCsvInput(text) {
+  if (!text) return ''
+  return text.replace(/^\uFEFF/, '')
+}
+
+function detectCsvDelimiter(text) {
+  const firstNewLineIndex = text.indexOf('\n')
+  const firstLine = firstNewLineIndex === -1 ? text : text.slice(0, firstNewLineIndex)
+  const counts = { ',': 0, ';': 0, '\t': 0 }
+  let inQuotes = false
+
+  for (let index = 0; index < firstLine.length; index += 1) {
+    const char = firstLine[index]
+
+    if (char === '"') {
+      const nextChar = firstLine[index + 1]
+      if (inQuotes && nextChar === '"') {
+        index += 1
+        continue
+      }
+      inQuotes = !inQuotes
+      continue
+    }
+
+    if (inQuotes) continue
+    if (char === ',' || char === ';' || char === '\t') {
+      counts[char] += 1
+    }
+  }
+
+  let delimiter = ','
+  let delimiterCount = counts[delimiter]
+
+  for (const candidate of [';', '\t']) {
+    if (counts[candidate] > delimiterCount) {
+      delimiter = candidate
+      delimiterCount = counts[candidate]
+    }
+  }
+
+  return delimiterCount > 0 ? delimiter : ','
+}
+
+function parseCsv(text) {
+  const normalizedText = normalizeCsvInput(text)
+  if (!normalizedText) return { headers: [], rows: [] }
+  const delimiter = detectCsvDelimiter(normalizedText)
+
+  const parsedRows = []
+  let row = []
+  let field = ''
+  let inQuotes = false
+
+  for (let index = 0; index < normalizedText.length; index += 1) {
+    const char = normalizedText[index]
+
+    if (inQuotes) {
+      if (char === '"') {
+        if (normalizedText[index + 1] === '"') {
+          field += '"'
+          index += 1
+        } else {
+          inQuotes = false
+        }
+      } else {
+        field += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+      continue
+    }
+    if (char === delimiter) {
+      row.push(field)
+      field = ''
+      continue
+    }
+    if (char === '\n') {
+      row.push(field)
+      parsedRows.push(row)
+      row = []
+      field = ''
+      continue
+    }
+    if (char === '\r') continue
+
+    field += char
+  }
+
+  if (field.length || row.length) {
+    row.push(field)
+    parsedRows.push(row)
+  }
+
+  if (!parsedRows.length) return { headers: [], rows: [] }
+
+  const headers = parsedRows[0]
+  const rows = []
+  for (let rowIndex = 1; rowIndex < parsedRows.length; rowIndex += 1) {
+    const values = parsedRows[rowIndex]
+    if (!values.length || (values.length === 1 && values[0] === '')) continue
+
+    const parsed = {}
+    for (let headerIndex = 0; headerIndex < headers.length; headerIndex += 1) {
+      parsed[headers[headerIndex]] = values[headerIndex] ?? ''
+    }
+    rows.push(parsed)
+  }
+
+  return { headers, rows }
+}
+
+function stringifyCsv(headers, rows) {
+  const lines = [headers.join(',')]
+  for (const row of rows) {
+    lines.push(headers.map((header) => csvEscape(row[header])).join(','))
+  }
+  return `${lines.join('\n')}\n`
+}
+
+function parseUsDateToIso(value, columnName) {
+  const text = String(value ?? '').trim()
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\b/)
+  if (!match) {
+    throw new Error(`Sellerboard row has invalid ${columnName}: ${text}`)
+  }
+  const month = match[1].padStart(2, '0')
+  const day = match[2].padStart(2, '0')
+  const year = match[3]
+  return `${year}-${month}-${day}`
+}
+
+function filterRowsToWeek(rows, dateColumn, weekStart, weekEnd) {
+  const filtered = []
+  for (const row of rows) {
+    const isoDate = parseUsDateToIso(row[dateColumn], dateColumn)
+    if (isoDate >= weekStart && isoDate <= weekEnd) filtered.push(row)
+  }
+  return filtered
+}
+
 async function downloadCsv(url) {
   const response = await fetch(url)
   const body = await response.text()
@@ -56,8 +206,24 @@ async function main() {
   const dashboardUrl = requireEnv('SELLERBOARD_US_DASHBOARD_REPORT_URL')
   const ordersUrl = requireEnv('SELLERBOARD_US_ORDERS_REPORT_URL')
 
-  const dashboardCsv = await downloadCsv(dashboardUrl)
-  const ordersCsv = await downloadCsv(ordersUrl)
+  const dashboardCsvRaw = await downloadCsv(dashboardUrl)
+  const ordersCsvRaw = await downloadCsv(ordersUrl)
+
+  const dashboardParsed = parseCsv(dashboardCsvRaw)
+  const ordersParsed = parseCsv(ordersCsvRaw)
+
+  if (!dashboardParsed.headers.includes('Date')) {
+    throw new Error('Sellerboard dashboard CSV missing Date column')
+  }
+  if (!ordersParsed.headers.includes('PurchaseDate(UTC)')) {
+    throw new Error('Sellerboard orders CSV missing PurchaseDate(UTC) column')
+  }
+
+  const dashboardRows = filterRowsToWeek(dashboardParsed.rows, 'Date', week.weekStart, week.weekEnd)
+  const ordersRows = filterRowsToWeek(ordersParsed.rows, 'PurchaseDate(UTC)', week.weekStart, week.weekEnd)
+
+  const dashboardCsv = stringifyCsv(dashboardParsed.headers, dashboardRows)
+  const ordersCsv = stringifyCsv(ordersParsed.headers, ordersRows)
 
   const dashboardFile = path.join(DASHBOARD_DIR, `${weekPrefix}_SB-Dashboard.csv`)
   const ordersFile = path.join(ORDERS_DIR, `${weekPrefix}_SB-Orders.csv`)
@@ -71,6 +237,16 @@ async function main() {
       {
         generatedAt: new Date().toISOString(),
         week,
+        filters: {
+          dashboardDateColumn: 'Date',
+          ordersDateColumn: 'PurchaseDate(UTC)',
+        },
+        counts: {
+          dashboardRowsBeforeFilter: dashboardParsed.rows.length,
+          dashboardRowsAfterFilter: dashboardRows.length,
+          ordersRowsBeforeFilter: ordersParsed.rows.length,
+          ordersRowsAfterFilter: ordersRows.length,
+        },
         files: {
           dashboardFile,
           ordersFile,
