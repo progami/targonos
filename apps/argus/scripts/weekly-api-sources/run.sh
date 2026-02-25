@@ -1,0 +1,60 @@
+#!/bin/bash
+# Weekly API Sources — Master Runner
+# Collects all Monitoring API folders that run weekly:
+#   - SP-API (Brand Analytics + Sales & Traffic)
+#   - SP Ads API (Sponsored Products reports)
+#   - Datadive API
+#   - Sellerboard API URLs
+#
+# Usage:
+#   bash apps/argus/scripts/weekly-api-sources/run.sh
+#   bash apps/argus/scripts/weekly-api-sources/run.sh --dry-run
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG="/tmp/weekly-api-sources.log"
+
+DRY_FLAG=""
+if [ "${1:-}" = "--dry-run" ]; then
+  DRY_FLAG="--dry-run"
+fi
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+
+log "=== Weekly API Sources run starting ${DRY_FLAG:-live} ==="
+
+FAILED=0
+
+run_step() {
+  local name="$1"
+  local cmd="$2"
+  log "Running: $name"
+  if eval "$cmd" >> "$LOG" 2>&1; then
+    log "OK: $name"
+  else
+    log "FAILED: $name"
+    FAILED=$((FAILED + 1))
+  fi
+}
+
+run_step "SP-API" "node \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG"
+run_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG"
+run_step "Datadive API" "node \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
+run_step "Sellerboard API" "node \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG"
+
+log "=== Weekly API Sources run done (failures=$FAILED) ==="
+
+if [ -z "$DRY_FLAG" ]; then
+  if [ $FAILED -gt 0 ]; then
+    osascript -e "display notification \"Weekly API sources: $FAILED script(s) failed\" with title \"Weekly API Sources\"" 2>/dev/null || true
+  else
+    osascript -e 'display notification "Weekly API sources completed" with title "Weekly API Sources"' 2>/dev/null || true
+  fi
+fi
+
+tail -400 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+
+if [ $FAILED -gt 0 ]; then
+  exit 1
+fi
