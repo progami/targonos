@@ -31,7 +31,7 @@ tell application "Google Chrome"
   end tell
 end tell
 '
-sleep 15
+sleep 20
 
 # Click Download link (exports XLSX)
 osascript -e '
