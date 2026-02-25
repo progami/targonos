@@ -24,54 +24,27 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
 
-# Navigate to POE search results
+# Navigate directly to POE niche Products tab
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
-    set URL to "https://sellercentral.amazon.com/opportunity-explorer/explore/search?search=plastic+drop+cloth&search_type=KEYWORD"
+    set URL to "https://sellercentral.amazon.com/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326/product"
   end tell
 end tell
 '
 sleep 20
-
-# Click the "plastic drop cloth" niche row
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    execute javascript "
-      const links = document.querySelectorAll(\"a, span, td\");
-      for (const el of links) {
-        if (el.textContent.trim() === \"plastic drop cloth\") { el.click(); break; }
-      }
-    "
-  end tell
-end tell
-'
-sleep 15
-
-# Click the "Products" tab
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    execute javascript "
-      const tabs = document.querySelectorAll(\"button, a, [role=\\\"tab\\\"]\");
-      for (const el of tabs) {
-        if (el.textContent.trim() === \"Products\") { el.click(); break; }
-      }
-    "
-  end tell
-end tell
-'
-sleep 10
 
 # Click Download button
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
     execute javascript "
-      const btns = document.querySelectorAll(\"button, a, [class*=\\\"download\\\"]\");
-      for (const el of btns) {
-        if (el.textContent.trim().includes(\"Download\")) { el.click(); break; }
+      var btns = document.querySelectorAll(\"a\");
+      for (var i = 0; i < btns.length; i++) {
+        if (btns[i].textContent.trim() === \"Download\") {
+          btns[i].click();
+          break;
+        }
       }
     "
   end tell
