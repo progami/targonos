@@ -1,5 +1,5 @@
 #!/bin/bash
-# Weekly Manual Sources — Master Runner
+# Weekly Browser Sources — Master Runner
 # Calls each weekly collection script in sequence.
 # Runs Monday 3 AM CT via launchd.
 #
@@ -8,8 +8,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PARENT_DIR="$(dirname "$SCRIPT_DIR")"
-LOG="/tmp/weekly-manual-sources.log"
+LOG="/tmp/weekly-browser-sources.log"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 log "=== Weekly Master Run Starting ==="
@@ -59,9 +58,10 @@ run_script() {
   sleep 5
 }
 
-run_script "Category Insights" "$PARENT_DIR/weekly-category-insights/collect.sh"
-run_script "Product Opportunity Explorer" "$PARENT_DIR/weekly-poe/collect.sh"
-run_script "ScaleInsights" "$PARENT_DIR/weekly-scaleinsights/collect.sh"
+run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh"
+run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh"
+run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh"
+run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh"
 
 log "=== Weekly Master Run Done ($FAILED failures) ==="
 
