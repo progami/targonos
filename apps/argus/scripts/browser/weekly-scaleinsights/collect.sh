@@ -11,6 +11,7 @@ LOG="/tmp/weekly-scaleinsights.log"
 
 EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
 LAST_SAT=$(date -v-sat '+%Y-%m-%d')
+LAST_SUN=$(date -j -v-6d -f '%Y-%m-%d' "$LAST_SAT" '+%Y-%m-%d')
 EPOCH_SAT=$(date -j -f '%Y-%m-%d' "$LAST_SAT" '+%s')
 WEEKS=$(( (EPOCH_SAT - EPOCH_START) / 604800 + 1 ))
 WEEK_NUM=$(printf "W%02d" $WEEKS)
@@ -32,6 +33,23 @@ tell application "Google Chrome"
 end tell
 '
 sleep 20
+
+# Set exact Sunday–Saturday date range before download
+osascript -e "
+tell application \"Google Chrome\"
+  tell active tab of first window
+    execute javascript \"
+      (function() {
+        var dp = jQuery('#reportrange').data('daterangepicker');
+        dp.setStartDate('${LAST_SUN}');
+        dp.setEndDate('${LAST_SAT}');
+        dp.clickApply();
+      })()
+    \"
+  end tell
+end tell
+"
+sleep 15
 
 # Click Download link (exports XLSX)
 osascript -e '
