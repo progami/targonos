@@ -1,8 +1,8 @@
 #!/bin/bash
-# Seller Central Session Keepalive
+# Session Keepalive — Seller Central + ScaleInsights
 # Runs every 4 hours via launchd to prevent session cookie expiration.
-# Finds an existing Seller Central tab in Chrome and refreshes it.
-# If no SC tab exists, creates one. Lightweight — no Claude API calls.
+# Finds existing tabs in Chrome and refreshes them.
+# If no tab exists, creates one. Lightweight — no Claude API calls.
 
 LOG="/tmp/sc-keepalive.log"
 
@@ -41,9 +41,42 @@ end tell
 APPLESCRIPT
 
 if [ $? -eq 0 ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — Keepalive OK" >> "$LOG"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive OK" >> "$LOG"
 else
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — Keepalive FAILED" >> "$LOG"
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive FAILED" >> "$LOG"
+fi
+
+sleep 5
+
+# ScaleInsights keepalive — refresh session cookie
+osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  if (count of windows) = 0 then return
+
+  set found to false
+  repeat with w in windows
+    repeat with i from 1 to (count of tabs of w)
+      if URL of tab i of w contains "scaleinsights.com" then
+        set URL of tab i of w to "https://portal.scaleinsights.com/KeywordRanking"
+        set found to true
+        exit repeat
+      end if
+    end repeat
+    if found then exit repeat
+  end repeat
+
+  if not found then
+    tell last window
+      make new tab with properties {URL:"https://portal.scaleinsights.com/KeywordRanking"}
+    end tell
+  end if
+end tell
+APPLESCRIPT
+
+if [ $? -eq 0 ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — SI Keepalive OK" >> "$LOG"
+else
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — SI Keepalive FAILED" >> "$LOG"
 fi
 
 # Trim log to last 100 lines
