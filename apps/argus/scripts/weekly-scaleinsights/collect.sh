@@ -23,45 +23,26 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
 
-# Navigate to ScaleInsights
+# Navigate directly to Keyword Ranking page
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
-    set URL to "https://portal.scaleinsights.com/"
+    set URL to "https://portal.scaleinsights.com/KeywordRanking"
   end tell
 end tell
 '
 sleep 15
 
-# Navigate to Keyword Ranking and click Export
-# ScaleInsights UI varies — try finding the export button
+# Click Download link (exports XLSX)
 osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
     execute javascript "
-      // Look for Keyword Ranking nav item
-      const navItems = document.querySelectorAll(\"a, span, div, button\");
-      for (const el of navItems) {
-        if (el.textContent.trim() === \"Keyword Ranking\" || el.textContent.trim() === \"Keyword ranking\") {
-          el.click(); break;
-        }
-      }
-    "
-  end tell
-end tell
-'
-sleep 10
-
-# Click Export/Download
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    execute javascript "
-      const btns = document.querySelectorAll(\"button, a\");
-      for (const el of btns) {
-        const t = el.textContent.trim().toLowerCase();
-        if (t === \"export\" || t === \"download\" || t.includes(\"export\")) {
-          el.click(); break;
+      var links = document.querySelectorAll(\"a\");
+      for (var i = 0; i < links.length; i++) {
+        if (links[i].textContent.trim() === \"Download\") {
+          links[i].click();
+          break;
         }
       }
     "
