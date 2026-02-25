@@ -486,103 +486,126 @@ export default function SettlementMappingPage() {
                 </Box>
               </Box>
 
-              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {isLoading && (
-                  <Typography sx={{ py: 3, color: 'text.secondary' }}>Loading…</Typography>
-                )}
+              {isLoading && (
+                <Typography sx={{ py: 3, color: 'text.secondary' }}>Loading…</Typography>
+              )}
 
-                {!isLoading && memoRows.length === 0 && (
-                  <Typography sx={{ py: 3, color: 'text.secondary' }}>No transaction category mappings found.</Typography>
-                )}
+              {!isLoading && memoRows.length === 0 && (
+                <Typography sx={{ py: 3, color: 'text.secondary' }}>No transaction category mappings found.</Typography>
+              )}
 
-                {!isLoading &&
-                  memoRows.map(([memo, accountId]) => {
+              {!isLoading && memoRows.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: taxEngineEnabled ? { xs: '1fr', md: '1fr 1fr 1fr' } : { xs: '1fr', md: '1fr 1fr' },
+                      gap: 0,
+                      px: 1.5,
+                      py: 1,
+                      borderBottom: 1,
+                      borderColor: 'divider',
+                    }}
+                  >
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                      Transaction Category
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
+                      Account Name
+                    </Typography>
+                    {taxEngineEnabled && (
+                      <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
+                        Tax Rate
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {memoRows.map(([memo, accountId]) => {
                     const taxCodeId = taxCodeMappings[memo] ?? null;
 
                     return (
-                      <Card key={memo} sx={{ border: 1, borderColor: 'divider', '&:hover': { borderColor: 'rgba(0, 194, 185, 0.3)' }, transition: 'border-color 0.15s' }}>
-                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9', mb: 0.5 }}>
-                            Transaction Category
-                          </Typography>
-                          <Typography sx={{ fontFamily: 'monospace', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', mb: 1.5 }}>
-                            {memo}
-                          </Typography>
-                          <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: taxEngineEnabled ? { xs: '1fr', md: '1fr 1fr' } : '1fr' }}>
-                            <Box>
-                              <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
-                                Account Name
-                              </Typography>
-                              <FormControl size="small" fullWidth>
-                                <Select
-                                  value={accountId}
-                                  onChange={(e) => {
-                                    const nextAccountId = e.target.value as string;
-                                    setByRegion((prev) => ({
-                                      ...prev,
-                                      [region]: {
-                                        ...prev[region],
-                                        memoMappings: { ...prev[region].memoMappings, [memo]: nextAccountId },
-                                      },
-                                    }));
-                                  }}
-                                  renderValue={(sel) => {
-                                    const found = accounts.find((a) => a.id === sel);
-                                    return found ? accountLabel(found) : (sel as string);
-                                  }}
-                                >
-                                  {accounts.map((a) => (
-                                    <MenuItem key={a.id} value={a.id}>
-                                      {accountLabel(a)}
-                                    </MenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            </Box>
-                            {taxEngineEnabled && (
-                              <Box>
-                                <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', mb: 0.5 }}>
-                                  Tax Rate
-                                </Typography>
-                                <FormControl size="small" fullWidth>
-                                  <Select
-                                    value={taxCodeId ?? ''}
-                                    onChange={(e) => {
-                                      const nextTaxCodeId = e.target.value as string;
-                                      setByRegion((prev) => ({
-                                        ...prev,
-                                        [region]: {
-                                          ...prev[region],
-                                          taxCodeMappings: {
-                                            ...prev[region].taxCodeMappings,
-                                            [memo]: nextTaxCodeId === '' ? null : nextTaxCodeId,
-                                          },
-                                        },
-                                      }));
-                                    }}
-                                    displayEmpty
-                                    renderValue={(sel) => {
-                                      if (!sel) return <span style={{ color: '#94a3b8' }}>No tax code</span>;
-                                      const found = activeTaxCodes.find((taxCode) => taxCode.id === sel);
-                                      return found ? found.name : (sel as string);
-                                    }}
-                                  >
-                                    <MenuItem value="">No tax code</MenuItem>
-                                    {activeTaxCodes.map((taxCode) => (
-                                      <MenuItem key={taxCode.id} value={taxCode.id}>
-                                        {taxCode.name}
-                                      </MenuItem>
-                                    ))}
-                                  </Select>
-                                </FormControl>
-                              </Box>
-                            )}
-                          </Box>
-                        </CardContent>
-                      </Card>
+                      <Box
+                        key={memo}
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: taxEngineEnabled ? { xs: '1fr', md: '1fr 1fr 1fr' } : { xs: '1fr', md: '1fr 1fr' },
+                          gap: { xs: 1, md: 2 },
+                          alignItems: 'center',
+                          px: 1.5,
+                          py: 1.25,
+                          borderBottom: 1,
+                          borderColor: 'divider',
+                          '&:last-child': { borderBottom: 0 },
+                          '&:hover': { bgcolor: 'rgba(0, 194, 185, 0.03)' },
+                          transition: 'background-color 0.15s',
+                        }}
+                      >
+                        <Typography sx={{ fontFamily: 'monospace', fontSize: '0.8125rem', fontWeight: 500, color: 'text.primary' }}>
+                          {memo}
+                        </Typography>
+                        <FormControl size="small" fullWidth>
+                          <Select
+                            value={accountId}
+                            onChange={(e) => {
+                              const nextAccountId = e.target.value as string;
+                              setByRegion((prev) => ({
+                                ...prev,
+                                [region]: {
+                                  ...prev[region],
+                                  memoMappings: { ...prev[region].memoMappings, [memo]: nextAccountId },
+                                },
+                              }));
+                            }}
+                            renderValue={(sel) => {
+                              const found = accounts.find((a) => a.id === sel);
+                              return found ? accountLabel(found) : (sel as string);
+                            }}
+                          >
+                            {accounts.map((a) => (
+                              <MenuItem key={a.id} value={a.id}>
+                                {accountLabel(a)}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        {taxEngineEnabled && (
+                          <FormControl size="small" fullWidth>
+                            <Select
+                              value={taxCodeId ?? ''}
+                              onChange={(e) => {
+                                const nextTaxCodeId = e.target.value as string;
+                                setByRegion((prev) => ({
+                                  ...prev,
+                                  [region]: {
+                                    ...prev[region],
+                                    taxCodeMappings: {
+                                      ...prev[region].taxCodeMappings,
+                                      [memo]: nextTaxCodeId === '' ? null : nextTaxCodeId,
+                                    },
+                                  },
+                                }));
+                              }}
+                              displayEmpty
+                              renderValue={(sel) => {
+                                if (!sel) return <span style={{ color: '#94a3b8' }}>No tax code</span>;
+                                const found = activeTaxCodes.find((taxCode) => taxCode.id === sel);
+                                return found ? found.name : (sel as string);
+                              }}
+                            >
+                              <MenuItem value="">No tax code</MenuItem>
+                              {activeTaxCodes.map((taxCode) => (
+                                <MenuItem key={taxCode.id} value={taxCode.id}>
+                                  {taxCode.name}
+                                </MenuItem>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        )}
+                      </Box>
                     );
                   })}
-              </Box>
+                </Box>
+              )}
             </CardContent>
           </Card>
 
