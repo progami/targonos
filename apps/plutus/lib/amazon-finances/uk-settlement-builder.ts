@@ -222,6 +222,15 @@ type MarketplaceVatWithheldSummary = {
   withheldVatShippingCents: number;
 };
 
+type MarketplaceVatOrderItem = {
+  taxCents: number;
+  shippingTaxCents: number;
+  taxPromoCents: number;
+  shippingTaxPromoCents: number;
+  withheldSummary: MarketplaceVatWithheldSummary;
+  promoWorkingCentsList: number[];
+};
+
 function computeMarketplaceVatWithheldSummary(input: {
   withheldComponents: SpApiTaxWithheldComponent[];
   context: string;
@@ -261,6 +270,88 @@ function computeMarketplaceVatWithheldSummary(input: {
     withheldVatPrincipalCents,
     withheldVatShippingCents,
   };
+}
+
+function hasMarketplaceVatResponsibleItem(items: MarketplaceVatOrderItem[]): boolean {
+  return items.some((item) => item.withheldSummary.marketplaceVatResponsible);
+}
+
+function applyTaxPromotionMatchingByItem(items: MarketplaceVatOrderItem[]): void {
+  for (const item of items) {
+    if (item.taxCents !== 0 && removeOneMatchingCents(item.promoWorkingCentsList, -item.taxCents)) {
+      item.taxPromoCents = -item.taxCents;
+    }
+    if (item.shippingTaxCents !== 0 && removeOneMatchingCents(item.promoWorkingCentsList, -item.shippingTaxCents)) {
+      item.shippingTaxPromoCents = -item.shippingTaxCents;
+    }
+  }
+}
+
+function sumMarketplaceVatTotals(items: MarketplaceVatOrderItem[]): {
+  taxCents: number;
+  taxPromoCents: number;
+  shippingTaxCents: number;
+  shippingTaxPromoCents: number;
+  withheldVatPrincipalCents: number;
+  withheldVatShippingCents: number;
+} {
+  let taxCents = 0;
+  let taxPromoCents = 0;
+  let shippingTaxCents = 0;
+  let shippingTaxPromoCents = 0;
+  let withheldVatPrincipalCents = 0;
+  let withheldVatShippingCents = 0;
+
+  for (const item of items) {
+    taxCents += item.taxCents;
+    taxPromoCents += item.taxPromoCents;
+    shippingTaxCents += item.shippingTaxCents;
+    shippingTaxPromoCents += item.shippingTaxPromoCents;
+    withheldVatPrincipalCents += item.withheldSummary.withheldVatPrincipalCents;
+    withheldVatShippingCents += item.withheldSummary.withheldVatShippingCents;
+  }
+
+  return {
+    taxCents,
+    taxPromoCents,
+    shippingTaxCents,
+    shippingTaxPromoCents,
+    withheldVatPrincipalCents,
+    withheldVatShippingCents,
+  };
+}
+
+function validateMarketplaceVatForOrder(input: {
+  context: 'Shipment' | 'Refund';
+  orderId: string;
+  items: MarketplaceVatOrderItem[];
+  marketplaceVatResponsible: boolean;
+}): void {
+  const totals = sumMarketplaceVatTotals(input.items);
+
+  if (input.marketplaceVatResponsible) {
+    const principalVatDelta = totals.taxCents + totals.taxPromoCents + totals.withheldVatPrincipalCents;
+    if (principalVatDelta !== 0) {
+      throw new Error(
+        `Marketplace VAT mismatch (Principal): tax=${totals.taxCents} promo=${totals.taxPromoCents} withheld=${totals.withheldVatPrincipalCents} orderId=${input.orderId}`,
+      );
+    }
+
+    const shippingVatDelta = totals.shippingTaxCents + totals.shippingTaxPromoCents + totals.withheldVatShippingCents;
+    if (shippingVatDelta !== 0) {
+      throw new Error(
+        `Marketplace VAT mismatch (Shipping): tax=${totals.shippingTaxCents} promo=${totals.shippingTaxPromoCents} withheld=${totals.withheldVatShippingCents} orderId=${input.orderId}`,
+      );
+    }
+
+    return;
+  }
+
+  if (totals.withheldVatPrincipalCents !== 0 || totals.withheldVatShippingCents !== 0) {
+    throw new Error(
+      `Unexpected withheld VAT for non-marketplace-VAT ${input.context.toLowerCase()}: principal=${totals.withheldVatPrincipalCents} shipping=${totals.withheldVatShippingCents} orderId=${input.orderId}`,
+    );
+  }
 }
 
 function removeOneMatchingCents(values: number[], target: number): boolean {
@@ -395,8 +486,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     const orderId = typeof shipment.AmazonOrderId === 'string' ? shipment.AmazonOrderId : '';
     const items = shipment.ShipmentItemList ?? [];
     const scope = orderScopeFromMarketplaceName((shipment as { MarketplaceName?: unknown }).MarketplaceName);
-
-    for (const item of items) {
+    const parsedItems = items.map((item) => {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qty = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
@@ -438,82 +528,78 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         withheldComponents: toWithheldComponents(item.ItemTaxWithheldList),
         context: 'Shipment',
       });
-      const marketplaceVatResponsible = withheldSummary.marketplaceVatResponsible;
 
-      const promoCentsList = toPromotions(item.PromotionList)
+      const promoWorkingCentsList = toPromotions(item.PromotionList)
         .map((promo) => {
           const amount = promo.PromotionAmount;
           return amount ? moneyToCents(amount, 'Shipment promotion') : 0;
         })
         .filter((cents) => cents !== 0);
 
-      const promoWorkingCentsList = promoCentsList.slice();
-      let taxPromoCents = 0;
-      let shippingTaxPromoCents = 0;
+      return {
+        item,
+        skuRaw,
+        qty,
+        brandLabel,
+        principalCents,
+        taxCents,
+        shippingCents,
+        shippingTaxCents,
+        withheldSummary,
+        promoWorkingCentsList,
+        taxPromoCents: 0,
+        shippingTaxPromoCents: 0,
+      };
+    });
 
-      if (marketplaceVatResponsible) {
-        if (taxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -taxCents)) {
-          taxPromoCents = -taxCents;
-        }
-        if (shippingTaxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -shippingTaxCents)) {
-          shippingTaxPromoCents = -shippingTaxCents;
-        }
+    const orderMarketplaceVatResponsible = hasMarketplaceVatResponsibleItem(parsedItems);
+    if (orderMarketplaceVatResponsible) {
+      applyTaxPromotionMatchingByItem(parsedItems);
+    }
+    validateMarketplaceVatForOrder({
+      context: 'Shipment',
+      orderId,
+      items: parsedItems,
+      marketplaceVatResponsible: orderMarketplaceVatResponsible,
+    });
 
-        const principalVatDelta = taxCents + taxPromoCents + withheldSummary.withheldVatPrincipalCents;
-        if (principalVatDelta !== 0) {
-          throw new Error(
-            `Marketplace VAT mismatch (Principal): tax=${taxCents} promo=${taxPromoCents} withheld=${withheldSummary.withheldVatPrincipalCents} orderId=${orderId} sku=${skuRaw}`,
-          );
-        }
+    for (const itemData of parsedItems) {
+      const principalNetCents = orderMarketplaceVatResponsible ? itemData.principalCents : itemData.principalCents + itemData.taxCents;
+      const shippingNetCents = orderMarketplaceVatResponsible ? itemData.shippingCents : itemData.shippingCents + itemData.shippingTaxCents;
 
-        const shippingVatDelta = shippingTaxCents + shippingTaxPromoCents + withheldSummary.withheldVatShippingCents;
-        if (shippingVatDelta !== 0) {
-          throw new Error(
-            `Marketplace VAT mismatch (Shipping): tax=${shippingTaxCents} promo=${shippingTaxPromoCents} withheld=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
-          );
-        }
-      } else if (withheldSummary.withheldVatPrincipalCents !== 0 || withheldSummary.withheldVatShippingCents !== 0) {
-        throw new Error(
-          `Unexpected withheld VAT for non-marketplace-VAT order: principal=${withheldSummary.withheldVatPrincipalCents} shipping=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
-        );
-      }
-
-      const principalNetCents = marketplaceVatResponsible ? principalCents : principalCents + taxCents;
-      const shippingNetCents = marketplaceVatResponsible ? shippingCents : shippingCents + shippingTaxCents;
-
-      if (brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
+      if (itemData.brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
         throw new Error(`Missing SKU/brand for shipment item with non-zero charges (orderId=${orderId})`);
       }
 
       if (principalNetCents !== 0) {
-        const memo = salesMemo({ kind: 'Principal', brandLabel, marketplaceVatResponsible });
+        const memo = salesMemo({ kind: 'Principal', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, principalNetCents);
         segment.auditRows.push({
           invoiceId: segment.docNumber,
           market: 'uk',
           date: localIsoDay,
           orderId,
-          sku: skuRaw,
-          quantity: qty,
+          sku: itemData.skuRaw,
+          quantity: itemData.qty,
           description: memo,
           netCents: principalNetCents,
         });
       }
 
       if (shippingNetCents !== 0) {
-        const memo = salesMemo({ kind: 'Shipping', brandLabel, marketplaceVatResponsible });
+        const memo = salesMemo({ kind: 'Shipping', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, shippingNetCents);
       }
 
-      if (promoWorkingCentsList.length > 0) {
-        const promoTotalCents = promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
+      if (itemData.promoWorkingCentsList.length > 0) {
+        const promoTotalCents = itemData.promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
         if (promoTotalCents !== 0) {
           const split = splitPromotionCentsByShipping({ promoTotalCents, shippingCents: shippingNetCents });
 
           if (split.shippingPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              salesMemo({ kind: 'Shipping Promotion', brandLabel, marketplaceVatResponsible }),
+              salesMemo({ kind: 'Shipping Promotion', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.shippingPromoCents,
             );
           }
@@ -521,14 +607,14 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.discountPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              salesMemo({ kind: 'Promotional Discounts', brandLabel, marketplaceVatResponsible }),
+              salesMemo({ kind: 'Promotional Discounts', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.discountPromoCents,
             );
           }
         }
       }
 
-      for (const fee of toFeeComponents(item.ItemFeeList)) {
+      for (const fee of toFeeComponents(itemData.item.ItemFeeList)) {
         const feeType = typeof fee.FeeType === 'string' ? fee.FeeType : '';
         const feeAmount = fee.FeeAmount;
         if (!feeAmount) continue;
@@ -541,13 +627,13 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         }
         addCents(segment.memoTotalsCents, memo, cents);
 
-        if (skuRaw !== '') {
+        if (itemData.skuRaw !== '') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
             market: 'uk',
             date: localIsoDay,
             orderId,
-            sku: skuRaw,
+            sku: itemData.skuRaw,
             quantity: 0,
             description: memo,
             netCents: cents,
@@ -568,8 +654,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     const orderId = typeof refund.AmazonOrderId === 'string' ? refund.AmazonOrderId : '';
     const items = refund.ShipmentItemAdjustmentList ?? [];
     const scope = orderScopeFromMarketplaceName((refund as { MarketplaceName?: unknown }).MarketplaceName);
-
-    for (const item of items) {
+    const parsedItems = items.map((item) => {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qtyRaw = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const qty = qtyRaw === 0 ? 0 : -qtyRaw;
@@ -612,82 +697,78 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         withheldComponents: toWithheldComponents(item.ItemTaxWithheldList),
         context: 'Refund',
       });
-      const marketplaceVatResponsible = withheldSummary.marketplaceVatResponsible;
 
-      const promoCentsList = toPromotions(item.PromotionAdjustmentList)
+      const promoWorkingCentsList = toPromotions(item.PromotionAdjustmentList)
         .map((promo) => {
           const amount = promo.PromotionAmount;
           return amount ? moneyToCents(amount, 'Refund promotion') : 0;
         })
         .filter((cents) => cents !== 0);
 
-      const promoWorkingCentsList = promoCentsList.slice();
-      let taxPromoCents = 0;
-      let shippingTaxPromoCents = 0;
+      return {
+        item,
+        skuRaw,
+        qty,
+        brandLabel,
+        principalCents,
+        taxCents,
+        shippingCents,
+        shippingTaxCents,
+        withheldSummary,
+        promoWorkingCentsList,
+        taxPromoCents: 0,
+        shippingTaxPromoCents: 0,
+      };
+    });
 
-      if (marketplaceVatResponsible) {
-        if (taxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -taxCents)) {
-          taxPromoCents = -taxCents;
-        }
-        if (shippingTaxCents !== 0 && removeOneMatchingCents(promoWorkingCentsList, -shippingTaxCents)) {
-          shippingTaxPromoCents = -shippingTaxCents;
-        }
+    const orderMarketplaceVatResponsible = hasMarketplaceVatResponsibleItem(parsedItems);
+    if (orderMarketplaceVatResponsible) {
+      applyTaxPromotionMatchingByItem(parsedItems);
+    }
+    validateMarketplaceVatForOrder({
+      context: 'Refund',
+      orderId,
+      items: parsedItems,
+      marketplaceVatResponsible: orderMarketplaceVatResponsible,
+    });
 
-        const principalVatDelta = taxCents + taxPromoCents + withheldSummary.withheldVatPrincipalCents;
-        if (principalVatDelta !== 0) {
-          throw new Error(
-            `Marketplace VAT mismatch (Principal): tax=${taxCents} promo=${taxPromoCents} withheld=${withheldSummary.withheldVatPrincipalCents} orderId=${orderId} sku=${skuRaw}`,
-          );
-        }
+    for (const itemData of parsedItems) {
+      const principalNetCents = orderMarketplaceVatResponsible ? itemData.principalCents : itemData.principalCents + itemData.taxCents;
+      const shippingNetCents = orderMarketplaceVatResponsible ? itemData.shippingCents : itemData.shippingCents + itemData.shippingTaxCents;
 
-        const shippingVatDelta = shippingTaxCents + shippingTaxPromoCents + withheldSummary.withheldVatShippingCents;
-        if (shippingVatDelta !== 0) {
-          throw new Error(
-            `Marketplace VAT mismatch (Shipping): tax=${shippingTaxCents} promo=${shippingTaxPromoCents} withheld=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
-          );
-        }
-      } else if (withheldSummary.withheldVatPrincipalCents !== 0 || withheldSummary.withheldVatShippingCents !== 0) {
-        throw new Error(
-          `Unexpected withheld VAT for non-marketplace-VAT refund: principal=${withheldSummary.withheldVatPrincipalCents} shipping=${withheldSummary.withheldVatShippingCents} orderId=${orderId} sku=${skuRaw}`,
-        );
-      }
-
-      const principalNetCents = marketplaceVatResponsible ? principalCents : principalCents + taxCents;
-      const shippingNetCents = marketplaceVatResponsible ? shippingCents : shippingCents + shippingTaxCents;
-
-      if (brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
+      if (itemData.brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
         throw new Error(`Missing SKU/brand for refund item with non-zero charges (orderId=${orderId})`);
       }
 
       if (principalNetCents !== 0) {
-        const memo = refundMemo({ kind: 'Refunded Principal', brandLabel, marketplaceVatResponsible });
+        const memo = refundMemo({ kind: 'Refunded Principal', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, principalNetCents);
         segment.auditRows.push({
           invoiceId: segment.docNumber,
           market: 'uk',
           date: localIsoDay,
           orderId,
-          sku: skuRaw,
-          quantity: qty,
+          sku: itemData.skuRaw,
+          quantity: itemData.qty,
           description: memo,
           netCents: principalNetCents,
         });
       }
 
       if (shippingNetCents !== 0) {
-        const memo = refundMemo({ kind: 'Refunded Shipping', brandLabel, marketplaceVatResponsible });
+        const memo = refundMemo({ kind: 'Refunded Shipping', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, shippingNetCents);
       }
 
-      if (promoWorkingCentsList.length > 0) {
-        const promoTotalCents = promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
+      if (itemData.promoWorkingCentsList.length > 0) {
+        const promoTotalCents = itemData.promoWorkingCentsList.reduce((sum, c) => sum + c, 0);
         if (promoTotalCents !== 0) {
           const split = splitPromotionCentsByShipping({ promoTotalCents, shippingCents: shippingNetCents });
 
           if (split.shippingPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              refundMemo({ kind: 'Refunded Shipping Promotion', brandLabel, marketplaceVatResponsible }),
+              refundMemo({ kind: 'Refunded Shipping Promotion', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.shippingPromoCents,
             );
           }
@@ -695,14 +776,14 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.discountPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              refundMemo({ kind: 'Refunded Promotional Discounts', brandLabel, marketplaceVatResponsible }),
+              refundMemo({ kind: 'Refunded Promotional Discounts', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.discountPromoCents,
             );
           }
         }
       }
 
-      for (const fee of toFeeComponents(item.ItemFeeAdjustmentList)) {
+      for (const fee of toFeeComponents(itemData.item.ItemFeeAdjustmentList)) {
         const feeType = typeof fee.FeeType === 'string' ? fee.FeeType : '';
         const feeAmount = fee.FeeAmount;
         if (!feeAmount) continue;
@@ -715,13 +796,13 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         }
         addCents(segment.memoTotalsCents, memo, cents);
 
-        if (skuRaw !== '') {
+        if (itemData.skuRaw !== '') {
           segment.auditRows.push({
             invoiceId: segment.docNumber,
             market: 'uk',
             date: localIsoDay,
             orderId,
-            sku: skuRaw,
+            sku: itemData.skuRaw,
             quantity: 0,
             description: memo,
             netCents: cents,
