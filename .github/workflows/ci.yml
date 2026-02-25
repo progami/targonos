@@ -24,7 +24,15 @@ jobs:
         with:
           node-version: 20
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc.ci
+        run: |
+          cat > "$NPM_CONFIG_USERCONFIG" <<'EOF'
+          registry=https://registry.npmjs.org/
+          @jsr:registry=https://npm.jsr.io/
+          always-auth=false
+          EOF
+          pnpm install --frozen-lockfile
       - name: Verify workspace versions are in sync
         run: node scripts/sync-versions.js --check
       - name: Populate dev env files
@@ -73,7 +81,9 @@ jobs:
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
   build-test-github-hosted:
-    if: vars.USE_SELF_HOSTED != 'true'
+    needs:
+      - build-test-self-hosted
+    if: always() && (vars.USE_SELF_HOSTED != 'true' || needs.build-test-self-hosted.result != 'success')
     runs-on: ubuntu-latest
     steps: *build-test-steps
   build-test:

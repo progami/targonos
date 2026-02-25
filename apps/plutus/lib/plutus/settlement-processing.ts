@@ -58,6 +58,12 @@ export type {
   SettlementProcessingResult,
 } from './settlement-types';
 
+const COGS_DISABLED_MARKETPLACES = new Set(['amazon.co.uk']);
+
+function isCogsEnabledForMarketplace(marketplace: string): boolean {
+  return COGS_DISABLED_MARKETPLACES.has(marketplace) === false;
+}
+
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
   const base = `${kind}${invoiceId}`;
   if (base.length <= 21) {
@@ -246,6 +252,7 @@ export async function computeSettlementPreview(input: {
 
   const meta = parseSettlementDocNumber(settlement.DocNumber);
   const marketplace = meta.marketplace.id;
+  const cogsEnabled = isCogsEnabledForMarketplace(marketplace);
 
   const invoiceId = input.invoiceId.trim();
   if (invoiceId === '') {
@@ -361,14 +368,6 @@ export async function computeSettlementPreview(input: {
   }
 
   const requiredMappingKeys = [
-    'invManufacturing',
-    'invFreight',
-    'invDuty',
-    'invMfgAccessories',
-    'cogsManufacturing',
-    'cogsFreight',
-    'cogsDuty',
-    'cogsMfgAccessories',
     'amazonSellerFees',
     'amazonFbaFees',
     'amazonStorageFees',
@@ -377,6 +376,18 @@ export async function computeSettlementPreview(input: {
     'amazonFbaInventoryReimbursement',
     'warehousingAwd',
   ];
+  if (cogsEnabled) {
+    requiredMappingKeys.unshift(
+      'invManufacturing',
+      'invFreight',
+      'invDuty',
+      'invMfgAccessories',
+      'cogsManufacturing',
+      'cogsFreight',
+      'cogsDuty',
+      'cogsMfgAccessories',
+    );
+  }
 
   const mapping: Record<string, string | undefined> = {};
   if (setupConfig) {
@@ -454,21 +465,24 @@ export async function computeSettlementPreview(input: {
         ? settlementResult.updatedConnection
         : input.connection;
 
-  const invManufacturing = mapping.invManufacturing;
-  if (!invManufacturing) throw new Error('Missing invManufacturing mapping');
-  const invFreight = mapping.invFreight;
-  if (!invFreight) throw new Error('Missing invFreight mapping');
-  const invDuty = mapping.invDuty;
-  if (!invDuty) throw new Error('Missing invDuty mapping');
-  const invMfgAccessories = mapping.invMfgAccessories;
-  if (!invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
+  let inventoryMappings: InventoryAccountMappings | null = null;
+  if (cogsEnabled) {
+    const invManufacturing = mapping.invManufacturing;
+    if (!invManufacturing) throw new Error('Missing invManufacturing mapping');
+    const invFreight = mapping.invFreight;
+    if (!invFreight) throw new Error('Missing invFreight mapping');
+    const invDuty = mapping.invDuty;
+    if (!invDuty) throw new Error('Missing invDuty mapping');
+    const invMfgAccessories = mapping.invMfgAccessories;
+    if (!invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
 
-  const inventoryMappings: InventoryAccountMappings = {
-    invManufacturing,
-    invFreight,
-    invDuty,
-    invMfgAccessories,
-  };
+    inventoryMappings = {
+      invManufacturing,
+      invFreight,
+      invDuty,
+      invMfgAccessories,
+    };
+  }
 
   // Bill sources:
   // - QBO bills parsing (best-effort, relies on memo/description conventions)
@@ -507,9 +521,11 @@ export async function computeSettlementPreview(input: {
     return { events, poUnitsBySku };
   }
 
-  const plutusMappings = await db.billMapping.findMany({
-    include: { lines: true },
-  });
+  const plutusMappings = cogsEnabled
+    ? await db.billMapping.findMany({
+        include: { lines: true },
+      })
+    : [];
 
   const mappedBillIds = new Set(plutusMappings.map((m) => m.qboBillId));
 
@@ -518,92 +534,95 @@ export async function computeSettlementPreview(input: {
   let parsedBillsFromQbo: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let allBills: QboBill[] = [];
 
-  try {
-    let startPosition = 1;
-    const pageSize = 100;
+  if (cogsEnabled) {
+    try {
+      let startPosition = 1;
+      const pageSize = 100;
 
-    while (true) {
-      const page = await fetchBills(billsConnection, { endDate: maxDate, maxResults: pageSize, startPosition });
-      if (page.updatedConnection) {
-        billsConnection = page.updatedConnection;
+      while (true) {
+        const page = await fetchBills(billsConnection, { endDate: maxDate, maxResults: pageSize, startPosition });
+        if (page.updatedConnection) {
+          billsConnection = page.updatedConnection;
+        }
+
+        allBills = allBills.concat(page.bills);
+
+        if (allBills.length >= page.totalCount) break;
+        if (page.bills.length === 0) break;
+
+        startPosition += page.bills.length;
       }
-
-      allBills = allBills.concat(page.bills);
-
-      if (allBills.length >= page.totalCount) break;
-      if (page.bills.length === 0) break;
-
-      startPosition += page.bills.length;
+    } catch (error) {
+      blocks.push({
+        code: 'BILLS_FETCH_ERROR',
+        message: 'Failed to fetch bills from QBO',
+        details: { error: error instanceof Error ? error.message : String(error) },
+      });
+      allBills = [];
     }
-  } catch (error) {
-    blocks.push({
-      code: 'BILLS_FETCH_ERROR',
-      message: 'Failed to fetch bills from QBO',
-      details: { error: error instanceof Error ? error.message : String(error) },
-    });
-    allBills = [];
-  }
 
-  if (plutusMappings.length > 0 && allBills.length > 0) {
-    const billsById = new Map(allBills.map((bill) => [bill.Id, bill]));
-    const pullSyncUpdates = buildBillMappingPullSyncUpdates(
-      plutusMappings as BillMappingPullSyncCandidate[],
-      billsById,
-    );
-
-    if (pullSyncUpdates.length > 0) {
-      const syncedAt = new Date();
-      await db.$transaction(
-        pullSyncUpdates.map((update) =>
-          db.billMapping.update({
-            where: { id: update.id },
-            data: {
-              poNumber: update.poNumber,
-              billDate: update.billDate,
-              vendorName: update.vendorName,
-              totalAmount: update.totalAmount,
-              syncedAt,
-            },
-          }),
-        ),
+    if (plutusMappings.length > 0 && allBills.length > 0) {
+      const billsById = new Map(allBills.map((bill) => [bill.Id, bill]));
+      const pullSyncUpdates = buildBillMappingPullSyncUpdates(
+        plutusMappings as BillMappingPullSyncCandidate[],
+        billsById,
       );
 
-      const mappingByBillId = new Map(plutusMappings.map((mapping) => [mapping.qboBillId, mapping]));
-      for (const update of pullSyncUpdates) {
-        const existing = mappingByBillId.get(update.qboBillId);
-        if (!existing) continue;
-        existing.poNumber = update.poNumber;
-        existing.billDate = update.billDate;
-        existing.vendorName = update.vendorName;
-        existing.totalAmount = update.totalAmount;
-        existing.syncedAt = syncedAt;
+      if (pullSyncUpdates.length > 0) {
+        const syncedAt = new Date();
+        await db.$transaction(
+          pullSyncUpdates.map((update) =>
+            db.billMapping.update({
+              where: { id: update.id },
+              data: {
+                poNumber: update.poNumber,
+                billDate: update.billDate,
+                vendorName: update.vendorName,
+                totalAmount: update.totalAmount,
+                syncedAt,
+              },
+            }),
+          ),
+        );
+
+        const mappingByBillId = new Map(plutusMappings.map((mapping) => [mapping.qboBillId, mapping]));
+        for (const update of pullSyncUpdates) {
+          const existing = mappingByBillId.get(update.qboBillId);
+          if (!existing) continue;
+          existing.poNumber = update.poNumber;
+          existing.billDate = update.billDate;
+          existing.vendorName = update.vendorName;
+          existing.totalAmount = update.totalAmount;
+          existing.syncedAt = syncedAt;
+        }
       }
     }
-  }
 
-  if (plutusMappings.length > 0) {
+    if (plutusMappings.length > 0) {
+      try {
+        parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
+      } catch (error) {
+        blocks.push({
+          code: 'BILLS_PARSE_ERROR',
+          message: 'Failed to build inventory events from bill mappings',
+          details: { error: error instanceof Error ? error.message : String(error) },
+        });
+        parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
+      }
+    }
+
     try {
-      parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
+      if (inventoryMappings === null) throw new Error('Missing inventory mappings');
+      const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
+      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
     } catch (error) {
       blocks.push({
         code: 'BILLS_PARSE_ERROR',
-        message: 'Failed to build inventory events from bill mappings',
+        message: 'Failed to parse bills into inventory events',
         details: { error: error instanceof Error ? error.message : String(error) },
       });
-      parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
+      parsedBillsFromQbo = { events: [], poUnitsBySku: new Map() };
     }
-  }
-
-  try {
-    const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
-    parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
-  } catch (error) {
-    blocks.push({
-      code: 'BILLS_PARSE_ERROR',
-      message: 'Failed to parse bills into inventory events',
-      details: { error: error instanceof Error ? error.message : String(error) },
-    });
-    parsedBillsFromQbo = { events: [], poUnitsBySku: new Map() };
   }
 
   const parsedBills = mergeParsedBills(parsedBillsFromQbo, parsedBillsFromMappings);
@@ -765,7 +784,7 @@ export async function computeSettlementPreview(input: {
 
   const knownSales: KnownLedgerEvent[] = [];
   const knownReturns: KnownLedgerEvent[] = [];
-  if (hasInvoiceUnitMovements) {
+  if (cogsEnabled && hasInvoiceUnitMovements) {
     const knownSalesRecords = await db.orderSale.findMany({
       where: {
         marketplace,
@@ -848,7 +867,7 @@ export async function computeSettlementPreview(input: {
 
   let ledgerBlocks: LedgerBlock[] = [];
   let computedCosts: SaleCost[] = [];
-  if (!hasBillsError && hasInvoiceUnitMovements) {
+  if (cogsEnabled && !hasBillsError && hasInvoiceUnitMovements) {
     const replay = replayInventoryLedger({
       parsedBills,
       knownSales,
@@ -885,7 +904,7 @@ export async function computeSettlementPreview(input: {
       const key = `${sale.orderId}::${sale.sku}`;
       const cost = computedCostByKey.get(key);
       if (!cost) {
-        if (!missingCostBasisSkus.has(sale.sku)) {
+        if (cogsEnabled && !missingCostBasisSkus.has(sale.sku)) {
           throw new Error(`Missing computed cost basis but no ledger block emitted: ${sale.orderId} ${sale.sku}`);
         }
         computedSales.push({
@@ -955,15 +974,17 @@ export async function computeSettlementPreview(input: {
   // Build JE lines (resolve brand sub-accounts)
   const brandNames = Array.from(new Set(skuToBrand.values())).sort();
 
-  const cogsLines = buildCogsJournalLines(
-    netCogsByBrand,
-    brandNames,
-    mapping,
-    accountsResult.accounts,
-    invoiceId,
-    blocks,
-    netCogsByBrandSku,
-  );
+  const cogsLines = cogsEnabled
+    ? buildCogsJournalLines(
+        netCogsByBrand,
+        brandNames,
+        mapping,
+        accountsResult.accounts,
+        invoiceId,
+        blocks,
+        netCogsByBrandSku,
+      )
+    : [];
   const pnlLines = buildPnlJournalLines(
     pnlAllocation.allocationsByBucket,
     mapping,
