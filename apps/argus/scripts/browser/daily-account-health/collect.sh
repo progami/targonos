@@ -100,11 +100,11 @@ tell application "Google Chrome"
         if (asin && m) listings.push({ asin: asin, ncx_rate: m[1], ncx_orders: m[2], total_orders: m[3] });
       });
       JSON.stringify({
-        cx_excellent: cx?.[1] || \"0\",
-        cx_good: cx?.[2] || \"0\",
+        cx_very_poor: cx?.[1] || \"0\",
+        cx_poor: cx?.[2] || \"0\",
         cx_fair: cx?.[3] || \"0\",
-        cx_poor: cx?.[4] || \"0\",
-        cx_very_poor: cx?.[5] || \"0\",
+        cx_good: cx?.[4] || \"0\",
+        cx_excellent: cx?.[5] || \"0\",
         listings: listings
       });
     "
