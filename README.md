@@ -17,7 +17,7 @@ nginx (local reverse proxy; hostname + path routing)
   ↓
 PM2 (process manager)
   ↓
-Next.js apps (ports 30xx main / 31xx dev)
+Next.js apps (ports 30xx main / 31xx dev / 32xx standalone local dev)
   ↓
 PostgreSQL (5432) + Redis (6379) + external APIs (S3, etc.)
 ```
@@ -127,6 +127,8 @@ Portal app-link configuration:
 ## Local development (new developer setup)
 
 This section covers how to set up the repo on your own machine for local development, connecting to the shared dev database.
+
+Local standalone convention: use `32xx` ports (`3200` portal, `3201` talos, `3205` website, `3206` atlas, `3208` xplan, `3210` kairos, `3212` plutus, `3214` hermes).
 
 ### Prerequisites
 

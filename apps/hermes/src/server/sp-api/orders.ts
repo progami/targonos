@@ -2,7 +2,7 @@
 import { SpApiClient } from "./client";
 
 /**
- * Orders API (v0)
+ * Orders API (v2026-01-01)
  *
  * For Hermes we use this for:
  * - backfilling past orders
@@ -13,14 +13,14 @@ import { SpApiClient } from "./client";
 type GetOrdersParams = {
   client: SpApiClient;
 
-  /** Required for the initial call (ignored when NextToken is used). */
+  /** Required for the initial call (kept across pagination). */
   marketplaceIds: string[];
 
-  /** ISO-8601. Required when NextToken is not used. */
+  /** ISO-8601. Required when paginationToken is not used. */
   createdAfter?: string;
   createdBefore?: string;
 
-  /** Alternative to CreatedAfter. ISO-8601. */
+  /** Alternative to createdAfter. ISO-8601. */
   lastUpdatedAfter?: string;
   lastUpdatedBefore?: string;
 
@@ -28,7 +28,7 @@ type GetOrdersParams = {
   orderStatuses?: string[];
   fulfillmentChannels?: string[];
 
-  /** Pagination token from a previous response. When provided, other params are ignored. */
+  /** Pagination token from a previous response. */
   nextToken?: string;
 
   /** 1..100 (per Amazon docs). */
@@ -46,6 +46,20 @@ function joinCsv(values?: string[]): string | undefined {
   return values.join(",");
 }
 
+function normalizeStatusForV2026(status: string): string {
+  const normalized = status.trim().toUpperCase().replace(/\s+/g, "_");
+  if (normalized === "PARTIALLYSHIPPED") return "PARTIALLY_SHIPPED";
+  if (normalized === "CANCELED") return "CANCELLED";
+  return normalized;
+}
+
+function normalizeFulfilledByForV2026(channel: string): string {
+  const normalized = channel.trim().toUpperCase().replace(/\s+/g, "_");
+  if (normalized === "AFN") return "AMAZON";
+  if (normalized === "MFN") return "MERCHANT";
+  return normalized;
+}
+
 export async function getOrders(params: GetOrdersParams) {
   const {
     client,
@@ -61,29 +75,27 @@ export async function getOrders(params: GetOrdersParams) {
     maxLimiterWaitMs,
   } = params;
 
-  const query: Record<string, string | undefined> = nextToken
-    ? {
-        NextToken: nextToken,
-      }
-    : {
-        MarketplaceIds: joinCsv(marketplaceIds),
-        CreatedAfter: createdAfter,
-        CreatedBefore: createdBefore,
-        LastUpdatedAfter: lastUpdatedAfter,
-        LastUpdatedBefore: lastUpdatedBefore,
-        OrderStatuses: joinCsv(orderStatuses),
-        FulfillmentChannels: joinCsv(fulfillmentChannels),
-        MaxResultsPerPage:
-          typeof maxResultsPerPage === "number" ? String(maxResultsPerPage) : undefined,
-      };
+  const query: Record<string, string | undefined> = {
+    marketplaceIds: joinCsv(marketplaceIds),
+    createdAfter: createdAfter,
+    createdBefore: createdBefore,
+    lastUpdatedAfter: lastUpdatedAfter,
+    lastUpdatedBefore: lastUpdatedBefore,
+    fulfillmentStatuses: joinCsv(orderStatuses?.map(normalizeStatusForV2026)),
+    fulfilledBy: joinCsv(fulfillmentChannels?.map(normalizeFulfilledByForV2026)),
+    paginationToken: nextToken,
+    maxResultsPerPage:
+      typeof maxResultsPerPage === "number" ? String(maxResultsPerPage) : undefined,
+    includedData: "FULFILLMENT",
+  };
 
   return client.request({
     method: "GET",
-    path: "/orders/v0/orders",
+    path: "/orders/2026-01-01/orders",
     query,
     // Default usage plan for this operation (Rate ~0.0167 rps, Burst 20)
     // SP-API may return dynamic rates via `x-amzn-RateLimit-Limit`.
-    rateLimitKey: "orders.getOrders",
+    rateLimitKey: "orders.searchOrders",
     defaultRateLimit: { ratePerSecond: 0.0167, burst: 20 },
     maxLimiterWaitMs,
   });

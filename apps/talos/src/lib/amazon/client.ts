@@ -73,6 +73,31 @@ type AmazonSearchCatalogItemsResponse = {
   items?: AmazonCatalogItemResponse[]
 }
 
+type AmazonOrdersV2026OrderItem = {
+  quantityOrdered?: number
+  fulfillment?: {
+    quantityFulfilled?: number
+    quantityUnfulfilled?: number
+  }
+}
+
+type AmazonOrdersV2026Order = {
+  orderId?: string
+  createdTime?: string
+  orderItems?: AmazonOrdersV2026OrderItem[]
+  fulfillment?: {
+    fulfillmentStatus?: string
+    fulfilledBy?: string
+  }
+}
+
+type AmazonOrdersV2026Response = {
+  orders?: AmazonOrdersV2026Order[]
+  pagination?: {
+    nextToken?: string
+  }
+}
+
 export type AmazonCatalogListingType = 'LISTING' | 'PARENT' | 'UNKNOWN'
 
 type AmazonListingItemSummary = {
@@ -980,21 +1005,85 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
   }
 }
 
+function normalizeOrdersStatusForLegacy(status: string | undefined): string {
+  if (!status) return 'Unknown'
+  if (status === 'PENDING_AVAILABILITY') return 'PendingAvailability'
+  if (status === 'PENDING') return 'Pending'
+  if (status === 'UNSHIPPED') return 'Unshipped'
+  if (status === 'PARTIALLY_SHIPPED') return 'PartiallyShipped'
+  if (status === 'SHIPPED') return 'Shipped'
+  if (status === 'CANCELLED') return 'Canceled'
+  if (status === 'UNFULFILLABLE') return 'Unfulfillable'
+  return status
+}
+
+function normalizeFulfillmentChannelForLegacy(fulfilledBy: string | undefined): string | undefined {
+  if (!fulfilledBy) return undefined
+  if (fulfilledBy === 'AMAZON') return 'AFN'
+  if (fulfilledBy === 'MERCHANT') return 'MFN'
+  return fulfilledBy
+}
+
+function mapOrdersV2026ToLegacy(orders: AmazonOrdersV2026Order[]): Array<Record<string, unknown>> {
+  return orders.map(order => {
+    const items = order.orderItems ?? []
+    const numberOfItemsShipped = items.reduce((total, item) => total + (item.fulfillment?.quantityFulfilled ?? 0), 0)
+    const numberOfItemsUnshipped = items.reduce((total, item) => {
+      if (typeof item.fulfillment?.quantityUnfulfilled === 'number') {
+        return total + item.fulfillment.quantityUnfulfilled
+      }
+      const ordered = item.quantityOrdered ?? 0
+      const fulfilled = item.fulfillment?.quantityFulfilled ?? 0
+      const remaining = ordered - fulfilled
+      return total + (remaining > 0 ? remaining : 0)
+    }, 0)
+
+    return {
+      AmazonOrderId: order.orderId ?? '',
+      PurchaseDate: order.createdTime ?? '',
+      OrderStatus: normalizeOrdersStatusForLegacy(order.fulfillment?.fulfillmentStatus),
+      NumberOfItemsShipped: numberOfItemsShipped,
+      NumberOfItemsUnshipped: numberOfItemsUnshipped,
+      FulfillmentChannel: normalizeFulfillmentChannelForLegacy(order.fulfillment?.fulfilledBy),
+    }
+  })
+}
+
 export async function getOrders(createdAfter?: Date, tenantCode?: TenantCode) {
-  try {
-    const config = getAmazonSpApiConfigFromEnv(tenantCode)
-    const response = await callAmazonApi<unknown>(tenantCode, {
-      operation: 'getOrders',
-      endpoint: 'orders',
-      query: {
-        marketplaceIds: [config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID],
-        createdAfter: createdAfter || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // Default to last 7 days
-      },
-    })
-    return response
-  } catch (_error) {
-    // console.error('Error fetching orders:', _error)
-    throw _error
+  const config = getAmazonSpApiConfigFromEnv(tenantCode)
+  const createdAfterDate = createdAfter ?? new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const orders: AmazonOrdersV2026Order[] = []
+  let paginationToken: string | undefined
+
+  do {
+    const query: Record<string, unknown> = {
+      marketplaceIds: [config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID],
+      createdAfter: createdAfterDate.toISOString(),
+      maxResultsPerPage: 100,
+      includedData: ['FULFILLMENT'],
+    }
+
+    if (paginationToken) {
+      query.paginationToken = paginationToken
+    }
+
+    const response = await callAmazonApi<AmazonOrdersV2026Response | { payload?: AmazonOrdersV2026Response }>(
+      tenantCode,
+      {
+        api_path: '/orders/2026-01-01/orders',
+        method: 'GET',
+        query,
+      }
+    )
+    const payload = typeof response === 'object' && response !== null && 'payload' in response
+      ? (response as { payload?: AmazonOrdersV2026Response }).payload ?? {}
+      : (response as AmazonOrdersV2026Response)
+    orders.push(...(payload.orders ?? []))
+    paginationToken = payload.pagination?.nextToken
+  } while (paginationToken)
+
+  return {
+    Orders: mapOrdersV2026ToLegacy(orders),
   }
 }
 

@@ -35,6 +35,7 @@ function clampCreatedBefore(iso: string | undefined): string | undefined {
 function pickNextToken(body: any): string | null {
   const payload = body?.payload ?? body;
   return (
+    payload?.pagination?.nextToken ??
     payload?.NextToken ??
     payload?.nextToken ??
     payload?.next_token ??

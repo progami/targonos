@@ -68,6 +68,7 @@ export interface DecodePortalSessionOptions {
     appId?: string;
     secret?: string;
     debug?: boolean;
+    request?: PortalUrlRequestLike;
 }
 export declare function decodePortalSession(options?: DecodePortalSessionOptions): Promise<PortalJwtPayload | null>;
 export type PortalUrlRequestLike = {

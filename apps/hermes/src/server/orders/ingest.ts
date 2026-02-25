@@ -126,6 +126,30 @@ export function computeScheduleForOrder(order: HermesOrder, cfg: ScheduleConfig)
   };
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function normalizeOrderStatusForLegacy(status: unknown): string | null {
+  if (typeof status !== "string") return null;
+  if (status === "PENDING_AVAILABILITY") return "PendingAvailability";
+  if (status === "PENDING") return "Pending";
+  if (status === "UNSHIPPED") return "Unshipped";
+  if (status === "PARTIALLY_SHIPPED") return "PartiallyShipped";
+  if (status === "SHIPPED") return "Shipped";
+  if (status === "CANCELLED") return "Canceled";
+  if (status === "UNFULFILLABLE") return "Unfulfillable";
+  return status;
+}
+
+function normalizeFulfillmentChannelForLegacy(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  if (value === "AMAZON") return "AFN";
+  if (value === "MERCHANT") return "MFN";
+  return value;
+}
+
 export function extractOrdersFromGetOrdersResponse(body: any, marketplaceId: string): HermesOrder[] {
   const payload = body?.payload ?? body;
   const orders = payload?.Orders ?? payload?.orders ?? [];
@@ -133,19 +157,34 @@ export function extractOrdersFromGetOrdersResponse(body: any, marketplaceId: str
 
   return orders
     .map((o: any) => {
-      const orderId = o?.AmazonOrderId ?? o?.amazonOrderId;
+      const fulfillment = asRecord(o?.fulfillment);
+      const salesChannel = asRecord(o?.salesChannel);
+      const deliverByWindow = asRecord(fulfillment?.deliverByWindow);
+      const shipByWindow = asRecord(fulfillment?.shipByWindow);
+
+      const orderId = o?.AmazonOrderId ?? o?.amazonOrderId ?? o?.orderId;
       if (typeof orderId !== "string" || !orderId) return null;
 
       return {
         orderId,
-        marketplaceId: (typeof (o?.MarketplaceId ?? o?.marketplaceId) === "string" && (o?.MarketplaceId ?? o?.marketplaceId)) ? String(o?.MarketplaceId ?? o?.marketplaceId) : marketplaceId,
-        purchaseDate: o?.PurchaseDate ?? o?.purchaseDate ?? null,
-        lastUpdateDate: o?.LastUpdateDate ?? o?.lastUpdateDate ?? null,
-        orderStatus: o?.OrderStatus ?? o?.orderStatus ?? null,
-        fulfillmentChannel: o?.FulfillmentChannel ?? o?.fulfillmentChannel ?? null,
-        earliestDeliveryDate: o?.EarliestDeliveryDate ?? o?.earliestDeliveryDate ?? null,
-        latestDeliveryDate: o?.LatestDeliveryDate ?? o?.latestDeliveryDate ?? null,
-        latestShipDate: o?.LatestShipDate ?? o?.latestShipDate ?? null,
+        marketplaceId:
+          typeof (o?.MarketplaceId ?? o?.marketplaceId ?? salesChannel?.marketplaceId) === "string"
+            ? String(o?.MarketplaceId ?? o?.marketplaceId ?? salesChannel?.marketplaceId)
+            : marketplaceId,
+        purchaseDate: o?.PurchaseDate ?? o?.purchaseDate ?? o?.createdTime ?? null,
+        lastUpdateDate: o?.LastUpdateDate ?? o?.lastUpdateDate ?? o?.lastUpdatedTime ?? null,
+        orderStatus: normalizeOrderStatusForLegacy(
+          o?.OrderStatus ?? o?.orderStatus ?? fulfillment?.fulfillmentStatus
+        ),
+        fulfillmentChannel: normalizeFulfillmentChannelForLegacy(
+          o?.FulfillmentChannel ?? o?.fulfillmentChannel ?? fulfillment?.fulfilledBy
+        ),
+        earliestDeliveryDate:
+          o?.EarliestDeliveryDate ?? o?.earliestDeliveryDate ?? deliverByWindow?.earliestDateTime ?? null,
+        latestDeliveryDate:
+          o?.LatestDeliveryDate ?? o?.latestDeliveryDate ?? deliverByWindow?.latestDateTime ?? null,
+        latestShipDate: o?.LatestShipDate ?? o?.latestShipDate ?? shipByWindow?.latestDateTime ?? null,
+        raw: o,
       } satisfies HermesOrder;
     })
     .filter(Boolean) as HermesOrder[];

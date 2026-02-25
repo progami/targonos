@@ -33,6 +33,11 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
 
+## Local Ports
+
+- Standalone local development uses `32xx` ports: `3200` (sso), `3201` (talos), `3205` (website), `3206` (atlas), `3208` (xplan), `3210` (kairos), `3212` (plutus), `3214` (hermes).
+- Do not use `30xx`/`31xx` for standalone local dev checks; those are reserved for hosted main/dev stacks.
+
 ## Git Workflow
 
 ### Branch Naming
