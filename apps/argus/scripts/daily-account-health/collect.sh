@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health (Cron)"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health"
 CSV="$DEST/account-health.csv"
 LOG="/tmp/daily-account-health.log"
 TODAY=$(date '+%Y-%m-%d')
