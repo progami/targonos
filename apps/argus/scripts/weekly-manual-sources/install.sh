@@ -2,6 +2,7 @@
 # Install launchd plists for:
 #   1. Seller Central session keepalive (every 4 hours)
 #   2. Weekly manual sources collection (Monday 3 AM CT)
+#   3. Daily Account Health collector (3 AM CT daily)
 #
 # Usage: bash apps/argus/scripts/weekly-manual-sources/install.sh
 # To uninstall: bash apps/argus/scripts/weekly-manual-sources/install.sh --uninstall
@@ -9,22 +10,26 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DAILY_SCRIPT_DIR="$(cd "$SCRIPT_DIR/../daily-account-health" && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
 KEEPALIVE_PLIST="$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-manual-sources.plist"
+DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 
 # Make scripts executable
 chmod +x "$SCRIPT_DIR/keepalive.sh"
 chmod +x "$SCRIPT_DIR/run.sh"
+chmod +x "$DAILY_SCRIPT_DIR/collect.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling launchd agents..."
   launchctl unload "$KEEPALIVE_PLIST" 2>/dev/null || true
   launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
-  rm -f "$KEEPALIVE_PLIST" "$WEEKLY_PLIST"
-  echo "Done. Both agents removed."
+  launchctl unload "$DAILY_AH_PLIST" 2>/dev/null || true
+  rm -f "$KEEPALIVE_PLIST" "$WEEKLY_PLIST" "$DAILY_AH_PLIST"
+  echo "Done. All agents removed."
   exit 0
 fi
 
@@ -87,16 +92,49 @@ cat > "$WEEKLY_PLIST" <<PLIST
 </plist>
 PLIST
 
+# 3. Daily Account Health — 3:00 AM CT daily
+cat > "$DAILY_AH_PLIST" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.targon.daily-account-health</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>${DAILY_SCRIPT_DIR}/collect.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>/tmp/daily-account-health-stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/daily-account-health-stderr.log</string>
+</dict>
+</plist>
+PLIST
+
 # Load the agents
 launchctl unload "$KEEPALIVE_PLIST" 2>/dev/null || true
 launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
+launchctl unload "$DAILY_AH_PLIST" 2>/dev/null || true
 launchctl load "$KEEPALIVE_PLIST"
 launchctl load "$WEEKLY_PLIST"
+launchctl load "$DAILY_AH_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Keepalive:  $KEEPALIVE_PLIST (every 4 hours)"
-echo "  Weekly run: $WEEKLY_PLIST (Monday 3:00 AM CT)"
+echo "  Keepalive:       $KEEPALIVE_PLIST (every 4 hours)"
+echo "  Weekly run:      $WEEKLY_PLIST (Monday 3:00 AM CT)"
+echo "  Daily Acct Health: $DAILY_AH_PLIST (daily 3:00 AM CT)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
@@ -105,5 +143,6 @@ echo "To uninstall:"
 echo "  bash $SCRIPT_DIR/install.sh --uninstall"
 echo ""
 echo "Logs:"
-echo "  Keepalive: /tmp/sc-keepalive.log"
-echo "  Weekly:    /tmp/weekly-manual-sources/run_*.log"
+echo "  Keepalive:    /tmp/sc-keepalive.log"
+echo "  Weekly:       /tmp/weekly-manual-sources/run_*.log"
+echo "  Daily AH:     /tmp/daily-account-health.log"
