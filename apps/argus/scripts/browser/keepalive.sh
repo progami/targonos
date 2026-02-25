@@ -1,6 +1,6 @@
 #!/bin/bash
-# Session Keepalive — Seller Central + ScaleInsights
-# Runs every 4 hours via launchd to prevent session cookie expiration.
+# Session Keepalive — Seller Central + ScaleInsights + Amazon Ads
+# Runs every 55 minutes via launchd to prevent session cookie expiration.
 # Finds existing tabs in Chrome and refreshes them.
 # If no tab exists, creates one. Lightweight — no Claude API calls.
 
@@ -14,11 +14,11 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   exit 0
 fi
 
+# --- Seller Central ---
 osascript <<'APPLESCRIPT'
 tell application "Google Chrome"
   if (count of windows) = 0 then return
 
-  -- Look for an existing Seller Central tab
   set found to false
   repeat with w in windows
     repeat with i from 1 to (count of tabs of w)
@@ -32,7 +32,6 @@ tell application "Google Chrome"
   end repeat
 
   if not found then
-    -- Create a new tab in the last window (least disruptive)
     tell last window
       make new tab with properties {URL:"https://sellercentral.amazon.com/home"}
     end tell
@@ -48,7 +47,7 @@ fi
 
 sleep 5
 
-# ScaleInsights keepalive — refresh session cookie
+# --- ScaleInsights ---
 osascript <<'APPLESCRIPT'
 tell application "Google Chrome"
   if (count of windows) = 0 then return
@@ -77,6 +76,39 @@ if [ $? -eq 0 ]; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — SI Keepalive OK" >> "$LOG"
 else
   echo "$(date '+%Y-%m-%d %H:%M:%S') — SI Keepalive FAILED" >> "$LOG"
+fi
+
+sleep 5
+
+# --- Amazon Advertising (Brand Metrics) ---
+osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  if (count of windows) = 0 then return
+
+  set found to false
+  repeat with w in windows
+    repeat with i from 1 to (count of tabs of w)
+      if URL of tab i of w contains "advertising.amazon.com" then
+        set URL of tab i of w to "https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P"
+        set found to true
+        exit repeat
+      end if
+    end repeat
+    if found then exit repeat
+  end repeat
+
+  if not found then
+    tell last window
+      make new tab with properties {URL:"https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P"}
+    end tell
+  end if
+end tell
+APPLESCRIPT
+
+if [ $? -eq 0 ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — Ads Keepalive OK" >> "$LOG"
+else
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — Ads Keepalive FAILED" >> "$LOG"
 fi
 
 # Trim log to last 100 lines
