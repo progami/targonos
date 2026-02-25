@@ -10,7 +10,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DAILY_SCRIPT_DIR="$(cd "$SCRIPT_DIR/../daily-account-health" && pwd)"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
@@ -18,10 +18,15 @@ KEEPALIVE_PLIST="$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-manual-sources.plist"
 DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 
-# Make scripts executable
+# Make all scripts executable
 chmod +x "$SCRIPT_DIR/keepalive.sh"
 chmod +x "$SCRIPT_DIR/run.sh"
-chmod +x "$DAILY_SCRIPT_DIR/collect.sh"
+chmod +x "$PARENT_DIR/daily-account-health/collect.sh"
+chmod +x "$PARENT_DIR/weekly-account-health/collect.sh"
+chmod +x "$PARENT_DIR/weekly-category-insights/collect.sh"
+chmod +x "$PARENT_DIR/weekly-listings/collect.sh"
+chmod +x "$PARENT_DIR/weekly-poe/collect.sh"
+chmod +x "$PARENT_DIR/weekly-scaleinsights/collect.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling launchd agents..."
@@ -61,6 +66,7 @@ cat > "$KEEPALIVE_PLIST" <<PLIST
 PLIST
 
 # 2. Weekly manual sources — Monday 3:00 AM CT
+#    Master runner calls all 5 weekly scripts in sequence.
 cat > "$WEEKLY_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -103,7 +109,7 @@ cat > "$DAILY_AH_PLIST" <<PLIST
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>${DAILY_SCRIPT_DIR}/collect.sh</string>
+    <string>${PARENT_DIR}/daily-account-health/collect.sh</string>
   </array>
   <key>StartCalendarInterval</key>
   <dict>
@@ -132,9 +138,16 @@ launchctl load "$DAILY_AH_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Keepalive:       $KEEPALIVE_PLIST (every 4 hours)"
-echo "  Weekly run:      $WEEKLY_PLIST (Monday 3:00 AM CT)"
+echo "  Keepalive:        $KEEPALIVE_PLIST (every 4 hours)"
+echo "  Weekly run:       $WEEKLY_PLIST (Monday 3:00 AM CT)"
 echo "  Daily Acct Health: $DAILY_AH_PLIST (daily 3:00 AM CT)"
+echo ""
+echo "Weekly master runner calls:"
+echo "  1. weekly-account-health  (screenshots)"
+echo "  2. weekly-category-insights (text extraction)"
+echo "  3. weekly-poe (CSV download)"
+echo "  4. weekly-scaleinsights (XLSX export)"
+echo "  5. weekly-listings (listing screenshots)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
@@ -144,5 +157,5 @@ echo "  bash $SCRIPT_DIR/install.sh --uninstall"
 echo ""
 echo "Logs:"
 echo "  Keepalive:    /tmp/sc-keepalive.log"
-echo "  Weekly:       /tmp/weekly-manual-sources/run_*.log"
+echo "  Weekly:       /tmp/weekly-manual-sources.log"
 echo "  Daily AH:     /tmp/daily-account-health.log"

@@ -1,62 +1,77 @@
 #!/bin/bash
-# Weekly Manual Sources — Monday Cron
-# Runs claude -p --chrome to collect Account Health screenshots,
-# Category Insights text, and POE CSV from Seller Central.
+# Weekly Manual Sources — Master Runner
+# Calls each weekly collection script in sequence.
+# Runs Monday 3 AM CT via launchd.
 #
-# Prerequisites:
-#   - Chrome running with Claude extension connected
-#   - Seller Central session active (keepalive.sh handles this)
-#   - claude CLI installed at ~/.local/bin/claude
+# No Claude needed. Pure AppleScript + screencapture + JS extraction.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="/tmp/weekly-manual-sources"
-mkdir -p "$LOG_DIR"
+PARENT_DIR="$(dirname "$SCRIPT_DIR")"
+LOG="/tmp/weekly-manual-sources.log"
 
-TIMESTAMP=$(date '+%Y-%m-%d_%H%M%S')
-LOG_FILE="$LOG_DIR/run_${TIMESTAMP}.log"
-
-CLAUDE="$HOME/.local/bin/claude"
-
-echo "=== Weekly Manual Sources Run ===" > "$LOG_FILE"
-echo "Started: $(date)" >> "$LOG_FILE"
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+log "=== Weekly Master Run Starting ==="
 
 # Check Chrome is running
 if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
-  MSG="Weekly Manual Sources ABORTED: Chrome is not running"
-  echo "$MSG" >> "$LOG_FILE"
-  osascript -e "display notification \"$MSG\" with title \"Weekly Manual Sources\""
+  log "ABORT: Chrome not running"
+  osascript -e 'display notification "Weekly sources: Chrome not running" with title "Weekly Monitor"' 2>/dev/null
   exit 1
 fi
 
-# Run Claude with the manual sources prompt
-"$CLAUDE" -p --chrome "Run the manual portion of the weekly-listing-performance skill. Collect ONLY these 3 manual sources for the latest complete BA week (1 week):
+# Check Seller Central session
+osascript -e '
+tell application "Google Chrome"
+  tell active tab of first window
+    set URL to "https://sellercentral.amazon.com/home"
+  end tell
+end tell
+'
+sleep 15
 
-1. Account Health screenshots (SOURCE 22): Dashboard + VoC Overview + VoC Details
-2. Category Insights text extraction (SOURCE 21): Painting Drop Cloths Plastic Sheeting
-3. Product Opportunity Explorer CSV (SOURCE 20): plastic drop cloth niche
-
-IMPORTANT — Auth check first:
-Navigate to https://sellercentral.amazon.com/home. If it redirects to a login page, send a macOS notification saying 'Seller Central session expired — manual login required' and abort. Do NOT attempt to enter credentials.
-
-If auth is valid, proceed with all 3 sources. Follow the exact browser steps, file naming (WNN_YYYY-MM-DD format), and Google Drive destinations documented in the weekly-listing-performance skill SKILL.md (specifically SKILL_MANUAL.md for manual sources).
-
-After completion, copy all files from ~/Downloads to the correct Google Drive subfolders and create a short verification summary." >> "$LOG_FILE" 2>&1
-
-EXIT_CODE=$?
-
-echo "" >> "$LOG_FILE"
-echo "Finished: $(date)" >> "$LOG_FILE"
-echo "Exit code: $EXIT_CODE" >> "$LOG_FILE"
-
-if [ $EXIT_CODE -eq 0 ]; then
-  osascript -e 'display notification "Weekly manual sources collection complete" with title "Weekly Manual Sources"'
-else
-  osascript -e 'display notification "Weekly manual sources FAILED — check logs" with title "Weekly Manual Sources"'
+PAGE_URL=$(osascript -e '
+tell application "Google Chrome"
+  return URL of active tab of first window
+end tell
+')
+if [[ "$PAGE_URL" == *"signin"* ]]; then
+  log "ABORT: Seller Central session expired"
+  osascript -e 'display notification "Weekly sources: SC session expired — login required" with title "Weekly Monitor"' 2>/dev/null
+  exit 1
 fi
 
-# Trim old logs (keep last 10 runs)
-ls -t "$LOG_DIR"/run_*.log 2>/dev/null | tail -n +11 | xargs rm -f 2>/dev/null
+log "Session OK"
 
-exit $EXIT_CODE
+FAILED=0
+
+run_script() {
+  local name="$1"
+  local script="$2"
+  log "Running: $name"
+  if bash "$script"; then
+    log "OK: $name"
+  else
+    log "FAILED: $name (exit $?)"
+    FAILED=$((FAILED + 1))
+  fi
+  sleep 5
+}
+
+run_script "Account Health" "$PARENT_DIR/weekly-account-health/collect.sh"
+run_script "Category Insights" "$PARENT_DIR/weekly-category-insights/collect.sh"
+run_script "Product Opportunity Explorer" "$PARENT_DIR/weekly-poe/collect.sh"
+run_script "ScaleInsights" "$PARENT_DIR/weekly-scaleinsights/collect.sh"
+run_script "Listings" "$PARENT_DIR/weekly-listings/collect.sh"
+
+log "=== Weekly Master Run Done ($FAILED failures) ==="
+
+if [ $FAILED -gt 0 ]; then
+  osascript -e "display notification \"Weekly sources: $FAILED script(s) failed\" with title \"Weekly Monitor\"" 2>/dev/null
+else
+  osascript -e 'display notification "Weekly sources: All collections complete" with title "Weekly Monitor"' 2>/dev/null
+fi
+
+# Trim log
+tail -200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
