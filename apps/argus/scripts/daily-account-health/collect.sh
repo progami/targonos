@@ -10,8 +10,9 @@
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health"
-CSV="$DEST/account-health.csv"
+DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health Dashboard"
+DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Voice of the Customer"
+CSV="$DEST_AH/account-health.csv"
 LOG="/tmp/daily-account-health.log"
 TODAY=$(date '+%Y-%m-%d')
 
@@ -150,7 +151,7 @@ print(','.join([
 echo "$ROW" >> "$CSV"
 
 # --- Write per-ASIN VoC CSV ---
-VOC_CSV="$DEST/voc-by-asin.csv"
+VOC_CSV="$DEST_VOC/voc-by-asin.csv"
 if [ ! -f "$VOC_CSV" ]; then
   echo "date,asin,ncx_rate,ncx_orders,total_orders" > "$VOC_CSV"
 fi
@@ -162,7 +163,7 @@ for l in v['listings']:
   print(f\"$TODAY,{l['asin']},{l['ncx_rate']},{l['ncx_orders']},{l['total_orders']}\")
 " >> "$VOC_CSV"
 
-log "CSVs written to $DEST"
+log "CSVs written"
 log "Done"
 
 # Trim log
