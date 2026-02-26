@@ -1,28 +1,68 @@
 'use client';
 
-import { cn } from '@/lib/utils';
-import { Tooltip } from '@/components/ui/tooltip';
+import Chip from '@mui/material/Chip';
+import MuiTooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import { keyframes } from '@mui/material/styles';
 
 interface ActiveStrategyIndicatorProps {
   strategyName: string;
   className?: string;
 }
 
+const pulse = keyframes`
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0; transform: scale(2); }
+`;
+
+function GreenDot() {
+  return (
+    <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 8, height: 8, flexShrink: 0 }}>
+      <Box
+        sx={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          bgcolor: '#34d399',
+          animation: `${pulse} 2s cubic-bezier(0.4, 0, 0.6, 1) infinite`,
+        }}
+      />
+      <Box sx={{ position: 'relative', width: 8, height: 8, borderRadius: '50%', bgcolor: '#10b981' }} />
+    </Box>
+  );
+}
+
 export function ActiveStrategyIndicator({ strategyName, className }: ActiveStrategyIndicatorProps) {
   return (
-    <Tooltip content={strategyName} position="bottom">
-      <div
-        className={cn(
-          'flex max-w-[320px] items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/70 px-2.5 py-1 text-[11px] font-semibold text-emerald-900 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-100',
-          className,
-        )}
-      >
-        <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-40" />
-          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-        </span>
-        <span className="truncate">{strategyName}</span>
-      </div>
-    </Tooltip>
+    <MuiTooltip title={strategyName} placement="bottom">
+      <Chip
+        icon={<GreenDot />}
+        label={strategyName}
+        size="small"
+        className={className}
+        sx={{
+          maxWidth: 320,
+          height: 26,
+          borderRadius: '9999px',
+          fontWeight: 600,
+          fontSize: '11px',
+          border: 1,
+          borderColor: '#a7f3d0',
+          bgcolor: 'rgba(236, 253, 245, 0.7)',
+          color: '#064e3b',
+          '.dark &': {
+            borderColor: 'rgba(16, 185, 129, 0.3)',
+            bgcolor: 'rgba(16, 185, 129, 0.1)',
+            color: '#d1fae5',
+          },
+          '& .MuiChip-label': {
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+        }}
+      />
+    </MuiTooltip>
   );
 }

@@ -3,7 +3,6 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import 'flatpickr/dist/themes/light.css';
 import { Providers } from '@/components/providers';
-import { clsx } from 'clsx';
 
 function normalizeBasePath(value?: string | null) {
   if (!value || value === '/') return '';
@@ -41,10 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={clsx(
-          'min-h-screen bg-slate-50 font-sans antialiased dark:bg-slate-950',
-          inter.variable,
-        )}
+        className={`min-h-screen bg-slate-50 font-sans antialiased dark:bg-slate-950 ${inter.variable}`}
       >
         <Providers>{children}</Providers>
         <a

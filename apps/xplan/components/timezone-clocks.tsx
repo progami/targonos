@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Tooltip } from '@/components/ui/tooltip';
+import MuiTooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 function formatTimestamp(value: Date, timeZone: string) {
   return new Intl.DateTimeFormat('en-GB', {
@@ -41,21 +43,41 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
   const userLabel = formatTimeZoneLabel(userTimeZone);
 
   return (
-    <Tooltip
-      content={
-        <div className="space-y-1">
-          <div><span className="font-semibold">Report:</span> {reportLabel} {reportNow}</div>
-          <div><span className="font-semibold">Local:</span> {userLabel} {userNow}</div>
-        </div>
+    <MuiTooltip
+      title={
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption">
+            <strong>Report:</strong> {reportLabel} {reportNow}
+          </Typography>
+          <Typography variant="caption">
+            <strong>Local:</strong> {userLabel} {userNow}
+          </Typography>
+        </Box>
       }
-      position="bottom"
-      className="hidden sm:flex"
+      placement="bottom"
     >
-      <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white/80 px-2 py-1 text-[10px] font-medium text-slate-600 shadow-sm backdrop-blur dark:border-[#0b3a52] dark:bg-[#06182b]/70 dark:text-slate-300">
+      <Box
+        className="hidden sm:flex"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          borderRadius: '8px',
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          px: 1,
+          py: 0.5,
+          fontSize: '10px',
+          fontWeight: 500,
+          color: 'text.secondary',
+          boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+        }}
+      >
         <span className="tabular-nums">{reportNow.split(' ').pop()}</span>
-        <span className="text-slate-300 dark:text-slate-600">/</span>
+        <Box component="span" sx={{ color: 'divider' }}>/</Box>
         <span className="tabular-nums">{userNow.split(' ').pop()}</span>
-      </div>
-    </Tooltip>
+      </Box>
+    </MuiTooltip>
   );
 }
