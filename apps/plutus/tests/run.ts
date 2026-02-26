@@ -10,7 +10,7 @@ import {
   createEmptyLedgerSnapshot,
   replayInventoryLedger,
 } from '../lib/inventory/ledger';
-import { buildInventoryEventsFromMappings } from '../lib/inventory/qbo-bills';
+import { buildInventoryEventsFromMappings, parseQboBillsToInventoryEvents } from '../lib/inventory/qbo-bills';
 import {
   buildAccountComponentMap,
   extractTrackedLinesFromBill,
@@ -341,7 +341,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
   assert.equal(csv, expected);
 });
 
-test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settlements to month-end', () => {
+test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement periods', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-1',
     eventGroupId: 'GROUP-1',
@@ -362,13 +362,15 @@ test('buildUsSettlementDraftFromSpApiFinances clamps negative cross-month settle
     skuToBrandName: new Map(),
   });
 
-  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments.length, 2);
   assert.equal(draft.segments[0]?.docNumber, 'US-19-31DEC-25-1');
+  assert.equal(draft.segments[1]?.docNumber, 'US-01-02JAN-26-2');
 
-  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  const cents = draft.segments[1]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);
 
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
 });
 
 test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order level for shipments', () => {
@@ -933,9 +935,9 @@ test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(lines[0]?.description.includes('SKU-B'), true);
 });
 
-test('isBlockingProcessingCode treats PNL allocation as blocking', () => {
+test('isBlockingProcessingCode treats PNL allocation warnings as blocking', () => {
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), false);
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), true);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
   assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
@@ -1072,6 +1074,177 @@ test('bill mappings allocate non-sku costs by PO units', () => {
   // Freight should be allocated by units (SKU-A:1, SKU-B:2) => 100/200 cents.
   assert.equal(stateA?.valueByComponentCents.freight, 100);
   assert.equal(stateB?.valueByComponentCents.freight, 200);
+});
+
+test('parseQboBillsToInventoryEvents scopes explicit inventory accounts by marketplace', () => {
+  const bill: QboBill = {
+    Id: 'B-1',
+    SyncToken: '0',
+    TxnDate: '2026-02-01',
+    TotalAmt: 200,
+    PrivateNote: 'PO: PO-1',
+    Line: [
+      {
+        Id: '1',
+        Amount: 100,
+        Description: 'SKU-US x 1 units',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-mfg', name: 'Manufacturing - US-PDS' },
+        },
+      },
+      {
+        Id: '2',
+        Amount: 100,
+        Description: 'SKU-UK x 1 units',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'uk-mfg', name: 'Manufacturing - UK-PDS' },
+        },
+      },
+    ],
+  };
+
+  const accountsById = new Map<string, QboAccount>([
+    [
+      'us-mfg',
+      {
+        Id: 'us-mfg',
+        SyncToken: '0',
+        Name: 'Manufacturing - US-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Manufacturing - US-PDS',
+      },
+    ],
+    [
+      'uk-mfg',
+      {
+        Id: 'uk-mfg',
+        SyncToken: '0',
+        Name: 'Manufacturing - UK-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Manufacturing - UK-PDS',
+      },
+    ],
+  ]);
+
+  const mappings = {
+    invManufacturing: 'inventory-root',
+    invFreight: 'inventory-root',
+    invDuty: 'inventory-root',
+    invMfgAccessories: 'inventory-root',
+  };
+
+  const parsedUs = parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.com');
+  assert.equal(parsedUs.events.length, 1);
+  assert.equal(parsedUs.events[0]?.kind, 'manufacturing');
+  if (parsedUs.events[0]?.kind !== 'manufacturing') {
+    throw new Error('expected manufacturing event');
+  }
+  assert.equal(parsedUs.events[0].sku, 'SKU-US');
+
+  const parsedUk = parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.co.uk');
+  assert.equal(parsedUk.events.length, 1);
+  assert.equal(parsedUk.events[0]?.kind, 'manufacturing');
+  if (parsedUk.events[0]?.kind !== 'manufacturing') {
+    throw new Error('expected manufacturing event');
+  }
+  assert.equal(parsedUk.events[0].sku, 'SKU-UK');
+});
+
+test('parseQboBillsToInventoryEvents reads PO number from bill custom fields', () => {
+  const bill: QboBill = {
+    Id: 'B-PO-CF',
+    SyncToken: '0',
+    TxnDate: '2026-02-01',
+    TotalAmt: 100,
+    CustomField: [{ Name: 'PO Number', StringValue: 'PO-CF-1' }],
+    Line: [
+      {
+        Id: '1',
+        Amount: 100,
+        Description: 'SKU-US x 1 units',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-mfg', name: 'Manufacturing - US-PDS' },
+        },
+      },
+    ],
+  };
+
+  const accountsById = new Map<string, QboAccount>([
+    [
+      'us-mfg',
+      {
+        Id: 'us-mfg',
+        SyncToken: '0',
+        Name: 'Manufacturing - US-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Manufacturing - US-PDS',
+      },
+    ],
+  ]);
+
+  const mappings = {
+    invManufacturing: 'inventory-root',
+    invFreight: 'inventory-root',
+    invDuty: 'inventory-root',
+    invMfgAccessories: 'inventory-root',
+  };
+
+  const parsed = parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.com');
+  assert.equal(parsed.events.length, 1);
+  assert.equal(parsed.events[0]?.kind, 'manufacturing');
+  if (parsed.events[0]?.kind !== 'manufacturing') {
+    throw new Error('expected manufacturing event');
+  }
+  assert.equal(parsed.events[0].poNumber, 'PO-CF-1');
+});
+
+test('parseQboBillsToInventoryEvents rejects inventory accounts without marketplace markers', () => {
+  const bill: QboBill = {
+    Id: 'B-NO-MARKET',
+    SyncToken: '0',
+    TxnDate: '2026-02-01',
+    TotalAmt: 100,
+    PrivateNote: 'PO: PO-1',
+    Line: [
+      {
+        Id: '1',
+        Amount: 100,
+        Description: 'SKU-US x 1 units',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'mfg-generic', name: 'Manufacturing' },
+        },
+      },
+    ],
+  };
+
+  const accountsById = new Map<string, QboAccount>([
+    [
+      'mfg-generic',
+      {
+        Id: 'mfg-generic',
+        SyncToken: '0',
+        Name: 'Manufacturing',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Manufacturing',
+      },
+    ],
+  ]);
+
+  const mappings = {
+    invManufacturing: 'inventory-root',
+    invFreight: 'inventory-root',
+    invDuty: 'inventory-root',
+    invMfgAccessories: 'inventory-root',
+  };
+
+  assert.throws(
+    () => parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.com'),
+    /missing marketplace marker/i,
+  );
 });
 
 test('manufacturing split allocation preserves total cents', () => {

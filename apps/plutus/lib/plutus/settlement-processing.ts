@@ -614,7 +614,7 @@ export async function computeSettlementPreview(input: {
     try {
       if (inventoryMappings === null) throw new Error('Missing inventory mappings');
       const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
-      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
+      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings, marketplace);
     } catch (error) {
       blocks.push({
         code: 'BILLS_PARSE_ERROR',

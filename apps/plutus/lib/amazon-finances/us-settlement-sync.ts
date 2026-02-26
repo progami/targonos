@@ -501,7 +501,10 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
             await db.auditDataRow.deleteMany({
               where: {
                 invoiceId: { in: invoiceIdsToRefresh },
-                market: { equals: 'us', mode: 'insensitive' },
+                OR: [
+                  { market: { equals: 'us', mode: 'insensitive' } },
+                  { market: { contains: 'amazon.com', mode: 'insensitive' } },
+                ],
               },
             });
 
