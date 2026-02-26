@@ -261,7 +261,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
   const groupEndTs = requireEventGroupField(input.eventGroup.FinancialEventGroupEnd, 'FinancialEventGroupEnd', input.settlementId);
 
   const startIsoDay = isoTimestampToZonedIsoDay(groupStartTs, timeZone, 'group start');
-  let endIsoDay = isoTimestampToZonedIsoDay(groupEndTs, timeZone, 'group end');
+  const endIsoDay = isoTimestampToZonedIsoDay(groupEndTs, timeZone, 'group end');
 
   const startParts = parseIsoDayParts(startIsoDay, 'group start day');
 
@@ -271,16 +271,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
   }
   const originalTotalCents = moneyToCents(originalTotalMoney, 'event group OriginalTotal');
 
-  const unclampedEndParts = parseIsoDayParts(endIsoDay, 'group end day');
-  const shouldClampNegativeCrossMonth =
-    originalTotalCents < 0 && (startParts.year !== unclampedEndParts.year || startParts.month !== unclampedEndParts.month);
-
-  let endParts = unclampedEndParts;
-  if (shouldClampNegativeCrossMonth) {
-    const last = lastDayOfMonth(startParts.year, startParts.month);
-    endIsoDay = `${startParts.year}-${pad2(startParts.month)}-${pad2(last)}`;
-    endParts = parseIsoDayParts(endIsoDay, 'group end day');
-  }
+  const endParts = parseIsoDayParts(endIsoDay, 'group end day');
 
   const segments: UsSettlementSegmentDraft[] = [];
   let year = startParts.year;
@@ -320,7 +311,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     throw new Error('No settlement segments built');
   }
 
-  const segmentLookupOptions = { allowAfterEndToLast: shouldClampNegativeCrossMonth };
+  const segmentLookupOptions = { allowAfterEndToLast: false };
 
   // Shipments
   for (const shipment of input.events.ShipmentEventList ?? []) {

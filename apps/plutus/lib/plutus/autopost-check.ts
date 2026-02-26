@@ -51,8 +51,8 @@ async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
   const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
     SELECT "invoiceId",
            CASE
-             WHEN LOWER("market") = 'us' THEN 'amazon.com'
-             WHEN LOWER("market") = 'uk' THEN 'amazon.co.uk'
+             WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
+             WHEN LOWER("market") = 'uk' OR LOWER("market") LIKE '%amazon.co.uk%' THEN 'amazon.co.uk'
              ELSE NULL
            END AS "marketplaceId",
            COUNT(*)::bigint AS "rowCount",
@@ -104,7 +104,10 @@ async function loadAuditRowsForInvoice(input: {
   const dbRows = await db.auditDataRow.findMany({
     where: {
       invoiceId: input.invoiceId,
-      market: { equals: market, mode: 'insensitive' },
+      OR: [
+        { market: { equals: market, mode: 'insensitive' } },
+        { market: { contains: input.marketplace, mode: 'insensitive' } },
+      ],
     },
     include: { upload: { select: { filename: true } } },
   });
