@@ -40,7 +40,28 @@ end tell
 APPLESCRIPT
 
 if [ $? -eq 0 ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive OK" >> "$LOG"
+  # Wait for page load, then verify session is still alive
+  sleep 10
+  SC_URL=$(osascript <<'APPLESCRIPT'
+tell application "Google Chrome"
+  if (count of windows) = 0 then return ""
+  repeat with w in windows
+    repeat with i from 1 to (count of tabs of w)
+      if URL of tab i of w contains "sellercentral.amazon.com" or URL of tab i of w contains "signin" then
+        return URL of tab i of w
+      end if
+    end repeat
+  end repeat
+  return ""
+end tell
+APPLESCRIPT
+  )
+  if [[ "$SC_URL" == *"signin"* ]]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive EXPIRED — login required" >> "$LOG"
+    osascript -e 'display notification "SC session expired — login required" with title "Keepalive"' 2>/dev/null
+  else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive OK" >> "$LOG"
+  fi
 else
   echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive FAILED" >> "$LOG"
 fi
