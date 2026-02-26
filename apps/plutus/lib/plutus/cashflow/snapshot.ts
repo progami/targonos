@@ -5,6 +5,7 @@ import type { Prisma } from '@targon/prisma-plutus';
 
 import { db } from '@/lib/db';
 import { parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
+import { buildSettlementPeriodKey, loadSettlementPeriodsFromAuditRows } from '@/lib/plutus/settlement-periods';
 import {
   fetchAccounts,
   fetchJournalEntries,
@@ -211,6 +212,66 @@ async function fetchSettlementHistoryForChannel(input: {
   }
 
   return rows;
+}
+
+async function hydrateSettlementPeriodEndFromAuditRows(input: {
+  rows: CashflowSettlementHistoryInput[];
+  warnings: CashflowWarning[];
+}): Promise<CashflowSettlementHistoryInput[]> {
+  const amazonComInvoiceIds: string[] = [];
+  const amazonCoUkInvoiceIds: string[] = [];
+  const rowPeriodKeys: Array<{ index: number; key: string }> = [];
+
+  for (const [index, row] of input.rows.entries()) {
+    try {
+      const meta = parseSettlementDocNumber(row.docNumber);
+      if (meta.marketplace.id === 'amazon.com') {
+        amazonComInvoiceIds.push(meta.normalizedDocNumber);
+      } else {
+        amazonCoUkInvoiceIds.push(meta.normalizedDocNumber);
+      }
+      rowPeriodKeys.push({
+        index,
+        key: buildSettlementPeriodKey(meta.marketplace.id, meta.normalizedDocNumber),
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  if (rowPeriodKeys.length === 0) {
+    return input.rows;
+  }
+
+  const periodsBySettlement = await loadSettlementPeriodsFromAuditRows({
+    amazonComInvoiceIds,
+    amazonCoUkInvoiceIds,
+  });
+
+  const hydratedRows = [...input.rows];
+
+  for (const rowPeriodKey of rowPeriodKeys) {
+    const row = hydratedRows[rowPeriodKey.index];
+    if (!row) continue;
+
+    const period = periodsBySettlement.get(rowPeriodKey.key);
+    if (!period) continue;
+
+    if (row.periodEnd !== null && row.periodEnd !== period.periodEnd) {
+      input.warnings.push({
+        code: 'SETTLEMENT_PERIOD_SOURCE_OVERRIDE',
+        message: `Settlement period end was overridden from audit rows for ${row.docNumber}.`,
+        detail: `docPeriodEnd=${row.periodEnd}; auditPeriodEnd=${period.periodEnd}`,
+      });
+    }
+
+    hydratedRows[rowPeriodKey.index] = {
+      ...row,
+      periodEnd: period.periodEnd,
+    };
+  }
+
+  return hydratedRows;
 }
 
 async function getOrCreateConfigRow(): Promise<NonNullable<CashflowConfigRow>> {
@@ -618,7 +679,10 @@ export async function generateCashflowSnapshot(): Promise<CashflowSnapshotPayloa
         }),
       ]);
 
-      const historyRows = usRows.concat(ukRows);
+      const historyRows = await hydrateSettlementPeriodEndFromAuditRows({
+        rows: usRows.concat(ukRows),
+        warnings,
+      });
       const projected = buildProjectedSettlementEvents({
         history: historyRows,
         asOfDate,

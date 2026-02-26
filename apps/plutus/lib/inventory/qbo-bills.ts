@@ -41,16 +41,69 @@ export type ParsedBills = {
   poUnitsBySku: Map<string, Map<string, number>>;
 };
 
-function parsePoNumber(memo: string): string {
-  const trimmed = memo.trim();
-  if (!trimmed.startsWith('PO: ')) {
-    throw new Error(`Bill memo must start with "PO: " (got "${memo}")`);
+const poCustomFieldNamePattern = /\b(?:po|p\/o|purchase\s*order)\b/i;
+const poMemoPatterns = [
+  /^P(?:\s*\/\s*)?O\s*(?:#|:|-)\s*(.+)$/i,
+  /^P(?:\s*\/\s*)?O\s+(.+)$/i,
+];
+const directPoCodePattern = /^P(?:\s*\/\s*)?O-[A-Za-z0-9].*$/i;
+
+function extractPoNumberFromCustomFields(customFields: QboBill['CustomField']): string {
+  if (!customFields || customFields.length === 0) return '';
+
+  for (const field of customFields) {
+    if (!field) continue;
+
+    const stringValueRaw = field.StringValue;
+    if (typeof stringValueRaw !== 'string') continue;
+
+    const stringValue = stringValueRaw.trim();
+    if (stringValue === '') continue;
+
+    const nameRaw = field.Name;
+    if (typeof nameRaw !== 'string') continue;
+
+    const name = nameRaw.trim();
+    if (name === '') continue;
+    if (!poCustomFieldNamePattern.test(name)) continue;
+
+    return stringValue;
   }
-  const po = trimmed.slice(4).trim();
-  if (po === '') {
-    throw new Error(`Bill memo PO number is empty (got "${memo}")`);
+
+  return '';
+}
+
+function extractPoNumberFromPrivateNote(privateNote: string | undefined): string {
+  if (privateNote === undefined) return '';
+
+  const lines = privateNote
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '');
+
+  for (const line of lines) {
+    if (directPoCodePattern.test(line)) {
+      return line;
+    }
+
+    for (const pattern of poMemoPatterns) {
+      const match = line.match(pattern);
+      if (!match) continue;
+      const po = match[1];
+      if (!po) continue;
+      const trimmed = po.trim();
+      if (trimmed === '') continue;
+      return trimmed;
+    }
   }
-  return po;
+
+  return '';
+}
+
+function extractPoNumberFromBill(bill: Pick<QboBill, 'PrivateNote' | 'CustomField'>): string {
+  const customFieldPo = extractPoNumberFromCustomFields(bill.CustomField);
+  if (customFieldPo !== '') return customFieldPo;
+  return extractPoNumberFromPrivateNote(bill.PrivateNote);
 }
 
 export function parseSkuQuantityFromDescription(description: string): { sku: string; quantity: number } {
@@ -95,6 +148,92 @@ function classifyInventoryComponentFromAccount(account: QboAccount): InventoryCo
   return null;
 }
 
+function inferInventoryAccountMarketplace(account: QboAccount): 'amazon.com' | 'amazon.co.uk' | null {
+  const values = [
+    account.Name.trim().toLowerCase(),
+    (account.FullyQualifiedName ? account.FullyQualifiedName : account.Name).trim().toLowerCase(),
+  ];
+
+  let detectedMarketplace: 'amazon.com' | 'amazon.co.uk' | null = null;
+
+  for (const value of values) {
+    const tokens = value.split(/[^a-z0-9.]+/).filter((token) => token !== '');
+    const hasUk = value.includes('amazon.co.uk') || tokens.includes('uk');
+    const hasUs = value.includes('amazon.com') || tokens.includes('us') || tokens.includes('usa');
+
+    if (hasUk && hasUs) {
+      throw new Error(`Inventory account has ambiguous marketplace marker: accountId=${account.Id} name="${account.Name}"`);
+    }
+
+    const inferred = hasUk ? 'amazon.co.uk' : hasUs ? 'amazon.com' : null;
+    if (inferred === null) continue;
+
+    if (detectedMarketplace === null) {
+      detectedMarketplace = inferred;
+      continue;
+    }
+
+    if (detectedMarketplace !== inferred) {
+      throw new Error(
+        `Inventory account marketplace markers conflict across name/fqn: accountId=${account.Id} name="${account.Name}"`,
+      );
+    }
+  }
+
+  return detectedMarketplace;
+}
+
+function isInventoryAccountAllowedForMarketplace(account: QboAccount, marketplace: string): boolean {
+  if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
+    throw new Error(`Unsupported marketplace: ${marketplace}`);
+  }
+
+  const accountMarketplace = inferInventoryAccountMarketplace(account);
+  if (accountMarketplace === null) {
+    throw new Error(`Inventory account is missing marketplace marker: accountId=${account.Id} name="${account.Name}"`);
+  }
+
+  return accountMarketplace === marketplace;
+}
+
+function compareText(a: string, b: string): number {
+  return a.localeCompare(b);
+}
+
+function compareBillEvents(a: BillEvent, b: BillEvent): number {
+  if (a.date !== b.date) return compareText(a.date, b.date);
+  if (a.poNumber !== b.poNumber) return compareText(a.poNumber, b.poNumber);
+
+  if (a.kind !== b.kind) {
+    if (a.kind === 'manufacturing') return -1;
+    if (b.kind === 'manufacturing') return 1;
+    if (a.kind === 'cost') return -1;
+    if (b.kind === 'cost') return 1;
+  }
+
+  if (a.kind === 'manufacturing' && b.kind === 'manufacturing') {
+    if (a.sku !== b.sku) return compareText(a.sku, b.sku);
+    if (a.units !== b.units) return a.units - b.units;
+    return a.costCents - b.costCents;
+  }
+
+  if (a.kind === 'cost' && b.kind === 'cost') {
+    if (a.component !== b.component) return compareText(a.component, b.component);
+    const aSku = a.sku === undefined ? '' : a.sku;
+    const bSku = b.sku === undefined ? '' : b.sku;
+    if (aSku !== bSku) return compareText(aSku, bSku);
+    return a.costCents - b.costCents;
+  }
+
+  if (a.kind === 'brand_cost' && b.kind === 'brand_cost') {
+    if (a.brandId !== b.brandId) return compareText(a.brandId, b.brandId);
+    if (a.component !== b.component) return compareText(a.component, b.component);
+    return a.costCents - b.costCents;
+  }
+
+  return 0;
+}
+
 function addPoUnits(poUnitsBySku: Map<string, Map<string, number>>, poNumber: string, sku: string, units: number) {
   const existing = poUnitsBySku.get(poNumber);
   if (!existing) {
@@ -112,12 +251,17 @@ export function parseQboBillsToInventoryEvents(
   bills: QboBill[],
   accountsById: Map<string, QboAccount>,
   _mappings: InventoryAccountMappings,
+  marketplace: string,
 ): ParsedBills {
   const events: BillEvent[] = [];
   const poUnitsBySku = new Map<string, Map<string, number>>();
 
-  for (const bill of bills) {
-    const memo = bill.PrivateNote ? bill.PrivateNote : '';
+  const sortedBills = [...bills].sort((a, b) => {
+    if (a.TxnDate !== b.TxnDate) return compareText(a.TxnDate, b.TxnDate);
+    return compareText(a.Id, b.Id);
+  });
+
+  for (const bill of sortedBills) {
     const date = bill.TxnDate;
 
     if (!bill.Line) continue;
@@ -136,15 +280,22 @@ export function parseQboBillsToInventoryEvents(
       }
       const component = classifyInventoryComponentFromAccount(account);
       if (!component) continue;
+      if (!isInventoryAccountAllowedForMarketplace(account, marketplace)) continue;
       candidateLines.push({ line, component });
     }
 
     if (candidateLines.length === 0) continue;
 
-    // Skip bills that don't follow the "PO: <number>" memo convention
-    const trimmedMemo = memo.trim();
-    if (!trimmedMemo.startsWith('PO: ')) continue;
-    const poNumber = parsePoNumber(memo);
+    const poNumber = extractPoNumberFromBill(bill);
+    if (poNumber === '') continue;
+
+    candidateLines.sort((a, b) => {
+      const aLineId = a.line.Id ? a.line.Id : '';
+      const bLineId = b.line.Id ? b.line.Id : '';
+      if (aLineId !== bLineId) return compareText(aLineId, bLineId);
+      if (a.component !== b.component) return compareText(a.component, b.component);
+      return a.line.Amount - b.line.Amount;
+    });
 
     for (const { line, component } of candidateLines) {
       if (!line.AccountBasedExpenseLineDetail) continue;
@@ -191,11 +342,7 @@ export function parseQboBillsToInventoryEvents(
     }
   }
 
-  events.sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
-    return 0;
-  });
+  events.sort(compareBillEvents);
 
   return { events, poUnitsBySku };
 }
@@ -220,8 +367,20 @@ export function buildInventoryEventsFromMappings(
   const events: BillEvent[] = [];
   const poUnitsBySku = new Map<string, Map<string, number>>();
 
-  for (const mapping of mappings) {
-    for (const line of mapping.lines) {
+  const sortedMappings = [...mappings].sort((a, b) => {
+    if (a.billDate !== b.billDate) return compareText(a.billDate, b.billDate);
+    if (a.poNumber !== b.poNumber) return compareText(a.poNumber, b.poNumber);
+    return compareText(a.qboBillId, b.qboBillId);
+  });
+
+  for (const mapping of sortedMappings) {
+    const sortedLines = [...mapping.lines].sort((a, b) => {
+      if (a.qboLineId !== b.qboLineId) return compareText(a.qboLineId, b.qboLineId);
+      if (a.component !== b.component) return compareText(a.component, b.component);
+      return a.amountCents - b.amountCents;
+    });
+
+    for (const line of sortedLines) {
       if (
         line.component !== 'manufacturing' &&
         line.component !== 'freight' &&
@@ -265,11 +424,7 @@ export function buildInventoryEventsFromMappings(
     }
   }
 
-  events.sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    if (a.kind !== b.kind) return a.kind === 'manufacturing' ? -1 : 1;
-    return 0;
-  });
+  events.sort(compareBillEvents);
 
   return { events, poUnitsBySku };
 }
@@ -284,6 +439,8 @@ export function allocatePoCostAcrossSkus(
     throw new Error(`Missing manufacturing units for PO: ${poNumber}`);
   }
 
-  const weights = Array.from(skuUnits.entries()).map(([sku, units]) => ({ key: sku, weight: units }));
+  const weights = Array.from(skuUnits.entries())
+    .map(([sku, units]) => ({ key: sku, weight: units }))
+    .sort((a, b) => compareText(a.key, b.key));
   return allocateByWeight(totalCents, weights);
 }
