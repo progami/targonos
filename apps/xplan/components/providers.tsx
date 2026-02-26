@@ -2,10 +2,13 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider as NextThemeProvider, useTheme } from 'next-themes';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
 import { Toaster } from 'sonner';
 import { useState, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { lightTheme, darkTheme } from '@/lib/mui-theme';
 
 type ProvidersProps = {
   // Accept any React tree so we can bridge the React 18/19 type mismatch in this workspace
@@ -18,7 +21,19 @@ type ProvidersProps = {
 };
 
 type ThemeProviderProps = ComponentProps<typeof NextThemeProvider> & { children?: ReactNode };
-const ThemeProvider = NextThemeProvider as unknown as (props: ThemeProviderProps) => ReactElement;
+const NextTheme = NextThemeProvider as unknown as (props: ThemeProviderProps) => ReactElement;
+
+function MuiThemeSync({ children }: { children: ReactNode }) {
+  const { resolvedTheme } = useTheme();
+  const muiTheme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
+
+  return (
+    <ThemeProvider theme={muiTheme}>
+      <CssBaseline enableColorScheme />
+      {children}
+    </ThemeProvider>
+  );
+}
 
 function ThemedToaster() {
   const { resolvedTheme } = useTheme();
@@ -47,13 +62,15 @@ export function Providers({ children }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider delayDuration={100}>
-          {children}
-          <ThemedToaster />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </ThemeProvider>
+    <NextTheme attribute="class" defaultTheme="light" enableSystem>
+      <MuiThemeSync>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider delayDuration={100}>
+            {children}
+            <ThemedToaster />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MuiThemeSync>
+    </NextTheme>
   );
 }
