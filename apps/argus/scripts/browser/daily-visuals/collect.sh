@@ -148,8 +148,12 @@ JSEOF
     return 1
   fi
 
+  # Copy to /tmp to avoid macOS sandbox restrictions on ~/Downloads
+  TMP_PNG="/tmp/${asin}.png"
+  cp "$LATEST_PNG" "$TMP_PNG"
+
   # Split into 4 vertical parts using Python + Pillow
-  python3 - "$LATEST_PNG" "$dest_dir" <<'PYEOF'
+  python3 - "$TMP_PNG" "$dest_dir" <<'PYEOF'
 import sys
 from PIL import Image
 
@@ -171,9 +175,10 @@ PYEOF
 
   if [ $? -eq 0 ]; then
     log "Saved: $brand/$TODAY/part{1..4}.png"
-    rm -f "$LATEST_PNG"
+    rm -f "$LATEST_PNG" "$TMP_PNG"
   else
     log "WARNING: Failed to split image for $brand"
+    rm -f "$TMP_PNG"
     return 1
   fi
 
