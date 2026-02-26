@@ -675,10 +675,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
 }
 
 // ===== Entitlement / Roles claim helpers =====
-export type AppRole = 'viewer';
-
 export type AuthzAppGrant = {
-  role: AppRole;
   departments: string[];
 };
 
@@ -689,7 +686,6 @@ export type PortalAuthz = {
 };
 
 export type AppEntitlement = {
-  role?: AppRole;
   departments?: string[];
   depts?: string[];
 };
@@ -702,7 +698,7 @@ export type AppEntryPolicy = 'role_gated' | 'public';
 export type AuthDecision = {
   allowed: boolean;
   status: 'ok' | 'unauthenticated' | 'forbidden';
-  reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_role';
+  reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_access';
   authz: PortalAuthz | null;
 };
 
@@ -715,16 +711,6 @@ function normalizeStringArray(value: unknown): string[] {
     : [];
 }
 
-function normalizeAppRole(value: unknown): AppRole {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-    if (normalized === 'viewer') {
-      return 'viewer';
-    }
-  }
-  return 'viewer';
-}
-
 function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
   if (!value || typeof value !== 'object') return {};
   const raw = value as Record<string, unknown>;
@@ -734,10 +720,7 @@ function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
     if (!grant || typeof grant !== 'object') continue;
     const rawGrant = grant as Record<string, unknown>;
     const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
-    apps[appId] = {
-      role: normalizeAppRole(rawGrant.role),
-      departments,
-    };
+    apps[appId] = { departments };
   }
 
   return apps;
@@ -898,7 +881,6 @@ function buildDevBypassAuthz(appId?: string): PortalAuthz {
   const apps: Record<string, AuthzAppGrant> = {};
   if (appId) {
     apps[appId] = {
-      role: 'viewer',
       departments: [],
     };
   }
@@ -1132,7 +1114,7 @@ export async function requireAppEntry(options: {
     return {
       allowed: false,
       status: 'forbidden',
-      reason: 'no_app_role',
+      reason: 'no_app_access',
       authz,
     };
   }
@@ -1189,7 +1171,6 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
     const grant = authz.apps[appId];
     if (!grant) return undefined;
     return {
-      role: grant.role,
       departments: grant.departments,
       depts: grant.departments,
     };
@@ -1205,7 +1186,6 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
   const raw = ent as Record<string, unknown>;
   const departments = normalizeStringArray(raw.departments ?? raw.depts);
   return {
-    role: normalizeAppRole(raw.role),
     departments,
     depts: departments,
   };

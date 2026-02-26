@@ -512,15 +512,6 @@ function normalizeStringArray(value) {
         ? value.map((item) => String(item).trim()).filter(Boolean)
         : [];
 }
-function normalizeAppRole(value) {
-    if (typeof value === 'string') {
-        const normalized = value.trim().toLowerCase();
-        if (normalized === 'viewer') {
-            return 'viewer';
-        }
-    }
-    return 'viewer';
-}
 function normalizeAuthzApps(value) {
     if (!value || typeof value !== 'object')
         return {};
@@ -531,10 +522,7 @@ function normalizeAuthzApps(value) {
             continue;
         const rawGrant = grant;
         const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
-        apps[appId] = {
-            role: normalizeAppRole(rawGrant.role),
-            departments,
-        };
+        apps[appId] = { departments };
     }
     return apps;
 }
@@ -678,7 +666,6 @@ function buildDevBypassAuthz(appId) {
     const apps = {};
     if (appId) {
         apps[appId] = {
-            role: 'viewer',
             departments: [],
         };
     }
@@ -868,7 +855,7 @@ export async function requireAppEntry(options) {
         return {
             allowed: false,
             status: 'forbidden',
-            reason: 'no_app_role',
+            reason: 'no_app_access',
             authz,
         };
     }
@@ -914,7 +901,6 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
         if (!grant)
             return undefined;
         return {
-            role: grant.role,
             departments: grant.departments,
             depts: grant.departments,
         };
@@ -930,7 +916,6 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
     const raw = ent;
     const departments = normalizeStringArray(raw.departments ?? raw.depts);
     return {
-        role: normalizeAppRole(raw.role),
         departments,
         depts: departments,
     };

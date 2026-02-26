@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 
 import { getPortalAuthPrisma } from './db.js'
-import type { AppRole, AuthzAppGrant, PortalAuthz } from './index.js'
+import type { AuthzAppGrant, PortalAuthz } from './index.js'
 
 type AppEntitlementMap = Record<string, AuthzAppGrant>
 
@@ -55,7 +55,6 @@ const userSelect = {
   },
   appAccess: {
     select: {
-      role: true,
       source: true,
       locked: true,
       departments: true,
@@ -78,7 +77,6 @@ type PortalUserRecord = {
   authzVersion: number
   roles: Array<{ role: { name: string } }>
   appAccess: Array<{
-    role: string
     source: string
     locked: boolean
     departments: unknown
@@ -90,7 +88,6 @@ type ProvisionedAppAccess = {
   slug: string
   name: string
   departments: string[]
-  role?: AppRole
   source?: 'manual' | 'group' | 'bootstrap'
   locked?: boolean
 }
@@ -99,7 +96,6 @@ export type ManualAppGrantInput = {
   userId: string
   appSlug: string
   appName?: string
-  role: AppRole
   departments?: string[]
   locked?: boolean
 }
@@ -109,16 +105,6 @@ export type GroupSyncResult = {
   upsertedGrants: number
   deletedGrants: number
   skippedLocked: number
-}
-
-function normalizeAppRole(value: unknown): AppRole {
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase()
-    if (normalized === 'viewer') {
-      return 'viewer'
-    }
-  }
-  return 'viewer'
 }
 
 function normalizeDepartments(value: unknown): string[] {
@@ -237,7 +223,6 @@ export async function provisionPortalUser(options: {
       await tx.userApp.upsert({
         where: { userId_appId: { userId, appId: appRecord.id } },
         update: {
-          role: app.role ?? 'viewer',
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
@@ -245,7 +230,6 @@ export async function provisionPortalUser(options: {
         create: {
           userId,
           appId: appRecord.id,
-          role: app.role ?? 'viewer',
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
@@ -302,7 +286,6 @@ export async function upsertManualUserAppGrant(input: ManualAppGrantInput): Prom
     await tx.userApp.upsert({
       where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
       update: {
-        role: input.role,
         source: 'manual',
         locked: input.locked ?? true,
         departments: input.departments ?? [],
@@ -310,7 +293,6 @@ export async function upsertManualUserAppGrant(input: ManualAppGrantInput): Prom
       create: {
         userId: input.userId,
         appId: appRecord.id,
-        role: input.role,
         source: 'manual',
         locked: input.locked ?? true,
         departments: input.departments ?? [],
@@ -403,7 +385,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
       where: { isActive: true },
       select: {
         googleGroup: true,
-        role: true,
         departments: true,
         app: {
           select: {
@@ -415,13 +396,12 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
     }),
   ])
 
-  const mappingByGroup = new Map<string, Array<{ appId: string; role: AppRole; departments: string[] }>>()
+  const mappingByGroup = new Map<string, Array<{ appId: string; departments: string[] }>>()
   for (const mapping of mappings) {
     const key = mapping.googleGroup.trim()
     const list = mappingByGroup.get(key) ?? []
     list.push({
       appId: mapping.app.id,
-      role: normalizeAppRole(mapping.role),
       departments: normalizeDepartments(mapping.departments),
     })
     mappingByGroup.set(key, list)
@@ -434,7 +414,7 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
 
   for (const user of users) {
     const groupNames = membershipsByEmail[user.email.toLowerCase()] ?? []
-    const desiredByApp = new Map<string, { role: AppRole; departments: string[] }>()
+    const desiredByApp = new Map<string, { departments: string[] }>()
 
     for (const groupName of groupNames) {
       const mappingsForGroup = mappingByGroup.get(groupName)
@@ -444,7 +424,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
         const existing = desiredByApp.get(mapping.appId)
         if (!existing) {
           desiredByApp.set(mapping.appId, {
-            role: mapping.role,
             departments: mapping.departments,
           })
           continue
@@ -453,7 +432,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
         const deptSet = new Set<string>([...existing.departments, ...mapping.departments])
 
         desiredByApp.set(mapping.appId, {
-          role: 'viewer',
           departments: Array.from(deptSet),
         })
       }
@@ -466,7 +444,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
         },
         select: {
           appId: true,
-          role: true,
           source: true,
           locked: true,
           departments: true,
@@ -493,14 +470,12 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
         }
 
         const current = existingGroupMap.get(appId)
-        const currentRole = current ? normalizeAppRole(current.role) : null
         const currentDepartments = current ? normalizeDepartments(current.departments) : []
-        const sameRole = currentRole === desired.role
         const sameDepartments =
           currentDepartments.length === desired.departments.length
           && currentDepartments.every((dept, idx) => dept === desired.departments[idx])
 
-        if (sameRole && sameDepartments) {
+        if (sameDepartments) {
           continue
         }
 
@@ -512,7 +487,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
             },
           },
           update: {
-            role: desired.role,
             departments: desired.departments,
             source: 'group',
             locked: false,
@@ -520,7 +494,6 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
           create: {
             userId: user.id,
             appId,
-            role: desired.role,
             departments: desired.departments,
             source: 'group',
             locked: false,
@@ -636,13 +609,13 @@ function handleDevFallback(emailOrUsername: string, password: string): Authentic
 function buildDemoUser(): AuthenticatedUser {
   const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase()
   const entitlements: AppEntitlementMap = {
-    talos: { role: 'viewer', departments: ['Ops'] },
-    atlas: { role: 'viewer', departments: ['People Ops'] },
-    website: { role: 'viewer', departments: [] },
-    kairos: { role: 'viewer', departments: ['Product'] },
-    xplan: { role: 'viewer', departments: ['Product'] },
-    hermes: { role: 'viewer', departments: ['Account / Listing'] },
-    plutus: { role: 'viewer', departments: ['Finance'] }
+    talos: { departments: ['Ops'] },
+    atlas: { departments: ['People Ops'] },
+    website: { departments: [] },
+    kairos: { departments: ['Product'] },
+    xplan: { departments: ['Product'] },
+    hermes: { departments: ['Account / Listing'] },
+    plutus: { departments: ['Finance'] }
   }
 
   return {
@@ -666,7 +639,6 @@ export async function getUserEntitlements(userId: string): Promise<AppEntitlemen
   const assignments = await prisma.userApp.findMany({
     where: { userId },
     select: {
-      role: true,
       departments: true,
       app: {
         select: {
@@ -679,7 +651,6 @@ export async function getUserEntitlements(userId: string): Promise<AppEntitlemen
   const entitlements: AppEntitlementMap = {}
   for (const assignment of assignments) {
     entitlements[assignment.app.slug] = {
-      role: normalizeAppRole(assignment.role),
       departments: normalizeDepartments(assignment.departments),
     }
   }
@@ -723,7 +694,6 @@ export async function getUserAuthz(userId: string): Promise<PortalAuthz> {
       authzVersion: true,
       appAccess: {
         select: {
-          role: true,
           departments: true,
           app: {
             select: {
@@ -755,7 +725,6 @@ export async function getUserAuthz(userId: string): Promise<PortalAuthz> {
   const apps: AppEntitlementMap = {}
   for (const assignment of user.appAccess) {
     apps[assignment.app.slug] = {
-      role: normalizeAppRole(assignment.role),
       departments: normalizeDepartments(assignment.departments),
     }
   }
@@ -859,7 +828,6 @@ export async function getOrCreatePortalUserByEmail(options: {
 function mapPortalUser(user: PortalUserRecord): AuthenticatedUser {
   const entitlements = user.appAccess.reduce<AppEntitlementMap>((acc, assignment) => {
     acc[assignment.app.slug] = {
-      role: normalizeAppRole(assignment.role),
       departments: normalizeDepartments(assignment.departments),
     }
     return acc
