@@ -153,6 +153,12 @@ function isIdempotencyBlock(block: { code: string }): boolean {
   return block.code === 'ALREADY_PROCESSED' || block.code === 'ORDER_ALREADY_PROCESSED';
 }
 
+function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP' {
+  if (marketplace === 'amazon.com') return 'USD';
+  if (marketplace === 'amazon.co.uk') return 'GBP';
+  throw new Error(`Unsupported marketplace for settlement currency: ${marketplace}`);
+}
+
 async function chooseAuditUploadForProcessing(input: {
   db: DbClient;
   sourceFilename: string;
@@ -319,6 +325,8 @@ async function main(): Promise<void> {
       continue;
     }
 
+    const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);
+
     // ---------------------------------------------------------------------
     // COGS JE repair
     // ---------------------------------------------------------------------
@@ -390,6 +398,7 @@ async function main(): Promise<void> {
               txnDate: computed.preview.cogsJournalEntry.txnDate,
               docNumber: computed.preview.cogsJournalEntry.docNumber,
               privateNote: computed.preview.cogsJournalEntry.privateNote,
+              currencyCode: settlementCurrencyCode,
               lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
                 amount: fromCents(line.amountCents),
                 postingType: line.postingType,
@@ -477,6 +486,7 @@ async function main(): Promise<void> {
               txnDate: computed.preview.pnlJournalEntry.txnDate,
               docNumber: computed.preview.pnlJournalEntry.docNumber,
               privateNote: computed.preview.pnlJournalEntry.privateNote,
+              currencyCode: settlementCurrencyCode,
               lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
                 amount: fromCents(line.amountCents),
                 postingType: line.postingType,

@@ -5,6 +5,7 @@ import type { QboAccount } from '@/lib/qbo/api';
 import { deleteJournalEntry, fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementTotalFromJournalEntry, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { buildSettlementPeriodKey, loadSettlementPeriodsFromAuditRows } from '@/lib/plutus/settlement-periods';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
@@ -56,6 +57,11 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
     const meta = parseSettlementDocNumber(je.DocNumber);
     const settlementTotal = computeSettlementTotalFromJournalEntry(je, accountsById);
+    const periodsBySettlement = await loadSettlementPeriodsFromAuditRows({
+      amazonComInvoiceIds: meta.marketplace.id === 'amazon.com' ? [meta.normalizedDocNumber] : [],
+      amazonCoUkInvoiceIds: meta.marketplace.id === 'amazon.co.uk' ? [meta.normalizedDocNumber] : [],
+    });
+    const period = periodsBySettlement.get(buildSettlementPeriodKey(meta.marketplace.id, meta.normalizedDocNumber));
 
     const processing = await db.settlementProcessing.findUnique({
       where: { qboSettlementJournalEntryId: settlementId },
@@ -76,8 +82,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         postedDate: je.TxnDate,
         memo: je.PrivateNote ? je.PrivateNote : '',
         marketplace: meta.marketplace,
-        periodStart: meta.periodStart,
-        periodEnd: meta.periodEnd,
+        periodStart: period ? period.periodStart : null,
+        periodEnd: period ? period.periodEnd : null,
         settlementTotal,
         qboStatus: 'Posted',
         plutusStatus,
