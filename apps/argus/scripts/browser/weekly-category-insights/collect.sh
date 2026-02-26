@@ -68,24 +68,36 @@ end tell
 '
 sleep 20
 
-# Extract the page data
-TEXT=$(osascript -e '
+# Function to extract main content text (excludes nav/footer)
+extract_content() {
+  osascript -e '
 tell application "Google Chrome"
   tell active tab of first window
-    return execute javascript "document.body.innerText"
+    return execute javascript "
+      (function() {
+        var main = document.querySelector(\"#sc-content-container\");
+        if (!main) main = document.body;
+        return main.innerText;
+      })()
+    "
   end tell
 end tell
-' 2>/dev/null)
+' 2>/dev/null
+}
 
-# Write structured text file
-cat > "$DEST/${PREFIX}_CategoryInsights.txt" << TXTEOF
-Category Insights — Painting Drop Cloths Plastic Sheeting
-Category: Tools & Home Improvement > Building Material > Painting Drop Cloths Plastic Sheeting
-Store: United States
-Captured: $TODAY
+# Extract page content (metrics are identical across time-period tabs;
+# chart trend data is canvas-rendered and not available via innerText)
+PAGE_DATA=$(extract_content)
 
-$TEXT
-TXTEOF
+OUTFILE="$DEST/${PREFIX}_CategoryInsights.txt"
+{
+  echo "Category Insights — Painting Drop Cloths Plastic Sheeting"
+  echo "Category: Tools & Home Improvement > Building Material > Painting Drop Cloths Plastic Sheeting"
+  echo "Store: United States"
+  echo "Captured: $TODAY"
+  echo ""
+  echo "$PAGE_DATA"
+} > "$OUTFILE"
 
 log "Saved: ${PREFIX}_CategoryInsights.txt"
 log "Done"
