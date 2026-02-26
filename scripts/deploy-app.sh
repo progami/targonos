@@ -589,9 +589,7 @@ if [[ -n "$prisma_cmd" ]]; then
         fi
         ;;
       argus)
-        if any_changed "apps/argus/prisma/schema.prisma" && ! any_changed_under "packages/prisma-argus/generated/"; then
-          run_prisma_generate="true"
-        fi
+        run_prisma_generate="true"
         ;;
     esac
   fi
