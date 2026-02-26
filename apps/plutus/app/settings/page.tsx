@@ -120,7 +120,6 @@ type PlutusUser = {
   id: string;
   email: string;
   name: string;
-  role: string;
 };
 
 async function fetchPlutusUsers(): Promise<{ users: PlutusUser[] }> {
@@ -460,19 +459,18 @@ export default function SettingsPage() {
                     <TableRow>
                       <TableCell sx={{ color: 'text.secondary' }}>Name</TableCell>
                       <TableCell sx={{ color: 'text.secondary' }}>Email</TableCell>
-                      <TableCell sx={{ color: 'text.secondary' }}>Role</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {usersLoading ? (
                       <TableRow>
-                        <TableCell colSpan={3} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
+                        <TableCell colSpan={2} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           Loading...
                         </TableCell>
                       </TableRow>
                     ) : !usersData?.users?.length ? (
                       <TableRow>
-                        <TableCell colSpan={3} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
+                        <TableCell colSpan={2} sx={{ textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled' }}>
                           No users found
                         </TableCell>
                       </TableRow>
@@ -481,9 +479,6 @@ export default function SettingsPage() {
                         <TableRow key={user.id}>
                           <TableCell sx={{ fontSize: '0.875rem', fontWeight: 500 }}>{user.name}</TableCell>
                           <TableCell sx={{ fontSize: '0.875rem' }}>{user.email}</TableCell>
-                          <TableCell>
-                            <Chip label={user.role} size="small" color="default" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />
-                          </TableCell>
                         </TableRow>
                       ))
                     )}
