@@ -212,10 +212,6 @@ export function buildPnlJournalLines(
   };
 
   for (const [bucketKey, perBrand] of Object.entries(pnlAllocationsByBucket)) {
-    if (bucketKey === 'amazonAdvertisingCosts') {
-      continue;
-    }
-
     const parentAccountId = mapping[bucketKey];
     const bucketMeta = bucketMetaByKey[bucketKey];
     if (!parentAccountId || !bucketMeta) continue;

@@ -460,6 +460,7 @@ async function main(): Promise<void> {
         txnDate: jeDraft.txnDate,
         docNumber: jeDraft.docNumber,
         privateNote: jeDraft.privateNote,
+        currencyCode: 'USD',
         lines: jeDraft.lines.map((l) => ({
           amount: l.amount,
           postingType: l.postingType,
