@@ -13,6 +13,7 @@ import {
   parseSettlementDocNumber,
   type SettlementMarketplace,
 } from '@/lib/plutus/settlement-doc-number';
+import { buildSettlementPeriodKey, loadSettlementPeriodsFromAuditRows } from '@/lib/plutus/settlement-periods';
 
 const logger = createLogger({ name: 'plutus-settlements' });
 
@@ -51,6 +52,11 @@ function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): Q
 
   return a.Id > b.Id ? a : b;
 }
+
+type SettlementMeta = {
+  marketplace: SettlementMarketplace;
+  normalizedDocNumber: string;
+};
 
 export async function GET(req: NextRequest) {
   try {
@@ -138,6 +144,35 @@ export async function GET(req: NextRequest) {
       return aDoc.localeCompare(bDoc);
     });
 
+    const settlementMetaByJournalEntryId = new Map<string, SettlementMeta>();
+    const amazonComInvoiceIds: string[] = [];
+    const amazonCoUkInvoiceIds: string[] = [];
+
+    for (const journalEntry of uniqueJournalEntries) {
+      const docNumber = journalEntry.DocNumber;
+      if (!docNumber) {
+        throw new Error(`Missing DocNumber on journal entry ${journalEntry.Id}`);
+      }
+
+      const meta = parseSettlementDocNumber(docNumber);
+      settlementMetaByJournalEntryId.set(journalEntry.Id, {
+        marketplace: meta.marketplace,
+        normalizedDocNumber: meta.normalizedDocNumber,
+      });
+
+      if (meta.marketplace.id === 'amazon.com') {
+        amazonComInvoiceIds.push(meta.normalizedDocNumber);
+        continue;
+      }
+
+      amazonCoUkInvoiceIds.push(meta.normalizedDocNumber);
+    }
+
+    const periodsBySettlement = await loadSettlementPeriodsFromAuditRows({
+      amazonComInvoiceIds,
+      amazonCoUkInvoiceIds,
+    });
+
     const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
     });
@@ -168,11 +203,11 @@ export async function GET(req: NextRequest) {
     const rolledBackSet = new Set(rolledBack.map((r) => r.qboSettlementJournalEntryId));
 
     const allRows: SettlementRow[] = uniqueJournalEntries.map((je) => {
-      if (!je.DocNumber) {
-        throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
+      const settlementMeta = settlementMetaByJournalEntryId.get(je.Id);
+      if (!settlementMeta) {
+        throw new Error(`Missing settlement metadata for journal entry ${je.Id}`);
       }
-
-      const meta = parseSettlementDocNumber(je.DocNumber);
+      const period = periodsBySettlement.get(buildSettlementPeriodKey(settlementMeta.marketplace.id, settlementMeta.normalizedDocNumber));
 
       let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';
       if (processedSet.has(je.Id)) {
@@ -183,12 +218,12 @@ export async function GET(req: NextRequest) {
 
       return {
         id: je.Id,
-        docNumber: je.DocNumber,
+        docNumber: settlementMeta.normalizedDocNumber,
         postedDate: je.TxnDate,
         memo: je.PrivateNote ? je.PrivateNote : '',
-        marketplace: meta.marketplace,
-        periodStart: meta.periodStart,
-        periodEnd: meta.periodEnd,
+        marketplace: settlementMeta.marketplace,
+        periodStart: period ? period.periodStart : null,
+        periodEnd: period ? period.periodEnd : null,
         settlementTotal: computeSettlementTotalFromJournalEntry(je, accountsById),
         qboStatus: 'Posted',
         plutusStatus,

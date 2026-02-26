@@ -566,14 +566,11 @@ async function auditSettlementProcessingRow(input: {
     });
     if (pnlAllocation.unallocatedSkuLessBuckets.length > 0) {
       for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
-        if (issue.bucket === 'amazonAdvertisingCosts') {
-          continue;
-        }
         warnings.push(`Unallocated SKU-less bucket: ${issue.bucket} ${issue.reason} (${issue.totalCents} cents)`);
       }
     }
 
-    const blockingUnallocatedBuckets = pnlAllocation.unallocatedSkuLessBuckets.filter((issue) => issue.bucket !== 'amazonAdvertisingCosts');
+    const blockingUnallocatedBuckets = pnlAllocation.unallocatedSkuLessBuckets;
     deterministicPnlOk = deterministic.issues.length === 0 && blockingUnallocatedBuckets.length === 0;
 
     pnlExpectedLines = buildPnlJournalLines(

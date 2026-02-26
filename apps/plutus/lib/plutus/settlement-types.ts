@@ -6,6 +6,7 @@ export type ProcessingBlock =
       code:
         | 'MISSING_SETUP'
         | 'MISSING_SKU_MAPPING'
+        | 'AUDIT_NET_SCALE_SUSPECT'
         | 'MISSING_ACCOUNT_MAPPING'
         | 'MISSING_BRAND_SUBACCOUNT'
         | 'ALREADY_PROCESSED'
@@ -26,7 +27,6 @@ const NON_BLOCKING_PROCESSING_CODES = new Set([
   'LATE_COST_ON_HAND_ZERO',
   'REFUND_ADJUSTMENT',
   'REFUND_PARTIAL',
-  'PNL_ALLOCATION_WARNING',
 ]);
 
 export function isBlockingProcessingCode(code: string): boolean {

@@ -438,6 +438,7 @@ export async function createJournalEntry(
     txnDate: string;
     docNumber?: string;
     privateNote?: string;
+    currencyCode?: string;
     lines: Array<{
       amount: number;
       postingType: 'Debit' | 'Credit';
@@ -456,6 +457,7 @@ export async function createJournalEntry(
     TxnDate: input.txnDate,
     DocNumber: input.docNumber,
     PrivateNote: input.privateNote,
+    ...(input.currencyCode !== undefined && input.currencyCode !== '' ? { CurrencyRef: { value: input.currencyCode } } : {}),
     Line: input.lines.map((line) => ({
       ...(() => {
         const detail: Record<string, unknown> = {
