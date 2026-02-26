@@ -11,22 +11,18 @@ vi.mock('next/navigation', () => ({
 describe('SheetTabs', () => {
   it('marks the active sheet and renders default hrefs', () => {
     render(<TooltipProvider><SheetTabs sheets={SHEETS} activeSlug="1-setup" /></TooltipProvider>)
-    const activeLabel = SHEETS.find((s) => s.slug === '1-setup')!.shortLabel
-    const active = screen.getByRole('link', { name: activeLabel })
-    expect(active).toHaveAttribute('href', '/1-setup')
-    expect(active.className).toContain('bg-cyan-600')
-
-    const inactiveLabel = SHEETS.find((s) => s.slug === '3-ops-planning')!.shortLabel
-    const inactive = screen.getByRole('link', { name: inactiveLabel })
-    expect(inactive).toHaveAttribute('href', '/3-ops-planning')
+    const tabs = screen.getAllByRole('tab')
+    const activeTab = tabs.find((tab) => tab.getAttribute('aria-selected') === 'true')
+    expect(activeTab).toBeDefined()
+    expect(activeTab).toHaveAttribute('href', '/1-setup')
   })
 
   it('respects precomputed href overrides', () => {
     const customSheets = SHEETS.map((sheet) => ({ ...sheet, href: `/custom/${sheet.slug}` }))
     render(<TooltipProvider><SheetTabs sheets={customSheets} activeSlug="1-setup" /></TooltipProvider>)
-    const inactiveLabel = SHEETS.find((s) => s.slug === '3-ops-planning')!.shortLabel
-    const inactive = screen.getByRole('link', { name: inactiveLabel })
-    expect(inactive).toHaveAttribute('href', '/custom/3-ops-planning')
+    const tabs = screen.getAllByRole('tab')
+    const opsTab = tabs.find((tab) => tab.getAttribute('href') === '/custom/3-ops-planning')
+    expect(opsTab).toBeDefined()
   })
 
 })

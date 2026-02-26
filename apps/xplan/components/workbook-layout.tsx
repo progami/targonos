@@ -9,13 +9,13 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FileText } from 'lucide-react';
-import { clsx } from 'clsx';
-import {
-  SHEET_TOOLBAR_BUTTON,
-  SHEET_TOOLBAR_GROUP,
-  SHEET_TOOLBAR_LABEL,
-  SHEET_TOOLBAR_SEGMENTED,
-} from '@/components/sheet-toolbar';
+import AppBar from '@mui/material/AppBar';
+import Toolbar from '@mui/material/Toolbar';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { TimeZoneClocks } from '@/components/timezone-clocks';
 
@@ -253,32 +253,50 @@ export function WorkbookLayout({
     if (!sortedYears.length || !isYearAwareSheet || resolvedYear == null) return null;
 
     return (
-      <div className={SHEET_TOOLBAR_GROUP}>
-        <span className={SHEET_TOOLBAR_LABEL}>Year</span>
-        <div role="group" aria-label="Select year" className={SHEET_TOOLBAR_SEGMENTED}>
-          {sortedYears.map((segment) => {
-            const isActive = segment.year === resolvedYear;
-            return (
-              <button
-                key={segment.year}
-                type="button"
-                className={clsx(
-                  SHEET_TOOLBAR_BUTTON,
-                  isActive
-                    ? 'bg-cyan-600 text-white dark:bg-cyan-500'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
-                )}
-                onClick={() => handleYearSelect(segment.year)}
-                disabled={isNavigationBusy && isActive}
-                aria-pressed={isActive}
-              >
-                {segment.year}
-                {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+        <Typography
+          variant="caption"
+          sx={{
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            color: 'text.secondary',
+          }}
+        >
+          Year
+        </Typography>
+        <ToggleButtonGroup
+          value={resolvedYear}
+          exclusive
+          onChange={(_e, val) => { if (val != null) handleYearSelect(val); }}
+          size="small"
+          aria-label="Select year"
+          sx={{
+            '& .MuiToggleButton-root': {
+              px: 1.25,
+              py: 0.5,
+              fontSize: '0.75rem',
+              fontWeight: 500,
+              '&.Mui-selected': {
+                bgcolor: 'secondary.main',
+                color: '#fff',
+                '&:hover': { bgcolor: 'secondary.main' },
+              },
+            },
+          }}
+        >
+          {sortedYears.map((segment) => (
+            <ToggleButton
+              key={segment.year}
+              value={segment.year}
+              disabled={isNavigationBusy && segment.year === resolvedYear}
+            >
+              {segment.year}
+              {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
     );
   }, [handleYearSelect, isNavigationBusy, isYearAwareSheet, resolvedYear, sortedYears]);
 
@@ -331,7 +349,6 @@ export function WorkbookLayout({
         if (target.closest('.handsontableInput')) return;
       }
 
-      // Ctrl + PageUp/PageDown to navigate sheets
       if (event.ctrlKey && !event.altKey && !event.metaKey) {
         if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
           const currentIndex = traversalIndexRef.current;
@@ -357,7 +374,6 @@ export function WorkbookLayout({
           return;
         }
 
-        // Ctrl + 1-5 to jump to specific sheets
         const num = parseInt(event.key, 10);
         if (num >= 1 && num <= sheets.length) {
           event.preventDefault();
@@ -425,105 +441,181 @@ export function WorkbookLayout({
   }, [meta]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 dark:bg-[#041324]">
-      <main className="flex flex-1 overflow-hidden" role="main" aria-label="Main content">
-        <section className="flex flex-1 overflow-hidden">
-          <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-auto">
-            <header
-              className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] sm:px-4 lg:px-5"
+    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
+      <Box component="main" sx={{ display: 'flex', flex: 1, overflow: 'hidden' }} role="main" aria-label="Main content">
+        <Box component="section" sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <Box ref={scrollContainerRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+            <AppBar
+              position="sticky"
+              color="transparent"
+              elevation={0}
+              sx={{
+                top: 0,
+                zIndex: 10,
+                borderBottom: 1,
+                borderColor: 'divider',
+                bgcolor: 'rgba(255,255,255,0.95)',
+                backdropFilter: 'blur(16px)',
+                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                '.dark &': {
+                  bgcolor: 'rgba(4,19,36,0.95)',
+                  borderColor: '#0b3a52',
+                  boxShadow: '0 26px 55px rgba(1,12,24,0.55)',
+                },
+              }}
               role="banner"
             >
-              <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+              <Toolbar
+                variant="dense"
+                sx={{ px: { xs: 1.5, sm: 2, lg: 2.5 }, py: 1, gap: 1, minHeight: 'auto' }}
+              >
                 {/* App branding - LEFT */}
-                <div className="flex items-center gap-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-dark shadow-md">
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      height: 36,
+                      width: 36,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      borderRadius: '12px',
+                      bgcolor: '#002C51',
+                      boxShadow: 2,
+                    }}
+                  >
                     <svg
                       viewBox="0 0 24 24"
                       width="20"
                       height="20"
                       fill="none"
                       aria-hidden="true"
-                      className="text-white"
+                      style={{ color: 'white' }}
                     >
-                      <path
-                        d="M7 7L17 17"
-                        stroke="currentColor"
-                        strokeWidth="2.6"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M17 7L7 17"
-                        stroke="currentColor"
-                        strokeWidth="2.6"
-                        strokeLinecap="round"
-                      />
+                      <path d="M7 7L17 17" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+                      <path d="M17 7L7 17" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
                     </svg>
-                  </div>
-                  <h1 className="hidden sm:block text-sm font-semibold tracking-tight text-slate-700 dark:text-slate-200">
+                  </Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      display: { xs: 'none', sm: 'block' },
+                      fontWeight: 600,
+                      letterSpacing: '-0.01em',
+                      color: 'text.primary',
+                    }}
+                  >
                     xplan
-                  </h1>
-                </div>
-                <div className="min-w-0 overflow-hidden">
+                  </Typography>
+                </Box>
+
+                {/* Sheet tabs - CENTER */}
+                <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                   <SheetTabs
                     sheets={sheetTabs}
                     activeSlug={activeSlug}
                     variant="scroll"
                     onSheetSelect={goToSheet}
                   />
-                </div>
-                <div className="flex items-center gap-3">
-                  {/* Active strategy indicator */}
+                </Box>
+
+                {/* Right controls */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
                   {ribbon}
 
-                  {/* Loading state */}
                   {showLoadingIndicator && (
-                    <div className="flex items-center gap-1.5">
-                      <div className="h-3 w-3 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent dark:border-[#00C2B9]" />
-                      <span className="text-xs font-semibold uppercase tracking-wider text-cyan-600 dark:text-cyan-300">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      <CircularProgress size={14} sx={{ color: 'secondary.main' }} />
+                      <Typography
+                        variant="caption"
+                        sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'secondary.main' }}
+                      >
                         Loading
-                      </span>
-                    </div>
+                      </Typography>
+                    </Box>
                   )}
 
                   {reportTimeZone ? <TimeZoneClocks reportTimeZone={reportTimeZone} /> : null}
 
-                  {/* Theme toggle */}
                   <ThemeToggle />
 
-                  {/* Targon branding - RIGHT */}
                   <TargonWordmark className="shrink-0" />
-
-                </div>
-              </div>
+                </Box>
+              </Toolbar>
 
               {hasControls && (
-                <div className="mt-1.5 flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-1.5 dark:border-slate-800">
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: 1,
+                    borderTop: 1,
+                    borderColor: 'divider',
+                    px: { xs: 1.5, sm: 2, lg: 2.5 },
+                    py: 0.75,
+                  }}
+                >
                   {headerControls}
                   {yearSwitcher}
-                </div>
+                </Box>
               )}
-            </header>
-            <div className="px-4 py-4 sm:px-6 lg:px-8">{children}</div>
-          </div>
+            </AppBar>
+            <Box sx={{ px: { xs: 2, sm: 3, lg: 4 }, py: 2 }}>{children}</Box>
+          </Box>
           {hasContextPane && (
-            <div
-              className="relative hidden h-full shrink-0 border-l border-slate-200 bg-white/90 backdrop-blur-sm dark:border-[#0b3a52] dark:bg-[#06182b]/85 lg:block"
-              style={{ width: contextWidth }}
+            <Box
+              className="hidden lg:block"
+              sx={{
+                position: 'relative',
+                height: '100%',
+                flexShrink: 0,
+                borderLeft: 1,
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                backdropFilter: 'blur(4px)',
+                width: contextWidth,
+              }}
             >
-              <div
+              <Box
                 role="separator"
                 aria-orientation="vertical"
-                className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize bg-cyan-600/30 transition-colors hover:bg-cyan-600/50 dark:bg-[#00c2b9]/30 dark:hover:bg-[#00c2b9]/50"
                 onMouseDown={() => setIsResizing(true)}
+                sx={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  height: '100%',
+                  width: 6,
+                  cursor: 'ew-resize',
+                  bgcolor: 'rgba(0,194,185,0.3)',
+                  transition: 'background-color 0.15s',
+                  '&:hover': { bgcolor: 'rgba(0,194,185,0.5)' },
+                }}
               />
-              <div className="h-full overflow-auto px-5 py-6">{contextPane}</div>
-            </div>
+              <Box sx={{ height: '100%', overflow: 'auto', px: 2.5, py: 3 }}>{contextPane}</Box>
+            </Box>
           )}
-        </section>
-      </main>
+        </Box>
+      </Box>
 
-      <footer
-        className="space-y-2 border-t border-slate-200 bg-white/95 px-3 py-2.5 shadow-lg backdrop-blur-xl dark:border-[#0b3a52] dark:bg-[#041324]/95 dark:shadow-[0_26px_55px_rgba(1,12,24,0.55)] lg:hidden"
+      <Box
+        component="footer"
+        className="lg:hidden"
+        sx={{
+          borderTop: 1,
+          borderColor: 'divider',
+          bgcolor: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(16px)',
+          px: 1.5,
+          py: 1.25,
+          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+          '.dark &': {
+            bgcolor: 'rgba(4,19,36,0.95)',
+            borderColor: '#0b3a52',
+            boxShadow: '0 26px 55px rgba(1,12,24,0.55)',
+          },
+        }}
         role="navigation"
         aria-label="Sheet navigation"
       >
@@ -534,12 +626,22 @@ export function WorkbookLayout({
           onSheetSelect={goToSheet}
         />
         {hasControls && (
-          <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-2 dark:border-[#0b3a52]">
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 1.5,
+              borderTop: 1,
+              borderColor: 'divider',
+              pt: 1,
+            }}
+          >
             {headerControls}
             {yearSwitcher}
-          </div>
+          </Box>
         )}
-      </footer>
-    </div>
+      </Box>
+    </Box>
   );
 }

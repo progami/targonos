@@ -2,9 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import MuiTooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
 import type { SheetConfig, SheetSlug } from '@/lib/sheets';
-import { Tooltip } from '@/components/ui/tooltip';
 
 type SheetTab = SheetConfig & { href?: string; prefetch?: boolean };
 
@@ -26,7 +32,7 @@ export function SheetTabs({
   const pathname = usePathname();
   const isStack = variant === 'stack';
 
-  const handleClick = (slug: SheetSlug, event: React.MouseEvent<HTMLAnchorElement>) => {
+  const handleClick = (slug: SheetSlug, event: React.MouseEvent) => {
     if (!onSheetSelect) return;
     event.preventDefault();
     onSheetSelect(slug);
@@ -36,74 +42,102 @@ export function SheetTabs({
 
   if (isStack) {
     return (
-      <div className="flex w-full flex-col gap-3">
-        <nav className="flex flex-col gap-1">
+      <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 1.5 }}>
+        <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           {sheets.map((sheet) => {
             const Icon = sheet.icon;
             const href = sheet.href ?? `/${sheet.slug}`;
             const isActive = activeSlug === sheet.slug || pathname === href;
             return (
-              <Link
+              <ListItemButton
                 key={sheet.slug}
+                component={Link}
                 href={href}
                 prefetch={sheet.prefetch}
-                onClick={onSheetSelect ? (event) => handleClick(sheet.slug, event) : undefined}
-                className={clsx(
-                  'relative min-w-[160px] overflow-hidden rounded-2xl border px-4 py-3.5 text-sm font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#00C2B9] touch-manipulation',
-                  isActive
-                    ? 'border-cyan-600 bg-cyan-600/20 text-slate-900 shadow-md dark:border-[#00C2B9] dark:bg-[#00C2B9]/30 dark:text-white dark:shadow-[0_18px_40px_rgba(0,194,185,0.3)]'
-                    : 'border-slate-300 bg-white text-slate-700 hover:border-cyan-500 hover:bg-slate-50 hover:text-slate-900 dark:border-[#6F7B8B]/50 dark:bg-[#002C51]/70 dark:text-[#6F7B8B] dark:hover:border-[#00C2B9]/70 dark:hover:bg-[#002C51] dark:hover:text-white',
-                )}
+                onClick={onSheetSelect ? (event: React.MouseEvent) => handleClick(sheet.slug, event) : undefined}
+                selected={isActive}
+                sx={{
+                  borderRadius: '16px',
+                  border: 1,
+                  borderColor: isActive ? 'secondary.main' : 'divider',
+                  py: 1.5,
+                  px: 2,
+                  minWidth: 160,
+                  ...(isActive && {
+                    bgcolor: 'rgba(0, 194, 185, 0.15)',
+                    boxShadow: 2,
+                    '&.Mui-selected': {
+                      bgcolor: 'rgba(0, 194, 185, 0.15)',
+                      '&:hover': { bgcolor: 'rgba(0, 194, 185, 0.2)' },
+                    },
+                  }),
+                }}
               >
-                <span className="relative z-10 flex items-center gap-2">
-                  {Icon ? <Icon className="h-4 w-4" aria-hidden /> : null}
-                  <span>{sheet.label}</span>
-                </span>
-              </Link>
+                {Icon && (
+                  <ListItemIcon sx={{ minWidth: 32 }}>
+                    <Icon size={16} />
+                  </ListItemIcon>
+                )}
+                <ListItemText
+                  primary={sheet.label}
+                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                />
+              </ListItemButton>
             );
           })}
-        </nav>
-        {suffix && <div className="shrink-0">{suffix}</div>}
-      </div>
+        </List>
+        {suffix && <Box sx={{ flexShrink: 0 }}>{suffix}</Box>}
+      </Box>
     );
   }
 
   return (
-    <div className="flex w-full items-center justify-between gap-2 py-1">
-      <nav className="flex items-center overflow-x-auto">
-        <ol className="flex items-center gap-1">
-          {sheets.map((sheet, index) => {
-            const Icon = sheet.icon;
-            const href = sheet.href ?? `/${sheet.slug}`;
-            const isActive = activeSlug === sheet.slug || pathname === href;
-            const isCompleted = index < activeIndex;
-
-            return (
-              <li key={sheet.slug} className="flex items-center">
-                <Tooltip content={sheet.label} position="bottom">
-                  <Link
-                    href={href}
-                    prefetch={sheet.prefetch}
-                    onClick={onSheetSelect ? (event) => handleClick(sheet.slug, event) : undefined}
-                    className={clsx(
-                      'group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400',
-                      isActive
-                        ? 'bg-cyan-600 text-white shadow-md dark:bg-cyan-500 dark:text-white'
-                        : isCompleted
-                          ? 'text-cyan-700 hover:bg-cyan-50 dark:text-cyan-300 dark:hover:bg-cyan-900/20'
-                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5',
-                    )}
-                  >
-                    {Icon ? <Icon className="h-4 w-4 shrink-0" aria-hidden /> : null}
-                    <span className="whitespace-nowrap">{sheet.shortLabel}</span>
-                  </Link>
-                </Tooltip>
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-      {suffix && <div className="shrink-0">{suffix}</div>}
-    </div>
+    <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.5 }}>
+      <Tabs
+        value={activeIndex >= 0 ? activeIndex : false}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{
+          minHeight: 36,
+          '& .MuiTabs-indicator': {
+            bgcolor: 'secondary.main',
+          },
+          '& .MuiTab-root': {
+            minHeight: 36,
+            px: 1.5,
+            py: 0.75,
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: 'text.secondary',
+            '&.Mui-selected': {
+              color: 'secondary.main',
+            },
+          },
+        }}
+      >
+        {sheets.map((sheet, index) => {
+          const Icon = sheet.icon;
+          const href = sheet.href ?? `/${sheet.slug}`;
+          return (
+            <Tab
+              key={sheet.slug}
+              component={Link}
+              href={href}
+              prefetch={sheet.prefetch}
+              onClick={onSheetSelect ? (event: React.MouseEvent) => handleClick(sheet.slug, event) : undefined}
+              icon={Icon ? <Icon size={16} /> : undefined}
+              iconPosition="start"
+              label={
+                <MuiTooltip title={sheet.label} placement="bottom">
+                  <span>{sheet.shortLabel}</span>
+                </MuiTooltip>
+              }
+            />
+          );
+        })}
+      </Tabs>
+      {suffix && <Box sx={{ flexShrink: 0 }}>{suffix}</Box>}
+    </Box>
   );
 }

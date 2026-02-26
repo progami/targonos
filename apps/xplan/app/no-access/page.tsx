@@ -1,61 +1,88 @@
+'use client';
+
 import Link from 'next/link';
-import { ShieldX, ArrowLeft, ExternalLink } from 'lucide-react';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
+import ArrowBack from '@mui/icons-material/ArrowBack';
+import OpenInNew from '@mui/icons-material/OpenInNew';
+
+const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || '/';
 
 export default function NoAccessPage() {
-  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || process.env.PORTAL_AUTH_URL || '/';
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8 text-center">
-        <div>
-          <div className="mx-auto h-24 w-24 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
-            <ShieldX className="h-12 w-12 text-amber-600 dark:text-amber-500" />
-          </div>
-          <h1 className="mt-6 text-3xl font-extrabold text-slate-900 dark:text-slate-100">
+    <Container maxWidth="sm" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', py: 6 }}>
+      <Box sx={{ width: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Box>
+          <Avatar
+            sx={{
+              mx: 'auto',
+              width: 96,
+              height: 96,
+              bgcolor: 'warning.light',
+              color: 'warning.dark',
+            }}
+          >
+            <ShieldOutlined sx={{ fontSize: 48 }} />
+          </Avatar>
+          <Typography variant="h4" sx={{ mt: 3, fontWeight: 800 }}>
             No Access to xplan
-          </h1>
-          <p className="mt-3 text-base text-slate-600 dark:text-slate-400">
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mt: 1.5 }}>
             Your account does not have permission to access xplan.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-left">
-          <h2 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+        <Paper variant="outlined" sx={{ p: 3, textAlign: 'left' }}>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
             What does this mean?
-          </h2>
-          <ul className="text-sm text-slate-600 dark:text-slate-400 space-y-1.5">
-            <li className="flex items-start gap-2">
-              <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
-              <span>You are signed in but xplan access has not been granted to your account</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-slate-400 dark:text-slate-500 mt-0.5">•</span>
-              <span>Contact your administrator to request access</span>
-            </li>
-          </ul>
-        </div>
+          </Typography>
+          <List dense disablePadding>
+            <ListItem disableGutters sx={{ alignItems: 'flex-start' }}>
+              <ListItemText
+                primary="You are signed in but xplan access has not been granted to your account"
+                primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+              />
+            </ListItem>
+            <ListItem disableGutters sx={{ alignItems: 'flex-start' }}>
+              <ListItemText
+                primary="Contact your administrator to request access"
+                primaryTypographyProps={{ variant: 'body2', color: 'text.secondary' }}
+              />
+            </ListItem>
+          </List>
+        </Paper>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+          <Button
+            component={Link}
             href={portalUrl}
-            className="inline-flex items-center px-5 py-2.5 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 dark:focus:ring-offset-slate-950 transition-colors"
+            variant="contained"
+            startIcon={<ArrowBack />}
           >
-            <ArrowLeft className="h-4 w-4 mr-2" />
             Back to Portal
-          </Link>
-          <a
-            href={`mailto:support@targonglobal.com?subject=xplan Access Request`}
-            className="inline-flex items-center px-5 py-2.5 border border-slate-300 dark:border-slate-700 text-sm font-medium rounded-lg text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500 dark:focus:ring-offset-slate-950 transition-colors"
+          </Button>
+          <Button
+            component="a"
+            href="mailto:support@targonglobal.com?subject=xplan Access Request"
+            variant="outlined"
+            startIcon={<OpenInNew />}
           >
-            <ExternalLink className="h-4 w-4 mr-2" />
             Request Access
-          </a>
-        </div>
+          </Button>
+        </Box>
 
-        <p className="text-xs text-slate-500 dark:text-slate-500">
+        <Typography variant="caption" color="text.secondary">
           If you believe this is an error, please contact your system administrator.
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Box>
+    </Container>
   );
 }

@@ -2,8 +2,10 @@
 
 import { useTheme } from 'next-themes';
 import { useEffect, useState } from 'react';
-import { Moon, Sun } from 'lucide-react';
-import { Tooltip } from '@/components/ui/tooltip';
+import IconButton from '@mui/material/IconButton';
+import MuiTooltip from '@mui/material/Tooltip';
+import DarkModeOutlined from '@mui/icons-material/DarkModeOutlined';
+import LightModeOutlined from '@mui/icons-material/LightModeOutlined';
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -22,19 +24,32 @@ export function ThemeToggle() {
   const isDark = theme === 'dark';
 
   return (
-    <Tooltip content={isDark ? 'Light mode' : 'Dark mode'} position="bottom">
-      <button
-        type="button"
+    <MuiTooltip title={isDark ? 'Light mode' : 'Dark mode'} placement="bottom">
+      <IconButton
         onClick={() => setTheme(isDark ? 'light' : 'dark')}
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition hover:bg-slate-50 hover:text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+        size="small"
+        sx={{
+          width: 36,
+          height: 36,
+          borderRadius: '12px',
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          color: 'text.secondary',
+          boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+          '&:hover': {
+            bgcolor: 'action.hover',
+            color: 'text.primary',
+          },
+        }}
       >
         {isDark ? (
-          <Sun className="h-7 w-7" aria-hidden />
+          <LightModeOutlined sx={{ fontSize: 22 }} />
         ) : (
-          <Moon className="h-7 w-7" aria-hidden />
+          <DarkModeOutlined sx={{ fontSize: 22 }} />
         )}
-      </button>
-    </Tooltip>
+      </IconButton>
+    </MuiTooltip>
   );
 }
