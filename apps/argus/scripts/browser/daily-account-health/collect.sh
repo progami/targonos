@@ -26,10 +26,18 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   exit 1
 fi
 
-# --- Navigate to Account Health Dashboard ---
+# --- Find SC tab and navigate to Account Health Dashboard ---
 osascript -e '
 tell application "Google Chrome"
-  tell active tab of first window
+  set w to first window
+  repeat with i from 1 to (count of tabs of w)
+    if URL of tab i of w contains "sellercentral.amazon.com" then
+      set active tab index of w to i
+      set URL of tab i of w to "https://sellercentral.amazon.com/performance/dashboard"
+      return
+    end if
+  end repeat
+  tell active tab of w
     set URL to "https://sellercentral.amazon.com/performance/dashboard"
   end tell
 end tell

@@ -30,6 +30,16 @@ declare -a BRANDS=("Caelum Star" "Axgatoxe" "Ecotez")
 
 FAILED=0
 
+# Create a temporary tab for captures (don't hijack existing tabs)
+osascript -e '
+tell application "Google Chrome"
+  tell first window
+    make new tab with properties {URL:"about:blank"}
+  end tell
+end tell
+'
+sleep 2
+
 capture_listing() {
   local asin="$1"
   local brand="$2"
@@ -191,6 +201,15 @@ for i in "${!ASINS[@]}"; do
   fi
   sleep 5
 done
+
+# Close the temporary tab
+osascript -e '
+tell application "Google Chrome"
+  tell active tab of first window
+    close
+  end tell
+end tell
+' 2>/dev/null
 
 log "Daily visuals done ($FAILED failures)"
 tail -200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
