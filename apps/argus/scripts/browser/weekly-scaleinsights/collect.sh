@@ -24,10 +24,18 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
 
-# Navigate directly to Keyword Ranking page
+# Find the ScaleInsights tab and navigate (don't hijack the SC tab)
 osascript -e '
 tell application "Google Chrome"
-  tell active tab of first window
+  set w to first window
+  repeat with i from 1 to (count of tabs of w)
+    if URL of tab i of w contains "scaleinsights.com" then
+      set active tab index of w to i
+      set URL of tab i of w to "https://portal.scaleinsights.com/KeywordRanking"
+      return
+    end if
+  end repeat
+  tell active tab of w
     set URL to "https://portal.scaleinsights.com/KeywordRanking"
   end tell
 end tell
