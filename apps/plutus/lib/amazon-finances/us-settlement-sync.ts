@@ -621,6 +621,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
             txnDate: jeDraft.txnDate,
             docNumber: buildPlutusSettlementDocNumber(jeDraft.docNumber),
             privateNote: jeDraft.privateNote,
+            currencyCode: 'USD',
             lines: jeDraft.lines.map((l) => ({
               amount: l.amount,
               postingType: l.postingType,
