@@ -100,7 +100,6 @@ function buildDevBypassSession(): Session {
     globalRoles: ['platform_admin'],
     apps: {
       kairos: {
-        role: 'viewer',
         departments: [] as string[],
       },
     },

@@ -42,13 +42,23 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"; exit 1
 fi
 
-# Navigate to Brand Metrics with date params
+# Find the Advertising tab and navigate (don't hijack the SC tab)
 # Must use window.location.href via JS to force full page reload (SPA ignores set URL)
 URL="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899&startDate=${START_DATE}&endDate=${END_DATE}"
 
 osascript -e "
 tell application \"Google Chrome\"
-  tell active tab of first window
+  set w to first window
+  repeat with i from 1 to (count of tabs of w)
+    if URL of tab i of w contains \"advertising.amazon.com\" then
+      set active tab index of w to i
+      tell tab i of w
+        execute javascript \"window.location.href = '$URL'; 'ok'\"
+      end tell
+      return
+    end if
+  end repeat
+  tell active tab of w
     execute javascript \"window.location.href = '$URL'; 'ok'\"
   end tell
 end tell
