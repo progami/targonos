@@ -341,156 +341,84 @@ export function SetupDefaultsBand({
   const salesItems = items.filter((item) => item.group === 'sales');
   const financeItems = items.filter((item) => item.group === 'finance');
 
-  return (
-    <section className={cn('space-y-3', className)}>
-      <h3 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
-        Strategy Defaults
-      </h3>
+  const allOpsAndSales = [...opsItems, ...salesItems];
 
-      <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
-        <div className="divide-y">
-          {/* Operations row */}
-          <div className="border-l-[3px] border-l-[#00C2B9] px-4 py-3">
-            <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Lead Time Defaults
+  const renderInput = (item: ParameterRecord) => {
+    const key = item.id || item.label;
+    const isError = item.status === 'error' || item.status === 'blocked';
+    const isDirty = item.status === 'dirty';
+    const isSaving = item.status === 'saving';
+
+    return (
+      <div key={key} className="space-y-1">
+        <label htmlFor={`def-${key}`} className="text-2xs text-muted-foreground truncate block">
+          {item.shortLabel}
+          {item.suffix ? <span className="ml-0.5 opacity-60">({item.suffix})</span> : null}
+        </label>
+        <div className="relative">
+          <Input
+            id={`def-${key}`}
+            value={item.value}
+            onChange={(event) => handleValueChange(key, event.target.value)}
+            onBlur={handleBlur}
+            inputMode="decimal"
+            aria-invalid={isError}
+            disabled={isSaving}
+            className={clsx(
+              'h-7 w-full text-right text-sm font-medium tabular-nums',
+              isError
+                ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-900/20 dark:text-rose-100'
+                : isDirty
+                  ? 'border-amber-300 bg-amber-50 text-slate-900 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-slate-100'
+                  : 'bg-background dark:bg-background',
+            )}
+          />
+          {isSaving ? (
+            <div className="absolute inset-y-0 right-2 flex items-center">
+              <svg className="h-3 w-3 animate-spin text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {opsItems.map((item) => {
-                const key = item.id || item.label;
-                const isError = item.status === 'error' || item.status === 'blocked';
-                const isDirty = item.status === 'dirty';
-                const isSaving = item.status === 'saving';
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
-                return (
-                  <div key={key} className="space-y-1">
-                    <label htmlFor={`def-${key}`} className="text-2xs text-muted-foreground truncate block">
-                      {item.shortLabel}
-                      {item.suffix ? <span className="ml-0.5 opacity-60">({item.suffix})</span> : null}
-                    </label>
-                    <div className="relative">
-                      <Input
-                        id={`def-${key}`}
-                        value={item.value}
-                        onChange={(event) => handleValueChange(key, event.target.value)}
-                        onBlur={handleBlur}
-                        inputMode="decimal"
-                        aria-invalid={isError}
-                        disabled={isSaving}
-                        className={clsx(
-                          'h-7 w-full text-right text-sm font-medium tabular-nums',
-                          isError
-                            ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-900/20 dark:text-rose-100'
-                            : isDirty
-                              ? 'border-amber-300 bg-amber-50 text-slate-900 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-slate-100'
-                              : 'bg-background dark:bg-background',
-                        )}
-                      />
-                      {isSaving ? (
-                        <div className="absolute inset-y-0 right-2 flex items-center">
-                          <svg className="h-3 w-3 animate-spin text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-              {/* Stockout inline with ops */}
-              {salesItems.map((item) => {
-                const key = item.id || item.label;
-                const isError = item.status === 'error' || item.status === 'blocked';
-                const isDirty = item.status === 'dirty';
-                const isSaving = item.status === 'saving';
-
-                return (
-                  <div key={key} className="space-y-1">
-                    <label htmlFor={`def-${key}`} className="text-2xs text-muted-foreground truncate block">
-                      {item.shortLabel}
-                      {item.suffix ? <span className="ml-0.5 opacity-60">({item.suffix})</span> : null}
-                    </label>
-                    <div className="relative">
-                      <Input
-                        id={`def-${key}`}
-                        value={item.value}
-                        onChange={(event) => handleValueChange(key, event.target.value)}
-                        onBlur={handleBlur}
-                        inputMode="decimal"
-                        aria-invalid={isError}
-                        disabled={isSaving}
-                        className={clsx(
-                          'h-7 w-full text-right text-sm font-medium tabular-nums',
-                          isError
-                            ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-900/20 dark:text-rose-100'
-                            : isDirty
-                              ? 'border-amber-300 bg-amber-50 text-slate-900 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-slate-100'
-                              : 'bg-background dark:bg-background',
-                        )}
-                      />
-                      {isSaving ? (
-                        <div className="absolute inset-y-0 right-2 flex items-center">
-                          <svg className="h-3 w-3 animate-spin text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+  return (
+    <section className={cn('space-y-4', className)}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Lead Time & Operations card */}
+        <div className="overflow-hidden rounded-xl border border-l-[3px] border-l-[#00C2B9] bg-card shadow-sm dark:border-white/10 dark:border-l-[#00C2B9]">
+          <div className="px-5 pt-4 pb-1">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+              Lead Time & Operations
+            </h4>
+            <p className="text-2xs text-muted-foreground mt-0.5">
+              Stage durations and stockout thresholds
+            </p>
+          </div>
+          <div className="px-5 pb-4 pt-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+              {allOpsAndSales.map(renderInput)}
             </div>
           </div>
+        </div>
 
-          {/* Finance row */}
-          <div className="border-l-[3px] border-l-[#00C2B9] px-4 py-3">
-            <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {/* Financial Defaults card */}
+        <div className="overflow-hidden rounded-xl border border-l-[3px] border-l-[#00C2B9] bg-card shadow-sm dark:border-white/10 dark:border-l-[#00C2B9]">
+          <div className="px-5 pt-4 pb-1">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
               Financial Defaults
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              {financeItems.map((item) => {
-                const key = item.id || item.label;
-                const isError = item.status === 'error' || item.status === 'blocked';
-                const isDirty = item.status === 'dirty';
-                const isSaving = item.status === 'saving';
-
-                return (
-                  <div key={key} className="space-y-1">
-                    <label htmlFor={`def-${key}`} className="text-2xs text-muted-foreground truncate block">
-                      {item.shortLabel}
-                      {item.suffix ? <span className="ml-0.5 opacity-60">({item.suffix})</span> : null}
-                    </label>
-                    <div className="relative">
-                      <Input
-                        id={`def-${key}`}
-                        value={item.value}
-                        onChange={(event) => handleValueChange(key, event.target.value)}
-                        onBlur={handleBlur}
-                        inputMode="decimal"
-                        aria-invalid={isError}
-                        disabled={isSaving}
-                        className={clsx(
-                          'h-7 w-full text-right text-sm font-medium tabular-nums',
-                          isError
-                            ? 'border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-500/50 dark:bg-rose-900/20 dark:text-rose-100'
-                            : isDirty
-                              ? 'border-amber-300 bg-amber-50 text-slate-900 dark:border-amber-500/50 dark:bg-amber-900/20 dark:text-slate-100'
-                              : 'bg-background dark:bg-background',
-                        )}
-                      />
-                      {isSaving ? (
-                        <div className="absolute inset-y-0 right-2 flex items-center">
-                          <svg className="h-3 w-3 animate-spin text-cyan-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
+            </h4>
+            <p className="text-2xs text-muted-foreground mt-0.5">
+              Cash, costs, and supplier payment splits
+            </p>
+          </div>
+          <div className="px-5 pb-4 pt-2">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3">
+              {financeItems.map(renderInput)}
             </div>
           </div>
         </div>
