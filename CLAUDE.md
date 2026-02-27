@@ -76,3 +76,38 @@ When `dev` and `main` diverge with conflicts:
 ## Deployment & Caching
 
 Do **not** suggest "hard refresh" as a troubleshooting step. Instead, use the in-app version badge (bottom-right) to confirm the deployed version and wait for the deploy pipeline if the version hasn't updated yet. If deployment is complete and the problem is still unsolved, investigate the root cause.
+
+## Design Context
+
+### Users
+
+Internal operations teams working on desktop. Staff managing day-to-day business operations across warehousing (Talos), planning (xPlan), documents (Atlas), finance (Plutus), scheduling (Kairos), and communications (Hermes). These are power users who spend hours in the tool daily and need to move fast through data-dense workflows.
+
+### Brand Personality
+
+**Professional, reliable, clean.** The interface should feel like a trusted tool that gets out of the way. No personality theater — the brand earns trust through consistency, clarity, and quiet competence.
+
+**Emotional goals:** Confidence & control, speed & efficiency, clarity & calm, trust & professionalism. Users should feel they have mastery over complex data and that the tool respects their time.
+
+### Aesthetic Direction
+
+**Visual tone:** Clean and professional. Data-forward without being sterile. Generous with whitespace but dense where the workflow demands it.
+
+**Brand colors:** Navy `#002C51` (primary) + Teal `#00C2B9` (accent/secondary). Full semantic scales defined in `@targon/theme`.
+
+**Typography:** Inter (sans) + JetBrains Mono (mono). No decorative fonts.
+
+**Theme:** Light and dark modes via CSS variables + `next-themes`. Dark mode inverts the color hierarchy — teal becomes primary, navy becomes secondary.
+
+**Anti-references:**
+- Not playful/startup-y — no rounded illustrations, bright gradients, or casual vibes
+- Not generic Bootstrap/template — should not look like a default admin dashboard kit
+- Not over-designed/flashy — function over aesthetics, no decoration for decoration's sake
+
+### Design Principles
+
+1. **Clarity over cleverness** — Every element should earn its place. If a user has to think about the UI instead of their task, the design has failed.
+2. **Density with hierarchy** — Operations teams need data density, but strong visual hierarchy (typography, spacing, color) prevents overwhelm.
+3. **Consistency across apps** — All apps share `@targon/theme` and should feel like one product suite. Same colors, same type scale, same interaction patterns.
+4. **Speed is a feature** — Minimal animation, fast interactions, keyboard-friendly. The interface should feel instant and responsive.
+5. **Quiet confidence** — The design should feel solid and trustworthy without drawing attention to itself. No flashy effects, no unnecessary motion.
