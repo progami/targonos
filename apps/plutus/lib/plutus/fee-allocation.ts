@@ -99,9 +99,303 @@ function sumSkuLessAwdFeeTotals(rows: SettlementAuditRow[]): {
   };
 }
 
-function monthOffsetForAwdFeeType(feeType: AwdFeeType): number {
-  if (feeType === 'STORAGE_FEE') return -1;
-  return 0;
+function summarizeUnknownSkus(unknownSkus: Set<string>): string {
+  const list = Array.from(unknownSkus).sort();
+  if (list.length <= 10) {
+    return list.join(', ');
+  }
+  return `${list.slice(0, 10).join(', ')}, ...`;
+}
+
+function sumAdsSpendCentsBySku(rows: Array<{ sku: string; spendCents: number }>): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const row of rows) {
+    const sku = normalizeSku(row.sku);
+    if (sku === '') continue;
+    if (!Number.isFinite(row.spendCents) || row.spendCents <= 0) continue;
+    const current = totals[sku];
+    totals[sku] = (current === undefined ? 0 : current) + row.spendCents;
+  }
+  return totals;
+}
+
+async function buildAdvertisingWeightsFromAdsData(input: {
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  skuToBrand: Map<string, string>;
+}): Promise<{
+  weightsBySku: Record<string, number>;
+  issue: string | null;
+}> {
+  const adsUploads = await db.adsDataUpload.findMany({
+    where: {
+      reportType: 'SP_ADVERTISED_PRODUCT',
+      marketplace: input.marketplace,
+      startDate: { lte: input.invoiceStartDate },
+      endDate: { gte: input.invoiceEndDate },
+    },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      uploadedAt: true,
+    },
+    orderBy: { uploadedAt: 'desc' },
+  });
+
+  const upload = chooseBestUpload(adsUploads);
+  if (upload === null) {
+    return {
+      weightsBySku: {},
+      issue: `Missing advertising report upload covering ${input.invoiceStartDate}..${input.invoiceEndDate}`,
+    };
+  }
+
+  const adsRows = await db.adsDataRow.findMany({
+    where: {
+      uploadId: upload.id,
+      date: { gte: input.invoiceStartDate, lte: input.invoiceEndDate },
+    },
+    select: {
+      sku: true,
+      spendCents: true,
+    },
+  });
+
+  if (adsRows.length === 0) {
+    return {
+      weightsBySku: {},
+      issue: `Advertising report has no rows for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
+    };
+  }
+
+  const spendBySku = sumAdsSpendCentsBySku(adsRows);
+  if (Object.keys(spendBySku).length === 0) {
+    return {
+      weightsBySku: {},
+      issue: `Advertising report has no positive spend for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
+    };
+  }
+
+  const unknownSkus = new Set<string>();
+  const weightsBySku: Record<string, number> = {};
+  for (const [sku, spendCents] of Object.entries(spendBySku)) {
+    if (!input.skuToBrand.has(sku)) {
+      unknownSkus.add(sku);
+      continue;
+    }
+    weightsBySku[sku] = spendCents;
+  }
+
+  if (unknownSkus.size > 0) {
+    return {
+      weightsBySku: {},
+      issue: `Advertising report contains SKUs not mapped to brand (${summarizeUnknownSkus(unknownSkus)})`,
+    };
+  }
+
+  if (Object.keys(weightsBySku).length === 0) {
+    return {
+      weightsBySku: {},
+      issue: `Advertising report has no mapped SKU spend for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
+    };
+  }
+
+  return { weightsBySku, issue: null };
+}
+
+function monthOffsetsForAwdFeeType(feeType: AwdFeeType): number[] {
+  if (feeType === 'STORAGE_FEE') return [-1, 0];
+  return [0, -1];
+}
+
+type AwdFeeResolutionAttempt =
+  | {
+      ok: true;
+      monthStart: string;
+      monthEnd: string;
+      feeCentsBySku: Record<string, number>;
+    }
+  | {
+      ok: false;
+      monthStart: string;
+      monthEnd: string;
+      message: string;
+    };
+
+async function resolveAwdFeeTypeForMonth(input: {
+  marketplace: 'amazon.com' | 'amazon.co.uk';
+  feeType: AwdFeeType;
+  monthStart: string;
+  monthEnd: string;
+  expectedTotal: number;
+  skuToBrand: Map<string, string>;
+}): Promise<AwdFeeResolutionAttempt> {
+  const monthStart = input.monthStart;
+  const monthEnd = input.monthEnd;
+
+  const awdUploads = await db.awdDataUpload.findMany({
+    where: {
+      reportType: AWD_REPORT_TYPE,
+      marketplace: input.marketplace,
+      startDate: { lte: monthStart },
+      endDate: { gte: monthEnd },
+      rows: { some: { feeType: input.feeType } },
+    },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      uploadedAt: true,
+    },
+    orderBy: { uploadedAt: 'desc' },
+  });
+
+  const upload = chooseBestUpload(awdUploads);
+  if (upload === null) {
+    return {
+      ok: false,
+      monthStart,
+      monthEnd,
+      message: `Missing AWD report upload for ${input.feeType} covering ${monthStart}..${monthEnd}`,
+    };
+  }
+
+  const awdRows = await db.awdDataRow.findMany({
+    where: {
+      uploadId: upload.id,
+      feeType: input.feeType,
+      monthStartDate: monthStart,
+      monthEndDate: monthEnd,
+    },
+    select: {
+      sku: true,
+      feeCents: true,
+      chargeType: true,
+    },
+  });
+
+  if (awdRows.length === 0) {
+    return {
+      ok: false,
+      monthStart,
+      monthEnd,
+      message: `AWD report has no rows for ${input.feeType} covering ${monthStart}..${monthEnd}`,
+    };
+  }
+
+  const expectedAbs = Math.abs(input.expectedTotal);
+  const byChargeType = sumChargeTypeTotals(awdRows);
+  const chargeTypeBreakdown = buildChargeTypeBreakdownString(byChargeType);
+
+  let selectedFeeCentsBySku: Record<string, number> | null = null;
+
+  if (byChargeType.size === 1) {
+    const entry = Array.from(byChargeType.values())[0];
+    if (!entry) throw new Error('Missing AWD charge type aggregation');
+    if (entry.totalCents !== expectedAbs) {
+      return {
+        ok: false,
+        monthStart,
+        monthEnd,
+        message: `AWD ${input.feeType} total mismatch for ${monthStart}..${monthEnd} (${entry.totalCents} vs ${expectedAbs})`,
+      };
+    }
+    selectedFeeCentsBySku = entry.feeCentsBySku;
+  } else {
+    const matching: Array<{ totalCents: number; feeCentsBySku: Record<string, number> }> = [];
+    for (const entry of byChargeType.values()) {
+      if (entry.totalCents === expectedAbs) {
+        matching.push(entry);
+      }
+    }
+
+    if (matching.length === 1) {
+      selectedFeeCentsBySku = matching[0]!.feeCentsBySku;
+    } else if (matching.length > 1) {
+      return {
+        ok: false,
+        monthStart,
+        monthEnd,
+        message: `Ambiguous AWD ${input.feeType} charge type match for ${monthStart}..${monthEnd} (${chargeTypeBreakdown})`,
+      };
+    } else {
+      let totalAll = 0;
+      for (const entry of byChargeType.values()) {
+        totalAll += entry.totalCents;
+      }
+      if (totalAll !== expectedAbs) {
+        return {
+          ok: false,
+          monthStart,
+          monthEnd,
+          message: `AWD ${input.feeType} total mismatch for ${monthStart}..${monthEnd} (${chargeTypeBreakdown} vs ${expectedAbs})`,
+        };
+      }
+
+      const merged: Record<string, number> = {};
+      for (const entry of byChargeType.values()) {
+        for (const [sku, cents] of Object.entries(entry.feeCentsBySku)) {
+          const current = merged[sku];
+          merged[sku] = (current === undefined ? 0 : current) + cents;
+        }
+      }
+      selectedFeeCentsBySku = merged;
+    }
+  }
+
+  if (selectedFeeCentsBySku === null) {
+    return {
+      ok: false,
+      monthStart,
+      monthEnd,
+      message: `Failed to select AWD rows for ${input.feeType} covering ${monthStart}..${monthEnd}`,
+    };
+  }
+
+  const missingSkus: string[] = [];
+  for (const sku of Object.keys(selectedFeeCentsBySku)) {
+    if (!input.skuToBrand.has(sku)) {
+      missingSkus.push(sku);
+    }
+  }
+  if (missingSkus.length > 0) {
+    return {
+      ok: false,
+      monthStart,
+      monthEnd,
+      message: `AWD report contains SKUs not mapped to brand (${missingSkus.slice(0, 10).join(', ')}${
+        missingSkus.length > 10 ? ', ...' : ''
+      })`,
+    };
+  }
+
+  let selectedTotal = 0;
+  for (const cents of Object.values(selectedFeeCentsBySku)) {
+    selectedTotal += cents;
+  }
+  if (selectedTotal !== expectedAbs) {
+    return {
+      ok: false,
+      monthStart,
+      monthEnd,
+      message: `AWD ${input.feeType} allocation total mismatch for ${monthStart}..${monthEnd} (${selectedTotal} vs ${expectedAbs})`,
+    };
+  }
+
+  const sign = input.expectedTotal < 0 ? -1 : 1;
+  const signedFeeCentsBySku: Record<string, number> = {};
+  for (const [sku, cents] of Object.entries(selectedFeeCentsBySku)) {
+    signedFeeCentsBySku[sku] = sign * cents;
+  }
+
+  return {
+    ok: true,
+    monthStart,
+    monthEnd,
+    feeCentsBySku: signedFeeCentsBySku,
+  };
 }
 
 function sumChargeTypeTotals(rows: Array<{ chargeType: string | null; sku: string; feeCents: number }>): Map<
@@ -195,6 +489,35 @@ function pickSkuWeightsForSkuLessBucket(input: {
   return {};
 }
 
+function buildSingleBrandFallbackWeights(skuToBrand: Map<string, string>): Record<string, number> {
+  const brandBySku = new Map<string, string>();
+  for (const [skuRaw, brand] of skuToBrand.entries()) {
+    const sku = normalizeSku(skuRaw);
+    if (sku === '') continue;
+    brandBySku.set(sku, brand);
+  }
+
+  if (brandBySku.size === 0) {
+    return {};
+  }
+
+  const brands = new Set<string>();
+  for (const brand of brandBySku.values()) {
+    brands.add(brand);
+  }
+
+  if (brands.size !== 1) {
+    return {};
+  }
+
+  const anchorSku = Array.from(brandBySku.keys()).sort()[0];
+  if (anchorSku === undefined) {
+    return {};
+  }
+
+  return { [anchorSku]: 1 };
+}
+
 function sumSkuLessTotalsByBucket(rows: SettlementAuditRow[]): Partial<Record<PnlBucketKey, number>> {
   const totals: Partial<Record<PnlBucketKey, number>> = {};
   for (const row of rows) {
@@ -281,14 +604,18 @@ export async function buildDeterministicSkuAllocations(input: {
   const issues: AllocationIssue[] = [];
   const skuLessTotalsByBucket = sumSkuLessTotalsByBucket(input.rows);
   const principalWeightsBySku = sumSkuAbsPrincipalCents(input.rows);
+  const singleBrandFallbackWeights = buildSingleBrandFallbackWeights(input.skuToBrand);
 
   const sellerFeesSkuLessTotal = skuLessTotalsByBucket.amazonSellerFees;
   if (sellerFeesSkuLessTotal !== undefined && sellerFeesSkuLessTotal !== 0) {
-    const weightsBySku = pickSkuWeightsForSkuLessBucket({
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonSellerFees',
       principalWeightsBySku,
     });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
     const allocated = allocateSignedByWeight({
       totalCents: sellerFeesSkuLessTotal,
       weightsBySku,
@@ -301,11 +628,14 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const fbaFeesSkuLessTotal = skuLessTotalsByBucket.amazonFbaFees;
   if (fbaFeesSkuLessTotal !== undefined && fbaFeesSkuLessTotal !== 0) {
-    const weightsBySku = pickSkuWeightsForSkuLessBucket({
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonFbaFees',
       principalWeightsBySku,
     });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
     const allocated = allocateSignedByWeight({
       totalCents: fbaFeesSkuLessTotal,
       weightsBySku,
@@ -318,11 +648,14 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const storageFeesSkuLessTotal = skuLessTotalsByBucket.amazonStorageFees;
   if (storageFeesSkuLessTotal !== undefined && storageFeesSkuLessTotal !== 0) {
-    const weightsBySku = pickSkuWeightsForSkuLessBucket({
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonStorageFees',
       principalWeightsBySku,
     });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
     const allocated = allocateSignedByWeight({
       totalCents: storageFeesSkuLessTotal,
       weightsBySku,
@@ -335,11 +668,14 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const promotionsSkuLessTotal = skuLessTotalsByBucket.amazonPromotions;
   if (promotionsSkuLessTotal !== undefined && promotionsSkuLessTotal !== 0) {
-    const weightsBySku = pickSkuWeightsForSkuLessBucket({
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonPromotions',
       principalWeightsBySku,
     });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
     const allocated = allocateSignedByWeight({
       totalCents: promotionsSkuLessTotal,
       weightsBySku,
@@ -352,11 +688,14 @@ export async function buildDeterministicSkuAllocations(input: {
 
   const reimbursementSkuLessTotal = skuLessTotalsByBucket.amazonFbaInventoryReimbursement;
   if (reimbursementSkuLessTotal !== undefined && reimbursementSkuLessTotal !== 0) {
-    const weightsBySku = pickSkuWeightsForSkuLessBucket({
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
       rows: input.rows,
       bucket: 'amazonFbaInventoryReimbursement',
       principalWeightsBySku,
     });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
     const allocated = allocateSignedByWeight({
       totalCents: reimbursementSkuLessTotal,
       weightsBySku,
@@ -364,6 +703,42 @@ export async function buildDeterministicSkuAllocations(input: {
 
     if (Object.keys(allocated).length > 0) {
       skuAllocationsByBucket.amazonFbaInventoryReimbursement = allocated;
+    }
+  }
+
+  const advertisingSkuLessTotal = skuLessTotalsByBucket.amazonAdvertisingCosts;
+  if (advertisingSkuLessTotal !== undefined && advertisingSkuLessTotal !== 0) {
+    let weightsBySku = pickSkuWeightsForSkuLessBucket({
+      rows: input.rows,
+      bucket: 'amazonAdvertisingCosts',
+      principalWeightsBySku,
+    });
+    if (Object.keys(weightsBySku).length === 0) {
+      weightsBySku = singleBrandFallbackWeights;
+    }
+    if (Object.keys(weightsBySku).length === 0) {
+      const adsWeights = await buildAdvertisingWeightsFromAdsData({
+        marketplace: input.marketplace,
+        invoiceStartDate: input.invoiceStartDate,
+        invoiceEndDate: input.invoiceEndDate,
+        skuToBrand: input.skuToBrand,
+      });
+      if (Object.keys(adsWeights.weightsBySku).length > 0) {
+        weightsBySku = adsWeights.weightsBySku;
+      } else if (adsWeights.issue !== null) {
+        issues.push({
+          bucket: 'amazonAdvertisingCosts',
+          message: adsWeights.issue,
+        });
+      }
+    }
+    const allocated = allocateSignedByWeight({
+      totalCents: advertisingSkuLessTotal,
+      weightsBySku,
+    });
+
+    if (Object.keys(allocated).length > 0) {
+      skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
     }
   }
 
@@ -398,157 +773,54 @@ export async function buildDeterministicSkuAllocations(input: {
         const expectedTotal = awdFeeTotals.totalsByFeeType[feeType];
         if (expectedTotal === undefined || expectedTotal === 0) continue;
 
-        const monthWindow = monthWindowOffsetForIsoDay(input.invoiceEndDate, monthOffsetForAwdFeeType(feeType));
-        const monthStart = monthWindow.monthStart;
-        const monthEnd = monthWindow.monthEnd;
+        const offsets = monthOffsetsForAwdFeeType(feeType);
+        const attempts: AwdFeeResolutionAttempt[] = [];
 
-        const awdUploads = await db.awdDataUpload.findMany({
-          where: {
-            reportType: AWD_REPORT_TYPE,
+        for (const offset of offsets) {
+          const monthWindow = monthWindowOffsetForIsoDay(input.invoiceEndDate, offset);
+          const attempt = await resolveAwdFeeTypeForMonth({
             marketplace: input.marketplace,
-            startDate: { lte: monthStart },
-            endDate: { gte: monthEnd },
-            rows: { some: { feeType } },
-          },
-          select: {
-            id: true,
-            startDate: true,
-            endDate: true,
-            uploadedAt: true,
-          },
-          orderBy: { uploadedAt: 'desc' },
-        });
-
-        const upload = chooseBestUpload(awdUploads);
-        if (upload === null) {
-          issues.push({
-            bucket: 'warehousingAwd',
-            message: `Missing AWD report upload for ${feeType} covering ${monthStart}..${monthEnd}`,
-          });
-          continue;
-        }
-
-        const awdRows = await db.awdDataRow.findMany({
-          where: {
-            uploadId: upload.id,
             feeType,
-            monthStartDate: monthStart,
-            monthEndDate: monthEnd,
-          },
-          select: {
-            sku: true,
-            feeCents: true,
-            chargeType: true,
-          },
-        });
+            monthStart: monthWindow.monthStart,
+            monthEnd: monthWindow.monthEnd,
+            expectedTotal,
+            skuToBrand: input.skuToBrand,
+          });
+          attempts.push(attempt);
+        }
 
-        if (awdRows.length === 0) {
+        const successfulAttempts = attempts.filter((attempt) => attempt.ok);
+        if (successfulAttempts.length === 0) {
+          const firstFailure = attempts.find((attempt) => !attempt.ok);
           issues.push({
             bucket: 'warehousingAwd',
-            message: `AWD report has no rows for ${feeType} covering ${monthStart}..${monthEnd}`,
+            message: firstFailure && !firstFailure.ok
+              ? firstFailure.message
+              : `Missing AWD allocation source for ${feeType}`,
           });
           continue;
         }
 
-        const expectedAbs = Math.abs(expectedTotal);
-        const sign = expectedTotal < 0 ? -1 : 1;
-
-        const byChargeType = sumChargeTypeTotals(awdRows);
-        const chargeTypeBreakdown = buildChargeTypeBreakdownString(byChargeType);
-
-        let selectedFeeCentsBySku: Record<string, number> | null = null;
-
-        if (byChargeType.size === 1) {
-          const entry = Array.from(byChargeType.values())[0];
-          if (!entry) throw new Error('Missing AWD charge type aggregation');
-          if (entry.totalCents !== expectedAbs) {
-            issues.push({
-              bucket: 'warehousingAwd',
-              message: `AWD ${feeType} total mismatch for ${monthStart}..${monthEnd} (${entry.totalCents} vs ${expectedAbs})`,
-            });
-            continue;
-          }
-          selectedFeeCentsBySku = entry.feeCentsBySku;
-        } else {
-          const matching: Array<{ totalCents: number; feeCentsBySku: Record<string, number> }> = [];
-          for (const entry of byChargeType.values()) {
-            if (entry.totalCents === expectedAbs) {
-              matching.push(entry);
-            }
-          }
-
-          if (matching.length === 1) {
-            selectedFeeCentsBySku = matching[0]!.feeCentsBySku;
-          } else if (matching.length > 1) {
-            issues.push({
-              bucket: 'warehousingAwd',
-              message: `Ambiguous AWD ${feeType} charge type match for ${monthStart}..${monthEnd} (${chargeTypeBreakdown})`,
-            });
-            continue;
-          } else {
-            let totalAll = 0;
-            for (const entry of byChargeType.values()) {
-              totalAll += entry.totalCents;
-            }
-            if (totalAll !== expectedAbs) {
-              issues.push({
-                bucket: 'warehousingAwd',
-                message: `AWD ${feeType} total mismatch for ${monthStart}..${monthEnd} (${chargeTypeBreakdown} vs ${expectedAbs})`,
-              });
-              continue;
-            }
-
-            const merged: Record<string, number> = {};
-            for (const entry of byChargeType.values()) {
-              for (const [sku, cents] of Object.entries(entry.feeCentsBySku)) {
-                const current = merged[sku];
-                merged[sku] = (current === undefined ? 0 : current) + cents;
-              }
-            }
-            selectedFeeCentsBySku = merged;
-          }
-        }
-
-        if (selectedFeeCentsBySku === null) {
+        if (successfulAttempts.length > 1) {
+          const monthWindows = successfulAttempts
+            .map((attempt) => `${attempt.monthStart}..${attempt.monthEnd}`)
+            .sort()
+            .join(', ');
           issues.push({
             bucket: 'warehousingAwd',
-            message: `Failed to select AWD rows for ${feeType} covering ${monthStart}..${monthEnd}`,
+            message: `Ambiguous AWD ${feeType} month match (${monthWindows})`,
           });
           continue;
         }
 
-        const missingSkus: string[] = [];
-        for (const sku of Object.keys(selectedFeeCentsBySku)) {
-          if (!input.skuToBrand.has(sku)) {
-            missingSkus.push(sku);
-          }
-        }
-        if (missingSkus.length > 0) {
-          issues.push({
-            bucket: 'warehousingAwd',
-            message: `AWD report contains SKUs not mapped to brand (${missingSkus.slice(0, 10).join(', ')}${
-              missingSkus.length > 10 ? ', ...' : ''
-            })`,
-          });
-          continue;
+        const selected = successfulAttempts[0];
+        if (!selected || !selected.ok) {
+          throw new Error(`Missing resolved AWD fee allocation for ${feeType}`);
         }
 
-        let selectedTotal = 0;
-        for (const cents of Object.values(selectedFeeCentsBySku)) {
-          selectedTotal += cents;
-        }
-        if (selectedTotal !== expectedAbs) {
-          issues.push({
-            bucket: 'warehousingAwd',
-            message: `AWD ${feeType} allocation total mismatch for ${monthStart}..${monthEnd} (${selectedTotal} vs ${expectedAbs})`,
-          });
-          continue;
-        }
-
-        for (const [sku, cents] of Object.entries(selectedFeeCentsBySku)) {
-          const signed = sign * cents;
+        for (const [sku, cents] of Object.entries(selected.feeCentsBySku)) {
           const current = awdAllocationsBySku[sku];
-          awdAllocationsBySku[sku] = (current === undefined ? 0 : current) + signed;
+          awdAllocationsBySku[sku] = (current === undefined ? 0 : current) + cents;
         }
       }
 

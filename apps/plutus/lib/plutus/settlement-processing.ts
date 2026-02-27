@@ -64,6 +64,12 @@ function isCogsEnabledForMarketplace(marketplace: string): boolean {
   return COGS_DISABLED_MARKETPLACES.has(marketplace) === false;
 }
 
+function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP' {
+  if (marketplace === 'amazon.com') return 'USD';
+  if (marketplace === 'amazon.co.uk') return 'GBP';
+  throw new Error(`Unsupported marketplace for settlement currency: ${marketplace}`);
+}
+
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
   const base = `${kind}${invoiceId}`;
   if (base.length <= 21) {
@@ -235,6 +241,47 @@ function summarizeRefundAdjustmentBlocks(blocks: ProcessingBlock[]): ProcessingB
   return summarized;
 }
 
+function buildAuditNetScaleStats(rows: SettlementAuditRow[]): {
+  rowCount: number;
+  integerDollarRatio: number;
+  medianAbsNet: number;
+  p90AbsNet: number;
+  maxAbsNet: number;
+} {
+  if (rows.length === 0) {
+    return {
+      rowCount: 0,
+      integerDollarRatio: 0,
+      medianAbsNet: 0,
+      p90AbsNet: 0,
+      maxAbsNet: 0,
+    };
+  }
+
+  const absNets = rows.map((row) => Math.abs(row.net)).sort((a, b) => a - b);
+  const integerDollarRows = rows.filter((row) => Math.abs(row.net - Math.trunc(row.net)) < 1e-9).length;
+  const at = (p: number) => absNets[Math.min(absNets.length - 1, Math.floor((absNets.length - 1) * p))]!;
+
+  return {
+    rowCount: rows.length,
+    integerDollarRatio: integerDollarRows / rows.length,
+    medianAbsNet: at(0.5),
+    p90AbsNet: at(0.9),
+    maxAbsNet: absNets[absNets.length - 1]!,
+  };
+}
+
+function isLikelyCentScaledAuditInput(stats: {
+  rowCount: number;
+  integerDollarRatio: number;
+  medianAbsNet: number;
+  p90AbsNet: number;
+}): boolean {
+  if (stats.rowCount < 50) return false;
+  if (stats.integerDollarRatio < 0.98) return false;
+  return stats.medianAbsNet >= 100 || stats.p90AbsNet >= 300;
+}
+
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
@@ -278,6 +325,20 @@ export async function computeSettlementPreview(input: {
   }
 
   const scopedInvoiceRows = input.auditRows;
+  const auditNetScaleStats = buildAuditNetScaleStats(scopedInvoiceRows);
+  if (isLikelyCentScaledAuditInput(auditNetScaleStats)) {
+    blocks.push({
+      code: 'AUDIT_NET_SCALE_SUSPECT',
+      message: 'Audit row net values appear cent-scaled (100x risk). Posting blocked until source net units are validated.',
+      details: {
+        rowCount: auditNetScaleStats.rowCount,
+        integerDollarRatio: Number(auditNetScaleStats.integerDollarRatio.toFixed(4)),
+        medianAbsNet: Number(auditNetScaleStats.medianAbsNet.toFixed(2)),
+        p90AbsNet: Number(auditNetScaleStats.p90AbsNet.toFixed(2)),
+        maxAbsNet: Number(auditNetScaleStats.maxAbsNet.toFixed(2)),
+      },
+    });
+  }
 
   const processingHash = computeProcessingHash(scopedInvoiceRows);
 
@@ -296,6 +357,7 @@ export async function computeSettlementPreview(input: {
   });
   const skipOrderIdempotencyChecks = existingSettlement !== null;
   const excludeSettlementProcessingId = existingSettlement ? existingSettlement.id : null;
+  const historicalProcessingCutoff = existingSettlement ? existingSettlement.uploadedAt : null;
   if (existingSettlement) {
     blocks.push({
       code: 'ALREADY_PROCESSED',
@@ -523,6 +585,11 @@ export async function computeSettlementPreview(input: {
 
   const plutusMappings = cogsEnabled
     ? await db.billMapping.findMany({
+        where: {
+          brand: {
+            marketplace,
+          },
+        },
         include: { lines: true },
       })
     : [];
@@ -614,7 +681,7 @@ export async function computeSettlementPreview(input: {
     try {
       if (inventoryMappings === null) throw new Error('Missing inventory mappings');
       const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
-      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings);
+      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings, marketplace);
     } catch (error) {
       blocks.push({
         code: 'BILLS_PARSE_ERROR',
@@ -664,9 +731,6 @@ export async function computeSettlementPreview(input: {
     });
 
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
-      if (issue.bucket === 'amazonAdvertisingCosts') {
-        continue;
-      }
       blocks.push({
         code: 'PNL_ALLOCATION_WARNING',
         message: `SKU-less bucket amount left in parent account. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
@@ -738,6 +802,9 @@ export async function computeSettlementPreview(input: {
     const refundSaleRecords = await db.orderSale.findMany({
       where: {
         marketplace,
+        ...(historicalProcessingCutoff
+          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
+          : {}),
         ...(excludeSettlementProcessingId
           ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
           : {}),
@@ -751,6 +818,9 @@ export async function computeSettlementPreview(input: {
     const existingReturns = await db.orderReturn.findMany({
       where: {
         marketplace,
+        ...(historicalProcessingCutoff
+          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
+          : {}),
         ...(excludeSettlementProcessingId
           ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
           : {}),
@@ -789,6 +859,9 @@ export async function computeSettlementPreview(input: {
       where: {
         marketplace,
         saleDate: { lte: maxDateObj },
+        ...(historicalProcessingCutoff
+          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
+          : {}),
         ...(excludeSettlementProcessingId
           ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
           : {}),
@@ -798,6 +871,9 @@ export async function computeSettlementPreview(input: {
       where: {
         marketplace,
         returnDate: { lte: maxDateObj },
+        ...(historicalProcessingCutoff
+          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
+          : {}),
         ...(excludeSettlementProcessingId
           ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
           : {}),
@@ -1044,6 +1120,7 @@ export async function processSettlement(input: {
   auditRows: SettlementAuditRow[];
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
+  const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);
 
   const blockingBlocks = computed.preview.blocks.filter((block) => isBlockingProcessingBlock(block));
   if (blockingBlocks.length > 0) {
@@ -1059,6 +1136,7 @@ export async function processSettlement(input: {
       txnDate: computed.preview.cogsJournalEntry.txnDate,
       docNumber: computed.preview.cogsJournalEntry.docNumber,
       privateNote: computed.preview.cogsJournalEntry.privateNote,
+      currencyCode: settlementCurrencyCode,
       lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
         amount: fromCents(line.amountCents),
         postingType: line.postingType,
@@ -1080,6 +1158,7 @@ export async function processSettlement(input: {
       txnDate: computed.preview.pnlJournalEntry.txnDate,
       docNumber: computed.preview.pnlJournalEntry.docNumber,
       privateNote: computed.preview.pnlJournalEntry.privateNote,
+      currencyCode: settlementCurrencyCode,
       lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
         amount: fromCents(line.amountCents),
         postingType: line.postingType,

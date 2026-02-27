@@ -37,7 +37,6 @@ const userSelect = {
     },
     appAccess: {
         select: {
-            role: true,
             source: true,
             locked: true,
             departments: true,
@@ -49,15 +48,6 @@ const userSelect = {
         },
     },
 };
-function normalizeAppRole(value) {
-    if (typeof value === 'string') {
-        const normalized = value.trim().toLowerCase();
-        if (normalized === 'viewer') {
-            return 'viewer';
-        }
-    }
-    return 'viewer';
-}
 function normalizeDepartments(value) {
     return Array.isArray(value)
         ? value.map((item) => String(item).trim()).filter(Boolean)
@@ -151,7 +141,6 @@ export async function provisionPortalUser(options) {
             await tx.userApp.upsert({
                 where: { userId_appId: { userId, appId: appRecord.id } },
                 update: {
-                    role: app.role ?? 'viewer',
                     source: app.source ?? 'manual',
                     locked: app.locked ?? false,
                     departments: app.departments,
@@ -159,7 +148,6 @@ export async function provisionPortalUser(options) {
                 create: {
                     userId,
                     appId: appRecord.id,
-                    role: app.role ?? 'viewer',
                     source: app.source ?? 'manual',
                     locked: app.locked ?? false,
                     departments: app.departments,
@@ -206,7 +194,6 @@ export async function upsertManualUserAppGrant(input) {
         await tx.userApp.upsert({
             where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
             update: {
-                role: input.role,
                 source: 'manual',
                 locked: input.locked ?? true,
                 departments: input.departments ?? [],
@@ -214,7 +201,6 @@ export async function upsertManualUserAppGrant(input) {
             create: {
                 userId: input.userId,
                 appId: appRecord.id,
-                role: input.role,
                 source: 'manual',
                 locked: input.locked ?? true,
                 departments: input.departments ?? [],
@@ -291,7 +277,6 @@ export async function syncGroupBasedAppAccess() {
             where: { isActive: true },
             select: {
                 googleGroup: true,
-                role: true,
                 departments: true,
                 app: {
                     select: {
@@ -308,7 +293,6 @@ export async function syncGroupBasedAppAccess() {
         const list = mappingByGroup.get(key) ?? [];
         list.push({
             appId: mapping.app.id,
-            role: normalizeAppRole(mapping.role),
             departments: normalizeDepartments(mapping.departments),
         });
         mappingByGroup.set(key, list);
@@ -328,14 +312,12 @@ export async function syncGroupBasedAppAccess() {
                 const existing = desiredByApp.get(mapping.appId);
                 if (!existing) {
                     desiredByApp.set(mapping.appId, {
-                        role: mapping.role,
                         departments: mapping.departments,
                     });
                     continue;
                 }
                 const deptSet = new Set([...existing.departments, ...mapping.departments]);
                 desiredByApp.set(mapping.appId, {
-                    role: 'viewer',
                     departments: Array.from(deptSet),
                 });
             }
@@ -347,7 +329,6 @@ export async function syncGroupBasedAppAccess() {
                 },
                 select: {
                     appId: true,
-                    role: true,
                     source: true,
                     locked: true,
                     departments: true,
@@ -370,12 +351,10 @@ export async function syncGroupBasedAppAccess() {
                     continue;
                 }
                 const current = existingGroupMap.get(appId);
-                const currentRole = current ? normalizeAppRole(current.role) : null;
                 const currentDepartments = current ? normalizeDepartments(current.departments) : [];
-                const sameRole = currentRole === desired.role;
                 const sameDepartments = currentDepartments.length === desired.departments.length
                     && currentDepartments.every((dept, idx) => dept === desired.departments[idx]);
-                if (sameRole && sameDepartments) {
+                if (sameDepartments) {
                     continue;
                 }
                 await tx.userApp.upsert({
@@ -386,7 +365,6 @@ export async function syncGroupBasedAppAccess() {
                         },
                     },
                     update: {
-                        role: desired.role,
                         departments: desired.departments,
                         source: 'group',
                         locked: false,
@@ -394,7 +372,6 @@ export async function syncGroupBasedAppAccess() {
                     create: {
                         userId: user.id,
                         appId,
-                        role: desired.role,
                         departments: desired.departments,
                         source: 'group',
                         locked: false,
@@ -488,13 +465,13 @@ function handleDevFallback(emailOrUsername, password) {
 function buildDemoUser() {
     const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase();
     const entitlements = {
-        talos: { role: 'viewer', departments: ['Ops'] },
-        atlas: { role: 'viewer', departments: ['People Ops'] },
-        website: { role: 'viewer', departments: [] },
-        kairos: { role: 'viewer', departments: ['Product'] },
-        xplan: { role: 'viewer', departments: ['Product'] },
-        hermes: { role: 'viewer', departments: ['Account / Listing'] },
-        plutus: { role: 'viewer', departments: ['Finance'] }
+        talos: { departments: ['Ops'] },
+        atlas: { departments: ['People Ops'] },
+        website: { departments: [] },
+        kairos: { departments: ['Product'] },
+        xplan: { departments: ['Product'] },
+        hermes: { departments: ['Account / Listing'] },
+        plutus: { departments: ['Finance'] }
     };
     return {
         id: DEMO_ADMIN_UUID,
@@ -514,7 +491,6 @@ export async function getUserEntitlements(userId) {
     const assignments = await prisma.userApp.findMany({
         where: { userId },
         select: {
-            role: true,
             departments: true,
             app: {
                 select: {
@@ -526,7 +502,6 @@ export async function getUserEntitlements(userId) {
     const entitlements = {};
     for (const assignment of assignments) {
         entitlements[assignment.app.slug] = {
-            role: normalizeAppRole(assignment.role),
             departments: normalizeDepartments(assignment.departments),
         };
     }
@@ -564,7 +539,6 @@ export async function getUserAuthz(userId) {
             authzVersion: true,
             appAccess: {
                 select: {
-                    role: true,
                     departments: true,
                     app: {
                         select: {
@@ -594,7 +568,6 @@ export async function getUserAuthz(userId) {
     const apps = {};
     for (const assignment of user.appAccess) {
         apps[assignment.app.slug] = {
-            role: normalizeAppRole(assignment.role),
             departments: normalizeDepartments(assignment.departments),
         };
     }
@@ -684,7 +657,6 @@ export async function getOrCreatePortalUserByEmail(options) {
 function mapPortalUser(user) {
     const entitlements = user.appAccess.reduce((acc, assignment) => {
         acc[assignment.app.slug] = {
-            role: normalizeAppRole(assignment.role),
             departments: normalizeDepartments(assignment.departments),
         };
         return acc;

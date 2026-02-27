@@ -2,15 +2,12 @@
 
 import { useEffect, useTransition } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { clsx } from 'clsx';
-import {
-  SHEET_TOOLBAR_BUTTON,
-  SHEET_TOOLBAR_GROUP,
-  SHEET_TOOLBAR_LABEL,
-  SHEET_TOOLBAR_SEGMENTED,
-} from '@/components/sheet-toolbar';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import MuiTooltip from '@mui/material/Tooltip';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 import { usePersistentState } from '@/hooks/usePersistentState';
-import { Tooltip } from '@/components/ui/tooltip';
 
 type SheetViewMode = 'tabular' | 'visual';
 
@@ -39,52 +36,70 @@ export function SheetViewToggle({ value, slug }: SheetViewToggleProps) {
     setStoredView(value);
   }, [hydrated, setStoredView, value]);
 
-  const handleSelect = (mode: SheetViewMode) => {
-    if (mode === value) return;
+  const handleChange = (_event: React.MouseEvent<HTMLElement>, newMode: SheetViewMode | null) => {
+    if (!newMode || newMode === value) return;
     startTransition(() => {
       const params = searchParams
         ? new URLSearchParams(searchParams.toString())
         : new URLSearchParams();
-      if (mode === 'tabular') {
+      if (newMode === 'tabular') {
         params.delete('view');
       } else {
-        params.set('view', mode);
+        params.set('view', newMode);
       }
       const query = params.toString();
       router.push(`${pathname}${query ? `?${query}` : ''}`);
     });
     if (hydrated) {
-      setStoredView(mode);
+      setStoredView(newMode);
     }
   };
 
   return (
-    <div className={SHEET_TOOLBAR_GROUP}>
-      <span className={SHEET_TOOLBAR_LABEL}>View</span>
-      <div role="group" aria-label="Select sheet view" className={SHEET_TOOLBAR_SEGMENTED}>
-        {options.map((option) => {
-          const isActive = value === option.value;
-          return (
-            <Tooltip key={option.value} content={option.helper} position="bottom">
-              <button
-                type="button"
-                className={clsx(
-                  SHEET_TOOLBAR_BUTTON,
-                  isActive
-                    ? 'bg-cyan-600 text-white dark:bg-cyan-500'
-                    : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
-                )}
-                onClick={() => handleSelect(option.value)}
-                aria-pressed={isActive}
-                disabled={isPending && isActive}
-              >
-                {option.label}
-              </button>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          color: 'text.secondary',
+        }}
+      >
+        View
+      </Typography>
+      <ToggleButtonGroup
+        value={value}
+        exclusive
+        onChange={handleChange}
+        size="small"
+        aria-label="Select sheet view"
+        sx={{
+          '& .MuiToggleButton-root': {
+            px: 1.25,
+            py: 0.5,
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            '&.Mui-selected': {
+              bgcolor: 'secondary.main',
+              color: '#fff',
+              '&:hover': { bgcolor: 'secondary.main' },
+            },
+          },
+        }}
+      >
+        {options.map((option) => (
+          <MuiTooltip key={option.value} title={option.helper} placement="bottom">
+            <ToggleButton
+              value={option.value}
+              disabled={isPending && value === option.value}
+            >
+              {option.label}
+            </ToggleButton>
+          </MuiTooltip>
+        ))}
+      </ToggleButtonGroup>
+    </Box>
   );
 }
 

@@ -8,7 +8,7 @@ import { getAppIcon } from '@/components/app-icons'
 
 import styles from './portal.module.css'
 
-type PortalRoleMap = Record<string, { role?: string; departments?: string[]; depts?: string[] }>
+type PortalRoleMap = Record<string, { departments?: string[]; depts?: string[] }>
 
 const CATEGORY_ORDER = [
   'Ops',

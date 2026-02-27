@@ -20,10 +20,19 @@ if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   exit 1
 fi
 
-# Check Seller Central session
+# Find and activate the Seller Central tab (scripts use "active tab of first window")
 osascript -e '
 tell application "Google Chrome"
-  tell active tab of first window
+  set w to first window
+  repeat with i from 1 to (count of tabs of w)
+    if URL of tab i of w contains "sellercentral.amazon.com" then
+      set active tab index of w to i
+      set URL of tab i of w to "https://sellercentral.amazon.com/home"
+      return
+    end if
+  end repeat
+  -- No SC tab found, use active tab
+  tell active tab of w
     set URL to "https://sellercentral.amazon.com/home"
   end tell
 end tell

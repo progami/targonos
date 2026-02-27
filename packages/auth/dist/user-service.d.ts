@@ -1,4 +1,4 @@
-import type { AppRole, AuthzAppGrant, PortalAuthz } from './index.js';
+import type { AuthzAppGrant, PortalAuthz } from './index.js';
 type AppEntitlementMap = Record<string, AuthzAppGrant>;
 export type AuthenticatedUser = {
     id: string;
@@ -13,7 +13,6 @@ type ProvisionedAppAccess = {
     slug: string;
     name: string;
     departments: string[];
-    role?: AppRole;
     source?: 'manual' | 'group' | 'bootstrap';
     locked?: boolean;
 };
@@ -21,7 +20,6 @@ export type ManualAppGrantInput = {
     userId: string;
     appSlug: string;
     appName?: string;
-    role: AppRole;
     departments?: string[];
     locked?: boolean;
 };

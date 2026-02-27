@@ -1,16 +1,11 @@
 'use client';
 
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { cn } from '@/lib/utils';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
 
 type ConfirmDialogTone = 'default' | 'danger';
 
@@ -38,26 +33,26 @@ export function ConfirmDialog({
   onOpenChange,
 }: ConfirmDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isBusy}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isBusy}
-            className={cn(
-              tone === 'danger' &&
-                'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-            )}
-          >
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <Dialog open={open} onClose={() => onOpenChange(false)}>
+      <DialogTitle>{title}</DialogTitle>
+      {description && (
+        <DialogContent>
+          <DialogContentText>{description}</DialogContentText>
+        </DialogContent>
+      )}
+      <DialogActions>
+        <Button onClick={() => onOpenChange(false)} disabled={isBusy}>
+          {cancelLabel}
+        </Button>
+        <Button
+          onClick={onConfirm}
+          disabled={isBusy}
+          variant="contained"
+          color={tone === 'danger' ? 'error' : 'primary'}
+        >
+          {confirmLabel}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }

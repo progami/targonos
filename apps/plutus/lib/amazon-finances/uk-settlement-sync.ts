@@ -504,7 +504,10 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
             await db.auditDataRow.deleteMany({
               where: {
                 invoiceId: { in: invoiceIdsToRefresh },
-                market: { equals: 'uk', mode: 'insensitive' },
+                OR: [
+                  { market: { equals: 'uk', mode: 'insensitive' } },
+                  { market: { contains: 'amazon.co.uk', mode: 'insensitive' } },
+                ],
               },
             });
 
@@ -621,6 +624,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
             txnDate: jeDraft.txnDate,
             docNumber: buildPlutusSettlementDocNumber(jeDraft.docNumber),
             privateNote: jeDraft.privateNote,
+            currencyCode: 'GBP',
             lines: jeDraft.lines.map((l) => ({
               amount: l.amount,
               postingType: l.postingType,

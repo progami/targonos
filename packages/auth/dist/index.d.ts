@@ -97,9 +97,7 @@ export declare function buildPortalUrl(path: string, options?: PortalUrlOptions)
  *   environments where app-specific secrets differ from the portal.
  */
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
-export type AppRole = 'viewer';
 export type AuthzAppGrant = {
-    role: AppRole;
     departments: string[];
 };
 export type PortalAuthz = {
@@ -108,7 +106,6 @@ export type PortalAuthz = {
     apps: Record<string, AuthzAppGrant>;
 };
 export type AppEntitlement = {
-    role?: AppRole;
     departments?: string[];
     depts?: string[];
 };
@@ -118,7 +115,7 @@ export type AppEntryPolicy = 'role_gated' | 'public';
 export type AuthDecision = {
     allowed: boolean;
     status: 'ok' | 'unauthenticated' | 'forbidden';
-    reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_role';
+    reason: 'ok' | 'unauthenticated' | 'missing_authz' | 'app_archived' | 'dev_app_restricted' | 'no_app_access';
     authz: PortalAuthz | null;
 };
 export declare function normalizePortalAuthz(value: unknown): PortalAuthz | null;

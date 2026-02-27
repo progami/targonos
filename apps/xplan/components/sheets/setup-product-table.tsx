@@ -438,22 +438,32 @@ export function SetupProductTable({
   const totalColumns = 7; // SKU + Name + 4 lead time + Actions
 
   return (
-    <section className={cn('space-y-2', className)}>
-      <div className="flex flex-wrap items-center gap-2">
-        {!isAdding ? (
-          <button type="button" onClick={() => setIsAdding(true)} className={primaryActionClass}>
-            <span className="inline-flex items-center gap-1.5">
-              <Plus className="h-4 w-4" />
-              Add product
-            </span>
-          </button>
-        ) : null}
+    <section className={cn('space-y-3', className)}>
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+            Products
+          </h4>
+          <p className="text-2xs text-muted-foreground mt-0.5">
+            {rows.length} product{rows.length !== 1 ? 's' : ''} configured
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!isAdding ? (
+            <button type="button" onClick={() => setIsAdding(true)} className={primaryActionClass}>
+              <span className="inline-flex items-center gap-1.5">
+                <Plus className="h-4 w-4" />
+                Add product
+              </span>
+            </button>
+          ) : null}
 
-        <ProductSetupAmazonImport
-          strategyId={strategyId}
-          existingSkus={rows.map((row) => row.sku)}
-          buttonClassName={primaryActionClass}
-        />
+          <ProductSetupAmazonImport
+            strategyId={strategyId}
+            existingSkus={rows.map((row) => row.sku)}
+            buttonClassName={primaryActionClass}
+          />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
