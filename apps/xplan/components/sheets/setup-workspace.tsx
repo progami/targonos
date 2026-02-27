@@ -149,11 +149,11 @@ export function SetupWorkspace({
       {/* Heading */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Setup Dashboard
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+            Setup
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage strategies, products, and default assumptions for planning across regions.
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Strategies, defaults, and product configuration
           </p>
         </div>
         <div className="flex gap-2">
@@ -165,19 +165,22 @@ export function SetupWorkspace({
       </div>
 
       {/* Sub-tabs */}
-      <div className="grid grid-cols-2 gap-3 max-w-md">
+      <div className="flex gap-6 border-b border-slate-200 dark:border-[#0b3a52]">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'p-3 rounded-lg border shadow-sm flex items-center gap-3 font-medium transition-colors',
+              'relative pb-2.5 text-sm font-semibold transition-colors',
               activeTab === tab.id
-                ? 'bg-white dark:bg-[#0c2a40] border-cyan-500 dark:border-[#00C2B9] ring-1 ring-cyan-500 dark:ring-[#00C2B9] text-cyan-700 dark:text-[#00C2B9]'
-                : 'bg-white dark:bg-[#06182b]/70 border-slate-200 dark:border-[#0b3a52] text-slate-500 dark:text-slate-400 opacity-60 hover:opacity-100 hover:border-cyan-300 dark:hover:border-cyan-500/50',
+                ? 'text-cyan-700 dark:text-[#00C2B9]'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300',
             )}
           >
             {tab.label}
+            {activeTab === tab.id && (
+              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-cyan-500 dark:bg-[#00C2B9]" />
+            )}
           </button>
         ))}
       </div>
@@ -188,13 +191,13 @@ export function SetupWorkspace({
         return (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
             {/* Region headers */}
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#0b3a52] pb-2">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+            <div className="pt-1">
+              <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400 flex items-center gap-2">
                 🇺🇸 United States (US)
               </h2>
             </div>
-            <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#0b3a52] pb-2">
-              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+            <div className="pt-1">
+              <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400 flex items-center gap-2">
                 🇬🇧 United Kingdom (UK)
               </h2>
             </div>
@@ -222,13 +225,13 @@ export function SetupWorkspace({
             ))}
 
             {/* Add group buttons */}
-            <button className="w-full rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
+            <button className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
               <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
               <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
                 Add Product Group to US
               </span>
             </button>
-            <button className="w-full rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-8 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
+            <button className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
               <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
               <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
                 Add Product Group to UK

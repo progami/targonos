@@ -462,18 +462,23 @@ export function StrategyGroupCard({
   const isPrimaryInGroup = (strategyId: string) => strategyId === (displayStrategy?.id ?? null);
   const isGloballyActive = (strategyId: string) => strategyId === selectedStrategyId;
 
+  const groupContainsActive = strategies.some((s) => s.id === selectedStrategyId);
+
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow dark:border-[#0b3a52] dark:bg-[#0c2a40]">
+      <div className={cn(
+        'overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-[#0b3a52] dark:bg-[#0c2a40]',
+        groupContainsActive && 'border-l-[3px] border-l-[#00C2B9]',
+      )}>
         {/* ---- Header bar ---- */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4 dark:border-[#0b3a52] dark:bg-[#081f33]">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900 dark:text-white">
+        <div className="flex items-center justify-between px-6 pt-5 pb-4">
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white">
               {group.name}
             </h3>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <span className="font-mono text-[10px] leading-none bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1.5 py-0.5 rounded">
               {group.code}
-            </p>
+            </span>
           </div>
           <button
             type="button"
@@ -503,10 +508,10 @@ export function StrategyGroupCard({
                     type="button"
                     onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                     className={cn(
-                      'relative flex min-w-[200px] flex-1 flex-col rounded-lg border-2 p-4 text-left shadow-sm transition hover:shadow-md',
+                      'relative flex min-w-[200px] flex-1 flex-col rounded-lg p-4 text-left transition hover:shadow-md',
                       isActive
-                        ? 'border-slate-800 bg-sky-50 dark:border-[#00C2B9] dark:bg-cyan-900/20'
-                        : 'border-slate-300 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
+                        ? 'border-2 border-teal-400 dark:border-teal-500 bg-teal-50/60 dark:bg-teal-900/15 border-l-[4px] border-l-[#00C2B9]'
+                        : 'border border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
                     )}
                   >
                     {isActive ? (
@@ -549,7 +554,7 @@ export function StrategyGroupCard({
                   type="button"
                   onClick={() => handleSelectStrategy(strategy.id, strategy.name)}
                   className={cn(
-                    'flex w-32 shrink-0 flex-col justify-between rounded-lg border p-3 text-left transition hover:border-cyan-500 hover:bg-cyan-50/50 dark:hover:border-[#00C2B9]/50 dark:hover:bg-cyan-900/10',
+                    'flex w-32 shrink-0 flex-col justify-between rounded-lg border p-3 text-left transition-all hover:border-cyan-500 hover:bg-cyan-50/50 hover:shadow-sm hover:-translate-y-px dark:hover:border-[#00C2B9]/50 dark:hover:bg-cyan-900/10',
                     isActive
                       ? 'border-cyan-500 bg-cyan-50/50 dark:border-[#00C2B9] dark:bg-cyan-900/20'
                       : 'border-slate-200 bg-white dark:border-[#0b3a52] dark:bg-[#06182b]',
@@ -581,30 +586,24 @@ export function StrategyGroupCard({
 
           {/* ---- Key Parameters section ---- */}
           <div className="border-t border-slate-200 pt-4 dark:border-[#0b3a52]">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Key Parameters
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              {keyParameters.map((param) => (
-                <div
-                  key={param.label}
-                  className="rounded border border-slate-200 bg-slate-50 p-3 dark:border-[#0b3a52] dark:bg-[#081f33]"
-                >
+            <div className="flex flex-wrap items-center gap-x-1 gap-y-1">
+              {keyParameters.map((param, index) => (
+                <span key={param.label} className="inline-flex items-center gap-1.5">
+                  {index > 0 && (
+                    <span className="text-slate-300 dark:text-slate-600 mx-1">&middot;</span>
+                  )}
                   <span className="text-xs text-muted-foreground">{param.label}</span>
-                  <p
+                  <span
                     className={cn(
-                      'mt-1 font-mono font-semibold',
+                      'text-sm font-semibold font-mono',
                       param.isAccent
                         ? 'text-cyan-600 dark:text-[#00C2B9]'
                         : 'text-slate-900 dark:text-white',
                     )}
                   >
                     {param.value}
-                  </p>
-                </div>
+                  </span>
+                </span>
               ))}
             </div>
           </div>

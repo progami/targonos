@@ -350,7 +350,7 @@ export function SetupDefaultsBand({
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
         <div className="divide-y">
           {/* Operations row */}
-          <div className="px-4 py-3">
+          <div className="border-l-[3px] border-l-[#00C2B9] px-4 py-3">
             <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Lead Time Defaults
             </div>
@@ -444,7 +444,7 @@ export function SetupDefaultsBand({
           </div>
 
           {/* Finance row */}
-          <div className="px-4 py-3">
+          <div className="border-l-[3px] border-l-[#00C2B9] px-4 py-3">
             <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
               Financial Defaults
             </div>
