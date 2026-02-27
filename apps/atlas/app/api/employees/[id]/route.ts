@@ -335,9 +335,9 @@ export async function DELETE(req: Request, context: EmployeeRouteContext) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    const isAdmin = await isSuperAdmin(actorId)
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Only super admin can remove employees' }, { status: 403 })
+    const hasPermission = await isHROrAbove(actorId)
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Only HR or super admin can remove employees' }, { status: 403 })
     }
 
     // Resolve canonical employee ID (route param can be cuid or employeeId).

@@ -58,6 +58,30 @@ export type Policy = {
   updatedAt?: string
 }
 
+export type OffboardPreflightWarnings = {
+  openTasks: { id: string; title: string; status: string }[]
+  openCases: { id: string; caseNumber: number; title: string; status: string }[]
+  directReports: { id: string; firstName: string; lastName: string; position: string }[]
+  departmentsLed: { id: string; name: string }[]
+  projectsLed: { id: string; name: string; status: string }[]
+  pendingLeaveRequests: { id: string; leaveType: string; startDate: string; endDate: string; status: string }[]
+  activeReviews: { id: string; reviewPeriod: string; reviewType: string; status: string }[]
+  upcomingEvents: { id: string; title: string; eventType: string; startDate: string }[]
+}
+
+export type OffboardPreflightResult = {
+  employee: Pick<Employee, 'id' | 'firstName' | 'lastName' | 'email'>
+  warnings: OffboardPreflightWarnings
+  hasWarnings: boolean
+}
+
+export type OffboardResult = {
+  ok: boolean
+  tasksCreated: number
+  ssoRevoked: boolean
+  ssoWarning?: string
+}
+
 export class ApiError extends Error {
   status: number
   body: any
@@ -212,6 +236,27 @@ export const EmployeesApi = {
   getAuthorizedReporters(employeeId: string) {
     return request<{ items: { id: string; employeeId: string; firstName: string; lastName: string; position: string }[]; total: number }>(
       `/api/employees/${encodeURIComponent(employeeId)}/authorized-reporters`
+    )
+  },
+  offboardPreflight(employeeId: string) {
+    return request<OffboardPreflightResult>(
+      `/api/employees/${encodeURIComponent(employeeId)}/offboard-preflight`
+    )
+  },
+  offboard(employeeId: string, payload: {
+    exitReason?: string
+    lastWorkingDay?: string
+    exitNotes?: string
+    taskOwnerId?: string
+    taskDueDate?: string
+  }) {
+    return request<OffboardResult>(
+      `/api/employees/${encodeURIComponent(employeeId)}/offboard`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }
     )
   },
 }

@@ -14,7 +14,9 @@ export function getPortalAuthPrisma(): PrismaClient {
   }
 
   if (!prismaInstance) {
-    prismaInstance = new PrismaClient()
+    prismaInstance = new PrismaClient({
+      transactionOptions: { timeout: 30000, maxWait: 30000 },
+    })
     if (process.env.NODE_ENV !== 'production') {
       ;(globalThis as typeof globalThis & { __portalAuthPrisma?: PrismaClient | null }).__portalAuthPrisma = prismaInstance
     }

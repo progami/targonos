@@ -11,7 +11,9 @@ export function getPortalAuthPrisma() {
         throw new Error('PORTAL_DB_URL is not configured');
     }
     if (!prismaInstance) {
-        prismaInstance = new PrismaClient();
+        prismaInstance = new PrismaClient({
+            transactionOptions: { timeout: 30000, maxWait: 30000 },
+        });
         if (process.env.NODE_ENV !== 'production') {
             ;
             globalThis.__portalAuthPrisma = prismaInstance;
