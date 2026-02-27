@@ -105,13 +105,16 @@ export function SheetTabs({
           },
           '& .MuiTab-root': {
             minHeight: 36,
-            px: 1.5,
-            py: 0.75,
+            px: 1.25,
+            py: 0.5,
             fontSize: '0.875rem',
             fontWeight: 600,
             color: 'text.secondary',
+            borderRadius: '6px',
+            transition: 'background-color 0.15s',
             '&.Mui-selected': {
               color: 'secondary.main',
+              bgcolor: 'rgba(0,194,185,0.08)',
             },
           },
         }}
