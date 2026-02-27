@@ -456,11 +456,11 @@ export function WorkbookLayout({
                 borderColor: 'divider',
                 bgcolor: 'rgba(255,255,255,0.95)',
                 backdropFilter: 'blur(16px)',
-                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
                 '.dark &': {
                   bgcolor: 'rgba(4,19,36,0.95)',
                   borderColor: '#0b3a52',
-                  boxShadow: '0 26px 55px rgba(1,12,24,0.55)',
+                  boxShadow: '0 1px 4px rgba(1,12,24,0.3)',
                 },
               }}
               role="banner"
@@ -609,11 +609,11 @@ export function WorkbookLayout({
           backdropFilter: 'blur(16px)',
           px: 1.5,
           py: 1.25,
-          boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
+          boxShadow: '0 -1px 3px rgba(0,0,0,0.06)',
           '.dark &': {
             bgcolor: 'rgba(4,19,36,0.95)',
             borderColor: '#0b3a52',
-            boxShadow: '0 26px 55px rgba(1,12,24,0.55)',
+            boxShadow: '0 -1px 4px rgba(1,12,24,0.3)',
           },
         }}
         role="navigation"
