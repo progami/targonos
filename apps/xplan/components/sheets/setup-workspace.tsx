@@ -1,7 +1,6 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { StrategyGroupCard } from '@/components/sheets/strategy-group-card';
 import { SetupDefaultsBand } from '@/components/sheets/setup-defaults-band';
@@ -147,21 +146,13 @@ export function SetupWorkspace({
   return (
     <div className="space-y-6">
       {/* Heading */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-            Setup
-          </h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Strategies, defaults, and product configuration
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 dark:border-[#0b3a52] dark:bg-[#0c2a40] dark:text-slate-200 dark:hover:bg-[#0c2a40]/80">
-            <Plus className="h-4 w-4" />
-            Add Region
-          </button>
-        </div>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
+          Setup
+        </h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          Strategies, defaults, and product configuration
+        </p>
       </div>
 
       {/* Sub-tabs */}
@@ -224,19 +215,6 @@ export function SetupWorkspace({
               </Fragment>
             ))}
 
-            {/* Add group buttons */}
-            <button className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
-              <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
-              <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
-                Add Product Group to US
-              </span>
-            </button>
-            <button className="w-full rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 p-6 flex flex-col items-center justify-center gap-3 hover:border-cyan-400 dark:hover:border-[#00C2B9]/50 hover:bg-cyan-50/50 dark:hover:bg-cyan-900/10 transition-all group">
-              <Plus className="h-6 w-6 text-slate-400 group-hover:text-cyan-500 dark:group-hover:text-[#00C2B9]" />
-              <span className="font-medium text-slate-500 group-hover:text-cyan-600 dark:text-slate-400 dark:group-hover:text-[#00C2B9]">
-                Add Product Group to UK
-              </span>
-            </button>
           </div>
         );
       })()}
