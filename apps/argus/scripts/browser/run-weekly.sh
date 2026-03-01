@@ -45,9 +45,40 @@ tell application "Google Chrome"
 end tell
 ')
 if [[ "$PAGE_URL" == *"signin"* ]]; then
-  log "ABORT: Seller Central session expired"
-  osascript -e 'display notification "Weekly sources: SC session expired — login required" with title "Weekly Monitor"' 2>/dev/null
-  exit 1
+  log "SC session expired — attempting relogin"
+  if bash "$SCRIPT_DIR/relogin.sh"; then
+    log "Relogin successful — retrying navigation"
+    osascript -e '
+    tell application "Google Chrome"
+      set w to first window
+      repeat with i from 1 to (count of tabs of w)
+        if URL of tab i of w contains "sellercentral.amazon.com" then
+          set active tab index of w to i
+          set URL of tab i of w to "https://sellercentral.amazon.com/home"
+          return
+        end if
+      end repeat
+      tell active tab of w
+        set URL to "https://sellercentral.amazon.com/home"
+      end tell
+    end tell
+    '
+    sleep 20
+    PAGE_URL=$(osascript -e '
+    tell application "Google Chrome"
+      return URL of active tab of first window
+    end tell
+    ')
+    if [[ "$PAGE_URL" == *"signin"* ]]; then
+      log "ABORT: Still on signin after relogin"
+      osascript -e 'display notification "Weekly sources: relogin failed" with title "Weekly Monitor"' 2>/dev/null
+      exit 1
+    fi
+  else
+    log "ABORT: Relogin failed"
+    osascript -e 'display notification "Weekly sources: relogin failed" with title "Weekly Monitor"' 2>/dev/null
+    exit 1
+  fi
 fi
 
 log "Session OK"
