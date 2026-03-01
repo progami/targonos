@@ -35,7 +35,11 @@ function getRelatedIdentifierValue(
 
 function mergeFinancialEvents(target: SpApiFinancialEvents, page: SpApiFinancialEvents): void {
   for (const [key, value] of Object.entries(page)) {
-    if (!Array.isArray(value) || value.length === 0) continue;
+    if (value === undefined || value === null) continue;
+    if (!Array.isArray(value)) {
+      throw new Error(`Unexpected non-array FinancialEvents.${key}`);
+    }
+    if (value.length === 0) continue;
 
     const existing = (target as Record<string, unknown>)[key];
     if (existing === undefined) {
@@ -62,6 +66,7 @@ export async function listAllFinancialEventGroups(input: {
   const maxResultsPerPage = input.maxResultsPerPage === undefined ? 100 : input.maxResultsPerPage;
   const result: SpApiFinancialEventGroup[] = [];
   let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
 
   for (let page = 0; page < 200; page++) {
     const res = await callAmazonApi<SpApiListFinancialEventGroupsResponse>(input.tenantCode, {
@@ -81,6 +86,10 @@ export async function listAllFinancialEventGroups(input: {
 
     const token = res.NextToken;
     if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error(`SP-API listFinancialEventGroups returned repeated NextToken on page ${page + 1}`);
+    }
+    seenTokens.add(token);
     nextToken = token;
   }
 
@@ -98,6 +107,7 @@ export async function fetchAllFinancialEventsByGroupId(input: {
   const merged: SpApiFinancialEvents = {};
 
   let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
   for (let page = 0; page < 500; page++) {
     const res = await callAmazonApi<SpApiListFinancialEventsByGroupIdResponse>(input.tenantCode, {
       operation: 'listFinancialEventsByGroupId',
@@ -117,6 +127,10 @@ export async function fetchAllFinancialEventsByGroupId(input: {
 
     const token = res.NextToken;
     if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error(`SP-API listFinancialEventsByGroupId returned repeated NextToken for group ${input.eventGroupId}`);
+    }
+    seenTokens.add(token);
     nextToken = token;
   }
 
@@ -134,6 +148,7 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
   const matches: Array<{ transaction: SpApiTransaction; groupId: string }> = [];
 
   let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
   for (let page = 0; page < 500; page++) {
     const res = await callAmazonApi<SpApiListTransactionsResponse>(input.tenantCode, {
       operation: 'listTransactions',
@@ -159,6 +174,10 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
 
     const token = res.nextToken;
     if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error(`SP-API listTransactions returned repeated nextToken while resolving settlement ${input.settlementId}`);
+    }
+    seenTokens.add(token);
     nextToken = token;
   }
 
@@ -185,6 +204,7 @@ export async function listSettlementEventGroupsFromTransactions(input: {
   const settlementToGroupId = new Map<string, string>();
 
   let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
   for (let page = 0; page < 500; page++) {
     const res = await callAmazonApi<SpApiListTransactionsResponse>(input.tenantCode, {
       operation: 'listTransactions',
@@ -215,6 +235,10 @@ export async function listSettlementEventGroupsFromTransactions(input: {
 
     const token = res.nextToken;
     if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error('SP-API listTransactions returned repeated nextToken while listing settlement groups');
+    }
+    seenTokens.add(token);
     nextToken = token;
   }
 
