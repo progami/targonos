@@ -441,7 +441,7 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
         showBack
         action={
           <div className="flex flex-wrap gap-2">
-            {isHROrAbove && !isSelf ? (
+            {isHROrAbove && !isSelf && employee.status === 'ACTIVE' ? (
               <>
                 <Button
                   variant="secondary"
@@ -547,7 +547,12 @@ export function EmployeeProfileClient({ employeeId, variant = 'employee' }: Empl
       {/* Onboarding/Offboarding Modal */}
       <OnboardingOffboardingModal
         open={workflowModalOpen}
-        onClose={() => setWorkflowModalOpen(false)}
+        onClose={(shouldRefresh) => {
+          setWorkflowModalOpen(false)
+          if (shouldRefresh) {
+            EmployeesApi.get(id).then(setEmployee).catch(console.error)
+          }
+        }}
         employee={employee}
         workflowType={workflowType}
       />

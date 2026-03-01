@@ -16,7 +16,15 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect } from '@/components/ui/select'
 import { Alert } from '@/components/ui/alert'
 import { CheckCircleIcon } from '@/components/ui/Icons'
-import { TasksApi, EmployeesApi, LeavesApi, type Employee, type LeaveBalance } from '@/lib/api-client'
+import {
+  TasksApi,
+  EmployeesApi,
+  LeavesApi,
+  type Employee,
+  type LeaveBalance,
+  type OffboardPreflightResult,
+  type OffboardResult,
+} from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { ensureMe, useMeStore } from '@/lib/store/me'
 import { EXIT_REASON_OPTIONS } from '@/lib/domain/employee/constants'
@@ -36,52 +44,28 @@ const ONBOARDING_TASKS: ChecklistTask[] = [
   { title: 'Day-1 readiness', description: 'Calendar, equipment, workspace' },
 ]
 
-function getOffboardingTasks(employee: Employee): ChecklistTask[] {
-  const email = employee.email
-  const encodedEmail = encodeURIComponent(email)
-  const employeeName = `${employee.firstName} ${employee.lastName}`
-
-  return [
-    {
-      title: 'Confirm last day & handover',
-      description: `Manager sign-off on ${employeeName}'s last working day and handover plan. Ensure all responsibilities are documented and transitioned.`,
-    },
-    {
-      title: 'Reassign open work',
-      description: `Transfer ${employeeName}'s tasks, projects, and responsibilities to remaining team members.`,
-    },
-    {
-      title: 'Suspend Google Workspace account',
-      description: `Suspend ${employeeName}'s Google account (${email}) in Google Admin Console. Do NOT delete — suspend first to preserve data.`,
-      actionUrl: `https://admin.google.com/ac/users/${encodedEmail}`,
-    },
-    {
-      title: 'Revoke Portal & Atlas access',
-      description: `Remove ${employeeName}'s SSO entitlements in the Portal admin. Ensure they can no longer authenticate to Atlas or other internal apps.`,
-      actionUrl: `/sso/admin`,
-    },
-    {
-      title: 'Recover assets',
-      description: `Collect all company property from ${employeeName}: laptop, badge, keys, parking pass, and any other equipment.`,
-    },
-    {
-      title: 'Archive & close',
-      description: `Upload final documents (separation agreement, NDA, clearance form) to ${employeeName}'s profile and confirm all offboarding steps are complete.`,
-      actionUrl: `/atlas/employees/${employee.id}`,
-    },
-  ]
-}
-
 type WorkflowType = 'onboarding' | 'offboarding'
 
 type OnboardingOffboardingModalProps = {
   open: boolean
-  onClose: () => void
+  onClose: (shouldRefresh?: boolean) => void
   employee: Employee
   workflowType: WorkflowType
 }
 
-type TaskStatus = 'pending' | 'creating' | 'done'
+type OnboardingTaskStatus = 'pending' | 'creating' | 'done'
+
+// Warning category labels for the preflight UI
+const WARNING_LABELS: Record<string, { label: string; description: string }> = {
+  openTasks: { label: 'Open Tasks', description: 'These tasks are assigned to this employee and will become unassigned.' },
+  openCases: { label: 'Open Cases', description: 'This employee is linked to active cases (subject or assigned).' },
+  directReports: { label: 'Direct Reports', description: 'These employees report to this person. They will be reassigned to their manager\'s manager.' },
+  departmentsLed: { label: 'Department Head', description: 'This employee is head of these departments. The head will be cleared.' },
+  projectsLed: { label: 'Project Lead', description: 'This employee leads these active projects.' },
+  pendingLeaveRequests: { label: 'Pending Leave Requests', description: 'These leave requests are still pending approval and will remain in the system.' },
+  activeReviews: { label: 'Active Reviews', description: 'These performance reviews are in progress.' },
+  upcomingEvents: { label: 'Upcoming Events', description: 'These HR calendar events reference this employee.' },
+}
 
 export function OnboardingOffboardingModal({
   open,
@@ -103,13 +87,20 @@ export function OnboardingOffboardingModal({
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([])
   const [leaveLoading, setLeaveLoading] = useState(false)
 
-  // Progress state
-  const [phase, setPhase] = useState<'form' | 'creating' | 'done'>('form')
-  const [taskStatuses, setTaskStatuses] = useState<TaskStatus[]>([])
+  // Offboarding preflight state
+  const [preflightData, setPreflightData] = useState<OffboardPreflightResult | null>(null)
+  const [warningsAcknowledged, setWarningsAcknowledged] = useState(false)
+  const [offboardResult, setOffboardResult] = useState<OffboardResult | null>(null)
+
+  // Onboarding progress state
+  const [onboardingTaskStatuses, setOnboardingTaskStatuses] = useState<OnboardingTaskStatus[]>([])
   const [createdCount, setCreatedCount] = useState(0)
 
+  // Phase: form → preflight → warnings → executing → done (offboarding)
+  //        form → creating → done (onboarding)
+  const [phase, setPhase] = useState<'form' | 'preflight' | 'warnings' | 'creating' | 'executing' | 'done'>('form')
+
   const isOnboarding = workflowType === 'onboarding'
-  const tasks = isOnboarding ? ONBOARDING_TASKS : getOffboardingTasks(employee)
   const title = isOnboarding ? 'Start Onboarding' : 'Start Offboarding'
 
   // Load employees when modal opens
@@ -118,13 +109,16 @@ export function OnboardingOffboardingModal({
 
     // Reset state when opening
     setPhase('form')
-    setTaskStatuses(tasks.map(() => 'pending'))
+    setOnboardingTaskStatuses(ONBOARDING_TASKS.map(() => 'pending'))
     setCreatedCount(0)
     setError(null)
     setExitReason('')
     setLastWorkingDay('')
     setExitNotes('')
     setLeaveBalances([])
+    setPreflightData(null)
+    setWarningsAcknowledged(false)
+    setOffboardResult(null)
 
     async function loadEmployees() {
       try {
@@ -161,21 +155,21 @@ export function OnboardingOffboardingModal({
     }
   }
 
-  const createTasks = useCallback(async () => {
+  // --- Onboarding: create tasks one by one (existing logic) ---
+  const createOnboardingTasks = useCallback(async () => {
     setPhase('creating')
     setError(null)
-    setTaskStatuses(tasks.map(() => 'pending'))
+    setOnboardingTaskStatuses(ONBOARDING_TASKS.map(() => 'pending'))
 
-    const prefix = isOnboarding ? 'Onboarding' : 'Offboarding'
     const employeeName = `${employee.firstName} ${employee.lastName}`
-    const dueDate = targetDate.trim() || lastWorkingDay.trim() || null
+    const dueDate = targetDate.trim() || null
     const assignedToId = ownerId.trim() || null
 
     let count = 0
-    for (let i = 0; i < tasks.length; i++) {
-      const t = tasks[i]
+    for (let i = 0; i < ONBOARDING_TASKS.length; i++) {
+      const t = ONBOARDING_TASKS[i]
 
-      setTaskStatuses((prev) => {
+      setOnboardingTaskStatuses((prev) => {
         const next = [...prev]
         next[i] = 'creating'
         return next
@@ -183,7 +177,7 @@ export function OnboardingOffboardingModal({
 
       try {
         await TasksApi.create({
-          title: `${prefix}: ${t.title} — ${employeeName}`,
+          title: `Onboarding: ${t.title} — ${employeeName}`,
           description: t.description,
           actionUrl: t.actionUrl,
           category: 'GENERAL',
@@ -194,7 +188,7 @@ export function OnboardingOffboardingModal({
         count++
         setCreatedCount(count)
 
-        setTaskStatuses((prev) => {
+        setOnboardingTaskStatuses((prev) => {
           const next = [...prev]
           next[i] = 'done'
           return next
@@ -208,23 +202,63 @@ export function OnboardingOffboardingModal({
       }
     }
 
-    // Save offboarding metadata to the employee record
-    if (!isOnboarding && (exitReason || lastWorkingDay || exitNotes)) {
-      try {
-        await EmployeesApi.update(employee.id, {
-          ...(exitReason ? { exitReason } : {}),
-          ...(lastWorkingDay ? { lastWorkingDay } : {}),
-          ...(exitNotes ? { exitNotes } : {}),
-        })
-      } catch {
-        // Non-blocking — tasks were already created
-      }
-    }
-
     setPhase('done')
-  }, [employee, exitNotes, exitReason, isOnboarding, lastWorkingDay, ownerId, targetDate, tasks])
+  }, [employee, ownerId, targetDate])
 
-  const handleClose = () => {
+  // --- Offboarding: preflight check ---
+  const startPreflightChecks = useCallback(async () => {
+    setPhase('preflight')
+    setError(null)
+    try {
+      const data = await EmployeesApi.offboardPreflight(employee.id)
+      setPreflightData(data)
+      if (data.hasWarnings) {
+        setPhase('warnings')
+      } else {
+        // No warnings — skip directly to execution
+        setPhase('executing')
+        try {
+          const result = await EmployeesApi.offboard(employee.id, {
+            exitReason: exitReason || undefined,
+            lastWorkingDay: lastWorkingDay || undefined,
+            exitNotes: exitNotes || undefined,
+            taskOwnerId: ownerId || undefined,
+            taskDueDate: targetDate || lastWorkingDay || undefined,
+          })
+          setOffboardResult(result)
+          setPhase('done')
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'Failed to complete offboarding')
+          setPhase('form')
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to run pre-flight checks')
+      setPhase('form')
+    }
+  }, [employee.id, exitReason, lastWorkingDay, exitNotes, ownerId, targetDate])
+
+  // --- Offboarding: execute after warnings acknowledged ---
+  const executeOffboard = useCallback(async () => {
+    setPhase('executing')
+    setError(null)
+    try {
+      const result = await EmployeesApi.offboard(employee.id, {
+        exitReason: exitReason || undefined,
+        lastWorkingDay: lastWorkingDay || undefined,
+        exitNotes: exitNotes || undefined,
+        taskOwnerId: ownerId || undefined,
+        taskDueDate: targetDate || lastWorkingDay || undefined,
+      })
+      setOffboardResult(result)
+      setPhase('done')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to complete offboarding')
+      setPhase('warnings')
+    }
+  }, [employee.id, exitReason, lastWorkingDay, exitNotes, ownerId, targetDate])
+
+  const handleClose = (shouldRefresh?: boolean) => {
     setOwnerId('')
     setTargetDate('')
     setExitReason('')
@@ -232,7 +266,29 @@ export function OnboardingOffboardingModal({
     setExitNotes('')
     setError(null)
     setPhase('form')
-    onClose()
+    setPreflightData(null)
+    setWarningsAcknowledged(false)
+    setOffboardResult(null)
+    onClose(shouldRefresh)
+  }
+
+  const getDescription = () => {
+    if (phase === 'done' && !isOnboarding && offboardResult) {
+      return `${employee.firstName} ${employee.lastName} has been offboarded`
+    }
+    if (phase === 'done' && isOnboarding) {
+      return `${createdCount} tasks created for ${employee.firstName} ${employee.lastName}`
+    }
+    if (phase === 'warnings') {
+      return `Review warnings before offboarding ${employee.firstName} ${employee.lastName}`
+    }
+    if (phase === 'preflight' || phase === 'executing') {
+      return `Processing ${employee.firstName} ${employee.lastName}...`
+    }
+    if (isOnboarding) {
+      return `Create ${ONBOARDING_TASKS.length} onboarding tasks for ${employee.firstName} ${employee.lastName}`
+    }
+    return `Offboard ${employee.firstName} ${employee.lastName} — this will change their status, create tasks, and revoke SSO access`
   }
 
   return (
@@ -246,11 +302,7 @@ export function OnboardingOffboardingModal({
           >
             {title}
           </DialogTitle>
-          <DialogDescription>
-            {phase === 'done'
-              ? `${createdCount} tasks created for ${employee.firstName} ${employee.lastName}`
-              : `Create ${tasks.length} ${workflowType} tasks for ${employee.firstName} ${employee.lastName}`}
-          </DialogDescription>
+          <DialogDescription>{getDescription()}</DialogDescription>
         </DialogHeader>
 
         {error && (
@@ -259,7 +311,7 @@ export function OnboardingOffboardingModal({
           </Alert>
         )}
 
-        {/* Form Phase */}
+        {/* ===== FORM PHASE ===== */}
         {phase === 'form' && (
           <div className="space-y-4 mt-4">
             {/* Employee display */}
@@ -376,72 +428,137 @@ export function OnboardingOffboardingModal({
               </>
             )}
 
-            {/* Task preview */}
-            <div className="space-y-1">
-              <Label className="text-xs text-slate-500">Tasks to create</Label>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {tasks.map((t, i) => (
-                  <div key={i} className="flex items-start gap-2 py-1">
-                    <div
-                      className={cn(
-                        'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0',
-                        isOnboarding ? 'bg-cyan-400' : 'bg-rose-400'
-                      )}
-                    />
-                    <div className="flex items-center gap-1.5">
+            {/* Task preview — onboarding only */}
+            {isOnboarding && (
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Tasks to create</Label>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {ONBOARDING_TASKS.map((t, i) => (
+                    <div key={i} className="flex items-start gap-2 py-1">
+                      <div className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 bg-cyan-400" />
                       <span className="text-sm text-slate-600 dark:text-slate-300">{t.title}</span>
-                      {t.actionUrl && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400">
-                          link
-                        </span>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             <DialogFooter className="pt-2">
-              <Button type="button" variant="secondary" onClick={handleClose}>
+              <Button type="button" variant="secondary" onClick={() => handleClose()}>
                 Cancel
               </Button>
+              {isOnboarding ? (
+                <Button onClick={createOnboardingTasks} variant="primary">
+                  Create {ONBOARDING_TASKS.length} Tasks
+                </Button>
+              ) : (
+                <Button onClick={startPreflightChecks} variant="destructive">
+                  Continue to Offboarding
+                </Button>
+              )}
+            </DialogFooter>
+          </div>
+        )}
+
+        {/* ===== PREFLIGHT LOADING PHASE (offboarding) ===== */}
+        {phase === 'preflight' && (
+          <div className="flex flex-col items-center py-10 mt-4">
+            <div className="w-8 h-8 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm text-slate-600 dark:text-slate-300">Running pre-flight checks...</p>
+          </div>
+        )}
+
+        {/* ===== WARNINGS PHASE (offboarding) ===== */}
+        {phase === 'warnings' && preflightData && (
+          <div className="space-y-4 mt-4">
+            <Alert variant="warning">
+              The following items are linked to this employee. Review them before proceeding.
+            </Alert>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {(Object.entries(preflightData.warnings) as [string, unknown[]][])
+                .filter(([, items]) => items.length > 0)
+                .map(([key, items]) => {
+                  const meta = WARNING_LABELS[key]
+                  return (
+                    <div key={key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                          {meta?.label ?? key}
+                        </span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                          {items.length}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                        {meta?.description}
+                      </p>
+                      <div className="space-y-1">
+                        {items.slice(0, 5).map((item: any, i: number) => (
+                          <div key={i} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <div className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />
+                            <span className="truncate">
+                              {item.title || item.name || (item.firstName ? `${item.firstName} ${item.lastName}` : item.leaveType) || `Item ${i + 1}`}
+                            </span>
+                          </div>
+                        ))}
+                        {items.length > 5 && (
+                          <p className="text-xs text-slate-400 ml-3">+ {items.length - 5} more</p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+
+            {/* Acknowledge checkbox */}
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={warningsAcknowledged}
+                onChange={(e) => setWarningsAcknowledged(e.target.checked)}
+                className="mt-0.5 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">
+                I have reviewed these warnings and want to proceed with offboarding
+              </span>
+            </label>
+
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="secondary" onClick={() => setPhase('form')}>
+                Back
+              </Button>
               <Button
-                onClick={createTasks}
-                variant={isOnboarding ? 'primary' : 'destructive'}
+                onClick={executeOffboard}
+                variant="destructive"
+                disabled={!warningsAcknowledged}
               >
-                Create {tasks.length} Tasks
+                Proceed with Offboarding
               </Button>
             </DialogFooter>
           </div>
         )}
 
-        {/* Creating Phase */}
-        {phase === 'creating' && (
+        {/* ===== CREATING PHASE (onboarding — task by task) ===== */}
+        {phase === 'creating' && isOnboarding && (
           <div className="space-y-3 mt-4">
-            {tasks.map((t, i) => (
+            {ONBOARDING_TASKS.map((t, i) => (
               <div
                 key={i}
                 className={cn(
                   'flex items-center gap-3 py-2 px-3 rounded-lg transition-colors',
-                  taskStatuses[i] === 'done'
+                  onboardingTaskStatuses[i] === 'done'
                     ? 'bg-green-50 dark:bg-green-900/20'
-                    : taskStatuses[i] === 'creating'
-                      ? isOnboarding
-                        ? 'bg-cyan-50 dark:bg-cyan-900/20'
-                        : 'bg-rose-50 dark:bg-rose-900/20'
+                    : onboardingTaskStatuses[i] === 'creating'
+                      ? 'bg-cyan-50 dark:bg-cyan-900/20'
                       : 'bg-slate-50 dark:bg-slate-800'
                 )}
               >
                 <div className="w-5 h-5 flex items-center justify-center shrink-0">
-                  {taskStatuses[i] === 'done' ? (
+                  {onboardingTaskStatuses[i] === 'done' ? (
                     <CheckCircleIcon className="w-5 h-5 text-green-500" />
-                  ) : taskStatuses[i] === 'creating' ? (
-                    <div
-                      className={cn(
-                        'w-4 h-4 border-2 border-t-transparent rounded-full animate-spin',
-                        isOnboarding ? 'border-cyan-500' : 'border-rose-500'
-                      )}
-                    />
+                  ) : onboardingTaskStatuses[i] === 'creating' ? (
+                    <div className="w-4 h-4 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <div className="w-3 h-3 rounded-full bg-slate-300 dark:bg-slate-600" />
                   )}
@@ -449,12 +566,10 @@ export function OnboardingOffboardingModal({
                 <span
                   className={cn(
                     'text-sm',
-                    taskStatuses[i] === 'done'
+                    onboardingTaskStatuses[i] === 'done'
                       ? 'text-green-700 dark:text-green-400'
-                      : taskStatuses[i] === 'creating'
-                        ? isOnboarding
-                          ? 'text-cyan-700 dark:text-cyan-400'
-                          : 'text-rose-700 dark:text-rose-400'
+                      : onboardingTaskStatuses[i] === 'creating'
+                        ? 'text-cyan-700 dark:text-cyan-400'
                         : 'text-slate-500 dark:text-slate-400'
                   )}
                 >
@@ -465,7 +580,21 @@ export function OnboardingOffboardingModal({
           </div>
         )}
 
-        {/* Done Phase */}
+        {/* ===== EXECUTING PHASE (offboarding — single server call) ===== */}
+        {phase === 'executing' && (
+          <div className="flex flex-col items-center py-10 mt-4">
+            <div className="w-10 h-10 border-2 border-rose-500 border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">Offboarding in progress...</p>
+            <div className="mt-4 space-y-2 text-xs text-slate-500 dark:text-slate-400">
+              <p>Setting employee status to Resigned</p>
+              <p>Creating offboarding tasks</p>
+              <p>Reassigning direct reports</p>
+              <p>Revoking SSO access</p>
+            </div>
+          </div>
+        )}
+
+        {/* ===== DONE PHASE ===== */}
         {phase === 'done' && (
           <div className="space-y-4 mt-4">
             <div className="flex flex-col items-center py-6">
@@ -482,17 +611,47 @@ export function OnboardingOffboardingModal({
                   )}
                 />
               </div>
-              <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                All done!
-              </p>
-              <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-1">
-                Created {createdCount} {workflowType} tasks for{' '}
-                <span className="font-medium">{employee.firstName}</span>
-              </p>
+
+              {isOnboarding ? (
+                <>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">All done!</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400 text-center mt-1">
+                    Created {createdCount} onboarding tasks for{' '}
+                    <span className="font-medium">{employee.firstName}</span>
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+                    Employee Offboarded
+                  </p>
+                  <div className="text-sm text-slate-500 dark:text-slate-400 text-center mt-1 space-y-1">
+                    <p>
+                      <span className="font-medium">{employee.firstName} {employee.lastName}</span> has been set to Resigned
+                    </p>
+                    {offboardResult && (
+                      <>
+                        <p>{offboardResult.tasksCreated} offboarding tasks created</p>
+                        <p>
+                          {offboardResult.ssoRevoked
+                            ? 'SSO access revoked'
+                            : 'SSO access not revoked — see warning below'}
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  {offboardResult?.ssoWarning && (
+                    <Alert variant="warning" className="mt-3 text-left">
+                      {offboardResult.ssoWarning}
+                    </Alert>
+                  )}
+                </>
+              )}
             </div>
 
             <DialogFooter>
-              <Button variant="secondary" onClick={handleClose}>
+              <Button variant="secondary" onClick={() => handleClose(!isOnboarding)}>
                 Close
               </Button>
               <Link href="/hub">

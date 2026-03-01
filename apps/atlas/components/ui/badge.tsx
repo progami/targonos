@@ -47,7 +47,7 @@ function getStatusVariant(status: unknown): BadgeVariant {
   if (/(active|published|approved|completed|acknowledged|done)\b/.test(s)) return "success"
   if (/(pending|review|in[_ -]?progress|awaiting|overdue)\b/.test(s)) return "warning"
   if (/(rejected|dismissed|denied|error|failed|cancelled|canceled)\b/.test(s)) return "error"
-  if (/(archived|inactive|suspended|closed)\b/.test(s)) return "default"
+  if (/(archived|inactive|suspended|closed|resigned|terminated)\b/.test(s)) return "default"
 
   return "info"
 }

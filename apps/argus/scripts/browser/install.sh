@@ -21,6 +21,7 @@ DAILY_VISUALS_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-visuals.plist"
 
 # Make all scripts executable
 chmod +x "$SCRIPT_DIR/keepalive.sh"
+chmod +x "$SCRIPT_DIR/relogin.sh"
 chmod +x "$SCRIPT_DIR/run-weekly.sh"
 chmod +x "$SCRIPT_DIR/daily-account-health/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-category-insights/collect.sh"
