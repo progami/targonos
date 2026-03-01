@@ -1,5 +1,5 @@
 import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
-import { createJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
+import { createJournalEntry, deleteJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
 import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
 import {
@@ -355,7 +355,6 @@ export async function computeSettlementPreview(input: {
   const existingSettlement = await db.settlementProcessing.findUnique({
     where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
   });
-  const skipOrderIdempotencyChecks = existingSettlement !== null;
   const excludeSettlementProcessingId = existingSettlement ? existingSettlement.id : null;
   const historicalProcessingCutoff = existingSettlement ? existingSettlement.uploadedAt : null;
   if (existingSettlement) {
@@ -757,33 +756,6 @@ export async function computeSettlementPreview(input: {
     };
   }
 
-  // Check existing OrderSales
-  const salePairs = Array.from(saleGroups.values()).map((s) => ({ orderId: s.orderId, sku: s.sku }));
-  const existingSalesSet = new Set<string>();
-  if (!skipOrderIdempotencyChecks && salePairs.length > 0) {
-    const existingSales = await db.orderSale.findMany({
-      where: {
-        marketplace,
-        OR: salePairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-      },
-    });
-    for (const sale of existingSales) {
-      existingSalesSet.add(`${sale.orderId}::${normalizeSku(sale.sku)}`);
-    }
-  }
-  if (!skipOrderIdempotencyChecks) {
-    for (const sale of saleGroups.values()) {
-      const key = `${sale.orderId}::${sale.sku}`;
-      if (existingSalesSet.has(key)) {
-        blocks.push({
-          code: 'ORDER_ALREADY_PROCESSED',
-          message: 'Order already processed by Plutus',
-          details: { orderId: sale.orderId, sku: sale.sku },
-        });
-      }
-    }
-  }
-
   // Match refunds to historical sales first; fallback for remaining refunds is handled
   // after current settlement sales get costed.
   const refundPairs = Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku }));
@@ -812,7 +784,28 @@ export async function computeSettlementPreview(input: {
       },
     });
     for (const sale of refundSaleRecords) {
-      saleRecordByKey.set(`${sale.orderId}::${normalizeSku(sale.sku)}`, sale);
+      const key = `${sale.orderId}::${normalizeSku(sale.sku)}`;
+      const current = saleRecordByKey.get(key);
+      if (!current) {
+        saleRecordByKey.set(key, {
+          orderId: sale.orderId,
+          sku: normalizeSku(sale.sku),
+          quantity: sale.quantity,
+          principalCents: sale.principalCents,
+          costManufacturingCents: sale.costManufacturingCents,
+          costFreightCents: sale.costFreightCents,
+          costDutyCents: sale.costDutyCents,
+          costMfgAccessoriesCents: sale.costMfgAccessoriesCents,
+        });
+        continue;
+      }
+
+      current.quantity += sale.quantity;
+      current.principalCents += sale.principalCents;
+      current.costManufacturingCents += sale.costManufacturingCents;
+      current.costFreightCents += sale.costFreightCents;
+      current.costDutyCents += sale.costDutyCents;
+      current.costMfgAccessoriesCents += sale.costMfgAccessoriesCents;
     }
 
     const existingReturns = await db.orderReturn.findMany({
@@ -1131,6 +1124,7 @@ export async function processSettlement(input: {
   let activeConnection = computed.updatedConnection;
 
   let cogsJournalEntryId = buildNoopJournalEntryId('COGS', computed.preview.invoiceId);
+  const noopCogsJournalEntryId = cogsJournalEntryId;
   if (computed.preview.cogsJournalEntry.lines.length > 0) {
     const cogs = await createJournalEntry(postingConnection, {
       txnDate: computed.preview.cogsJournalEntry.txnDate,
@@ -1153,6 +1147,7 @@ export async function processSettlement(input: {
   }
 
   let pnlJournalEntryId = buildNoopJournalEntryId('PNL', computed.preview.invoiceId);
+  const noopPnlJournalEntryId = pnlJournalEntryId;
   if (computed.preview.pnlJournalEntry.lines.length > 0) {
     const pnl = await createJournalEntry(postingConnection, {
       txnDate: computed.preview.pnlJournalEntry.txnDate,
@@ -1173,79 +1168,123 @@ export async function processSettlement(input: {
     }
   }
 
-  // Task 1: Atomic transaction with duplicate check inside
-  await db.$transaction(async (tx) => {
-    // Re-check for duplicates inside the transaction to prevent race conditions
-    const existingSettlement = await tx.settlementProcessing.findUnique({
-      where: { qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId },
-    });
-    if (existingSettlement) {
-      throw new Error(`Settlement already processed: ${existingSettlement.id}`);
-    }
+  try {
+    // Task 1: Atomic transaction with duplicate check inside
+    await db.$transaction(async (tx) => {
+      // Re-check for duplicates inside the transaction to prevent race conditions
+      const existingSettlement = await tx.settlementProcessing.findUnique({
+        where: { qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId },
+      });
+      if (existingSettlement) {
+        throw new Error(`Settlement already processed: ${existingSettlement.id}`);
+      }
 
-    const existingInvoice = await tx.settlementProcessing.findUnique({
-      where: {
-        marketplace_invoiceId: {
-          marketplace: computed.preview.marketplace,
-          invoiceId: computed.preview.invoiceId,
+      const existingInvoice = await tx.settlementProcessing.findUnique({
+        where: {
+          marketplace_invoiceId: {
+            marketplace: computed.preview.marketplace,
+            invoiceId: computed.preview.invoiceId,
+          },
         },
-      },
-    });
-    if (existingInvoice) {
-      throw new Error(`Invoice already processed: ${existingInvoice.id}`);
-    }
-
-    const processing = await tx.settlementProcessing.create({
-      data: {
-        marketplace: computed.preview.marketplace,
-        qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId,
-        settlementDocNumber: computed.preview.settlementDocNumber,
-        settlementPostedDate: new Date(`${computed.preview.settlementPostedDate}T00:00:00Z`),
-        invoiceId: computed.preview.invoiceId,
-        processingHash: computed.preview.processingHash,
-        sourceFilename: input.sourceFilename,
-        qboCogsJournalEntryId: cogsJournalEntryId,
-        qboPnlReclassJournalEntryId: pnlJournalEntryId,
-      },
-    });
-
-    if (computed.preview.sales.length > 0) {
-      // Task 2: Use createMany for bulk inserts
-      await tx.orderSale.createMany({
-        data: computed.preview.sales.map((sale) => ({
-          marketplace: computed.preview.marketplace,
-          orderId: sale.orderId,
-          sku: sale.sku,
-          saleDate: new Date(`${sale.date}T00:00:00Z`),
-          quantity: sale.quantity,
-          principalCents: sale.principalCents,
-          costManufacturingCents: sale.costByComponentCents.manufacturing,
-          costFreightCents: sale.costByComponentCents.freight,
-          costDutyCents: sale.costByComponentCents.duty,
-          costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
-          settlementProcessingId: processing.id,
-        })),
       });
+      if (existingInvoice) {
+        throw new Error(`Invoice already processed: ${existingInvoice.id}`);
+      }
+
+      const processing = await tx.settlementProcessing.create({
+        data: {
+          marketplace: computed.preview.marketplace,
+          qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId,
+          settlementDocNumber: computed.preview.settlementDocNumber,
+          settlementPostedDate: new Date(`${computed.preview.settlementPostedDate}T00:00:00Z`),
+          invoiceId: computed.preview.invoiceId,
+          processingHash: computed.preview.processingHash,
+          sourceFilename: input.sourceFilename,
+          qboCogsJournalEntryId: cogsJournalEntryId,
+          qboPnlReclassJournalEntryId: pnlJournalEntryId,
+        },
+      });
+
+      if (computed.preview.sales.length > 0) {
+        // Task 2: Use createMany for bulk inserts
+        await tx.orderSale.createMany({
+          data: computed.preview.sales.map((sale) => ({
+            marketplace: computed.preview.marketplace,
+            orderId: sale.orderId,
+            sku: sale.sku,
+            saleDate: new Date(`${sale.date}T00:00:00Z`),
+            quantity: sale.quantity,
+            principalCents: sale.principalCents,
+            costManufacturingCents: sale.costByComponentCents.manufacturing,
+            costFreightCents: sale.costByComponentCents.freight,
+            costDutyCents: sale.costByComponentCents.duty,
+            costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
+            settlementProcessingId: processing.id,
+          })),
+        });
+      }
+
+      if (computed.preview.returns.length > 0) {
+        await tx.orderReturn.createMany({
+          data: computed.preview.returns.map((ret) => ({
+            marketplace: computed.preview.marketplace,
+            orderId: ret.orderId,
+            sku: ret.sku,
+            returnDate: new Date(`${ret.date}T00:00:00Z`),
+            quantity: ret.quantity,
+            principalCents: ret.principalCents,
+            costManufacturingCents: ret.costByComponentCents.manufacturing,
+            costFreightCents: ret.costByComponentCents.freight,
+            costDutyCents: ret.costByComponentCents.duty,
+            costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
+            settlementProcessingId: processing.id,
+          })),
+        });
+      }
+    });
+  } catch (error) {
+    let cleanupConnection = activeConnection ? activeConnection : postingConnection;
+    const cleanupErrors: string[] = [];
+
+    if (pnlJournalEntryId !== noopPnlJournalEntryId) {
+      try {
+        const deleted = await deleteJournalEntry(cleanupConnection, pnlJournalEntryId);
+        if (deleted.updatedConnection) {
+          cleanupConnection = deleted.updatedConnection;
+        }
+      } catch (cleanupError) {
+        cleanupErrors.push(
+          cleanupError instanceof Error
+            ? `Failed to delete P&L JE ${pnlJournalEntryId}: ${cleanupError.message}`
+            : `Failed to delete P&L JE ${pnlJournalEntryId}: ${String(cleanupError)}`,
+        );
+      }
     }
 
-    if (computed.preview.returns.length > 0) {
-      await tx.orderReturn.createMany({
-        data: computed.preview.returns.map((ret) => ({
-          marketplace: computed.preview.marketplace,
-          orderId: ret.orderId,
-          sku: ret.sku,
-          returnDate: new Date(`${ret.date}T00:00:00Z`),
-          quantity: ret.quantity,
-          principalCents: ret.principalCents,
-          costManufacturingCents: ret.costByComponentCents.manufacturing,
-          costFreightCents: ret.costByComponentCents.freight,
-          costDutyCents: ret.costByComponentCents.duty,
-          costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
-          settlementProcessingId: processing.id,
-        })),
-      });
+    if (cogsJournalEntryId !== noopCogsJournalEntryId) {
+      try {
+        const deleted = await deleteJournalEntry(cleanupConnection, cogsJournalEntryId);
+        if (deleted.updatedConnection) {
+          cleanupConnection = deleted.updatedConnection;
+        }
+      } catch (cleanupError) {
+        cleanupErrors.push(
+          cleanupError instanceof Error
+            ? `Failed to delete COGS JE ${cogsJournalEntryId}: ${cleanupError.message}`
+            : `Failed to delete COGS JE ${cogsJournalEntryId}: ${String(cleanupError)}`,
+        );
+      }
     }
-  });
+
+    if (cleanupErrors.length > 0) {
+      const originalMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to persist settlement processing: ${originalMessage}. Cleanup failed: ${cleanupErrors.join(' | ')}`,
+      );
+    }
+
+    throw error;
+  }
 
   return {
     result: {

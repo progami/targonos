@@ -212,9 +212,21 @@ export function buildPnlJournalLines(
   };
 
   for (const [bucketKey, perBrand] of Object.entries(pnlAllocationsByBucket)) {
-    const parentAccountId = mapping[bucketKey];
+    // Ads must stay on the parent account: settlement JEs post ads to the mapped parent
+    // and we intentionally do not reclass ads into brand sub-accounts.
+    if (bucketKey === 'amazonAdvertisingCosts') {
+      continue;
+    }
+
     const bucketMeta = bucketMetaByKey[bucketKey];
-    if (!parentAccountId || !bucketMeta) continue;
+    if (!bucketMeta) {
+      throw new Error(`Unhandled P&L bucket key: ${bucketKey}`);
+    }
+
+    const parentAccountId = mapping[bucketKey];
+    if (!parentAccountId) {
+      throw new Error(`Missing parent account mapping for P&L bucket: ${bucketKey}`);
+    }
     const label = bucketMeta.label;
 
     for (const [brand, cents] of Object.entries(perBrand)) {

@@ -387,6 +387,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
         {
           PostedDate: '2026-01-16T12:00:00.000Z',
           AmazonOrderId: 'ORDER-1',
+          MarketplaceName: 'Amazon.co.uk',
           ShipmentItemList: [
             {
               SellerSKU: 'SKU-1',
@@ -441,6 +442,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
         {
           PostedDate: '2026-01-16T12:00:00.000Z',
           AmazonOrderId: 'ORDER-2',
+          MarketplaceName: 'Amazon.co.uk',
           ShipmentItemAdjustmentList: [
             {
               SellerSKU: 'SKU-2',
@@ -496,6 +498,7 @@ test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch
           {
             PostedDate: '2026-01-16T12:00:00.000Z',
             AmazonOrderId: 'ORDER-3',
+            MarketplaceName: 'Amazon.co.uk',
             ShipmentItemList: [
               {
                 SellerSKU: 'SKU-3',

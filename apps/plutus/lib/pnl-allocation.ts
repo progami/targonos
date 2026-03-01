@@ -39,6 +39,25 @@ export function classifyPnlBucket(description: string): PnlBucketKey | null {
   return null;
 }
 
+function isParentOnlySettlementMemo(description: string): boolean {
+  const normalized = description.trim();
+  if (normalized.startsWith('Amazon Sales -')) return true;
+  if (normalized.startsWith('Amazon Refunds -')) return true;
+  if (normalized.startsWith('Amazon Sales Tax -')) return true;
+  if (normalized.startsWith('Amazon Reserved Balances -')) return true;
+  if (normalized.startsWith('Split month settlement -')) return true;
+  return false;
+}
+
+function shouldRequirePnlBucketClassification(description: string): boolean {
+  const normalized = description.trim();
+  if (normalized === '') return false;
+  if (isParentOnlySettlementMemo(normalized)) return false;
+  if (normalized.startsWith('Amazon ')) return true;
+  if (/\bAWD\b/i.test(normalized)) return true;
+  return false;
+}
+
 function addCents(target: Record<string, number>, brand: string, cents: number) {
   const current = target[brand];
   target[brand] = (current === undefined ? 0 : current) + cents;
@@ -94,7 +113,12 @@ export function computePnlAllocation(
   const skuLessTotalsByBucket = new Map<PnlBucketKey, number>();
   for (const row of rows) {
     const bucket = classifyPnlBucket(row.description);
-    if (!bucket) continue;
+    if (!bucket) {
+      if (shouldRequirePnlBucketClassification(row.description)) {
+        throw new Error(`Unrecognized P&L bucket memo: ${row.description.trim()}`);
+      }
+      continue;
+    }
 
     const cents = toCents(row.net);
     if (!Number.isInteger(cents)) {
@@ -153,7 +177,9 @@ export function computePnlAllocation(
     for (const [skuRaw, cents] of Object.entries(skuAllocations)) {
       if (cents === 0) continue;
       const sku = skuRaw.trim();
-      if (sku === '') continue;
+      if (sku === '') {
+        throw new Error(`Deterministic allocation contains empty SKU for bucket ${bucket}`);
+      }
       const brand = brandResolver.getBrandForSku(sku);
       addCents(allocationsByBucket[bucket], brand, cents);
       addSkuCents(skuBreakdownByBucketBrand[bucket], brand, sku, cents);

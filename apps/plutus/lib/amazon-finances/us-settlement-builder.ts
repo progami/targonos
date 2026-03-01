@@ -157,6 +157,7 @@ function withheldChargeMemo(chargeType: string, context: 'shipment' | 'refund'):
 
 function chargeTypeMemoForRefund(input: { chargeType: string; brandLabel: string }): string | null {
   if (input.chargeType === 'Principal') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
+  if (input.chargeType === 'RestockingFee') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
   if (input.chargeType === 'ShippingCharge') return `Amazon Refunds - Refunded Shipping - ${input.brandLabel}`;
   if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
   if (input.chargeType === 'ShippingTax') return null;
