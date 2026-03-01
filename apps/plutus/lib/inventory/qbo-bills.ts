@@ -381,13 +381,26 @@ export function buildInventoryEventsFromMappings(
     });
 
     for (const line of sortedLines) {
+      const knownNonInventoryComponent =
+        line.component === 'warehousing3pl' ||
+        line.component === 'warehouseAmazonFc' ||
+        line.component === 'warehousingAmazonFc' ||
+        line.component === 'warehouseAwd' ||
+        line.component === 'warehousingAwd' ||
+        line.component === 'productExpenses';
+
       if (
         line.component !== 'manufacturing' &&
         line.component !== 'freight' &&
         line.component !== 'duty' &&
         line.component !== 'mfgAccessories'
       ) {
-        continue;
+        if (knownNonInventoryComponent) {
+          continue;
+        }
+        throw new Error(
+          `Unsupported bill mapping component: billId=${mapping.qboBillId} lineId=${line.qboLineId} component=${line.component}`,
+        );
       }
 
       const component = line.component as InventoryComponent;

@@ -380,7 +380,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
     });
   }
 
-  const groupStartedAfterIso = computeGroupStartedAfterIso(startDate);
+  const groupStartedAfterIso = settlementIds.length > 0 ? postedAfterIso : computeGroupStartedAfterIso(startDate);
   const eventGroups = await listAllFinancialEventGroups({
     tenantCode: 'UK',
     startedAfterIso: groupStartedAfterIso,

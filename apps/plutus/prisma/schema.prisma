@@ -228,9 +228,10 @@ model OrderSale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([marketplace, orderId, sku])
+  @@unique([marketplace, orderId, sku, settlementProcessingId])
   @@index([settlementProcessingId])
   @@index([marketplace])
+  @@index([marketplace, orderId, sku])
   @@index([saleDate])
 }
 

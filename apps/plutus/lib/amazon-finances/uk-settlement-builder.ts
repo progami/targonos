@@ -117,9 +117,12 @@ type OrderScope = 'Domestic Orders' | 'International Orders';
 
 function orderScopeFromMarketplaceName(marketplaceName: unknown): OrderScope {
   if (typeof marketplaceName !== 'string' || marketplaceName.trim() === '') {
-    return 'Domestic Orders';
+    throw new Error('Missing MarketplaceName for UK order scope');
   }
   const normalized = marketplaceName.trim().toLowerCase();
+  if (!normalized.startsWith('amazon.')) {
+    throw new Error(`Unhandled MarketplaceName for UK order scope: ${String(marketplaceName)}`);
+  }
   if (normalized === 'amazon.co.uk') return 'Domestic Orders';
   return 'International Orders';
 }
@@ -496,6 +499,10 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         if (cents === 0) continue;
 
         if (chargeType === 'Principal') {
+          principalCents += cents;
+          continue;
+        }
+        if (chargeType === 'RestockingFee') {
           principalCents += cents;
           continue;
         }
