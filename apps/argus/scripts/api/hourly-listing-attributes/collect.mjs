@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const REPO_ROOT = path.resolve(__dirname, '../../../../')
+const REPO_ROOT = path.resolve(__dirname, '../../../../../')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 
 const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Listing Attributes (API)'
@@ -389,6 +389,204 @@ function parsePricing(pricingPayload) {
   }
 }
 
+function parseItemOffers(itemOffersPayload) {
+  const summary = itemOffersPayload?.Summary ?? {}
+  const offers = Array.isArray(itemOffersPayload?.Offers) ? itemOffersPayload.Offers : []
+  const lowestPrices = Array.isArray(summary?.LowestPrices) ? summary.LowestPrices : []
+  const buyBoxPrices = Array.isArray(summary?.BuyBoxPrices) ? summary.BuyBoxPrices : []
+  const numberOfOffers = Array.isArray(summary?.NumberOfOffers) ? summary.NumberOfOffers : []
+  const buyBoxEligibleOffers = Array.isArray(summary?.BuyBoxEligibleOffers) ? summary.BuyBoxEligibleOffers : []
+
+  const readAmount = (priceNode, key) => {
+    const amount = priceNode?.[key]?.Amount
+    return amount ?? ''
+  }
+
+  const readCurrency = (priceNode, key) => {
+    const currency = priceNode?.[key]?.CurrencyCode
+    return currency ?? ''
+  }
+
+  const findPrice = (items, predicate) => {
+    for (const item of items) {
+      if (predicate(item)) return item
+    }
+    return null
+  }
+
+  const firstNonEmpty = (...values) => {
+    for (const value of values) {
+      if (value !== null && value !== undefined && String(value).trim() !== '') return value
+    }
+    return ''
+  }
+
+  const buyBoxPrice = findPrice(
+    buyBoxPrices,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+  ) ?? buyBoxPrices[0] ?? null
+
+  const lowestFbaPrice = findPrice(
+    lowestPrices,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+      && String(entry?.fulfillmentChannel ?? '').toLowerCase() === 'amazon'
+  )
+  const lowestMfnPrice = findPrice(
+    lowestPrices,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+      && String(entry?.fulfillmentChannel ?? '').toLowerCase() === 'merchant'
+  )
+
+  const countOffers = (items, predicate) => {
+    let total = 0
+    for (const item of items) {
+      if (!predicate(item)) continue
+      const raw = item?.OfferCount ?? item?.Count
+      const value = Number(raw)
+      if (Number.isFinite(value)) total += value
+    }
+    return total
+  }
+
+  const offersFba = countOffers(
+    numberOfOffers,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+      && String(entry?.fulfillmentChannel ?? '').toLowerCase() === 'amazon'
+  )
+  const offersMfn = countOffers(
+    numberOfOffers,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+      && String(entry?.fulfillmentChannel ?? '').toLowerCase() === 'merchant'
+  )
+  const buyBoxEligibleOfferCount = countOffers(
+    buyBoxEligibleOffers,
+    (entry) => String(entry?.condition ?? '').toLowerCase() === 'new'
+  )
+
+  let featuredOfferCount = 0
+  let primeOfferCount = 0
+  let fbaOfferCount = 0
+  const uniqueSellers = new Set()
+  for (const offer of offers) {
+    if (offer?.IsFeaturedMerchant === true) featuredOfferCount += 1
+    if (offer?.PrimeInformation?.IsPrime === true) primeOfferCount += 1
+    if (offer?.IsFulfilledByAmazon === true) fbaOfferCount += 1
+    const sellerId = String(offer?.SellerId ?? '').trim()
+    if (sellerId) uniqueSellers.add(sellerId)
+  }
+
+  const buyBoxWinner = findPrice(
+    offers,
+    (offer) => offer?.IsBuyBoxWinner === true
+  )
+
+  const totalOfferCountRaw = Number(summary?.TotalOfferCount)
+  const totalOfferCount = Number.isFinite(totalOfferCountRaw) ? totalOfferCountRaw : ''
+
+  const buyBoxPriceCurrency = firstNonEmpty(
+    readCurrency(buyBoxPrice, 'LandedPrice'),
+    readCurrency(buyBoxPrice, 'ListingPrice')
+  )
+  const lowestOfferCurrency = firstNonEmpty(
+    readCurrency(lowestFbaPrice, 'LandedPrice'),
+    readCurrency(lowestFbaPrice, 'ListingPrice'),
+    readCurrency(lowestMfnPrice, 'LandedPrice'),
+    readCurrency(lowestMfnPrice, 'ListingPrice')
+  )
+
+  return {
+    listPrice: summary?.ListPrice?.Amount ?? '',
+    listPriceCurrency: summary?.ListPrice?.CurrencyCode ?? '',
+    buyBoxLandedPrice: readAmount(buyBoxPrice, 'LandedPrice'),
+    buyBoxListingPrice: readAmount(buyBoxPrice, 'ListingPrice'),
+    buyBoxShippingPrice: readAmount(buyBoxPrice, 'Shipping'),
+    buyBoxPriceCurrency,
+    lowestFbaLandedPrice: readAmount(lowestFbaPrice, 'LandedPrice'),
+    lowestFbaListingPrice: readAmount(lowestFbaPrice, 'ListingPrice'),
+    lowestFbaShippingPrice: readAmount(lowestFbaPrice, 'Shipping'),
+    lowestMfnLandedPrice: readAmount(lowestMfnPrice, 'LandedPrice'),
+    lowestMfnListingPrice: readAmount(lowestMfnPrice, 'ListingPrice'),
+    lowestMfnShippingPrice: readAmount(lowestMfnPrice, 'Shipping'),
+    lowestOfferCurrency,
+    totalOfferCount,
+    offersFba,
+    offersMfn,
+    buyBoxEligibleOfferCount,
+    buyBoxWinnerSellerId: buyBoxWinner?.SellerId ?? '',
+    buyBoxWinnerIsFba: buyBoxWinner?.IsFulfilledByAmazon ?? '',
+    buyBoxWinnerIsPrime: buyBoxWinner?.PrimeInformation?.IsPrime ?? '',
+    buyBoxWinnerIsFeatured: buyBoxWinner?.IsFeaturedMerchant ?? '',
+    buyBoxWinnerFeedbackCount: buyBoxWinner?.SellerFeedbackRating?.FeedbackCount ?? '',
+    buyBoxWinnerPositiveFeedbackPct: buyBoxWinner?.SellerFeedbackRating?.SellerPositiveFeedbackRating ?? '',
+    featuredOfferCount,
+    primeOfferCount,
+    fbaOfferCount,
+    uniqueSellerCount: uniqueSellers.size,
+  }
+}
+
+function parseListingMonitoringFields(listing) {
+  const offers = Array.isArray(listing?.offers) ? listing.offers : []
+  const fulfillmentAvailability = Array.isArray(listing?.fulfillmentAvailability)
+    ? listing.fulfillmentAvailability
+    : []
+  const issues = Array.isArray(listing?.issues) ? listing.issues : []
+
+  let ownB2cPrice = ''
+  let ownB2cCurrency = ''
+  let ownB2bPrice = ''
+  let ownB2bCurrency = ''
+  const offerTypes = []
+  const offerAudienceValues = []
+
+  for (const offer of offers) {
+    const offerType = String(offer?.offerType ?? '').trim()
+    if (offerType) offerTypes.push(offerType)
+
+    const audienceValue = String(offer?.audience?.value ?? '').trim()
+    if (audienceValue) offerAudienceValues.push(audienceValue)
+
+    if (String(offerType).toUpperCase() === 'B2C') {
+      ownB2cPrice = offer?.price?.amount ?? ''
+      ownB2cCurrency = offer?.price?.currencyCode ?? offer?.price?.currency ?? ''
+    }
+    if (String(offerType).toUpperCase() === 'B2B') {
+      ownB2bPrice = offer?.price?.amount ?? ''
+      ownB2bCurrency = offer?.price?.currencyCode ?? offer?.price?.currency ?? ''
+    }
+  }
+
+  const fulfillmentChannels = []
+  let fulfillmentQuantityTotal = 0
+  for (const availability of fulfillmentAvailability) {
+    const channel = String(availability?.fulfillmentChannelCode ?? '').trim()
+    if (channel) fulfillmentChannels.push(channel)
+
+    const quantity = Number(availability?.quantity)
+    if (Number.isFinite(quantity)) fulfillmentQuantityTotal += quantity
+  }
+
+  const issueCodes = []
+  for (const issue of issues) {
+    const code = String(issue?.code ?? '').trim()
+    if (code) issueCodes.push(code)
+  }
+
+  return {
+    ownOfferB2cPrice: ownB2cPrice,
+    ownOfferB2cCurrency: ownB2cCurrency,
+    ownOfferB2bPrice: ownB2bPrice,
+    ownOfferB2bCurrency: ownB2bCurrency,
+    ownOfferTypes: sortedPipe(offerTypes),
+    ownOfferAudiences: sortedPipe(offerAudienceValues),
+    ownFulfillmentChannels: sortedPipe(fulfillmentChannels),
+    ownFulfillmentChannelCount: uniq(fulfillmentChannels).length,
+    ownFulfillmentQuantityTotal: fulfillmentQuantityTotal,
+    ownIssueCount: issues.length,
+    ownIssueCodes: sortedPipe(issueCodes),
+  }
+}
+
 function sortRows(rows) {
   rows.sort((a, b) => {
     if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
@@ -559,6 +757,16 @@ async function collectRows(sp, marketplaceId, sellerId) {
       },
     })
     const pricing = parsePricing(pricingPayload)
+    const itemOffersPayload = await sp.callAPI({
+      operation: 'getItemOffers',
+      endpoint: 'productPricing',
+      path: { Asin: asin },
+      query: {
+        MarketplaceId: marketplaceId,
+        ItemCondition: 'New',
+      },
+    })
+    const itemOffers = parseItemOffers(itemOffersPayload)
 
     const catalog = await fetchCatalog(sp, marketplaceId, asin, ['summaries', 'attributes', 'images', 'relationships', 'salesRanks', 'classifications', 'identifiers'])
 
@@ -590,9 +798,12 @@ async function collectRows(sp, marketplaceId, sellerId) {
     const size = pickFirstString(attributes.size, catalogSummary?.size)
     const material = pickFirstString(attributes.material)
     const variationTheme = pickFirstString(attributes.variation_theme)
-    const bulletPoints = extractStrings(attributes.bullet_point).join(' | ')
-    const description = extractStrings(attributes.product_description).join(' | ')
-    const backendTerms = ownerType === 'our' ? extractStrings(attributes.generic_keyword).join(' | ') : ''
+    const bulletPointValues = extractStrings(attributes.bullet_point)
+    const descriptionValues = extractStrings(attributes.product_description)
+    const backendTermValues = ownerType === 'our' ? extractStrings(attributes.generic_keyword) : []
+    const bulletPoints = bulletPointValues.join(' | ')
+    const description = descriptionValues.join(' | ')
+    const backendTerms = backendTermValues.join(' | ')
 
     const imageUrlsList = collectCatalogImageUrls(catalog, listingSummary?.mainImage?.link)
     const imageUrls = imageUrlsList.join(' | ')
@@ -602,6 +813,7 @@ async function collectRows(sp, marketplaceId, sellerId) {
     const relationships = parseRelationships(catalog)
     const relatedAsins = uniq([...relationships.parentAsins, ...relationships.childAsins])
     const statusValues = Array.isArray(listingSummary?.status) ? uniq(listingSummary.status).sort() : []
+    const listingMonitoring = parseListingMonitoringFields(listing)
 
     rows.push({
       snapshot_timestamp_utc: snapshotTimestampUtc,
@@ -625,14 +837,56 @@ async function collectRows(sp, marketplaceId, sellerId) {
       bullet_points: bulletPoints,
       description,
       backend_terms: backendTerms,
+      title_length: title ? title.length : '',
+      bullet_count: bulletPointValues.length,
+      description_length: description ? description.length : '',
+      backend_terms_count: ownerType === 'our' ? backendTermValues.length : '',
       image_count: imageUrlsList.length,
       image_urls: imageUrls,
       landed_price: pricing.landedPrice,
       listing_price: pricing.listingPrice,
       shipping_price: pricing.shippingPrice,
       price_currency: pricing.currency,
+      list_price: itemOffers.listPrice,
+      list_price_currency: itemOffers.listPriceCurrency,
+      buy_box_landed_price: itemOffers.buyBoxLandedPrice,
+      buy_box_listing_price: itemOffers.buyBoxListingPrice,
+      buy_box_shipping_price: itemOffers.buyBoxShippingPrice,
+      buy_box_price_currency: itemOffers.buyBoxPriceCurrency,
+      lowest_fba_landed_price: itemOffers.lowestFbaLandedPrice,
+      lowest_fba_listing_price: itemOffers.lowestFbaListingPrice,
+      lowest_fba_shipping_price: itemOffers.lowestFbaShippingPrice,
+      lowest_mfn_landed_price: itemOffers.lowestMfnLandedPrice,
+      lowest_mfn_listing_price: itemOffers.lowestMfnListingPrice,
+      lowest_mfn_shipping_price: itemOffers.lowestMfnShippingPrice,
+      lowest_offer_currency: itemOffers.lowestOfferCurrency,
+      total_offer_count: itemOffers.totalOfferCount,
       offers_any: pricing.offersAny,
       offers_new: pricing.offersNew,
+      offers_fba: itemOffers.offersFba,
+      offers_mfn: itemOffers.offersMfn,
+      buybox_eligible_offer_count: itemOffers.buyBoxEligibleOfferCount,
+      buybox_winner_seller_id: itemOffers.buyBoxWinnerSellerId,
+      buybox_winner_is_fba: itemOffers.buyBoxWinnerIsFba,
+      buybox_winner_is_prime: itemOffers.buyBoxWinnerIsPrime,
+      buybox_winner_is_featured: itemOffers.buyBoxWinnerIsFeatured,
+      buybox_winner_feedback_count: itemOffers.buyBoxWinnerFeedbackCount,
+      buybox_winner_positive_feedback_pct: itemOffers.buyBoxWinnerPositiveFeedbackPct,
+      featured_offer_count: itemOffers.featuredOfferCount,
+      prime_offer_count: itemOffers.primeOfferCount,
+      fba_offer_count: itemOffers.fbaOfferCount,
+      unique_seller_count: itemOffers.uniqueSellerCount,
+      own_offer_b2c_price: ownerType === 'our' ? listingMonitoring.ownOfferB2cPrice : '',
+      own_offer_b2c_currency: ownerType === 'our' ? listingMonitoring.ownOfferB2cCurrency : '',
+      own_offer_b2b_price: ownerType === 'our' ? listingMonitoring.ownOfferB2bPrice : '',
+      own_offer_b2b_currency: ownerType === 'our' ? listingMonitoring.ownOfferB2bCurrency : '',
+      own_offer_types: ownerType === 'our' ? listingMonitoring.ownOfferTypes : '',
+      own_offer_audiences: ownerType === 'our' ? listingMonitoring.ownOfferAudiences : '',
+      own_fulfillment_channels: ownerType === 'our' ? listingMonitoring.ownFulfillmentChannels : '',
+      own_fulfillment_channel_count: ownerType === 'our' ? listingMonitoring.ownFulfillmentChannelCount : '',
+      own_fulfillment_quantity_total: ownerType === 'our' ? listingMonitoring.ownFulfillmentQuantityTotal : '',
+      own_issue_count: ownerType === 'our' ? listingMonitoring.ownIssueCount : '',
+      own_issue_codes: ownerType === 'our' ? listingMonitoring.ownIssueCodes : '',
       root_bsr_rank: pricing.rootRank,
       root_bsr_category_id: pricing.rootCategoryId,
       sub_bsr_rank: pricing.subRank,
