@@ -4,6 +4,7 @@
 # Finds existing tabs in Chrome and refreshes them.
 # If no tab exists, creates one. Lightweight — no Claude API calls.
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/sc-keepalive.log"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Keepalive ping" >> "$LOG"
@@ -57,8 +58,39 @@ end tell
 APPLESCRIPT
   )
   if [[ "$SC_URL" == *"signin"* ]]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive EXPIRED — login required" >> "$LOG"
-    osascript -e 'display notification "SC session expired — login required" with title "Keepalive"' 2>/dev/null
+    echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive EXPIRED — attempting relogin" >> "$LOG"
+    # Activate the signin tab so relogin.sh operates on it
+    osascript -e '
+    tell application "Google Chrome"
+      repeat with w in windows
+        repeat with i from 1 to (count of tabs of w)
+          if URL of tab i of w contains "signin" then
+            set active tab index of w to i
+            return
+          end if
+        end repeat
+      end repeat
+    end tell
+    '
+    if bash "$SCRIPT_DIR/relogin.sh"; then
+      echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive RESTORED via relogin" >> "$LOG"
+      # Navigate back to SC home after relogin
+      osascript -e '
+      tell application "Google Chrome"
+        repeat with w in windows
+          repeat with i from 1 to (count of tabs of w)
+            if URL of tab i of w contains "sellercentral.amazon.com" then
+              set URL of tab i of w to "https://sellercentral.amazon.com/home"
+              return
+            end if
+          end repeat
+        end repeat
+      end tell
+      '
+    else
+      echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive RELOGIN FAILED" >> "$LOG"
+      osascript -e 'display notification "SC session expired — relogin failed" with title "Keepalive"' 2>/dev/null
+    fi
   else
     echo "$(date '+%Y-%m-%d %H:%M:%S') — SC Keepalive OK" >> "$LOG"
   fi

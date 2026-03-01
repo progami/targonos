@@ -10,6 +10,7 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Account Health Dashboard"
 DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Voice of the Customer"
 CSV="$DEST_AH/account-health.csv"
@@ -51,9 +52,30 @@ tell application "Google Chrome"
 end tell
 ')
 if [[ "$PAGE_URL" != *"sellercentral.amazon.com"* ]] || [[ "$PAGE_URL" == *"signin"* ]]; then
-  log "ABORT: Seller Central session expired"
-  osascript -e 'display notification "Account Health: SC session expired — login required" with title "Daily Monitor"' 2>/dev/null
-  exit 1
+  log "SC session expired — attempting relogin"
+  if bash "$SCRIPT_DIR/../relogin.sh"; then
+    log "Relogin successful — retrying navigation"
+    osascript -e '
+    tell application "Google Chrome"
+      set w to first window
+      repeat with i from 1 to (count of tabs of w)
+        if URL of tab i of w contains "sellercentral.amazon.com" then
+          set active tab index of w to i
+          set URL of tab i of w to "https://sellercentral.amazon.com/performance/dashboard"
+          return
+        end if
+      end repeat
+      tell active tab of w
+        set URL to "https://sellercentral.amazon.com/performance/dashboard"
+      end tell
+    end tell
+    '
+    sleep 20
+  else
+    log "ABORT: Relogin failed"
+    osascript -e 'display notification "Account Health: relogin failed" with title "Daily Monitor"' 2>/dev/null
+    exit 1
+  fi
 fi
 
 # --- Extract Dashboard Metrics ---
