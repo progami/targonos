@@ -27,9 +27,6 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 ## Testing
 
-- Test via Chrome browser at `https://os.targonglobal.com/<app>`
-- Do not test on localhost
-- **CRITICAL: Always test changes in Chrome BEFORE creating any PR** - Verify your changes work visually before committing
 - Run the repo checks relevant to your changes (e.g., lint/type-check/tests) before opening PRs.
 
 ## Git Workflow
@@ -52,16 +49,15 @@ Example: `fix(talos): use presigned URL for PO document uploads [claude]`
 
 Once work is complete:
 
-1. **Test in browser** - Verify changes work in Chrome before proceeding
-2. **PR to dev** - Create a pull request targeting the `dev` branch
-3. **Wait for GitHub CI to pass** - Do not proceed until all checks are green
-4. **Review PR feedback (dev PR)** - Always read and address PR reviews/comments from anyone before merging
-5. **Merge to dev** - Merge the PR yourself without waiting for approval
-6. **PR to main** - Create a pull request from `dev` to `main` (PR must come from `dev` branch or CI will fail)
-7. **Wait for GitHub CI to pass** - Ensure all checks pass on the main PR
-8. **Review PR feedback (main PR)** - Always read and address PR reviews/comments from anyone before merging
-9. **Merge to main** - Merge the PR yourself without waiting for approval
-10. **Delete merged branches** - Delete all feature/fix branches you created after they are merged (both remote and local)
+1. **PR to dev** - Create a pull request targeting the `dev` branch
+2. **Wait for GitHub CI to pass** - Do not proceed until all checks are green
+3. **Review PR feedback (dev PR)** - Always read and address PR reviews/comments from anyone before merging
+4. **Merge to dev** - Merge the PR yourself without waiting for approval
+5. **PR to main** - Create a pull request from `dev` to `main` (PR must come from `dev` branch or CI will fail)
+6. **Wait for GitHub CI to pass** - Ensure all checks pass on the main PR
+7. **Review PR feedback (main PR)** - Always read and address PR reviews/comments from anyone before merging
+8. **Merge to main** - Merge the PR yourself without waiting for approval
+9. **Delete merged branches** - Delete all feature/fix branches you created after they are merged (both remote and local)
 
 Always wait for CI to pass before merging. Always read and address PR reviews/comments from anyone before merging (applies to both the dev PR and the dev → main PR). Merge PRs yourself without requiring approval. Always clean up your branches after merging.
 
