@@ -153,12 +153,12 @@ function classifyDocNumber(docNumber: string): TargetKind {
   if (first === 'P') return 'pnl';
 
   if (!isSettlementDocNumber(stripped)) {
-    if (/US-/i.test(stripped)) return 'unknown';
+    if (/UK-/i.test(stripped)) return 'unknown';
     return 'unknown';
   }
 
   const meta = parseSettlementDocNumber(stripped);
-  if (meta.marketplace.id !== 'amazon.com') return 'unknown';
+  if (meta.marketplace.id !== 'amazon.co.uk') return 'unknown';
   return 'settlement';
 }
 
@@ -202,7 +202,7 @@ async function main(): Promise<void> {
   const { db } = await import('@/lib/db');
   const { fetchJournalEntries, fetchJournalEntryById, deleteJournalEntry } = await import('@/lib/qbo/api');
   const { getQboConnection, saveServerQboConnection } = await import('@/lib/qbo/connection-store');
-  const { syncUsSettlementsFromSpApiFinances } = await import('@/lib/amazon-finances/us-settlement-sync');
+  const { syncUkSettlementsFromSpApiFinances } = await import('@/lib/amazon-finances/uk-settlement-sync');
 
   const connection = await getQboConnection();
   if (!connection) {
@@ -215,8 +215,8 @@ async function main(): Promise<void> {
 
   const processingRows = await db.settlementProcessing.findMany({
     where: {
-      marketplace: 'amazon.com',
-      settlementDocNumber: { contains: 'US-' },
+      marketplace: 'amazon.co.uk',
+      settlementDocNumber: { contains: 'UK-' },
       settlementPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
@@ -231,8 +231,8 @@ async function main(): Promise<void> {
 
   const rollbackRows = await db.settlementRollback.findMany({
     where: {
-      marketplace: 'amazon.com',
-      settlementDocNumber: { contains: 'US-' },
+      marketplace: 'amazon.co.uk',
+      settlementDocNumber: { contains: 'UK-' },
       settlementPostedDate: { gte: rangeStart, lte: rangeEnd },
     },
     select: {
@@ -245,37 +245,22 @@ async function main(): Promise<void> {
     },
   });
 
-  const qboIdsToDelete = new Set<string>();
   const invoiceIdsToDelete = new Set<string>();
   const auditUploadsMaybeEmpty = new Set<string>();
 
   for (const row of processingRows) {
-    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
-    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
-      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
-    }
     invoiceIdsToDelete.add(row.invoiceId);
     invoiceIdsToDelete.add(row.settlementDocNumber);
   }
 
   for (const row of rollbackRows) {
-    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
-    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
-      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
-    }
     invoiceIdsToDelete.add(row.invoiceId);
     invoiceIdsToDelete.add(row.settlementDocNumber);
   }
 
-  // QBO search by DocNumber contains "US-" catches:
-  // - settlement JEs (DocNumber contains a US settlement id)
-  // - processing JEs when invoiceId embeds a settlement id (e.g. CUS-... / PUS-...)
+  // QBO search by DocNumber contains "UK-" catches:
+  // - settlement JEs (DocNumber contains a UK settlement id)
+  // - processing JEs when invoiceId embeds a settlement id (e.g. CUK-... / PUK-...)
   // It does NOT catch processing JEs for numeric invoiceIds (e.g. C18299627).
   const qboSearchResults: Array<{ id: string; txnDate: string; docNumber: string }> = [];
 
@@ -285,7 +270,7 @@ async function main(): Promise<void> {
     const page = await fetchJournalEntries(activeConnection, {
       startDate,
       endDate,
-      docNumberContains: 'US-',
+      docNumberContains: 'UK-',
       maxResults: queryPageSize,
       startPosition,
     });
@@ -301,10 +286,6 @@ async function main(): Promise<void> {
     if (qboSearchResults.length >= page.totalCount) break;
     if (page.journalEntries.length === 0) break;
     startPosition += page.journalEntries.length;
-  }
-
-  for (const r of qboSearchResults) {
-    qboIdsToDelete.add(r.id);
   }
 
   const targets: DeletionTarget[] = [];
@@ -407,7 +388,7 @@ async function main(): Promise<void> {
           },
           plan: deletionPlan,
           next: {
-            command: 'pnpm -C apps/plutus exec tsx scripts/us-settlement-reset-spapi.ts --apply --start-date <YYYY-MM-DD> [--end-date <YYYY-MM-DD>]',
+            command: 'pnpm -C apps/plutus exec tsx scripts/uk-settlement-reset-spapi.ts --apply --start-date <YYYY-MM-DD> [--end-date <YYYY-MM-DD>]',
           },
         },
         null,
@@ -502,7 +483,7 @@ async function main(): Promise<void> {
   const deletedCount = deletions.filter((d) => d.ok && !d.skipped).length;
   const skippedCount = deletions.filter((d) => d.skipped).length;
 
-  // DB cleanup (Plutus only) — remove processed/rollback records and invoice audit rows for this US range.
+  // DB cleanup (Plutus only) — remove processed/rollback records and invoice audit rows for this UK range.
   await db.settlementProcessing.deleteMany({
     where: { id: { in: processingRows.map((r) => r.id) } },
   });
@@ -511,7 +492,7 @@ async function main(): Promise<void> {
   });
 
   const affectedUploadIds = await db.auditDataRow.findMany({
-    where: { invoiceId: { in: Array.from(invoiceIdsToDelete) }, market: { equals: 'us', mode: 'insensitive' } },
+    where: { invoiceId: { in: Array.from(invoiceIdsToDelete) }, market: { equals: 'uk', mode: 'insensitive' } },
     select: { uploadId: true },
     distinct: ['uploadId'],
   });
@@ -520,7 +501,13 @@ async function main(): Promise<void> {
   }
 
   await db.auditDataRow.deleteMany({
-    where: { invoiceId: { in: Array.from(invoiceIdsToDelete) }, market: { equals: 'us', mode: 'insensitive' } },
+    where: {
+      invoiceId: { in: Array.from(invoiceIdsToDelete) },
+      OR: [
+        { market: { equals: 'uk', mode: 'insensitive' } },
+        { market: { contains: 'amazon.co.uk', mode: 'insensitive' } },
+      ],
+    },
   });
 
   for (const uploadId of auditUploadsMaybeEmpty) {
@@ -534,7 +521,7 @@ async function main(): Promise<void> {
 
   let resyncResult: unknown = null;
   if (options.resync) {
-    resyncResult = await syncUsSettlementsFromSpApiFinances({
+    resyncResult = await syncUkSettlementsFromSpApiFinances({
       startDate,
       endDate,
       postToQbo: true,

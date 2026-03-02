@@ -3,7 +3,6 @@ import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
   listAllFinancialEventGroups,
-  listSettlementEventGroupsFromTransactions,
 } from '@/lib/amazon-finances/sp-api-finances';
 import {
   buildSettlementAuditCsvBytes,
@@ -379,11 +378,12 @@ async function validateUkSettlementCashAccountCurrencies(input: {
   needPaymentAccount: boolean;
   bankAccountId: string;
   paymentAccountId: string;
+  homeCurrencyCode: string;
 }): Promise<{ updatedConnection?: QboConnection }> {
   const accountsResult = await fetchAccounts(input.connection, { includeInactive: true });
   const accountById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
 
-  function requireAccountCurrency(accountId: string, role: 'Transfer to Bank' | 'Payment to Amazon'): void {
+  function requireAccountCurrency(accountId: string, role: 'Transfer to Bank' | 'Payment to Amazon', expectedCurrency: string): void {
     const account = accountById.get(accountId);
     if (!account) {
       throw new Error(`Settlement mapping account not found in QBO for ${role}: ${accountId}`);
@@ -393,18 +393,22 @@ async function validateUkSettlementCashAccountCurrencies(input: {
     if (currency === '') {
       throw new Error(`Settlement mapping account currency missing for ${role}: ${accountId} (${account.Name})`);
     }
-    if (currency !== 'GBP') {
+    if (currency !== expectedCurrency) {
       throw new Error(
-        `Settlement mapping currency mismatch for ${role}: expected GBP account, got ${currency} (${account.Name} / ${accountId})`,
+        `Settlement mapping currency mismatch for ${role}: expected ${expectedCurrency} account, got ${currency} (${account.Name} / ${accountId})`,
       );
     }
   }
 
   if (input.needBankAccount) {
-    requireAccountCurrency(input.bankAccountId, 'Transfer to Bank');
+    requireAccountCurrency(input.bankAccountId, 'Transfer to Bank', 'GBP');
   }
   if (input.needPaymentAccount) {
-    requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon');
+    const expected = input.homeCurrencyCode.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(expected)) {
+      throw new Error(`Missing home currency for settlement mapping validation: ${input.homeCurrencyCode}`);
+    }
+    requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon', expected);
   }
 
   return { updatedConnection: accountsResult.updatedConnection };
@@ -432,25 +436,10 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   const postedAfterIso = computePostedAfterIso(startDate);
   const postedBeforeIso = computePostedBeforeIso(endDate);
 
+  // UK listTransactions can be extremely slow/throttled for large ranges. We only need transactions
+  // when the caller explicitly targets settlementIds; otherwise, financial event groups are the
+  // canonical driver for settlement periods.
   let settlementToGroupId: Map<string, string>;
-  if (settlementIds.length > 0) {
-    settlementToGroupId = new Map<string, string>();
-    for (const settlementId of Array.from(new Set(settlementIds)).sort()) {
-      const eventGroupId = await findFinancialEventGroupIdForSettlementId({
-        tenantCode: 'UK',
-        settlementId,
-        postedAfterIso,
-        postedBeforeIso,
-      });
-      settlementToGroupId.set(settlementId, eventGroupId);
-    }
-  } else {
-    settlementToGroupId = await listSettlementEventGroupsFromTransactions({
-      tenantCode: 'UK',
-      postedAfterIso,
-      postedBeforeIso,
-    });
-  }
 
   const groupStartedAfterIso = settlementIds.length > 0 ? postedAfterIso : computeGroupStartedAfterIso(startDate);
   const eventGroups = await listAllFinancialEventGroups({
@@ -467,6 +456,40 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   }
 
   if (settlementIds.length > 0) {
+    settlementToGroupId = new Map<string, string>();
+    for (const settlementId of Array.from(new Set(settlementIds)).sort()) {
+      const eventGroupId = await findFinancialEventGroupIdForSettlementId({
+        tenantCode: 'UK',
+        settlementId,
+        postedAfterIso,
+        postedBeforeIso,
+      });
+      settlementToGroupId.set(settlementId, eventGroupId);
+    }
+  } else {
+    settlementToGroupId = new Map<string, string>();
+    const postedAfterMs = new Date(postedAfterIso).getTime();
+    const postedBeforeMs = new Date(postedBeforeIso).getTime();
+
+    for (const group of eventGroups) {
+      if (!isClosedFinancialEventGroup(group)) continue;
+
+      const groupId = group.FinancialEventGroupId;
+      if (typeof groupId !== 'string' || groupId.trim() === '') continue;
+
+      const endTs = group.FinancialEventGroupEnd;
+      if (typeof endTs !== 'string' || endTs.trim() === '') continue;
+      const endMs = new Date(endTs).getTime();
+      if (Number.isNaN(endMs)) continue;
+      if (endMs < postedAfterMs) continue;
+      if (endMs > postedBeforeMs) continue;
+
+      // Synthetic settlement id: stable, unique, and still shows the canonical SP-API group id in the result.
+      settlementToGroupId.set(`EG-${groupId}`, groupId);
+    }
+  }
+
+  if (settlementIds.length > 0) {
     for (const [settlementId, eventGroupId] of settlementToGroupId.entries()) {
       const eventGroup = groupById.get(eventGroupId);
       if (!eventGroup) {
@@ -476,15 +499,6 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
         throw new Error(`Settlement is not closed yet: ${settlementId} (${String(eventGroup.ProcessingStatus ?? 'unknown')})`);
       }
     }
-  } else {
-    const closedSettlementToGroupId = new Map<string, string>();
-    for (const [settlementId, eventGroupId] of settlementToGroupId.entries()) {
-      const eventGroup = groupById.get(eventGroupId);
-      if (!eventGroup) continue;
-      if (!isClosedFinancialEventGroup(eventGroup)) continue;
-      closedSettlementToGroupId.set(settlementId, eventGroupId);
-    }
-    settlementToGroupId = closedSettlementToGroupId;
   }
 
   const bundles: SettlementDraftBundle[] = [];
@@ -545,17 +559,6 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
 
   const mapping = await loadUkSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
 
-  const currencyValidation = await validateUkSettlementCashAccountCurrencies({
-    connection: activeConnection,
-    needBankAccount,
-    needPaymentAccount,
-    bankAccountId: mapping.bankAccountId,
-    paymentAccountId: mapping.paymentAccountId,
-  });
-  if (currencyValidation.updatedConnection) {
-    activeConnection = currencyValidation.updatedConnection;
-  }
-
   const preferencesResult = await fetchPreferences(activeConnection);
   if (preferencesResult.updatedConnection) {
     activeConnection = preferencesResult.updatedConnection;
@@ -566,6 +569,18 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
     : '';
   if (!/^[A-Z]{3}$/.test(homeCurrencyCode)) {
     throw new Error('Missing home currency in QBO preferences');
+  }
+
+  const currencyValidation = await validateUkSettlementCashAccountCurrencies({
+    connection: activeConnection,
+    needBankAccount,
+    needPaymentAccount,
+    bankAccountId: mapping.bankAccountId,
+    paymentAccountId: mapping.paymentAccountId,
+    homeCurrencyCode,
+  });
+  if (currencyValidation.updatedConnection) {
+    activeConnection = currencyValidation.updatedConnection;
   }
 
   const exchangeRateByTxnDate = new Map<string, number>();

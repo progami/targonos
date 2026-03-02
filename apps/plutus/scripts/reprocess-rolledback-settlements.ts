@@ -7,6 +7,7 @@ import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 type CliOptions = {
   invoiceId: string | null;
   marketplace: string | null;
+  amazonEnvPath: string | null;
   apply: boolean;
   plutusEnvPath: string;
 };
@@ -48,9 +49,21 @@ async function loadPlutusEnvFile(filePath: string): Promise<void> {
   }
 }
 
+async function loadAmazonEnvFile(filePath: string): Promise<void> {
+  const raw = await fs.readFile(filePath, 'utf8');
+  for (const line of raw.split(/\r?\n/)) {
+    const parsed = parseDotenvLine(line);
+    if (!parsed) continue;
+    const isAmazon = parsed.key.startsWith('AMAZON_') || parsed.key.startsWith('AWS_');
+    if (!isAmazon) continue;
+    process.env[parsed.key] = parsed.value;
+  }
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let invoiceId: string | null = null;
   let marketplace: string | null = null;
+  let amazonEnvPath: string | null = null;
   let apply = false;
   let plutusEnvPath = '.env.local';
 
@@ -82,6 +95,15 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--amazon-env') {
+      const next = argv[i + 1];
+      if (!next) throw new Error('Missing value for --amazon-env');
+      amazonEnvPath = next.trim();
+      if (amazonEnvPath === '') amazonEnvPath = null;
+      i += 2;
+      continue;
+    }
+
     if (arg === '--apply') {
       apply = true;
       i += 1;
@@ -91,7 +113,7 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { invoiceId, marketplace, apply, plutusEnvPath };
+  return { invoiceId, marketplace, amazonEnvPath, apply, plutusEnvPath };
 }
 
 async function loadAuditRowsFromDb(input: {
@@ -265,6 +287,9 @@ async function resolveSettlementJournalEntryId(input: {
 export async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   await loadPlutusEnvFile(options.plutusEnvPath);
+  if (options.amazonEnvPath !== null) {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
 
   const connectionMaybe = await getQboConnection();
   if (!connectionMaybe) throw new Error('Not connected to QBO (missing server connection file)');
