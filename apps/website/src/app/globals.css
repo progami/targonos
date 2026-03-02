@@ -407,3 +407,118 @@ body.tg-home .tg-ring--core {
     animation: none;
   }
 }
+
+/* ============================================
+   Caelum Star — Product page
+   ============================================ */
+
+/* Small uppercase section label */
+.cs-overline {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Dark hero gradient */
+.cs-hero {
+  background: linear-gradient(
+    180deg,
+    #001220 0%,
+    #002C51 30%,
+    #0B273F 68%,
+    rgb(var(--bg)) 100%
+  );
+}
+
+/* Ambient colored light leaks on the hero */
+.cs-hero-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse 60% 50% at 75% 25%, rgba(0, 194, 185, 0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 60% at 15% 80%, rgba(0, 44, 81, 0.12) 0%, transparent 60%);
+}
+
+/* Bottom gradient that dissolves the hero into page bg */
+.cs-hero-fade {
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(to bottom, transparent, rgb(var(--bg)));
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Teal glow behind floating product image */
+.cs-product-glow {
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(0, 194, 185, 0.2) 0%,
+    rgba(0, 44, 81, 0.06) 50%,
+    transparent 70%
+  );
+  filter: blur(60px);
+  z-index: 0;
+  animation: cs-glow-pulse 5s ease-in-out infinite;
+}
+
+@keyframes cs-glow-pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-product-glow {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Dark section: navy gradient with fades into page bg */
+.cs-dark-section--navy {
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--bg)),
+    #0B273F 100px,
+    #002C51 220px,
+    #002C51 calc(100% - 220px),
+    #0B273F calc(100% - 100px),
+    rgb(var(--bg))
+  );
+}
+
+/* Dark section: deeper navy for sustainability */
+.cs-dark-section--deep {
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--bg)),
+    #0B273F 100px,
+    #001a33 220px,
+    #001a33 calc(100% - 220px),
+    #0B273F calc(100% - 100px),
+    rgb(var(--bg))
+  );
+}
+
+/* Tabular number styling for stat callouts */
+.cs-stat-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+}
+
+/* Dark gradient CTA card */
+.cs-support-card {
+  background: linear-gradient(135deg, #002C51 0%, #0B273F 100%);
+  border: 1px solid rgba(0, 194, 185, 0.1);
+  box-shadow:
+    0 20px 60px rgba(0, 44, 81, 0.18),
+    0 0 0 1px rgba(0, 194, 185, 0.04);
+}
