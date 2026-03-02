@@ -1,5 +1,6 @@
 import {
   fetchInboundShipmentItemsByShipmentId,
+  listTransactionsForFinancialEventGroupId,
   listTransactionsForSettlementId,
 } from '@/lib/amazon-finances/sp-api-finances';
 import type { TenantCode } from '@/lib/amazon-finances/types';
@@ -20,13 +21,27 @@ const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
 type AwdFeeType = 'STORAGE_FEE' | 'PROCESSING_FEE' | 'TRANSPORTATION_FEE';
 type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
 
-const SETTLEMENT_ID_FILENAME_PATTERN = /spapi-finances-settlement-([A-Za-z0-9]+)/i;
+const SETTLEMENT_ID_FILENAME_PATTERN = /spapi-finances-settlement-([A-Za-z0-9][A-Za-z0-9_-]*)/i;
 const FBA_INBOUND_LOOKBACK_DAYS = 60;
 
 function tenantCodeForMarketplace(marketplace: MarketplaceId): TenantCode {
   if (marketplace === 'amazon.com') return 'US';
   if (marketplace === 'amazon.co.uk') return 'UK';
   throw new Error(`Unsupported marketplace: ${marketplace}`);
+}
+
+function isSkuLessParentOnlyFbaFeeMemo(description: string): boolean {
+  const normalized = description.trim();
+  if (normalized === 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment') return true;
+  if (normalized === 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment - Domestic Orders') return true;
+  return false;
+}
+
+function isSkuLessParentOnlyInboundTransportationMemo(description: string): boolean {
+  const normalized = description.trim();
+  if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Fee - Domestic Orders') return true;
+  if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders') return true;
+  return false;
 }
 
 function parseIsoDay(value: string): Date {
@@ -450,12 +465,19 @@ async function buildInboundTransportationAllocationFromSpApi(input: {
   const postedBeforeIso = minIsoTimestamp(requestedPostedBeforeIso, nowMinusFiveMinutesIso());
   const tenantCode = tenantCodeForMarketplace(input.marketplace);
 
-  const transactions = await listTransactionsForSettlementId({
-    tenantCode,
-    settlementId,
-    postedAfterIso,
-    postedBeforeIso,
-  });
+  const transactions = settlementId.startsWith('EG-')
+    ? await listTransactionsForFinancialEventGroupId({
+        tenantCode,
+        eventGroupId: settlementId.slice('EG-'.length),
+        postedAfterIso,
+        postedBeforeIso,
+      })
+    : await listTransactionsForSettlementId({
+        tenantCode,
+        settlementId,
+        postedAfterIso,
+        postedBeforeIso,
+      });
 
   const extraction = extractInboundTransportationServiceFeeCharges(transactions);
   const issues = [...extraction.issues];
@@ -520,15 +542,15 @@ const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
   amazonSellerFees:
     'Amazon Seller Fees are allocated to SKU/brand when a SKU is present in the settlement data. SKU-less seller fee lines (e.g., subscription fees) stay in the parent account.',
   amazonFbaFees:
-    'Missing deterministic source for SKU-less Amazon FBA Fees. Provide shipment-level fee/API data with deterministic SKU linkage.',
+    'SKU-less Amazon FBA Fees stay in the parent account unless we can deterministically link them to SKUs (e.g., inbound transportation via SP-API shipment item data).',
   amazonStorageFees:
-    'Missing deterministic source for SKU-less Amazon Storage Fees. Provide storage fee detail report/API data at SKU level.',
+    'Amazon Storage Fees are posted without SKU-level allocation when a SKU is not present in the settlement data.',
   amazonAdvertisingCosts:
     'Amazon Advertising Costs are posted without SKU-level allocation.',
   amazonPromotions:
-    'Missing deterministic source for SKU-less Amazon Promotions. Provide promotions chargeback detail report/API data at SKU level.',
+    'Amazon Promotions are posted without SKU-level allocation when a SKU is not present in the settlement data.',
   amazonFbaInventoryReimbursement:
-    'Missing deterministic source for SKU-less Amazon FBA Inventory Reimbursement. Provide reimbursement detail report/API data at SKU level.',
+    'Amazon FBA Inventory Reimbursement is posted without SKU-level allocation when a SKU is not present in the settlement data.',
   warehousingAwd:
     'Missing deterministic source for SKU-less AWD fees. Upload AWD fee report covering the invoice range and matching fee types (e.g., STORAGE_FEE / PROCESSING_FEE / TRANSPORTATION_FEE).',
 };
@@ -561,14 +583,20 @@ export async function buildDeterministicSkuAllocations(input: {
     for (const [description, cents] of totalsByDescription.entries()) {
       if (cents === 0) continue;
       if (isInboundTransportationMemoDescription(description)) {
+        if (isSkuLessParentOnlyInboundTransportationMemo(description)) {
+          // SKU-less and not deterministically allocatable with current SP-API transaction data.
+          continue;
+        }
         inboundExpectedTotalCents += cents;
         continue;
       }
 
-      issues.push({
-        bucket: 'amazonFbaFees',
-        message: `Unhandled SKU-less FBA fee memo '${description}' (${cents} cents)`,
-      });
+      if (isSkuLessParentOnlyFbaFeeMemo(description)) {
+        // SKU-less adjustments stay in the parent account (no deterministic SKU linkage).
+        continue;
+      }
+
+      issues.push({ bucket: 'amazonFbaFees', message: `Unhandled SKU-less FBA fee memo '${description}' (${cents} cents)` });
     }
 
     if (inboundExpectedTotalCents !== 0) {
@@ -619,29 +647,10 @@ export async function buildDeterministicSkuAllocations(input: {
     }
   }
 
-  const storageFeesSkuLessTotal = skuLessTotalsByBucket.amazonStorageFees;
-  if (storageFeesSkuLessTotal !== undefined && storageFeesSkuLessTotal !== 0) {
-    issues.push({
-      bucket: 'amazonStorageFees',
-      message: `SKU-less Amazon Storage Fees require deterministic source data (${storageFeesSkuLessTotal} cents)`,
-    });
-  }
-
-  const promotionsSkuLessTotal = skuLessTotalsByBucket.amazonPromotions;
-  if (promotionsSkuLessTotal !== undefined && promotionsSkuLessTotal !== 0) {
-    issues.push({
-      bucket: 'amazonPromotions',
-      message: `SKU-less Amazon Promotions require deterministic source data (${promotionsSkuLessTotal} cents)`,
-    });
-  }
-
-  const reimbursementSkuLessTotal = skuLessTotalsByBucket.amazonFbaInventoryReimbursement;
-  if (reimbursementSkuLessTotal !== undefined && reimbursementSkuLessTotal !== 0) {
-    issues.push({
-      bucket: 'amazonFbaInventoryReimbursement',
-      message: `SKU-less Amazon FBA Inventory Reimbursement requires deterministic source data (${reimbursementSkuLessTotal} cents)`,
-    });
-  }
+  // Note: other SKU-less buckets (storage fees, promotions, reimbursements) intentionally stay in
+  // the parent account unless we have a deterministic source for SKU linkage. We do not emit
+  // issues for these buckets to avoid blocking processing on data that is not available from the
+  // settlement feed.
 
   const awdSkuLessTotal = skuLessTotalsByBucket.warehousingAwd;
   if (awdSkuLessTotal !== undefined && awdSkuLessTotal !== 0) {
