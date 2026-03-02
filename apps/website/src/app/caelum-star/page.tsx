@@ -12,54 +12,40 @@ export const metadata = {
 export default function CaelumStarPage() {
   return (
     <div>
-      {/* ─── HERO ─── */}
       <section className="cs-hero relative min-h-[70vh] overflow-hidden">
         <div className="cs-hero-ambient" />
         <Container className="relative z-10">
           <div className="flex flex-col items-center pb-20 pt-16 text-center md:pb-28 md:pt-24">
             <Reveal delay={0}>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                <span className="inline-flex items-center rounded-pill border border-white/15 bg-white/[0.07] px-3 py-1 text-xs font-semibold text-white/70">
-                  Targon
-                </span>
-                <span className="inline-flex items-center rounded-pill border border-accent/30 bg-accent/[0.12] px-3 py-1 text-xs font-semibold text-accent">
-                  Caelum Star
-                </span>
-              </div>
+              <Image
+                src="/brand/cs/logo-on-dark.webp"
+                alt="Caelum Star"
+                width={520}
+                height={120}
+                className="h-auto w-[220px] max-w-full opacity-90 md:w-[260px]"
+                priority
+              />
             </Reveal>
 
-            <Reveal delay={40}>
-              <div className="mt-6">
-                <Image
-                  src="/brand/cs/logo-on-dark.webp"
-                  alt="CS Caelum Star"
-                  width={520}
-                  height={120}
-                  className="h-auto w-[260px] max-w-full opacity-90 md:w-[300px]"
-                  priority
-                />
-              </div>
-            </Reveal>
-
-            <Reveal delay={80}>
+            <Reveal delay={60}>
               <h1 className="mt-6 text-balance text-[clamp(2.8rem,6vw,4.5rem)] font-bold leading-[0.92] tracking-[-0.04em] text-white">
                 Extra&#x2011;large dust sheets.
               </h1>
             </Reveal>
 
-            <Reveal delay={160}>
+            <Reveal delay={120}>
               <p className="mt-5 max-w-md text-pretty text-lg leading-relaxed text-white/50">
                 Select your region to see products and pricing.
               </p>
             </Reveal>
 
-            <Reveal delay={240}>
+            <Reveal delay={180}>
               <div className="mt-12 grid w-full max-w-2xl gap-5 sm:grid-cols-2">
                 <Link
                   href="/caelum-star/us"
                   className="group flex flex-col items-center rounded-[20px] border border-white/[0.08] bg-white/[0.04] px-8 py-10 text-center transition-all duration-300 hover:border-accent/25 hover:bg-white/10"
                 >
-                  <span className="text-5xl">🇺🇸</span>
+                  <span className="text-5xl">&#x1F1FA;&#x1F1F8;</span>
                   <span className="mt-4 text-xl font-bold tracking-tight text-white">
                     United States
                   </span>
@@ -75,7 +61,7 @@ export default function CaelumStarPage() {
                   href="/caelum-star/uk"
                   className="group flex flex-col items-center rounded-[20px] border border-white/[0.08] bg-white/[0.04] px-8 py-10 text-center transition-all duration-300 hover:border-accent/25 hover:bg-white/10"
                 >
-                  <span className="text-5xl">🇬🇧</span>
+                  <span className="text-5xl">&#x1F1EC;&#x1F1E7;</span>
                   <span className="mt-4 text-xl font-bold tracking-tight text-white">
                     United Kingdom
                   </span>
@@ -89,7 +75,7 @@ export default function CaelumStarPage() {
               </div>
             </Reveal>
 
-            <Reveal delay={320}>
+            <Reveal delay={240}>
               <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
                 <Button asChild variant="outline" className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]">
                   <Link href="/products">Compare packs</Link>
