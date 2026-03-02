@@ -59,7 +59,7 @@ export function ProductCard({ product }: { product: Product }) {
             </a>
           </Button>
           <Link
-            href={`/products/${product.slug}`}
+            href={`/caelum-star/products/${product.slug}`}
             className="text-sm font-medium text-muted underline-offset-4 hover:text-ink hover:underline"
           >
             Details

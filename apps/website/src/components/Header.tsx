@@ -19,8 +19,8 @@ const homeNavLinks = [
 
 const siteNavLinks = [
   { label: 'Caelum Star', href: '/caelum-star' },
-  { label: 'Packs', href: '/products' },
-  { label: 'Where to buy', href: '/where-to-buy' },
+  { label: 'Packs', href: '/caelum-star/products' },
+  { label: 'Where to buy', href: '/caelum-star/where-to-buy' },
   { label: 'Support', href: '/support' },
   { label: 'About', href: '/about' }
 ];
