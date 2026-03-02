@@ -20,6 +20,7 @@ import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { buildPlutusSettlementDocNumber, isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   createJournalEntry,
+  fetchAccounts,
   fetchJournalEntries,
   findJournalEntryAttachmentIdByFileName,
   uploadJournalEntryAttachment,
@@ -335,6 +336,43 @@ async function loadUsSettlementPostingMapping(input: {
   };
 }
 
+async function validateUsSettlementCashAccountCurrencies(input: {
+  connection: QboConnection;
+  needBankAccount: boolean;
+  needPaymentAccount: boolean;
+  bankAccountId: string;
+  paymentAccountId: string;
+}): Promise<{ updatedConnection?: QboConnection }> {
+  const accountsResult = await fetchAccounts(input.connection, { includeInactive: true });
+  const accountById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
+
+  function requireAccountCurrency(accountId: string, role: 'Transfer to Bank' | 'Payment to Amazon'): void {
+    const account = accountById.get(accountId);
+    if (!account) {
+      throw new Error(`Settlement mapping account not found in QBO for ${role}: ${accountId}`);
+    }
+
+    const currency = account.CurrencyRef?.value ? account.CurrencyRef.value.trim().toUpperCase() : '';
+    if (currency === '') {
+      throw new Error(`Settlement mapping account currency missing for ${role}: ${accountId} (${account.Name})`);
+    }
+    if (currency !== 'USD') {
+      throw new Error(
+        `Settlement mapping currency mismatch for ${role}: expected USD account, got ${currency} (${account.Name} / ${accountId})`,
+      );
+    }
+  }
+
+  if (input.needBankAccount) {
+    requireAccountCurrency(input.bankAccountId, 'Transfer to Bank');
+  }
+  if (input.needPaymentAccount) {
+    requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon');
+  }
+
+  return { updatedConnection: accountsResult.updatedConnection };
+}
+
 export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlementSyncInput): Promise<UsSpApiSettlementSyncResult> {
   const startDate = requireIsoDay(input.startDate, 'startDate');
   const endDate = input.endDate === undefined ? undefined : requireIsoDay(input.endDate, 'endDate');
@@ -469,6 +507,17 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
   const processingByInvoiceId = new Map(existingProcessings.map((p) => [p.invoiceId, p]));
 
   const mapping = await loadUsSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
+
+  const currencyValidation = await validateUsSettlementCashAccountCurrencies({
+    connection: activeConnection,
+    needBankAccount,
+    needPaymentAccount,
+    bankAccountId: mapping.bankAccountId,
+    paymentAccountId: mapping.paymentAccountId,
+  });
+  if (currencyValidation.updatedConnection) {
+    activeConnection = currencyValidation.updatedConnection;
+  }
 
   const segments: UsSpApiSettlementSyncSegmentResult[] = [];
 

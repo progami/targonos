@@ -18,6 +18,8 @@
     "settlements:us:rematch": "tsx scripts/us-settlement-rematch.ts",
     "settlements:us:reconcile:spapi": "tsx scripts/us-settlement-reconcile-spapi.ts",
     "settlements:us:ingest:spapi": "tsx scripts/us-settlement-ingest-spapi.ts",
+    "settlements:backfill-docnumbers": "tsx scripts/backfill-settlement-doc-numbers.ts",
+    "settlements:backfill-fx": "tsx scripts/backfill-settlement-exchange-rates.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:push": "prisma db push --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",

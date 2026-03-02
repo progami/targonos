@@ -20,7 +20,10 @@ import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { buildPlutusSettlementDocNumber, isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   createJournalEntry,
+  fetchAccounts,
+  fetchExchangeRate,
   fetchJournalEntries,
+  fetchPreferences,
   findJournalEntryAttachmentIdByFileName,
   uploadJournalEntryAttachment,
   type QboConnection,
@@ -338,6 +341,43 @@ async function loadUkSettlementPostingMapping(input: {
   };
 }
 
+async function validateUkSettlementCashAccountCurrencies(input: {
+  connection: QboConnection;
+  needBankAccount: boolean;
+  needPaymentAccount: boolean;
+  bankAccountId: string;
+  paymentAccountId: string;
+}): Promise<{ updatedConnection?: QboConnection }> {
+  const accountsResult = await fetchAccounts(input.connection, { includeInactive: true });
+  const accountById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
+
+  function requireAccountCurrency(accountId: string, role: 'Transfer to Bank' | 'Payment to Amazon'): void {
+    const account = accountById.get(accountId);
+    if (!account) {
+      throw new Error(`Settlement mapping account not found in QBO for ${role}: ${accountId}`);
+    }
+
+    const currency = account.CurrencyRef?.value ? account.CurrencyRef.value.trim().toUpperCase() : '';
+    if (currency === '') {
+      throw new Error(`Settlement mapping account currency missing for ${role}: ${accountId} (${account.Name})`);
+    }
+    if (currency !== 'GBP') {
+      throw new Error(
+        `Settlement mapping currency mismatch for ${role}: expected GBP account, got ${currency} (${account.Name} / ${accountId})`,
+      );
+    }
+  }
+
+  if (input.needBankAccount) {
+    requireAccountCurrency(input.bankAccountId, 'Transfer to Bank');
+  }
+  if (input.needPaymentAccount) {
+    requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon');
+  }
+
+  return { updatedConnection: accountsResult.updatedConnection };
+}
+
 export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlementSyncInput): Promise<UkSpApiSettlementSyncResult> {
   const startDate = requireIsoDay(input.startDate, 'startDate');
   const endDate = input.endDate === undefined ? undefined : requireIsoDay(input.endDate, 'endDate');
@@ -472,6 +512,50 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   const processingByInvoiceId = new Map(existingProcessings.map((p) => [p.invoiceId, p]));
 
   const mapping = await loadUkSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
+
+  const currencyValidation = await validateUkSettlementCashAccountCurrencies({
+    connection: activeConnection,
+    needBankAccount,
+    needPaymentAccount,
+    bankAccountId: mapping.bankAccountId,
+    paymentAccountId: mapping.paymentAccountId,
+  });
+  if (currencyValidation.updatedConnection) {
+    activeConnection = currencyValidation.updatedConnection;
+  }
+
+  const preferencesResult = await fetchPreferences(activeConnection);
+  if (preferencesResult.updatedConnection) {
+    activeConnection = preferencesResult.updatedConnection;
+  }
+
+  const homeCurrencyCode = preferencesResult.preferences.CurrencyPrefs?.HomeCurrency?.value
+    ? preferencesResult.preferences.CurrencyPrefs.HomeCurrency.value.trim().toUpperCase()
+    : '';
+  if (!/^[A-Z]{3}$/.test(homeCurrencyCode)) {
+    throw new Error('Missing home currency in QBO preferences');
+  }
+
+  const exchangeRateByTxnDate = new Map<string, number>();
+  if (homeCurrencyCode !== 'GBP') {
+    const txnDates = Array.from(
+      new Set(
+        bundles.flatMap((bundle) => bundle.draft.segments.map((segment) => segment.txnDate)),
+      ),
+    ).sort();
+
+    for (const txnDate of txnDates) {
+      const rateResult = await fetchExchangeRate(activeConnection, {
+        sourceCurrencyCode: 'GBP',
+        targetCurrencyCode: homeCurrencyCode,
+        asOfDate: txnDate,
+      });
+      if (rateResult.updatedConnection) {
+        activeConnection = rateResult.updatedConnection;
+      }
+      exchangeRateByTxnDate.set(txnDate, rateResult.exchangeRate.Rate);
+    }
+  }
 
   const segments: UkSpApiSettlementSyncSegmentResult[] = [];
 
@@ -625,6 +709,14 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
             docNumber: buildPlutusSettlementDocNumber(jeDraft.docNumber),
             privateNote: jeDraft.privateNote,
             currencyCode: 'GBP',
+            exchangeRate: (() => {
+              if (homeCurrencyCode === 'GBP') return undefined;
+              const rate = exchangeRateByTxnDate.get(jeDraft.txnDate);
+              if (rate === undefined) {
+                throw new Error(`Missing FX rate for settlement date ${jeDraft.txnDate} (GBP->${homeCurrencyCode})`);
+              }
+              return rate;
+            })(),
             lines: jeDraft.lines.map((l) => ({
               amount: l.amount,
               postingType: l.postingType,
