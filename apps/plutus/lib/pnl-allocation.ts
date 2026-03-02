@@ -33,6 +33,12 @@ const DEFAULT_PARENT_ONLY_BUCKETS = new Set<PnlBucketKey>([
 
 const DEFAULT_SKU_LESS_PARENT_ONLY_BUCKETS = new Set<PnlBucketKey>([
   'amazonSellerFees',
+  // These buckets often contain SKU-less lines in SP-API settlement data (e.g. monthly storage fees,
+  // reimbursements, promo chargebacks). If a SKU is not present, we keep the amount in the parent
+  // account rather than guessing an allocation.
+  'amazonStorageFees',
+  'amazonPromotions',
+  'amazonFbaInventoryReimbursement',
 ]);
 
 export function classifyPnlBucket(description: string): PnlBucketKey | null {
@@ -56,6 +62,24 @@ function isParentOnlySettlementMemo(description: string): boolean {
   if (normalized.startsWith('Amazon Sales Tax -')) return true;
   if (normalized.startsWith('Amazon Reserved Balances -')) return true;
   if (normalized.startsWith('Split month settlement -')) return true;
+  return false;
+}
+
+function isSkuLessParentOnlyMemo(bucket: PnlBucketKey, description: string): boolean {
+  const normalized = description.trim();
+
+  // Pick & pack adjustments can be SKU-less. We keep them in the parent Amazon FBA Fees account
+  // (no deterministic SKU linkage available from the settlement feed).
+  if (bucket === 'amazonFbaFees') {
+    if (normalized === 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment') return true;
+    if (normalized === 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment - Domestic Orders') return true;
+
+    // Domestic-order inbound transportation fees do not currently carry shipment identifiers in
+    // SP-API transactions, so we keep them in the parent account (no SKU allocation).
+    if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Fee - Domestic Orders') return true;
+    if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders') return true;
+  }
+
   return false;
 }
 
@@ -155,7 +179,7 @@ export function computePnlAllocation(
       continue;
     }
 
-    if (skuLessParentOnlyBuckets.has(bucket)) {
+    if (skuLessParentOnlyBuckets.has(bucket) || isSkuLessParentOnlyMemo(bucket, row.description)) {
       continue;
     }
 

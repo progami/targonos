@@ -29,6 +29,7 @@ type BuildDeterministicSkuAllocations = typeof import('@/lib/plutus/fee-allocati
 
 type CliOptions = {
   invoiceId: string | null;
+  amazonEnvPath: string | null;
   includeJson: boolean;
 };
 
@@ -119,8 +120,23 @@ async function loadPlutusEnv(): Promise<void> {
   await loadEnvFile(path.join(cwd, '.env'));
 }
 
+async function loadAmazonEnvFile(filePath: string): Promise<void> {
+  const raw = await fs.readFile(filePath, 'utf8');
+  for (const line of raw.split(/\r?\n/)) {
+    const parsed = parseDotenvLine(line);
+    if (!parsed) continue;
+
+    const isAmazon = parsed.key.startsWith('AMAZON_') || parsed.key.startsWith('AWS_');
+    if (!isAmazon) continue;
+
+    if (process.env[parsed.key] !== undefined) continue;
+    process.env[parsed.key] = parsed.value;
+  }
+}
+
 function parseArgs(argv: string[]): CliOptions {
   let invoiceId: string | null = null;
+  let amazonEnvPath: string | null = null;
   let includeJson = false;
 
   let i = 0;
@@ -141,10 +157,19 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--amazon-env') {
+      const next = argv[i + 1];
+      if (!next) throw new Error('Missing value for --amazon-env');
+      amazonEnvPath = next.trim();
+      if (amazonEnvPath === '') amazonEnvPath = null;
+      i += 2;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { invoiceId, includeJson };
+  return { invoiceId, amazonEnvPath, includeJson };
 }
 
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
@@ -448,7 +473,8 @@ async function auditSettlementProcessingRow(input: {
       row.costByComponentCents.duty === 0 &&
       row.costByComponentCents.mfgAccessories === 0,
   );
-  if (zeroCostSales.length > 0) {
+  const cogsEnabled = processing.marketplace === 'amazon.com';
+  if (cogsEnabled && zeroCostSales.length > 0) {
     warnings.push(`Detected ${zeroCostSales.length} sales with principal but zero cost basis`);
   }
 
@@ -548,8 +574,6 @@ async function auditSettlementProcessingRow(input: {
 
     const pnlAllocation = computePnlAllocation(auditRows, brandResolver, {
       skuAllocationsByBucket: deterministic.skuAllocationsByBucket,
-      parentOnlyBuckets: ['amazonAdvertisingCosts'],
-      skuLessParentOnlyBuckets: ['amazonSellerFees'],
     });
     if (pnlAllocation.unallocatedSkuLessBuckets.length > 0) {
       for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
@@ -725,6 +749,9 @@ async function auditSettlementProcessingRow(input: {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   await loadPlutusEnv();
+  if (options.amazonEnvPath !== null) {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
 
   const { db } = await import('@/lib/db');
   const { buildDeterministicSkuAllocations } = await import('@/lib/plutus/fee-allocation');

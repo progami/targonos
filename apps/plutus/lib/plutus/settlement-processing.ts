@@ -773,8 +773,6 @@ export async function computeSettlementPreview(input: {
 
     pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
       skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
-      parentOnlyBuckets: ['amazonAdvertisingCosts'],
-      skuLessParentOnlyBuckets: ['amazonSellerFees'],
     });
 
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {

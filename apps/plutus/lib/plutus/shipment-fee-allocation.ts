@@ -8,6 +8,7 @@ import { allocateByWeight } from '@/lib/inventory/money';
 import { normalizeSku } from './settlement-validation';
 
 const INBOUND_TRANSPORT_FEE_PHRASE = 'inbound transportation';
+const INBOUND_TRANSPORT_FEE_CODE_FRAGMENT = 'inboundtransportation';
 const SHIPMENT_IDENTIFIER_NAMES = ['ORDER_ID', 'SHIPMENT_ID', 'INBOUND_SHIPMENT_ID'];
 
 export type InboundTransportationServiceFeeCharge = {
@@ -85,7 +86,12 @@ function isServiceFeeTransactionType(value: unknown): boolean {
 
 export function isInboundTransportationMemoDescription(description: string): boolean {
   const normalized = description.trim().toLowerCase();
-  return normalized.includes(INBOUND_TRANSPORT_FEE_PHRASE);
+  return (
+    normalized.includes(INBOUND_TRANSPORT_FEE_PHRASE) ||
+    // listTransactions (finances 2024-06-19) often uses code-like descriptions such as
+    // "FBAPostInboundTransportation" rather than a human-readable phrase.
+    normalized.includes(INBOUND_TRANSPORT_FEE_CODE_FRAGMENT)
+  );
 }
 
 function extractMoneyFromRecord(record: Record<string, unknown>): SpApiMoney | null {

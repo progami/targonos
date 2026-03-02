@@ -349,6 +349,56 @@ export async function listTransactionsForSettlementId(input: {
   return matchedTransactions;
 }
 
+export async function listTransactionsForFinancialEventGroupId(input: {
+  tenantCode: TenantCode;
+  eventGroupId: string;
+  postedAfterIso: string;
+  postedBeforeIso: string;
+}): Promise<SpApiTransaction[]> {
+  const callAmazonApi = await getCallAmazonApi();
+
+  const eventGroupId = input.eventGroupId.trim();
+  if (eventGroupId === '') {
+    throw new Error('Missing eventGroupId');
+  }
+
+  const matchedTransactions: SpApiTransaction[] = [];
+
+  let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
+  for (let page = 0; page < 500; page++) {
+    const res = await callAmazonApi<SpApiListTransactionsResponse>(input.tenantCode, {
+      operation: 'listTransactions',
+      endpoint: 'finances',
+      options: { version: '2024-06-19' },
+      query: {
+        postedAfter: input.postedAfterIso,
+        postedBefore: input.postedBeforeIso,
+        nextToken,
+      },
+    });
+
+    const txs = Array.isArray(res.transactions) ? res.transactions : [];
+    for (const tx of txs) {
+      const groupId = getRelatedIdentifierValue(tx.relatedIdentifiers, 'FINANCIAL_EVENT_GROUP_ID');
+      if (groupId !== eventGroupId) continue;
+      matchedTransactions.push(tx);
+    }
+
+    const token = res.nextToken;
+    if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error(
+        `SP-API listTransactions returned repeated nextToken while loading transactions for eventGroupId ${eventGroupId}`,
+      );
+    }
+    seenTokens.add(token);
+    nextToken = token;
+  }
+
+  return matchedTransactions;
+}
+
 export async function fetchInboundShipmentItemsByShipmentId(input: {
   tenantCode: TenantCode;
   shipmentId: string;

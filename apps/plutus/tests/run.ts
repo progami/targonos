@@ -374,15 +374,14 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
     skuToBrandName: new Map(),
   });
 
-  assert.equal(draft.segments.length, 2);
-  assert.equal(draft.segments[0]?.docNumber, 'US-251219-251231-S1');
-  assert.equal(draft.segments[1]?.docNumber, 'US-260101-260102-S2');
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments[0]?.docNumber, 'US-251219-260102-S1');
 
-  const cents = draft.segments[1]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);
 
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
-  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
+  assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
 });
 
 test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order level for shipments', () => {

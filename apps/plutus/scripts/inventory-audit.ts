@@ -174,8 +174,13 @@ async function loadAuditRowsForProcessing(input: {
   sourceFilename: string;
   processedAt: Date;
 }): Promise<{ upload: { id: string; filename: string; uploadedAt: Date } | null; rows: SettlementAuditRow[] }> {
+  // A single SP-API settlement ingest can be re-run multiple times which may create multiple AuditDataUpload rows
+  // with the same filename. Only consider uploads that actually contain rows for this invoiceId.
   const uploads = await input.db.auditDataUpload.findMany({
-    where: { filename: input.sourceFilename },
+    where: {
+      filename: input.sourceFilename,
+      rows: { some: { invoiceId: input.invoiceId } },
+    },
     orderBy: { uploadedAt: 'desc' },
     select: { id: true, filename: true, uploadedAt: true },
   });
