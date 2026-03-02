@@ -494,6 +494,7 @@ async function main(): Promise<void> {
           auditRows,
           sourceFilename: uploadFilename,
           invoiceId: segment.docNumber,
+          settlementId,
         });
         if (result.updatedConnection) connection = result.updatedConnection;
         if (!result.result.ok) {

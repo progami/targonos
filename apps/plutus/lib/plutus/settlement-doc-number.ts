@@ -88,7 +88,16 @@ export function normalizeSettlementDocNumber(docNumber: string): string {
 }
 
 export function buildPlutusSettlementDocNumber(docNumber: string): string {
-  return `${PLUTUS_DOC_PREFIX}${normalizeSettlementDocNumber(docNumber)}`;
+  const normalized = normalizeSettlementDocNumber(docNumber);
+  const prefixed = `${PLUTUS_DOC_PREFIX}${normalized}`;
+
+  // QBO DocNumber max length is 21; canonical settlement ids are 19 chars.
+  // Keep canonical ids unprefixed when prefixing would exceed the limit.
+  if (prefixed.length > 21) {
+    return normalized;
+  }
+
+  return prefixed;
 }
 
 function isoDayToCompactToken(isoDay: string, context: string): string {

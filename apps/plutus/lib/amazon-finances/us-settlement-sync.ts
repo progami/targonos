@@ -25,6 +25,7 @@ import {
   findJournalEntryAttachmentIdByFileName,
   uploadJournalEntryAttachment,
   type QboConnection,
+  type QboJournalEntry,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
@@ -142,6 +143,32 @@ async function buildSkuToBrandName(): Promise<Map<string, string>> {
   return skuToBrandName;
 }
 
+function isCanonicalSettlementDocNumber(docNumber: string): boolean {
+  const trimmedUpper = docNumber.trim().toUpperCase();
+  if (!isSettlementDocNumber(trimmedUpper)) return false;
+  return trimmedUpper === normalizeSettlementDocNumber(trimmedUpper);
+}
+
+function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
+  const aDocNumber = a.DocNumber ? a.DocNumber : '';
+  const bDocNumber = b.DocNumber ? b.DocNumber : '';
+
+  const aCanonical = isCanonicalSettlementDocNumber(aDocNumber);
+  const bCanonical = isCanonicalSettlementDocNumber(bDocNumber);
+
+  if (aCanonical && !bCanonical) return a;
+  if (bCanonical && !aCanonical) return b;
+
+  const aTxnDate = a.TxnDate ? a.TxnDate : '';
+  const bTxnDate = b.TxnDate ? b.TxnDate : '';
+
+  if (aTxnDate !== bTxnDate) {
+    return aTxnDate > bTxnDate ? a : b;
+  }
+
+  return a.Id > b.Id ? a : b;
+}
+
 async function findExistingJournalEntryIdByDocNumber(
   connection: QboConnection,
   docNumber: string,
@@ -157,18 +184,23 @@ async function findExistingJournalEntryIdByDocNumber(
   }
 
   const normalizedTarget = normalizeSettlementDocNumber(docNumber);
-  const match = existing.journalEntries.find((je) => {
+  const matches = existing.journalEntries.filter((je) => {
     const candidateDocNumber = je.DocNumber;
     if (typeof candidateDocNumber !== 'string') return false;
     if (!isSettlementDocNumber(candidateDocNumber)) return false;
     return normalizeSettlementDocNumber(candidateDocNumber) === normalizedTarget;
   });
 
-  if (!match) {
+  if (matches.length === 0) {
     return { journalEntryId: null, updatedConnection: activeConnection === connection ? undefined : activeConnection };
   }
 
-  return { journalEntryId: match.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
+  let selected = matches[0]!;
+  for (const candidate of matches.slice(1)) {
+    selected = pickPreferredSettlementEntry(selected, candidate);
+  }
+
+  return { journalEntryId: selected.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
 async function ensureJournalEntryHasSettlementEvidenceAttachments(
@@ -740,6 +772,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
             auditRows,
             sourceFilename: uploadFilename,
             invoiceId: segmentDraft.docNumber,
+            settlementId: bundle.settlementId,
           });
         if (processResult.updatedConnection) {
           activeConnection = processResult.updatedConnection;

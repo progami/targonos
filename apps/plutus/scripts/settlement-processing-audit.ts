@@ -258,63 +258,65 @@ async function loadAuditRowsForProcessing(input: {
   sourceFilename: string;
   processedAt: Date;
 }): Promise<{ upload: { id: string; filename: string; uploadedAt: Date } | null; rows: SettlementAuditRow[] }> {
+  const buildScopedRows = async (uploadId: string): Promise<SettlementAuditRow[]> => {
+    const storedRows = await input.db.auditDataRow.findMany({
+      where: {
+        uploadId,
+        invoiceId: input.invoiceId,
+      },
+      select: {
+        invoiceId: true,
+        market: true,
+        date: true,
+        orderId: true,
+        sku: true,
+        quantity: true,
+        description: true,
+        net: true,
+      },
+    });
+
+    const scoped: SettlementAuditRow[] = [];
+    for (const row of storedRows) {
+      const marketplaceId = normalizeAuditMarketToMarketplaceId(row.market);
+      if (marketplaceId !== input.marketplace) continue;
+
+      scoped.push({
+        invoiceId: row.invoiceId,
+        market: row.market,
+        date: row.date,
+        orderId: row.orderId,
+        sku: row.sku,
+        quantity: row.quantity,
+        description: row.description,
+        net: row.net / 100,
+      });
+    }
+    return scoped;
+  };
+
   const uploads = await input.db.auditDataUpload.findMany({
     where: { filename: input.sourceFilename },
     orderBy: { uploadedAt: 'desc' },
     select: { id: true, filename: true, uploadedAt: true },
   });
 
-  let chosen: { id: string; filename: string; uploadedAt: Date } | null = null;
-  for (const upload of uploads) {
-    if (upload.uploadedAt <= input.processedAt) {
-      chosen = upload;
-      break;
-    }
-  }
-
-  if (chosen === null && uploads.length > 0) {
-    chosen = uploads[0]!;
-  }
-
-  if (chosen === null) {
+  if (uploads.length === 0) {
     return { upload: null, rows: [] };
   }
 
-  const storedRows = await input.db.auditDataRow.findMany({
-    where: {
-      uploadId: chosen.id,
-      invoiceId: input.invoiceId,
-    },
-    select: {
-      invoiceId: true,
-      market: true,
-      date: true,
-      orderId: true,
-      sku: true,
-      quantity: true,
-      description: true,
-      net: true,
-    },
-  });
+  const candidates = uploads.filter((upload) => upload.uploadedAt <= input.processedAt);
+  const orderedCandidates = candidates.length > 0 ? candidates : uploads;
 
-  const scoped: SettlementAuditRow[] = [];
-  for (const row of storedRows) {
-    const marketplaceId = normalizeAuditMarketToMarketplaceId(row.market);
-    if (marketplaceId !== input.marketplace) continue;
-
-    scoped.push({
-      invoiceId: row.invoiceId,
-      market: row.market,
-      date: row.date,
-      orderId: row.orderId,
-      sku: row.sku,
-      quantity: row.quantity,
-      description: row.description,
-      net: row.net / 100,
-    });
+  let fallbackUpload: { id: string; filename: string; uploadedAt: Date } | null = orderedCandidates[0] ?? null;
+  for (const upload of orderedCandidates) {
+    const scoped = await buildScopedRows(upload.id);
+    if (scoped.length > 0) {
+      return { upload, rows: scoped };
+    }
   }
 
-  return { upload: chosen, rows: scoped };
+  return { upload: fallbackUpload, rows: [] };
 }
 
 async function auditSettlementProcessingRow(input: {
@@ -505,18 +507,9 @@ async function auditSettlementProcessingRow(input: {
   let pnlExpectedLines: LineSummary[] = [];
   if (auditRows.length > 0 && minDate !== '' && maxDate !== '') {
     const skuLessTotalsByBucket = new Map<PnlBucketKey, number>();
-    let hasAnyPrincipalSku = false;
     for (const row of auditRows) {
       const description = row.description.trim();
       const sku = row.sku.trim();
-      if (sku !== '') {
-        if (
-          description.startsWith('Amazon Sales - Principal') ||
-          description.startsWith('Amazon Refunds - Refunded Principal')
-        ) {
-          hasAnyPrincipalSku = true;
-        }
-      }
 
       const bucket = classifyPnlBucket(row.description);
       if (bucket === null) continue;
@@ -527,15 +520,6 @@ async function auditSettlementProcessingRow(input: {
         const current = skuLessTotalsByBucket.get(bucket);
         skuLessTotalsByBucket.set(bucket, (current === undefined ? 0 : current) + cents);
         continue;
-      }
-    }
-
-    if (!hasAnyPrincipalSku && skuLessTotalsByBucket.size > 0) {
-      const reliesOnPrincipalWeights = Array.from(skuLessTotalsByBucket.keys()).some(
-        (bucket) => bucket !== 'amazonAdvertisingCosts' && bucket !== 'warehousingAwd',
-      );
-      if (reliesOnPrincipalWeights) {
-        warnings.push('Invoice has SKU-less buckets but no principal SKU rows; allocations may rely on trailing/equal weights');
       }
     }
 
@@ -554,6 +538,7 @@ async function auditSettlementProcessingRow(input: {
       invoiceStartDate: minDate,
       invoiceEndDate: maxDate,
       skuToBrand: input.skuToBrand,
+      sourceFilename: processing.sourceFilename,
     });
     if (deterministic.issues.length > 0) {
       for (const issue of deterministic.issues) {
@@ -563,6 +548,8 @@ async function auditSettlementProcessingRow(input: {
 
     const pnlAllocation = computePnlAllocation(auditRows, brandResolver, {
       skuAllocationsByBucket: deterministic.skuAllocationsByBucket,
+      parentOnlyBuckets: ['amazonAdvertisingCosts'],
+      skuLessParentOnlyBuckets: ['amazonSellerFees'],
     });
     if (pnlAllocation.unallocatedSkuLessBuckets.length > 0) {
       for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
@@ -760,18 +747,10 @@ async function main(): Promise<void> {
   const skuRows = await db.sku.findMany({ include: { brand: true } });
   const skuToBrandByMarketplace = buildSkuToBrandMapsByMarketplace(skuRows);
 
-  const where = options.invoiceId
-    ? {
-        marketplace_invoiceId: {
-          marketplace: 'amazon.com',
-          invoiceId: options.invoiceId,
-        },
-      }
-    : undefined;
-
-  const processed = where
-    ? await db.settlementProcessing.findUnique({
-        where,
+  const processed = options.invoiceId
+    ? await db.settlementProcessing.findFirst({
+        where: { invoiceId: options.invoiceId },
+        orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           marketplace: true,
@@ -807,7 +786,7 @@ async function main(): Promise<void> {
         },
       });
 
-  if (processed === null && where !== undefined) {
+  if (processed === null && options.invoiceId !== null) {
     throw new Error(`SettlementProcessing not found for invoiceId=${options.invoiceId}`);
   }
 
@@ -834,21 +813,16 @@ async function main(): Promise<void> {
 
   await saveServerQboConnection(connection);
 
-  const ok = results.filter(
-    (r) => r.settlementJe.status === 'ok' && r.cogsJe.status === 'ok' && r.pnlJe.status === 'ok' && r.deterministicPnlOk,
-  );
+  const ok = results.filter((r) => r.settlementJe.status === 'ok' && r.cogsJe.status === 'ok' && r.pnlJe.status === 'ok');
   const mismatched = results.filter(
-    (r) =>
-      r.settlementJe.status !== 'ok' ||
-      r.cogsJe.status !== 'ok' ||
-      r.pnlJe.status !== 'ok' ||
-      r.deterministicPnlOk !== true,
+    (r) => r.settlementJe.status !== 'ok' || r.cogsJe.status !== 'ok' || r.pnlJe.status !== 'ok',
   );
+  const deterministicNotOk = results.filter((r) => r.deterministicPnlOk !== true);
 
   if (!options.includeJson) {
     for (const row of results) {
       const status =
-        row.settlementJe.status === 'ok' && row.cogsJe.status === 'ok' && row.pnlJe.status === 'ok' && row.deterministicPnlOk
+        row.settlementJe.status === 'ok' && row.cogsJe.status === 'ok' && row.pnlJe.status === 'ok'
           ? 'ok'
           : 'not ok';
       console.log(`${status} ${row.invoiceId} | settlement=${row.settlementJournalEntryId} cogs=${row.cogsJournalEntryId} pnl=${row.pnlJournalEntryId}`);
@@ -863,9 +837,27 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`\nTotals: ${results.length} processed | ok=${ok.length} not_ok=${mismatched.length}`);
+    console.log(
+      `\nTotals: ${results.length} processed | ok=${ok.length} not_ok=${mismatched.length} | deterministic_not_ok=${deterministicNotOk.length}`,
+    );
   } else {
-    console.log(JSON.stringify({ options, totals: { processed: results.length, ok: ok.length, notOk: mismatched.length }, results }, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          options,
+          totals: {
+            processed: results.length,
+            ok: ok.length,
+            notOk: mismatched.length,
+            deterministicOk: results.length - deterministicNotOk.length,
+            deterministicNotOk: deterministicNotOk.length,
+          },
+          results,
+        },
+        null,
+        2,
+      ),
+    );
   }
 
   if (mismatched.length > 0) {

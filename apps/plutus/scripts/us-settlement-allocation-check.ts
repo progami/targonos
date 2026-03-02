@@ -169,6 +169,8 @@ async function main(): Promise<void> {
 
   const pnl = computePnlAllocation(auditRows, brandResolver, {
     skuAllocationsByBucket: deterministic.skuAllocationsByBucket,
+    parentOnlyBuckets: ['amazonAdvertisingCosts'],
+    skuLessParentOnlyBuckets: ['amazonSellerFees'],
   });
 
   const bucketTotals: Record<string, number> = {};
