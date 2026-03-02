@@ -38,7 +38,7 @@ import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
-import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { isSettlementDocNumber, normalizeSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -336,6 +336,13 @@ async function postSettlement(settlementId: string, invoiceId: string, marketpla
  * We look for YYYY-MM-DD patterns in the string.
  */
 function extractDatesFromInvoiceId(invoiceId: string): { start: string; end: string } | null {
+  if (isSettlementDocNumber(invoiceId)) {
+    const parsed = parseSettlementDocNumber(invoiceId);
+    if (parsed.periodStart !== null && parsed.periodEnd !== null) {
+      return { start: parsed.periodStart, end: parsed.periodEnd };
+    }
+  }
+
   const datePattern = /(\d{4}-\d{2}-\d{2})/g;
   const matches = invoiceId.match(datePattern);
   if (!matches || matches.length < 2) return null;

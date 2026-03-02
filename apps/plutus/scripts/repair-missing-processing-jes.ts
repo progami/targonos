@@ -247,12 +247,14 @@ async function main(): Promise<void> {
   const { db } = await import('@/lib/db');
   const { computeSettlementPreview } = (await import('@/lib/plutus/settlement-processing')) as { computeSettlementPreview: ComputeSettlementPreview };
   const { getQboConnection, saveServerQboConnection } = await import('@/lib/qbo/connection-store');
-  const { createJournalEntry, fetchJournalEntries, fetchJournalEntryById } = await import('@/lib/qbo/api');
+  const { createJournalEntry, fetchExchangeRate, fetchJournalEntries, fetchJournalEntryById, fetchPreferences } =
+    await import('@/lib/qbo/api');
 
-  let connection = await getQboConnection();
-  if (!connection) {
+  const initialConnection = await getQboConnection();
+  if (!initialConnection) {
     throw new Error('Missing QBO connection. Connect to QBO in Plutus first.');
   }
+  let connection = initialConnection;
 
   const sinceDate = new Date(`${options.since}T00:00:00.000Z`);
   const all = await db.settlementProcessing.findMany({
@@ -284,6 +286,48 @@ async function main(): Promise<void> {
     cogs: { ok: 0, noop: 0, updatedId: 0, created: 0, missing: 0, blocked: 0 },
     pnl: { ok: 0, noop: 0, updatedId: 0, created: 0, missing: 0, blocked: 0 },
   };
+
+  const exchangeRateCache = new Map<string, number | null>();
+
+  async function resolveExchangeRate(input: {
+    txnDate: string;
+    currencyCode: 'USD' | 'GBP';
+  }): Promise<number | undefined> {
+    const key = `${input.currencyCode}:${input.txnDate}`;
+    if (exchangeRateCache.has(key)) {
+      const cached = exchangeRateCache.get(key);
+      return cached === null ? undefined : cached;
+    }
+
+    const pref = await fetchPreferences(connection);
+    if (pref.updatedConnection) {
+      connection = pref.updatedConnection;
+      await saveServerQboConnection(pref.updatedConnection);
+    }
+    const homeCurrencyCode = pref.preferences.CurrencyPrefs?.HomeCurrency?.value
+      ? pref.preferences.CurrencyPrefs.HomeCurrency.value.trim().toUpperCase()
+      : '';
+    if (!/^[A-Z]{3}$/.test(homeCurrencyCode)) {
+      throw new Error('Missing home currency in QBO preferences');
+    }
+
+    if (homeCurrencyCode === input.currencyCode) {
+      exchangeRateCache.set(key, null);
+      return undefined;
+    }
+
+    const rate = await fetchExchangeRate(connection, {
+      sourceCurrencyCode: input.currencyCode,
+      targetCurrencyCode: homeCurrencyCode,
+      asOfDate: input.txnDate,
+    });
+    if (rate.updatedConnection) {
+      connection = rate.updatedConnection;
+      await saveServerQboConnection(rate.updatedConnection);
+    }
+    exchangeRateCache.set(key, rate.exchangeRate.Rate);
+    return rate.exchangeRate.Rate;
+  }
 
   for (const processing of processings) {
     const audit = await loadAuditRowsForProcessing({
@@ -326,6 +370,10 @@ async function main(): Promise<void> {
     }
 
     const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);
+    const settlementExchangeRate = await resolveExchangeRate({
+      txnDate: computed.preview.settlementPostedDate,
+      currencyCode: settlementCurrencyCode,
+    });
 
     // ---------------------------------------------------------------------
     // COGS JE repair
@@ -399,6 +447,7 @@ async function main(): Promise<void> {
               docNumber: computed.preview.cogsJournalEntry.docNumber,
               privateNote: computed.preview.cogsJournalEntry.privateNote,
               currencyCode: settlementCurrencyCode,
+              exchangeRate: settlementExchangeRate,
               lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
                 amount: fromCents(line.amountCents),
                 postingType: line.postingType,
@@ -487,6 +536,7 @@ async function main(): Promise<void> {
               docNumber: computed.preview.pnlJournalEntry.docNumber,
               privateNote: computed.preview.pnlJournalEntry.privateNote,
               currencyCode: settlementCurrencyCode,
+              exchangeRate: settlementExchangeRate,
               lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
                 amount: fromCents(line.amountCents),
                 postingType: line.postingType,

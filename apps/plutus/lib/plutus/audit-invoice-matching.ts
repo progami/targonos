@@ -1,3 +1,5 @@
+import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+
 export type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
 
 export type AuditInvoiceSummary = {
@@ -47,15 +49,14 @@ export function dateRangesOverlapIsoDay(
 }
 
 function isSettlementInvoiceId(value: string): boolean {
-  return /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i.test(value.trim());
+  return isSettlementDocNumber(value);
 }
 
 function normalizeSettlementDocNumberForInvoiceId(value: string): string {
   const trimmed = value.trim();
   if (trimmed === '') return trimmed;
-
-  const match = trimmed.match(/\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i);
-  return match ? match[0]!.toUpperCase() : trimmed;
+  if (!isSettlementDocNumber(trimmed)) return trimmed;
+  return normalizeSettlementDocNumber(trimmed);
 }
 
 function pickPreferredInvoice(candidates: AuditInvoiceSummary[]): AuditInvoiceSummary | null {
