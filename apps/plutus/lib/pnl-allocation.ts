@@ -23,7 +23,17 @@ export type BrandResolver = {
 
 export type PnlAllocationOptions = {
   skuAllocationsByBucket?: Partial<Record<PnlBucketKey, Record<string, number>>>;
+  parentOnlyBuckets?: PnlBucketKey[];
+  skuLessParentOnlyBuckets?: PnlBucketKey[];
 };
+
+const DEFAULT_PARENT_ONLY_BUCKETS = new Set<PnlBucketKey>([
+  'amazonAdvertisingCosts',
+]);
+
+const DEFAULT_SKU_LESS_PARENT_ONLY_BUCKETS = new Set<PnlBucketKey>([
+  'amazonSellerFees',
+]);
 
 export function classifyPnlBucket(description: string): PnlBucketKey | null {
   const normalized = description.trim();
@@ -109,6 +119,14 @@ export function computePnlAllocation(
     warehousingAwd: {},
   };
   const unallocatedSkuLessBuckets: Array<{ bucket: PnlBucketKey; totalCents: number; reason: string }> = [];
+  const parentOnlyBuckets = new Set<PnlBucketKey>(
+    options?.parentOnlyBuckets === undefined ? Array.from(DEFAULT_PARENT_ONLY_BUCKETS) : options.parentOnlyBuckets,
+  );
+  const skuLessParentOnlyBuckets = new Set<PnlBucketKey>(
+    options?.skuLessParentOnlyBuckets === undefined
+      ? Array.from(DEFAULT_SKU_LESS_PARENT_ONLY_BUCKETS)
+      : options.skuLessParentOnlyBuckets,
+  );
 
   const skuLessTotalsByBucket = new Map<PnlBucketKey, number>();
   for (const row of rows) {
@@ -117,6 +135,10 @@ export function computePnlAllocation(
       if (shouldRequirePnlBucketClassification(row.description)) {
         throw new Error(`Unrecognized P&L bucket memo: ${row.description.trim()}`);
       }
+      continue;
+    }
+
+    if (parentOnlyBuckets.has(bucket)) {
       continue;
     }
 
@@ -130,6 +152,10 @@ export function computePnlAllocation(
       const brand = brandResolver.getBrandForSku(skuRaw);
       addCents(allocationsByBucket[bucket], brand, cents);
       addSkuCents(skuBreakdownByBucketBrand[bucket], brand, skuRaw, cents);
+      continue;
+    }
+
+    if (skuLessParentOnlyBuckets.has(bucket)) {
       continue;
     }
 

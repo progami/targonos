@@ -27,6 +27,7 @@ const NON_BLOCKING_PROCESSING_CODES = new Set([
   'LATE_COST_ON_HAND_ZERO',
   'REFUND_ADJUSTMENT',
   'REFUND_PARTIAL',
+  'PNL_ALLOCATION_WARNING',
 ]);
 
 export function isBlockingProcessingCode(code: string): boolean {
