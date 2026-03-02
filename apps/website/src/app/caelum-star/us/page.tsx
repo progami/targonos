@@ -1,5 +1,6 @@
 import type { RegionImages } from '../CaelumStarContent';
 import { CaelumStarContent } from '../CaelumStarContent';
+import { products } from '@/content/products';
 
 export const metadata = {
   title: 'Caelum Star — US'
@@ -18,5 +19,5 @@ const usImages: RegionImages = {
 };
 
 export default function CaelumStarUSPage() {
-  return <CaelumStarContent images={usImages} />;
+  return <CaelumStarContent images={usImages} products={products} />;
 }

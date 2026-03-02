@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { portalOrigin } from '@/lib/portal'
 import { withoutBasePath } from '@/lib/utils/base-path'
@@ -25,7 +26,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
  redirect(desired)
  }
  const portalAuth = portalOrigin()
- const resolvedAppBase = resolveAppBase()
+ const resolvedAppBase = await resolveAppBase()
  if (!resolvedAppBase) {
   throw new Error('Unable to determine Talos application base URL. Configure BASE_PATH or NEXT_PUBLIC_APP_URL.')
  }
@@ -44,7 +45,7 @@ const { baseUrl, basePath, originHostname } = resolvedAppBase
  redirect(url.toString())
 }
 
-function resolveAppBase(): { baseUrl: string; basePath: string; originHostname: string } | null {
+async function resolveAppBase(): Promise<{ baseUrl: string; basePath: string; originHostname: string } | null> {
  const normalizeBasePath = (value?: string | null) => {
  if (!value) return ''
  let normalized = value.trim()
@@ -69,19 +70,73 @@ function resolveAppBase(): { baseUrl: string; basePath: string; originHostname: 
 
  const appUrlFromEnv = parseUrl(process.env.NEXT_PUBLIC_APP_URL)
  const portalUrl = parseUrl(process.env.PORTAL_AUTH_URL)
+ const headerList = await headers()
+ const requestUrlFromHeaders = resolveUrlFromHeaders(headerList)
 
- const basePath =
- normalizeBasePath(process.env.BASE_PATH) ||
- normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH) ||
- normalizeBasePath(appUrlFromEnv?.pathname ?? '')
+ const basePathCandidates = [
+  normalizeBasePath(process.env.BASE_PATH),
+  normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH),
+  normalizeBasePath(requestUrlFromHeaders?.pathname ?? ''),
+  normalizeBasePath(appUrlFromEnv?.pathname ?? ''),
+ ]
 
- const originUrl = appUrlFromEnv ?? portalUrl
+ let basePath = ''
+ for (const candidate of basePathCandidates) {
+  if (!candidate) continue
+  basePath = candidate
+  break
+ }
+
+ let originUrl = requestUrlFromHeaders
+ if (!originUrl) {
+  originUrl = appUrlFromEnv
+ }
+ if (!originUrl) {
+  originUrl = portalUrl
+ }
  if (!originUrl) {
   throw new Error('NEXT_PUBLIC_APP_URL or PORTAL_AUTH_URL must be configured for Talos login redirect.')
  }
 
  const baseUrl = `${originUrl.origin}${basePath}`
  return { baseUrl, basePath, originHostname: originUrl.hostname }
+}
+
+function resolveUrlFromHeaders(headerList: { get(name: string): string | null }): URL | null {
+ const parseUrl = (value?: string | null) => {
+  if (!value) return null
+  try {
+   return new URL(value)
+  } catch {
+   return null
+  }
+ }
+
+ const forwardedOriginRaw = headerList.get('x-forwarded-origin')
+ const forwardedOrigin = forwardedOriginRaw ? forwardedOriginRaw.split(',')[0].trim() : ''
+ if (forwardedOrigin) {
+  const parsed = parseUrl(forwardedOrigin)
+  if (parsed) return parsed
+ }
+
+ const forwardedHostRaw = headerList.get('x-forwarded-host')
+ const forwardedHost = forwardedHostRaw ? forwardedHostRaw.split(',')[0].trim() : ''
+ const forwardedProtoRaw = headerList.get('x-forwarded-proto')
+ const forwardedProto = forwardedProtoRaw ? forwardedProtoRaw.split(',')[0].trim() : 'https'
+
+ if (forwardedHost) {
+  const parsed = parseUrl(`${forwardedProto}://${forwardedHost}`)
+  if (parsed) return parsed
+ }
+
+ const hostRaw = headerList.get('host')
+ const host = hostRaw ? hostRaw.trim() : ''
+ if (host) {
+  const parsed = parseUrl(`${forwardedProto}://${host}`)
+  if (parsed) return parsed
+ }
+
+ return null
 }
 
 function buildCallback(appBase: string, basePath: string, target: string): string {

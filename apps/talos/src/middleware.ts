@@ -11,12 +11,23 @@ applyDevAuthDefaults({
   appId: 'targon',
 })
 
-function resolveAppOrigin(): string {
-  const candidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.BASE_URL,
-    process.env.NEXTAUTH_URL,
-  ]
+function resolveAppOrigin(request: NextRequest): string {
+  const candidates: Array<string | undefined> = []
+
+  const forwardedHostRaw = request.headers.get('x-forwarded-host')
+  const forwardedHost = forwardedHostRaw ? forwardedHostRaw.split(',')[0].trim() : ''
+  const forwardedProtoRaw = request.headers.get('x-forwarded-proto')
+  const forwardedProto = forwardedProtoRaw ? forwardedProtoRaw.split(',')[0].trim() : 'https'
+
+  if (forwardedHost) {
+    candidates.push(`${forwardedProto}://${forwardedHost}`)
+  }
+
+  candidates.push(request.nextUrl.origin)
+  candidates.push(request.url)
+  candidates.push(process.env.NEXT_PUBLIC_APP_URL)
+  candidates.push(process.env.BASE_URL)
+  candidates.push(process.env.NEXTAUTH_URL)
 
   for (const candidate of candidates) {
     if (!candidate) continue
@@ -130,7 +141,7 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      const origin = resolveAppOrigin()
+      const origin = resolveAppOrigin(request)
 
       const rawBasePath = (process.env.BASE_PATH ?? '').trim()
       const normalizedBasePath = rawBasePath && rawBasePath !== '/'
