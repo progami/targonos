@@ -1,5 +1,5 @@
-import type { RegionImages } from '../CaelumStarContent';
-import { CaelumStarContent } from '../CaelumStarContent';
+import type { RegionImages } from '../caelum-star/CaelumStarContent';
+import { CaelumStarContent } from '../caelum-star/CaelumStarContent';
 import { productsUK } from '@/content/products';
 
 export const metadata = {
