@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import Image from 'next/image';
 
-import { ArrowRight, ExternalLink, Check, Recycle } from 'lucide-react';
+import { ArrowRight, ExternalLink } from 'lucide-react';
 
 import { Container } from '@/components/Container';
 import { ProductFeatureCard } from '@/components/ProductFeatureCard';
 import { Button } from '@/components/Button';
 import { Reveal } from '@/components/Reveal';
-import { products } from '@/content/products';
 import { site } from '@/content/site';
+import type { Product } from '@/content/products';
 import { cn } from '@/lib/utils';
 
 export type RegionImages = {
@@ -37,7 +37,7 @@ function WideImage({
   return (
     <div
       className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm transition-all duration-500 motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1',
+        'relative w-full overflow-hidden rounded-2xl border shadow-sm',
         'aspect-[61/25]',
         className
       )}
@@ -47,7 +47,7 @@ function WideImage({
         alt={alt}
         fill
         sizes="(max-width: 1024px) 100vw, 1920px"
-        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.02]"
+        className="object-cover"
       />
     </div>
   );
@@ -65,7 +65,7 @@ function SquareImage({
   return (
     <div
       className={cn(
-        'group relative w-full overflow-hidden rounded-[28px] border bg-white/60 shadow-sm transition-all duration-500 motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1',
+        'relative w-full overflow-hidden rounded-2xl border shadow-sm',
         'aspect-square',
         className
       )}
@@ -75,64 +75,55 @@ function SquareImage({
         alt={alt}
         fill
         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 900px"
-        className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.03]"
+        className="object-cover"
       />
     </div>
   );
 }
 
-export function CaelumStarContent({ images }: { images: RegionImages }) {
+export function CaelumStarContent({
+  images,
+  products
+}: {
+  images: RegionImages;
+  products: Product[];
+}) {
   const primary = products.find((p) => p.primary);
   if (!primary) {
     throw new Error('Primary product not found.');
   }
 
-  const highlightChips = primary.highlights.slice(0, 3);
-
   return (
     <div>
-      {/* ─── HERO ─── Immersive dark gradient */}
+      {/* ─── HERO ─── */}
       <section className="cs-hero relative min-h-[70vh] overflow-hidden">
         <div className="cs-hero-ambient" />
         <Container className="relative z-10">
           <div className="grid items-center gap-10 pb-20 pt-12 md:pb-28 md:pt-20 lg:grid-cols-12">
             <div className="lg:col-span-5">
               <Reveal delay={0}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="inline-flex items-center rounded-pill border border-white/15 bg-white/[0.07] px-3 py-1 text-xs font-semibold text-white/70">
-                    {site.name}
-                  </span>
-                  <span className="inline-flex items-center rounded-pill border border-accent/30 bg-accent/[0.12] px-3 py-1 text-xs font-semibold text-accent">
-                    Caelum Star
-                  </span>
-                </div>
+                <Image
+                  src="/brand/cs/logo-on-dark.webp"
+                  alt="Caelum Star"
+                  width={520}
+                  height={120}
+                  className="h-auto w-[220px] max-w-full opacity-90 md:w-[260px]"
+                />
               </Reveal>
 
-              <Reveal delay={40}>
-                <div className="mt-5">
-                  <Image
-                    src="/brand/cs/logo-on-dark.webp"
-                    alt="CS Caelum Star"
-                    width={520}
-                    height={120}
-                    className="h-auto w-[260px] max-w-full opacity-90 md:w-[300px]"
-                  />
-                </div>
-              </Reveal>
-
-              <Reveal delay={80}>
+              <Reveal delay={60}>
                 <h1 className="mt-5 text-balance text-[clamp(2.8rem,6vw,4.5rem)] font-bold leading-[0.92] tracking-[-0.04em] text-white">
                   Extra&#x2011;large dust sheets.
                 </h1>
               </Reveal>
 
-              <Reveal delay={160}>
-                <p className="mt-5 max-w-md text-pretty text-lg leading-relaxed text-white/50">
+              <Reveal delay={120}>
+                <p className="mt-4 max-w-md text-pretty text-lg leading-relaxed text-white/50">
                   Cover more. Clean up less.
                 </p>
               </Reveal>
 
-              <Reveal delay={240}>
+              <Reveal delay={180}>
                 <div className="mt-8 flex flex-wrap items-center gap-3">
                   <Button asChild variant="accent" size="lg">
                     <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
@@ -150,30 +141,10 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
                   </Button>
                 </div>
               </Reveal>
-
-              <Reveal delay={320}>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {highlightChips.map((h) => (
-                    <span
-                      key={h}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/[0.08] px-3 py-1.5 text-xs font-semibold text-white/80"
-                    >
-                      <Check className="h-3 w-3 text-accent" />
-                      {h}
-                    </span>
-                  ))}
-                </div>
-              </Reveal>
-
-              <Reveal delay={400}>
-                <p className="mt-6 text-sm text-white/30">
-                  Compare packs below. Purchase through authorized retailers.
-                </p>
-              </Reveal>
             </div>
 
             <div className="lg:col-span-7">
-              <Reveal variant="zoom" delay={140} className="h-full">
+              <Reveal variant="zoom" delay={100} className="h-full">
                 <div className="relative mx-auto max-w-[680px]">
                   <div className="cs-product-glow" />
                   <Image
@@ -196,25 +167,12 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
       <section className="py-16 md:py-24">
         <Container>
           <Reveal>
-            <div className="text-center">
-              <p className="cs-overline text-accent-strong">Choose your pack</p>
-              <h2 className="mt-3 text-balance text-[clamp(2rem,4.5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em]">
-                Pick your protection.
-              </h2>
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                <Button asChild size="lg">
-                  <Link href="/products">Explore packs</Link>
-                </Button>
-                <Button asChild variant="ghost" size="lg">
-                  <Link href="/where-to-buy">
-                    Where to buy <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
+            <h2 className="text-balance text-center text-[clamp(2rem,4.5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em]">
+              Pick your protection.
+            </h2>
           </Reveal>
 
-          <Reveal variant="media" delay={120}>
+          <Reveal variant="media" delay={100}>
             <div className="mt-10">
               <WideImage
                 src={images.pickProtection}
@@ -225,16 +183,13 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
         </Container>
       </section>
 
-      {/* ─── COVERAGE AT A GLANCE ─── Dark native section */}
+      {/* ─── COVERAGE AT A GLANCE ─── */}
       <section className="cs-dark-section--navy py-20 md:py-28">
         <Container className="relative z-10">
           <Reveal>
-            <div className="text-center">
-              <p className="cs-overline text-accent">At a glance</p>
-              <h2 className="mt-3 text-balance text-[clamp(2rem,4.5vw,3rem)] font-bold leading-[0.95] tracking-[-0.035em] text-white">
-                Coverage that scales with your project.
-              </h2>
-            </div>
+            <h2 className="text-balance text-center text-[clamp(2rem,4.5vw,3rem)] font-bold leading-[0.95] tracking-[-0.035em] text-white">
+              Coverage that scales with your project.
+            </h2>
           </Reveal>
 
           <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -285,15 +240,12 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
       <section className="py-16 md:py-24">
         <Container>
           <Reveal>
-            <div className="text-center">
-              <p className="cs-overline text-accent-strong">Size comparison</p>
-              <h2 className="mt-3 text-balance text-[clamp(2rem,4.5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em]">
-                Find your perfect fit.
-              </h2>
-            </div>
+            <h2 className="text-balance text-center text-[clamp(2rem,4.5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em]">
+              Find your perfect fit.
+            </h2>
           </Reveal>
 
-          <Reveal variant="media" delay={120}>
+          <Reveal variant="media" delay={100}>
             <div className="mt-10">
               <WideImage
                 src={images.fitCoverage}
@@ -304,7 +256,7 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
         </Container>
       </section>
 
-      {/* ─── USE CASE TILES ─── 2-up grid */}
+      {/* ─── USE CASE TILES ─── */}
       <section className="py-10 md:py-16">
         <Container>
           <div className="grid gap-6 lg:grid-cols-2">
@@ -314,7 +266,7 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
                 alt="Ideal for general projects — 6 pack essentials"
               />
             </Reveal>
-            <Reveal variant="media" delay={120}>
+            <Reveal variant="media" delay={100}>
               <SquareImage
                 src={images.multiRoomProjects}
                 alt="Ideal for multi-room projects — 12 pack deluxe"
@@ -340,14 +292,11 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
       <section className="py-16 md:py-24">
         <Container>
           <Reveal>
-            <div className="text-center">
-              <p className="cs-overline text-accent-strong">Durability options</p>
-              <h2 className="mt-3 text-balance text-[clamp(2rem,4.5vw,3rem)] font-bold leading-[0.95] tracking-[-0.035em]">
-                Strong when you need it.{' '}
-                <br className="hidden sm:block" />
-                Light when you don&apos;t.
-              </h2>
-            </div>
+            <h2 className="text-balance text-center text-[clamp(2rem,4.5vw,3rem)] font-bold leading-[0.95] tracking-[-0.035em]">
+              Strong when you need it.{' '}
+              <br className="hidden sm:block" />
+              Light when you don&apos;t.
+            </h2>
           </Reveal>
 
           <Reveal variant="media" delay={100}>
@@ -370,16 +319,12 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
         </Container>
       </section>
 
-      {/* ─── SUSTAINABILITY ─── Dark manifesto section */}
+      {/* ─── SUSTAINABILITY ─── */}
       <section className="cs-dark-section--deep py-20 md:py-28">
         <Container className="relative z-10">
           <Reveal>
             <div className="flex flex-col items-center text-center">
-              <span className="inline-flex items-center gap-1.5 rounded-pill border border-accent/20 bg-accent/[0.08] px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-accent">
-                <Recycle className="h-3.5 w-3.5" />
-                Sustainability
-              </span>
-              <h2 className="mt-5 text-balance text-[clamp(2rem,5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em] text-white">
+              <h2 className="text-balance text-[clamp(2rem,5vw,3.5rem)] font-bold leading-[0.95] tracking-[-0.035em] text-white">
                 Made with <span className="text-accent">55%</span> recycled plastic.
               </h2>
               <p className="mt-4 max-w-2xl text-pretty text-base leading-relaxed text-white/45">
@@ -391,24 +336,24 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
 
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
             <Reveal variant="media" delay={0}>
-              <div className="group relative w-full overflow-hidden rounded-[28px] border border-white/[0.08] shadow-sm transition-all duration-500 aspect-[61/25] motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1">
+              <div className="relative w-full overflow-hidden rounded-2xl border border-white/[0.08] shadow-sm aspect-[61/25]">
                 <Image
                   src={images.sustainableProcess}
                   alt="Sustainable efficiency process"
                   fill
                   sizes="(max-width: 1024px) 100vw, 960px"
-                  className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.02]"
+                  className="object-cover"
                 />
               </div>
             </Reveal>
-            <Reveal variant="media" delay={120}>
-              <div className="group relative w-full overflow-hidden rounded-[28px] border border-white/[0.08] shadow-sm transition-all duration-500 aspect-[61/25] motion-safe:hover:shadow-lg motion-safe:hover:-translate-y-1">
+            <Reveal variant="media" delay={100}>
+              <div className="relative w-full overflow-hidden rounded-2xl border border-white/[0.08] shadow-sm aspect-[61/25]">
                 <Image
                   src={images.sustainableEfficiency}
                   alt="Sustainable efficiency — 55% recycled plastic"
                   fill
                   sizes="(max-width: 1024px) 100vw, 960px"
-                  className="object-cover transition-transform duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] motion-safe:group-hover:scale-[1.02]"
+                  className="object-cover"
                 />
               </div>
             </Reveal>
@@ -421,15 +366,9 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
         <Container>
           <Reveal>
             <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="cs-overline text-accent-strong">Product range</p>
-                <h2 className="mt-2 text-balance text-[clamp(1.8rem,4vw,2.5rem)] font-bold leading-[0.95] tracking-[-0.03em]">
-                  Explore packs.
-                </h2>
-                <p className="mt-2 text-sm text-muted">
-                  Start with the 6 pack. Scale up when you need it.
-                </p>
-              </div>
+              <h2 className="text-balance text-[clamp(1.8rem,4vw,2.5rem)] font-bold leading-[0.95] tracking-[-0.03em]">
+                Explore packs.
+              </h2>
               <Button asChild variant="ghost" className="hidden md:inline-flex">
                 <Link href="/products">
                   View all <ArrowRight className="h-4 w-4" />
@@ -438,7 +377,7 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
             </div>
           </Reveal>
 
-          <Reveal variant="media" delay={120}>
+          <Reveal variant="media" delay={100}>
             <div className="mt-8 flex gap-6 overflow-x-auto pb-2">
               {products.map((product) => (
                 <ProductFeatureCard key={product.slug} product={product} />
@@ -452,7 +391,7 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
       <section className="pb-20">
         <Container>
           <Reveal variant="media">
-            <div className="cs-support-card rounded-[28px] p-8 md:p-12">
+            <div className="cs-support-card rounded-2xl p-8 md:p-12">
               <div className="grid gap-8 md:grid-cols-12 md:items-center">
                 <div className="md:col-span-8">
                   <h3 className="text-balance text-[clamp(1.4rem,3vw,2rem)] font-bold leading-tight tracking-[-0.03em] text-white">
@@ -466,7 +405,6 @@ export function CaelumStarContent({ images }: { images: RegionImages }) {
                     >
                       {site.contactEmail}
                     </a>
-                    .
                   </p>
                 </div>
                 <div className="md:col-span-4 md:flex md:justify-end">
