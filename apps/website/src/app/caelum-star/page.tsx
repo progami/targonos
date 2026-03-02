@@ -42,7 +42,7 @@ export default function CaelumStarPage() {
             <Reveal delay={180}>
               <div className="mt-12 grid w-full max-w-2xl gap-5 sm:grid-cols-2">
                 <Link
-                  href="/caelum-star/us"
+                  href="/caelum-star-us"
                   className="group flex flex-col items-center rounded-[20px] border border-white/[0.08] bg-white/[0.04] px-8 py-10 text-center transition-all duration-300 hover:border-accent/25 hover:bg-white/10"
                 >
                   <span className="text-5xl">&#x1F1FA;&#x1F1F8;</span>
@@ -58,7 +58,7 @@ export default function CaelumStarPage() {
                 </Link>
 
                 <Link
-                  href="/caelum-star/uk"
+                  href="/caelum-star-uk"
                   className="group flex flex-col items-center rounded-[20px] border border-white/[0.08] bg-white/[0.04] px-8 py-10 text-center transition-all duration-300 hover:border-accent/25 hover:bg-white/10"
                 >
                   <span className="text-5xl">&#x1F1EC;&#x1F1E7;</span>
