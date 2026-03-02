@@ -33,7 +33,7 @@ export default function ProductsPage() {
             <Reveal delay={160}>
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <Button asChild variant="accent">
-                  <Link href="/where-to-buy">Where to buy</Link>
+                  <Link href="/caelum-star/where-to-buy">Where to buy</Link>
                 </Button>
                 <Button
                   asChild
@@ -83,7 +83,7 @@ export default function ProductsPage() {
                 </span>
               </div>
               <Link
-                href="/where-to-buy"
+                href="/caelum-star/where-to-buy"
                 className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent transition hover:text-white"
               >
                 Where to buy <ArrowRight className="h-3.5 w-3.5" />

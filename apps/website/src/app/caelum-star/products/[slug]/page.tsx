@@ -69,7 +69,7 @@ export default function ProductDetailPage({ params }: PageProps) {
               <Breadcrumb
                 items={[
                   { label: 'Home', href: '/' },
-                  { label: 'Products', href: '/products' },
+                  { label: 'Products', href: '/caelum-star/products' },
                   { label: p.name }
                 ]}
               />
@@ -105,7 +105,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                     </a>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href="/products">Compare packs</Link>
+                    <Link href="/caelum-star/products">Compare packs</Link>
                   </Button>
                 </div>
               </Reveal>
@@ -227,7 +227,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 </p>
               </div>
               <Button asChild variant="outline">
-                <Link href="/products">Compare packs</Link>
+                <Link href="/caelum-star/products">Compare packs</Link>
               </Button>
             </div>
           </Reveal>
@@ -308,7 +308,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="md:col-span-5 md:flex md:justify-end">
                   <div className="flex flex-wrap gap-3">
                     <Button asChild variant="outline" className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]">
-                      <Link href="/products">See all packs</Link>
+                      <Link href="/caelum-star/products">See all packs</Link>
                     </Button>
                     <Button asChild variant="accent">
                       <a href={primary.amazonUrl} target="_blank" rel="noreferrer">

@@ -125,7 +125,7 @@ export default function WhereToBuyPage() {
                         </div>
 
                         <div className="mt-3">
-                          <Link className="text-sm font-semibold text-ink hover:underline" href={`/products/${p.slug}`}>
+                          <Link className="text-sm font-semibold text-ink hover:underline" href={`/caelum-star/products/${p.slug}`}>
                             View details
                           </Link>
                         </div>

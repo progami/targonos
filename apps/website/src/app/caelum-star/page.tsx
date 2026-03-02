@@ -78,7 +78,7 @@ export default function CaelumStarPage() {
             <Reveal delay={240}>
               <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
                 <Button asChild variant="outline" className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]">
-                  <Link href="/products">Compare packs</Link>
+                  <Link href="/caelum-star/products">Compare packs</Link>
                 </Button>
                 <Button asChild variant="ghost" className="text-white/60 hover:text-white">
                   <Link href="/support">

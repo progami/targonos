@@ -10,16 +10,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${baseUrl}/caelum-star`, lastModified: new Date() },
     { url: `${baseUrl}/caelum-star-us`, lastModified: new Date() },
     { url: `${baseUrl}/caelum-star-uk`, lastModified: new Date() },
-    { url: `${baseUrl}/products`, lastModified: new Date() },
+    { url: `${baseUrl}/caelum-star/products`, lastModified: new Date() },
+    { url: `${baseUrl}/caelum-star/where-to-buy`, lastModified: new Date() },
     { url: `${baseUrl}/about`, lastModified: new Date() },
     { url: `${baseUrl}/support`, lastModified: new Date() },
-    { url: `${baseUrl}/where-to-buy`, lastModified: new Date() },
     { url: `${baseUrl}/legal/privacy`, lastModified: new Date() },
     { url: `${baseUrl}/legal/terms`, lastModified: new Date() }
   ];
 
   const productRoutes: MetadataRoute.Sitemap = getAllProducts().map((p) => ({
-    url: `${baseUrl}/products/${p.slug}`,
+    url: `${baseUrl}/caelum-star/products/${p.slug}`,
     lastModified: new Date()
   }));
 

@@ -119,7 +119,7 @@ export default function AboutPage() {
                 </div>
                 <div className="md:col-span-4 md:flex md:justify-end">
                   <Button asChild variant="accent" size="lg">
-                    <Link href="/products">
+                    <Link href="/caelum-star/products">
                       Browse packs <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
