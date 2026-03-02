@@ -88,6 +88,10 @@ pnpm --filter @targon/xplan type-check  # tsc in noEmit mode
 - Automatic supplier invoice generation (manufacturing deposit/production/final, freight, tariff) so new purchase orders surface immediately in planning and cash views.
 - Prisma schema scoped to the `xplan` schema inside the portal database.
 
+## ERD
+
+- `apps/xplan/erd-v1.0.html` documents the xPlan schema (xPlan entities/relations only), with integration context called out separately.
+
 ## Using xplan
 
 1. Navigate between workbook tabs with the bar at the top or with `Ctrl` + `PageUp/PageDown`. When focused outside a Handsontable grid you can jump directly between Sales Planning → P&L → Cash Flow (across years) using `Ctrl` + `←/→`.

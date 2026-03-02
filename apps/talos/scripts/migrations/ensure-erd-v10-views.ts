@@ -347,7 +347,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         MAX(CASE WHEN d."document_type" = 'bill_of_lading' THEN d."s3_key" END) AS "bl_doc_url",
         MAX(CASE WHEN d."document_type" = 'packing_list' THEN d."s3_key" END) AS "packing_list_doc_url"
       FROM "purchase_order_documents" d
-      WHERE d."stage"::text = 'OCEAN'
+      WHERE d."stage"::text = 'MANUFACTURING'
       GROUP BY d."purchase_order_id"
     )
     SELECT
@@ -425,7 +425,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         MAX(CASE WHEN d."document_type" = 'freight_receipt' THEN d."s3_key" END) AS "freight_receipt_url",
         MAX(CASE WHEN d."document_type" = 'transaction_certificate' THEN d."s3_key" END) AS "transaction_cert_url"
       FROM "purchase_order_documents" d
-      WHERE d."stage"::text = 'WAREHOUSE'
+      WHERE d."stage"::text = 'OCEAN'
       GROUP BY d."purchase_order_id"
     )
     SELECT

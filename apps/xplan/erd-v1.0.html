@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERD v1.0 - xPlan Data Model</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f4f7fa;
+    --surface: #ffffff;
+    --border: #d7e2ea;
+    --line: #8ea4b7;
+    --text: #10263b;
+    --muted: #5d7489;
+
+    --navy: #002c51;
+    --teal: #00c2b9;
+    --blue: #2f6fb8;
+    --orange: #c77b1f;
+    --green: #2f9a6f;
+    --slate: #557087;
+    --indigo: #4f62b7;
+
+    --navy-bg: #ecf3f9;
+    --teal-bg: #e7fbfa;
+    --blue-bg: #edf4fc;
+    --orange-bg: #fff6ea;
+    --green-bg: #ecfbf3;
+    --slate-bg: #f0f4f7;
+    --indigo-bg: #eef0fc;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+  }
+
+  .page {
+    max-width: 1900px;
+    margin: 0 auto;
+    padding: 24px 20px 48px;
+  }
+
+  header h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 4px;
+    color: var(--navy);
+  }
+
+  header p {
+    font-size: 0.84rem;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 14px;
+  }
+
+  .legend-title {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.73rem;
+    color: var(--muted);
+  }
+
+  .kb {
+    font-size: 0.52rem;
+    font-weight: 700;
+    border-radius: 3px;
+    padding: 1px 5px;
+    border: 1px solid;
+  }
+
+  .kb-pk {
+    color: #9a6d00;
+    background: #fff7db;
+    border-color: #efcf75;
+  }
+
+  .kb-fk {
+    color: #4c3d95;
+    background: #f1ecff;
+    border-color: #c8b7ff;
+  }
+
+  .erd-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: auto;
+  }
+
+  .erd {
+    position: relative;
+    width: 1600px;
+    height: 1660px;
+  }
+
+  svg.lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .e {
+    position: absolute;
+    background: var(--surface);
+    border: 2px solid;
+    border-radius: 7px;
+    z-index: 2;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .e-h {
+    border-bottom: 2px solid;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 5px 5px 0 0;
+  }
+
+  .e-n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .e-t {
+    font-size: 0.52rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid;
+  }
+
+  .e-b {
+    padding: 4px 0;
+  }
+
+  .f {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.68rem;
+    padding: 2px 10px;
+  }
+
+  .fn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.64rem;
+  }
+
+  .ft {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    color: #7d90a2;
+  }
+
+  .fk {
+    font-size: 0.48rem;
+    font-weight: 700;
+    border-radius: 2px;
+    padding: 1px 3px;
+  }
+
+  .sep {
+    height: 1px;
+    margin: 3px 10px;
+    background: #e3ebf2;
+  }
+
+  .stg {
+    position: absolute;
+    z-index: 3;
+    font-size: 0.56rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 7px;
+    border-radius: 4px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+
+  .c-navy { border-color: var(--navy); }
+  .c-navy .e-h { background: var(--navy-bg); border-color: var(--navy); }
+  .c-navy .e-n { color: var(--navy); }
+  .c-navy .e-t { color: var(--navy); border-color: #bfd3e6; background: var(--navy-bg); }
+
+  .c-teal { border-color: var(--teal); }
+  .c-teal .e-h { background: var(--teal-bg); border-color: var(--teal); }
+  .c-teal .e-n { color: #0c7b76; }
+  .c-teal .e-t { color: #0c7b76; border-color: #9cece8; background: var(--teal-bg); }
+
+  .c-blue { border-color: var(--blue); }
+  .c-blue .e-h { background: var(--blue-bg); border-color: var(--blue); }
+  .c-blue .e-n { color: var(--blue); }
+  .c-blue .e-t { color: var(--blue); border-color: #bed4ee; background: var(--blue-bg); }
+
+  .c-orange { border-color: var(--orange); }
+  .c-orange .e-h { background: var(--orange-bg); border-color: var(--orange); }
+  .c-orange .e-n { color: var(--orange); }
+  .c-orange .e-t { color: var(--orange); border-color: #f0d7aa; background: var(--orange-bg); }
+
+  .c-green { border-color: var(--green); }
+  .c-green .e-h { background: var(--green-bg); border-color: var(--green); }
+  .c-green .e-n { color: var(--green); }
+  .c-green .e-t { color: var(--green); border-color: #bce9d3; background: var(--green-bg); }
+
+  .c-slate { border-color: var(--slate); }
+  .c-slate .e-h { background: var(--slate-bg); border-color: var(--slate); }
+  .c-slate .e-n { color: var(--slate); }
+  .c-slate .e-t { color: var(--slate); border-color: #c8d6e2; background: var(--slate-bg); }
+
+  .c-indigo { border-color: var(--indigo); }
+  .c-indigo .e-h { background: var(--indigo-bg); border-color: var(--indigo); }
+  .c-indigo .e-n { color: var(--indigo); }
+  .c-indigo .e-t { color: var(--indigo); border-color: #c7d0f1; background: var(--indigo-bg); }
+
+  .notes {
+    margin-top: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Entity Relationship Diagram - xPlan v1.0</h1>
+    <p>Crow's Feet notation. xPlan schema only (no Talos entities). Key fields are shown for readability.</p>
+  </header>
+
+  <div class="legend">
+    <span class="legend-title">Crow's Feet</span>
+    <div class="legend-item"><svg width="44" height="16" viewBox="0 0 44 16"><line x1="2" y1="8" x2="30" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="2" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="14" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="30" y1="8" x2="42" y2="8" stroke="var(--line)" stroke-width="1.5"/></svg>Many</div>
+    <div class="legend-item"><svg width="44" height="16" viewBox="0 0 44 16"><line x1="2" y1="8" x2="38" y2="8" stroke="var(--line)" stroke-width="1.5"/><line x1="38" y1="1" x2="38" y2="15" stroke="var(--line)" stroke-width="2.5"/></svg>One</div>
+    <div class="legend-item"><span class="kb kb-pk">PK</span> Primary Key</div>
+    <div class="legend-item"><span class="kb kb-fk">FK</span> Foreign Key</div>
+  </div>
+
+  <div class="erd-wrap">
+    <div class="erd" id="erd">
+      <div class="stg" style="top:8px;left:40px;background:var(--navy-bg);color:var(--navy);border-color:#bfd3e6">Strategy Setup</div>
+      <div class="stg" style="top:8px;left:390px;background:var(--teal-bg);color:#0c7b76;border-color:#9cece8">Ops Planning</div>
+      <div class="stg" style="top:8px;left:800px;background:var(--blue-bg);color:var(--blue);border-color:#bed4ee">Sales Planning</div>
+      <div class="stg" style="top:8px;left:1200px;background:var(--green-bg);color:var(--green);border-color:#bce9d3">Finance Planning</div>
+
+      <div class="e c-navy" id="strategy_group" style="top:60px;left:30px;width:250px">
+        <div class="e-h"><span class="e-n">strategy_group</span><span class="e-t">Core</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">code</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">name</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">region</span><span class="ft">enum</span></div>
+        </div>
+      </div>
+
+      <div class="e c-navy" id="strategy" style="top:300px;left:30px;width:280px">
+        <div class="e-h"><span class="e-n">strategy</span><span class="e-t">Core</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_group_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">name</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">region</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">is_default</span><span class="ft">bool</span></div>
+          <div class="f"><span class="fn">is_primary</span><span class="ft">bool</span></div>
+        </div>
+      </div>
+
+      <div class="e c-navy" id="lead_stage_template" style="top:620px;left:30px;width:250px">
+        <div class="e-h"><span class="e-n">lead_stage_template</span><span class="e-t">Config</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">label</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">default_weeks</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">sequence</span><span class="ft">int</span></div>
+        </div>
+      </div>
+
+      <div class="e c-navy" id="strategy_assignee" style="top:890px;left:30px;width:250px">
+        <div class="e-h"><span class="e-n">strategy_assignee</span><span class="e-t">Access</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">assignee_id</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">assignee_email</span><span class="ft">text</span></div>
+        </div>
+      </div>
+
+      <div class="e c-navy" id="business_parameter" style="top:1160px;left:30px;width:270px">
+        <div class="e-h"><span class="e-n">business_parameter</span><span class="e-t">Config</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">label</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">value_numeric</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">value_text</span><span class="ft">text?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="product" style="top:60px;left:360px;width:320px">
+        <div class="e-h"><span class="e-n">product</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">sku</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">asin</span><span class="ft">text?</span></div>
+          <div class="f"><span class="fn">name</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">selling_price</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">manufacturing_cost</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">freight_cost</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">tariff_rate</span><span class="ft">decimal</span></div>
+          <div class="f"><span class="fn">is_active</span><span class="ft">bool</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="lead_time_override" style="top:620px;left:380px;width:270px">
+        <div class="e-h"><span class="e-n">lead_time_override</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">product_id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">stage_template_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">duration_weeks</span><span class="ft">decimal</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="purchase_order" style="top:900px;left:360px;width:330px">
+        <div class="e-h"><span class="e-n">purchase_order</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">product_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">order_code</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">quantity</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">status</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">po_date</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">source_departure</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">port_eta</span><span class="ft">date?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="batch_table_row" style="top:1240px;left:380px;width:290px">
+        <div class="e-h"><span class="e-n">batch_table_row</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">purchase_order_id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">product_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">batch_code</span><span class="ft">text?</span></div>
+          <div class="f"><span class="fn">quantity</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">units_per_carton</span><span class="ft">int?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-blue" id="sales_week" style="top:60px;left:760px;width:300px">
+        <div class="e-h"><span class="e-n">sales_week</span><span class="e-t">Sales</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">product_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">week_number</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">actual_sales</span><span class="ft">int?</span></div>
+          <div class="f"><span class="fn">forecast_sales</span><span class="ft">int?</span></div>
+          <div class="f"><span class="fn">final_sales</span><span class="ft">int?</span></div>
+          <div class="f"><span class="fn">stock_end</span><span class="ft">int?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-blue" id="sales_week_financials" style="top:400px;left:760px;width:320px">
+        <div class="e-h"><span class="e-n">sales_week_financials</span><span class="e-t">Sales</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">product_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">week_number</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">actual_revenue</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">actual_amazon_fees</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">actual_ppc_spend</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">actual_net_profit</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="purchase_order_payment" style="top:810px;left:760px;width:270px">
+        <div class="e-h"><span class="e-n">purchase_order_payment</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">purchase_order_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">payment_index</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">due_date</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">percentage</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">amount_expected</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-teal" id="logistics_event" style="top:1070px;left:760px;width:250px">
+        <div class="e-h"><span class="e-n">logistics_event</span><span class="e-t">Ops</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">purchase_order_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">type</span><span class="ft">enum</span></div>
+          <div class="f"><span class="fn">event_date</span><span class="ft">date?</span></div>
+          <div class="f"><span class="fn">reference</span><span class="ft">text?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-green" id="profit_and_loss_week" style="top:60px;left:1160px;width:300px">
+        <div class="e-h"><span class="e-n">profit_and_loss_week</span><span class="e-t">Finance</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">week_number</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">revenue</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">cogs</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">net_profit</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-green" id="cash_flow_week" style="top:360px;left:1160px;width:300px">
+        <div class="e-h"><span class="e-n">cash_flow_week</span><span class="e-t">Finance</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">week_number</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">amazon_payout</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">net_cash</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">cash_balance</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-green" id="monthly_summary" style="top:680px;left:1160px;width:300px">
+        <div class="e-h"><span class="e-n">monthly_summary</span><span class="e-t">Finance</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">year</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">month</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">revenue</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">closing_cash</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-green" id="quarterly_summary" style="top:960px;left:1160px;width:300px">
+        <div class="e-h"><span class="e-n">quarterly_summary</span><span class="e-t">Finance</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="f"><span class="fk kb-fk">FK</span><span class="fn">strategy_id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">year</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">quarter</span><span class="ft">int</span></div>
+          <div class="f"><span class="fn">revenue</span><span class="ft">decimal?</span></div>
+          <div class="f"><span class="fn">closing_cash</span><span class="ft">decimal?</span></div>
+        </div>
+      </div>
+
+      <div class="e c-slate" id="scenario_snapshot" style="top:1260px;left:1160px;width:280px">
+        <div class="e-h"><span class="e-n">scenario_snapshot</span><span class="e-t">Snapshot</span></div>
+        <div class="e-b">
+          <div class="f"><span class="fk kb-pk">PK</span><span class="fn">id</span><span class="ft">cuid</span></div>
+          <div class="sep"></div>
+          <div class="f"><span class="fn">name</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">created_by</span><span class="ft">text</span></div>
+          <div class="f"><span class="fn">created_at</span><span class="ft">datetime</span></div>
+          <div class="f"><span class="fn">workbook</span><span class="ft">json</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    Talos import is an external integration flow and is intentionally not modeled as database entities in this ERD.
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const erd = document.getElementById('erd');
+  const ns = 'http://www.w3.org/2000/svg';
+  const C = getComputedStyle(document.documentElement).getPropertyValue('--line').trim() || '#8ea4b7';
+
+  const svg = document.createElementNS(ns, 'svg');
+  svg.classList.add('lines');
+  svg.setAttribute('viewBox', `0 0 ${erd.scrollWidth} ${erd.scrollHeight}`);
+  erd.insertBefore(svg, erd.firstChild);
+
+  function g(id) {
+    const e = document.getElementById(id);
+    return {
+      l: e.offsetLeft,
+      t: e.offsetTop,
+      r: e.offsetLeft + e.offsetWidth,
+      b: e.offsetTop + e.offsetHeight,
+      cx: e.offsetLeft + e.offsetWidth / 2,
+      cy: e.offsetTop + e.offsetHeight / 2,
+    };
+  }
+
+  function mkLine(x1, y1, x2, y2, w = 1.5) {
+    const l = document.createElementNS(ns, 'line');
+    l.setAttribute('x1', x1);
+    l.setAttribute('y1', y1);
+    l.setAttribute('x2', x2);
+    l.setAttribute('y2', y2);
+    l.setAttribute('stroke', C);
+    l.setAttribute('stroke-width', w);
+    svg.appendChild(l);
+  }
+
+  function mkPoly(pts) {
+    const p = document.createElementNS(ns, 'polyline');
+    p.setAttribute('points', pts.map((pt) => pt.join(',')).join(' '));
+    p.setAttribute('stroke', C);
+    p.setAttribute('stroke-width', '1.5');
+    p.setAttribute('fill', 'none');
+    svg.appendChild(p);
+  }
+
+  function mkText(x, y, txt, angle) {
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', x);
+    t.setAttribute('y', y);
+    t.setAttribute('text-anchor', 'middle');
+    t.setAttribute('font-family', 'JetBrains Mono, monospace');
+    t.setAttribute('font-size', '9.5');
+    t.setAttribute('fill', '#9db0c2');
+    t.setAttribute('font-weight', '500');
+    if (angle) t.setAttribute('transform', `rotate(${angle},${x},${y})`);
+    t.textContent = txt;
+    svg.appendChild(t);
+  }
+
+  function crow(x, y, dir) {
+    const s = 9;
+    const d = { r: [1, 0], l: [-1, 0], d: [0, 1], u: [0, -1] }[dir];
+    const p = [-d[1], d[0]];
+    mkLine(x, y, x + d[0] * s + p[0] * s, y + d[1] * s + p[1] * s);
+    mkLine(x, y, x + d[0] * s - p[0] * s, y + d[1] * s - p[1] * s);
+    mkLine(x, y, x + d[0] * s, y + d[1] * s);
+  }
+
+  function bar(x, y, dir) {
+    const s = 7;
+    if (dir === 'r' || dir === 'l') mkLine(x, y - s, x, y + s, 2.4);
+    else mkLine(x - s, y, x + s, y, 2.4);
+  }
+
+  const SG = g('strategy_group');
+  const ST = g('strategy');
+  const LST = g('lead_stage_template');
+  const SA = g('strategy_assignee');
+  const BP = g('business_parameter');
+
+  const PR = g('product');
+  const LTO = g('lead_time_override');
+  const PO = g('purchase_order');
+  const BA = g('batch_table_row');
+
+  const SW = g('sales_week');
+  const SWF = g('sales_week_financials');
+  const POP = g('purchase_order_payment');
+  const LE = g('logistics_event');
+
+  const PNL = g('profit_and_loss_week');
+  const CFW = g('cash_flow_week');
+  const MS = g('monthly_summary');
+  const QS = g('quarterly_summary');
+
+  let x = 0;
+  let y = 0;
+
+  x = SG.l + 70;
+  mkLine(x, SG.b, x, ST.t);
+  bar(x, SG.b + 3, 'd');
+  crow(x, ST.t - 3, 'd');
+  mkText(x + 22, (SG.b + ST.t) / 2, '1 : N');
+
+  x = ST.l + 55;
+  mkLine(x, ST.b, x, SA.t);
+  bar(x, ST.b + 3, 'd');
+  crow(x, SA.t - 3, 'd');
+  mkText(x + 20, (ST.b + SA.t) / 2, '1 : N');
+
+  y = ST.t + 72;
+  mkLine(ST.r, y, PR.l, y);
+  bar(ST.r + 3, y, 'r');
+  crow(PR.l - 3, y, 'r');
+  mkText((ST.r + PR.l) / 2, y - 10, '1 : N');
+
+  x = PR.l + 105;
+  mkLine(x, PR.b, x, LTO.t);
+  bar(x, PR.b + 3, 'd');
+  crow(x, LTO.t - 3, 'd');
+  mkText(x - 20, (PR.b + LTO.t) / 2, '1 : N', -90);
+
+  y = LST.t + 70;
+  mkLine(LST.r, y, LTO.l, y);
+  bar(LST.r + 3, y, 'r');
+  crow(LTO.l - 3, y, 'r');
+  mkText((LST.r + LTO.l) / 2, y - 10, '1 : N');
+
+  let sx = ST.r;
+  let sy = ST.t + 150;
+  let mx = 335;
+  let ey = BP.t + 55;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [BP.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(BP.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = ST.r;
+  sy = ST.t + 120;
+  mx = 340;
+  ey = PO.t + 52;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [PO.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(PO.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  x = PR.r - 24;
+  mkLine(x, PR.b, x, PO.t);
+  bar(x, PR.b + 3, 'd');
+  crow(x, PO.t - 3, 'd');
+  mkText(x + 22, (PR.b + PO.t) / 2, '1 : N');
+
+  x = PO.l + 90;
+  mkLine(x, PO.b, x, BA.t);
+  bar(x, PO.b + 3, 'd');
+  crow(x, BA.t - 3, 'd');
+  mkText(x + 20, (PO.b + BA.t) / 2, '1 : N');
+
+  sx = PR.r;
+  sy = PR.t + 170;
+  mx = 730;
+  ey = BA.t + 55;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [BA.r, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(BA.r + 3, ey, 'l');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  y = PO.t + 85;
+  mkLine(PO.r, y, POP.l, y);
+  bar(PO.r + 3, y, 'r');
+  crow(POP.l - 3, y, 'r');
+  mkText((PO.r + POP.l) / 2, y - 10, '1 : N');
+
+  sx = PO.r;
+  sy = PO.t + 128;
+  mx = 730;
+  ey = LE.t + 54;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [LE.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(LE.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = ST.r;
+  sy = ST.t + 30;
+  mx = 705;
+  ey = SW.t + 45;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [SW.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(SW.l - 3, ey, 'r');
+  mkText(mx - 18, (sy + ey) / 2, '1 : N', -90);
+
+  y = PR.t + 78;
+  mkLine(PR.r, y, SW.l, y);
+  bar(PR.r + 3, y, 'r');
+  crow(SW.l - 3, y, 'r');
+  mkText((PR.r + SW.l) / 2, y - 10, '1 : N');
+
+  sx = ST.r;
+  sy = ST.t + 56;
+  mx = 705;
+  ey = SWF.t + 60;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [SWF.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(SWF.l - 3, ey, 'r');
+  mkText(mx - 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = PR.r;
+  sy = PR.t + 116;
+  mx = 735;
+  ey = SWF.t + 88;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [SWF.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(SWF.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = ST.r;
+  sy = ST.t + 18;
+  mx = 1110;
+  ey = PNL.t + 44;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [PNL.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(PNL.l - 3, ey, 'r');
+  mkText((mx + PNL.l) / 2, ey - 10, '1 : N');
+
+  sx = ST.r;
+  sy = ST.t + 200;
+  mx = 1090;
+  ey = CFW.t + 50;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [CFW.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(CFW.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = ST.r;
+  sy = ST.t + 220;
+  mx = 1070;
+  ey = MS.t + 50;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [MS.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(MS.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+
+  sx = ST.r;
+  sy = ST.t + 240;
+  mx = 1050;
+  ey = QS.t + 50;
+  mkPoly([[sx, sy], [mx, sy], [mx, ey], [QS.l, ey]]);
+  bar(sx + 3, sy, 'r');
+  crow(QS.l - 3, ey, 'r');
+  mkText(mx + 18, (sy + ey) / 2, '1 : N', -90);
+});
+</script>
+</body>
+</html>
