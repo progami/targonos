@@ -91,6 +91,7 @@ pnpm --filter @targon/xplan type-check  # tsc in noEmit mode
 ## ERD
 
 - `apps/xplan/erd-v1.0.html` documents the xPlan schema (xPlan entities/relations only), with integration context called out separately.
+- Open it locally from the repo root with `open apps/xplan/erd-v1.0.html`.
 
 ## Using xplan
 
