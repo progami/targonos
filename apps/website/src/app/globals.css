@@ -514,6 +514,21 @@ body.tg-home .tg-ring--core {
   letter-spacing: -0.05em;
 }
 
+/* ============================================
+   Interior pages — shared hero
+   ============================================ */
+
+/* Shorter dark hero gradient for interior pages */
+.pg-hero {
+  background: linear-gradient(
+    180deg,
+    #001220 0%,
+    #002C51 30%,
+    #0B273F 65%,
+    rgb(var(--bg)) 100%
+  );
+}
+
 /* Dark gradient CTA card */
 .cs-support-card {
   background: linear-gradient(135deg, #002C51 0%, #0B273F 100%);
