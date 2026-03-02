@@ -13,6 +13,13 @@ type SettlementDocMeta = {
   periodEnd: string | null;
 };
 
+type SettlementDocParts = {
+  region: 'US' | 'UK';
+  startIsoDay: string;
+  endIsoDay: string;
+  seq: number;
+};
+
 const MONTHS: Record<string, number> = {
   JAN: 1,
   FEB: 2,
@@ -29,11 +36,16 @@ const MONTHS: Record<string, number> = {
 };
 
 // Canonical settlement DocNumber format (no prefix/suffix; entire string is the settlement id).
-const SETTLEMENT_DOC_NUMBER_EXACT_RE = /^(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+$/i;
+// Example: UK-260116-260130-S1 (YYMMDD start/end).
+const SETTLEMENT_DOC_NUMBER_CANONICAL_EXACT_RE = /^(US|UK)-(\d{6})-(\d{6})-S(\d+)$/i;
+// Legacy settlement DocNumber format kept for backwards compatibility.
+// Example: UK-16-30JAN-26-1
+const SETTLEMENT_DOC_NUMBER_LEGACY_EXACT_RE = /^(US|UK)-(\d{2}(?:[A-Z]{3})?)-(\d{2}[A-Z]{3})-(\d{2,4})-(\d+)$/i;
+const SETTLEMENT_DOC_NUMBER_EXACT_RE = /^(?:US|UK)-(?:\d{6}-\d{6}-S\d+|\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+)$/i;
 
 // Settlement ids can appear inside prefixed DocNumbers (e.g. "LMB-UK-16-30JAN-26-1").
 // We still normalize/parse based on the embedded settlement id.
-const SETTLEMENT_DOC_NUMBER_MATCH_RE = /\b(?:US|UK)-\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+\b/i;
+const SETTLEMENT_DOC_NUMBER_MATCH_RE = /\b(?:US|UK)-(?:\d{6}-\d{6}-S\d+|\d{2}(?:[A-Z]{3})?-\d{2}[A-Z]{3}-\d{2,4}-\d+)\b/i;
 const PLUTUS_DOC_PREFIX = 'PLT-';
 
 function pad2(value: number): string {
@@ -47,7 +59,8 @@ export function getMarketplaceFromRegion(region: string): SettlementMarketplace 
 }
 
 export function isSettlementDocNumber(docNumber: string): boolean {
-  return SETTLEMENT_DOC_NUMBER_MATCH_RE.test(docNumber.trim());
+  const trimmed = stripPlutusDocPrefix(docNumber).trim();
+  return SETTLEMENT_DOC_NUMBER_MATCH_RE.test(trimmed);
 }
 
 export function stripPlutusDocPrefix(docNumber: string): string {
@@ -59,18 +72,70 @@ export function stripPlutusDocPrefix(docNumber: string): string {
 }
 
 export function normalizeSettlementDocNumber(docNumber: string): string {
-  const trimmed = stripPlutusDocPrefix(docNumber);
-  const exact = trimmed.match(SETTLEMENT_DOC_NUMBER_EXACT_RE);
-  if (exact) return exact[0].toUpperCase();
+  const trimmedUpper = stripPlutusDocPrefix(docNumber).trim().toUpperCase();
 
-  const match = trimmed.match(SETTLEMENT_DOC_NUMBER_MATCH_RE);
+  const exact = trimmedUpper.match(SETTLEMENT_DOC_NUMBER_EXACT_RE);
+  if (exact) {
+    const parsed = parseSettlementDocNumberExact(exact[0]);
+    return buildCanonicalSettlementDocNumber(parsed);
+  }
+
+  const match = trimmedUpper.match(SETTLEMENT_DOC_NUMBER_MATCH_RE);
   if (!match) throw new Error(`DocNumber is not a settlement id: ${docNumber}`);
 
-  return match[0].toUpperCase();
+  const parsed = parseSettlementDocNumberExact(match[0]);
+  return buildCanonicalSettlementDocNumber(parsed);
 }
 
 export function buildPlutusSettlementDocNumber(docNumber: string): string {
   return `${PLUTUS_DOC_PREFIX}${normalizeSettlementDocNumber(docNumber)}`;
+}
+
+function isoDayToCompactToken(isoDay: string, context: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDay);
+  if (!match) {
+    throw new Error(`Invalid ISO day for ${context}: ${isoDay}`);
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`Invalid ISO day for ${context}: ${isoDay}`);
+  }
+
+  if (year < 2000 || year > 2099) {
+    throw new Error(`Settlement year out of supported range (2000-2099): ${isoDay}`);
+  }
+
+  return `${pad2(year % 100)}${pad2(month)}${pad2(day)}`;
+}
+
+function parseCompactIsoDay(token: string, context: string): string {
+  const match = /^(\d{2})(\d{2})(\d{2})$/.exec(token);
+  if (!match) {
+    throw new Error(`Invalid compact settlement date token for ${context}: ${token}`);
+  }
+
+  const year = 2000 + Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  return toIsoDay(year, month, day, context);
+}
+
+function toIsoDay(year: number, month: number, day: number, context: string): string {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    throw new Error(`Invalid settlement date for ${context}: ${year}-${month}-${day}`);
+  }
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) {
+    throw new Error(`Invalid settlement date for ${context}: ${year}-${month}-${day}`);
+  }
+
+  return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
 function parseDayMonth(token: string): { day: number; month: number | null } {
@@ -95,40 +160,42 @@ function parseDayMonth(token: string): { day: number; month: number | null } {
   return { day: Number(dayMonth[1]), month };
 }
 
-function parseSettlementPeriod(normalizedDocNumber: string): SettlementDocMeta {
-  const tokens = normalizedDocNumber.split('-').map((t) => t.trim());
+function parseCanonicalSettlementDocNumber(docNumber: string): SettlementDocParts | null {
+  const match = docNumber.match(SETTLEMENT_DOC_NUMBER_CANONICAL_EXACT_RE);
+  if (!match) return null;
 
-  const region = tokens[0];
+  const region = match[1]!.toUpperCase();
   if (region !== 'US' && region !== 'UK') {
-    throw new Error(`Missing settlement region in doc number: ${normalizedDocNumber}`);
+    throw new Error(`Invalid settlement region in doc number: ${docNumber}`);
   }
 
-  const marketplace = getMarketplaceFromRegion(region);
-
-  if (tokens.length < 5) {
-    return { marketplace, periodStart: null, periodEnd: null };
+  const startIsoDay = parseCompactIsoDay(match[2]!, `${docNumber} start`);
+  const endIsoDay = parseCompactIsoDay(match[3]!, `${docNumber} end`);
+  const seq = Number(match[4]);
+  if (!Number.isInteger(seq) || seq < 1) {
+    throw new Error(`Invalid settlement sequence in doc number: ${docNumber}`);
   }
 
-  const yearToken = tokens[tokens.length - 2];
-  const rangeTokens = tokens.slice(1, tokens.length - 2);
+  return { region, startIsoDay, endIsoDay, seq };
+}
 
-  if (!yearToken) {
-    throw new Error(`Invalid settlement doc number format: ${normalizedDocNumber}`);
+function parseLegacySettlementDocNumber(docNumber: string): SettlementDocParts | null {
+  const match = docNumber.match(SETTLEMENT_DOC_NUMBER_LEGACY_EXACT_RE);
+  if (!match) return null;
+
+  const region = match[1]!.toUpperCase();
+  if (region !== 'US' && region !== 'UK') {
+    throw new Error(`Missing settlement region in doc number: ${docNumber}`);
   }
 
-  if (rangeTokens.length !== 2) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
-
-  const startToken = rangeTokens[0];
-  const endToken = rangeTokens[1];
-  if (!startToken || !endToken) {
-    return { marketplace, periodStart: null, periodEnd: null };
-  }
+  const startToken = match[2]!;
+  const endToken = match[3]!;
+  const yearToken = match[4]!;
+  const seqToken = match[5]!;
 
   const endYear = yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken);
-  if (!Number.isFinite(endYear)) {
-    throw new Error(`Invalid year in settlement doc number: ${normalizedDocNumber}`);
+  if (!Number.isInteger(endYear)) {
+    throw new Error(`Invalid year in settlement doc number: ${docNumber}`);
   }
 
   const start = parseDayMonth(startToken);
@@ -136,17 +203,64 @@ function parseSettlementPeriod(normalizedDocNumber: string): SettlementDocMeta {
 
   const endMonth = end.month;
   const startMonth = start.month === null ? endMonth : start.month;
-
   if (startMonth === null || endMonth === null) {
-    return { marketplace, periodStart: null, periodEnd: null };
+    throw new Error(`Invalid settlement date range in doc number: ${docNumber}`);
   }
 
   const startYear = startMonth > endMonth ? endYear - 1 : endYear;
+  const startIsoDay = toIsoDay(startYear, startMonth, start.day, `${docNumber} start`);
+  const endIsoDay = toIsoDay(endYear, endMonth, end.day, `${docNumber} end`);
 
-  const periodStart = `${startYear}-${pad2(startMonth)}-${pad2(start.day)}`;
-  const periodEnd = `${endYear}-${pad2(endMonth)}-${pad2(end.day)}`;
+  const seq = Number(seqToken);
+  if (!Number.isInteger(seq) || seq < 1) {
+    throw new Error(`Invalid settlement sequence in doc number: ${docNumber}`);
+  }
 
-  return { marketplace, periodStart, periodEnd };
+  return { region, startIsoDay, endIsoDay, seq };
+}
+
+function parseSettlementDocNumberExact(docNumber: string): SettlementDocParts {
+  const canonical = parseCanonicalSettlementDocNumber(docNumber);
+  if (canonical) return canonical;
+
+  const legacy = parseLegacySettlementDocNumber(docNumber);
+  if (legacy) return legacy;
+
+  throw new Error(`Invalid settlement doc number format: ${docNumber}`);
+}
+
+export function buildCanonicalSettlementDocNumber(input: {
+  region: 'US' | 'UK';
+  startIsoDay: string;
+  endIsoDay: string;
+  seq: number;
+}): string {
+  if (input.region !== 'US' && input.region !== 'UK') {
+    throw new Error(`Unsupported settlement region: ${input.region}`);
+  }
+  if (!Number.isInteger(input.seq) || input.seq < 1) {
+    throw new Error(`Invalid settlement sequence: ${input.seq}`);
+  }
+
+  const startToken = isoDayToCompactToken(input.startIsoDay, `${input.region} settlement start`);
+  const endToken = isoDayToCompactToken(input.endIsoDay, `${input.region} settlement end`);
+
+  return `${input.region}-${startToken}-${endToken}-S${input.seq}`;
+}
+
+function parseSettlementPeriod(normalizedDocNumber: string): SettlementDocMeta {
+  const parsed = parseCanonicalSettlementDocNumber(normalizedDocNumber);
+  if (!parsed) {
+    throw new Error(`Invalid normalized settlement doc number: ${normalizedDocNumber}`);
+  }
+
+  const marketplace = getMarketplaceFromRegion(parsed.region);
+
+  return {
+    marketplace,
+    periodStart: parsed.startIsoDay,
+    periodEnd: parsed.endIsoDay,
+  };
 }
 
 export function parseSettlementDocNumber(docNumber: string): SettlementDocMeta & { normalizedDocNumber: string } {

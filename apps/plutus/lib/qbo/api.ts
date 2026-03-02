@@ -314,6 +314,11 @@ export interface QboJournalEntry {
   TxnDate: string;
   DocNumber?: string;
   PrivateNote?: string;
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
+  ExchangeRate?: number;
   Line: QboJournalEntryLine[];
   MetaData?: {
     CreateTime: string;
@@ -439,6 +444,7 @@ export async function createJournalEntry(
     docNumber?: string;
     privateNote?: string;
     currencyCode?: string;
+    exchangeRate?: number;
     lines: Array<{
       amount: number;
       postingType: 'Debit' | 'Credit';
@@ -458,6 +464,7 @@ export async function createJournalEntry(
     DocNumber: input.docNumber,
     PrivateNote: input.privateNote,
     ...(input.currencyCode !== undefined && input.currencyCode !== '' ? { CurrencyRef: { value: input.currencyCode } } : {}),
+    ...(input.exchangeRate !== undefined ? { ExchangeRate: input.exchangeRate } : {}),
     Line: input.lines.map((line) => ({
       ...(() => {
         const detail: Record<string, unknown> = {
@@ -535,6 +542,14 @@ export interface QboCurrency {
   Name?: string;
   Code?: string;
   Active?: boolean;
+}
+
+export interface QboExchangeRate {
+  SourceCurrencyCode: string;
+  TargetCurrencyCode?: string;
+  HomeCurrencyCode?: string;
+  Rate: number;
+  AsOfDate: string;
 }
 
 export interface QboPreferences {
@@ -1232,6 +1247,81 @@ export async function fetchJournalEntryById(
 }
 
 /**
+ * Update a JournalEntry (sparse update for DocNumber and/or PrivateNote).
+ *
+ * Note: QBO requires the current SyncToken for updates.
+ */
+export async function updateJournalEntry(
+  connection: QboConnection,
+  journalEntryId: string,
+  updates: {
+    docNumber?: string;
+    privateNote?: string;
+    exchangeRate?: number;
+  },
+): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
+  if (updates.docNumber === undefined && updates.privateNote === undefined && updates.exchangeRate === undefined) {
+    throw new Error('updateJournalEntry requires at least one field to update');
+  }
+
+  const existing = await fetchJournalEntryById(connection, journalEntryId);
+  let activeConnection = existing.updatedConnection ? existing.updatedConnection : connection;
+
+  const { accessToken, updatedConnection } = await getValidToken(activeConnection);
+  if (updatedConnection) {
+    activeConnection = updatedConnection;
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const url = `${baseUrl}/v3/company/${activeConnection.realmId}/journalentry?operation=update`;
+
+  const payload: Record<string, unknown> = {
+    Id: existing.journalEntry.Id,
+    SyncToken: existing.journalEntry.SyncToken,
+    sparse: true,
+    TxnDate: existing.journalEntry.TxnDate,
+  };
+
+  if (updates.docNumber !== undefined) {
+    payload.DocNumber = updates.docNumber;
+  }
+  if (updates.privateNote !== undefined) {
+    payload.PrivateNote = updates.privateNote;
+  }
+  if (updates.exchangeRate !== undefined) {
+    payload.ExchangeRate = updates.exchangeRate;
+  }
+
+  logger.info('Updating journal entry in QBO', { journalEntryId, updates });
+
+  const response = await fetchWithRetry(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update journal entry', {
+      journalEntryId,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to update journal entry: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { JournalEntry: QboJournalEntry };
+  return {
+    journalEntry: data.JournalEntry,
+    updatedConnection: activeConnection === connection ? undefined : activeConnection,
+  };
+}
+
+/**
  * Delete a single JournalEntry by ID.
  *
  * Note: QBO requires the current SyncToken for deletes.
@@ -1772,6 +1862,7 @@ const VENDORS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const TERMS_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const CURRENCIES_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const PREFERENCES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const EXCHANGE_RATE_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 /**
  * Fetch Vendors from QBO
@@ -1927,6 +2018,96 @@ export async function fetchPreferences(
   const preferences = data.Preferences ?? {};
   setCache(cacheKey, preferences, PREFERENCES_CACHE_TTL_MS);
   return { preferences, updatedConnection };
+}
+
+export async function fetchExchangeRate(
+  connection: QboConnection,
+  input: {
+    sourceCurrencyCode: string;
+    targetCurrencyCode: string;
+    asOfDate: string;
+  },
+): Promise<{ exchangeRate: QboExchangeRate; updatedConnection?: QboConnection }> {
+  const sourceCurrencyCode = input.sourceCurrencyCode.trim().toUpperCase();
+  const targetCurrencyCode = input.targetCurrencyCode.trim().toUpperCase();
+  const asOfDate = input.asOfDate.trim();
+
+  if (!/^[A-Z]{3}$/.test(sourceCurrencyCode)) {
+    throw new Error(`Invalid source currency code: ${input.sourceCurrencyCode}`);
+  }
+  if (!/^[A-Z]{3}$/.test(targetCurrencyCode)) {
+    throw new Error(`Invalid target currency code: ${input.targetCurrencyCode}`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) {
+    throw new Error(`Invalid asOfDate for exchange rate lookup: ${input.asOfDate}`);
+  }
+
+  const cacheKey = `exchange-rate:${connection.realmId}:${sourceCurrencyCode}:${targetCurrencyCode}:${asOfDate}`;
+  const cached = getCached<QboExchangeRate>(cacheKey);
+  if (cached) {
+    return { exchangeRate: cached };
+  }
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const query = `SELECT * FROM ExchangeRate WHERE SourceCurrencyCode = '${escapeSoql(sourceCurrencyCode)}' AND AsOfDate = '${escapeSoql(asOfDate)}' MAXRESULTS 100`;
+  const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
+
+  logger.info('Fetching exchange rate from QBO', {
+    sourceCurrencyCode,
+    targetCurrencyCode,
+    asOfDate,
+  });
+
+  const response = await fetchWithRetry(queryUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch exchange rate', {
+      sourceCurrencyCode,
+      targetCurrencyCode,
+      asOfDate,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to fetch exchange rate: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as {
+    QueryResponse?: {
+      ExchangeRate?: QboExchangeRate[] | QboExchangeRate;
+    };
+  };
+
+  const rawRates = data.QueryResponse?.ExchangeRate;
+  const rates = Array.isArray(rawRates) ? rawRates : rawRates ? [rawRates] : [];
+  const matchingRates = rates.filter((rate) => {
+    const source = rate.SourceCurrencyCode.trim().toUpperCase();
+    if (source !== sourceCurrencyCode) return false;
+    if (rate.AsOfDate !== asOfDate) return false;
+    const explicitTarget = rate.TargetCurrencyCode ? rate.TargetCurrencyCode.trim().toUpperCase() : '';
+    if (explicitTarget !== '' && explicitTarget !== targetCurrencyCode) return false;
+    return true;
+  });
+  if (matchingRates.length !== 1) {
+    throw new Error(
+      `Expected exactly one exchange rate for ${sourceCurrencyCode}->${targetCurrencyCode} on ${asOfDate}, got ${matchingRates.length}`,
+    );
+  }
+
+  const rate = matchingRates[0]!;
+  if (!Number.isFinite(rate.Rate) || rate.Rate <= 0) {
+    throw new Error(`Invalid exchange rate value for ${sourceCurrencyCode}->${targetCurrencyCode} on ${asOfDate}`);
+  }
+
+  setCache(cacheKey, rate, EXCHANGE_RATE_CACHE_TTL_MS);
+  return { exchangeRate: rate, updatedConnection };
 }
 
 function buildMultipartUploadBody(params: {

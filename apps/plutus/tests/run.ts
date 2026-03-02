@@ -83,14 +83,21 @@ test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
   assert.equal(isSettlementDocNumber('UK-16-30JAN-26-1'), true);
   assert.equal(isSettlementDocNumber('LMB-UK-16-30JAN-26-1'), true);
   assert.equal(isSettlementDocNumber('PLT-UK-16-30JAN-26-1'), true);
-  assert.equal(normalizeSettlementDocNumber('UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
-  assert.equal(normalizeSettlementDocNumber('LMB-UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
-  assert.equal(normalizeSettlementDocNumber('PLT-UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
-  assert.equal(stripPlutusDocPrefix('PLT-UK-16-30JAN-26-1'), 'UK-16-30JAN-26-1');
-  assert.equal(buildPlutusSettlementDocNumber('UK-16-30JAN-26-1'), 'PLT-UK-16-30JAN-26-1');
+  assert.equal(isSettlementDocNumber('UK-260116-260130-S1'), true);
+  assert.equal(isSettlementDocNumber('LMB-UK-260116-260130-S1'), true);
+  assert.equal(isSettlementDocNumber('PLT-UK-260116-260130-S1'), true);
+  assert.equal(normalizeSettlementDocNumber('UK-16-30JAN-26-1'), 'UK-260116-260130-S1');
+  assert.equal(normalizeSettlementDocNumber('LMB-UK-16-30JAN-26-1'), 'UK-260116-260130-S1');
+  assert.equal(normalizeSettlementDocNumber('PLT-UK-16-30JAN-26-1'), 'UK-260116-260130-S1');
+  assert.equal(normalizeSettlementDocNumber('UK-260116-260130-S1'), 'UK-260116-260130-S1');
+  assert.equal(normalizeSettlementDocNumber('LMB-UK-260116-260130-S1'), 'UK-260116-260130-S1');
+  assert.equal(normalizeSettlementDocNumber('PLT-UK-260116-260130-S1'), 'UK-260116-260130-S1');
+  assert.equal(stripPlutusDocPrefix('PLT-UK-260116-260130-S1'), 'UK-260116-260130-S1');
+  assert.equal(buildPlutusSettlementDocNumber('UK-16-30JAN-26-1'), 'PLT-UK-260116-260130-S1');
+  assert.equal(buildPlutusSettlementDocNumber('UK-260116-260130-S1'), 'PLT-UK-260116-260130-S1');
 
   const meta = parseSettlementDocNumber('LMB-UK-16-30JAN-26-1');
-  assert.equal(meta.normalizedDocNumber, 'UK-16-30JAN-26-1');
+  assert.equal(meta.normalizedDocNumber, 'UK-260116-260130-S1');
   assert.equal(meta.marketplace.id, 'amazon.co.uk');
   assert.equal(meta.periodStart, '2026-01-16');
   assert.equal(meta.periodEnd, '2026-01-30');
@@ -160,18 +167,18 @@ test('selectAuditInvoiceForSettlement falls back to unique overlap match', () =>
 test('selectAuditInvoiceForSettlement prefers invoiceId matching settlement DocNumber', () => {
   const invoices: AuditInvoiceSummary[] = [
     { invoiceId: 'MONTHLY', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-28', rowCount: 100 },
-    { invoiceId: 'US-01-14FEB-26-1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
+    { invoiceId: 'US-260201-260214-S1', marketplace: 'amazon.com', markets: ['Amazon.com'], minDate: '2026-02-01', maxDate: '2026-02-14', rowCount: 10 },
   ];
 
   const match = selectAuditInvoiceForSettlement({
     settlementMarketplace: 'amazon.com',
     settlementPeriodStart: '2026-02-01',
     settlementPeriodEnd: '2026-02-14',
-    settlementDocNumber: 'US-01-14FEB-26-1',
+    settlementDocNumber: 'US-260201-260214-S1',
     invoices,
   });
 
-  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'US-01-14FEB-26-1' });
+  assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'US-260201-260214-S1' });
 });
 
 test('parseAmazonTransactionCsv parses required totals', () => {
@@ -218,21 +225,21 @@ test('parseAmazonUnifiedTransactionCsv parses Monthly Unified Transaction report
 });
 
 test('buildSettlementAuditFilename prefixes settlement evidence files', () => {
-  assert.equal(buildSettlementAuditFilename('UK-16-30JAN-26-1'), 'plutus-settlement-audit-UK-16-30JAN-26-1.csv');
+  assert.equal(buildSettlementAuditFilename('UK-260116-260130-S1'), 'plutus-settlement-audit-UK-260116-260130-S1.csv');
 });
 
 test('buildSettlementFullAuditTrailFilename prefixes full audit trail files', () => {
-  assert.equal(buildSettlementFullAuditTrailFilename('UK-16-30JAN-26-1'), 'plutus-full-audit-trail-UK-16-30JAN-26-1.csv');
+  assert.equal(buildSettlementFullAuditTrailFilename('UK-260116-260130-S1'), 'plutus-full-audit-trail-UK-260116-260130-S1.csv');
 });
 
 test('buildSettlementMtdDailySummaryFilename prefixes mtd summary files', () => {
-  assert.equal(buildSettlementMtdDailySummaryFilename('UK-16-30JAN-26-1'), 'plutus-mtd-daily-summary-UK-16-30JAN-26-1.csv');
+  assert.equal(buildSettlementMtdDailySummaryFilename('UK-260116-260130-S1'), 'plutus-mtd-daily-summary-UK-260116-260130-S1.csv');
 });
 
 test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
   const bytes = buildSettlementAuditCsvBytes([
     {
-      invoiceId: 'UK-16-30JAN-26-1',
+      invoiceId: 'UK-260116-260130-S1',
       market: 'uk',
       date: '2026-01-16',
       orderId: '123-123',
@@ -246,7 +253,7 @@ test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
   const csv = Buffer.from(bytes).toString('utf8');
   const expected = [
     'invoiceId,market,date,orderId,sku,quantity,description,net',
-    'UK-16-30JAN-26-1,uk,2026-01-16,123-123,SKU-1,2,"Amazon fee, ""test""",-10.50',
+    'UK-260116-260130-S1,uk,2026-01-16,123-123,SKU-1,2,"Amazon fee, ""test""",-10.50',
   ].join('\n');
 
   assert.equal(csv, expected);
@@ -254,13 +261,13 @@ test('buildSettlementAuditCsvBytes serializes escaped rows with cents', () => {
 
 test('buildSettlementFullAuditTrailCsvBytes serializes settlement lines with account and tax columns', () => {
   const bytes = buildSettlementFullAuditTrailCsvBytes({
-    invoiceId: 'UK-16-30JAN-26-1',
+    invoiceId: 'UK-260116-260130-S1',
     countryCode: 'GB',
     accountIdByMemo: new Map([['Amazon fee, "test"', '184']]),
     taxCodeIdByMemo: new Map([['Amazon fee, "test"', null]]),
     rows: [
       {
-        invoiceId: 'UK-16-30JAN-26-1',
+        invoiceId: 'UK-260116-260130-S1',
         market: 'uk',
         date: '2026-01-16',
         orderId: '123-123',
@@ -275,7 +282,7 @@ test('buildSettlementFullAuditTrailCsvBytes serializes settlement lines with acc
   const csv = Buffer.from(bytes).toString('utf8');
   const expected = [
     'date,Order Id,Sku,Sku Name,Quantity,LMB Line Description,Account Name,Tax Rate,Tax Name,Gross,Tax,Net,Country,Invoice',
-    '2026-01-16,123-123,SKU-1,,2,"Amazon fee, ""test""",184,0,No Tax Rate Applicable,-10.50,0.00,-10.50,GB,UK-16-30JAN-26-1',
+    '2026-01-16,123-123,SKU-1,,2,"Amazon fee, ""test""",184,0,No Tax Rate Applicable,-10.50,0.00,-10.50,GB,UK-260116-260130-S1',
   ].join('\n');
 
   assert.equal(csv, expected);
@@ -297,7 +304,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
     ]),
     rows: [
       {
-        invoiceId: 'UK-16-30JAN-26-1',
+        invoiceId: 'UK-260116-260130-S1',
         market: 'uk',
         date: '2026-01-16',
         orderId: 'o-1',
@@ -307,7 +314,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
         netCents: 1000,
       },
       {
-        invoiceId: 'UK-16-30JAN-26-1',
+        invoiceId: 'UK-260116-260130-S1',
         market: 'uk',
         date: '2026-01-17',
         orderId: 'o-2',
@@ -317,7 +324,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
         netCents: 500,
       },
       {
-        invoiceId: 'UK-16-30JAN-26-1',
+        invoiceId: 'UK-260116-260130-S1',
         market: 'uk',
         date: '2026-01-17',
         orderId: 'o-3',
@@ -363,8 +370,8 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
   });
 
   assert.equal(draft.segments.length, 2);
-  assert.equal(draft.segments[0]?.docNumber, 'US-19-31DEC-25-1');
-  assert.equal(draft.segments[1]?.docNumber, 'US-01-02JAN-26-2');
+  assert.equal(draft.segments[0]?.docNumber, 'US-251219-251231-S1');
+  assert.equal(draft.segments[1]?.docNumber, 'US-260101-260102-S2');
 
   const cents = draft.segments[1]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);

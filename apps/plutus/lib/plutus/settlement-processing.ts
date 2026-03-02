@@ -1,5 +1,13 @@
 import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
-import { createJournalEntry, deleteJournalEntry, fetchAccounts, fetchBills, fetchJournalEntryById } from '@/lib/qbo/api';
+import {
+  createJournalEntry,
+  deleteJournalEntry,
+  fetchAccounts,
+  fetchBills,
+  fetchExchangeRate,
+  fetchJournalEntryById,
+  fetchPreferences,
+} from '@/lib/qbo/api';
 import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
 import {
@@ -68,6 +76,41 @@ function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP
   if (marketplace === 'amazon.com') return 'USD';
   if (marketplace === 'amazon.co.uk') return 'GBP';
   throw new Error(`Unsupported marketplace for settlement currency: ${marketplace}`);
+}
+
+async function resolveExchangeRateForJournalPosting(input: {
+  connection: QboConnection;
+  txnDate: string;
+  currencyCode: 'USD' | 'GBP';
+}): Promise<{ exchangeRate?: number; updatedConnection?: QboConnection }> {
+  const preferencesResult = await fetchPreferences(input.connection);
+  let activeConnection = preferencesResult.updatedConnection ? preferencesResult.updatedConnection : input.connection;
+
+  const homeCurrencyCode = preferencesResult.preferences.CurrencyPrefs?.HomeCurrency?.value
+    ? preferencesResult.preferences.CurrencyPrefs.HomeCurrency.value.trim().toUpperCase()
+    : '';
+  if (!/^[A-Z]{3}$/.test(homeCurrencyCode)) {
+    throw new Error('Missing home currency in QBO preferences');
+  }
+
+  const txnCurrencyCode = input.currencyCode.trim().toUpperCase();
+  if (txnCurrencyCode === homeCurrencyCode) {
+    return { updatedConnection: activeConnection === input.connection ? undefined : activeConnection };
+  }
+
+  const rateResult = await fetchExchangeRate(activeConnection, {
+    sourceCurrencyCode: txnCurrencyCode,
+    targetCurrencyCode: homeCurrencyCode,
+    asOfDate: input.txnDate,
+  });
+  if (rateResult.updatedConnection) {
+    activeConnection = rateResult.updatedConnection;
+  }
+
+  return {
+    exchangeRate: rateResult.exchangeRate.Rate,
+    updatedConnection: activeConnection === input.connection ? undefined : activeConnection,
+  };
 }
 
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
@@ -1123,6 +1166,16 @@ export async function processSettlement(input: {
   let postingConnection = computed.updatedConnection ? computed.updatedConnection : input.connection;
   let activeConnection = computed.updatedConnection;
 
+  const postingRate = await resolveExchangeRateForJournalPosting({
+    connection: postingConnection,
+    txnDate: computed.preview.settlementPostedDate,
+    currencyCode: settlementCurrencyCode,
+  });
+  if (postingRate.updatedConnection) {
+    postingConnection = postingRate.updatedConnection;
+    activeConnection = postingRate.updatedConnection;
+  }
+
   let cogsJournalEntryId = buildNoopJournalEntryId('COGS', computed.preview.invoiceId);
   const noopCogsJournalEntryId = cogsJournalEntryId;
   if (computed.preview.cogsJournalEntry.lines.length > 0) {
@@ -1131,6 +1184,7 @@ export async function processSettlement(input: {
       docNumber: computed.preview.cogsJournalEntry.docNumber,
       privateNote: computed.preview.cogsJournalEntry.privateNote,
       currencyCode: settlementCurrencyCode,
+      exchangeRate: postingRate.exchangeRate,
       lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
         amount: fromCents(line.amountCents),
         postingType: line.postingType,
@@ -1154,6 +1208,7 @@ export async function processSettlement(input: {
       docNumber: computed.preview.pnlJournalEntry.docNumber,
       privateNote: computed.preview.pnlJournalEntry.privateNote,
       currencyCode: settlementCurrencyCode,
+      exchangeRate: postingRate.exchangeRate,
       lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
         amount: fromCents(line.amountCents),
         postingType: line.postingType,
