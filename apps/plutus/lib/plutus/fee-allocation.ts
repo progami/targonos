@@ -1,13 +1,33 @@
-import { allocateByWeight } from '@/lib/inventory/money';
+import {
+  fetchInboundShipmentItemsByShipmentId,
+  listTransactionsForSettlementId,
+} from '@/lib/amazon-finances/sp-api-finances';
+import type { TenantCode } from '@/lib/amazon-finances/types';
 import type { PnlBucketKey } from '@/lib/pnl-allocation';
 import { classifyPnlBucket } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
-import { isRefundPrincipal, isSalePrincipal, normalizeSku } from './settlement-validation';
+import { normalizeSku } from './settlement-validation';
 import type { SettlementAuditRow } from './settlement-audit';
+import {
+  allocateShipmentFeeChargesBySkuQuantity,
+  extractInboundTransportationServiceFeeCharges,
+  isInboundTransportationMemoDescription,
+  type InboundShipmentItem,
+} from './shipment-fee-allocation';
 
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
 
 type AwdFeeType = 'STORAGE_FEE' | 'PROCESSING_FEE' | 'TRANSPORTATION_FEE';
+type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
+
+const SETTLEMENT_ID_FILENAME_PATTERN = /spapi-finances-settlement-([A-Za-z0-9]+)/i;
+const FBA_INBOUND_LOOKBACK_DAYS = 60;
+
+function tenantCodeForMarketplace(marketplace: MarketplaceId): TenantCode {
+  if (marketplace === 'amazon.com') return 'US';
+  if (marketplace === 'amazon.co.uk') return 'UK';
+  throw new Error(`Unsupported marketplace: ${marketplace}`);
+}
 
 function parseIsoDay(value: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -20,6 +40,47 @@ function diffDays(start: string, end: string): number {
   const startDate = parseIsoDay(start);
   const endDate = parseIsoDay(end);
   return Math.floor((endDate.getTime() - startDate.getTime()) / 86400000);
+}
+
+function shiftIsoDay(value: string, deltaDays: number): string {
+  const date = parseIsoDay(value);
+  date.setUTCDate(date.getUTCDate() + deltaDays);
+  return date.toISOString().slice(0, 10);
+}
+
+function dayStartIso(value: string): string {
+  return `${value}T00:00:00.000Z`;
+}
+
+function dayEndIso(value: string): string {
+  return `${value}T23:59:59.999Z`;
+}
+
+function nowMinusFiveMinutesIso(): string {
+  return new Date(Date.now() - 5 * 60 * 1000).toISOString();
+}
+
+function minIsoTimestamp(a: string, b: string): string {
+  return a <= b ? a : b;
+}
+
+function resolveSettlementId(input: { settlementId?: string; sourceFilename?: string }): string | null {
+  const explicit = input.settlementId;
+  if (typeof explicit === 'string') {
+    const trimmed = explicit.trim();
+    if (trimmed !== '') {
+      return trimmed;
+    }
+  }
+
+  const sourceFilename = input.sourceFilename;
+  if (typeof sourceFilename !== 'string') return null;
+  const trimmed = sourceFilename.trim();
+  if (trimmed === '') return null;
+
+  const match = trimmed.match(SETTLEMENT_ID_FILENAME_PATTERN);
+  if (!match || !match[1]) return null;
+  return match[1].trim();
 }
 
 function chooseBestUpload<T extends { startDate: string; endDate: string; uploadedAt: Date }>(uploads: T[]): T | null {
@@ -97,112 +158,6 @@ function sumSkuLessAwdFeeTotals(rows: SettlementAuditRow[]): {
     totalsByFeeType,
     unknownDescriptions: Array.from(unknownDescriptions).sort(),
   };
-}
-
-function summarizeUnknownSkus(unknownSkus: Set<string>): string {
-  const list = Array.from(unknownSkus).sort();
-  if (list.length <= 10) {
-    return list.join(', ');
-  }
-  return `${list.slice(0, 10).join(', ')}, ...`;
-}
-
-function sumAdsSpendCentsBySku(rows: Array<{ sku: string; spendCents: number }>): Record<string, number> {
-  const totals: Record<string, number> = {};
-  for (const row of rows) {
-    const sku = normalizeSku(row.sku);
-    if (sku === '') continue;
-    if (!Number.isFinite(row.spendCents) || row.spendCents <= 0) continue;
-    const current = totals[sku];
-    totals[sku] = (current === undefined ? 0 : current) + row.spendCents;
-  }
-  return totals;
-}
-
-async function buildAdvertisingWeightsFromAdsData(input: {
-  marketplace: 'amazon.com' | 'amazon.co.uk';
-  invoiceStartDate: string;
-  invoiceEndDate: string;
-  skuToBrand: Map<string, string>;
-}): Promise<{
-  weightsBySku: Record<string, number>;
-  issue: string | null;
-}> {
-  const adsUploads = await db.adsDataUpload.findMany({
-    where: {
-      reportType: 'SP_ADVERTISED_PRODUCT',
-      marketplace: input.marketplace,
-      startDate: { lte: input.invoiceStartDate },
-      endDate: { gte: input.invoiceEndDate },
-    },
-    select: {
-      id: true,
-      startDate: true,
-      endDate: true,
-      uploadedAt: true,
-    },
-    orderBy: { uploadedAt: 'desc' },
-  });
-
-  const upload = chooseBestUpload(adsUploads);
-  if (upload === null) {
-    return {
-      weightsBySku: {},
-      issue: `Missing advertising report upload covering ${input.invoiceStartDate}..${input.invoiceEndDate}`,
-    };
-  }
-
-  const adsRows = await db.adsDataRow.findMany({
-    where: {
-      uploadId: upload.id,
-      date: { gte: input.invoiceStartDate, lte: input.invoiceEndDate },
-    },
-    select: {
-      sku: true,
-      spendCents: true,
-    },
-  });
-
-  if (adsRows.length === 0) {
-    return {
-      weightsBySku: {},
-      issue: `Advertising report has no rows for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
-    };
-  }
-
-  const spendBySku = sumAdsSpendCentsBySku(adsRows);
-  if (Object.keys(spendBySku).length === 0) {
-    return {
-      weightsBySku: {},
-      issue: `Advertising report has no positive spend for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
-    };
-  }
-
-  const unknownSkus = new Set<string>();
-  const weightsBySku: Record<string, number> = {};
-  for (const [sku, spendCents] of Object.entries(spendBySku)) {
-    if (!input.skuToBrand.has(sku)) {
-      unknownSkus.add(sku);
-      continue;
-    }
-    weightsBySku[sku] = spendCents;
-  }
-
-  if (unknownSkus.size > 0) {
-    return {
-      weightsBySku: {},
-      issue: `Advertising report contains SKUs not mapped to brand (${summarizeUnknownSkus(unknownSkus)})`,
-    };
-  }
-
-  if (Object.keys(weightsBySku).length === 0) {
-    return {
-      weightsBySku: {},
-      issue: `Advertising report has no mapped SKU spend for ${input.invoiceStartDate}..${input.invoiceEndDate}`,
-    };
-  }
-
-  return { weightsBySku, issue: null };
 }
 
 function monthOffsetsForAwdFeeType(feeType: AwdFeeType): number[] {
@@ -436,59 +391,6 @@ function buildChargeTypeBreakdownString(byChargeType: Map<string | null, { total
   return parts.join(', ');
 }
 
-function sumSkuAbsCentsByBucket(rows: SettlementAuditRow[], bucket: PnlBucketKey): Record<string, number> {
-  const weightsBySku: Record<string, number> = {};
-  for (const row of rows) {
-    if (classifyPnlBucket(row.description) !== bucket) continue;
-    const skuRaw = row.sku.trim();
-    if (skuRaw === '') continue;
-    const cents = centsFromNet(row.net);
-    const weight = Math.abs(cents);
-    if (weight <= 0) continue;
-    const sku = normalizeSku(skuRaw);
-    const existing = weightsBySku[sku];
-    weightsBySku[sku] = (existing === undefined ? 0 : existing) + weight;
-  }
-  return weightsBySku;
-}
-
-function sumSkuAbsPrincipalCents(rows: SettlementAuditRow[]): Record<string, number> {
-  const weightsBySku: Record<string, number> = {};
-  for (const row of rows) {
-    const description = row.description.trim();
-    if (!isSalePrincipal(description) && !isRefundPrincipal(description)) continue;
-    const skuRaw = row.sku.trim();
-    if (skuRaw === '') continue;
-    const cents = centsFromNet(row.net);
-    const weight = Math.abs(cents);
-    if (weight <= 0) continue;
-    const sku = normalizeSku(skuRaw);
-    const existing = weightsBySku[sku];
-    weightsBySku[sku] = (existing === undefined ? 0 : existing) + weight;
-  }
-  return weightsBySku;
-}
-
-function pickSkuWeightsForSkuLessBucket(input: {
-  rows: SettlementAuditRow[];
-  bucket: PnlBucketKey;
-  principalWeightsBySku: Record<string, number>;
-}): Record<string, number> {
-  const rows = input.rows;
-  const bucket = input.bucket;
-
-  const byBucket = sumSkuAbsCentsByBucket(rows, bucket);
-  if (Object.keys(byBucket).length > 0) {
-    return byBucket;
-  }
-
-  if (Object.keys(input.principalWeightsBySku).length > 0) {
-    return input.principalWeightsBySku;
-  }
-
-  return {};
-}
-
 function sumSkuLessTotalsByBucket(rows: SettlementAuditRow[]): Partial<Record<PnlBucketKey, number>> {
   const totals: Partial<Record<PnlBucketKey, number>> = {};
   for (const row of rows) {
@@ -506,6 +408,22 @@ function sumSkuLessTotalsByBucket(rows: SettlementAuditRow[]): Partial<Record<Pn
   return totals;
 }
 
+function sumSkuLessTotalsByDescription(rows: SettlementAuditRow[], bucket: PnlBucketKey): Map<string, number> {
+  const totalsByDescription = new Map<string, number>();
+  for (const row of rows) {
+    if (classifyPnlBucket(row.description) !== bucket) continue;
+    if (row.sku.trim() !== '') continue;
+
+    const description = row.description.trim();
+    if (description === '') continue;
+
+    const cents = centsFromNet(row.net);
+    const current = totalsByDescription.get(description);
+    totalsByDescription.set(description, (current === undefined ? 0 : current) + cents);
+  }
+  return totalsByDescription;
+}
+
 function sumRecordValues(record: Record<string, number>): number {
   let total = 0;
   for (const value of Object.values(record)) {
@@ -514,25 +432,83 @@ function sumRecordValues(record: Record<string, number>): number {
   return total;
 }
 
-function allocateSignedByWeight(input: {
-  totalCents: number;
-  weightsBySku: Record<string, number>;
-}): Record<string, number> {
-  const totalCents = input.totalCents;
-  const sign = totalCents < 0 ? -1 : 1;
-  const absTotal = Math.abs(totalCents);
-  const weights = Object.entries(input.weightsBySku)
-    .filter((entry) => entry[0] !== '' && Number.isFinite(entry[1]) && entry[1] > 0)
-    .map((entry) => ({ key: entry[0], weight: entry[1] }));
-  if (weights.length === 0) {
-    return {};
+async function buildInboundTransportationAllocationFromSpApi(input: {
+  marketplace: MarketplaceId;
+  settlementId: string;
+  invoiceStartDate: string;
+  invoiceEndDate: string;
+  expectedTotalCents: number;
+  skuToBrand: Map<string, string>;
+}): Promise<{ allocationBySku: Record<string, number>; issues: string[] }> {
+  const settlementId = input.settlementId.trim();
+  if (settlementId === '') {
+    throw new Error('Missing settlementId for inbound transportation allocation');
   }
-  const allocated = allocateByWeight(absTotal, weights);
-  const signed: Record<string, number> = {};
-  for (const [sku, cents] of Object.entries(allocated)) {
-    signed[sku] = sign * cents;
+
+  const postedAfterIso = dayStartIso(shiftIsoDay(input.invoiceStartDate, -FBA_INBOUND_LOOKBACK_DAYS));
+  const requestedPostedBeforeIso = dayEndIso(shiftIsoDay(input.invoiceEndDate, FBA_INBOUND_LOOKBACK_DAYS));
+  const postedBeforeIso = minIsoTimestamp(requestedPostedBeforeIso, nowMinusFiveMinutesIso());
+  const tenantCode = tenantCodeForMarketplace(input.marketplace);
+
+  const transactions = await listTransactionsForSettlementId({
+    tenantCode,
+    settlementId,
+    postedAfterIso,
+    postedBeforeIso,
+  });
+
+  const extraction = extractInboundTransportationServiceFeeCharges(transactions);
+  const issues = [...extraction.issues];
+  if (extraction.charges.length === 0) {
+    issues.push(`SP-API returned no inbound transportation service-fee charges for settlement ${settlementId}`);
+    return { allocationBySku: {}, issues };
   }
-  return signed;
+
+  const chargesTotalCents = extraction.charges.reduce((total, charge) => total + charge.cents, 0);
+  if (chargesTotalCents !== input.expectedTotalCents) {
+    issues.push(
+      `Inbound transportation fee total mismatch vs SP-API transactions (${chargesTotalCents} vs ${input.expectedTotalCents})`,
+    );
+  }
+
+  const shipmentItemsByShipmentId = new Map<string, InboundShipmentItem[]>();
+  const uniqueShipmentIds = Array.from(new Set(extraction.charges.map((charge) => charge.shipmentId))).sort();
+  for (const shipmentId of uniqueShipmentIds) {
+    const items = await fetchInboundShipmentItemsByShipmentId({ tenantCode, shipmentId });
+    shipmentItemsByShipmentId.set(
+      shipmentId,
+      items.map((item) => ({
+        sku: item.sellerSku,
+        quantity: item.quantityShipped,
+      })),
+    );
+  }
+
+  const allocation = allocateShipmentFeeChargesBySkuQuantity({
+    charges: extraction.charges,
+    shipmentItemsByShipmentId,
+  });
+  for (const issue of allocation.issues) {
+    issues.push(issue);
+  }
+
+  for (const sku of Object.keys(allocation.allocationBySku)) {
+    if (!input.skuToBrand.has(sku)) {
+      issues.push(`Shipment fee allocation contains unmapped SKU ${sku}`);
+    }
+  }
+
+  const allocatedTotalCents = sumRecordValues(allocation.allocationBySku);
+  if (allocatedTotalCents !== input.expectedTotalCents) {
+    issues.push(
+      `Inbound transportation SKU allocation total mismatch (${allocatedTotalCents} vs ${input.expectedTotalCents})`,
+    );
+  }
+
+  return {
+    allocationBySku: allocation.allocationBySku,
+    issues,
+  };
 }
 
 type AllocationIssue = {
@@ -542,9 +518,9 @@ type AllocationIssue = {
 
 const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
   amazonSellerFees:
-    'Missing deterministic source for SKU-less Amazon Seller Fees. Provide seller fee detail report/API data at SKU level.',
+    'Amazon Seller Fees are allocated to SKU/brand when a SKU is present in the settlement data. SKU-less seller fee lines (e.g., subscription fees) stay in the parent account.',
   amazonFbaFees:
-    'Missing deterministic source for SKU-less Amazon FBA Fees. Provide FBA fee detail report/API data at SKU level.',
+    'Missing deterministic source for SKU-less Amazon FBA Fees. Provide shipment-level fee/API data with deterministic SKU linkage.',
   amazonStorageFees:
     'Missing deterministic source for SKU-less Amazon Storage Fees. Provide storage fee detail report/API data at SKU level.',
   amazonAdvertisingCosts:
@@ -563,10 +539,12 @@ export function deterministicSourceGuidanceForBucket(bucket: PnlBucketKey): stri
 
 export async function buildDeterministicSkuAllocations(input: {
   rows: SettlementAuditRow[];
-  marketplace: 'amazon.com' | 'amazon.co.uk';
+  marketplace: MarketplaceId;
   invoiceStartDate: string;
   invoiceEndDate: string;
   skuToBrand: Map<string, string>;
+  settlementId?: string;
+  sourceFilename?: string;
 }): Promise<{
   skuAllocationsByBucket: Partial<Record<PnlBucketKey, Record<string, number>>>;
   issues: AllocationIssue[];
@@ -574,124 +552,95 @@ export async function buildDeterministicSkuAllocations(input: {
   const skuAllocationsByBucket: Partial<Record<PnlBucketKey, Record<string, number>>> = {};
   const issues: AllocationIssue[] = [];
   const skuLessTotalsByBucket = sumSkuLessTotalsByBucket(input.rows);
-  const principalWeightsBySku = sumSkuAbsPrincipalCents(input.rows);
-
-  const sellerFeesSkuLessTotal = skuLessTotalsByBucket.amazonSellerFees;
-  if (sellerFeesSkuLessTotal !== undefined && sellerFeesSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
-      bucket: 'amazonSellerFees',
-      principalWeightsBySku,
-    });
-    const allocated = allocateSignedByWeight({
-      totalCents: sellerFeesSkuLessTotal,
-      weightsBySku,
-    });
-
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonSellerFees = allocated;
-    }
-  }
 
   const fbaFeesSkuLessTotal = skuLessTotalsByBucket.amazonFbaFees;
   if (fbaFeesSkuLessTotal !== undefined && fbaFeesSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
-      bucket: 'amazonFbaFees',
-      principalWeightsBySku,
-    });
-    const allocated = allocateSignedByWeight({
-      totalCents: fbaFeesSkuLessTotal,
-      weightsBySku,
-    });
+    const totalsByDescription = sumSkuLessTotalsByDescription(input.rows, 'amazonFbaFees');
+    let inboundExpectedTotalCents = 0;
 
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonFbaFees = allocated;
+    for (const [description, cents] of totalsByDescription.entries()) {
+      if (cents === 0) continue;
+      if (isInboundTransportationMemoDescription(description)) {
+        inboundExpectedTotalCents += cents;
+        continue;
+      }
+
+      issues.push({
+        bucket: 'amazonFbaFees',
+        message: `Unhandled SKU-less FBA fee memo '${description}' (${cents} cents)`,
+      });
+    }
+
+    if (inboundExpectedTotalCents !== 0) {
+      const settlementId = resolveSettlementId({
+        settlementId: input.settlementId,
+        sourceFilename: input.sourceFilename,
+      });
+
+      if (settlementId === null) {
+        issues.push({
+          bucket: 'amazonFbaFees',
+          message:
+            'Missing settlementId for inbound transportation fee allocation. Process via SP-API settlement sync or provide a settlementId.',
+        });
+      } else {
+        let inboundAllocation: Awaited<ReturnType<typeof buildInboundTransportationAllocationFromSpApi>> | null = null;
+        try {
+          inboundAllocation = await buildInboundTransportationAllocationFromSpApi({
+            marketplace: input.marketplace,
+            settlementId,
+            invoiceStartDate: input.invoiceStartDate,
+            invoiceEndDate: input.invoiceEndDate,
+            expectedTotalCents: inboundExpectedTotalCents,
+            skuToBrand: input.skuToBrand,
+          });
+        } catch (error) {
+          issues.push({
+            bucket: 'amazonFbaFees',
+            message: `Inbound transportation allocation failed for settlement ${settlementId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          });
+        }
+
+        if (inboundAllocation !== null) {
+          for (const issue of inboundAllocation.issues) {
+            issues.push({
+              bucket: 'amazonFbaFees',
+              message: issue,
+            });
+          }
+
+          if (Object.keys(inboundAllocation.allocationBySku).length > 0) {
+            skuAllocationsByBucket.amazonFbaFees = inboundAllocation.allocationBySku;
+          }
+        }
+      }
     }
   }
 
   const storageFeesSkuLessTotal = skuLessTotalsByBucket.amazonStorageFees;
   if (storageFeesSkuLessTotal !== undefined && storageFeesSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
+    issues.push({
       bucket: 'amazonStorageFees',
-      principalWeightsBySku,
+      message: `SKU-less Amazon Storage Fees require deterministic source data (${storageFeesSkuLessTotal} cents)`,
     });
-    const allocated = allocateSignedByWeight({
-      totalCents: storageFeesSkuLessTotal,
-      weightsBySku,
-    });
-
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonStorageFees = allocated;
-    }
   }
 
   const promotionsSkuLessTotal = skuLessTotalsByBucket.amazonPromotions;
   if (promotionsSkuLessTotal !== undefined && promotionsSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
+    issues.push({
       bucket: 'amazonPromotions',
-      principalWeightsBySku,
+      message: `SKU-less Amazon Promotions require deterministic source data (${promotionsSkuLessTotal} cents)`,
     });
-    const allocated = allocateSignedByWeight({
-      totalCents: promotionsSkuLessTotal,
-      weightsBySku,
-    });
-
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonPromotions = allocated;
-    }
   }
 
   const reimbursementSkuLessTotal = skuLessTotalsByBucket.amazonFbaInventoryReimbursement;
   if (reimbursementSkuLessTotal !== undefined && reimbursementSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
+    issues.push({
       bucket: 'amazonFbaInventoryReimbursement',
-      principalWeightsBySku,
+      message: `SKU-less Amazon FBA Inventory Reimbursement requires deterministic source data (${reimbursementSkuLessTotal} cents)`,
     });
-    const allocated = allocateSignedByWeight({
-      totalCents: reimbursementSkuLessTotal,
-      weightsBySku,
-    });
-
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonFbaInventoryReimbursement = allocated;
-    }
-  }
-
-  const advertisingSkuLessTotal = skuLessTotalsByBucket.amazonAdvertisingCosts;
-  if (advertisingSkuLessTotal !== undefined && advertisingSkuLessTotal !== 0) {
-    let weightsBySku = pickSkuWeightsForSkuLessBucket({
-      rows: input.rows,
-      bucket: 'amazonAdvertisingCosts',
-      principalWeightsBySku,
-    });
-    if (Object.keys(weightsBySku).length === 0) {
-      const adsWeights = await buildAdvertisingWeightsFromAdsData({
-        marketplace: input.marketplace,
-        invoiceStartDate: input.invoiceStartDate,
-        invoiceEndDate: input.invoiceEndDate,
-        skuToBrand: input.skuToBrand,
-      });
-      if (Object.keys(adsWeights.weightsBySku).length > 0) {
-        weightsBySku = adsWeights.weightsBySku;
-      } else if (adsWeights.issue !== null) {
-        issues.push({
-          bucket: 'amazonAdvertisingCosts',
-          message: adsWeights.issue,
-        });
-      }
-    }
-    const allocated = allocateSignedByWeight({
-      totalCents: advertisingSkuLessTotal,
-      weightsBySku,
-    });
-
-    if (Object.keys(allocated).length > 0) {
-      skuAllocationsByBucket.amazonAdvertisingCosts = allocated;
-    }
   }
 
   const awdSkuLessTotal = skuLessTotalsByBucket.warehousingAwd;

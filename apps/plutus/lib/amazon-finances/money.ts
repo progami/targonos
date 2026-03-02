@@ -31,7 +31,12 @@ function parseSignedDecimalToCents(value: string): number {
 }
 
 export function moneyToCents(money: SpApiMoney, context: string): number {
-  const numeric = money.CurrencyAmount;
+  const numeric =
+    typeof money.CurrencyAmount === 'number'
+      ? money.CurrencyAmount
+      : typeof money.currencyAmount === 'number'
+        ? money.currencyAmount
+        : undefined;
   if (typeof numeric === 'number') {
     if (!Number.isFinite(numeric)) {
       throw new Error(`Invalid money CurrencyAmount for ${context}`);
@@ -39,7 +44,7 @@ export function moneyToCents(money: SpApiMoney, context: string): number {
     return Math.round(numeric * 100);
   }
 
-  const raw = money.Amount;
+  const raw = typeof money.Amount === 'string' ? money.Amount : typeof money.amount === 'string' ? money.amount : undefined;
   if (typeof raw !== 'string' || raw.trim() === '') {
     throw new Error(`Missing money amount for ${context}`);
   }

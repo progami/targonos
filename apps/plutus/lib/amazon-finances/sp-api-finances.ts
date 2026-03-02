@@ -21,16 +21,72 @@ async function getCallAmazonApi(): Promise<CallAmazonApi> {
   return cachedCallAmazonApi;
 }
 
-function getRelatedIdentifierValue(
+type InboundShipmentItemsResponse = {
+  payload?: {
+    ItemData?: unknown[];
+    items?: unknown[];
+    shipmentItems?: unknown[];
+  };
+  ItemData?: unknown[];
+  items?: unknown[];
+  shipmentItems?: unknown[];
+  errors?: Array<{
+    code?: string;
+    message?: string;
+    details?: string;
+  }>;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => asRecord(entry))
+    .filter((entry): entry is Record<string, unknown> => entry !== null);
+}
+
+function readTrimmedString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  return trimmed;
+}
+
+function readItemArray(source: Record<string, unknown>): Record<string, unknown>[] {
+  const preferredKeys = ['ItemData', 'items', 'shipmentItems'];
+  for (const key of preferredKeys) {
+    const rows = asRecordArray(source[key]);
+    if (rows.length > 0) return rows;
+  }
+  return [];
+}
+
+export function getRelatedIdentifierValue(
   identifiers: SpApiTransactionRelatedIdentifier[] | undefined,
   name: string,
 ): string | null {
   const list = Array.isArray(identifiers) ? identifiers : [];
-  const match = list.find((entry) => entry?.relatedIdentifierName === name);
-  const value = match?.relatedIdentifierValue;
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
+  const upperName = name.trim().toUpperCase();
+
+  for (const entry of list) {
+    const rawName = entry?.relatedIdentifierName;
+    if (typeof rawName !== 'string') continue;
+    if (rawName.trim().toUpperCase() !== upperName) continue;
+
+    const value = entry.relatedIdentifierValue;
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed === '') continue;
+    return trimmed;
+  }
+
+  return null;
 }
 
 function mergeFinancialEvents(target: SpApiFinancialEvents, page: SpApiFinancialEvents): void {
@@ -145,7 +201,7 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
 }): Promise<string> {
   const callAmazonApi = await getCallAmazonApi();
 
-  const matches: Array<{ transaction: SpApiTransaction; groupId: string }> = [];
+  let matchedGroupId: string | null = null;
 
   let nextToken: string | undefined;
   const seenTokens = new Set<string>();
@@ -169,7 +225,16 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
       const groupId = getRelatedIdentifierValue(tx.relatedIdentifiers, 'FINANCIAL_EVENT_GROUP_ID');
       if (!groupId) continue;
 
-      matches.push({ transaction: tx, groupId });
+      if (matchedGroupId === null) {
+        matchedGroupId = groupId;
+        // Settlement ID uniquely identifies a single financial event group.
+        // Once resolved, stop paginating to avoid scanning unrelated transactions.
+        return matchedGroupId;
+      }
+
+      if (matchedGroupId !== groupId) {
+        throw new Error(`SettlementId ${input.settlementId} maps to multiple event groups: ${matchedGroupId}, ${groupId}`);
+      }
     }
 
     const token = res.nextToken;
@@ -181,17 +246,11 @@ export async function findFinancialEventGroupIdForSettlementId(input: {
     nextToken = token;
   }
 
-  if (matches.length === 0) {
+  if (matchedGroupId === null) {
     throw new Error(`No SP-API transactions found for settlementId ${input.settlementId}`);
   }
 
-  const unique = new Set(matches.map((m) => m.groupId));
-  if (unique.size !== 1) {
-    throw new Error(`SettlementId ${input.settlementId} maps to multiple event groups: ${Array.from(unique).join(', ')}`);
-  }
-
-  const groupId = matches[0]!.groupId;
-  return groupId;
+  return matchedGroupId;
 }
 
 export async function listSettlementEventGroupsFromTransactions(input: {
@@ -243,4 +302,118 @@ export async function listSettlementEventGroupsFromTransactions(input: {
   }
 
   return settlementToGroupId;
+}
+
+export async function listTransactionsForSettlementId(input: {
+  tenantCode: TenantCode;
+  settlementId: string;
+  postedAfterIso: string;
+  postedBeforeIso: string;
+}): Promise<SpApiTransaction[]> {
+  const callAmazonApi = await getCallAmazonApi();
+
+  const matchedTransactions: SpApiTransaction[] = [];
+
+  let nextToken: string | undefined;
+  const seenTokens = new Set<string>();
+  for (let page = 0; page < 500; page++) {
+    const res = await callAmazonApi<SpApiListTransactionsResponse>(input.tenantCode, {
+      operation: 'listTransactions',
+      endpoint: 'finances',
+      options: { version: '2024-06-19' },
+      query: {
+        postedAfter: input.postedAfterIso,
+        postedBefore: input.postedBeforeIso,
+        nextToken,
+      },
+    });
+
+    const txs = Array.isArray(res.transactions) ? res.transactions : [];
+    for (const tx of txs) {
+      const settlementId = getRelatedIdentifierValue(tx.relatedIdentifiers, 'SETTLEMENT_ID');
+      if (settlementId !== input.settlementId) continue;
+      matchedTransactions.push(tx);
+    }
+
+    const token = res.nextToken;
+    if (typeof token !== 'string' || token.trim() === '') break;
+    if (seenTokens.has(token)) {
+      throw new Error(
+        `SP-API listTransactions returned repeated nextToken while loading settlement transactions ${input.settlementId}`,
+      );
+    }
+    seenTokens.add(token);
+    nextToken = token;
+  }
+
+  return matchedTransactions;
+}
+
+export async function fetchInboundShipmentItemsByShipmentId(input: {
+  tenantCode: TenantCode;
+  shipmentId: string;
+}): Promise<Array<{ sellerSku: string; quantityShipped: number }>> {
+  const callAmazonApi = await getCallAmazonApi();
+
+  const shipmentId = input.shipmentId.trim();
+  if (shipmentId === '') {
+    throw new Error('Missing shipmentId');
+  }
+
+  const res = await callAmazonApi<InboundShipmentItemsResponse>(input.tenantCode, {
+    operation: 'getShipmentItemsByShipmentId',
+    endpoint: 'fulfillmentInbound',
+    path: { shipmentId },
+  });
+
+  const errorList = Array.isArray(res.errors) ? res.errors : [];
+  if (errorList.length > 0) {
+    const details = errorList
+      .map((entry) => {
+        const message = readTrimmedString(entry.message);
+        if (message !== null) return message;
+        const code = readTrimmedString(entry.code);
+        if (code !== null) return code;
+        return 'Unknown SP-API error';
+      })
+      .join(' | ');
+    throw new Error(`SP-API getShipmentItemsByShipmentId failed for ${shipmentId}: ${details}`);
+  }
+
+  const responseRecord = asRecord(res);
+  if (responseRecord === null) {
+    throw new Error(`Invalid shipment item response shape for ${shipmentId}`);
+  }
+
+  const payloadValue = responseRecord.payload;
+  const payloadRecord = asRecord(payloadValue);
+
+  let itemRecords: Record<string, unknown>[] = [];
+  if (payloadRecord !== null) {
+    itemRecords = readItemArray(payloadRecord);
+  }
+  if (itemRecords.length === 0) {
+    itemRecords = readItemArray(responseRecord);
+  }
+
+  const result: Array<{ sellerSku: string; quantityShipped: number }> = [];
+  for (const row of itemRecords) {
+    const sellerSku = readTrimmedString(row.SellerSKU);
+    if (sellerSku === null) continue;
+
+    const quantityRaw = row.QuantityShipped;
+    if (typeof quantityRaw !== 'number' || !Number.isFinite(quantityRaw)) {
+      throw new Error(`Invalid QuantityShipped for shipment ${shipmentId} SKU ${sellerSku}`);
+    }
+    if (!Number.isInteger(quantityRaw) || quantityRaw <= 0) {
+      throw new Error(`Non-positive QuantityShipped for shipment ${shipmentId} SKU ${sellerSku}: ${quantityRaw}`);
+    }
+
+    result.push({
+      sellerSku,
+      quantityShipped: quantityRaw,
+    });
+  }
+
+  return result;
 }

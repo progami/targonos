@@ -35,6 +35,11 @@ import {
 import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
 import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
 import { computePnlAllocation } from '../lib/pnl-allocation';
+import {
+  allocateShipmentFeeChargesBySkuQuantity,
+  extractInboundTransportationServiceFeeCharges,
+  isInboundTransportationMemoDescription,
+} from '../lib/plutus/shipment-fee-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
@@ -93,8 +98,8 @@ test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
   assert.equal(normalizeSettlementDocNumber('LMB-UK-260116-260130-S1'), 'UK-260116-260130-S1');
   assert.equal(normalizeSettlementDocNumber('PLT-UK-260116-260130-S1'), 'UK-260116-260130-S1');
   assert.equal(stripPlutusDocPrefix('PLT-UK-260116-260130-S1'), 'UK-260116-260130-S1');
-  assert.equal(buildPlutusSettlementDocNumber('UK-16-30JAN-26-1'), 'PLT-UK-260116-260130-S1');
-  assert.equal(buildPlutusSettlementDocNumber('UK-260116-260130-S1'), 'PLT-UK-260116-260130-S1');
+  assert.equal(buildPlutusSettlementDocNumber('UK-16-30JAN-26-1'), 'UK-260116-260130-S1');
+  assert.equal(buildPlutusSettlementDocNumber('UK-260116-260130-S1'), 'UK-260116-260130-S1');
 
   const meta = parseSettlementDocNumber('LMB-UK-16-30JAN-26-1');
   assert.equal(meta.normalizedDocNumber, 'UK-260116-260130-S1');
@@ -657,7 +662,7 @@ test('computePnlAllocation leaves SKU-less fees unallocated without deterministi
       orderId: 'n/a',
       sku: '',
       quantity: 0,
-      description: 'Amazon Seller Fees - Commission',
+      description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
       net: -9,
     },
   ];
@@ -666,11 +671,121 @@ test('computePnlAllocation leaves SKU-less fees unallocated without deterministi
     getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
   });
 
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, undefined);
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandB, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
+  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandB, undefined);
   assert.equal(allocation.unallocatedSkuLessBuckets.length, 1);
-  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.bucket, 'amazonSellerFees');
+  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.bucket, 'amazonFbaFees');
   assert.equal(allocation.unallocatedSkuLessBuckets[0]?.totalCents, -900);
+});
+
+test('computePnlAllocation allocates amazon seller fees when SKU is present', () => {
+  const rows = [
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'ORD-1',
+      sku: 'SKU-A',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Commission',
+      net: -2.5,
+    },
+    {
+      invoice: 'INV-1',
+      market: 'Amazon.com',
+      date: '2025-12-01',
+      orderId: 'n/a',
+      sku: '',
+      quantity: 0,
+      description: 'Amazon Seller Fees - Subscription Fee',
+      net: -1.25,
+    },
+  ];
+
+  const allocation = computePnlAllocation(rows, {
+    getBrandForSku: () => 'BrandA',
+  });
+
+  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -250);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -250);
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+});
+
+test('extractInboundTransportationServiceFeeCharges parses transaction and context entries', () => {
+  const parsed = extractInboundTransportationServiceFeeCharges([
+    {
+      transactionType: 'ServiceFee',
+      transactionId: 'TX-1',
+      description: 'FBA Inbound Transportation Fee',
+      totalAmount: { currencyAmount: -100 },
+      relatedIdentifiers: [{ relatedIdentifierName: 'ORDER_ID', relatedIdentifierValue: 'FBA-SHIP-1' }],
+    },
+    {
+      transactionType: 'ServiceFee',
+      transactionId: 'TX-2',
+      description: 'Service fee',
+      relatedIdentifiers: [{ relatedIdentifierName: 'SETTLEMENT_ID', relatedIdentifierValue: 'S-1' }],
+      contexts: [
+        {
+          description: 'FBA Inbound Transportation Fee',
+          amount: { currencyAmount: -50 },
+          relatedIdentifiers: [{ relatedIdentifierName: 'ORDER_ID', relatedIdentifierValue: 'FBA-SHIP-2' }],
+        },
+      ],
+    },
+    {
+      transactionType: 'DebtRecovery',
+      transactionId: 'TX-3',
+    },
+  ]);
+
+  assert.equal(parsed.issues.length, 0);
+  assert.equal(parsed.charges.length, 2);
+  assert.equal(parsed.charges[0]?.shipmentId, 'FBA-SHIP-1');
+  assert.equal(parsed.charges[0]?.cents, -10000);
+  assert.equal(parsed.charges[1]?.shipmentId, 'FBA-SHIP-2');
+  assert.equal(parsed.charges[1]?.cents, -5000);
+  assert.equal(isInboundTransportationMemoDescription('Amazon FBA Fees - FBA Inbound Transportation Fee'), true);
+  assert.equal(isInboundTransportationMemoDescription('Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders'), true);
+  assert.equal(isInboundTransportationMemoDescription('Amazon Seller Fees - Subscription Fee'), false);
+});
+
+test('allocateShipmentFeeChargesBySkuQuantity allocates by shipped quantity', () => {
+  const allocation = allocateShipmentFeeChargesBySkuQuantity({
+    charges: [
+      {
+        shipmentId: 'FBA-SHIP-1',
+        cents: -10000,
+        transactionId: 'TX-1',
+        description: 'FBA Inbound Transportation Fee',
+      },
+      {
+        shipmentId: 'FBA-SHIP-2',
+        cents: -5000,
+        transactionId: 'TX-2',
+        description: 'FBA Inbound Transportation Fee',
+      },
+    ],
+    shipmentItemsByShipmentId: new Map([
+      [
+        'FBA-SHIP-1',
+        [
+          { sku: 'SKU-A', quantity: 3 },
+          { sku: 'SKU-B', quantity: 1 },
+        ],
+      ],
+      [
+        'FBA-SHIP-2',
+        [
+          { sku: 'SKU-B', quantity: 2 },
+        ],
+      ],
+    ]),
+  });
+
+  assert.equal(allocation.issues.length, 0);
+  assert.equal(allocation.allocationBySku['SKU-A'], -7500);
+  assert.equal(allocation.allocationBySku['SKU-B'], -7500);
 });
 
 test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
@@ -877,7 +992,7 @@ test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee r
       orderId: 'n/a',
       sku: '',
       quantity: 0,
-      description: 'Amazon Seller Fees - Commission',
+      description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
       net: -3,
     },
   ];
@@ -889,7 +1004,7 @@ test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee r
     },
     {
       skuAllocationsByBucket: {
-        amazonSellerFees: {
+        amazonFbaFees: {
           'SKU-A': -200,
           'SKU-B': -100,
         },
@@ -897,9 +1012,9 @@ test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee r
     },
   );
 
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -300);
-  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -200);
-  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-B'], -100);
+  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, -300);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonFbaFees.BrandA?.['SKU-A'], -200);
+  assert.equal(allocation.skuBreakdownByBucketBrand.amazonFbaFees.BrandA?.['SKU-B'], -100);
   assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
 });
 
@@ -945,9 +1060,9 @@ test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(lines[0]?.description.includes('SKU-B'), true);
 });
 
-test('isBlockingProcessingCode treats PNL allocation warnings as blocking', () => {
+test('isBlockingProcessingCode treats PNL allocation warnings as non-blocking', () => {
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), true);
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), false);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
   assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);

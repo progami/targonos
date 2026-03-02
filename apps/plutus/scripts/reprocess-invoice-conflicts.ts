@@ -196,39 +196,42 @@ async function loadAuditRowsFromDb(input: {
     select: { id: true, filename: true, uploadedAt: true },
   });
 
-  const chosen = uploads.find((u) => u.uploadedAt <= input.processedAt) ?? null;
-  if (!chosen) {
+  if (uploads.length === 0) {
     throw new Error(
       `No audit upload found for ${input.invoiceId} (${input.marketplace}) with filename=${input.sourceFilename} at or before ${input.processedAt.toISOString()}`,
     );
   }
 
-  const dbRows = await input.db.auditDataRow.findMany({
-    where: {
-      uploadId: chosen.id,
-      invoiceId: input.invoiceId,
-      market: { equals: market, mode: 'insensitive' },
-    },
-  });
+  const candidates = uploads.filter((u) => u.uploadedAt <= input.processedAt);
+  const orderedCandidates = candidates.length > 0 ? candidates : uploads;
+  for (const chosen of orderedCandidates) {
+    const dbRows = await input.db.auditDataRow.findMany({
+      where: {
+        uploadId: chosen.id,
+        invoiceId: input.invoiceId,
+        market: { equals: market, mode: 'insensitive' },
+      },
+    });
 
-  if (dbRows.length === 0) {
-    throw new Error(
-      `No stored audit rows found for invoice ${input.invoiceId} (${input.marketplace}) in upload ${chosen.id} (${chosen.filename})`,
-    );
+    if (dbRows.length === 0) continue;
+
+    const rows: SettlementAuditRow[] = dbRows.map((r) => ({
+      invoiceId: r.invoiceId,
+      market: r.market,
+      date: r.date,
+      orderId: r.orderId,
+      sku: r.sku,
+      quantity: r.quantity,
+      description: r.description,
+      net: fromCents(r.net),
+    }));
+
+    return { rows, sourceFilename: chosen.filename };
   }
 
-  const rows: SettlementAuditRow[] = dbRows.map((r) => ({
-    invoiceId: r.invoiceId,
-    market: r.market,
-    date: r.date,
-    orderId: r.orderId,
-    sku: r.sku,
-    quantity: r.quantity,
-    description: r.description,
-    net: fromCents(r.net),
-  }));
-
-  return { rows, sourceFilename: chosen.filename };
+  throw new Error(
+    `No stored audit rows found for invoice ${input.invoiceId} (${input.marketplace}) in any upload with filename=${input.sourceFilename} at or before ${input.processedAt.toISOString()}`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -302,6 +305,9 @@ async function main(): Promise<void> {
   const { processSettlement } = await import('@/lib/plutus/settlement-processing');
 
   const toFix = options.max === null ? conflicts : conflicts.slice(0, options.max);
+  let fixed = 0;
+  let blocked = 0;
+  const blockedInvoices: Array<{ invoiceId: string; blockingCodes: string[] }> = [];
   for (const conflict of toFix) {
     const existing = await db.settlementProcessing.findUnique({
       where: { id: conflict.settlementProcessingId },
@@ -400,13 +406,35 @@ async function main(): Promise<void> {
       activeConnection = processed.updatedConnection;
     }
     if (!processed.result.ok) {
-      throw new Error(`Reprocess blocked for ${existing.invoiceId}: ${JSON.stringify(processed.result.preview.blocks)}`);
+      blocked += 1;
+      blockedInvoices.push({
+        invoiceId: existing.invoiceId,
+        blockingCodes: processed.result.preview.blocks.map((block) => block.code),
+      });
+      continue;
     }
+    fixed += 1;
   }
 
   await saveServerQboConnection(activeConnection);
 
-  console.log(JSON.stringify({ options, totals: { processed: processings.length, conflicts: conflicts.length, fixed: toFix.length } }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        options,
+        totals: {
+          processed: processings.length,
+          conflicts: conflicts.length,
+          attempted: toFix.length,
+          fixed,
+          blocked,
+        },
+        blockedInvoices,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((error) => {

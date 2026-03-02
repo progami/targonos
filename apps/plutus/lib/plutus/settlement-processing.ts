@@ -68,7 +68,7 @@ export type {
 
 function isCogsEnabledForMarketplace(marketplace: string): boolean {
   if (marketplace === 'amazon.com') return true;
-  if (marketplace === 'amazon.co.uk') return true;
+  if (marketplace === 'amazon.co.uk') return false;
   throw new Error(`Unsupported marketplace for COGS processing: ${marketplace}`);
 }
 
@@ -331,6 +331,7 @@ export async function computeSettlementPreview(input: {
   sourceFilename: string;
   invoiceId: string;
   auditRows: SettlementAuditRow[];
+  settlementId?: string;
 }): Promise<{ preview: SettlementProcessingPreview; updatedConnection?: QboConnection }> {
   const blocks: ProcessingBlock[] = [];
 
@@ -759,6 +760,8 @@ export async function computeSettlementPreview(input: {
       invoiceStartDate: minDate,
       invoiceEndDate: maxDate,
       skuToBrand,
+      settlementId: input.settlementId,
+      sourceFilename: input.sourceFilename,
     });
     for (const issue of deterministicAllocations.issues) {
       blocks.push({
@@ -770,6 +773,8 @@ export async function computeSettlementPreview(input: {
 
     pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
       skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
+      parentOnlyBuckets: ['amazonAdvertisingCosts'],
+      skuLessParentOnlyBuckets: ['amazonSellerFees'],
     });
 
     for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
@@ -1154,6 +1159,7 @@ export async function processSettlement(input: {
   sourceFilename: string;
   invoiceId: string;
   auditRows: SettlementAuditRow[];
+  settlementId?: string;
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
   const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);

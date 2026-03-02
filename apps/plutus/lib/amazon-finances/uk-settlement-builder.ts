@@ -160,6 +160,7 @@ function serviceFeeMemo(feeType: string): string | null {
   if (feeType === 'AmazonUpstreamProcessingFee') return 'Amazon FBA Fees - AWD Processing Fee';
   if (feeType === 'AmazonUpstreamStorageTransportationFee') return 'Amazon FBA Fees - AWD Transportation Fee';
   if (feeType === 'FBAPerUnitFulfillmentFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment - Domestic Orders';
+  if (feeType === 'FBADisposalFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment - Domestic Orders';
   if (feeType === 'FBAStorageFee') return 'Amazon Storage Fees - Storage Fee';
   if (feeType === 'STARStorageFee') return 'Amazon Storage Fees - AWD Storage Fee';
   if (feeType === 'FBAWeightBasedFee') return null;

@@ -6,6 +6,9 @@ export type SpApiMoney = {
   CurrencyCode?: string;
   CurrencyAmount?: number;
   Amount?: string;
+  currencyCode?: string;
+  currencyAmount?: number;
+  amount?: string;
 };
 
 export type SpApiTransactionRelatedIdentifier = {
@@ -17,10 +20,28 @@ export type SpApiTransaction = {
   transactionType?: string;
   transactionId?: string;
   postedDate?: string;
+  description?: string;
+  amount?: SpApiMoney;
+  totalAmount?: SpApiMoney;
+  transactionAmount?: SpApiMoney;
   marketplaceDetails?: {
     marketplaceId?: string;
   };
   relatedIdentifiers?: SpApiTransactionRelatedIdentifier[];
+  contexts?: Array<{
+    description?: string;
+    amount?: SpApiMoney;
+    totalAmount?: SpApiMoney;
+    transactionAmount?: SpApiMoney;
+    relatedIdentifiers?: SpApiTransactionRelatedIdentifier[];
+    breakdowns?: Array<{
+      description?: string;
+      amount?: SpApiMoney;
+      totalAmount?: SpApiMoney;
+      transactionAmount?: SpApiMoney;
+      relatedIdentifiers?: SpApiTransactionRelatedIdentifier[];
+    }>;
+  }>;
 };
 
 export type SpApiListTransactionsResponse = {
