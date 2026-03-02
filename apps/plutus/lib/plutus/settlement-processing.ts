@@ -66,10 +66,10 @@ export type {
   SettlementProcessingResult,
 } from './settlement-types';
 
-const COGS_DISABLED_MARKETPLACES = new Set(['amazon.co.uk']);
-
 function isCogsEnabledForMarketplace(marketplace: string): boolean {
-  return COGS_DISABLED_MARKETPLACES.has(marketplace) === false;
+  if (marketplace === 'amazon.com') return true;
+  if (marketplace === 'amazon.co.uk') return true;
+  throw new Error(`Unsupported marketplace for COGS processing: ${marketplace}`);
 }
 
 function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP' {
