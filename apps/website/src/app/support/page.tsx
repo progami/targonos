@@ -64,7 +64,7 @@ export default function SupportPage() {
                   </p>
                   <div className="mt-4">
                     <Button asChild variant="outline">
-                      <Link href="/products">Compare packs</Link>
+                      <Link href="/caelum-star/products">Compare packs</Link>
                     </Button>
                   </div>
                 </Card>
@@ -133,7 +133,7 @@ export default function SupportPage() {
                 </div>
                 <div className="md:col-span-4 md:flex md:justify-end">
                   <Button asChild variant="accent" size="lg">
-                    <Link href="/products">
+                    <Link href="/caelum-star/products">
                       Browse packs <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
