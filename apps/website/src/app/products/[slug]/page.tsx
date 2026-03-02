@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowUpRight, Check, Shield, Sparkles } from 'lucide-react';
+import { ArrowRight, ArrowUpRight, Check, Shield, Sparkles } from 'lucide-react';
 
 import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
@@ -44,11 +44,11 @@ export function generateMetadata({ params }: PageProps): Metadata {
 function SpecRow({ label, value, index }: { label: string; value: string; index: number }) {
   return (
     <div className={cn(
-      "flex items-start justify-between gap-6 border-b border-border py-4 pl-4 -ml-4 border-l-2",
+      "flex items-start justify-between gap-6 border-b border-white/10 py-4 pl-4 -ml-4 border-l-2",
       index % 2 === 0 ? "border-l-accent/50" : "border-l-transparent"
     )}>
-      <div className="text-sm font-semibold text-ink">{label}</div>
-      <div className="text-sm text-muted text-right">{value}</div>
+      <div className="text-sm font-semibold text-white">{label}</div>
+      <div className="text-sm text-white/60 text-right">{value}</div>
     </div>
   );
 }
@@ -61,7 +61,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
   return (
     <div>
-      {/* Hero */}
+      {/* ─── HERO ─── */}
       <section className="pt-12 md:pt-16">
         <Container>
           <div className="grid gap-10 md:grid-cols-12 md:items-center">
@@ -86,7 +86,7 @@ export default function ProductDetailPage({ params }: PageProps) {
               </Reveal>
 
               <Reveal delay={80}>
-                <h1 className="mt-5 text-4xl font-semibold tracking-tightish md:text-6xl">{p.name}</h1>
+                <h1 className="mt-5 text-[clamp(2.5rem,5vw,4rem)] font-bold leading-[0.92] tracking-[-0.04em]">{p.name}</h1>
               </Reveal>
 
               <Reveal delay={150}>
@@ -166,7 +166,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         </Container>
       </section>
 
-      {/* Quick benefits */}
+      {/* ─── QUICK BENEFITS ─── */}
       <section className="mt-12">
         <Container>
           <div className="grid gap-4 md:grid-cols-3">
@@ -211,13 +211,14 @@ export default function ProductDetailPage({ params }: PageProps) {
         </Container>
       </section>
 
-      {/* Gallery */}
-      <section className="mt-12">
+      {/* ─── GALLERY ─── */}
+      <section className="mt-16">
         <Container>
           <Reveal>
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-semibold tracking-tightish text-ink md:text-3xl">
+                <p className="cs-overline text-accent-strong">Gallery</p>
+                <h2 className="mt-2 text-[clamp(1.8rem,4vw,2.5rem)] font-bold leading-[0.95] tracking-[-0.03em]">
                   Built for real projects.
                 </h2>
                 <p className="mt-3 max-w-2xl text-sm text-muted">
@@ -235,21 +236,21 @@ export default function ProductDetailPage({ params }: PageProps) {
         </Container>
       </section>
 
-      {/* Highlights + specs */}
-      <section className="mt-12">
-        <Container>
+      {/* ─── HIGHLIGHTS + SPECS ─── Dark section */}
+      <section className="cs-dark-section--navy mt-16 py-20 md:py-28">
+        <Container className="relative z-10">
           <div className="grid gap-10 md:grid-cols-12">
             <div className="md:col-span-5">
               <Reveal>
-                <h2 className="text-2xl font-semibold tracking-tightish text-ink md:text-3xl">What you get</h2>
-                <p className="mt-3 text-sm text-muted">Short, practical details — Apple-style.</p>
+                <p className="cs-overline text-accent">Details</p>
+                <h2 className="mt-2 text-[clamp(1.8rem,4vw,2.5rem)] font-bold leading-[0.95] tracking-[-0.03em] text-white">What you get</h2>
               </Reveal>
               <Reveal delay={120}>
                 <ul className="mt-6 space-y-3">
                   {p.highlights.map((h) => (
                     <li key={h} className="flex items-start gap-3">
                       <div className="mt-1 h-2 w-2 flex-none rounded-full bg-accent" />
-                      <div className="text-sm text-ink">{h}</div>
+                      <div className="text-sm text-white/80">{h}</div>
                     </li>
                   ))}
                 </ul>
@@ -257,11 +258,11 @@ export default function ProductDetailPage({ params }: PageProps) {
 
               <Reveal delay={220}>
                 <div className="mt-8">
-                  <h3 className="text-sm font-semibold text-ink">Need help?</h3>
-                  <p className="mt-2 text-sm text-muted">
+                  <h3 className="text-sm font-semibold text-white">Need help?</h3>
+                  <p className="mt-2 text-sm text-white/50">
                     Email{' '}
                     <a
-                      className="font-semibold text-ink hover:underline"
+                      className="text-white/80 underline decoration-white/20 underline-offset-2 transition hover:text-white hover:decoration-white/50"
                       href={`mailto:${site.contactEmail}`}
                     >
                       {site.contactEmail}
@@ -274,77 +275,50 @@ export default function ProductDetailPage({ params }: PageProps) {
 
             <div className="md:col-span-7">
               <Reveal variant="media" delay={120}>
-                <Card className="p-6">
-                  <div className="text-sm font-semibold text-ink">Specifications</div>
+                <div className="rounded-[20px] border border-white/[0.08] bg-white/[0.04] p-6">
+                  <div className="text-sm font-semibold text-white">Specifications</div>
                   <div className="mt-4">
                     {p.specs.map((s, i) => (
                       <SpecRow key={s.label} label={s.label} value={s.value} index={i} />
                     ))}
                   </div>
-                  <div className="mt-4 text-xs text-muted">* Specs and pricing may vary by marketplace.</div>
-                </Card>
+                  <div className="mt-4 text-xs text-white/40">* Specs and pricing may vary by marketplace.</div>
+                </div>
               </Reveal>
             </div>
           </div>
         </Container>
       </section>
 
-      {/* Compare + next */}
-      <section className="mt-12 pb-16">
+      {/* ─── CTA ─── */}
+      <section className="py-16 pb-20">
         <Container>
           <Reveal variant="media">
-            <Card className="overflow-hidden">
-              <div className="border-b border-border bg-surface px-6 py-4">
-                <div className="text-sm font-semibold text-ink">Compare packs</div>
-                <p className="mt-1 text-xs text-muted">Find your fit, then buy on Amazon.</p>
-              </div>
-              <div className="grid gap-0 md:grid-cols-12">
-                <div className="relative md:col-span-7">
-                  <div className="relative aspect-[970/600] bg-black">
-                    <Image
-                      src="/images/amazon/fit-coverage.webp"
-                      alt="Find your perfect fit"
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
+            <div className="cs-support-card rounded-[28px] p-8 md:p-12">
+              <div className="grid gap-8 md:grid-cols-12 md:items-center">
+                <div className="md:col-span-7">
+                  <h3 className="text-balance text-[clamp(1.4rem,3vw,2rem)] font-bold leading-tight tracking-[-0.03em] text-white">
+                    Find your perfect fit.
+                  </h3>
+                  <p className="mt-3 text-sm text-white/50">
+                    Start with the <span className="font-semibold text-white/80">{primary.name}</span>. It&apos;s
+                    the pack most customers choose.
+                  </p>
                 </div>
-                <div className="md:col-span-5">
-                  <div className="p-6">
-                    <div className="text-sm font-semibold text-ink">Recommended</div>
-                    <p className="mt-2 text-sm text-muted">
-                      Start with the <span className="font-semibold text-ink">{primary.name}</span>. It’s
-                      the pack most customers choose.
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-3">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href="/products">See all packs</Link>
-                      </Button>
-                      <Button asChild variant="accent" size="sm">
-                        <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
-                          Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
-                        </a>
-                      </Button>
-                    </div>
-
-                    {primary.amazonAltUrl ? (
-                      <div className="mt-3 text-xs text-muted">
-                        Prefer{' '}
-                        <a
-                          className="font-semibold text-ink hover:underline"
-                          href={primary.amazonAltUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {primary.amazonAltLabel}
-                        </a>
-                        ?
-                      </div>
-                    ) : null}
+                <div className="md:col-span-5 md:flex md:justify-end">
+                  <div className="flex flex-wrap gap-3">
+                    <Button asChild variant="outline" className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]">
+                      <Link href="/products">See all packs</Link>
+                    </Button>
+                    <Button asChild variant="accent">
+                      <a href={primary.amazonUrl} target="_blank" rel="noreferrer">
+                        Buy {primary.name} <ArrowUpRight className="h-4 w-4" />
+                      </a>
+                    </Button>
                   </div>
                 </div>
               </div>
-            </Card>
+            </div>
           </Reveal>
         </Container>
       </section>
