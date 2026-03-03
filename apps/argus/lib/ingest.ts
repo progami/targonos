@@ -26,6 +26,16 @@ export async function ingestSnapshot(
   capturedAt: Date = new Date(),
 ): Promise<IngestResult> {
   const html = readFileSync(htmlPath, 'utf-8')
+  return ingestSnapshotHtml(listingId, html, assetsDir, capturedAt, htmlPath)
+}
+
+export async function ingestSnapshotHtml(
+  listingId: string,
+  html: string,
+  assetsDir: string,
+  capturedAt: Date = new Date(),
+  rawHtmlPath: string | null = null,
+): Promise<IngestResult> {
   const extracted = extractAll(html)
   const changes: string[] = []
 
@@ -172,7 +182,7 @@ export async function ingestSnapshot(
       listingId,
       seq: snapshotCount + 1,
       capturedAt,
-      rawHtmlPath: htmlPath,
+      rawHtmlPath: rawHtmlPath ?? undefined,
       titleRevisionId: activeTitleId,
       bulletsRevisionId: activeBulletsId,
       galleryRevisionId: activeGalleryId,
@@ -317,14 +327,19 @@ async function storeSnapshotImage(
 
   const remoteUrl = opts.downloadUrl ?? opts.sourceUrl ?? src
   if (remoteUrl.startsWith('http://') || remoteUrl.startsWith('https://')) {
-    const res = await fetch(remoteUrl)
+    const parsed = parseAllowedRemoteAssetUrl(remoteUrl)
+    if (!parsed) {
+      return null
+    }
+
+    const res = await fetch(parsed.toString())
     if (!res.ok) {
       return null
     }
     const data = Buffer.from(await res.arrayBuffer())
-    const ext = extnameFromUrl(remoteUrl) ?? extnameFromContentType(res.headers.get('content-type')) ?? '.jpg'
+    const ext = extnameFromUrl(parsed.toString()) ?? extnameFromContentType(res.headers.get('content-type')) ?? '.jpg'
     const stored = await storeImageBuffer(data, ext, {
-      sourceUrl: opts.sourceUrl ?? remoteUrl,
+      sourceUrl: opts.sourceUrl ?? parsed.toString(),
       originalName: opts.originalName,
       mimeType: res.headers.get('content-type') ?? undefined,
     })
@@ -332,6 +347,54 @@ async function storeSnapshotImage(
   }
 
   return null
+}
+
+function parseAllowedRemoteAssetUrl(raw: string): URL | null {
+  let parsed: URL
+  try {
+    parsed = new URL(raw)
+  } catch {
+    return null
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return null
+  }
+
+  const hostname = parsed.hostname.trim().toLowerCase()
+  if (!hostname) {
+    return null
+  }
+
+  const isProd = process.env.NODE_ENV === 'production'
+  if (isProd && parsed.protocol !== 'https:') {
+    return null
+  }
+
+  if (!isProd && (hostname === 'localhost' || hostname === '127.0.0.1')) {
+    return parsed
+  }
+
+  if (parsed.port && parsed.port !== '80' && parsed.port !== '443') {
+    return null
+  }
+
+  const allowlistedHosts = [
+    'm.media-amazon.com',
+    'images-na.ssl-images-amazon.com',
+    'images-na.ssl-amazon.com',
+    'targonglobal.com',
+    'www.targonglobal.com',
+  ]
+
+  const isAllowedHost = allowlistedHosts.some(
+    (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+  )
+  if (!isAllowedHost) {
+    return null
+  }
+
+  return parsed
 }
 
 function extnameFromUrl(url: string): string | null {

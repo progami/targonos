@@ -1,17 +1,19 @@
 # Security Best Practices Report
 
-Date: 2026-02-22  
-Repo: `/Users/jarraramjad/.codex/worktrees/8a23/sso`
+Date: 2026-03-03  
+Repo: `/Users/jarraramjad/dev/targonos-main`
 
 ## Executive summary
 
-This monorepo is primarily **Next.js (TypeScript)** apps (React + NextAuth + Prisma) plus a **FastAPI (Python)** service (`services/kairos-ml`).
+This monorepo is primarily **Next.js (TypeScript)** apps (React + Prisma) plus a **FastAPI (Python)** service (`services/kairos-ml`).
 
-Top findings:
+Top findings (and status on this branch):
 
-- **High:** The SSO redirect relay (`/auth/relay`) can be used as an **open redirect within `*.targonglobal.com`**, and the NextAuth redirect allowlist has a **suffix check bug** that can allow unintended hostnames (e.g., `evil-os.targonglobal.com`) when `ALLOW_CALLBACK_REDIRECT=true`.
-- **Medium:** Multiple apps build `callbackUrl` using `x-forwarded-*` headers; if these headers are not stripped/overwritten by a trusted proxy, this becomes **host header poisoning** and can feed the redirect chain above.
-- **Medium:** The FastAPI service has **no auth/allowlist in-app**, returns **internal exception strings** to callers, and has **no explicit request size limits** (DoS risk) if reachable beyond trusted networks.
+- **Critical (fixed):** Argus had no auth boundary for pages + API routes. Added middleware requiring portal session/app entry.
+- **Critical (fixed):** Argus ingest accepted client-controlled filesystem paths (`htmlPath`, `assetsDir`). Replaced with multipart zip upload + temp staging + ingest-from-HTML.
+- **High (fixed):** Talos `/auth/login` allowed open redirects via unvalidated `callbackUrl` for authenticated users. Now only same-origin URLs are accepted and normalized to internal paths.
+- **Medium (fixed):** Argus ingest remote fetch could be abused for SSRF if untrusted HTML is ingested. Added a remote asset allowlist + HTTPS-only in production.
+- **Medium (fixed):** Kairos ML interactive docs/OpenAPI are now disabled by default and can be enabled via `KAIROS_ML_ENABLE_DOCS`.
 
 ## Scope & methodology
 
@@ -20,135 +22,85 @@ Top findings:
 
 ## Findings
 
+### Critical
+
+#### 1) Argus: missing authentication/authorization boundary for pages + API routes
+
+- **Rule ID:** NEXT-AUTHZ-BOUNDARY-001
+- **Severity:** Critical
+- **Location:** `apps/argus/middleware.ts:42-118` (auth boundary) and all Argus routes/pages
+- **Evidence:**
+  - App entry is enforced via `requireAppEntry`:
+    - `apps/argus/middleware.ts:82-116`
+- **Impact:** Without an app-level auth boundary, unauthenticated users could read/modify listing data and trigger side effects.
+- **Fix (implemented):**
+  - Added `apps/argus/middleware.ts` to require a portal session and redirect unauthenticated users to portal login with a callback URL.
+  - API routes return 401/403 JSON instead of HTML redirects.
+- **False positive notes:** If an external edge already blocks Argus, risk is reduced — that is not visible in app code, so the app now enforces the boundary directly.
+
+#### 2) Argus: ingest endpoint accepted client-controlled filesystem paths
+
+- **Rule ID:** NEXT-FILES-TRAVERSAL-001
+- **Severity:** Critical
+- **Location:**
+  - `apps/argus/app/api/listings/[id]/ingest/route.ts:18-111`
+  - `apps/argus/lib/ingest.ts:22-203`
+- **Evidence:**
+  - Ingest now requires multipart zip upload and stages extraction in a temp directory:
+    - `apps/argus/app/api/listings/[id]/ingest/route.ts:18-111`
+  - Ingest supports ingest-from-HTML without needing a raw HTML filesystem path in the DB:
+    - `apps/argus/lib/ingest.ts:32-203`
+- **Impact:** Allowing callers to choose file paths can lead to arbitrary file reads (local file inclusion) and DB/media contamination.
+- **Fix (implemented):**
+  - Removed JSON `htmlPath`/`assetsDir` ingestion; require multipart zip upload.
+  - Prevents zip-slip by stripping leading slashes, skipping `.`/`..`, and ensuring extracted files stay within the staging directory.
+
 ### High
 
-#### 1) Open redirect surface in SSO relay (`/auth/relay`)
+#### 3) Talos `/auth/login`: open redirect via `callbackUrl` when already authenticated
 
-- **Rule ID:** NEXT-AUTH-REDIRECT-001
+- **Rule ID:** NEXT-REDIRECT-OPEN-001
 - **Severity:** High
-- **Location:** `apps/sso/app/auth/relay/page.tsx:11-61`
+- **Location:** `apps/talos/src/app/auth/login/page.tsx:12-63`
 - **Evidence:**
-  - User-controlled target:
-    - `apps/sso/app/auth/relay/page.tsx:11-12`
-      - `const to = searchParams.get('to') || '/'`
-  - Allowed target scope is any subdomain of the **base domain** (last two labels), not the SSO environment domain:
-    - `apps/sso/app/auth/relay/page.tsx:48-50`
-      - `const baseDomain = getBaseDomain(window.location.hostname)`
-      - `hostname === baseDomain || hostname.endsWith(\`.\${baseDomain}\`)`
-  - Redirect happens client-side:
-    - `apps/sso/app/auth/relay/page.tsx:53-59`
-      - `window.location.replace(url.toString())`
-- **Impact:** Attackers can use `https://os.targonglobal.com/auth/relay?to=...` to redirect victims to an attacker-controlled (or takeover-able) hostname under the same registrable domain, which is a common phishing and auth-flow abuse primitive.
-- **Fix (recommended):**
-  - Restrict redirects to the **configured SSO cookie domain / environment domain** (e.g., `*.os.targonglobal.com` or `*.dev-os.targonglobal.com`), not the registrable base domain.
-  - Use a strict hostname check: `host === cookieDomain || host.endsWith('.' + cookieDomain)` (dot-boundary), where `cookieDomain` is the environment domain without leading dot.
-  - Consider making `/auth/relay` a **server component** so it can read a server-only env var and enforce the allowlist without relying on client-derived heuristics.
-- **Mitigation (defense-in-depth):**
-  - Add monitoring for unexpected `to=` targets and consider rate limiting.
-  - If you must keep client-side, pass an allowlisted `envDomain` via `NEXT_PUBLIC_*` and validate against it.
-- **False positive notes:** If this route is not deployed publicly (or is edge-restricted), the practical risk is lower; that restriction is not visible in repo code.
-
-#### 2) Callback redirect allowlist uses an unsafe suffix match
-
-- **Rule ID:** NEXT-AUTH-REDIRECT-002
-- **Severity:** High
-- **Location:** `apps/sso/lib/auth.ts:228-268`
-- **Evidence:**
-  - Callback redirects are enabled in environments that set `ALLOW_CALLBACK_REDIRECT=true` (documented for production-like UX):
-    - `apps/sso/README.md:70-76`
-  - Redirect callback allowlist uses `endsWith(cookieDomain)`:
-    - `apps/sso/lib/auth.ts:261-266`
-      - `const cookieDomain = resolvedCookieDomain.replace(/^\./, '')`
-      - `if (cookieDomain && target.hostname.endsWith(cookieDomain)) { ... }`
-- **Impact:** When callback redirects are enabled, hostnames that are **not subdomains** of the intended cookie domain can still pass (suffix confusion), enabling unintended post-login redirects (phishing vector). Example class: `evil-os.targonglobal.com` matches `os.targonglobal.com` by raw suffix.
-- **Fix (recommended):**
-  - Replace `endsWith(cookieDomain)` with a dot-boundary check:
-    - `target.hostname === cookieDomain || target.hostname.endsWith('.' + cookieDomain)`
-  - Ensure the allowlist matches the documented behavior (“only subdomains of `COOKIE_DOMAIN`”).
-- **Mitigation (defense-in-depth):**
-  - Prefer a small explicit allowlist of app origins (or app IDs → origins) over suffix rules.
-  - Keep the `/auth/relay` validation aligned with the redirect callback rules to avoid inconsistent policy.
-- **False positive notes:** If `ALLOW_CALLBACK_REDIRECT` is not enabled in production, this is lower impact (but `apps/sso/.env.dev.ci:14` shows it enabled in CI-like dev env).
+  - `callbackUrl` is normalized to a same-origin internal path (and collapses `//...`):
+    - `apps/talos/src/app/auth/login/page.tsx:14-44`
+  - Authenticated redirect uses only the sanitized path:
+    - `apps/talos/src/app/auth/login/page.tsx:46-49`
+  - Portal login always receives a callback derived from app base + sanitized path:
+    - `apps/talos/src/app/auth/login/page.tsx:60-63`
+- **Impact:** Attackers could redirect already-authenticated users to an external site for phishing.
+- **Fix (implemented):**
+  - Absolute URLs are only accepted when `origin` matches `NEXT_PUBLIC_APP_URL` origin; otherwise the flow falls back to `/dashboard`.
+  - Redirect targets are normalized to a single-leading-slash path before calling `redirect()`.
 
 ### Medium
 
-#### 3) Trusting `x-forwarded-host` / `x-forwarded-proto` when constructing callback URLs
+#### 4) Argus ingest: remote fetch could be abused for SSRF if untrusted HTML is ingested
 
-- **Rule ID:** NEXT-HEADERS-TRUST-001
-- **Severity:** Medium (High if these headers are attacker-controlled at the app)
-- **Locations (examples):**
-  - `apps/plutus/middleware.ts:11-23`
-  - `apps/talos/src/middleware.ts:100-123`
-  - `packages/auth/src/index.ts:429-438` (origin inference)
-- **Evidence:**
-  - `apps/plutus/middleware.ts:12-23` builds `callbackUrl` from forwarded headers:
-    - `const forwardedHost = request.headers.get('x-forwarded-host') || request.headers.get('host')`
-    - `return \`\${protocol}://\${host}\${pathname}\${request.nextUrl.search}\``
-- **Impact:** If a deployment path does not strictly set/overwrite `x-forwarded-*` (or `Host`) at a trusted edge, an attacker can craft requests that generate poisoned `callbackUrl` values, which then flow into SSO redirect logic.
-- **Fix (recommended):**
-  - Build callback URLs from a **canonical configured origin** (e.g., `NEXT_PUBLIC_APP_URL`/`BASE_URL`) + `request.nextUrl.pathname/search`, rather than request headers.
-  - If forwarded headers must be used, validate the derived host against an allowlist (exact hosts for each env).
-- **Mitigation (defense-in-depth):**
-  - Ensure edge/proxy strips inbound `x-forwarded-*` from the public internet and sets them itself.
-  - Consider adding `TrustedHost`-style validation at the edge/app layer.
-- **False positive notes:** Many platforms (Vercel, managed ingress) set these headers safely; that configuration is not visible here.
-
-#### 4) FastAPI service: information disclosure + DoS risk if reachable
-
-- **Rule ID:** FASTAPI-DEPLOY-INFO-001
+- **Rule ID:** NEXT-SSRF-OUTBOUND-001
 - **Severity:** Medium
-- **Locations:**
-  - `services/kairos-ml/app/main.py:547-635`
-  - `services/kairos-ml/Dockerfile:1-12`
+- **Location:** `apps/argus/lib/ingest.ts:314-398`
 - **Evidence:**
-  - Internal exception string is returned to callers:
-    - `services/kairos-ml/app/main.py:632-635`
-      - `raise HTTPException(status_code=500, detail=f"Forecast failed: {str(e)}")`
-  - No explicit auth/allowlist in-app; service is intended as a compute backend:
-    - `services/kairos-ml/README.md:1-14`
-  - No explicit request size limits (arrays + horizon):
-    - `services/kairos-ml/app/main.py:568-606` validates shape but not maximum sizes.
-- **Impact:** If the service becomes reachable beyond trusted networks, attackers can (a) glean internal error details and (b) send oversized/heavy requests to exhaust CPU/memory.
-- **Fix (recommended):**
-  - Return a generic 500 message; keep details only in logs.
-  - Add explicit max constraints to request models (e.g., max series length, max horizon, max batch items).
-  - Disable/protect interactive docs (`/docs`, `/openapi.json`) in production if publicly reachable.
-  - Add auth between Kairos and this service (or enforce network allowlists at the edge).
-- **Mitigation (defense-in-depth):**
-  - Enforce payload size limits, timeouts, and rate limits at the reverse proxy/ingress.
-  - Use separate worker pools/queues for heavy models.
-- **False positive notes:** If the service is strictly private (cluster-internal) with strong ingress controls, exposure is reduced; those controls are not in this repo.
+  - Remote asset URLs are allowlisted and HTTPS-only in production:
+    - `apps/argus/lib/ingest.ts:352-398`
+- **Impact:** Attackers can attempt to force the server to fetch internal network resources during ingest.
+- **Fix (implemented):**
+  - Added `parseAllowedRemoteAssetUrl` to allow only known image domains and disallow non-standard ports; localhost is blocked in production.
 
-### Low
+#### 5) Kairos ML: OpenAPI/docs exposed by default
 
-#### 5) Client-side HTML sinks (`document.write` / `innerHTML`) exist; verify inputs stay trusted
-
-- **Rule ID:** REACT-XSS-SINK-001
-- **Severity:** Low (can become High if untrusted content reaches the sink)
-- **Locations (examples):**
-  - `apps/talos/src/components/purchase-orders/purchase-order-flow.tsx:2940-2945`
-  - `apps/talos/src/components/purchase-orders/purchase-order-flow.tsx:2976-2981`
-  - `apps/talos/public/clear-cache.html:52-99`
+- **Rule ID:** FASTAPI-OPENAPI-001
+- **Severity:** Medium
+- **Location:** `services/kairos-ml/app/main.py:33-45`
 - **Evidence:**
-  - `apps/talos/src/components/purchase-orders/purchase-order-flow.tsx:2944-2945`
-    - `popup.document.write(html)`
-  - Server endpoint attempts to escape many fields when generating HTML:
-    - `apps/talos/src/app/api/purchase-orders/[id]/pdf/route.ts:82-90` (`escapeHtml`)
-- **Impact:** If a server endpoint ever returns attacker-influenced HTML/JS, it will execute in a privileged same-origin context.
-- **Fix (recommended):**
-  - Prefer generating PDFs/binary downloads rather than rendering raw HTML in a popup.
-  - If HTML rendering is required, ensure server output escapes all dynamic fields and does not include scripts; consider a strict CSP on these endpoints/pages.
-- **False positive notes:** Current PO PDF generator uses `escapeHtml` extensively, reducing risk; verify all dynamic fields are consistently escaped.
-
-## Good practices noticed
-
-- Next.js apps generally use `next start` for production scripts (no evidence of `next dev` as a production entrypoint).
-- NextAuth secret is validated (`packages/auth/src/index.ts:101-105` requires `NEXTAUTH_SECRET` with minimum length).
-- QBO OAuth flow uses a state cookie for CSRF (`apps/plutus/app/api/qbo/connect/route.ts:21-32`, `apps/plutus/app/api/qbo/callback/route.ts:55-63`).
+  - `/docs`, `/redoc`, and `/openapi.json` are disabled unless `KAIROS_ML_ENABLE_DOCS` is set:
+    - `services/kairos-ml/app/main.py:33-45`
+- **Impact:** Docs exposure increases attacker visibility into internal endpoints and payload shapes if the service becomes reachable.
+- **Fix (implemented):**
+  - Gate docs/OpenAPI behind `KAIROS_ML_ENABLE_DOCS`.
 
 ## Recommended next steps (prioritized)
 
-1) Tighten SSO redirect allowlists (`apps/sso/app/auth/relay/page.tsx`, `apps/sso/lib/auth.ts`) and add regression tests for tricky hostnames.
-2) Replace forwarded-header-derived `callbackUrl` construction with canonical env-based origins (or enforce strict allowlists).
-3) Harden `services/kairos-ml` for production exposure: auth/ingress restrictions, request size limits, and less-informative 500 responses.
-
+1) Consider stricter authorization for Argus state-changing endpoints (ingest/reset/fetch), beyond app-level authentication.
+2) Review forwarded header trust (`x-forwarded-*`) across apps and ensure the edge strips/sets these headers.
