@@ -1,7 +1,7 @@
 #!/bin/bash
 # Daily Visuals — Full-page Amazon Listing Screenshots
 # Uses Playwright (headless Chromium) to capture full-page listing screenshots,
-# splits into 4 vertical parts, saves to Google Drive organized by brand and date.
+# splits into 4 vertical parts, saves to Google Drive organized by brand, ASIN, and date.
 #
 # Tracked:
 #   All ASINs present in Monitoring hourly listing state:
@@ -46,7 +46,7 @@ FAILED=0
 capture_listing() {
   local asin="$1"
   local brand="$2"
-  local dest_dir="$DEST/$brand/$TODAY/$asin"
+  local dest_dir="$DEST/$brand/$asin/$TODAY"
   mkdir -p "$dest_dir"
 
   log "Capturing $brand ($asin)"
@@ -88,7 +88,7 @@ capture_listing() {
     fi
   done
 
-  log "Saved: $brand/$TODAY/$asin/part{1..4}.png"
+  log "Saved: $brand/$asin/$TODAY/part{1..4}.png"
   rm -f "$TMP_PNG"
 
   return 0
