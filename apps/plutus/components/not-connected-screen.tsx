@@ -33,10 +33,11 @@ function QboLogo() {
 
 interface NotConnectedScreenProps {
   title: string;
+  canConnect: boolean;
   error?: string;
 }
 
-export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
+export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScreenProps) {
   const handleConnect = () => {
     window.location.href = `${basePath}/api/qbo/connect`;
   };
@@ -95,24 +96,29 @@ export function NotConnectedScreen({ title, error }: NotConnectedScreenProps) {
             Connect your QuickBooks Online account to view and manage your {title.toLowerCase()}.
           </Typography>
           <Typography variant="caption" component="p" sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}>
-            This connection is shared across Plutus users. If you are not a QuickBooks Company Admin, ask one to connect.
+            This connection is shared across Plutus users.
+            {canConnect
+              ? ' You must also be a QuickBooks Company Admin to authorize the connection.'
+              : ' Only platform admins can connect/disconnect QBO. Ask one to connect.'}
           </Typography>
 
           <Box sx={{ mt: 4 }}>
-            <Button
-              variant="contained"
-              onClick={handleConnect}
-              sx={{
-                width: '100%',
-                borderRadius: 3,
-                background: 'linear-gradient(to right, #00C2B9, #00a89f)',
-                color: '#fff',
-                boxShadow: '0 4px 16px rgba(0, 194, 185, 0.25)',
-                '&:hover': { background: 'linear-gradient(to right, #00a89f, #008f87)' },
-              }}
-            >
-              Connect to QuickBooks
-            </Button>
+            {canConnect && (
+              <Button
+                variant="contained"
+                onClick={handleConnect}
+                sx={{
+                  width: '100%',
+                  borderRadius: 3,
+                  background: 'linear-gradient(to right, #00C2B9, #00a89f)',
+                  color: '#fff',
+                  boxShadow: '0 4px 16px rgba(0, 194, 185, 0.25)',
+                  '&:hover': { background: 'linear-gradient(to right, #00a89f, #008f87)' },
+                }}
+              >
+                Connect to QuickBooks
+              </Button>
+            )}
             {error && (
               <Box
                 sx={{

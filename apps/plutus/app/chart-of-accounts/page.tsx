@@ -48,6 +48,7 @@ if (basePath === undefined) {
 
 interface ConnectionStatus {
   connected: boolean;
+  canConnect: boolean;
   error?: string;
 }
 
@@ -388,7 +389,7 @@ export default function ChartOfAccountsPage() {
   const activeFiltersCount = (selectedTypes.size > 0 ? 1 : 0) + (selectedDetailTypes.size > 0 ? 1 : 0) + (selectedCurrencies.size > 0 ? 1 : 0);
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Chart of Accounts" error={connectionStatus.error} />;
+    return <NotConnectedScreen title="Chart of Accounts" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
   }
 
   return (

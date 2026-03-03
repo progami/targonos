@@ -54,6 +54,7 @@ if (basePath === undefined) {
 
 type ConnectionStatus = {
   connected: boolean;
+  canConnect: boolean;
   homeCurrency?: string;
   error?: string;
 };
@@ -2644,7 +2645,7 @@ export default function TransactionsPage() {
   }, [brands]);
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Transactions" error={connection.error} />;
+    return <NotConnectedScreen title="Transactions" canConnect={connection.canConnect} error={connection.error} />;
   }
 
   return (

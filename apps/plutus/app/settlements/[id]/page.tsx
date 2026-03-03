@@ -166,7 +166,7 @@ type SettlementProcessingPreview = {
 
 type PreviewBlock = SettlementProcessingPreview['blocks'][number];
 
-type ConnectionStatus = { connected: boolean; error?: string };
+type ConnectionStatus = { connected: boolean; canConnect: boolean; error?: string };
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -943,7 +943,7 @@ export default function SettlementDetailPage() {
   const hasInvoiceConflict = visiblePreviewBlocks.some((block) => block.code === 'INVOICE_CONFLICT');
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlement Details" error={connection.error} />;
+    return <NotConnectedScreen title="Settlement Details" canConnect={connection.canConnect} error={connection.error} />;
   }
 
   async function initiateRollback() {

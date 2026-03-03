@@ -28,6 +28,7 @@ if (basePath === undefined) {
 
 type ConnectionStatus = {
   connected: boolean;
+  canConnect: boolean;
   error?: string;
   usingSalesTax?: boolean;
   partnerTaxEnabled?: boolean;
@@ -298,7 +299,7 @@ export default function SettlementMappingPage() {
   });
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Account Taxes" error={connectionStatus.error} />;
+    return <NotConnectedScreen title="Account Taxes" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
   }
 
   const isLoading =

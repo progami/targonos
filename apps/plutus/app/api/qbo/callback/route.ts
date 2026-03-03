@@ -5,6 +5,7 @@ import { createLogger } from '@targon/logger';
 import { z } from 'zod';
 import { saveServerQboConnection } from '@/lib/qbo/connection-store';
 import type { QboConnection } from '@/lib/qbo/api';
+import { decodePlutusPortalSession, isPlatformAdminPortalSession } from '@/lib/portal-session';
 
 const logger = createLogger({ name: 'qbo-callback' });
 
@@ -35,6 +36,11 @@ export async function GET(req: NextRequest) {
   const baseUrl = baseUrlFromEnv === undefined ? req.nextUrl.origin : baseUrlFromEnv;
 
   try {
+    const session = await decodePlutusPortalSession(req.headers.get('cookie'));
+    if (!isPlatformAdminPortalSession(session)) {
+      return NextResponse.redirect(new URL(`${basePath}/no-access`, baseUrl));
+    }
+
     const cookieStore = await cookies();
     const storedState = cookieStore.get('qbo_oauth_state')?.value;
 

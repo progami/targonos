@@ -4,15 +4,20 @@ import { getApiBaseUrl } from '@/lib/qbo/client';
 import { getValidToken } from '@/lib/qbo/api';
 import type { QboConnectionStatus, QboCompanyInfoResponse, QboPreferences } from '@/lib/qbo/types';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { decodePlutusPortalSession, isPlatformAdminPortalSession } from '@/lib/portal-session';
 
 const logger = createLogger({ name: 'qbo-status' });
 
-export async function GET() {
+export async function GET(request: Request) {
+  const session = await decodePlutusPortalSession(request.headers.get('cookie'));
+  const canConnect = isPlatformAdminPortalSession(session);
+
   const connection = await getQboConnection();
 
   if (!connection) {
     return NextResponse.json<QboConnectionStatus>({
       connected: false,
+      canConnect,
     });
   }
 
@@ -32,6 +37,7 @@ export async function GET() {
     });
     return NextResponse.json<QboConnectionStatus>({
       connected: false,
+      canConnect,
       error: 'Session expired. Please reconnect to QuickBooks.',
     });
   }
@@ -54,6 +60,7 @@ export async function GET() {
       logger.error('QBO authentication failed', { status: response.status });
       return NextResponse.json<QboConnectionStatus>({
         connected: false,
+        canConnect,
         error: 'Session expired. Please reconnect to QuickBooks.',
       });
     }
@@ -63,6 +70,7 @@ export async function GET() {
       logger.error('Failed to fetch company info', { status: response.status });
       return NextResponse.json<QboConnectionStatus>({
         connected: true,
+        canConnect,
         realmId: connection.realmId,
       });
     }
@@ -95,6 +103,7 @@ export async function GET() {
 
     return NextResponse.json<QboConnectionStatus>({
       connected: true,
+      canConnect,
       realmId: connection.realmId,
       companyName: companyInfo?.CompanyName,
       homeCurrency,
@@ -108,6 +117,7 @@ export async function GET() {
     });
     return NextResponse.json<QboConnectionStatus>({
       connected: true,
+      canConnect,
       realmId: connection.realmId,
     });
   }
