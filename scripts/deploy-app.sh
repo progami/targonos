@@ -458,6 +458,9 @@ else
   else
     git reset --hard "origin/$BRANCH"
   fi
+  # Ensure stray, untracked debug artifacts don't break deterministic deployments.
+  # (Intentionally does NOT remove ignored files like .env.local.)
+  git clean -ffd
   log "Git pull complete"
 fi
 
