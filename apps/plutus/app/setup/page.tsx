@@ -82,6 +82,8 @@ type SettlementMappingResponse = {
 
 type ConnectionStatus = {
   connected: boolean;
+  canConnect: boolean;
+  error?: string;
   usingSalesTax?: boolean;
   partnerTaxEnabled?: boolean;
 };
@@ -1039,6 +1041,7 @@ function AccountRow({
 // Accounts Section
 function AccountsSection({
   isQboConnected,
+  canConnect,
   accounts,
   accountMappings,
   onAccountMappingsChange,
@@ -1048,6 +1051,7 @@ function AccountsSection({
   isLoadingAccounts,
 }: {
   isQboConnected: boolean;
+  canConnect: boolean;
   accounts: QboAccount[];
   accountMappings: Record<string, string>;
   onAccountMappingsChange: (accounts: Record<string, string>) => void;
@@ -1159,21 +1163,27 @@ function AccountsSection({
               Account mapping is available after connecting QBO.
             </Box>
             <Box sx={{ mt: 2.5 }}>
-              <Button
-                variant="contained"
-                disableElevation
-                onClick={handleConnect}
-                sx={{
-                  width: '100%',
-                  borderRadius: 3,
-                  bgcolor: '#00C2B9',
-                  color: '#fff',
-                  '&:hover': { bgcolor: '#00a89f' },
-                  boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
-                }}
-              >
-                Connect to QuickBooks
-              </Button>
+              {canConnect ? (
+                <Button
+                  variant="contained"
+                  disableElevation
+                  onClick={handleConnect}
+                  sx={{
+                    width: '100%',
+                    borderRadius: 3,
+                    bgcolor: '#00C2B9',
+                    color: '#fff',
+                    '&:hover': { bgcolor: '#00a89f' },
+                    boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
+                  }}
+                >
+                  Connect to QuickBooks
+                </Button>
+              ) : (
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                  Ask a platform admin to connect QuickBooks.
+                </Typography>
+              )}
             </Box>
           </CardContent>
         </Card>
@@ -1422,6 +1432,7 @@ function AccountsSection({
 
 function SettlementSection({
   isQboConnected,
+  canConnect,
   isLoadingAccounts,
   accounts,
   mapping,
@@ -1430,6 +1441,7 @@ function SettlementSection({
   taxEngineEnabled,
 }: {
   isQboConnected: boolean;
+  canConnect: boolean;
   isLoadingAccounts: boolean;
   accounts: QboAccount[];
   mapping: SettlementMappingResponse | undefined;
@@ -1499,23 +1511,29 @@ function SettlementSection({
               Plutus posts Amazon settlements as journal entries and needs QBO accounts selected.
             </Box>
             <Box sx={{ mt: 2.5 }}>
-              <Button
-                variant="contained"
-                disableElevation
-                onClick={() => {
-                  window.location.href = `${basePath}/api/qbo/connect`;
-                }}
-                sx={{
-                  width: '100%',
-                  borderRadius: 3,
-                  bgcolor: '#00C2B9',
-                  color: '#fff',
-                  '&:hover': { bgcolor: '#00a89f' },
-                  boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
-                }}
-              >
-                Connect to QuickBooks
-              </Button>
+              {canConnect ? (
+                <Button
+                  variant="contained"
+                  disableElevation
+                  onClick={() => {
+                    window.location.href = `${basePath}/api/qbo/connect`;
+                  }}
+                  sx={{
+                    width: '100%',
+                    borderRadius: 3,
+                    bgcolor: '#00C2B9',
+                    color: '#fff',
+                    '&:hover': { bgcolor: '#00a89f' },
+                    boxShadow: '0 4px 14px -3px rgba(0,194,185,0.25)',
+                  }}
+                >
+                  Connect to QuickBooks
+                </Button>
+              ) : (
+                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                  Ask a platform admin to connect QuickBooks.
+                </Typography>
+              )}
             </Box>
           </CardContent>
         </Card>
@@ -2038,6 +2056,7 @@ export default function SetupPage() {
                   {state.section === 'accounts' && (
                     <AccountsSection
                       isQboConnected={connectionStatus?.connected === true}
+                      canConnect={connectionStatus?.canConnect === true}
                       accounts={accounts}
                       accountMappings={state.accountMappings}
                       onAccountMappingsChange={saveAccountMappings}
@@ -2050,6 +2069,7 @@ export default function SetupPage() {
                   {state.section === 'settlement' && (
                     <SettlementSection
                       isQboConnected={connectionStatus?.connected === true}
+                      canConnect={connectionStatus?.canConnect === true}
                       isLoadingAccounts={isLoadingAccounts}
                       accounts={accounts}
                       mapping={settlementMappingData}

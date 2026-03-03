@@ -26,7 +26,7 @@ if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type ConnectionStatus = { connected: boolean; companyName?: string; homeCurrency?: string; error?: string };
+type ConnectionStatus = { connected: boolean; canConnect: boolean; companyName?: string; homeCurrency?: string; error?: string };
 
 type NotificationPreferences = {
   onNewSettlement: boolean;
@@ -346,16 +346,34 @@ export default function SettingsPage() {
 
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
                 {status?.connected ? (
-                  <Button
-                    variant="outlined"
-                    sx={{ borderColor: 'divider', color: 'text.primary' }}
-                    onClick={() => disconnectMutation.mutate()}
-                    disabled={disconnectMutation.isPending}
-                  >
-                    {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
-                  </Button>
+                  status.canConnect ? (
+                    <Button
+                      variant="outlined"
+                      sx={{ borderColor: 'divider', color: 'text.primary' }}
+                      onClick={() => disconnectMutation.mutate()}
+                      disabled={disconnectMutation.isPending}
+                    >
+                      {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
+                    </Button>
+                  ) : (
+                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                      Ask a platform admin to disconnect/reconnect QBO.
+                    </Typography>
+                  )
                 ) : (
-                  <Button variant="contained" sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }} onClick={handleConnect}>Connect to QuickBooks</Button>
+                  status?.canConnect ? (
+                    <Button
+                      variant="contained"
+                      sx={{ bgcolor: '#00C2B9', color: '#fff', '&:hover': { bgcolor: '#00a89f' } }}
+                      onClick={handleConnect}
+                    >
+                      Connect to QuickBooks
+                    </Button>
+                  ) : (
+                    <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                      Ask a platform admin to connect QBO.
+                    </Typography>
+                  )
                 )}
               </Box>
             </CardContent>

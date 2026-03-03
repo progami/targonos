@@ -74,7 +74,7 @@ const DATA_SOURCES: DataSourceConfig[] = [
    Shared helpers
    ================================================================ */
 
-type ConnectionStatus = { connected: boolean; error?: string };
+type ConnectionStatus = { connected: boolean; canConnect: boolean; error?: string };
 type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
 
 function readApiError(payload: unknown, fallback: string): string {
@@ -246,7 +246,7 @@ export default function DataSourcesPage() {
   }
 
   if (connection?.connected === false) {
-    return <NotConnectedScreen title="Data Sources" error={connection.error} />;
+    return <NotConnectedScreen title="Data Sources" canConnect={connection.canConnect} error={connection.error} />;
   }
 
   /* ---- history table data ---- */
