@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-export const REPO_ROOT = path.resolve(__dirname, '../../../../../')
+export const REPO_ROOT = path.resolve(__dirname, '../../../../../../')
 export const MONITORING_BASE = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring'
 
 const BASE_WEEK_START = new Date(2025, 11, 28)
@@ -18,28 +18,33 @@ export function ensureDir(dir) {
 export function loadEnvFile(file) {
   if (!fs.existsSync(file)) return
 
-  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const separator = trimmed.indexOf('=')
-    if (separator < 0) continue
+  const rawLines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
+  for (const rawLine of rawLines) {
+    for (const line of rawLine.split(/\\\\n|\\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
 
-    const key = trimmed.slice(0, separator).trim()
-    let value = trimmed.slice(separator + 1).trim()
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1)
+      const cleaned = trimmed.replace(/^\d+→/, '')
+      const separator = cleaned.indexOf('=')
+      if (separator < 0) continue
+
+      const key = cleaned.slice(0, separator).trim()
+      let value = cleaned.slice(separator + 1).trim()
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
+      if (value.endsWith('$')) value = value.slice(0, -1)
+
+      if (!process.env[key]) process.env[key] = value
     }
-
-    if (!process.env[key]) process.env[key] = value
   }
 }
 
 export function loadMonitoringEnv() {
-  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
+  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 }
 
 export function requireEnv(name) {
