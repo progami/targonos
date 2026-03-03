@@ -384,6 +384,120 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
 });
 
+test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-SPLIT-1',
+    eventGroupId: 'GROUP-SPLIT-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2025-12-19T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-02-02T08:00:00.000Z',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -3 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2025-12-31T08:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 },
+        },
+        {
+          PostedDate: '2026-02-02T08:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -2 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+    splitByMonth: true,
+  });
+
+  assert.equal(draft.segments.length, 3);
+  assert.equal(draft.segments[0]?.docNumber, 'US-251219-251231-S1');
+  assert.equal(draft.segments[1]?.docNumber, 'US-260101-260131-S2');
+  assert.equal(draft.segments[2]?.docNumber, 'US-260201-260202-S3');
+
+  const seg1 = draft.segments[0]!;
+  const seg2 = draft.segments[1]!;
+  const seg3 = draft.segments[2]!;
+
+  const sum = (map: Map<string, number>): number => {
+    let total = 0;
+    for (const v of map.values()) total += v;
+    return total;
+  };
+
+  assert.equal(seg1.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount'), -100);
+  assert.equal(seg1.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
+  assert.equal(seg1.memoTotalsCents.get('Split month settlement - balance of this invoice rolled forward'), 100);
+  assert.equal(sum(seg1.memoTotalsCents), 0);
+
+  assert.equal(seg2.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
+  assert.equal(seg2.memoTotalsCents.get('Split month settlement - balance of this invoice rolled forward'), 100);
+  assert.equal(sum(seg2.memoTotalsCents), 0);
+
+  assert.equal(seg3.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount'), -200);
+  assert.equal(seg3.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
+  assert.equal(seg3.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+  assert.equal(sum(seg3.memoTotalsCents), -300);
+});
+
+test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-SPLIT-UK-1',
+    eventGroupId: 'GROUP-SPLIT-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2025-12-19T00:00:00.000Z',
+      FinancialEventGroupEnd: '2026-02-02T00:00:00.000Z',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -3 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2025-12-31T00:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: -1 },
+        },
+        {
+          PostedDate: '2026-02-02T00:00:00.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: -2 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+    splitByMonth: true,
+  });
+
+  assert.equal(draft.segments.length, 3);
+  assert.equal(draft.segments[0]?.docNumber, 'UK-251219-251231-S1');
+  assert.equal(draft.segments[1]?.docNumber, 'UK-260101-260131-S2');
+  assert.equal(draft.segments[2]?.docNumber, 'UK-260201-260202-S3');
+
+  const seg1 = draft.segments[0]!;
+  const seg2 = draft.segments[1]!;
+  const seg3 = draft.segments[2]!;
+
+  const sum = (map: Map<string, number>): number => {
+    let total = 0;
+    for (const v of map.values()) total += v;
+    return total;
+  };
+
+  assert.equal(seg1.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount'), -100);
+  assert.equal(seg1.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
+  assert.equal(seg1.memoTotalsCents.get('Split month settlement - balance of this invoice rolled forward'), 100);
+  assert.equal(sum(seg1.memoTotalsCents), 0);
+
+  assert.equal(seg2.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
+  assert.equal(seg2.memoTotalsCents.get('Split month settlement - balance of this invoice rolled forward'), 100);
+  assert.equal(sum(seg2.memoTotalsCents), 0);
+
+  assert.equal(seg3.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount'), -200);
+  assert.equal(seg3.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
+  assert.equal(seg3.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+  assert.equal(sum(seg3.memoTotalsCents), -300);
+});
+
 test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order level for shipments', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'UK-SET-1',
