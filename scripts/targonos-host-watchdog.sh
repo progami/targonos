@@ -4,11 +4,37 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
 
 log() {
-  printf '%s %s\n' "$(date -Is)" "$*"
+  printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*"
 }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1
+}
+
+deploy_in_progress() {
+  if ! require_cmd pgrep; then
+    return 1
+  fi
+  pgrep -f "scripts/deploy-app.sh" >/dev/null 2>&1
+}
+
+repo_root_from_pm2() {
+  local pm_name="$1"
+  local cwd
+  cwd="$(pm2_describe_field "$pm_name" "exec cwd")"
+  if [[ -z "$cwd" ]]; then
+    return 1
+  fi
+  dirname "$(dirname "$cwd")"
+}
+
+deploy_lock_present() {
+  local repo_root="$1"
+  local lock_dir="$repo_root/tmp/deploy-locks"
+  if [[ ! -d "$lock_dir" ]]; then
+    return 1
+  fi
+  compgen -G "$lock_dir/*" >/dev/null
 }
 
 ensure_brew_services_started() {
@@ -95,7 +121,7 @@ ensure_pm2_processes_healthy() {
   done
 }
 
-check_http_not_502() {
+check_http_not_5xx() {
   local url="$1"
   local code rc
   set +e
@@ -108,29 +134,117 @@ check_http_not_502() {
     return 1
   fi
 
-  if [[ "$code" == "502" ]]; then
-    log "unhealthy: ${url} (502)"
+  if [[ "$code" =~ ^5 ]]; then
+    log "unhealthy: ${url} (${code})"
     return 1
   fi
 
   return 0
 }
 
+check_next_build_manifest() {
+  local base_url="$1"
+  local base_path="$2"
+  local pm_name="$3"
+
+  local cwd
+  cwd="$(pm2_describe_field "$pm_name" "exec cwd")"
+  if [[ -z "$cwd" ]]; then
+    log "unhealthy: missing exec cwd for ${pm_name}"
+    return 1
+  fi
+
+  local build_id_file="$cwd/.next/BUILD_ID"
+  if [[ ! -f "$build_id_file" ]]; then
+    log "unhealthy: missing BUILD_ID for ${pm_name} (${cwd})"
+    return 1
+  fi
+
+  local build_id
+  build_id="$(cat "$build_id_file")"
+  if [[ -z "$build_id" ]]; then
+    log "unhealthy: empty BUILD_ID for ${pm_name} (${cwd})"
+    return 1
+  fi
+
+  local url="${base_url}${base_path}/_next/static/${build_id}/_buildManifest.js"
+
+  local code rc
+  set +e
+  code="$(curl -sS -o /dev/null -w '%{http_code}' "$url")"
+  rc=$?
+  set -e
+
+  if [[ $rc -ne 0 ]]; then
+    log "unhealthy: ${url} (curl rc=${rc})"
+    return 1
+  fi
+
+  if [[ "$code" != "200" ]]; then
+    log "unhealthy: ${url} (${code})"
+    return 1
+  fi
+
+  return 0
+}
+
+ensure_no_deploy_lock() {
+  if deploy_in_progress; then
+    log "deploy in progress (deploy-app.sh running); skipping watchdog actions"
+    exit 0
+  fi
+
+  local main_root=""
+  if main_root="$(repo_root_from_pm2 "main-targonos" 2>/dev/null)"; then
+    if deploy_lock_present "$main_root"; then
+      log "deploy lock detected (${main_root}/tmp/deploy-locks); skipping watchdog actions"
+      exit 0
+    fi
+  fi
+
+  local dev_root=""
+  if dev_root="$(repo_root_from_pm2 "dev-targonos" 2>/dev/null)"; then
+    if deploy_lock_present "$dev_root"; then
+      log "deploy lock detected (${dev_root}/tmp/deploy-locks); skipping watchdog actions"
+      exit 0
+    fi
+  fi
+}
+
 check_nginx_routes() {
-  check_http_not_502 "http://127.0.0.1:8080/" || exit 1
-  check_http_not_502 "http://127.0.0.1:8081/" || exit 1
+  check_http_not_5xx "http://127.0.0.1:8080/" || exit 1
+  check_http_not_5xx "http://127.0.0.1:8081/" || exit 1
 
   local base p
   for base in "http://127.0.0.1:8080" "http://127.0.0.1:8081"; do
     for p in "/talos/" "/xplan/" "/atlas/" "/kairos/" "/plutus/" "/hermes/" "/argus/"; do
-      check_http_not_502 "${base}${p}" || exit 1
+      check_http_not_5xx "${base}${p}" || exit 1
     done
   done
+
+  check_next_build_manifest "http://127.0.0.1:8080" "" "main-targonos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/talos" "main-talos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/xplan" "main-xplan" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/atlas" "main-atlas" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/kairos" "main-kairos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/plutus" "main-plutus" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/hermes" "main-hermes" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8080" "/argus" "main-argus" || exit 1
+
+  check_next_build_manifest "http://127.0.0.1:8081" "" "dev-targonos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/talos" "dev-talos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/xplan" "dev-xplan" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/atlas" "dev-atlas" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/kairos" "dev-kairos" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/plutus" "dev-plutus" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/hermes" "dev-hermes" || exit 1
+  check_next_build_manifest "http://127.0.0.1:8081" "/argus" "dev-argus" || exit 1
 }
 
 main() {
   ensure_brew_services_started
   ensure_pm2_alive
+  ensure_no_deploy_lock
   ensure_pm2_processes_healthy
   check_nginx_routes
 }
