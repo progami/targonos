@@ -486,6 +486,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
   const requiredMemos = new Set<string>();
   let needBankAccount = false;
   let needPaymentAccount = false;
+  const splitByMonth = globalThis.process.env.PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH === 'true';
 
   for (const [settlementId, eventGroupId] of Array.from(settlementToGroupId.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
     const eventGroup = groupById.get(eventGroupId);
@@ -501,6 +502,7 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
       eventGroup,
       events,
       skuToBrandName,
+      splitByMonth,
     });
 
     if (draft.originalTotalCents > 0) needBankAccount = true;

@@ -364,6 +364,7 @@ async function main(): Promise<void> {
   }
 
   const runSummary: Array<Record<string, unknown>> = [];
+  const splitByMonth = process.env.PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH === 'true';
 
   for (const settlementId of options.settlementIds) {
     const eventGroupId = await findFinancialEventGroupIdForSettlementId({
@@ -386,6 +387,7 @@ async function main(): Promise<void> {
       eventGroup,
       events,
       skuToBrandName,
+      splitByMonth,
     });
 
     const jeDrafts = buildQboJournalEntriesFromUsSettlementDraft({
