@@ -13,7 +13,6 @@ import {
   parseSettlementDocNumber,
   type SettlementMarketplace,
 } from '@/lib/plutus/settlement-doc-number';
-import { buildSettlementPeriodKey, loadSettlementPeriodsFromAuditRows } from '@/lib/plutus/settlement-periods';
 
 const logger = createLogger({ name: 'plutus-settlements' });
 
@@ -56,6 +55,8 @@ function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): Q
 type SettlementMeta = {
   marketplace: SettlementMarketplace;
   normalizedDocNumber: string;
+  periodStart: string | null;
+  periodEnd: string | null;
 };
 
 export async function GET(req: NextRequest) {
@@ -145,8 +146,6 @@ export async function GET(req: NextRequest) {
     });
 
     const settlementMetaByJournalEntryId = new Map<string, SettlementMeta>();
-    const amazonComInvoiceIds: string[] = [];
-    const amazonCoUkInvoiceIds: string[] = [];
 
     for (const journalEntry of uniqueJournalEntries) {
       const docNumber = journalEntry.DocNumber;
@@ -158,20 +157,10 @@ export async function GET(req: NextRequest) {
       settlementMetaByJournalEntryId.set(journalEntry.Id, {
         marketplace: meta.marketplace,
         normalizedDocNumber: meta.normalizedDocNumber,
+        periodStart: meta.periodStart,
+        periodEnd: meta.periodEnd,
       });
-
-      if (meta.marketplace.id === 'amazon.com') {
-        amazonComInvoiceIds.push(meta.normalizedDocNumber);
-        continue;
-      }
-
-      amazonCoUkInvoiceIds.push(meta.normalizedDocNumber);
     }
-
-    const periodsBySettlement = await loadSettlementPeriodsFromAuditRows({
-      amazonComInvoiceIds,
-      amazonCoUkInvoiceIds,
-    });
 
     const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
@@ -207,7 +196,6 @@ export async function GET(req: NextRequest) {
       if (!settlementMeta) {
         throw new Error(`Missing settlement metadata for journal entry ${je.Id}`);
       }
-      const period = periodsBySettlement.get(buildSettlementPeriodKey(settlementMeta.marketplace.id, settlementMeta.normalizedDocNumber));
 
       let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';
       if (processedSet.has(je.Id)) {
@@ -222,8 +210,8 @@ export async function GET(req: NextRequest) {
         postedDate: je.TxnDate,
         memo: je.PrivateNote ? je.PrivateNote : '',
         marketplace: settlementMeta.marketplace,
-        periodStart: period ? period.periodStart : null,
-        periodEnd: period ? period.periodEnd : null,
+        periodStart: settlementMeta.periodStart,
+        periodEnd: settlementMeta.periodEnd,
         settlementTotal: computeSettlementTotalFromJournalEntry(je, accountsById),
         qboStatus: 'Posted',
         plutusStatus,
