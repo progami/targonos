@@ -51,7 +51,7 @@ compute_changed_files() {
 	    done < <(git ls-files)
 	    changed_files_available="true"
 	    return 0
-	  fi
+  fi
 
   # Best-effort fallback for manual runs without an explicit range.
 	  if git rev-parse --verify -q "${head}^" >/dev/null 2>&1; then
@@ -103,6 +103,23 @@ changed_files_available="false"
 changed_files=()
 ZERO_SHA="0000000000000000000000000000000000000000"
 
+# Prevent the host watchdog from restarting stopped PM2 processes mid-deploy.
+# The watchdog checks for any files under: <worktree>/tmp/deploy-locks/*
+lock_dir=""
+lock_file=""
+acquire_deploy_lock() {
+  lock_dir="${REPO_DIR}/tmp/deploy-locks"
+  mkdir -p "$lock_dir"
+  lock_file="${lock_dir}/${environment}-${app_key}-$$.lock"
+  printf '%s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ") pid=$$ app=$app_key env=$environment" >"$lock_file"
+}
+
+release_deploy_lock() {
+  if [[ -n "${lock_file:-}" ]]; then
+    rm -f "$lock_file"
+  fi
+}
+
 # Determine directories based on environment
 if [[ "$environment" == "dev" ]]; then
   REPO_DIR="${TARGONOS_DEV_DIR:-${TARGON_DEV_DIR:-}}"
@@ -127,6 +144,9 @@ if [[ ! -d "$REPO_DIR" ]]; then
   echo "Repo directory does not exist: $REPO_DIR" >&2
   exit 1
 fi
+
+acquire_deploy_lock
+trap release_deploy_lock EXIT
 
 # Map app keys to workspace names and directories
 case "$app_key" in
@@ -460,7 +480,7 @@ else
   fi
   # Ensure stray, untracked debug artifacts don't break deterministic deployments.
   # (Intentionally does NOT remove ignored files like .env.local.)
-  git clean -ffd
+  git clean -ffd -e '.next/' -e '.venv/'
   log "Git pull complete"
 fi
 
