@@ -24,6 +24,7 @@ Access via Prisma Studio: `pnpm prisma studio` from the app folder.
 
 - No OR statements as fallbacks - let the code fail
 - Do not add unnecessary error handling or fallbacks
+- **Be blocking** — prefer hard failures over fallbacks/optional behavior unless explicitly requested
 
 ## Testing
 
