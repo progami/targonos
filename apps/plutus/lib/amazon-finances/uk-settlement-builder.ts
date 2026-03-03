@@ -2,7 +2,7 @@ import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { buildCanonicalSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 import { moneyToCents } from './money';
-import { isoDayToYearMonth, isoTimestampToZonedIsoDay } from './time';
+import { isoDayToYearMonth, isoTimestampToZonedIsoDay, lastDayOfMonth, parseIsoDayParts } from './time';
 import type {
   SpApiAdjustmentEvent,
   SpApiChargeComponent,
@@ -44,6 +44,10 @@ export type UkSettlementDraft = {
 };
 
 const UK_TIME_ZONE = 'Europe/London';
+
+function pad2(value: number): string {
+  return value < 10 ? `0${value}` : String(value);
+}
 
 function buildUkSettlementDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
   return buildCanonicalSettlementDocNumber({
@@ -362,6 +366,57 @@ function requireEventGroupField(value: string | undefined, field: string, settle
   return value;
 }
 
+function buildMonthlySegments(input: {
+  startIsoDay: string;
+  endIsoDay: string;
+  buildDocNumber: (params: { startIsoDay: string; endIsoDay: string; seq: number }) => string;
+}): UkSettlementSegmentDraft[] {
+  const start = parseIsoDayParts(input.startIsoDay, 'settlement start');
+  const end = parseIsoDayParts(input.endIsoDay, 'settlement end');
+
+  const segments: UkSettlementSegmentDraft[] = [];
+
+  let year = start.year;
+  let month = start.month;
+  let seq = 1;
+
+  for (let guard = 0; guard < 1200; guard++) {
+    const isFirst = seq === 1;
+    const isLast = year === end.year && month === end.month;
+
+    const startIsoDay = isFirst ? input.startIsoDay : `${year}-${pad2(month)}-01`;
+    const endIsoDay = isLast
+      ? input.endIsoDay
+      : `${year}-${pad2(month)}-${pad2(lastDayOfMonth(year, month))}`;
+
+    segments.push({
+      seq,
+      yearMonth: isoDayToYearMonth(startIsoDay, 'segment start day'),
+      startIsoDay,
+      endIsoDay,
+      txnDate: endIsoDay,
+      docNumber: input.buildDocNumber({ startIsoDay, endIsoDay, seq }),
+      memoTotalsCents: new Map(),
+      auditRows: [],
+    });
+
+    if (isLast) break;
+
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+    seq += 1;
+  }
+
+  if (segments.length === 0) {
+    throw new Error(`Failed to build settlement segments for ${input.startIsoDay} → ${input.endIsoDay}`);
+  }
+
+  return segments;
+}
+
 export function buildUkSettlementDraftFromSpApiFinances(input: {
   settlementId: string;
   eventGroupId: string;
@@ -370,8 +425,11 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   skuToBrandName: Map<string, string>;
   brandLabelByBrandName?: Map<string, string>;
   timeZone?: string;
+  /// When true, split the settlement into month-bounded segments with zero-total rollovers (LMB-style).
+  splitByMonth?: boolean;
 }): UkSettlementDraft {
   const timeZone = input.timeZone === undefined ? UK_TIME_ZONE : input.timeZone;
+  const splitByMonth = input.splitByMonth === true;
 
   const groupStartTs = requireEventGroupField(input.eventGroup.FinancialEventGroupStart, 'FinancialEventGroupStart', input.settlementId);
   const groupEndTs = requireEventGroupField(input.eventGroup.FinancialEventGroupEnd, 'FinancialEventGroupEnd', input.settlementId);
@@ -385,28 +443,44 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   }
   const originalTotalCents = moneyToCents(originalTotalMoney, 'event group OriginalTotal');
 
-  const segments: UkSettlementSegmentDraft[] = [];
-  const seq = 1;
-  segments.push({
-    seq,
-    // Keep yearMonth for debugging/summary purposes; it no longer drives segmentation.
-    yearMonth: isoDayToYearMonth(startIsoDay, 'group start day'),
-    startIsoDay,
-    endIsoDay,
-    txnDate: endIsoDay,
-    docNumber: buildUkSettlementDocNumber({ startIsoDay, endIsoDay, seq }),
-    memoTotalsCents: new Map(),
-    auditRows: [],
-  });
+  const segments: UkSettlementSegmentDraft[] = splitByMonth
+    ? buildMonthlySegments({ startIsoDay, endIsoDay, buildDocNumber: buildUkSettlementDocNumber })
+    : [
+        {
+          seq: 1,
+          yearMonth: isoDayToYearMonth(startIsoDay, 'group start day'),
+          startIsoDay,
+          endIsoDay,
+          txnDate: endIsoDay,
+          docNumber: buildUkSettlementDocNumber({ startIsoDay, endIsoDay, seq: 1 }),
+          memoTotalsCents: new Map(),
+          auditRows: [],
+        },
+      ];
 
-  const lastSegment = segments[0];
+  const lastSegment = segments[segments.length - 1];
   if (!lastSegment) throw new Error('No settlement segment built');
+
+  const segmentsByYearMonth = new Map<string, UkSettlementSegmentDraft>();
+  for (const segment of segments) {
+    segmentsByYearMonth.set(segment.yearMonth, segment);
+  }
+
+  const requireSegmentForIsoDay = (localIsoDay: string): UkSettlementSegmentDraft => {
+    if (!splitByMonth) return lastSegment;
+    const yearMonth = isoDayToYearMonth(localIsoDay, 'event day');
+    const segment = segmentsByYearMonth.get(yearMonth);
+    if (!segment) {
+      throw new Error(`Event day ${localIsoDay} falls outside settlement months (${startIsoDay} → ${endIsoDay})`);
+    }
+    return segment;
+  };
 
   // Shipments
   for (const shipment of input.events.ShipmentEventList ?? []) {
     const postedDate = requirePostedDate(shipment.PostedDate, 'ShipmentEvent');
     const localIsoDay = isoTimestampToZonedIsoDay(postedDate, timeZone, 'ShipmentEvent.PostedDate');
-    const segment = lastSegment;
+    const segment = requireSegmentForIsoDay(localIsoDay);
 
     const orderId = typeof shipment.AmazonOrderId === 'string' ? shipment.AmazonOrderId : '';
     const items = shipment.ShipmentItemList ?? [];
@@ -576,7 +650,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   for (const refund of input.events.RefundEventList ?? []) {
     const postedDate = requirePostedDate(refund.PostedDate, 'RefundEvent');
     const localIsoDay = isoTimestampToZonedIsoDay(postedDate, timeZone, 'RefundEvent.PostedDate');
-    const segment = lastSegment;
+    const segment = requireSegmentForIsoDay(localIsoDay);
 
     const orderId = typeof refund.AmazonOrderId === 'string' ? refund.AmazonOrderId : '';
     const items = refund.ShipmentItemAdjustmentList ?? [];
@@ -747,7 +821,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     }
 
     const localIsoDay = isoTimestampToZonedIsoDay(postedDateRaw, timeZone, 'ProductAdsPaymentEvent.postedDate');
-    const segment = lastSegment;
+    const segment = requireSegmentForIsoDay(localIsoDay);
 
     const value = (ad as { transactionValue?: unknown }).transactionValue as { CurrencyCode?: string; CurrencyAmount?: number } | undefined;
     if (!value) continue;
@@ -772,7 +846,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   for (const adj of input.events.AdjustmentEventList ?? []) {
     const postedDate = requirePostedDate(adj.PostedDate, 'AdjustmentEvent');
     const localIsoDay = isoTimestampToZonedIsoDay(postedDate, timeZone, 'AdjustmentEvent.PostedDate');
-    const segment = lastSegment;
+    const segment = requireSegmentForIsoDay(localIsoDay);
 
     const amount = adj.AdjustmentAmount;
     if (!amount) continue;
@@ -829,7 +903,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   for (const event of input.events.AdhocDisbursementEventList ?? []) {
     const postedDate = requirePostedDate(event.PostedDate, 'AdhocDisbursementEvent');
     const localIsoDay = isoTimestampToZonedIsoDay(postedDate, timeZone, 'AdhocDisbursementEvent.PostedDate');
-    const segment = lastSegment;
+    const segment = requireSegmentForIsoDay(localIsoDay);
 
     const txType = typeof event.TransactionType === 'string' ? event.TransactionType : '';
     const amount = event.TransactionAmount;
@@ -914,19 +988,24 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
 
   // Split-month rollovers to make each segment JE balance, matching legacy behavior.
   if (segments.length > 1) {
-    let priorTotal = 0;
+    let carriedCents = 0;
 
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i]!;
       const segmentTotal = sumMap(segment.memoTotalsCents);
+      const isLast = i === segments.length - 1;
 
-      if (i < segments.length - 1) {
-        addCents(segment.memoTotalsCents, 'Split month settlement - balance of this invoice rolled forward', -segmentTotal);
-        priorTotal += segmentTotal;
-        continue;
+      if (carriedCents !== 0) {
+        addCents(segment.memoTotalsCents, 'Split month settlement - balance of previous invoice(s) rolled forward', carriedCents);
       }
 
-      addCents(segment.memoTotalsCents, 'Split month settlement - balance of previous invoice(s) rolled forward', priorTotal);
+      if (isLast) continue;
+
+      const nextCarried = carriedCents + segmentTotal;
+      if (nextCarried !== 0) {
+        addCents(segment.memoTotalsCents, 'Split month settlement - balance of this invoice rolled forward', -nextCarried);
+      }
+      carriedCents = nextCarried;
     }
   }
 
