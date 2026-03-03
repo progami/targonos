@@ -171,17 +171,41 @@ export function QboStatusIndicator() {
               {status.companyName}
             </Typography>
           </Box>
-          <Box sx={{ p: 0.5 }}>
-            <MenuItem
-              onClick={handleDisconnect}
-              disabled={disconnectMutation.isPending}
-              sx={{ color: 'error.main' }}
-            >
-              {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
-            </MenuItem>
-          </Box>
+          {status.canConnect && (
+            <Box sx={{ p: 0.5 }}>
+              <MenuItem
+                onClick={handleDisconnect}
+                disabled={disconnectMutation.isPending}
+                sx={{ color: 'error.main' }}
+              >
+                {disconnectMutation.isPending ? 'Disconnecting...' : 'Disconnect'}
+              </MenuItem>
+            </Box>
+          )}
         </Menu>
       </>
+    );
+  }
+
+  const connectSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1,
+    px: 1.5,
+    py: 0.75,
+    borderRadius: 99,
+    bgcolor: 'action.hover',
+    border: 'none',
+    transition: 'background-color 0.15s',
+  } as const;
+
+  if (!status?.canConnect) {
+    return (
+      <Box sx={connectSx}>
+        <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.secondary' }}>
+          QBO
+        </Typography>
+      </Box>
     );
   }
 
@@ -190,16 +214,8 @@ export function QboStatusIndicator() {
       component="button"
       onClick={handleConnect}
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1,
-        px: 1.5,
-        py: 0.75,
-        borderRadius: 99,
-        bgcolor: 'action.hover',
-        border: 'none',
+        ...connectSx,
         cursor: 'pointer',
-        transition: 'background-color 0.15s',
         '&:hover': { bgcolor: 'action.selected' },
       }}
     >

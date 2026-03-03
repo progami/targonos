@@ -76,7 +76,7 @@ type SettlementsResponse = {
   };
 };
 
-type ConnectionStatus = { connected: boolean; error?: string };
+type ConnectionStatus = { connected: boolean; canConnect: boolean; error?: string };
 type Region = SettlementRow['marketplace']['region'];
 
 /* ── shared chip styles ── */
@@ -537,7 +537,7 @@ export default function SettlementsPage() {
   };
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlements" error={connection.error} />;
+    return <NotConnectedScreen title="Settlements" canConnect={connection.canConnect} error={connection.error} />;
   }
 
   return (

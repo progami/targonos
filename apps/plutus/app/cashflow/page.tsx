@@ -55,6 +55,7 @@ if (basePath === undefined) {
 
 type ConnectionStatus = {
   connected: boolean;
+  canConnect: boolean;
   homeCurrency?: string;
   error?: string;
 };
@@ -469,7 +470,7 @@ export default function CashflowPage() {
           py: 3,
         }}
       >
-        <NotConnectedScreen title="cashflow forecast" error={connection.error} />
+        <NotConnectedScreen title="cashflow forecast" canConnect={connection.canConnect} error={connection.error} />
       </Box>
     );
   }

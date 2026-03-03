@@ -164,6 +164,10 @@ export interface QboLine {
 // Connection status for UI
 export interface QboConnectionStatus {
   connected: boolean;
+  /**
+   * Whether the current user can manage the shared QBO connection (connect/disconnect).
+   */
+  canConnect: boolean;
   realmId?: string;
   companyName?: string;
   homeCurrency?: string;
