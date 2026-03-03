@@ -12,7 +12,7 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[5]
 ENV_PATH = REPO_ROOT / '.env.local'
 
 DEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)')
@@ -42,15 +42,20 @@ CODE_SUFFIX = {
 
 def load_env(path: Path):
     env = {}
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
-            continue
-        key, value = line.split('=', 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
-            value = value[1:-1]
-        env[key.strip()] = value
+    for raw_line in path.read_text().splitlines():
+        for line in re.split(r'\\\\n|\\n', raw_line):
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+
+            line = re.sub(r'^\\d+→', '', line)
+            key, value = line.split('=', 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if value.endswith('$'):
+                value = value[:-1]
+            env[key.strip()] = value
     return env
 
 
