@@ -2,7 +2,8 @@ import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { buildCanonicalSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 import { moneyToCents } from './money';
-import { isoDayToYearMonth, isoTimestampToZonedIsoDay, lastDayOfMonth, parseIsoDayParts } from './time';
+import { buildMonthlySettlementSegments, applySplitMonthRollovers } from './settlement-splitting';
+import { isoDayToYearMonth, isoTimestampToZonedIsoDay } from './time';
 import type {
   SpApiAdjustmentEvent,
   SpApiChargeComponent,
@@ -44,10 +45,6 @@ export type UkSettlementDraft = {
 };
 
 const UK_TIME_ZONE = 'Europe/London';
-
-function pad2(value: number): string {
-  return value < 10 ? `0${value}` : String(value);
-}
 
 function buildUkSettlementDocNumber(input: { startIsoDay: string; endIsoDay: string; seq: number }): string {
   return buildCanonicalSettlementDocNumber({
@@ -366,57 +363,6 @@ function requireEventGroupField(value: string | undefined, field: string, settle
   return value;
 }
 
-function buildMonthlySegments(input: {
-  startIsoDay: string;
-  endIsoDay: string;
-  buildDocNumber: (params: { startIsoDay: string; endIsoDay: string; seq: number }) => string;
-}): UkSettlementSegmentDraft[] {
-  const start = parseIsoDayParts(input.startIsoDay, 'settlement start');
-  const end = parseIsoDayParts(input.endIsoDay, 'settlement end');
-
-  const segments: UkSettlementSegmentDraft[] = [];
-
-  let year = start.year;
-  let month = start.month;
-  let seq = 1;
-
-  for (let guard = 0; guard < 1200; guard++) {
-    const isFirst = seq === 1;
-    const isLast = year === end.year && month === end.month;
-
-    const startIsoDay = isFirst ? input.startIsoDay : `${year}-${pad2(month)}-01`;
-    const endIsoDay = isLast
-      ? input.endIsoDay
-      : `${year}-${pad2(month)}-${pad2(lastDayOfMonth(year, month))}`;
-
-    segments.push({
-      seq,
-      yearMonth: isoDayToYearMonth(startIsoDay, 'segment start day'),
-      startIsoDay,
-      endIsoDay,
-      txnDate: endIsoDay,
-      docNumber: input.buildDocNumber({ startIsoDay, endIsoDay, seq }),
-      memoTotalsCents: new Map(),
-      auditRows: [],
-    });
-
-    if (isLast) break;
-
-    month += 1;
-    if (month > 12) {
-      month = 1;
-      year += 1;
-    }
-    seq += 1;
-  }
-
-  if (segments.length === 0) {
-    throw new Error(`Failed to build settlement segments for ${input.startIsoDay} → ${input.endIsoDay}`);
-  }
-
-  return segments;
-}
-
 export function buildUkSettlementDraftFromSpApiFinances(input: {
   settlementId: string;
   eventGroupId: string;
@@ -444,7 +390,11 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   const originalTotalCents = moneyToCents(originalTotalMoney, 'event group OriginalTotal');
 
   const segments: UkSettlementSegmentDraft[] = splitByMonth
-    ? buildMonthlySegments({ startIsoDay, endIsoDay, buildDocNumber: buildUkSettlementDocNumber })
+    ? buildMonthlySettlementSegments<UkSettlementAuditRowDraft>({
+        startIsoDay,
+        endIsoDay,
+        buildDocNumber: buildUkSettlementDocNumber,
+      })
     : [
         {
           seq: 1,
@@ -987,27 +937,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   }
 
   // Split-month rollovers to make each segment JE balance, matching legacy behavior.
-  if (segments.length > 1) {
-    let carriedCents = 0;
-
-    for (let i = 0; i < segments.length; i++) {
-      const segment = segments[i]!;
-      const segmentTotal = sumMap(segment.memoTotalsCents);
-      const isLast = i === segments.length - 1;
-
-      if (carriedCents !== 0) {
-        addCents(segment.memoTotalsCents, 'Split month settlement - balance of previous invoice(s) rolled forward', carriedCents);
-      }
-
-      if (isLast) continue;
-
-      const nextCarried = carriedCents + segmentTotal;
-      if (nextCarried !== 0) {
-        addCents(segment.memoTotalsCents, 'Split month settlement - balance of this invoice rolled forward', -nextCarried);
-      }
-      carriedCents = nextCarried;
-    }
-  }
+  applySplitMonthRollovers({ segments, addCents, sumMap });
 
   return {
     settlementId: input.settlementId,
