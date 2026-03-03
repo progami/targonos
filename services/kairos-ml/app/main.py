@@ -30,7 +30,19 @@ logging.getLogger("neuralprophet").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-app = FastAPI(title="Kairos ML Service", version="1.0.0")
+def truthy_env(name: str) -> bool:
+    return str(os.getenv(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+ENABLE_DOCS = truthy_env("KAIROS_ML_ENABLE_DOCS")
+
+app = FastAPI(
+    title="Kairos ML Service",
+    version="1.0.0",
+    docs_url="/docs" if ENABLE_DOCS else None,
+    redoc_url="/redoc" if ENABLE_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_DOCS else None,
+)
 
 # Supported models
 ModelName = Literal["ETS", "PROPHET", "ARIMA", "THETA", "NEURALPROPHET"]
