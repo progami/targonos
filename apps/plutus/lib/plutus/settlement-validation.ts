@@ -84,6 +84,133 @@ export function buildPrincipalGroups(
   return groups;
 }
 
+export function buildPrincipalGroupsByDate(
+  rows: SettlementAuditRow[],
+  predicate: (description: string) => boolean,
+): Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }> {
+  const groups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+
+  for (const row of rows) {
+    if (!predicate(row.description)) continue;
+    const skuRaw = row.sku.trim();
+    if (skuRaw === '') continue;
+
+    const sku = normalizeSku(skuRaw);
+    const orderId = row.orderId.trim();
+    const date = row.date;
+
+    if (!Number.isFinite(row.quantity) || !Number.isInteger(row.quantity) || row.quantity === 0) {
+      continue;
+    }
+
+    const cents = toCents(row.net);
+    const key = `${orderId}::${sku}::${date}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { orderId, sku, date, quantity: row.quantity, principalCents: cents });
+      continue;
+    }
+
+    existing.quantity += row.quantity;
+    existing.principalCents += cents;
+  }
+
+  return groups;
+}
+
+export type RefundSaleLayer = {
+  orderId: string;
+  sku: string;
+  date: string;
+  quantity: number;
+  principalCents: number;
+  costByComponentCents: Record<InventoryComponent, number>;
+};
+
+export type ExistingReturnLayer = {
+  orderId: string;
+  sku: string;
+  date: string;
+  quantity: number;
+};
+
+type MutableRefundSaleLayer = RefundSaleLayer & {
+  remainingQuantity: number;
+};
+
+function createEmptyCostByComponentCents(): Record<InventoryComponent, number> {
+  return {
+    manufacturing: 0,
+    freight: 0,
+    duty: 0,
+    mfgAccessories: 0,
+  };
+}
+
+function buildMutableSaleLayersByKey(saleLayers: RefundSaleLayer[]): Map<string, MutableRefundSaleLayer[]> {
+  const byKey = new Map<string, MutableRefundSaleLayer[]>();
+
+  for (const saleLayer of saleLayers) {
+    if (!Number.isInteger(saleLayer.quantity) || saleLayer.quantity <= 0) {
+      continue;
+    }
+
+    const key = `${saleLayer.orderId}::${saleLayer.sku}`;
+    const existing = byKey.get(key);
+    const layer: MutableRefundSaleLayer = {
+      ...saleLayer,
+      remainingQuantity: saleLayer.quantity,
+    };
+
+    if (!existing) {
+      byKey.set(key, [layer]);
+      continue;
+    }
+
+    existing.push(layer);
+  }
+
+  for (const saleLayersForKey of byKey.values()) {
+    saleLayersForKey.sort((left, right) => left.date.localeCompare(right.date));
+  }
+
+  return byKey;
+}
+
+function applyExistingReturnsToSaleLayers(
+  saleLayersByKey: Map<string, MutableRefundSaleLayer[]>,
+  existingReturns: ExistingReturnLayer[],
+) {
+  const sortedReturns = [...existingReturns].sort((left, right) => left.date.localeCompare(right.date));
+
+  for (const existingReturn of sortedReturns) {
+    if (!Number.isInteger(existingReturn.quantity) || existingReturn.quantity <= 0) {
+      continue;
+    }
+
+    const key = `${existingReturn.orderId}::${existingReturn.sku}`;
+    const saleLayers = saleLayersByKey.get(key);
+    if (!saleLayers) {
+      continue;
+    }
+
+    let remainingQuantity = existingReturn.quantity;
+    for (const saleLayer of saleLayers) {
+      if (saleLayer.remainingQuantity === 0 || saleLayer.date > existingReturn.date) {
+        continue;
+      }
+
+      const matchedQuantity = Math.min(remainingQuantity, saleLayer.remainingQuantity);
+      saleLayer.remainingQuantity -= matchedQuantity;
+      remainingQuantity -= matchedQuantity;
+
+      if (remainingQuantity === 0) {
+        break;
+      }
+    }
+  }
+}
+
 export function requireAccountMapping(config: unknown, key: string): string {
   if (!config || typeof config !== 'object') {
     throw new Error('Missing setup config');
@@ -109,16 +236,18 @@ export function findRequiredSubAccountId(
 
 export function matchRefundsToSales(
   refundGroups: Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>,
-  saleRecordByKey: Map<string, { orderId: string; sku: string; quantity: number; principalCents: number; costManufacturingCents: number; costFreightCents: number; costDutyCents: number; costMfgAccessoriesCents: number }>,
-  returnedQtyByKey: Map<string, number>,
+  saleLayers: RefundSaleLayer[],
+  existingReturns: ExistingReturnLayer[],
   blocks: ProcessingBlock[],
 ): ProcessingReturn[] {
   const matchedReturns: ProcessingReturn[] = [];
+  const saleLayersByKey = buildMutableSaleLayersByKey(saleLayers);
+  applyExistingReturnsToSaleLayers(saleLayersByKey, existingReturns);
 
   for (const refund of refundGroups.values()) {
     const key = `${refund.orderId}::${refund.sku}`;
-    const saleRecord = saleRecordByKey.get(key);
-    if (!saleRecord) {
+    const saleLayersForKey = saleLayersByKey.get(key);
+    if (!saleLayersForKey) {
       blocks.push({
         code: 'REFUND_UNMATCHED',
         message: 'Refund cannot be matched to an original sale',
@@ -127,13 +256,24 @@ export function matchRefundsToSales(
       continue;
     }
 
-    const saleQty = saleRecord.quantity;
     const refundQty = Math.abs(refund.quantity);
     if (!Number.isInteger(refundQty) || refundQty <= 0) continue;
 
-    const alreadyReturned = returnedQtyByKey.get(key);
-    const returnedSoFar = alreadyReturned === undefined ? 0 : alreadyReturned;
-    if (returnedSoFar + refundQty > saleQty) {
+    const saleLayersBeforeRefund = saleLayersForKey.filter((saleLayer) => saleLayer.date <= refund.date);
+    if (saleLayersBeforeRefund.length === 0) {
+      blocks.push({
+        code: 'REFUND_UNMATCHED',
+        message: 'Refund cannot be matched to an original sale',
+        details: { orderId: refund.orderId, sku: refund.sku },
+      });
+      continue;
+    }
+
+    const eligibleSaleLayers = saleLayersBeforeRefund.filter((saleLayer) => saleLayer.remainingQuantity > 0);
+    const saleQty = saleLayersBeforeRefund.reduce((sum, saleLayer) => sum + saleLayer.quantity, 0);
+    const remainingQty = eligibleSaleLayers.reduce((sum, saleLayer) => sum + saleLayer.remainingQuantity, 0);
+    const returnedSoFar = saleQty - remainingQty;
+    if (refundQty > remainingQty) {
       blocks.push({
         code: 'REFUND_ADJUSTMENT',
         message: 'Refund exceeds remaining sale quantity; treated as a financial adjustment (no additional inventory return)',
@@ -142,7 +282,31 @@ export function matchRefundsToSales(
       continue;
     }
 
-    const expectedAbs = Math.round((Math.abs(saleRecord.principalCents) * refundQty) / saleQty);
+    let remainingToMatch = refundQty;
+    let expectedAbs = 0;
+    const returnCost = createEmptyCostByComponentCents();
+    const matchedSaleLayers: Array<{ saleLayer: MutableRefundSaleLayer; quantity: number }> = [];
+
+    for (const saleLayer of eligibleSaleLayers) {
+      if (remainingToMatch === 0) {
+        break;
+      }
+
+      const matchedQuantity = Math.min(remainingToMatch, saleLayer.remainingQuantity);
+      matchedSaleLayers.push({ saleLayer, quantity: matchedQuantity });
+      remainingToMatch -= matchedQuantity;
+
+      expectedAbs += Math.round((Math.abs(saleLayer.principalCents) * matchedQuantity) / saleLayer.quantity);
+      const matchedCost = removeProportionalComponents(
+        saleLayer.costByComponentCents,
+        matchedQuantity,
+        saleLayer.quantity,
+      ) as Record<InventoryComponent, number>;
+      for (const component of Object.keys(returnCost) as InventoryComponent[]) {
+        returnCost[component] += matchedCost[component];
+      }
+    }
+
     const actualAbs = Math.abs(refund.principalCents);
     if (expectedAbs === 0) {
       blocks.push({
@@ -163,13 +327,9 @@ export function matchRefundsToSales(
       continue;
     }
 
-    const saleCostTotals: Record<InventoryComponent, number> = {
-      manufacturing: saleRecord.costManufacturingCents,
-      freight: saleRecord.costFreightCents,
-      duty: saleRecord.costDutyCents,
-      mfgAccessories: saleRecord.costMfgAccessoriesCents,
-    };
-    const returnCost = removeProportionalComponents(saleCostTotals, refundQty, saleQty) as Record<InventoryComponent, number>;
+    for (const matchedSaleLayer of matchedSaleLayers) {
+      matchedSaleLayer.saleLayer.remainingQuantity -= matchedSaleLayer.quantity;
+    }
 
     matchedReturns.push({
       orderId: refund.orderId,

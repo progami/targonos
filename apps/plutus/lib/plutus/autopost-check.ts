@@ -1,9 +1,9 @@
 import { createLogger } from '@targon/logger';
 
 import { db } from '@/lib/db';
-import { fromCents } from '@/lib/inventory/money';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
+import { loadAuditRowsFromDb } from '@/lib/plutus/audit-data';
 import {
   fetchJournalEntries,
   QboAuthError,
@@ -91,42 +91,14 @@ async function loadAuditRowsForInvoice(input: {
   invoiceId: string;
   marketplace: MarketplaceId;
 }): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string } | null> {
-  const market =
-    input.marketplace === 'amazon.com'
-      ? 'us'
-      : input.marketplace === 'amazon.co.uk'
-        ? 'uk'
-        : (() => {
-            const exhaustive: never = input.marketplace;
-            throw new Error(`Unsupported marketplace: ${exhaustive}`);
-          })();
-
-  const dbRows = await db.auditDataRow.findMany({
-    where: {
-      invoiceId: input.invoiceId,
-      OR: [
-        { market: { equals: market, mode: 'insensitive' } },
-        { market: { contains: input.marketplace, mode: 'insensitive' } },
-      ],
-    },
-    include: { upload: { select: { filename: true } } },
-  });
-
-  if (dbRows.length === 0) return null;
-
-  const rows: SettlementAuditRow[] = dbRows.map((r) => ({
-    invoiceId: r.invoiceId,
-    market: r.market,
-    date: r.date,
-    orderId: r.orderId,
-    sku: r.sku,
-    quantity: r.quantity,
-    description: r.description,
-    net: fromCents(r.net),
-  }));
-
-  const sourceFilename = dbRows[0]!.upload.filename;
-  return { rows, sourceFilename };
+  try {
+    return await loadAuditRowsFromDb(input);
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('No stored audit data found for invoice ')) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 async function fetchAllSettlementJournalEntries(input: {
@@ -145,13 +117,13 @@ async function fetchAllSettlementJournalEntries(input: {
 
   for (const docNumberContains of docNumberQueries) {
     let startPosition = 1;
-    let fetchedForQuery = 0;
     while (true) {
       const result = await fetchJournalEntries(activeConnection, {
         docNumberContains,
         maxResults: pageSize,
         startPosition,
         startDate: input.startDate,
+        includeTotalCount: false,
       });
 
       if (result.updatedConnection) {
@@ -160,9 +132,7 @@ async function fetchAllSettlementJournalEntries(input: {
 
       allJournalEntries = allJournalEntries.concat(result.journalEntries);
 
-      fetchedForQuery += result.journalEntries.length;
-      if (fetchedForQuery >= result.totalCount) break;
-      if (result.journalEntries.length === 0) break;
+      if (result.journalEntries.length < pageSize) break;
       startPosition += result.journalEntries.length;
     }
   }

@@ -6,11 +6,16 @@ import {
   updateBill,
   updateBillWithPayload,
   QboAuthError,
+  type QboBill,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { createLogger } from '@targon/logger';
 import db from '@/lib/db';
-import { buildAccountComponentMap, extractTrackedLinesFromBill } from '@/lib/plutus/bills/classification';
+import {
+  buildAccountComponentMap,
+  extractTrackedLinesFromBill,
+  type TrackedBillLine,
+} from '@/lib/plutus/bills/classification';
 import {
   buildBillMappingPullSyncUpdates,
   type BillMappingPullSyncCandidate,
@@ -42,23 +47,15 @@ export async function GET(req: NextRequest) {
     const rawPageSize = searchParams.get('pageSize');
     const page = parseInt(rawPage ? rawPage : '1', 10);
     const pageSize = parseInt(rawPageSize ? rawPageSize : '50', 10);
-    const startPosition = (page - 1) * pageSize + 1;
-
-    // Fetch QBO bills
-    const billsResult = await fetchBills(connection, {
-      startDate,
-      endDate,
-      maxResults: pageSize,
-      startPosition,
-    });
-    let activeConnection = billsResult.updatedConnection ? billsResult.updatedConnection : connection;
+    const pageStart = (page - 1) * pageSize;
+    const pageEnd = pageStart + pageSize;
+    let activeConnection = connection;
 
     // Fetch QBO accounts for classification
-    const accountsResult = await fetchAccounts(activeConnection);
+    const accountsResult = await fetchAccounts(activeConnection, { includeInactive: true });
     if (accountsResult.updatedConnection) {
       activeConnection = accountsResult.updatedConnection;
     }
-    await saveServerQboConnection(activeConnection);
 
     // Load SetupConfig for warehousing account IDs
     const config = await db.setupConfig.findFirst();
@@ -69,15 +66,54 @@ export async function GET(req: NextRequest) {
       productExpenses: config?.productExpenses,
     });
 
-    // Fetch all QBO bill IDs from this page to look up mappings
-    const qboBillIds = billsResult.bills.map((b) => b.Id);
+    const trackedBillsPage: Array<{ bill: QboBill; trackedLines: TrackedBillLine[] }> = [];
+    let trackedBillCount = 0;
+    let rawStartPosition = 1;
+    const scanPageSize = Math.max(pageSize, 100);
+
+    while (true) {
+      const billsResult = await fetchBills(activeConnection, {
+        startDate,
+        endDate,
+        maxResults: scanPageSize,
+        startPosition: rawStartPosition,
+        includeTotalCount: false,
+      });
+      if (billsResult.updatedConnection) {
+        activeConnection = billsResult.updatedConnection;
+      }
+
+      for (const bill of billsResult.bills) {
+        const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
+        if (trackedLines.length === 0) {
+          continue;
+        }
+
+        if (trackedBillCount >= pageStart && trackedBillCount < pageEnd) {
+          trackedBillsPage.push({ bill, trackedLines });
+        }
+        trackedBillCount += 1;
+      }
+
+      if (billsResult.bills.length < scanPageSize) {
+        break;
+      }
+
+      rawStartPosition += billsResult.bills.length;
+    }
+
+    if (activeConnection !== connection) {
+      await saveServerQboConnection(activeConnection);
+    }
+
+    const qboBillIds = trackedBillsPage.map(({ bill }) => bill.Id);
     const mappings = await db.billMapping.findMany({
       where: { qboBillId: { in: qboBillIds } },
       include: { lines: true },
     });
     const mappingsByBillId = new Map(mappings.map((m) => [m.qboBillId, m]));
 
-    const billsById = new Map(billsResult.bills.map((bill) => [bill.Id, bill]));
+    const billsById = new Map(trackedBillsPage.map(({ bill }) => [bill.Id, bill]));
     const pullSyncUpdates = buildBillMappingPullSyncUpdates(
       mappings as BillMappingPullSyncCandidate[],
       billsById,
@@ -112,11 +148,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Build response
-    const bills = billsResult.bills.map((bill) => {
-      const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
-
-      if (trackedLines.length === 0) return null;
-
+    const bills = trackedBillsPage.map(({ bill, trackedLines }) => {
       const mapping = mappingsByBillId.get(bill.Id);
 
       return {
@@ -147,8 +179,6 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const trackedBills = bills.filter((b) => b !== null);
-
     // Fetch brands and SKUs for dropdowns
     const brands = await db.brand.findMany({
       select: { id: true, name: true },
@@ -161,15 +191,15 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      bills: trackedBills,
-      realmId: connection.realmId,
+      bills,
+      realmId: activeConnection.realmId,
       brands,
       skus,
       pagination: {
         page,
         pageSize,
-        totalCount: billsResult.totalCount,
-        totalPages: Math.ceil(billsResult.totalCount / pageSize),
+        totalCount: trackedBillCount,
+        totalPages: Math.ceil(trackedBillCount / pageSize),
       },
     });
   } catch (error) {
