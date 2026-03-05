@@ -31,8 +31,11 @@ import {
   isSalePrincipal,
   isRefundPrincipal,
   buildPrincipalGroups,
+  buildPrincipalGroupsByDate,
   requireAccountMapping,
   matchRefundsToSales,
+  type ExistingReturnLayer,
+  type RefundSaleLayer,
   sumCentsByBrandComponent,
   sumCentsByBrandComponentSku,
   mergeBrandComponentCents,
@@ -758,7 +761,7 @@ export async function computeSettlementPreview(input: {
 
   // Principal groups for unit movements
   const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
-  const refundGroups = buildPrincipalGroups(scopedInvoiceRows, isRefundPrincipal);
+  const refundGroups = buildPrincipalGroupsByDate(scopedInvoiceRows, isRefundPrincipal);
   const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
 
   let pnlAllocation;
@@ -814,17 +817,8 @@ export async function computeSettlementPreview(input: {
   // Match refunds to historical sales first; fallback for remaining refunds is handled
   // after current settlement sales get costed.
   const refundPairs = Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku }));
-  const saleRecordByKey = new Map<string, {
-    orderId: string;
-    sku: string;
-    quantity: number;
-    principalCents: number;
-    costManufacturingCents: number;
-    costFreightCents: number;
-    costDutyCents: number;
-    costMfgAccessoriesCents: number;
-  }>();
-  const returnedQtyByKey = new Map<string, number>();
+  const historicalSaleLayers: RefundSaleLayer[] = [];
+  const historicalExistingReturns: ExistingReturnLayer[] = [];
   if (refundPairs.length > 0) {
     const refundSaleRecords = await db.orderSale.findMany({
       where: {
@@ -837,30 +831,22 @@ export async function computeSettlementPreview(input: {
           : {}),
         OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
       },
+      orderBy: [{ saleDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
     for (const sale of refundSaleRecords) {
-      const key = `${sale.orderId}::${normalizeSku(sale.sku)}`;
-      const current = saleRecordByKey.get(key);
-      if (!current) {
-        saleRecordByKey.set(key, {
-          orderId: sale.orderId,
-          sku: normalizeSku(sale.sku),
-          quantity: sale.quantity,
-          principalCents: sale.principalCents,
-          costManufacturingCents: sale.costManufacturingCents,
-          costFreightCents: sale.costFreightCents,
-          costDutyCents: sale.costDutyCents,
-          costMfgAccessoriesCents: sale.costMfgAccessoriesCents,
-        });
-        continue;
-      }
-
-      current.quantity += sale.quantity;
-      current.principalCents += sale.principalCents;
-      current.costManufacturingCents += sale.costManufacturingCents;
-      current.costFreightCents += sale.costFreightCents;
-      current.costDutyCents += sale.costDutyCents;
-      current.costMfgAccessoriesCents += sale.costMfgAccessoriesCents;
+      historicalSaleLayers.push({
+        orderId: sale.orderId,
+        sku: normalizeSku(sale.sku),
+        date: dateToIsoDay(sale.saleDate),
+        quantity: sale.quantity,
+        principalCents: sale.principalCents,
+        costByComponentCents: {
+          manufacturing: sale.costManufacturingCents,
+          freight: sale.costFreightCents,
+          duty: sale.costDutyCents,
+          mfgAccessories: sale.costMfgAccessoriesCents,
+        },
+      });
     }
 
     const existingReturns = await db.orderReturn.findMany({
@@ -874,19 +860,24 @@ export async function computeSettlementPreview(input: {
           : {}),
         OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
       },
+      orderBy: [{ returnDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
     for (const ret of existingReturns) {
-      const key = `${ret.orderId}::${normalizeSku(ret.sku)}`;
-      const current = returnedQtyByKey.get(key);
-      returnedQtyByKey.set(key, (current === undefined ? 0 : current) + ret.quantity);
+      historicalExistingReturns.push({
+        orderId: ret.orderId,
+        sku: normalizeSku(ret.sku),
+        date: dateToIsoDay(ret.returnDate),
+        quantity: ret.quantity,
+      });
     }
   }
 
+  const historicalSaleKeys = new Set(historicalSaleLayers.map((sale) => `${sale.orderId}::${sale.sku}`));
   const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
   const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
   for (const refund of refundGroups.values()) {
     const key = `${refund.orderId}::${refund.sku}`;
-    if (saleRecordByKey.has(key)) {
+    if (historicalSaleKeys.has(key)) {
       historicalRefundGroups.set(key, refund);
       continue;
     }
@@ -896,7 +887,7 @@ export async function computeSettlementPreview(input: {
   const matchedReturnsFromHistory =
     historicalRefundGroups.size === 0
       ? []
-      : matchRefundsToSales(historicalRefundGroups, saleRecordByKey, returnedQtyByKey, blocks);
+      : matchRefundsToSales(historicalRefundGroups, historicalSaleLayers, historicalExistingReturns, blocks);
 
   const maxDateObj = new Date(`${maxDate}T00:00:00Z`);
 
@@ -1057,34 +1048,24 @@ export async function computeSettlementPreview(input: {
     }
   }
 
-  const currentSettlementSaleRecordByKey = new Map<string, {
-    orderId: string;
-    sku: string;
-    quantity: number;
-    principalCents: number;
-    costManufacturingCents: number;
-    costFreightCents: number;
-    costDutyCents: number;
-    costMfgAccessoriesCents: number;
-  }>();
-  for (const sale of computedSales) {
-    const key = `${sale.orderId}::${sale.sku}`;
-    currentSettlementSaleRecordByKey.set(key, {
-      orderId: sale.orderId,
-      sku: sale.sku,
-      quantity: sale.quantity,
-      principalCents: sale.principalCents,
-      costManufacturingCents: sale.costByComponentCents.manufacturing,
-      costFreightCents: sale.costByComponentCents.freight,
-      costDutyCents: sale.costByComponentCents.duty,
-      costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
-    });
-  }
+  const currentSettlementSaleLayers: RefundSaleLayer[] = computedSales.map((sale) => ({
+    orderId: sale.orderId,
+    sku: sale.sku,
+    date: sale.date,
+    quantity: sale.quantity,
+    principalCents: sale.principalCents,
+    costByComponentCents: {
+      manufacturing: sale.costByComponentCents.manufacturing,
+      freight: sale.costByComponentCents.freight,
+      duty: sale.costByComponentCents.duty,
+      mfgAccessories: sale.costByComponentCents.mfgAccessories,
+    },
+  }));
 
   const matchedReturnsFromCurrentSettlement =
     currentSettlementRefundGroups.size === 0
       ? []
-      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleRecordByKey, new Map(), blocks);
+      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks);
 
   const matchedReturns = [...matchedReturnsFromHistory, ...matchedReturnsFromCurrentSettlement];
 

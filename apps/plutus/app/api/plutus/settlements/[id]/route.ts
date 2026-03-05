@@ -206,26 +206,27 @@ export async function POST(req: NextRequest, context: RouteContext) {
       }
     }
 
-    await db.settlementRollback.create({
-      data: {
-        marketplace: existing.marketplace,
-        qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
-        settlementDocNumber: existing.settlementDocNumber,
-        settlementPostedDate: existing.settlementPostedDate,
-        invoiceId: existing.invoiceId,
-        processingHash: existing.processingHash,
-        sourceFilename: existing.sourceFilename,
-        processedAt: existing.uploadedAt,
-        qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
-        qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
-        orderSalesCount: existing._count.orderSales,
-        orderReturnsCount: existing._count.orderReturns,
-      },
-    });
-
-    await db.settlementProcessing.delete({
-      where: { qboSettlementJournalEntryId: settlementId },
-    });
+    await db.$transaction([
+      db.settlementRollback.create({
+        data: {
+          marketplace: existing.marketplace,
+          qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
+          settlementDocNumber: existing.settlementDocNumber,
+          settlementPostedDate: existing.settlementPostedDate,
+          invoiceId: existing.invoiceId,
+          processingHash: existing.processingHash,
+          sourceFilename: existing.sourceFilename,
+          processedAt: existing.uploadedAt,
+          qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
+          qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
+          orderSalesCount: existing._count.orderSales,
+          orderReturnsCount: existing._count.orderReturns,
+        },
+      }),
+      db.settlementProcessing.delete({
+        where: { qboSettlementJournalEntryId: settlementId },
+      }),
+    ]);
 
     const user = await getCurrentUser();
     await logAudit({
