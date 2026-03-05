@@ -9,7 +9,7 @@ import {
 import type { SpApiFinancialEvents } from '@/lib/amazon-finances/types';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
-import { fetchJournalEntries, fetchJournalEntryById, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
+import { fetchAccounts, fetchJournalEntries, fetchJournalEntryById, type QboAccount, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type CliOptions = {
@@ -472,6 +472,7 @@ async function main(): Promise<void> {
       const accountIdByMemo = new Map<string, string>();
       let bankAccountId = '';
       let paymentAccountId = '';
+      let settlementControlAccountId = '';
 
       for (const line of actualLines) {
         if (line.description === 'Transfer to Bank') {
@@ -482,15 +483,35 @@ async function main(): Promise<void> {
           paymentAccountId = line.accountId;
           continue;
         }
+        if (line.description.startsWith('Settlement Control (FundTransferStatus=')) {
+          settlementControlAccountId = line.accountId;
+          continue;
+        }
         if (!accountIdByMemo.has(line.description)) {
           accountIdByMemo.set(line.description, line.accountId);
         }
       }
 
+      if (settlementControlAccountId === '') {
+        // Resolve via chart of accounts in case the settlement didn't use it.
+        const accountsResult = await fetchAccounts(connection, { includeInactive: true });
+        if (accountsResult.updatedConnection) connection = accountsResult.updatedConnection;
+        const matches = accountsResult.accounts.filter(
+          (a: QboAccount) => a.Name.trim().toLowerCase() === 'plutus settlement control',
+        );
+        if (matches.length !== 1) {
+          throw new Error(
+            `Missing or ambiguous QBO account for settlement control (expected exactly one named \"Plutus Settlement Control\", found ${matches.length})`,
+          );
+        }
+        settlementControlAccountId = matches[0]!.Id;
+      }
+
       const isLast = segmentIdx === draft.segments.length - 1;
       const originalTotalCents = isLast ? draft.originalTotalCents : 0;
+      const transferSucceeded = draft.fundTransferStatus === 'Succeeded';
 
-      if (isLast && originalTotalCents > 0 && bankAccountId === '') {
+      if (isLast && transferSucceeded && originalTotalCents > 0 && bankAccountId === '') {
         throw new Error(`Missing 'Transfer to Bank' line in ${segment.docNumber}`);
       }
       if (isLast && originalTotalCents < 0 && paymentAccountId === '') {
@@ -504,6 +525,7 @@ async function main(): Promise<void> {
           segments: [segment],
         },
         privateNote: 'Plutus reconcile (SP-API Finances)',
+        settlementControlAccountId,
         bankAccountId,
         paymentAccountId,
         accountIdByMemo,

@@ -4,7 +4,6 @@ import {
   deleteJournalEntry,
   fetchAccounts,
   fetchBills,
-  fetchExchangeRate,
   fetchJournalEntryById,
   fetchPreferences,
 } from '@/lib/qbo/api';
@@ -82,6 +81,7 @@ async function resolveExchangeRateForJournalPosting(input: {
   connection: QboConnection;
   txnDate: string;
   currencyCode: 'USD' | 'GBP';
+  preferredExchangeRate?: number;
 }): Promise<{ exchangeRate?: number; updatedConnection?: QboConnection }> {
   const preferencesResult = await fetchPreferences(input.connection);
   let activeConnection = preferencesResult.updatedConnection ? preferencesResult.updatedConnection : input.connection;
@@ -98,17 +98,22 @@ async function resolveExchangeRateForJournalPosting(input: {
     return { updatedConnection: activeConnection === input.connection ? undefined : activeConnection };
   }
 
-  const rateResult = await fetchExchangeRate(activeConnection, {
-    sourceCurrencyCode: txnCurrencyCode,
-    targetCurrencyCode: homeCurrencyCode,
-    asOfDate: input.txnDate,
-  });
-  if (rateResult.updatedConnection) {
-    activeConnection = rateResult.updatedConnection;
+  // Deterministic posting: for foreign currency settlements we must reuse the settlement JE's ExchangeRate.
+  // Otherwise the P&L reclass won't net to zero in home currency (FX drift between JEs).
+  if (input.preferredExchangeRate === undefined) {
+    throw new Error(
+      `Missing ExchangeRate for ${txnCurrencyCode}->${homeCurrencyCode} posting on ${input.txnDate}. Settlement JE ExchangeRate is required.`,
+    );
+  }
+
+  if (!Number.isFinite(input.preferredExchangeRate) || input.preferredExchangeRate <= 0) {
+    throw new Error(
+      `Invalid ExchangeRate for ${txnCurrencyCode}->${homeCurrencyCode} posting on ${input.txnDate}: ${String(input.preferredExchangeRate)}`,
+    );
   }
 
   return {
-    exchangeRate: rateResult.exchangeRate.Rate,
+    exchangeRate: input.preferredExchangeRate,
     updatedConnection: activeConnection === input.connection ? undefined : activeConnection,
   };
 }
@@ -126,6 +131,7 @@ function buildEmptyPreview(input: {
   settlementJournalEntryId: string;
   settlementDocNumber: string;
   settlementPostedDate: string;
+  settlementExchangeRate?: number;
   invoiceId: string;
   processingHash: string;
   minDate: string;
@@ -153,6 +159,7 @@ function buildEmptyPreview(input: {
     settlementJournalEntryId: input.settlementJournalEntryId,
     settlementDocNumber: input.settlementDocNumber,
     settlementPostedDate: input.settlementPostedDate,
+    settlementExchangeRate: input.settlementExchangeRate,
     invoiceId: input.invoiceId,
     processingHash: input.processingHash,
     minDate: input.minDate,
@@ -454,6 +461,7 @@ export async function computeSettlementPreview(input: {
         settlementJournalEntryId: settlement.Id,
         settlementDocNumber: settlement.DocNumber,
         settlementPostedDate: settlement.TxnDate,
+        settlementExchangeRate: settlement.ExchangeRate,
         invoiceId,
         processingHash,
         minDate,
@@ -546,6 +554,7 @@ export async function computeSettlementPreview(input: {
         settlementJournalEntryId: settlement.Id,
         settlementDocNumber: settlement.DocNumber,
         settlementPostedDate: settlement.TxnDate,
+        settlementExchangeRate: settlement.ExchangeRate,
         invoiceId,
         processingHash,
         minDate,
@@ -1132,6 +1141,7 @@ export async function computeSettlementPreview(input: {
     settlementJournalEntryId: settlement.Id,
     settlementDocNumber: settlement.DocNumber,
     settlementPostedDate: settlement.TxnDate,
+    settlementExchangeRate: settlement.ExchangeRate,
     invoiceId,
     processingHash,
     minDate,
@@ -1174,6 +1184,7 @@ export async function processSettlement(input: {
     connection: postingConnection,
     txnDate: computed.preview.settlementPostedDate,
     currencyCode: settlementCurrencyCode,
+    preferredExchangeRate: computed.preview.settlementExchangeRate,
   });
   if (postingRate.updatedConnection) {
     postingConnection = postingRate.updatedConnection;

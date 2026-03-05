@@ -9,7 +9,15 @@ import {
 import { fromCents } from '@/lib/inventory/money';
 import { stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import { normalizeSku } from '@/lib/plutus/settlement-validation';
-import { createJournalEntry, fetchJournalEntries, fetchJournalEntryById, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
+import {
+  createJournalEntry,
+  fetchAccounts,
+  fetchJournalEntries,
+  fetchJournalEntryById,
+  type QboAccount,
+  type QboConnection,
+  type QboJournalEntry,
+} from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type CliOptions = {
@@ -348,6 +356,27 @@ async function main(): Promise<void> {
     paymentAccountId = found.accountId;
   }
 
+  const accountsResult = await fetchAccounts(connection, { includeInactive: true });
+  if (accountsResult.updatedConnection) connection = accountsResult.updatedConnection;
+  const settlementControlMatches = accountsResult.accounts.filter(
+    (account: QboAccount) => account.Name.trim().toLowerCase() === 'plutus settlement control',
+  );
+  if (settlementControlMatches.length !== 1) {
+    throw new Error(
+      `Missing or ambiguous QBO account for settlement control (expected exactly one named \"Plutus Settlement Control\", found ${settlementControlMatches.length})`,
+    );
+  }
+  const settlementControlAccount = settlementControlMatches[0]!;
+  const settlementControlCurrency = settlementControlAccount.CurrencyRef?.value
+    ? settlementControlAccount.CurrencyRef.value.trim().toUpperCase()
+    : '';
+  if (settlementControlCurrency === '' || settlementControlCurrency !== 'USD') {
+    throw new Error(
+      `Settlement control account currency mismatch: expected USD, got ${settlementControlCurrency} (${settlementControlAccount.Name} / ${settlementControlAccount.Id})`,
+    );
+  }
+  const settlementControlAccountId = settlementControlAccount.Id;
+
   const postedAfterIso = `${options.startDate}T00:00:00.000Z`;
   const postedBeforeIso = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
@@ -393,6 +422,7 @@ async function main(): Promise<void> {
     const jeDrafts = buildQboJournalEntriesFromUsSettlementDraft({
       draft,
       privateNote: `Plutus (SP-API Finances) | Settlement: ${settlementId} | Group: ${eventGroupId}`,
+      settlementControlAccountId,
       bankAccountId,
       paymentAccountId,
       accountIdByMemo: templateMapping.accountIdByMemo,

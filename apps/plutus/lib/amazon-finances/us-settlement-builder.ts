@@ -41,6 +41,7 @@ export type UsSettlementDraft = {
   eventGroupId: string;
   timeZone: string;
   originalTotalCents: number;
+  fundTransferStatus: string;
   segments: UsSettlementSegmentDraft[];
 };
 
@@ -72,6 +73,21 @@ function requirePostedDate(value: string | undefined, context: string): string {
     throw new Error(`Missing PostedDate for ${context}`);
   }
   return value;
+}
+
+function requireFundTransferStatus(value: unknown, settlementId: string): string {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Missing FundTransferStatus for settlement ${settlementId}`);
+  }
+  return value.trim();
+}
+
+function normalizeFundTransferStatus(value: string, settlementId: string): 'Succeeded' | 'Failed' | 'Unknown' {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'succeeded') return 'Succeeded';
+  if (normalized === 'failed') return 'Failed';
+  if (normalized === 'unknown') return 'Unknown';
+  throw new Error(`Unhandled FundTransferStatus for settlement ${settlementId}: ${value}`);
 }
 
 function brandNameForSku(skuRaw: string, skuToBrandName: Map<string, string>): string {
@@ -232,6 +248,10 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     throw new Error(`Missing OriginalTotal for settlement ${input.settlementId}`);
   }
   const originalTotalCents = moneyToCents(originalTotalMoney, 'event group OriginalTotal');
+  const fundTransferStatus = normalizeFundTransferStatus(
+    requireFundTransferStatus(input.eventGroup.FundTransferStatus, input.settlementId),
+    input.settlementId,
+  );
 
   const segments: UsSettlementSegmentDraft[] = splitByMonth
     ? buildMonthlySettlementSegments<UsSettlementAuditRowDraft>({
@@ -650,6 +670,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     eventGroupId: input.eventGroupId,
     timeZone,
     originalTotalCents,
+    fundTransferStatus,
     segments,
   };
 }
@@ -677,6 +698,7 @@ function postingForNonBank(cents: number): { postingType: 'Debit' | 'Credit'; am
 export function buildQboJournalEntriesFromUsSettlementDraft(input: {
   draft: UsSettlementDraft;
   privateNote: string;
+  settlementControlAccountId: string;
   bankAccountId: string;
   paymentAccountId: string;
   accountIdByMemo: Map<string, string>;
@@ -709,13 +731,28 @@ export function buildQboJournalEntriesFromUsSettlementDraft(input: {
       const abs = Math.abs(cents);
       const amount = abs / 100;
 
+      // Amazon uses FundTransferStatus to describe payout success for positive settlements.
+      // Negative settlements are charged to the payment method and typically show FundTransferStatus=Unknown,
+      // but still need a "Payment to Amazon" line so the charge can be matched in QBO.
+      const transferSucceeded = input.draft.fundTransferStatus === 'Succeeded';
+
       if (cents > 0) {
-        lines.push({
-          accountId: input.bankAccountId,
-          postingType: 'Debit',
-          amount,
-          description: 'Transfer to Bank',
-        });
+        if (transferSucceeded) {
+          lines.push({
+            accountId: input.bankAccountId,
+            postingType: 'Debit',
+            amount,
+            description: 'Transfer to Bank',
+          });
+        } else {
+          const description = `Settlement Control (FundTransferStatus=${input.draft.fundTransferStatus})`;
+          lines.push({
+            accountId: input.settlementControlAccountId,
+            postingType: 'Debit',
+            amount,
+            description,
+          });
+        }
       } else {
         lines.push({
           accountId: input.paymentAccountId,
