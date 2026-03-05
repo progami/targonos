@@ -2157,4 +2157,48 @@ test('buildPrincipalGroupsByDate keeps refunds from different days separate', ()
   assert.equal(groups.size, 2);
 });
 
+test('historical refund routing keeps multiple dated refunds for the same order and sku', () => {
+  const refundGroups = buildPrincipalGroupsByDate(
+    [
+      {
+        invoiceId: 'INV-2',
+        market: 'us',
+        date: '2026-01-10',
+        orderId: 'ORDER-4',
+        sku: 'sku-4',
+        quantity: -1,
+        description: 'Amazon Refunds - Refunded Principal',
+        net: -10,
+      },
+      {
+        invoiceId: 'INV-2',
+        market: 'us',
+        date: '2026-01-11',
+        orderId: 'ORDER-4',
+        sku: 'sku-4',
+        quantity: -1,
+        description: 'Amazon Refunds - Refunded Principal',
+        net: -10,
+      },
+    ],
+    (description) => description === 'Amazon Refunds - Refunded Principal',
+  );
+
+  const historicalSaleKeys = new Set(['ORDER-4::SKU-4']);
+  const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+  const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+
+  for (const [refundKey, refund] of refundGroups.entries()) {
+    const saleKey = `${refund.orderId}::${refund.sku}`;
+    if (historicalSaleKeys.has(saleKey)) {
+      historicalRefundGroups.set(refundKey, refund);
+      continue;
+    }
+    currentSettlementRefundGroups.set(refundKey, refund);
+  }
+
+  assert.equal(historicalRefundGroups.size, 2);
+  assert.equal(currentSettlementRefundGroups.size, 0);
+});
+
 process.stdout.write('All tests passed.\n');
