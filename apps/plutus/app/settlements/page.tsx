@@ -40,7 +40,11 @@ import { SplitButton } from '@/components/ui/split-button';
 import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
-import { useSettlementsListStore } from '@/lib/store/settlements';
+import {
+  SETTLEMENT_LIST_STATUSES,
+  useSettlementsListStore,
+  type SettlementListStatus,
+} from '@/lib/store/settlements';
 import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -63,7 +67,7 @@ type SettlementRow = {
   periodEnd: string | null;
   settlementTotal: number | null;
   qboStatus: 'Posted';
-  plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
+  plutusStatus: SettlementListStatus;
 };
 
 type SettlementsResponse = {
@@ -236,16 +240,6 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
         sx={{ ...chipBase, bgcolor: 'action.hover', color: 'text.secondary' }}
       />
     );
-  if (status === 'Blocked')
-    return (
-      <Chip
-        label="Blocked"
-        size="small"
-        color="error"
-        variant="filled"
-        sx={{ ...chipBase, bgcolor: 'error.main', color: 'error.contrastText', opacity: 0.9 }}
-      />
-    );
   return (
     <Chip
       label="Pending"
@@ -276,7 +270,7 @@ async function fetchSettlements({
   startDate: string | null;
   endDate: string | null;
   marketplace: Marketplace;
-  status: string[];
+  status: SettlementListStatus[];
   totalMin: string;
   totalMax: string;
 }): Promise<SettlementsResponse> {
@@ -423,6 +417,15 @@ export default function SettlementsPage() {
     }, 300);
     return () => window.clearTimeout(handle);
   }, [searchInput, setPage, setSearch]);
+
+  useEffect(() => {
+    const normalized = statusFilter.filter((status) =>
+      (SETTLEMENT_LIST_STATUSES as readonly string[]).includes(status),
+    ) as SettlementListStatus[];
+    if (normalized.length !== statusFilter.length) {
+      setStatusFilter(normalized);
+    }
+  }, [setStatusFilter, statusFilter]);
 
   const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
   const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
@@ -720,7 +723,7 @@ export default function SettlementsPage() {
                       <Popper open={Boolean(statusAnchorEl)} anchorEl={statusAnchorEl} placement="bottom-start" sx={{ zIndex: 1300 }}>
                         <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
                           <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
-                            {(['Pending', 'Processed', 'Blocked', 'RolledBack'] as const).map((status) => (
+                            {SETTLEMENT_LIST_STATUSES.map((status) => (
                               <FormControlLabel
                                 key={status}
                                 control={

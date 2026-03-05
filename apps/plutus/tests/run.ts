@@ -56,6 +56,7 @@ import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-pro
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
+import { matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
   buildPlutusSettlementDocNumber,
   isSettlementDocNumber,
@@ -2017,6 +2018,107 @@ test('shouldRefreshCashflowSnapshot handles no snapshot, stale date, and min age
     autoRefreshMinSnapshotAgeMinutes: 30,
   });
   assert.equal(todayTooFresh, false);
+});
+
+test('matchRefundsToSales ignores future sale layers when refunding historical orders', () => {
+  const blocks: ProcessingBlock[] = [];
+  const matchedReturns = matchRefundsToSales(
+    new Map([
+      [
+        'ORDER-1::SKU-1',
+        {
+          orderId: 'ORDER-1',
+          sku: 'SKU-1',
+          date: '2026-01-15',
+          quantity: -1,
+          principalCents: -1_000,
+        },
+      ],
+    ]),
+    [
+      {
+        orderId: 'ORDER-1',
+        sku: 'SKU-1',
+        date: '2026-01-01',
+        quantity: 1,
+        principalCents: 1_000,
+        costByComponentCents: { manufacturing: 100, freight: 10, duty: 5, mfgAccessories: 0 },
+      },
+      {
+        orderId: 'ORDER-1',
+        sku: 'SKU-1',
+        date: '2026-02-01',
+        quantity: 1,
+        principalCents: 3_000,
+        costByComponentCents: { manufacturing: 300, freight: 30, duty: 15, mfgAccessories: 0 },
+      },
+    ],
+    [],
+    blocks,
+  );
+
+  assert.equal(blocks.length, 0);
+  assert.equal(matchedReturns.length, 1);
+  assert.deepEqual(matchedReturns[0]?.costByComponentCents, {
+    manufacturing: 100,
+    freight: 10,
+    duty: 5,
+    mfgAccessories: 0,
+  });
+});
+
+test('matchRefundsToSales uses remaining sale layers after prior returns', () => {
+  const blocks: ProcessingBlock[] = [];
+  const matchedReturns = matchRefundsToSales(
+    new Map([
+      [
+        'ORDER-2::SKU-2',
+        {
+          orderId: 'ORDER-2',
+          sku: 'SKU-2',
+          date: '2026-02-15',
+          quantity: -1,
+          principalCents: -3_000,
+        },
+      ],
+    ]),
+    [
+      {
+        orderId: 'ORDER-2',
+        sku: 'SKU-2',
+        date: '2026-01-01',
+        quantity: 1,
+        principalCents: 1_000,
+        costByComponentCents: { manufacturing: 100, freight: 0, duty: 0, mfgAccessories: 0 },
+      },
+      {
+        orderId: 'ORDER-2',
+        sku: 'SKU-2',
+        date: '2026-02-01',
+        quantity: 1,
+        principalCents: 3_000,
+        costByComponentCents: { manufacturing: 300, freight: 0, duty: 0, mfgAccessories: 0 },
+      },
+    ],
+    [
+      {
+        orderId: 'ORDER-2',
+        sku: 'SKU-2',
+        date: '2026-01-10',
+        quantity: 1,
+      },
+    ],
+    blocks,
+  );
+
+  assert.equal(blocks.length, 0);
+  assert.equal(matchedReturns.length, 1);
+  assert.deepEqual(matchedReturns[0]?.costByComponentCents, {
+    manufacturing: 300,
+    freight: 0,
+    duty: 0,
+    mfgAccessories: 0,
+  });
 });
 
 process.stdout.write('All tests passed.\n');

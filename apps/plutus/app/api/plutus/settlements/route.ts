@@ -26,8 +26,14 @@ type SettlementRow = {
   periodEnd: string | null;
   settlementTotal: number | null;
   qboStatus: 'Posted';
-  plutusStatus: 'Pending' | 'Processed' | 'Blocked' | 'RolledBack';
+  plutusStatus: 'Pending' | 'Processed' | 'RolledBack';
 };
+
+const LIST_SETTLEMENT_STATUSES = ['Pending', 'Processed', 'RolledBack'] as const;
+
+function isSettlementListStatus(value: string): value is SettlementRow['plutusStatus'] {
+  return (LIST_SETTLEMENT_STATUSES as readonly string[]).includes(value);
+}
 
 function isCanonicalSettlementDocNumber(docNumber: string): boolean {
   const trimmedUpper = docNumber.trim().toUpperCase();
@@ -79,7 +85,12 @@ export async function GET(req: NextRequest) {
     const rawStatus = searchParams.get('status');
     const rawTotalMin = searchParams.get('totalMin');
     const rawTotalMax = searchParams.get('totalMax');
-    const statusFilter = rawStatus ? rawStatus.split(',').filter((s) => s !== '') : null;
+    const statusFilter = rawStatus
+      ? rawStatus
+          .split(',')
+          .map((status) => status.trim())
+          .filter((status): status is SettlementRow['plutusStatus'] => status !== '' && isSettlementListStatus(status))
+      : null;
     const totalMin = rawTotalMin ? parseFloat(rawTotalMin) : null;
     const totalMax = rawTotalMax ? parseFloat(rawTotalMax) : null;
 
@@ -98,7 +109,6 @@ export async function GET(req: NextRequest) {
 
     for (const docQuery of docNumberQueries) {
       let startPosition = 1;
-      let fetchedForQuery = 0;
       while (true) {
         const pageResult = await fetchJournalEntries(activeConnection, {
           startDate,
@@ -106,14 +116,13 @@ export async function GET(req: NextRequest) {
           docNumberContains: docQuery,
           maxResults: queryPageSize,
           startPosition,
+          includeTotalCount: false,
         });
         if (pageResult.updatedConnection) {
           activeConnection = pageResult.updatedConnection;
         }
         allJournalEntries.push(...pageResult.journalEntries);
-        fetchedForQuery += pageResult.journalEntries.length;
-        if (fetchedForQuery >= pageResult.totalCount) break;
-        if (pageResult.journalEntries.length === 0) break;
+        if (pageResult.journalEntries.length < queryPageSize) break;
         startPosition += pageResult.journalEntries.length;
       }
     }

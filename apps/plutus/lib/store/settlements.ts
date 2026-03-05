@@ -3,12 +3,16 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+export const SETTLEMENT_LIST_STATUSES = ['Pending', 'Processed', 'RolledBack'] as const;
+
+export type SettlementListStatus = (typeof SETTLEMENT_LIST_STATUSES)[number];
+
 type SettlementsListState = {
   searchInput: string;
   search: string;
   startDate: string;
   endDate: string;
-  statusFilter: string[];
+  statusFilter: SettlementListStatus[];
   totalMin: string;
   totalMax: string;
   page: number;
@@ -16,7 +20,7 @@ type SettlementsListState = {
   setSearch: (value: string) => void;
   setStartDate: (value: string) => void;
   setEndDate: (value: string) => void;
-  setStatusFilter: (value: string[]) => void;
+  setStatusFilter: (value: SettlementListStatus[]) => void;
   setTotalMin: (value: string) => void;
   setTotalMax: (value: string) => void;
   setPage: (page: number) => void;
@@ -28,7 +32,7 @@ const DEFAULT_STATE = {
   search: '',
   startDate: '',
   endDate: '',
-  statusFilter: [] as string[],
+  statusFilter: [] as SettlementListStatus[],
   totalMin: '',
   totalMax: '',
   page: 1,
@@ -64,4 +68,3 @@ export const useSettlementsListStore = create<SettlementsListState>()(
     },
   ),
 );
-

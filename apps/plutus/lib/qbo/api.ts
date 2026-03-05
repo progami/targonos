@@ -354,6 +354,7 @@ export async function fetchJournalEntries(
     maxResults?: number;
     startPosition?: number;
     docNumberContains?: string;
+    includeTotalCount?: boolean;
   } = {},
 ): Promise<{ journalEntries: QboJournalEntry[]; totalCount: number; updatedConnection?: QboConnection }> {
   const { accessToken, updatedConnection } = await getValidToken(connection);
@@ -361,6 +362,7 @@ export async function fetchJournalEntries(
 
   const maxResults = params.maxResults === undefined ? 50 : params.maxResults;
   const startPosition = params.startPosition === undefined ? 1 : params.startPosition;
+  const includeTotalCount = params.includeTotalCount !== false;
 
   const conditions: string[] = [];
   if (params.startDate) {
@@ -405,7 +407,7 @@ export async function fetchJournalEntries(
   }
 
   let totalCount = journalEntries.length;
-  if (journalEntries.length > 0) {
+  if (includeTotalCount && journalEntries.length > 0) {
     const countQuery = `SELECT COUNT(*) FROM JournalEntry${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
@@ -602,8 +604,10 @@ export interface FetchPurchasesOptions {
   startDate?: string;
   endDate?: string;
   docNumberContains?: string;
+  accountId?: string;
   maxResults?: number;
   startPosition?: number;
+  includeTotalCount?: boolean;
 }
 
 export interface FetchBillsOptions {
@@ -612,6 +616,7 @@ export interface FetchBillsOptions {
   docNumberContains?: string;
   maxResults?: number;
   startPosition?: number;
+  includeTotalCount?: boolean;
 }
 
 export interface FetchOpenBillsOptions {
@@ -700,7 +705,15 @@ export async function fetchPurchases(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
+  const {
+    startDate,
+    endDate,
+    docNumberContains,
+    accountId,
+    maxResults = 100,
+    startPosition = 1,
+    includeTotalCount = true,
+  } = options;
 
   // Build query
   let query = `SELECT * FROM Purchase`;
@@ -714,6 +727,9 @@ export async function fetchPurchases(
   }
   if (docNumberContains) {
     conditions.push(`DocNumber LIKE '%${escapeSoql(docNumberContains)}%'`);
+  }
+  if (accountId) {
+    conditions.push(`AccountRef = '${escapeSoql(accountId)}'`);
   }
 
   if (conditions.length > 0) {
@@ -751,7 +767,7 @@ export async function fetchPurchases(
 
   // Get total count with a separate query if we have results
   let totalCount = purchases.length;
-  if (purchases.length > 0) {
+  if (includeTotalCount && purchases.length > 0) {
     const countQuery = `SELECT COUNT(*) FROM Purchase${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
@@ -789,7 +805,14 @@ export async function fetchBills(
   const { accessToken, updatedConnection } = await getValidToken(connection);
   const baseUrl = getApiBaseUrl();
 
-  const { startDate, endDate, docNumberContains, maxResults = 100, startPosition = 1 } = options;
+  const {
+    startDate,
+    endDate,
+    docNumberContains,
+    maxResults = 100,
+    startPosition = 1,
+    includeTotalCount = true,
+  } = options;
 
   let query = `SELECT * FROM Bill`;
   const conditions: string[] = [];
@@ -838,7 +861,7 @@ export async function fetchBills(
   }
 
   let totalCount = bills.length;
-  if (bills.length > 0) {
+  if (includeTotalCount && bills.length > 0) {
     const countQuery = `SELECT COUNT(*) FROM Bill${conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : ''}`;
     const countUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(countQuery)}`;
 
