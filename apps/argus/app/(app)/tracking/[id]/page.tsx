@@ -1,502 +1,533 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useEffect, useMemo, useState } from 'react'
+import { useParams } from 'next/navigation'
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Skeleton,
+  Divider,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import {
-  LineChart,
+  CartesianGrid,
   Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from 'recharts'
+import type {
+  MonitoringAsinDetail,
+  MonitoringChangeEvent,
+  MonitoringSnapshotRecord,
+} from '@/lib/monitoring/types'
+import {
+  CategoryChip,
+  DataField,
+  MetricCard,
+  OwnerChip,
+  SeverityChip,
+  formatCount,
+  formatDateTime,
+  formatMoney,
+  humanizeFieldName,
+} from '@/components/monitoring/ui'
 
 const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
-type TrackedAsinDetail = {
-  id: string
-  asin: string
-  marketplace: string
-  ownership: string
-  label: string
-  brand: string | null
-  imageUrl: string | null
-  enabled: boolean
-  latestSnapshot: SnapshotRow | null
-}
-
-type SnapshotRow = {
-  id: string
-  capturedAt: string
-  landedPriceCents: number | null
-  listingPriceCents: number | null
-  shippingPriceCents: number | null
-  currencyCode: string | null
-  offerCount: number | null
-  bsrRoot: number | null
-  bsrRootCategory: string | null
-  bsrSub: number | null
-  bsrSubCategory: string | null
-  title: string | null
-  brand: string | null
-}
-
-function formatCents(cents: number | null): string {
-  if (cents === null) return '—'
-  return `$${(cents / 100).toFixed(2)}`
-}
-
-function formatDelta(
-  current: number | null,
-  snapshots: SnapshotRow[],
-  field: keyof SnapshotRow
-): React.ReactNode {
-  if (current === null || snapshots.length < 2) return null
-  const oldest = snapshots[0]
-  const oldValue = oldest[field] as number | null
-  if (oldValue === null) return null
-  const delta = current - oldValue
-  if (delta === 0) return null
-  const isBsr = field === 'bsrRoot' || field === 'bsrSub'
-  const isGood = isBsr ? delta < 0 : delta < 0
-  const prefix = delta > 0 ? '+' : ''
-  const display = isBsr ? delta.toLocaleString() : formatCents(delta)
-  return (
-    <Typography
-      variant="caption"
-      sx={{ color: isGood ? 'success.main' : 'error.main', fontWeight: 600 }}
-    >
-      {prefix}
-      {display}
-    </Typography>
-  )
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
-}
+type RangeValue = '24h' | '7d' | '30d' | 'all'
 
 export default function TrackingDetailPage() {
   const params = useParams()
-  const router = useRouter()
-  const id = params.id as string
-
-  const [asin, setAsin] = useState<TrackedAsinDetail | null>(null)
-  const [history, setHistory] = useState<SnapshotRow[]>([])
-  const [range, setRange] = useState<'24h' | '7d' | '30d'>('7d')
+  const asin = String(params.id ?? '').trim().toUpperCase()
+  const [detail, setDetail] = useState<MonitoringAsinDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [deleteOpen, setDeleteOpen] = useState(false)
-
-  const fetchData = useCallback(async () => {
-    const [asinRes, historyRes] = await Promise.all([
-      fetch(`${basePath}/api/tracking/asins/${id}`),
-      fetch(`${basePath}/api/tracking/asins/${id}/history?range=${range}`),
-    ])
-    const asinData = await asinRes.json()
-    const historyData = await historyRes.json()
-    setAsin(asinData)
-    setHistory(historyData)
-    setLoading(false)
-  }, [id, range])
+  const [error, setError] = useState<string | null>(null)
+  const [range, setRange] = useState<RangeValue>('7d')
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    let cancelled = false
 
-  const handleDelete = async () => {
-    await fetch(`${basePath}/api/tracking/asins/${id}`, { method: 'DELETE' })
-    router.push(`${basePath}/tracking`)
-  }
+    async function loadDetail() {
+      try {
+        setLoading(true)
+        setError(null)
+        const response = await fetch(`${basePath}/api/monitoring/asins/${asin}`)
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(payload.error ?? 'Failed to load ASIN monitoring detail.')
+        }
+        if (!cancelled) {
+          setDetail(payload)
+          setLoading(false)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load ASIN detail.')
+          setLoading(false)
+        }
+      }
+    }
+
+    if (asin !== '') {
+      void loadDetail()
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [asin])
+
+  const filteredSnapshots = useMemo(
+    () => filterSnapshots(detail?.snapshots ?? [], range),
+    [detail?.snapshots, range],
+  )
+
+  const filteredChanges = useMemo(
+    () => filterChanges(detail?.changes ?? [], range),
+    [detail?.changes, range],
+  )
+
+  const current = detail?.current ?? null
+  const owner = current?.owner ?? 'UNKNOWN'
 
   if (loading) {
     return (
-      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-        <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-          <Skeleton variant="circular" width={32} height={32} />
-          <Skeleton width={240} height={32} />
-        </Stack>
-        <Stack direction="row" spacing={2} mb={3}>
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} variant="rounded" height={80} sx={{ flex: 1 }} />
-          ))}
-        </Stack>
-        <Skeleton variant="rounded" height={280} />
-      </Box>
-    )
-  }
-
-  if (!asin) {
-    return (
       <Box sx={{ p: 4 }}>
-        <Typography>Not found</Typography>
+        <Typography>Loading ASIN detail...</Typography>
       </Box>
     )
   }
-
-  const latest = asin.latestSnapshot
-
-  const priceChartData = history
-    .filter((s) => s.landedPriceCents != null)
-    .map((s) => ({
-      time: new Date(s.capturedAt).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
-      price: s.landedPriceCents! / 100,
-    }))
-
-  const bsrChartData = history
-    .filter((s) => s.bsrRoot != null)
-    .map((s) => ({
-      time: new Date(s.capturedAt).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      }),
-      bsr: s.bsrRoot,
-    }))
-
-  const productName = asin.brand
-    ? `${asin.brand} — ${asin.label}`
-    : asin.label
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        mb={3}
-      >
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <IconButton
-            onClick={() => router.push(`${basePath}/tracking`)}
-            size="small"
-          >
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-          {asin.imageUrl && (
-            <Box
-              component="img"
-              src={asin.imageUrl}
-              alt=""
+    <Box sx={{ maxWidth: 1480, mx: 'auto', pb: 4 }}>
+      <Stack spacing={3}>
+        <Button
+          component={Link}
+          href="/tracking"
+          startIcon={<ArrowBackIcon />}
+          sx={{ alignSelf: 'flex-start' }}
+        >
+          Back to Monitoring
+        </Button>
+
+        {error ? (
+          <Alert severity="error" sx={{ borderRadius: 3 }}>
+            {error}
+          </Alert>
+        ) : null}
+
+        {detail && current ? (
+          <>
+            <Card
               sx={{
-                width: 40,
-                height: 40,
-                objectFit: 'contain',
-                borderRadius: 1,
+                borderRadius: 5,
+                border: '1px solid rgba(15, 23, 42, 0.08)',
+                boxShadow: '0 24px 54px rgba(15, 23, 42, 0.1)',
+                background:
+                  'radial-gradient(circle at top right, rgba(196, 119, 49, 0.12), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,242,234,0.96) 100%)',
               }}
-            />
-          )}
-          <Box>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h6">{productName}</Typography>
-              <Chip
-                label={asin.ownership === 'OURS' ? 'Ours' : 'Competitor'}
-                size="small"
-                color={asin.ownership === 'OURS' ? 'primary' : 'secondary'}
-                variant="outlined"
-                sx={{ height: 20, fontSize: '0.675rem' }}
-              />
-            </Stack>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ fontFamily: 'monospace' }}
             >
-              {asin.asin}
-            </Typography>
-          </Box>
-        </Stack>
-        <IconButton
-          size="small"
-          color="error"
-          onClick={() => setDeleteOpen(true)}
-        >
-          <DeleteOutlineIcon fontSize="small" />
-        </IconButton>
-      </Stack>
+              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+                <Stack spacing={2.5}>
+                  <Stack
+                    direction={{ xs: 'column', lg: 'row' }}
+                    justifyContent="space-between"
+                    spacing={2}
+                  >
+                    <Stack spacing={1.2}>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <OwnerChip owner={owner} />
+                        {current.status ? <CategoryChip category="status" /> : null}
+                      </Stack>
+                      <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
+                        {detail.asin}
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        {current.title ?? 'Untitled monitoring record'}
+                      </Typography>
+                      <Typography color="text.secondary">
+                        {current.brand ? `${current.brand} · ` : ''}
+                        Latest snapshot
+                        {' '}
+                        {formatDateTime(detail.latestSnapshotAt)}
+                      </Typography>
+                    </Stack>
 
-      <Stack direction="row" spacing={2} mb={3}>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Price
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              {formatCents(latest?.landedPriceCents ?? null)}
-            </Typography>
-            {formatDelta(
-              latest?.landedPriceCents ?? null,
-              history,
-              'landedPriceCents'
-            )}
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              BSR
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              {latest?.bsrRoot?.toLocaleString() ?? '—'}
-            </Typography>
-            <Stack direction="row" alignItems="center" spacing={0.5}>
-              {formatDelta(latest?.bsrRoot ?? null, history, 'bsrRoot')}
-              {latest?.bsrRootCategory && (
-                <Typography variant="caption" color="text.secondary">
-                  {latest.bsrRootCategory}
-                </Typography>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Sub BSR
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              {latest?.bsrSub?.toLocaleString() ?? '—'}
-            </Typography>
-            <Stack direction="row" alignItems="center" spacing={0.5}>
-              {formatDelta(latest?.bsrSub ?? null, history, 'bsrSub')}
-              {latest?.bsrSubCategory && (
-                <Typography variant="caption" color="text.secondary">
-                  {latest.bsrSubCategory}
-                </Typography>
-              )}
-            </Stack>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Offers
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              {latest?.offerCount ?? '—'}
-            </Typography>
-          </CardContent>
-        </Card>
-      </Stack>
-
-      <Stack direction="row" justifyContent="flex-end" mb={2}>
-        <ToggleButtonGroup
-          value={range}
-          exclusive
-          onChange={(_, v) => v && setRange(v)}
-          size="small"
-        >
-          <ToggleButton value="24h">24h</ToggleButton>
-          <ToggleButton value="7d">7d</ToggleButton>
-          <ToggleButton value="30d">30d</ToggleButton>
-        </ToggleButtonGroup>
-      </Stack>
-
-      {priceChartData.length > 1 && (
-        <Card sx={{ mb: 2 }}>
-          <CardContent sx={{ pb: '16px !important' }}>
-            <Typography variant="overline" color="text.secondary">
-              Price
-            </Typography>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={priceChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#dde1e5" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 11, fill: '#6F7B8B' }}
-                />
-                <YAxis
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 11, fill: '#6F7B8B' }}
-                  tickFormatter={(v: number) => `$${v}`}
-                />
-                <Tooltip
-                  formatter={(value: number) => [
-                    `$${value.toFixed(2)}`,
-                    'Price',
-                  ]}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: '1px solid #dde1e5',
-                    fontSize: 12,
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#002C51"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      {bsrChartData.length > 1 && (
-        <Card sx={{ mb: 2 }}>
-          <CardContent sx={{ pb: '16px !important' }}>
-            <Typography variant="overline" color="text.secondary">
-              BSR
-            </Typography>
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={bsrChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#dde1e5" />
-                <XAxis
-                  dataKey="time"
-                  tick={{ fontSize: 11, fill: '#6F7B8B' }}
-                />
-                <YAxis
-                  reversed
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 11, fill: '#6F7B8B' }}
-                  tickFormatter={(v: number) => v.toLocaleString()}
-                />
-                <Tooltip
-                  formatter={(value: number) => [
-                    value.toLocaleString(),
-                    'BSR',
-                  ]}
-                  contentStyle={{
-                    borderRadius: 8,
-                    border: '1px solid #dde1e5',
-                    fontSize: 12,
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="bsr"
-                  stroke="#00C2B9"
-                  strokeWidth={2}
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      <TableContainer>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Captured</TableCell>
-              <TableCell align="right">Landed</TableCell>
-              <TableCell align="right">List</TableCell>
-              <TableCell align="right">BSR</TableCell>
-              <TableCell align="right">Sub BSR</TableCell>
-              <TableCell align="right">Offers</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {[...history].reverse().map((snap) => (
-              <TableRow key={snap.id}>
-                <TableCell>
-                  <Typography variant="body2" fontWeight={500}>
-                    {new Date(snap.capturedAt).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                    <Typography
-                      component="span"
-                      variant="caption"
-                      color="text.secondary"
-                      sx={{ ml: 0.5 }}
+                    <ToggleButtonGroup
+                      value={range}
+                      exclusive
+                      onChange={(_event, nextValue: RangeValue | null) => {
+                        if (nextValue) setRange(nextValue)
+                      }}
+                      size="small"
+                      sx={{ alignSelf: 'flex-start' }}
                     >
-                      {new Date(snap.capturedAt).toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </Typography>
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
-                  {formatCents(snap.landedPriceCents)}
-                </TableCell>
-                <TableCell align="right">
-                  {formatCents(snap.listingPriceCents)}
-                </TableCell>
-                <TableCell align="right">
-                  {snap.bsrRoot?.toLocaleString() ?? '—'}
-                </TableCell>
-                <TableCell align="right">
-                  {snap.bsrSub?.toLocaleString() ?? '—'}
-                </TableCell>
-                <TableCell align="right">
-                  {snap.offerCount ?? '—'}
-                </TableCell>
-              </TableRow>
-            ))}
-            {history.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4, border: 0 }}>
-                  <Typography color="text.secondary" variant="body2">
-                    No snapshots yet
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                      <ToggleButton value="24h">24h</ToggleButton>
+                      <ToggleButton value="7d">7d</ToggleButton>
+                      <ToggleButton value="30d">30d</ToggleButton>
+                      <ToggleButton value="all">All</ToggleButton>
+                    </ToggleButtonGroup>
+                  </Stack>
 
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>Remove {productName}?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            All snapshot history for this product will be permanently deleted.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDeleteOpen(false)} size="small">
-            Keep
-          </Button>
-          <Button
-            color="error"
-            variant="contained"
-            size="small"
-            onClick={handleDelete}
-          >
-            Remove
-          </Button>
-        </DialogActions>
-      </Dialog>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gap: 2,
+                      gridTemplateColumns: {
+                        xs: '1fr',
+                        sm: 'repeat(2, minmax(0, 1fr))',
+                        xl: 'repeat(5, minmax(0, 1fr))',
+                      },
+                    }}
+                  >
+                    <MetricCard
+                      label="Status"
+                      value={current.status ?? 'Unknown'}
+                      helper={current.sellerSku ? `SKU ${current.sellerSku}` : 'No seller SKU in feed'}
+                      accent="#17324d"
+                    />
+                    <MetricCard
+                      label="Landed Price"
+                      value={formatMoney(current.landedPrice, current.priceCurrency)}
+                      helper={`Listing ${formatMoney(current.listingPrice, current.priceCurrency)}`}
+                      accent="#8c4b1f"
+                    />
+                    <MetricCard
+                      label="Root BSR"
+                      value={formatCount(current.rootBsrRank)}
+                      helper={`Sub rank ${formatCount(current.subBsrRank)}`}
+                      accent="#0f5c5c"
+                    />
+                    <MetricCard
+                      label="Offer Count"
+                      value={formatCount(current.totalOfferCount)}
+                      helper={`Images ${formatCount(current.imageCount)}`}
+                      accent="#32556d"
+                    />
+                    <MetricCard
+                      label="Changes In View"
+                      value={filteredChanges.length}
+                      helper={`${filteredSnapshots.length} snapshots in ${range}`}
+                      accent="#b5362d"
+                    />
+                  </Box>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            <Box
+              sx={{
+                display: 'grid',
+                gap: 2,
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  xl: 'minmax(0, 1.35fr) minmax(340px, 0.9fr)',
+                },
+              }}
+            >
+              <Stack spacing={2}>
+                <Card
+                  sx={{
+                    borderRadius: 4,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Stack spacing={2}>
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        Price trajectory
+                      </Typography>
+                      {filteredSnapshots.filter((item) => item.landedPrice !== null).length > 1 ? (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <LineChart
+                            data={filteredSnapshots
+                              .filter((item) => item.landedPrice !== null)
+                              .map((item) => ({
+                                label: new Date(item.capturedAt).toLocaleDateString(),
+                                value: item.landedPrice,
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.1)" />
+                            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                            <YAxis tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Line
+                              type="monotone"
+                              dataKey="value"
+                              stroke="#b46832"
+                              strokeWidth={2.5}
+                              dot={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Typography color="text.secondary">
+                          Not enough priced snapshots in the selected window.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  sx={{
+                    borderRadius: 4,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Stack spacing={2}>
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        Rank trajectory
+                      </Typography>
+                      {filteredSnapshots.filter((item) => item.rootBsrRank !== null).length > 1 ? (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <LineChart
+                            data={filteredSnapshots
+                              .filter((item) => item.rootBsrRank !== null)
+                              .map((item) => ({
+                                label: new Date(item.capturedAt).toLocaleDateString(),
+                                value: item.rootBsrRank,
+                              }))}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.1)" />
+                            <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                            <YAxis reversed tick={{ fontSize: 11 }} />
+                            <Tooltip />
+                            <Line
+                              type="monotone"
+                              dataKey="value"
+                              stroke="#1f6a5a"
+                              strokeWidth={2.5}
+                              dot={false}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <Typography color="text.secondary">
+                          Not enough rank snapshots in the selected window.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  sx={{
+                    borderRadius: 4,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Stack spacing={2}>
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        Recent change events
+                      </Typography>
+
+                      {filteredChanges.length > 0 ? (
+                        <Stack spacing={1.5}>
+                          {filteredChanges.map((event) => (
+                            <Card
+                              key={event.id}
+                              variant="outlined"
+                              sx={{
+                                borderRadius: 3.5,
+                                borderColor: 'rgba(15, 23, 42, 0.08)',
+                                backgroundColor: 'rgba(248, 250, 252, 0.78)',
+                              }}
+                            >
+                              <CardContent sx={{ p: 2 }}>
+                                <Stack spacing={1.2}>
+                                  <Stack direction="row" justifyContent="space-between" spacing={1}>
+                                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                      <SeverityChip severity={event.severity} />
+                                      {event.categories.map((category) => (
+                                        <CategoryChip key={`${event.id}-${category}`} category={category} />
+                                      ))}
+                                    </Stack>
+                                    <Typography variant="caption" color="text.secondary">
+                                      {formatDateTime(event.timestamp)}
+                                    </Typography>
+                                  </Stack>
+                                  <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                                    {event.headline}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {event.summary}
+                                  </Typography>
+                                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                    {event.changedFields.slice(0, 6).map((field) => (
+                                      <Chip
+                                        key={`${event.id}-${field}`}
+                                        label={humanizeFieldName(field)}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ borderRadius: 999 }}
+                                      />
+                                    ))}
+                                  </Stack>
+                                  <Typography variant="caption" color="text.secondary">
+                                    Fields:
+                                    {' '}
+                                    {event.changedFields.map((field) => humanizeFieldName(field)).join(', ')}
+                                  </Typography>
+                                </Stack>
+                              </CardContent>
+                            </Card>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <Typography color="text.secondary">
+                          No change events in the selected window.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Stack>
+
+              <Stack spacing={2}>
+                <Card
+                  sx={{
+                    borderRadius: 4,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Stack spacing={1.2}>
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        Current record
+                      </Typography>
+                      <Divider />
+                      <DataField label="Title" value={current.title ?? '—'} />
+                      <DataField label="Brand" value={current.brand ?? '—'} />
+                      <DataField label="Status" value={current.status ?? '—'} />
+                      <DataField label="Seller SKU" value={current.sellerSku ?? '—'} />
+                      <DataField
+                        label="Landed price"
+                        value={formatMoney(current.landedPrice, current.priceCurrency)}
+                      />
+                      <DataField
+                        label="Offer count"
+                        value={formatCount(current.totalOfferCount)}
+                      />
+                      <DataField label="Root BSR" value={formatCount(current.rootBsrRank)} />
+                      <DataField label="Sub BSR" value={formatCount(current.subBsrRank)} />
+                      <DataField label="Bullet count" value={formatCount(current.bulletCount)} />
+                      <DataField
+                        label="Description length"
+                        value={formatCount(current.descriptionLength)}
+                      />
+                      <DataField
+                        label="Last updated on Amazon"
+                        value={formatDateTime(current.lastUpdatedDate)}
+                      />
+                    </Stack>
+                  </CardContent>
+                </Card>
+
+                <Card
+                  sx={{
+                    borderRadius: 4,
+                    border: '1px solid rgba(15, 23, 42, 0.08)',
+                    boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 2.5 }}>
+                    <Stack spacing={1.5}>
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        Current gallery
+                      </Typography>
+                      {current.imageUrls.length > 0 ? (
+                        <Box
+                          sx={{
+                            display: 'grid',
+                            gap: 1,
+                            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                          }}
+                        >
+                          {current.imageUrls.slice(0, 8).map((url) => (
+                            <Box
+                              key={url}
+                              component="img"
+                              src={url}
+                              alt=""
+                              sx={{
+                                width: '100%',
+                                aspectRatio: '1 / 1',
+                                objectFit: 'contain',
+                                borderRadius: 2.5,
+                                p: 1,
+                                bgcolor: 'rgba(248, 250, 252, 0.9)',
+                                border: '1px solid rgba(15, 23, 42, 0.08)',
+                              }}
+                            />
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography color="text.secondary">
+                          No image URLs are present in the latest monitoring state.
+                        </Typography>
+                      )}
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Stack>
+            </Box>
+          </>
+        ) : (
+          <Alert severity="warning" sx={{ borderRadius: 3 }}>
+            This ASIN was not found in the current monitoring state.
+          </Alert>
+        )}
+      </Stack>
     </Box>
   )
+}
+
+function filterChanges(items: MonitoringChangeEvent[], range: RangeValue): MonitoringChangeEvent[] {
+  const since = getSince(range)
+  if (!since) return items
+
+  return items.filter((item) => new Date(item.timestamp).getTime() >= since.getTime())
+}
+
+function filterSnapshots(
+  items: MonitoringSnapshotRecord[],
+  range: RangeValue,
+): MonitoringSnapshotRecord[] {
+  const since = getSince(range)
+  if (!since) return items
+
+  return items.filter((item) => new Date(item.capturedAt).getTime() >= since.getTime())
+}
+
+function getSince(range: RangeValue): Date | null {
+  const now = Date.now()
+
+  switch (range) {
+    case '24h':
+      return new Date(now - 24 * 60 * 60 * 1000)
+    case '7d':
+      return new Date(now - 7 * 24 * 60 * 60 * 1000)
+    case '30d':
+      return new Date(now - 30 * 24 * 60 * 60 * 1000)
+    case 'all':
+      return null
+  }
 }

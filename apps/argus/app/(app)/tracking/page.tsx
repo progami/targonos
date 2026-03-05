@@ -1,390 +1,940 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
+  Alert,
   Box,
   Button,
+  Card,
+  CardContent,
   Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
+  Divider,
   FormControl,
   InputLabel,
+  List,
+  ListItemButton,
+  LinearProgress,
   MenuItem,
+  Paper,
   Select,
-  Skeleton,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
+  Tab,
+  Tabs,
   TextField,
   Typography,
 } from '@mui/material'
-import AddIcon from '@mui/icons-material/Add'
+import ArrowOutwardIcon from '@mui/icons-material/ArrowOutward'
 import RefreshIcon from '@mui/icons-material/Refresh'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import StorageIcon from '@mui/icons-material/Storage'
+import WarningAmberIcon from '@mui/icons-material/WarningAmber'
+import type {
+  MonitoringCategory,
+  MonitoringChangeEvent,
+  MonitoringHealthReport,
+  MonitoringOverview,
+  MonitoringSeverity,
+} from '@/lib/monitoring/types'
+import {
+  CategoryChip,
+  DataField,
+  MetricCard,
+  OwnerChip,
+  SeverityChip,
+  formatCount,
+  formatDateTime,
+  formatMoney,
+  humanizeFieldName,
+} from '@/components/monitoring/ui'
 
 const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
-type DashboardRow = {
-  id: string
-  asin: string
-  marketplace: string
-  ownership: string
-  label: string
-  brand: string | null
-  imageUrl: string | null
-  enabled: boolean
-  price: number | null
-  listingPrice: number | null
-  currencyCode: string | null
-  bsrRoot: number | null
-  bsrRootCategory: string | null
-  bsrSub: number | null
-  offerCount: number | null
-  lastUpdated: string | null
-  priceDelta: number | null
-  bsrDelta: number | null
-}
+type OwnerFilter = 'ALL' | 'OURS' | 'COMPETITOR'
 
-type DashboardData = {
-  totalAsins: number
-  oursCount: number
-  competitorCount: number
-  lastFetchAt: string | null
-  lastFetchStatus: string | null
-  rows: DashboardRow[]
-}
+const WINDOWS = [
+  { label: '24h', value: '24h' },
+  { label: '7d', value: '7d' },
+  { label: '30d', value: '30d' },
+  { label: 'All', value: 'all' },
+] as const
 
-function formatCents(cents: number | null, currency?: string | null): string {
-  if (cents === null) return '—'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency ?? 'USD',
-  }).format(cents / 100)
-}
+const CATEGORY_OPTIONS: Array<{ value: MonitoringCategory | 'ALL'; label: string }> = [
+  { value: 'ALL', label: 'All categories' },
+  { value: 'status', label: 'Status' },
+  { value: 'content', label: 'Content' },
+  { value: 'images', label: 'Images' },
+  { value: 'price', label: 'Price' },
+  { value: 'offers', label: 'Offers' },
+  { value: 'rank', label: 'Rank' },
+  { value: 'catalog', label: 'Catalog' },
+]
 
-function Delta({
-  value,
-  invert,
-  isCents,
-}: {
-  value: number | null
-  invert?: boolean
-  isCents?: boolean
-}) {
-  if (value === null || value === 0) return null
-  const positive = value > 0
-  const isGood = invert ? !positive : positive
-  const display = isCents
-    ? formatCents(Math.abs(value))
-    : Math.abs(value).toLocaleString()
-  return (
-    <Typography
-      variant="caption"
-      sx={{
-        color: isGood ? 'success.main' : 'error.main',
-        fontWeight: 600,
-        ml: 0.5,
-      }}
-    >
-      {positive ? '+' : '−'}
-      {display}
-    </Typography>
-  )
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
-}
+const SEVERITY_OPTIONS: Array<{ value: MonitoringSeverity | 'ALL'; label: string }> = [
+  { value: 'ALL', label: 'All severities' },
+  { value: 'critical', label: 'Critical' },
+  { value: 'high', label: 'High' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'low', label: 'Low' },
+]
 
 export default function TrackingDashboard() {
-  const router = useRouter()
-  const [data, setData] = useState<DashboardData | null>(null)
+  const [activeTab, setActiveTab] = useState<'changes' | 'sources'>('changes')
+  const [overview, setOverview] = useState<MonitoringOverview | null>(null)
+  const [changes, setChanges] = useState<MonitoringChangeEvent[]>([])
+  const [health, setHealth] = useState<MonitoringHealthReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [newAsin, setNewAsin] = useState('')
-  const [newLabel, setNewLabel] = useState('')
-  const [newOwnership, setNewOwnership] = useState<'OURS' | 'COMPETITOR'>('OURS')
+  const [error, setError] = useState<string | null>(null)
+  const [healthError, setHealthError] = useState<string | null>(null)
+  const [windowValue, setWindowValue] = useState<'24h' | '7d' | '30d' | 'all'>('7d')
+  const [owner, setOwner] = useState<OwnerFilter>('ALL')
+  const [category, setCategory] = useState<MonitoringCategory | 'ALL'>('ALL')
+  const [severity, setSeverity] = useState<MonitoringSeverity | 'ALL'>('ALL')
+  const [query, setQuery] = useState('')
+  const deferredQuery = useDeferredValue(query)
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
 
-  const fetchDashboard = useCallback(async () => {
-    const res = await fetch(`${basePath}/api/tracking/dashboard`)
-    const json = await res.json()
-    setData(json)
-    setLoading(false)
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadOverview() {
+      try {
+        setError(null)
+        const response = await fetch(`${basePath}/api/monitoring/overview`)
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(payload.error ?? 'Failed to load monitoring overview.')
+        }
+        if (!cancelled) {
+          setOverview(payload)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring overview.')
+        }
+      }
+    }
+
+    void loadOverview()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
-    fetchDashboard()
-  }, [fetchDashboard])
+    let cancelled = false
 
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await fetch(`${basePath}/api/tracking/fetch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ triggeredBy: 'manual' }),
-    })
-    await fetchDashboard()
-    setRefreshing(false)
-  }
+    async function loadChanges() {
+      try {
+        setLoading(true)
+        setError(null)
+        const searchParams = new URLSearchParams()
+        searchParams.set('window', windowValue)
+        searchParams.set('owner', owner)
+        searchParams.set('category', category)
+        searchParams.set('severity', severity)
+        if (deferredQuery.trim() !== '') searchParams.set('query', deferredQuery.trim())
 
-  const handleAddAsin = async () => {
-    await fetch(`${basePath}/api/tracking/asins`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        asin: newAsin.trim(),
-        label: newLabel.trim(),
-        ownership: newOwnership,
-      }),
-    })
-    setDialogOpen(false)
-    setNewAsin('')
-    setNewLabel('')
-    setNewOwnership('OURS')
-    await fetchDashboard()
-  }
+        const response = await fetch(`${basePath}/api/monitoring/changes?${searchParams.toString()}`)
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(payload.error ?? 'Failed to load monitoring changes.')
+        }
 
-  if (loading) {
-    return (
-      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-        <Skeleton width={200} height={40} sx={{ mb: 3 }} />
-        <Skeleton variant="rounded" height={400} />
-      </Box>
+        if (!cancelled) {
+          setChanges(payload)
+          setLoading(false)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring changes.')
+          setLoading(false)
+        }
+      }
+    }
+
+    void loadChanges()
+    return () => {
+      cancelled = true
+    }
+  }, [windowValue, owner, category, severity, deferredQuery])
+
+  useEffect(() => {
+    if (activeTab !== 'sources') return
+    let cancelled = false
+
+    async function loadHealth() {
+      try {
+        setHealthError(null)
+        const response = await fetch(`${basePath}/api/monitoring/health`)
+        const payload = await response.json()
+        if (!response.ok) {
+          throw new Error(payload.error ?? 'Failed to load monitoring health.')
+        }
+        if (!cancelled) {
+          setHealth(payload)
+        }
+      } catch (loadError) {
+        if (!cancelled) {
+          setHealthError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring health.')
+        }
+      }
+    }
+
+    void loadHealth()
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab])
+
+  useEffect(() => {
+    if (changes.length === 0) {
+      setSelectedEventId(null)
+      return
+    }
+
+    const stillExists = changes.some((item) => item.id === selectedEventId)
+    if (!stillExists) {
+      setSelectedEventId(changes[0].id)
+    }
+  }, [changes, selectedEventId])
+
+  const selectedEvent = useMemo(
+    () => changes.find((item) => item.id === selectedEventId) ?? null,
+    [changes, selectedEventId],
+  )
+
+  const snapshotAgeMinutes = useMemo(() => {
+    if (!overview) return null
+    return Math.max(
+      0,
+      Math.round((Date.now() - new Date(overview.snapshotTimestamp).getTime()) / 60000),
     )
+  }, [overview])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    setError(null)
+    setHealthError(null)
+    try {
+      const [overviewResponse, changesResponse] = await Promise.all([
+        fetch(`${basePath}/api/monitoring/overview`),
+        fetch(
+          `${basePath}/api/monitoring/changes?${new URLSearchParams({
+            window: windowValue,
+            owner,
+            category,
+            severity,
+            query: deferredQuery.trim(),
+          }).toString()}`,
+        ),
+      ])
+
+      const overviewPayload = await overviewResponse.json()
+      const changesPayload = await changesResponse.json()
+
+      if (!overviewResponse.ok) {
+        throw new Error(overviewPayload.error ?? 'Failed to refresh overview.')
+      }
+      if (!changesResponse.ok) {
+        throw new Error(changesPayload.error ?? 'Failed to refresh change feed.')
+      }
+
+      setOverview(overviewPayload)
+      setChanges(changesPayload)
+
+      if (activeTab === 'sources') {
+        const healthResponse = await fetch(`${basePath}/api/monitoring/health`)
+        const healthPayload = await healthResponse.json()
+        if (!healthResponse.ok) {
+          throw new Error(healthPayload.error ?? 'Failed to refresh source health.')
+        }
+        setHealth(healthPayload)
+      }
+    } catch (refreshError) {
+      setError(refreshError instanceof Error ? refreshError.message : 'Refresh failed.')
+    } finally {
+      setRefreshing(false)
+    }
   }
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Stack
-        direction="row"
-        justifyContent="space-between"
-        alignItems="center"
-        mb={2}
-      >
-        <Stack direction="row" alignItems="baseline" spacing={1}>
-          <Typography variant="h5">Tracking</Typography>
-          {data?.lastFetchAt && (
-            <Typography variant="caption" color="text.secondary">
-              Synced {timeAgo(data.lastFetchAt)}
-            </Typography>
-          )}
-        </Stack>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={
-              refreshing ? (
-                <CircularProgress size={14} color="inherit" />
-              ) : (
-                <RefreshIcon sx={{ fontSize: 18 }} />
-              )
-            }
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            Sync
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setDialogOpen(true)}
-          >
-            Track
-          </Button>
-        </Stack>
-      </Stack>
-
-      <TableContainer>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Product</TableCell>
-              <TableCell />
-              <TableCell align="right">Price</TableCell>
-              <TableCell align="right">BSR</TableCell>
-              <TableCell align="right">Sub BSR</TableCell>
-              <TableCell align="right">Offers</TableCell>
-              <TableCell align="right">Updated</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {data?.rows.map((row) => (
-              <TableRow
-                key={row.id}
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => router.push(`${basePath}/tracking/${row.id}`)}
+    <Box sx={{ maxWidth: 1520, mx: 'auto', pb: 4 }}>
+      <Stack spacing={3}>
+        <Card
+          sx={{
+            overflow: 'hidden',
+            borderRadius: 5,
+            border: '1px solid rgba(15, 23, 42, 0.08)',
+            boxShadow: '0 26px 60px rgba(15, 23, 42, 0.12)',
+            background:
+              'radial-gradient(circle at top left, rgba(44, 103, 91, 0.18), transparent 38%), linear-gradient(135deg, #13232f 0%, #243649 52%, #a15a27 100%)',
+            color: '#f8fafc',
+          }}
+        >
+          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+            <Stack spacing={3}>
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                justifyContent="space-between"
+                spacing={2}
               >
-                <TableCell>
-                  <Stack direction="row" alignItems="center" spacing={1.5}>
-                    {row.imageUrl && (
-                      <Box
-                        component="img"
-                        src={row.imageUrl}
-                        alt=""
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          objectFit: 'contain',
-                          borderRadius: 0.5,
-                        }}
-                      />
-                    )}
-                    <Box>
-                      <Typography variant="body2" fontWeight={500}>
-                        {row.brand ? `${row.brand} — ` : ''}
-                        {row.label}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ fontFamily: 'monospace' }}
-                      >
-                        {row.asin}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                </TableCell>
-                <TableCell sx={{ width: 80 }}>
-                  <Chip
-                    label={row.ownership === 'OURS' ? 'Ours' : 'Comp'}
-                    size="small"
-                    color={row.ownership === 'OURS' ? 'primary' : 'secondary'}
-                    variant="outlined"
-                    sx={{ height: 20, fontSize: '0.675rem' }}
-                  />
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="body2" component="span" fontWeight={500}>
-                    {formatCents(row.price, row.currencyCode)}
-                  </Typography>
-                  <Delta value={row.priceDelta} isCents />
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="body2" component="span" fontWeight={500}>
-                    {row.bsrRoot?.toLocaleString() ?? '—'}
-                  </Typography>
-                  <Delta value={row.bsrDelta} invert />
-                </TableCell>
-                <TableCell align="right">
-                  {row.bsrSub?.toLocaleString() ?? '—'}
-                </TableCell>
-                <TableCell align="right">{row.offerCount ?? '—'}</TableCell>
-                <TableCell align="right">
+                <Stack spacing={1}>
                   <Typography
-                    variant="body2"
-                    fontWeight={500}
+                    variant="overline"
+                    sx={{ color: 'rgba(248, 250, 252, 0.72)', letterSpacing: '0.12em' }}
+                  >
+                    Dust Sheets US Monitoring
+                  </Typography>
+                  <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
+                    Change-led oversight for our listings and competitors
+                  </Typography>
+                  <Typography sx={{ color: 'rgba(248, 250, 252, 0.84)', maxWidth: 760 }}>
+                    Argus now treats hourly polling as evidence only. The working surface is the
+                    change event: what moved, who it affects, and whether it deserves inspection.
+                  </Typography>
+                </Stack>
+
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1.5}
+                  justifyContent="flex-start"
+                  alignItems={{ xs: 'stretch', sm: 'center' }}
+                >
+                  <Button
+                    variant="contained"
+                    startIcon={<RefreshIcon />}
+                    onClick={handleRefresh}
+                    disabled={refreshing}
                     sx={{
-                      color: row.lastUpdated
-                        ? Date.now() - new Date(row.lastUpdated).getTime() >
-                          86400000
-                          ? 'warning.main'
-                          : 'text.primary'
-                        : 'text.secondary',
+                      bgcolor: '#f8fafc',
+                      color: '#102032',
+                      '&:hover': { bgcolor: '#e2e8f0' },
                     }}
                   >
-                    {row.lastUpdated ? timeAgo(row.lastUpdated) : '—'}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ))}
-            {(!data?.rows || data.rows.length === 0) && (
-              <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 8, border: 0 }}>
-                  <TrendingUpIcon
-                    sx={{ fontSize: 40, color: 'divider', mb: 1 }}
-                  />
-                  <Typography color="text.secondary" variant="body2">
-                    No products tracked yet
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    onClick={() => setDialogOpen(true)}
-                    sx={{ mt: 1 }}
-                  >
-                    Track a product
+                    {refreshing ? 'Refreshing...' : 'Refresh Workspace'}
                   </Button>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+                  {selectedEvent ? (
+                    <Button
+                      component={Link}
+                      href={`/tracking/${selectedEvent.asin}`}
+                      variant="outlined"
+                      startIcon={<ArrowOutwardIcon />}
+                      sx={{
+                        borderColor: 'rgba(248, 250, 252, 0.28)',
+                        color: '#f8fafc',
+                      }}
+                    >
+                      Open {selectedEvent.asin}
+                    </Button>
+                  ) : null}
+                </Stack>
+              </Stack>
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>Track a product</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="ASIN"
-              value={newAsin}
-              onChange={(e) => setNewAsin(e.target.value)}
-              placeholder="B09HXC3NL8"
-              size="small"
-              fullWidth
-            />
-            <TextField
-              label="Product name"
-              value={newLabel}
-              onChange={(e) => setNewLabel(e.target.value)}
-              placeholder="e.g. ToughGuard — Drop Cloth 6-Pack"
-              size="small"
-              fullWidth
-              helperText="Brand — product descriptor"
-            />
-            <FormControl fullWidth size="small">
-              <InputLabel>Ownership</InputLabel>
-              <Select
-                value={newOwnership}
-                label="Ownership"
-                onChange={(e) =>
-                  setNewOwnership(e.target.value as 'OURS' | 'COMPETITOR')
-                }
+              <Stack
+                direction={{ xs: 'column', md: 'row' }}
+                spacing={2}
+                divider={<Divider flexItem orientation="vertical" sx={{ borderColor: 'rgba(248,250,252,0.12)' }} />}
               >
-                <MenuItem value="OURS">Ours</MenuItem>
-                <MenuItem value="COMPETITOR">Competitor</MenuItem>
-              </Select>
-            </FormControl>
-          </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setDialogOpen(false)} size="small">
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={handleAddAsin}
-            disabled={!newAsin.trim() || !newLabel.trim()}
+                <Box sx={{ minWidth: 220 }}>
+                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.7)' }}>
+                    Latest monitoring snapshot
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    {overview ? formatDateTime(overview.snapshotTimestamp) : 'Loading...'}
+                  </Typography>
+                  {overview ? (
+                    <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
+                      {overview.snapshotFile}
+                    </Typography>
+                  ) : null}
+                </Box>
+                <Box sx={{ minWidth: 220 }}>
+                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.7)' }}>
+                    Working mode
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>
+                    Shared-drive Monitoring files
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
+                    Postgres stays out of the loop until this UX proves itself.
+                  </Typography>
+                </Box>
+              </Stack>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        {snapshotAgeMinutes !== null && snapshotAgeMinutes > 180 ? (
+          <Alert
+            severity="warning"
+            icon={<WarningAmberIcon fontSize="inherit" />}
+            sx={{ borderRadius: 3 }}
           >
-            Track
-          </Button>
-        </DialogActions>
-      </Dialog>
+            Monitoring freshness is outside the hourly window. The latest snapshot is
+            {' '}
+            {snapshotAgeMinutes}
+            {' '}
+            minutes old.
+          </Alert>
+        ) : null}
+
+        {error ? (
+          <Alert severity="error" sx={{ borderRadius: 3 }}>
+            {error}
+          </Alert>
+        ) : null}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 2,
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, minmax(0, 1fr))',
+              xl: 'repeat(5, minmax(0, 1fr))',
+            },
+          }}
+        >
+          <MetricCard
+            label="Tracked ASINs"
+            value={overview ? overview.trackedAsins : '—'}
+            helper={
+              overview
+                ? `${overview.ourAsins} ours / ${overview.competitorAsins} competitors`
+                : 'Loading monitoring coverage'
+            }
+            accent="#17324d"
+          />
+          <MetricCard
+            label="Changes in 24h"
+            value={overview ? overview.changes24h : '—'}
+            helper={
+              overview
+                ? `${overview.ourChanges24h} ours / ${overview.competitorChanges24h} competitors`
+                : 'Loading change volume'
+            }
+            accent="#8c4b1f"
+          />
+          <MetricCard
+            label="Changes in 7d"
+            value={overview ? overview.changes7d : '—'}
+            helper="Current working window is filterable below"
+            accent="#0f5c5c"
+          />
+          <MetricCard
+            label="Critical in 24h"
+            value={overview ? overview.critical24h : '—'}
+            helper="High-signal items are promoted above rank churn"
+            accent="#b5362d"
+          />
+          <MetricCard
+            label="Top signal mix"
+            value={
+              overview?.topCategories24h[0]
+                ? humanizeFieldName(overview.topCategories24h[0].category)
+                : '—'
+            }
+            helper={
+              overview?.topCategories24h[0]
+                ? `${overview.topCategories24h[0].count} events in the last 24h`
+                : 'Loading category mix'
+            }
+            accent="#32556d"
+          />
+        </Box>
+
+        <Card
+          sx={{
+            borderRadius: 4,
+            border: '1px solid rgba(15, 23, 42, 0.08)',
+            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+            backgroundColor: 'rgba(255, 252, 245, 0.92)',
+          }}
+        >
+          <Box sx={{ px: 2, pt: 1.5 }}>
+            <Tabs
+              value={activeTab}
+              onChange={(_event, nextValue: 'changes' | 'sources') => setActiveTab(nextValue)}
+            >
+              <Tab label="Change Feed" value="changes" />
+              <Tab label="Source Health" value="sources" />
+            </Tabs>
+          </Box>
+
+          {activeTab === 'changes' ? (
+            <CardContent sx={{ p: 2.5 }}>
+              <Stack spacing={2.5}>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 1.5,
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      md: 'repeat(5, minmax(0, 1fr))',
+                    },
+                  }}
+                >
+                  <FormControl size="small">
+                    <InputLabel>Window</InputLabel>
+                    <Select
+                      value={windowValue}
+                      label="Window"
+                      onChange={(event) => setWindowValue(event.target.value as typeof windowValue)}
+                    >
+                      {WINDOWS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  <FormControl size="small">
+                    <InputLabel>Owner</InputLabel>
+                    <Select
+                      value={owner}
+                      label="Owner"
+                      onChange={(event) => setOwner(event.target.value as OwnerFilter)}
+                    >
+                      <MenuItem value="ALL">All owners</MenuItem>
+                      <MenuItem value="OURS">Ours</MenuItem>
+                      <MenuItem value="COMPETITOR">Competitors</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  <FormControl size="small">
+                    <InputLabel>Category</InputLabel>
+                    <Select
+                      value={category}
+                      label="Category"
+                      onChange={(event) =>
+                        setCategory(event.target.value as MonitoringCategory | 'ALL')
+                      }
+                    >
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  <FormControl size="small">
+                    <InputLabel>Severity</InputLabel>
+                    <Select
+                      value={severity}
+                      label="Severity"
+                      onChange={(event) =>
+                        setSeverity(event.target.value as MonitoringSeverity | 'ALL')
+                      }
+                    >
+                      {SEVERITY_OPTIONS.map((option) => (
+                        <MenuItem key={option.value} value={option.value}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+
+                  <TextField
+                    label="Search"
+                    size="small"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="ASIN, headline, field"
+                  />
+                </Box>
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 2,
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      xl: 'minmax(0, 1.45fr) minmax(360px, 0.95fr)',
+                    },
+                    alignItems: 'start',
+                  }}
+                >
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      borderRadius: 4,
+                      overflow: 'hidden',
+                      borderColor: 'rgba(15, 23, 42, 0.08)',
+                      backgroundColor: 'rgba(255,255,255,0.78)',
+                    }}
+                  >
+                    {loading ? <LinearProgress /> : null}
+                    <List sx={{ p: 0 }}>
+                      {changes.map((item, index) => {
+                        const selected = item.id === selectedEventId
+                        return (
+                          <Box key={item.id}>
+                            <ListItemButton
+                              selected={selected}
+                              onClick={() => setSelectedEventId(item.id)}
+                              sx={{
+                                alignItems: 'stretch',
+                                px: 2,
+                                py: 2,
+                                bgcolor: selected ? 'rgba(24, 88, 78, 0.08)' : 'transparent',
+                                '&.Mui-selected': {
+                                  bgcolor: 'rgba(24, 88, 78, 0.08)',
+                                },
+                              }}
+                            >
+                              <Stack spacing={1.4} sx={{ width: '100%' }}>
+                                <Stack
+                                  direction={{ xs: 'column', sm: 'row' }}
+                                  justifyContent="space-between"
+                                  spacing={1}
+                                >
+                                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                    <SeverityChip severity={item.severity} />
+                                    <OwnerChip owner={item.owner} />
+                                    <CategoryChip category={item.primaryCategory} />
+                                  </Stack>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{ color: 'text.secondary', alignSelf: 'center' }}
+                                  >
+                                    {formatDateTime(item.timestamp)}
+                                  </Typography>
+                                </Stack>
+
+                                <Box>
+                                  <Typography
+                                    variant="subtitle1"
+                                    sx={{ fontWeight: 800, letterSpacing: '-0.01em' }}
+                                  >
+                                    {item.headline}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {item.summary}
+                                  </Typography>
+                                </Box>
+
+                                <Stack
+                                  direction={{ xs: 'column', md: 'row' }}
+                                  justifyContent="space-between"
+                                  spacing={1.5}
+                                >
+                                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                    <Chip
+                                      label={item.asin}
+                                      size="small"
+                                      sx={{
+                                        fontFamily: 'var(--font-mono)',
+                                        borderRadius: 999,
+                                        bgcolor: 'rgba(15, 23, 42, 0.06)',
+                                      }}
+                                    />
+                                    {item.changedFields.slice(0, 4).map((field) => (
+                                      <Chip
+                                        key={`${item.id}-${field}`}
+                                        label={humanizeFieldName(field)}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ borderRadius: 999 }}
+                                      />
+                                    ))}
+                                  </Stack>
+                                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {item.changedFieldCount}
+                                    {' '}
+                                    field
+                                    {item.changedFieldCount === 1 ? '' : 's'}
+                                  </Typography>
+                                </Stack>
+                              </Stack>
+                            </ListItemButton>
+                            {index < changes.length - 1 ? <Divider /> : null}
+                          </Box>
+                        )
+                      })}
+
+                      {!loading && changes.length === 0 ? (
+                        <Box sx={{ px: 3, py: 6, textAlign: 'center' }}>
+                          <StorageIcon sx={{ fontSize: 42, color: 'text.secondary', mb: 1 }} />
+                          <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                            No change events match the current filters
+                          </Typography>
+                          <Typography color="text.secondary">
+                            Widen the time window or remove category filters to inspect more signals.
+                          </Typography>
+                        </Box>
+                      ) : null}
+                    </List>
+                  </Paper>
+
+                  <Paper
+                    variant="outlined"
+                    sx={{
+                      position: { xl: 'sticky' },
+                      top: { xl: 24 },
+                      borderRadius: 4,
+                      borderColor: 'rgba(15, 23, 42, 0.08)',
+                      backgroundColor: 'rgba(255,255,255,0.84)',
+                    }}
+                  >
+                    <CardContent sx={{ p: 2.5 }}>
+                      {selectedEvent ? (
+                        <Stack spacing={2.2}>
+                          <Stack direction="row" justifyContent="space-between" spacing={1.5}>
+                            <Box>
+                              <Typography
+                                variant="overline"
+                                sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
+                              >
+                                Inspection
+                              </Typography>
+                              <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
+                                {selectedEvent.asin}
+                              </Typography>
+                            </Box>
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                              <SeverityChip severity={selectedEvent.severity} />
+                              <OwnerChip owner={selectedEvent.owner} />
+                            </Stack>
+                          </Stack>
+
+                          <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                            {selectedEvent.headline}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {selectedEvent.summary}
+                          </Typography>
+
+                          <Divider />
+
+                          <Stack spacing={1.2}>
+                            <DataField label="Observed at" value={formatDateTime(selectedEvent.timestamp)} />
+                            <DataField
+                              label="Baseline"
+                              value={formatDateTime(selectedEvent.baselineTimestamp)}
+                            />
+                            <DataField
+                              label="Categories"
+                              value={selectedEvent.categories
+                                .map((item) => humanizeFieldName(item))
+                                .join(', ')}
+                            />
+                            <DataField
+                              label="Changed fields"
+                              value={selectedEvent.changedFields
+                                .map((item) => humanizeFieldName(item))
+                                .join(', ')}
+                            />
+                          </Stack>
+
+                          <Divider />
+
+                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                            Current vs baseline
+                          </Typography>
+
+                          <Stack spacing={1.2}>
+                            <DataField
+                              label="Status"
+                              value={comparisonLabel(
+                                selectedEvent.baselineSnapshot?.status ?? null,
+                                selectedEvent.currentSnapshot?.status ?? null,
+                              )}
+                            />
+                            <DataField
+                              label="Landed price"
+                              value={comparisonLabel(
+                                formatMoney(
+                                  selectedEvent.baselineSnapshot?.landedPrice ?? null,
+                                  selectedEvent.baselineSnapshot?.priceCurrency ?? null,
+                                ),
+                                formatMoney(
+                                  selectedEvent.currentSnapshot?.landedPrice ?? null,
+                                  selectedEvent.currentSnapshot?.priceCurrency ?? null,
+                                ),
+                              )}
+                            />
+                            <DataField
+                              label="Root BSR"
+                              value={comparisonLabel(
+                                formatCount(selectedEvent.baselineSnapshot?.rootBsrRank ?? null),
+                                formatCount(selectedEvent.currentSnapshot?.rootBsrRank ?? null),
+                              )}
+                            />
+                            <DataField
+                              label="Offer count"
+                              value={comparisonLabel(
+                                formatCount(selectedEvent.baselineSnapshot?.totalOfferCount ?? null),
+                                formatCount(selectedEvent.currentSnapshot?.totalOfferCount ?? null),
+                              )}
+                            />
+                            <DataField
+                              label="Image count"
+                              value={comparisonLabel(
+                                formatCount(selectedEvent.baselineSnapshot?.imageCount ?? null),
+                                formatCount(selectedEvent.currentSnapshot?.imageCount ?? null),
+                              )}
+                            />
+                          </Stack>
+
+                          {selectedEvent.currentSnapshot?.imageUrls.length ? (
+                            <>
+                              <Divider />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+                                Current gallery
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'grid',
+                                  gap: 1,
+                                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                }}
+                              >
+                                {selectedEvent.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
+                                  <Box
+                                    key={url}
+                                    component="img"
+                                    src={url}
+                                    alt=""
+                                    sx={{
+                                      width: '100%',
+                                      aspectRatio: '1 / 1',
+                                      objectFit: 'contain',
+                                      borderRadius: 2,
+                                      bgcolor: 'rgba(248, 250, 252, 0.96)',
+                                      border: '1px solid rgba(15, 23, 42, 0.08)',
+                                      p: 0.8,
+                                    }}
+                                  />
+                                ))}
+                              </Box>
+                            </>
+                          ) : null}
+
+                          <Button
+                            component={Link}
+                            href={`/tracking/${selectedEvent.asin}`}
+                            variant="contained"
+                            startIcon={<ArrowOutwardIcon />}
+                            sx={{ alignSelf: 'flex-start' }}
+                          >
+                            Open ASIN Detail
+                          </Button>
+                        </Stack>
+                      ) : (
+                        <Typography color="text.secondary">
+                          Select a change event to inspect its current state, baseline, and gallery.
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Paper>
+                </Box>
+              </Stack>
+            </CardContent>
+          ) : (
+            <CardContent sx={{ p: 2.5 }}>
+              <Stack spacing={2.5}>
+                <Alert severity="info" sx={{ borderRadius: 3 }}>
+                  The monitoring UI is powered directly by the hourly listing-attributes feed. Daily
+                  and weekly bundles are shown here for freshness and future expansion, not yet for
+                  analytical drill-down.
+                </Alert>
+
+                {healthError ? (
+                  <Alert severity="error" sx={{ borderRadius: 3 }}>
+                    {healthError}
+                  </Alert>
+                ) : null}
+
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gap: 2,
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      md: 'repeat(2, minmax(0, 1fr))',
+                    },
+                  }}
+                >
+                  {health?.datasets.map((dataset) => (
+                    <Card
+                      key={dataset.id}
+                      sx={{
+                        borderRadius: 4,
+                        border: '1px solid rgba(15, 23, 42, 0.08)',
+                        boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                        background:
+                          dataset.status === 'healthy'
+                            ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,249,244,0.88) 100%)'
+                            : dataset.status === 'stale'
+                              ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,245,229,0.88) 100%)'
+                              : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,241,241,0.92) 100%)',
+                      }}
+                    >
+                      <CardContent sx={{ p: 2.5 }}>
+                        <Stack spacing={1.2}>
+                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                            <Box>
+                              <Typography variant="overline" color="text.secondary">
+                                {dataset.cadence}
+                              </Typography>
+                              <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                                {dataset.label}
+                              </Typography>
+                            </Box>
+                            <Chip
+                              label={dataset.status.toUpperCase()}
+                              size="small"
+                              sx={{
+                                fontWeight: 800,
+                                borderRadius: 999,
+                                bgcolor:
+                                  dataset.status === 'healthy'
+                                    ? 'rgba(35, 116, 70, 0.14)'
+                                    : dataset.status === 'stale'
+                                      ? 'rgba(180, 104, 50, 0.16)'
+                                      : 'rgba(181, 54, 45, 0.16)',
+                                color:
+                                  dataset.status === 'healthy'
+                                    ? '#1f6a5a'
+                                    : dataset.status === 'stale'
+                                      ? '#8c4b1f'
+                                      : '#b5362d',
+                              }}
+                            />
+                          </Stack>
+
+                          <DataField label="Last updated" value={formatDateTime(dataset.updatedAt)} />
+                          <DataField
+                            label="Age"
+                            value={
+                              dataset.ageMinutes === null
+                                ? 'Missing'
+                                : `${dataset.ageMinutes.toLocaleString()} minutes`
+                            }
+                          />
+                          <DataField label="Path" value={dataset.path} />
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </Box>
+
+                {!health && !healthError ? <LinearProgress /> : null}
+              </Stack>
+            </CardContent>
+          )}
+        </Card>
+      </Stack>
     </Box>
   )
+}
+
+function comparisonLabel(
+  baseline: string | null,
+  current: string | null,
+): string {
+  return `${baseline ?? '—'} -> ${current ?? '—'}`
 }
