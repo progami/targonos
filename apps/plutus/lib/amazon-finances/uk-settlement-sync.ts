@@ -379,7 +379,7 @@ async function validateUkSettlementCashAccountCurrencies(input: {
   bankAccountId: string;
   paymentAccountId: string;
   homeCurrencyCode: string;
-}): Promise<{ updatedConnection?: QboConnection }> {
+}): Promise<{ updatedConnection?: QboConnection; settlementControlAccountId: string }> {
   const accountsResult = await fetchAccounts(input.connection, { includeInactive: true });
   const accountById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
 
@@ -411,7 +411,27 @@ async function validateUkSettlementCashAccountCurrencies(input: {
     requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon', expected);
   }
 
-  return { updatedConnection: accountsResult.updatedConnection };
+  const settlementControlMatches = accountsResult.accounts.filter(
+    (account) => account.Name.trim().toLowerCase() === 'plutus settlement control',
+  );
+  if (settlementControlMatches.length !== 1) {
+    throw new Error(
+      `Missing or ambiguous QBO account for settlement control (expected exactly one named \"Plutus Settlement Control\", found ${settlementControlMatches.length})`,
+    );
+  }
+
+  const settlementControl = settlementControlMatches[0]!;
+  const settlementControlCurrency = settlementControl.CurrencyRef?.value
+    ? settlementControl.CurrencyRef.value.trim().toUpperCase()
+    : '';
+  const expectedControlCurrency = input.homeCurrencyCode.trim().toUpperCase();
+  if (settlementControlCurrency === '' || settlementControlCurrency !== expectedControlCurrency) {
+    throw new Error(
+      `Settlement control account currency mismatch: expected ${expectedControlCurrency}, got ${settlementControlCurrency} (${settlementControl.Name} / ${settlementControl.Id})`,
+    );
+  }
+
+  return { updatedConnection: accountsResult.updatedConnection, settlementControlAccountId: settlementControl.Id };
 }
 
 export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlementSyncInput): Promise<UkSpApiSettlementSyncResult> {
@@ -524,7 +544,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
       splitByMonth,
     });
 
-    if (draft.originalTotalCents > 0) needBankAccount = true;
+    if (draft.originalTotalCents > 0 && draft.fundTransferStatus === 'Succeeded') needBankAccount = true;
     if (draft.originalTotalCents < 0) needPaymentAccount = true;
 
     for (const segment of draft.segments) {
@@ -584,6 +604,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   if (currencyValidation.updatedConnection) {
     activeConnection = currencyValidation.updatedConnection;
   }
+  const settlementControlAccountId = currencyValidation.settlementControlAccountId;
 
   const exchangeRateByTxnDate = new Map<string, number>();
   if (homeCurrencyCode !== 'GBP') {
@@ -670,6 +691,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
     const jeDrafts = buildQboJournalEntriesFromUkSettlementDraft({
       draft: bundle.draft,
       privateNote: `Plutus (SP-API Finances) | Region: UK | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId}${upload ? ` | Upload: ${upload.id}` : ''}`,
+      settlementControlAccountId,
       bankAccountId: mapping.bankAccountId,
       paymentAccountId: mapping.paymentAccountId,
       accountIdByMemo: mapping.accountIdByMemo,
