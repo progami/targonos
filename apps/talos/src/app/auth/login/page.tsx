@@ -11,15 +11,37 @@ type SearchParamsInput =
 
 export default async function LoginPage({ searchParams }: { searchParams?: SearchParamsInput }) {
  const resolved = await Promise.resolve(searchParams)
- const desiredRaw =
-  typeof resolved?.callbackUrl === 'string' && resolved.callbackUrl.trim().length > 0
-   ? resolved.callbackUrl.trim()
-   : '/dashboard'
- const desiredRelative = desiredRaw.startsWith('/') ? desiredRaw : `/${desiredRaw}`
- const desired =
-  desiredRaw.startsWith('http://') || desiredRaw.startsWith('https://')
-   ? desiredRaw
-   : withoutBasePath(desiredRelative)
+ const desiredRawInput = typeof resolved?.callbackUrl === 'string' ? resolved.callbackUrl.trim() : ''
+ const desiredDefault = '/dashboard'
+ const desiredRaw = desiredRawInput.length > 0 ? desiredRawInput : desiredDefault
+
+ const appUrl = process.env.NEXT_PUBLIC_APP_URL
+ if (!appUrl) {
+  throw new Error('NEXT_PUBLIC_APP_URL must be defined for Talos login redirects.')
+ }
+ const canonicalOrigin = new URL(appUrl).origin
+ let desired = desiredDefault
+
+ if (desiredRaw.startsWith('http://') || desiredRaw.startsWith('https://')) {
+  try {
+   const parsed = new URL(desiredRaw)
+   if (parsed.origin === canonicalOrigin) {
+    const relative = `${parsed.pathname}${parsed.search}`
+    const normalized = relative.startsWith('/') ? relative : `/${relative}`
+    desired = withoutBasePath(normalized)
+   }
+  } catch {
+   desired = desiredDefault
+  }
+ } else {
+  const desiredRelative = desiredRaw.startsWith('/') ? desiredRaw : `/${desiredRaw}`
+  desired = withoutBasePath(desiredRelative)
+ }
+
+ desired = desired.replace(/^\/+/g, '/')
+ if (!desired.trim()) {
+  desired = desiredDefault
+ }
 
  const session = await auth()
  if (session) {
@@ -37,11 +59,7 @@ const { baseUrl, basePath, originHostname } = resolvedAppBase
  }
  const url = new URL('/login', portalAuth)
  // Pass back the full app URL users should land on after portal login
- if (desired.startsWith('http')) {
- url.searchParams.set('callbackUrl', desired)
- } else {
  url.searchParams.set('callbackUrl', buildCallback(baseUrl, basePath, desired))
- }
  redirect(url.toString())
 }
 
