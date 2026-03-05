@@ -86,6 +86,9 @@ export type SettlementProcessingPreview = {
   settlementJournalEntryId: string;
   settlementDocNumber: string;
   settlementPostedDate: string;
+  // The ExchangeRate from the settlement JE in QBO (when the settlement currency is not the QBO home currency).
+  // We reuse this for posting P&L/COGS JEs so parent-account reclasses net to zero in home currency.
+  settlementExchangeRate?: number;
 
   invoiceId: string;
   processingHash: string;

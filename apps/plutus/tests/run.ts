@@ -360,6 +360,7 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
     eventGroup: {
       FinancialEventGroupStart: '2025-12-19T08:00:00.000Z',
       FinancialEventGroupEnd: '2026-01-02T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
       OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -1 },
     },
     events: {
@@ -391,6 +392,7 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
     eventGroup: {
       FinancialEventGroupStart: '2025-12-19T08:00:00.000Z',
       FinancialEventGroupEnd: '2026-02-02T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
       OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -3 },
     },
     events: {
@@ -448,6 +450,7 @@ test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements 
     eventGroup: {
       FinancialEventGroupStart: '2025-12-19T00:00:00.000Z',
       FinancialEventGroupEnd: '2026-02-02T00:00:00.000Z',
+      FundTransferStatus: 'Unknown',
       OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -3 },
     },
     events: {
@@ -505,6 +508,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
     eventGroup: {
       FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
       FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+      FundTransferStatus: 'Unknown',
       OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 30 },
     },
     events: {
@@ -560,6 +564,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
     eventGroup: {
       FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
       FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+      FundTransferStatus: 'Unknown',
       OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -30 },
     },
     events: {
@@ -616,6 +621,7 @@ test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch
       eventGroup: {
         FinancialEventGroupStart: '2026-01-16T00:00:00.000Z',
         FinancialEventGroupEnd: '2026-01-16T23:59:59.000Z',
+        FundTransferStatus: 'Unknown',
         OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 20 },
       },
       events: {
