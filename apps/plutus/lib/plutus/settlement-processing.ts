@@ -875,13 +875,13 @@ export async function computeSettlementPreview(input: {
   const historicalSaleKeys = new Set(historicalSaleLayers.map((sale) => `${sale.orderId}::${sale.sku}`));
   const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
   const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
-  for (const refund of refundGroups.values()) {
+  for (const [refundKey, refund] of refundGroups.entries()) {
     const key = `${refund.orderId}::${refund.sku}`;
     if (historicalSaleKeys.has(key)) {
-      historicalRefundGroups.set(key, refund);
+      historicalRefundGroups.set(refundKey, refund);
       continue;
     }
-    currentSettlementRefundGroups.set(key, refund);
+    currentSettlementRefundGroups.set(refundKey, refund);
   }
 
   const matchedReturnsFromHistory =
