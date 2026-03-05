@@ -84,6 +84,40 @@ export function buildPrincipalGroups(
   return groups;
 }
 
+export function buildPrincipalGroupsByDate(
+  rows: SettlementAuditRow[],
+  predicate: (description: string) => boolean,
+): Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }> {
+  const groups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+
+  for (const row of rows) {
+    if (!predicate(row.description)) continue;
+    const skuRaw = row.sku.trim();
+    if (skuRaw === '') continue;
+
+    const sku = normalizeSku(skuRaw);
+    const orderId = row.orderId.trim();
+    const date = row.date;
+
+    if (!Number.isFinite(row.quantity) || !Number.isInteger(row.quantity) || row.quantity === 0) {
+      continue;
+    }
+
+    const cents = toCents(row.net);
+    const key = `${orderId}::${sku}::${date}`;
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { orderId, sku, date, quantity: row.quantity, principalCents: cents });
+      continue;
+    }
+
+    existing.quantity += row.quantity;
+    existing.principalCents += cents;
+  }
+
+  return groups;
+}
+
 export type RefundSaleLayer = {
   orderId: string;
   sku: string;

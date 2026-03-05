@@ -56,7 +56,7 @@ import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-pro
 import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
 import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
-import { matchRefundsToSales } from '../lib/plutus/settlement-validation';
+import { buildPrincipalGroupsByDate, matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
   buildPlutusSettlementDocNumber,
   isSettlementDocNumber,
@@ -2119,6 +2119,36 @@ test('matchRefundsToSales uses remaining sale layers after prior returns', () =>
     duty: 0,
     mfgAccessories: 0,
   });
+});
+
+test('buildPrincipalGroupsByDate keeps refunds from different days separate', () => {
+  const groups = buildPrincipalGroupsByDate(
+    [
+      {
+        invoiceId: 'INV-1',
+        market: 'us',
+        date: '2026-01-10',
+        orderId: 'ORDER-3',
+        sku: 'sku-3',
+        quantity: -1,
+        description: 'Amazon Refunds - Refunded Principal',
+        net: -10,
+      },
+      {
+        invoiceId: 'INV-1',
+        market: 'us',
+        date: '2026-01-11',
+        orderId: 'ORDER-3',
+        sku: 'sku-3',
+        quantity: -1,
+        description: 'Amazon Refunds - Refunded Principal',
+        net: -10,
+      },
+    ],
+    (description) => description === 'Amazon Refunds - Refunded Principal',
+  );
+
+  assert.equal(groups.size, 2);
 });
 
 process.stdout.write('All tests passed.\n');

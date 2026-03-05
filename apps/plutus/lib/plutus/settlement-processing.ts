@@ -32,6 +32,7 @@ import {
   isSalePrincipal,
   isRefundPrincipal,
   buildPrincipalGroups,
+  buildPrincipalGroupsByDate,
   requireAccountMapping,
   matchRefundsToSales,
   type ExistingReturnLayer,
@@ -751,7 +752,7 @@ export async function computeSettlementPreview(input: {
 
   // Principal groups for unit movements
   const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
-  const refundGroups = buildPrincipalGroups(scopedInvoiceRows, isRefundPrincipal);
+  const refundGroups = buildPrincipalGroupsByDate(scopedInvoiceRows, isRefundPrincipal);
   const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
 
   let pnlAllocation;
