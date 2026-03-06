@@ -115,6 +115,7 @@ export function MetricCard(props: {
 export function DataField(props: {
   label: string
   value: string
+  mono?: boolean
 }) {
   return (
     <Box
@@ -128,7 +129,14 @@ export function DataField(props: {
       <Typography variant="caption" sx={{ color: 'text.secondary', letterSpacing: '0.04em' }}>
         {props.label}
       </Typography>
-      <Typography variant="body2" sx={{ fontWeight: 600, wordBreak: 'break-word' }}>
+      <Typography
+        variant="body2"
+        sx={{
+          fontWeight: 600,
+          wordBreak: 'break-word',
+          ...(props.mono && { fontFamily: 'var(--font-mono)', fontWeight: 700 }),
+        }}
+      >
         {props.value}
       </Typography>
     </Box>
