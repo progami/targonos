@@ -15,11 +15,12 @@ import {
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 
+const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 const DRAWER_WIDTH = 240
 
 const NAV_ITEMS = [
-  { label: 'Listings', href: '/listings', icon: <ListAltIcon /> },
-  { label: 'Tracking', href: '/tracking', icon: <TrendingUpIcon /> },
+  { label: 'Listings', href: `${basePath}/listings`, icon: <ListAltIcon /> },
+  { label: 'Tracking', href: `${basePath}/tracking`, icon: <TrendingUpIcon /> },
 ]
 
 export default function AppLayout({
@@ -28,7 +29,6 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
-  // Strip base path prefix for matching
   const normalizedPath = pathname.replace(/^\/argus/, '')
 
   return (
@@ -45,28 +45,43 @@ export default function AppLayout({
         }}
       >
         <Toolbar>
-          <Typography variant="h6" noWrap fontWeight={700}>
+          <Typography variant="h6" noWrap fontWeight={700} color="primary">
             Argus
           </Typography>
         </Toolbar>
         <List>
           {NAV_ITEMS.map((item) => {
-            const isActive = normalizedPath.startsWith(item.href)
+            const isActive = normalizedPath.startsWith(
+              item.href.replace(basePath, '')
+            )
             return (
               <ListItemButton
                 key={item.href}
                 component={Link}
                 href={item.href}
                 selected={isActive}
+                sx={{
+                  mx: 1,
+                  borderRadius: 1,
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
+                    '& .MuiListItemIcon-root': { color: 'inherit' },
+                    '&:hover': { bgcolor: 'primary.dark' },
+                  },
+                }}
               >
-                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
                 <ListItemText primary={item.label} />
               </ListItemButton>
             )
           })}
         </List>
       </Drawer>
-      <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+      <Box
+        component="main"
+        sx={{ flexGrow: 1, p: 3, bgcolor: 'background.default' }}
+      >
         {children}
       </Box>
     </Box>

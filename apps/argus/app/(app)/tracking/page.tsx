@@ -8,6 +8,7 @@ import {
   Card,
   CardContent,
   Chip,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,6 +17,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Skeleton,
   Stack,
   Table,
   TableBody,
@@ -28,6 +30,7 @@ import {
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 
 const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
@@ -63,36 +66,37 @@ type DashboardData = {
 
 function formatCents(cents: number | null, currency?: string | null): string {
   if (cents === null) return '—'
-  const dollars = cents / 100
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: currency ?? 'USD',
-  }).format(dollars)
+  }).format(cents / 100)
 }
 
-function formatDelta(delta: number | null, isCents?: boolean): React.ReactNode {
-  if (delta === null) return null
-  const display = isCents ? formatCents(Math.abs(delta)) : Math.abs(delta).toLocaleString()
-  const color = delta < 0 ? 'success.main' : delta > 0 ? 'error.main' : 'text.secondary'
-  const prefix = delta < 0 ? '-' : delta > 0 ? '+' : ''
-  // For BSR, lower is better so green = negative
+function Delta({
+  value,
+  invert,
+  isCents,
+}: {
+  value: number | null
+  invert?: boolean
+  isCents?: boolean
+}) {
+  if (value === null || value === 0) return null
+  const positive = value > 0
+  const isGood = invert ? !positive : positive
+  const display = isCents
+    ? formatCents(Math.abs(value))
+    : Math.abs(value).toLocaleString()
   return (
-    <Typography variant="caption" sx={{ color, ml: 0.5 }}>
-      {prefix}
-      {display}
-    </Typography>
-  )
-}
-
-function formatBsrDelta(delta: number | null): React.ReactNode {
-  if (delta === null) return null
-  const display = Math.abs(delta).toLocaleString()
-  // For BSR, lower = better, so negative delta = green (improvement)
-  const color = delta < 0 ? 'success.main' : delta > 0 ? 'error.main' : 'text.secondary'
-  const prefix = delta < 0 ? '-' : delta > 0 ? '+' : ''
-  return (
-    <Typography variant="caption" sx={{ color, ml: 0.5 }}>
-      {prefix}
+    <Typography
+      variant="caption"
+      sx={{
+        color: isGood ? 'success.main' : 'error.main',
+        fontWeight: 600,
+        ml: 0.5,
+      }}
+    >
+      {positive ? '+' : '−'}
       {display}
     </Typography>
   )
@@ -149,29 +153,47 @@ export default function TrackingDashboard() {
 
   if (loading) {
     return (
-      <Box sx={{ p: 4 }}>
-        <Typography>Loading...</Typography>
+      <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+        <Stack direction="row" justifyContent="space-between" mb={3}>
+          <Skeleton width={200} height={40} />
+          <Stack direction="row" spacing={1}>
+            <Skeleton width={120} height={36} variant="rounded" />
+            <Skeleton width={100} height={36} variant="rounded" />
+          </Stack>
+        </Stack>
+        <Stack direction="row" spacing={2} mb={3}>
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} variant="rounded" height={88} sx={{ flex: 1 }} />
+          ))}
+        </Stack>
+        <Skeleton variant="rounded" height={300} />
       </Box>
     )
   }
 
   return (
-    <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h5" fontWeight={700}>
-          Competitive Tracking
-        </Typography>
+        <Typography variant="h5">Competitive Tracking</Typography>
         <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
-            startIcon={<RefreshIcon />}
+            size="small"
+            startIcon={
+              refreshing ? (
+                <CircularProgress size={16} color="inherit" />
+              ) : (
+                <RefreshIcon />
+              )
+            }
             onClick={handleRefresh}
             disabled={refreshing}
           >
-            {refreshing ? 'Fetching...' : 'Refresh Now'}
+            Refresh
           </Button>
           <Button
             variant="contained"
+            size="small"
             startIcon={<AddIcon />}
             onClick={() => setDialogOpen(true)}
           >
@@ -180,42 +202,43 @@ export default function TrackingDashboard() {
         </Stack>
       </Stack>
 
-      {/* Summary Cards */}
       <Stack direction="row" spacing={2} mb={3}>
         <Card sx={{ flex: 1 }}>
-          <CardContent>
+          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
-              Total ASINs
+              Total
             </Typography>
-            <Typography variant="h4">{data?.totalAsins ?? 0}</Typography>
+            <Typography variant="h4" fontWeight={700}>
+              {data?.totalAsins ?? 0}
+            </Typography>
           </CardContent>
         </Card>
         <Card sx={{ flex: 1 }}>
-          <CardContent>
+          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
               Ours
             </Typography>
-            <Typography variant="h4" color="primary">
+            <Typography variant="h4" fontWeight={700} color="primary.main">
               {data?.oursCount ?? 0}
             </Typography>
           </CardContent>
         </Card>
         <Card sx={{ flex: 1 }}>
-          <CardContent>
+          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
               Competitors
             </Typography>
-            <Typography variant="h4" color="warning.main">
+            <Typography variant="h4" fontWeight={700} color="secondary.main">
               {data?.competitorCount ?? 0}
             </Typography>
           </CardContent>
         </Card>
         <Card sx={{ flex: 1 }}>
-          <CardContent>
+          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
               Last Fetch
             </Typography>
-            <Typography variant="body1">
+            <Typography variant="body2" fontWeight={500}>
               {data?.lastFetchAt
                 ? new Date(data.lastFetchAt).toLocaleString()
                 : 'Never'}
@@ -225,14 +248,13 @@ export default function TrackingDashboard() {
                 label={data.lastFetchStatus}
                 size="small"
                 color={data.lastFetchStatus === 'SUCCEEDED' ? 'success' : 'error'}
-                sx={{ mt: 0.5 }}
+                sx={{ mt: 0.5, height: 20, fontSize: '0.675rem' }}
               />
             )}
           </CardContent>
         </Card>
       </Stack>
 
-      {/* Data Table */}
       <TableContainer component={Card}>
         <Table size="small">
           <TableHead>
@@ -244,7 +266,7 @@ export default function TrackingDashboard() {
               <TableCell align="right">BSR</TableCell>
               <TableCell align="right">Sub BSR</TableCell>
               <TableCell align="right">Offers</TableCell>
-              <TableCell>Last Updated</TableCell>
+              <TableCell>Updated</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -253,7 +275,7 @@ export default function TrackingDashboard() {
                 key={row.id}
                 hover
                 sx={{ cursor: 'pointer' }}
-                onClick={() => router.push(`/tracking/${row.id}`)}
+                onClick={() => router.push(`${basePath}/tracking/${row.id}`)}
               >
                 <TableCell>
                   <Stack direction="row" alignItems="center" spacing={1}>
@@ -262,48 +284,76 @@ export default function TrackingDashboard() {
                         component="img"
                         src={row.imageUrl}
                         alt=""
-                        sx={{ width: 32, height: 32, objectFit: 'contain', borderRadius: 0.5 }}
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          objectFit: 'contain',
+                          borderRadius: 0.5,
+                        }}
                       />
                     )}
-                    <Typography variant="body2" fontFamily="monospace">
+                    <Typography
+                      variant="body2"
+                      sx={{ fontFamily: 'monospace', fontWeight: 500 }}
+                    >
                       {row.asin}
                     </Typography>
                   </Stack>
                 </TableCell>
-                <TableCell>{row.label}</TableCell>
+                <TableCell>
+                  <Typography variant="body2">{row.label}</Typography>
+                </TableCell>
                 <TableCell>
                   <Chip
                     label={row.ownership}
                     size="small"
-                    color={row.ownership === 'OURS' ? 'primary' : 'warning'}
+                    color={row.ownership === 'OURS' ? 'primary' : 'secondary'}
                     variant="outlined"
+                    sx={{ height: 22, fontSize: '0.7rem' }}
                   />
                 </TableCell>
                 <TableCell align="right">
-                  {formatCents(row.price, row.currencyCode)}
-                  {formatDelta(row.priceDelta, true)}
+                  <Typography variant="body2" component="span">
+                    {formatCents(row.price, row.currencyCode)}
+                  </Typography>
+                  <Delta value={row.priceDelta} isCents />
                 </TableCell>
                 <TableCell align="right">
-                  {row.bsrRoot?.toLocaleString() ?? '—'}
-                  {formatBsrDelta(row.bsrDelta)}
+                  <Typography variant="body2" component="span">
+                    {row.bsrRoot?.toLocaleString() ?? '—'}
+                  </Typography>
+                  <Delta value={row.bsrDelta} invert />
                 </TableCell>
                 <TableCell align="right">
                   {row.bsrSub?.toLocaleString() ?? '—'}
                 </TableCell>
                 <TableCell align="right">{row.offerCount ?? '—'}</TableCell>
                 <TableCell>
-                  {row.lastUpdated
-                    ? new Date(row.lastUpdated).toLocaleString()
-                    : '—'}
+                  <Typography variant="body2" color="text.secondary">
+                    {row.lastUpdated
+                      ? new Date(row.lastUpdated).toLocaleDateString()
+                      : '—'}
+                  </Typography>
                 </TableCell>
               </TableRow>
             ))}
             {(!data?.rows || data.rows.length === 0) && (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                  <Typography color="text.secondary">
-                    No ASINs being tracked. Click &quot;Add ASIN&quot; to get started.
+                <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
+                  <TrendingUpIcon
+                    sx={{ fontSize: 48, color: 'divider', mb: 1 }}
+                  />
+                  <Typography color="text.secondary" variant="body2">
+                    No ASINs tracked yet
                   </Typography>
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => setDialogOpen(true)}
+                    sx={{ mt: 1 }}
+                  >
+                    Add ASIN
+                  </Button>
                 </TableCell>
               </TableRow>
             )}
@@ -311,9 +361,13 @@ export default function TrackingDashboard() {
         </Table>
       </TableContainer>
 
-      {/* Add ASIN Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add ASIN to Track</DialogTitle>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Add ASIN</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -321,6 +375,7 @@ export default function TrackingDashboard() {
               value={newAsin}
               onChange={(e) => setNewAsin(e.target.value)}
               placeholder="B09HXC3NL8"
+              size="small"
               fullWidth
             />
             <TextField
@@ -328,14 +383,17 @@ export default function TrackingDashboard() {
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
               placeholder="Drop Cloth 6-Pack"
+              size="small"
               fullWidth
             />
-            <FormControl fullWidth>
+            <FormControl fullWidth size="small">
               <InputLabel>Ownership</InputLabel>
               <Select
                 value={newOwnership}
                 label="Ownership"
-                onChange={(e) => setNewOwnership(e.target.value as 'OURS' | 'COMPETITOR')}
+                onChange={(e) =>
+                  setNewOwnership(e.target.value as 'OURS' | 'COMPETITOR')
+                }
               >
                 <MenuItem value="OURS">Ours</MenuItem>
                 <MenuItem value="COMPETITOR">Competitor</MenuItem>
@@ -343,10 +401,13 @@ export default function TrackingDashboard() {
             </FormControl>
           </Stack>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDialogOpen(false)} size="small">
+            Cancel
+          </Button>
           <Button
             variant="contained"
+            size="small"
             onClick={handleAddAsin}
             disabled={!newAsin.trim() || !newLabel.trim()}
           >
