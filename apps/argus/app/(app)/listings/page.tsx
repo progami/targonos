@@ -1,4 +1,12 @@
 import Link from 'next/link'
+import {
+  Box,
+  Card,
+  Chip,
+  Stack,
+  Typography,
+} from '@mui/material'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 import prisma from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
@@ -11,78 +19,136 @@ export default async function ListingsPage() {
       asin: true,
       label: true,
       brandName: true,
-      _count: { select: { snapshots: true, titleRevisions: true, bulletsRevisions: true, galleryRevisions: true, videoRevisions: true, ebcRevisions: true } },
+      _count: {
+        select: {
+          snapshots: true,
+          titleRevisions: true,
+          bulletsRevisions: true,
+          galleryRevisions: true,
+          videoRevisions: true,
+          ebcRevisions: true,
+        },
+      },
     },
   })
 
   return (
-    <div className="max-w-4xl mx-auto p-8">
-      <h1 className="text-2xl font-bold mb-6">Listings</h1>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+      <Typography variant="h5" mb={3}>
+        Listings
+      </Typography>
 
       {listings.length > 0 ? (
-        <div className="space-y-3">
-          {listings.map((listing: { id: string; asin: string; label: string; brandName: string | null; _count: { snapshots: number; titleRevisions: number; bulletsRevisions: number; galleryRevisions: number; videoRevisions: number; ebcRevisions: number } }) => (
-            <div key={listing.id} className="border rounded-lg p-6 hover:bg-muted/50 transition-colors">
-              <Link href={`/listings/${listing.id}`} className="block">
-                <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-                    IMG
-                  </div>
-                  <div className="flex-1">
-                    <h2 className="font-medium">{listing.label}</h2>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      ASIN: {listing.asin}
+        <Stack spacing={1.5}>
+          {listings.map(
+            (listing: {
+              id: string
+              asin: string
+              label: string
+              brandName: string | null
+              _count: {
+                snapshots: number
+                titleRevisions: number
+                bulletsRevisions: number
+                galleryRevisions: number
+                videoRevisions: number
+                ebcRevisions: number
+              }
+            }) => (
+              <Card
+                key={listing.id}
+                component={Link}
+                href={`/listings/${listing.id}`}
+                sx={{
+                  display: 'block',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  p: 2,
+                  '&:hover': { bgcolor: 'action.hover' },
+                  transition: 'background-color 0.15s',
+                }}
+              >
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      bgcolor: 'background.default',
+                      borderRadius: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <ListAltIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body1" fontWeight={500}>
+                      {listing.label}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {listing.asin}
                       {listing.brandName && ` · ${listing.brandName}`}
-                    </p>
-                    <div className="flex gap-2 mt-2">
-                      <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
-                        {listing._count.snapshots} snapshot{listing._count.snapshots !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        Title ×{listing._count.titleRevisions}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        Bullets ×{listing._count.bulletsRevisions}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        Gallery ×{listing._count.galleryRevisions}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        Video ×{listing._count.videoRevisions}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded">
-                        A+ ×{listing._count.ebcRevisions}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            </div>
-          ))}
-        </div>
+                    </Typography>
+                    <Stack direction="row" spacing={0.5} mt={1} flexWrap="wrap">
+                      <Chip
+                        label={`${listing._count.snapshots} snapshot${listing._count.snapshots !== 1 ? 's' : ''}`}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        sx={{ height: 20, fontSize: '0.675rem' }}
+                      />
+                      {listing._count.titleRevisions > 0 && (
+                        <Chip
+                          label={`Title ×${listing._count.titleRevisions}`}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.675rem' }}
+                        />
+                      )}
+                      {listing._count.bulletsRevisions > 0 && (
+                        <Chip
+                          label={`Bullets ×${listing._count.bulletsRevisions}`}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.675rem' }}
+                        />
+                      )}
+                      {listing._count.galleryRevisions > 0 && (
+                        <Chip
+                          label={`Gallery ×${listing._count.galleryRevisions}`}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.675rem' }}
+                        />
+                      )}
+                      {listing._count.videoRevisions > 0 && (
+                        <Chip
+                          label={`Video ×${listing._count.videoRevisions}`}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.675rem' }}
+                        />
+                      )}
+                      {listing._count.ebcRevisions > 0 && (
+                        <Chip
+                          label={`A+ ×${listing._count.ebcRevisions}`}
+                          size="small"
+                          sx={{ height: 20, fontSize: '0.675rem' }}
+                        />
+                      )}
+                    </Stack>
+                  </Box>
+                </Stack>
+              </Card>
+            )
+          )}
+        </Stack>
       ) : (
-        /* Fallback: hardcoded fixture link when no DB data */
-        <div className="border rounded-lg p-6 hover:bg-muted/50 transition-colors">
-          <Link href="/listings/B09HXC3NL8" className="block">
-            <div className="flex items-start gap-4">
-              <div className="w-16 h-16 bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">
-                IMG
-              </div>
-              <div>
-                <h2 className="font-medium">
-                  6 Pack Extra Large Clear Painter&apos;s Drop Cloth for Painting
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  ASIN: B09HXC3NL8
-                </p>
-                <span className="inline-block mt-2 text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded">
-                  Reference fixture loaded
-                </span>
-              </div>
-            </div>
-          </Link>
-        </div>
+        <Card sx={{ p: 6, textAlign: 'center' }}>
+          <ListAltIcon sx={{ fontSize: 48, color: 'divider', mb: 1 }} />
+          <Typography color="text.secondary" variant="body2">
+            No listings yet
+          </Typography>
+        </Card>
       )}
-    </div>
+    </Box>
   )
 }
