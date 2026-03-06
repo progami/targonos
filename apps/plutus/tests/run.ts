@@ -444,7 +444,7 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
   assert.equal(sum(seg3.memoTotalsCents), -300);
 });
 
-test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-UK-1',
     eventGroupId: 'GROUP-SPLIT-UK-1',
@@ -469,7 +469,6 @@ test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements 
       ],
     },
     skuToBrandName: new Map(),
-    splitByMonth: true,
   });
 
   assert.equal(draft.segments.length, 3);
@@ -2123,6 +2122,46 @@ test('matchRefundsToSales uses remaining sale layers after prior returns', () =>
     manufacturing: 300,
     freight: 0,
     duty: 0,
+    mfgAccessories: 0,
+  });
+});
+
+test('matchRefundsToSales can use later sale layers within the current settlement when enabled', () => {
+  const blocks: ProcessingBlock[] = [];
+  const matchedReturns = matchRefundsToSales(
+    new Map([
+      [
+        'ORDER-3::SKU-3',
+        {
+          orderId: 'ORDER-3',
+          sku: 'SKU-3',
+          date: '2026-02-24',
+          quantity: -1,
+          principalCents: -1_000,
+        },
+      ],
+    ]),
+    [
+      {
+        orderId: 'ORDER-3',
+        sku: 'SKU-3',
+        date: '2026-02-25',
+        quantity: 1,
+        principalCents: 1_000,
+        costByComponentCents: { manufacturing: 100, freight: 10, duty: 5, mfgAccessories: 0 },
+      },
+    ],
+    [],
+    blocks,
+    { allowFutureSales: true },
+  );
+
+  assert.equal(blocks.length, 0);
+  assert.equal(matchedReturns.length, 1);
+  assert.deepEqual(matchedReturns[0]?.costByComponentCents, {
+    manufacturing: 100,
+    freight: 10,
+    duty: 5,
     mfgAccessories: 0,
   });
 });
