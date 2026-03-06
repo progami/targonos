@@ -157,9 +157,11 @@ export default function TrackingDetailPage() {
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
                           {current.title ?? 'Untitled'}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                           {current.brand ? `${current.brand} · ` : ''}
-                          {formatDateTime(detail.latestSnapshotAt)}
+                          <Box component="span" sx={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'text.primary' }}>
+                            {formatDateTime(detail.latestSnapshotAt)}
+                          </Box>
                         </Typography>
                       </Stack>
                     </Stack>
@@ -356,7 +358,7 @@ export default function TrackingDetailPage() {
                                         <CategoryChip key={`${event.id}-${category}`} category={category} />
                                       ))}
                                     </Stack>
-                                    <Typography variant="caption" color="text.secondary">
+                                    <Typography variant="body2" sx={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
                                       {formatDateTime(event.timestamp)}
                                     </Typography>
                                   </Stack>
@@ -426,8 +428,9 @@ export default function TrackingDetailPage() {
                         value={formatCount(current.descriptionLength)}
                       />
                       <DataField
-                        label="Last updated on Amazon"
+                        label="Last updated"
                         value={formatDateTime(current.lastUpdatedDate)}
+                        mono
                       />
                     </Stack>
                   </CardContent>

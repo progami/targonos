@@ -38,7 +38,6 @@ import type {
 import {
   CategoryChip,
   DataField,
-  MetricCard,
   OwnerChip,
   SeverityChip,
   formatCount,
@@ -290,7 +289,7 @@ export default function TrackingDashboard() {
                   Monitoring
                 </Typography>
                 {overview ? (
-                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.5)' }}>
+                  <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.7)', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
                     {formatDateTime(overview.snapshotTimestamp)}
                   </Typography>
                 ) : null}
@@ -350,55 +349,6 @@ export default function TrackingDashboard() {
             {error}
           </Alert>
         ) : null}
-
-        <Box
-          sx={{
-            display: 'grid',
-            gap: 2,
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, minmax(0, 1fr))',
-              xl: 'repeat(5, minmax(0, 1fr))',
-            },
-          }}
-        >
-          <MetricCard
-            label="Tracked ASINs"
-            value={overview ? overview.trackedAsins : '—'}
-            helper={overview ? `${overview.ourAsins} ours · ${overview.competitorAsins} comp` : undefined}
-            accent="#17324d"
-          />
-          <MetricCard
-            label="24h Changes"
-            value={overview ? overview.changes24h : '—'}
-            helper={overview ? `${overview.ourChanges24h} ours · ${overview.competitorChanges24h} comp` : undefined}
-            accent="#8c4b1f"
-          />
-          <MetricCard
-            label="7d Changes"
-            value={overview ? overview.changes7d : '—'}
-            accent="#0f5c5c"
-          />
-          <MetricCard
-            label="24h Critical"
-            value={overview ? overview.critical24h : '—'}
-            accent="#b5362d"
-          />
-          <MetricCard
-            label="Top Signal"
-            value={
-              overview?.topCategories24h[0]
-                ? humanizeFieldName(overview.topCategories24h[0].category)
-                : '—'
-            }
-            helper={
-              overview?.topCategories24h[0]
-                ? `${overview.topCategories24h[0].count} in 24h`
-                : undefined
-            }
-            accent="#32556d"
-          />
-        </Box>
 
         <Card
           sx={{
@@ -553,8 +503,8 @@ export default function TrackingDashboard() {
                                     <CategoryChip category={item.primaryCategory} />
                                   </Stack>
                                   <Typography
-                                    variant="caption"
-                                    sx={{ color: 'text.secondary', alignSelf: 'center' }}
+                                    variant="body2"
+                                    sx={{ color: 'text.primary', fontWeight: 600, fontFamily: 'var(--font-mono)', alignSelf: 'center' }}
                                   >
                                     {formatDateTime(item.timestamp)}
                                   </Typography>
@@ -663,10 +613,11 @@ export default function TrackingDashboard() {
                           <Divider />
 
                           <Stack spacing={1.2}>
-                            <DataField label="Observed at" value={formatDateTime(selectedEvent.timestamp)} />
+                            <DataField label="Observed at" value={formatDateTime(selectedEvent.timestamp)} mono />
                             <DataField
                               label="Baseline"
                               value={formatDateTime(selectedEvent.baselineTimestamp)}
+                              mono
                             />
                             <DataField
                               label="Categories"
@@ -853,7 +804,7 @@ export default function TrackingDashboard() {
                             />
                           </Stack>
 
-                          <DataField label="Last updated" value={formatDateTime(dataset.updatedAt)} />
+                          <DataField label="Last updated" value={formatDateTime(dataset.updatedAt)} mono />
                           <DataField
                             label="Age"
                             value={
