@@ -264,102 +264,72 @@ export default function TrackingDashboard() {
         <Card
           sx={{
             overflow: 'hidden',
-            borderRadius: 5,
+            borderRadius: 4,
             border: '1px solid rgba(15, 23, 42, 0.08)',
-            boxShadow: '0 26px 60px rgba(15, 23, 42, 0.12)',
+            boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
             background:
-              'radial-gradient(circle at top left, rgba(44, 103, 91, 0.18), transparent 38%), linear-gradient(135deg, #13232f 0%, #243649 52%, #a15a27 100%)',
+              'linear-gradient(135deg, #13232f 0%, #243649 60%, #7a4520 100%)',
             color: '#f8fafc',
           }}
         >
-          <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-            <Stack spacing={3}>
-              <Stack
-                direction={{ xs: 'column', md: 'row' }}
-                justifyContent="space-between"
-                spacing={2}
-              >
-                <Stack spacing={1}>
-                  <Typography
-                    variant="overline"
-                    sx={{ color: 'rgba(248, 250, 252, 0.72)', letterSpacing: '0.12em' }}
-                  >
-                    Dust Sheets US Monitoring
-                  </Typography>
-                  <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
-                    Change-led oversight for our listings and competitors
-                  </Typography>
-                  <Typography sx={{ color: 'rgba(248, 250, 252, 0.84)', maxWidth: 760 }}>
-                    Argus now treats hourly polling as evidence only. The working surface is the
-                    change event: what moved, who it affects, and whether it deserves inspection.
-                  </Typography>
-                </Stack>
-
-                <Stack
-                  direction={{ xs: 'column', sm: 'row' }}
-                  spacing={1.5}
-                  justifyContent="flex-start"
-                  alignItems={{ xs: 'stretch', sm: 'center' }}
+          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              justifyContent="space-between"
+              alignItems={{ md: 'center' }}
+              spacing={2}
+            >
+              <Stack spacing={0.3}>
+                <Typography
+                  variant="overline"
+                  sx={{ color: 'rgba(248, 250, 252, 0.6)', letterSpacing: '0.1em', fontSize: '0.65rem' }}
                 >
-                  <Button
-                    variant="contained"
-                    startIcon={<RefreshIcon />}
-                    onClick={handleRefresh}
-                    disabled={refreshing}
-                    sx={{
-                      bgcolor: '#f8fafc',
-                      color: '#102032',
-                      '&:hover': { bgcolor: '#e2e8f0' },
-                    }}
-                  >
-                    {refreshing ? 'Refreshing...' : 'Refresh Workspace'}
-                  </Button>
-                  {selectedEvent ? (
-                    <Button
-                      component={Link}
-                      href={`/tracking/${selectedEvent.asin}`}
-                      variant="outlined"
-                      startIcon={<ArrowOutwardIcon />}
-                      sx={{
-                        borderColor: 'rgba(248, 250, 252, 0.28)',
-                        color: '#f8fafc',
-                      }}
-                    >
-                      Open {selectedEvent.asin}
-                    </Button>
-                  ) : null}
-                </Stack>
+                  Dust Sheets US
+                </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
+                  Monitoring
+                </Typography>
+                {overview ? (
+                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.5)' }}>
+                    {formatDateTime(overview.snapshotTimestamp)}
+                  </Typography>
+                ) : null}
               </Stack>
 
               <Stack
-                direction={{ xs: 'column', md: 'row' }}
-                spacing={2}
-                divider={<Divider flexItem orientation="vertical" sx={{ borderColor: 'rgba(248,250,252,0.12)' }} />}
+                direction="row"
+                spacing={1}
+                alignItems="center"
               >
-                <Box sx={{ minWidth: 220 }}>
-                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.7)' }}>
-                    Latest monitoring snapshot
-                  </Typography>
-                  <Typography sx={{ fontWeight: 700 }}>
-                    {overview ? formatDateTime(overview.snapshotTimestamp) : 'Loading...'}
-                  </Typography>
-                  {overview ? (
-                    <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
-                      {overview.snapshotFile}
-                    </Typography>
-                  ) : null}
-                </Box>
-                <Box sx={{ minWidth: 220 }}>
-                  <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.7)' }}>
-                    Working mode
-                  </Typography>
-                  <Typography sx={{ fontWeight: 700 }}>
-                    Shared-drive Monitoring files
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
-                    Postgres stays out of the loop until this UX proves itself.
-                  </Typography>
-                </Box>
+                <Button
+                  variant="contained"
+                  size="small"
+                  startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                  sx={{
+                    bgcolor: '#f8fafc',
+                    color: '#102032',
+                    '&:hover': { bgcolor: '#e2e8f0' },
+                  }}
+                >
+                  {refreshing ? 'Refreshing...' : 'Refresh'}
+                </Button>
+                {selectedEvent ? (
+                  <Button
+                    component={Link}
+                    href={`/tracking/${selectedEvent.asin}`}
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ArrowOutwardIcon sx={{ fontSize: 14 }} />}
+                    sx={{
+                      borderColor: 'rgba(248, 250, 252, 0.28)',
+                      color: '#f8fafc',
+                    }}
+                  >
+                    {selectedEvent.asin}
+                  </Button>
+                ) : null}
               </Stack>
             </Stack>
           </CardContent>
@@ -371,11 +341,7 @@ export default function TrackingDashboard() {
             icon={<WarningAmberIcon fontSize="inherit" />}
             sx={{ borderRadius: 3 }}
           >
-            Monitoring freshness is outside the hourly window. The latest snapshot is
-            {' '}
-            {snapshotAgeMinutes}
-            {' '}
-            minutes old.
+            Snapshot is {snapshotAgeMinutes}m old
           </Alert>
         ) : null}
 
@@ -399,37 +365,27 @@ export default function TrackingDashboard() {
           <MetricCard
             label="Tracked ASINs"
             value={overview ? overview.trackedAsins : '—'}
-            helper={
-              overview
-                ? `${overview.ourAsins} ours / ${overview.competitorAsins} competitors`
-                : 'Loading monitoring coverage'
-            }
+            helper={overview ? `${overview.ourAsins} ours · ${overview.competitorAsins} comp` : undefined}
             accent="#17324d"
           />
           <MetricCard
-            label="Changes in 24h"
+            label="24h Changes"
             value={overview ? overview.changes24h : '—'}
-            helper={
-              overview
-                ? `${overview.ourChanges24h} ours / ${overview.competitorChanges24h} competitors`
-                : 'Loading change volume'
-            }
+            helper={overview ? `${overview.ourChanges24h} ours · ${overview.competitorChanges24h} comp` : undefined}
             accent="#8c4b1f"
           />
           <MetricCard
-            label="Changes in 7d"
+            label="7d Changes"
             value={overview ? overview.changes7d : '—'}
-            helper="Current working window is filterable below"
             accent="#0f5c5c"
           />
           <MetricCard
-            label="Critical in 24h"
+            label="24h Critical"
             value={overview ? overview.critical24h : '—'}
-            helper="High-signal items are promoted above rank churn"
             accent="#b5362d"
           />
           <MetricCard
-            label="Top signal mix"
+            label="Top Signal"
             value={
               overview?.topCategories24h[0]
                 ? humanizeFieldName(overview.topCategories24h[0].category)
@@ -437,8 +393,8 @@ export default function TrackingDashboard() {
             }
             helper={
               overview?.topCategories24h[0]
-                ? `${overview.topCategories24h[0].count} events in the last 24h`
-                : 'Loading category mix'
+                ? `${overview.topCategories24h[0].count} in 24h`
+                : undefined
             }
             accent="#32556d"
           />
@@ -656,13 +612,10 @@ export default function TrackingDashboard() {
                       })}
 
                       {!loading && changes.length === 0 ? (
-                        <Box sx={{ px: 3, py: 6, textAlign: 'center' }}>
-                          <StorageIcon sx={{ fontSize: 42, color: 'text.secondary', mb: 1 }} />
-                          <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                            No change events match the current filters
-                          </Typography>
-                          <Typography color="text.secondary">
-                            Widen the time window or remove category filters to inspect more signals.
+                        <Box sx={{ px: 3, py: 5, textAlign: 'center' }}>
+                          <StorageIcon sx={{ fontSize: 36, color: 'text.secondary', mb: 1 }} />
+                          <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                            No matching events
                           </Typography>
                         </Box>
                       ) : null}
@@ -824,8 +777,8 @@ export default function TrackingDashboard() {
                           </Button>
                         </Stack>
                       ) : (
-                        <Typography color="text.secondary">
-                          Select a change event to inspect its current state, baseline, and gallery.
+                        <Typography variant="body2" color="text.secondary">
+                          Select an event to inspect
                         </Typography>
                       )}
                     </CardContent>
@@ -836,12 +789,6 @@ export default function TrackingDashboard() {
           ) : (
             <CardContent sx={{ p: 2.5 }}>
               <Stack spacing={2.5}>
-                <Alert severity="info" sx={{ borderRadius: 3 }}>
-                  The monitoring UI is powered directly by the hourly listing-attributes feed. Daily
-                  and weekly bundles are shown here for freshness and future expansion, not yet for
-                  analytical drill-down.
-                </Alert>
-
                 {healthError ? (
                   <Alert severity="error" sx={{ borderRadius: 3 }}>
                     {healthError}

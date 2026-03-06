@@ -131,37 +131,37 @@ export default function TrackingDetailPage() {
           <>
             <Card
               sx={{
-                borderRadius: 5,
+                borderRadius: 4,
                 border: '1px solid rgba(15, 23, 42, 0.08)',
-                boxShadow: '0 24px 54px rgba(15, 23, 42, 0.1)',
+                boxShadow: '0 12px 32px rgba(15, 23, 42, 0.07)',
                 background:
-                  'radial-gradient(circle at top right, rgba(196, 119, 49, 0.12), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,242,234,0.96) 100%)',
+                  'radial-gradient(circle at top right, rgba(196, 119, 49, 0.08), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,242,234,0.96) 100%)',
               }}
             >
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <Stack spacing={2.5}>
+              <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
+                <Stack spacing={2}>
                   <Stack
                     direction={{ xs: 'column', lg: 'row' }}
                     justifyContent="space-between"
+                    alignItems={{ lg: 'center' }}
                     spacing={2}
                   >
-                    <Stack spacing={1.2}>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <OwnerChip owner={owner} />
-                        {current.status ? <CategoryChip category="status" /> : null}
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Stack spacing={0.3}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
+                            {detail.asin}
+                          </Typography>
+                          <OwnerChip owner={owner} />
+                        </Stack>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {current.title ?? 'Untitled'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {current.brand ? `${current.brand} · ` : ''}
+                          {formatDateTime(detail.latestSnapshotAt)}
+                        </Typography>
                       </Stack>
-                      <Typography variant="h3" sx={{ fontWeight: 800, letterSpacing: '-0.04em' }}>
-                        {detail.asin}
-                      </Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                        {current.title ?? 'Untitled monitoring record'}
-                      </Typography>
-                      <Typography color="text.secondary">
-                        {current.brand ? `${current.brand} · ` : ''}
-                        Latest snapshot
-                        {' '}
-                        {formatDateTime(detail.latestSnapshotAt)}
-                      </Typography>
                     </Stack>
 
                     <ToggleButtonGroup
@@ -194,31 +194,28 @@ export default function TrackingDetailPage() {
                     <MetricCard
                       label="Status"
                       value={current.status ?? 'Unknown'}
-                      helper={current.sellerSku ? `SKU ${current.sellerSku}` : 'No seller SKU in feed'}
                       accent="#17324d"
                     />
                     <MetricCard
                       label="Landed Price"
                       value={formatMoney(current.landedPrice, current.priceCurrency)}
-                      helper={`Listing ${formatMoney(current.listingPrice, current.priceCurrency)}`}
                       accent="#8c4b1f"
                     />
                     <MetricCard
                       label="Root BSR"
                       value={formatCount(current.rootBsrRank)}
-                      helper={`Sub rank ${formatCount(current.subBsrRank)}`}
+                      helper={`Sub ${formatCount(current.subBsrRank)}`}
                       accent="#0f5c5c"
                     />
                     <MetricCard
-                      label="Offer Count"
+                      label="Offers"
                       value={formatCount(current.totalOfferCount)}
-                      helper={`Images ${formatCount(current.imageCount)}`}
                       accent="#32556d"
                     />
                     <MetricCard
-                      label="Changes In View"
+                      label="Changes"
                       value={filteredChanges.length}
-                      helper={`${filteredSnapshots.length} snapshots in ${range}`}
+                      helper={`${filteredSnapshots.length} snapshots`}
                       accent="#b5362d"
                     />
                   </Box>
@@ -273,8 +270,8 @@ export default function TrackingDetailPage() {
                           </LineChart>
                         </ResponsiveContainer>
                       ) : (
-                        <Typography color="text.secondary">
-                          Not enough priced snapshots in the selected window.
+                        <Typography variant="body2" color="text.secondary">
+                          Insufficient price data
                         </Typography>
                       )}
                     </Stack>
@@ -317,8 +314,8 @@ export default function TrackingDetailPage() {
                           </LineChart>
                         </ResponsiveContainer>
                       ) : (
-                        <Typography color="text.secondary">
-                          Not enough rank snapshots in the selected window.
+                        <Typography variant="body2" color="text.secondary">
+                          Insufficient rank data
                         </Typography>
                       )}
                     </Stack>
@@ -380,19 +377,14 @@ export default function TrackingDetailPage() {
                                       />
                                     ))}
                                   </Stack>
-                                  <Typography variant="caption" color="text.secondary">
-                                    Fields:
-                                    {' '}
-                                    {event.changedFields.map((field) => humanizeFieldName(field)).join(', ')}
-                                  </Typography>
                                 </Stack>
                               </CardContent>
                             </Card>
                           ))}
                         </Stack>
                       ) : (
-                        <Typography color="text.secondary">
-                          No change events in the selected window.
+                        <Typography variant="body2" color="text.secondary">
+                          No events in this window
                         </Typography>
                       )}
                     </Stack>
@@ -480,8 +472,8 @@ export default function TrackingDetailPage() {
                           ))}
                         </Box>
                       ) : (
-                        <Typography color="text.secondary">
-                          No image URLs are present in the latest monitoring state.
+                        <Typography variant="body2" color="text.secondary">
+                          No images
                         </Typography>
                       )}
                     </Stack>

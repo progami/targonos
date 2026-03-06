@@ -3,8 +3,6 @@
 import {
   alpha,
   Box,
-  Card,
-  CardContent,
   Chip,
   Stack,
   Typography,
@@ -80,42 +78,38 @@ export function MetricCard(props: {
   accent?: string
 }) {
   return (
-    <Card
+    <Box
       sx={{
-        height: '100%',
-        borderRadius: 4,
-        border: '1px solid rgba(15, 23, 42, 0.08)',
-        boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-        background:
-          'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,245,238,0.96) 100%)',
+        px: 2,
+        py: 1.5,
+        borderRadius: 2.5,
+        border: '1px solid rgba(15, 23, 42, 0.07)',
+        bgcolor: 'rgba(255, 255, 255, 0.72)',
       }}
     >
-      <CardContent sx={{ p: 2.5 }}>
-        <Stack spacing={0.6}>
-          <Typography
-            variant="overline"
-            sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
-          >
-            {props.label}
-          </Typography>
-          <Typography
-            variant="h4"
-            sx={{
-              fontWeight: 800,
-              lineHeight: 1.05,
-              color: props.accent ?? '#0f172a',
-            }}
-          >
-            {props.value}
-          </Typography>
-          {props.helper ? (
-            <Typography variant="body2" color="text.secondary">
-              {props.helper}
-            </Typography>
-          ) : null}
-        </Stack>
-      </CardContent>
-    </Card>
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', letterSpacing: '0.04em', fontSize: '0.68rem' }}
+      >
+        {props.label}
+      </Typography>
+      <Typography
+        variant="h6"
+        sx={{
+          fontWeight: 800,
+          lineHeight: 1.15,
+          color: props.accent ?? '#0f172a',
+          mt: 0.2,
+        }}
+      >
+        {props.value}
+      </Typography>
+      {props.helper ? (
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.68rem' }}>
+          {props.helper}
+        </Typography>
+      ) : null}
+    </Box>
   )
 }
 

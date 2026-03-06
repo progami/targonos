@@ -78,9 +78,6 @@ export default function AppLayout({
         <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em', mt: 0.4 }}>
           Argus
         </Typography>
-        <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.72)', mt: 0.8 }}>
-          Monitoring and version control for Amazon listing operations.
-        </Typography>
       </Box>
 
       <Divider sx={{ my: 2, borderColor: 'rgba(248, 250, 252, 0.08)' }} />
@@ -131,14 +128,9 @@ export default function AppLayout({
 
       <Box sx={{ flexGrow: 1 }} />
 
-      <Stack spacing={0.5} sx={{ px: 1.25, pb: 1 }}>
-        <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.56)' }}>
-          Operating model
-        </Typography>
-        <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.78)' }}>
-          File-backed monitoring now. Database ingestion later if the workspace proves the model.
-        </Typography>
-      </Stack>
+      <Typography variant="caption" sx={{ color: 'rgba(248, 250, 252, 0.44)', px: 1.25, pb: 1 }}>
+        File-backed monitoring
+      </Typography>
     </Box>
   )
 
