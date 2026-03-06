@@ -1,7 +1,5 @@
-import type { ReactNode } from 'react'
-import { ListingsLayoutClient } from './listings-layout-client'
+import { redirect } from 'next/navigation'
 
-export default function ListingsLayout({ children }: { children: ReactNode }) {
-  return <ListingsLayoutClient>{children}</ListingsLayoutClient>
+export default function ListingsLayout() {
+  redirect('/tracking')
 }
-
