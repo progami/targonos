@@ -17,7 +17,7 @@ const assetPrefix = basePath || ''
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
   if (process.env.NODE_ENV === 'development') {
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3016/argus'
+    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3216/argus'
   } else {
     throw new Error('NEXT_PUBLIC_APP_URL must be defined before loading the Argus Next.js config.')
   }
