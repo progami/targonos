@@ -85,7 +85,6 @@ function formatDelta(
   const delta = current - oldValue
   if (delta === 0) return null
   const isBsr = field === 'bsrRoot' || field === 'bsrSub'
-  // For BSR lower is better; for price, context-dependent but showing direction
   const isGood = isBsr ? delta < 0 : delta < 0
   const prefix = delta > 0 ? '+' : ''
   const display = isBsr ? delta.toLocaleString() : formatCents(delta)
@@ -98,6 +97,17 @@ function formatDelta(
       {display}
     </Typography>
   )
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
 }
 
 export default function TrackingDetailPage() {
@@ -136,19 +146,15 @@ export default function TrackingDetailPage() {
     return (
       <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
         <Stack direction="row" alignItems="center" spacing={2} mb={3}>
-          <Skeleton variant="circular" width={40} height={40} />
-          <Skeleton variant="rounded" width={64} height={64} />
-          <Box>
-            <Skeleton width={200} height={32} />
-            <Skeleton width={120} height={20} />
-          </Box>
+          <Skeleton variant="circular" width={32} height={32} />
+          <Skeleton width={240} height={32} />
         </Stack>
         <Stack direction="row" spacing={2} mb={3}>
           {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} variant="rounded" height={88} sx={{ flex: 1 }} />
+            <Skeleton key={i} variant="rounded" height={80} sx={{ flex: 1 }} />
           ))}
         </Stack>
-        <Skeleton variant="rounded" height={300} />
+        <Skeleton variant="rounded" height={280} />
       </Box>
     )
   }
@@ -156,7 +162,7 @@ export default function TrackingDetailPage() {
   if (!asin) {
     return (
       <Box sx={{ p: 4 }}>
-        <Typography>ASIN not found</Typography>
+        <Typography>Not found</Typography>
       </Box>
     )
   }
@@ -183,6 +189,10 @@ export default function TrackingDetailPage() {
       bsr: s.bsrRoot,
     }))
 
+  const productName = asin.brand
+    ? `${asin.brand} — ${asin.label}`
+    : asin.label
+
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       <Stack
@@ -191,12 +201,12 @@ export default function TrackingDetailPage() {
         justifyContent="space-between"
         mb={3}
       >
-        <Stack direction="row" alignItems="center" spacing={2}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
           <IconButton
             onClick={() => router.push(`${basePath}/tracking`)}
             size="small"
           >
-            <ArrowBackIcon />
+            <ArrowBackIcon fontSize="small" />
           </IconButton>
           {asin.imageUrl && (
             <Box
@@ -204,8 +214,8 @@ export default function TrackingDetailPage() {
               src={asin.imageUrl}
               alt=""
               sx={{
-                width: 48,
-                height: 48,
+                width: 40,
+                height: 40,
                 objectFit: 'contain',
                 borderRadius: 1,
               }}
@@ -213,29 +223,31 @@ export default function TrackingDetailPage() {
           )}
           <Box>
             <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography variant="h5">{asin.label}</Typography>
+              <Typography variant="h6">{productName}</Typography>
               <Chip
-                label={asin.ownership}
+                label={asin.ownership === 'OURS' ? 'Ours' : 'Competitor'}
                 size="small"
                 color={asin.ownership === 'OURS' ? 'primary' : 'secondary'}
                 variant="outlined"
-                sx={{ height: 22, fontSize: '0.7rem' }}
+                sx={{ height: 20, fontSize: '0.675rem' }}
               />
             </Stack>
-            <Typography variant="body2" color="text.secondary">
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontFamily: 'monospace' }}
+            >
               {asin.asin}
-              {asin.brand && ` · ${asin.brand}`}
             </Typography>
           </Box>
         </Stack>
-        <Button
-          color="error"
+        <IconButton
           size="small"
-          startIcon={<DeleteOutlineIcon />}
+          color="error"
           onClick={() => setDeleteOpen(true)}
         >
-          Delete
-        </Button>
+          <DeleteOutlineIcon fontSize="small" />
+        </IconButton>
       </Stack>
 
       <Stack direction="row" spacing={2} mb={3}>
@@ -244,7 +256,7 @@ export default function TrackingDetailPage() {
             <Typography variant="overline" color="text.secondary">
               Price
             </Typography>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h5" fontWeight={700}>
               {formatCents(latest?.landedPriceCents ?? null)}
             </Typography>
             {formatDelta(
@@ -257,9 +269,9 @@ export default function TrackingDetailPage() {
         <Card sx={{ flex: 1 }}>
           <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
-              BSR (Root)
+              BSR
             </Typography>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h5" fontWeight={700}>
               {latest?.bsrRoot?.toLocaleString() ?? '—'}
             </Typography>
             <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -275,9 +287,9 @@ export default function TrackingDetailPage() {
         <Card sx={{ flex: 1 }}>
           <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="overline" color="text.secondary">
-              BSR (Sub)
+              Sub BSR
             </Typography>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h5" fontWeight={700}>
               {latest?.bsrSub?.toLocaleString() ?? '—'}
             </Typography>
             <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -295,7 +307,7 @@ export default function TrackingDetailPage() {
             <Typography variant="overline" color="text.secondary">
               Offers
             </Typography>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h5" fontWeight={700}>
               {latest?.offerCount ?? '—'}
             </Typography>
           </CardContent>
@@ -316,12 +328,12 @@ export default function TrackingDetailPage() {
       </Stack>
 
       {priceChartData.length > 1 && (
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" mb={2}>
-              Price History
+        <Card sx={{ mb: 2 }}>
+          <CardContent sx={{ pb: '16px !important' }}>
+            <Typography variant="overline" color="text.secondary">
+              Price
             </Typography>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={240}>
               <LineChart data={priceChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#dde1e5" />
                 <XAxis
@@ -334,7 +346,10 @@ export default function TrackingDetailPage() {
                   tickFormatter={(v: number) => `$${v}`}
                 />
                 <Tooltip
-                  formatter={(value: number) => [`$${value.toFixed(2)}`, 'Price']}
+                  formatter={(value: number) => [
+                    `$${value.toFixed(2)}`,
+                    'Price',
+                  ]}
                   contentStyle={{
                     borderRadius: 8,
                     border: '1px solid #dde1e5',
@@ -355,12 +370,12 @@ export default function TrackingDetailPage() {
       )}
 
       {bsrChartData.length > 1 && (
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="subtitle2" color="text.secondary" mb={2}>
-              BSR History
+        <Card sx={{ mb: 2 }}>
+          <CardContent sx={{ pb: '16px !important' }}>
+            <Typography variant="overline" color="text.secondary">
+              BSR
             </Typography>
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={240}>
               <LineChart data={bsrChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#dde1e5" />
                 <XAxis
@@ -397,89 +412,80 @@ export default function TrackingDetailPage() {
         </Card>
       )}
 
-      <Card>
-        <CardContent>
-          <Typography variant="subtitle2" color="text.secondary" mb={2}>
-            Snapshots
-          </Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Time</TableCell>
-                  <TableCell align="right">Landed</TableCell>
-                  <TableCell align="right">List</TableCell>
-                  <TableCell align="right">BSR Root</TableCell>
-                  <TableCell align="right">BSR Sub</TableCell>
-                  <TableCell align="right">Offers</TableCell>
-                  <TableCell>Title</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {[...history].reverse().map((snap) => (
-                  <TableRow key={snap.id}>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {new Date(snap.capturedAt).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="right">
-                      {formatCents(snap.landedPriceCents)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {formatCents(snap.listingPriceCents)}
-                    </TableCell>
-                    <TableCell align="right">
-                      {snap.bsrRoot?.toLocaleString() ?? '—'}
-                    </TableCell>
-                    <TableCell align="right">
-                      {snap.bsrSub?.toLocaleString() ?? '—'}
-                    </TableCell>
-                    <TableCell align="right">
-                      {snap.offerCount ?? '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Typography
-                        variant="body2"
-                        noWrap
-                        sx={{ maxWidth: 280 }}
-                      >
-                        {snap.title ?? '—'}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {history.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
-                      <Typography color="text.secondary" variant="body2">
-                        No snapshots yet
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </CardContent>
-      </Card>
+      <TableContainer>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Captured</TableCell>
+              <TableCell align="right">Landed</TableCell>
+              <TableCell align="right">List</TableCell>
+              <TableCell align="right">BSR</TableCell>
+              <TableCell align="right">Sub BSR</TableCell>
+              <TableCell align="right">Offers</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {[...history].reverse().map((snap) => (
+              <TableRow key={snap.id}>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={500}>
+                    {new Date(snap.capturedAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ ml: 0.5 }}
+                    >
+                      {new Date(snap.capturedAt).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Typography>
+                  </Typography>
+                </TableCell>
+                <TableCell align="right">
+                  {formatCents(snap.landedPriceCents)}
+                </TableCell>
+                <TableCell align="right">
+                  {formatCents(snap.listingPriceCents)}
+                </TableCell>
+                <TableCell align="right">
+                  {snap.bsrRoot?.toLocaleString() ?? '—'}
+                </TableCell>
+                <TableCell align="right">
+                  {snap.bsrSub?.toLocaleString() ?? '—'}
+                </TableCell>
+                <TableCell align="right">
+                  {snap.offerCount ?? '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+            {history.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ py: 4, border: 0 }}>
+                  <Typography color="text.secondary" variant="body2">
+                    No snapshots yet
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)}>
-        <DialogTitle>Delete ASIN</DialogTitle>
+        <DialogTitle>Remove {productName}?</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            This will permanently remove <strong>{asin.label}</strong> (
-            {asin.asin}) and all its snapshot history.
+            All snapshot history for this product will be permanently deleted.
           </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteOpen(false)} size="small">
-            Cancel
+            Keep
           </Button>
           <Button
             color="error"
@@ -487,7 +493,7 @@ export default function TrackingDetailPage() {
             size="small"
             onClick={handleDelete}
           >
-            Delete
+            Remove
           </Button>
         </DialogActions>
       </Dialog>
