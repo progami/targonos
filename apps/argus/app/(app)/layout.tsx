@@ -18,10 +18,17 @@ import {
 } from '@mui/material'
 import MenuIcon from '@mui/icons-material/Menu'
 import AutoGraphIcon from '@mui/icons-material/AutoGraph'
+import ViewInArIcon from '@mui/icons-material/ViewInAr'
 
 const DRAWER_WIDTH = 292
 
 const NAV_ITEMS = [
+  {
+    label: 'Listings',
+    href: '/listings',
+    icon: <ViewInArIcon />,
+    description: 'Replica + version control',
+  },
   {
     label: 'Monitoring',
     href: '/tracking',
