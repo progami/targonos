@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation'
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Dialog,
@@ -102,6 +100,17 @@ function Delta({
   )
 }
 
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  return `${days}d ago`
+}
+
 export default function TrackingDashboard() {
   const router = useRouter()
   const [data, setData] = useState<DashboardData | null>(null)
@@ -154,42 +163,43 @@ export default function TrackingDashboard() {
   if (loading) {
     return (
       <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-        <Stack direction="row" justifyContent="space-between" mb={3}>
-          <Skeleton width={200} height={40} />
-          <Stack direction="row" spacing={1}>
-            <Skeleton width={120} height={36} variant="rounded" />
-            <Skeleton width={100} height={36} variant="rounded" />
-          </Stack>
-        </Stack>
-        <Stack direction="row" spacing={2} mb={3}>
-          {[1, 2, 3, 4].map((i) => (
-            <Skeleton key={i} variant="rounded" height={88} sx={{ flex: 1 }} />
-          ))}
-        </Stack>
-        <Skeleton variant="rounded" height={300} />
+        <Skeleton width={200} height={40} sx={{ mb: 3 }} />
+        <Skeleton variant="rounded" height={400} />
       </Box>
     )
   }
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h5">Competitive Tracking</Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        mb={2}
+      >
+        <Stack direction="row" alignItems="baseline" spacing={1}>
+          <Typography variant="h5">Tracking</Typography>
+          {data?.lastFetchAt && (
+            <Typography variant="caption" color="text.secondary">
+              Synced {timeAgo(data.lastFetchAt)}
+            </Typography>
+          )}
+        </Stack>
         <Stack direction="row" spacing={1}>
           <Button
             variant="outlined"
             size="small"
             startIcon={
               refreshing ? (
-                <CircularProgress size={16} color="inherit" />
+                <CircularProgress size={14} color="inherit" />
               ) : (
-                <RefreshIcon />
+                <RefreshIcon sx={{ fontSize: 18 }} />
               )
             }
             onClick={handleRefresh}
             disabled={refreshing}
           >
-            Refresh
+            Sync
           </Button>
           <Button
             variant="contained"
@@ -197,76 +207,22 @@ export default function TrackingDashboard() {
             startIcon={<AddIcon />}
             onClick={() => setDialogOpen(true)}
           >
-            Add ASIN
+            Track
           </Button>
         </Stack>
       </Stack>
 
-      <Stack direction="row" spacing={2} mb={3}>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Total
-            </Typography>
-            <Typography variant="h4" fontWeight={700}>
-              {data?.totalAsins ?? 0}
-            </Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Ours
-            </Typography>
-            <Typography variant="h4" fontWeight={700} color="primary.main">
-              {data?.oursCount ?? 0}
-            </Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Competitors
-            </Typography>
-            <Typography variant="h4" fontWeight={700} color="secondary.main">
-              {data?.competitorCount ?? 0}
-            </Typography>
-          </CardContent>
-        </Card>
-        <Card sx={{ flex: 1 }}>
-          <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Last Fetch
-            </Typography>
-            <Typography variant="body2" fontWeight={500}>
-              {data?.lastFetchAt
-                ? new Date(data.lastFetchAt).toLocaleString()
-                : 'Never'}
-            </Typography>
-            {data?.lastFetchStatus && (
-              <Chip
-                label={data.lastFetchStatus}
-                size="small"
-                color={data.lastFetchStatus === 'SUCCEEDED' ? 'success' : 'error'}
-                sx={{ mt: 0.5, height: 20, fontSize: '0.675rem' }}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </Stack>
-
-      <TableContainer component={Card}>
+      <TableContainer>
         <Table size="small">
           <TableHead>
             <TableRow>
-              <TableCell>ASIN</TableCell>
-              <TableCell>Label</TableCell>
-              <TableCell>Type</TableCell>
+              <TableCell>Product</TableCell>
+              <TableCell />
               <TableCell align="right">Price</TableCell>
               <TableCell align="right">BSR</TableCell>
               <TableCell align="right">Sub BSR</TableCell>
               <TableCell align="right">Offers</TableCell>
-              <TableCell>Updated</TableCell>
+              <TableCell align="right">Updated</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -278,48 +234,52 @@ export default function TrackingDashboard() {
                 onClick={() => router.push(`${basePath}/tracking/${row.id}`)}
               >
                 <TableCell>
-                  <Stack direction="row" alignItems="center" spacing={1}>
+                  <Stack direction="row" alignItems="center" spacing={1.5}>
                     {row.imageUrl && (
                       <Box
                         component="img"
                         src={row.imageUrl}
                         alt=""
                         sx={{
-                          width: 28,
-                          height: 28,
+                          width: 32,
+                          height: 32,
                           objectFit: 'contain',
                           borderRadius: 0.5,
                         }}
                       />
                     )}
-                    <Typography
-                      variant="body2"
-                      sx={{ fontFamily: 'monospace', fontWeight: 500 }}
-                    >
-                      {row.asin}
-                    </Typography>
+                    <Box>
+                      <Typography variant="body2" fontWeight={500}>
+                        {row.brand ? `${row.brand} — ` : ''}
+                        {row.label}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ fontFamily: 'monospace' }}
+                      >
+                        {row.asin}
+                      </Typography>
+                    </Box>
                   </Stack>
                 </TableCell>
-                <TableCell>
-                  <Typography variant="body2">{row.label}</Typography>
-                </TableCell>
-                <TableCell>
+                <TableCell sx={{ width: 80 }}>
                   <Chip
-                    label={row.ownership}
+                    label={row.ownership === 'OURS' ? 'Ours' : 'Comp'}
                     size="small"
                     color={row.ownership === 'OURS' ? 'primary' : 'secondary'}
                     variant="outlined"
-                    sx={{ height: 22, fontSize: '0.7rem' }}
+                    sx={{ height: 20, fontSize: '0.675rem' }}
                   />
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="body2" component="span">
+                  <Typography variant="body2" component="span" fontWeight={500}>
                     {formatCents(row.price, row.currencyCode)}
                   </Typography>
                   <Delta value={row.priceDelta} isCents />
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="body2" component="span">
+                  <Typography variant="body2" component="span" fontWeight={500}>
                     {row.bsrRoot?.toLocaleString() ?? '—'}
                   </Typography>
                   <Delta value={row.bsrDelta} invert />
@@ -328,23 +288,32 @@ export default function TrackingDashboard() {
                   {row.bsrSub?.toLocaleString() ?? '—'}
                 </TableCell>
                 <TableCell align="right">{row.offerCount ?? '—'}</TableCell>
-                <TableCell>
-                  <Typography variant="body2" color="text.secondary">
-                    {row.lastUpdated
-                      ? new Date(row.lastUpdated).toLocaleDateString()
-                      : '—'}
+                <TableCell align="right">
+                  <Typography
+                    variant="body2"
+                    fontWeight={500}
+                    sx={{
+                      color: row.lastUpdated
+                        ? Date.now() - new Date(row.lastUpdated).getTime() >
+                          86400000
+                          ? 'warning.main'
+                          : 'text.primary'
+                        : 'text.secondary',
+                    }}
+                  >
+                    {row.lastUpdated ? timeAgo(row.lastUpdated) : '—'}
                   </Typography>
                 </TableCell>
               </TableRow>
             ))}
             {(!data?.rows || data.rows.length === 0) && (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 8 }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 8, border: 0 }}>
                   <TrendingUpIcon
-                    sx={{ fontSize: 48, color: 'divider', mb: 1 }}
+                    sx={{ fontSize: 40, color: 'divider', mb: 1 }}
                   />
                   <Typography color="text.secondary" variant="body2">
-                    No ASINs tracked yet
+                    No products tracked yet
                   </Typography>
                   <Button
                     size="small"
@@ -352,7 +321,7 @@ export default function TrackingDashboard() {
                     onClick={() => setDialogOpen(true)}
                     sx={{ mt: 1 }}
                   >
-                    Add ASIN
+                    Track a product
                   </Button>
                 </TableCell>
               </TableRow>
@@ -367,7 +336,7 @@ export default function TrackingDashboard() {
         maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Add ASIN</DialogTitle>
+        <DialogTitle>Track a product</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -379,12 +348,13 @@ export default function TrackingDashboard() {
               fullWidth
             />
             <TextField
-              label="Label"
+              label="Product name"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
-              placeholder="Drop Cloth 6-Pack"
+              placeholder="e.g. ToughGuard — Drop Cloth 6-Pack"
               size="small"
               fullWidth
+              helperText="Brand — product descriptor"
             />
             <FormControl fullWidth size="small">
               <InputLabel>Ownership</InputLabel>
@@ -411,7 +381,7 @@ export default function TrackingDashboard() {
             onClick={handleAddAsin}
             disabled={!newAsin.trim() || !newLabel.trim()}
           >
-            Add
+            Track
           </Button>
         </DialogActions>
       </Dialog>
