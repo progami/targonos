@@ -13,7 +13,6 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
