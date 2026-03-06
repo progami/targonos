@@ -34,7 +34,7 @@ export default async function ListingsPage() {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h5" mb={3}>
+      <Typography variant="h5" mb={2}>
         Listings
       </Typography>
 
