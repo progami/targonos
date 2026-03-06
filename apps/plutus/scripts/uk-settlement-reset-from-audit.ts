@@ -28,6 +28,17 @@ import {
   parseSettlementDocNumber,
   stripPlutusDocPrefix,
 } from '@/lib/plutus/settlement-doc-number';
+import type { ProcessingBlock } from '@/lib/plutus/settlement-types';
+import { isBlockingProcessingBlock } from '@/lib/plutus/settlement-types';
+import {
+  buildPrincipalGroupsByDate,
+  isRefundPrincipal,
+  isSalePrincipal,
+  matchRefundsToSales,
+  normalizeSku,
+  type ExistingReturnLayer,
+  type RefundSaleLayer,
+} from '@/lib/plutus/settlement-validation';
 import {
   createJournalEntry,
   deleteJournalEntry,
@@ -82,6 +93,14 @@ type RebuildSource = {
   fundTransferStatus: 'Succeeded' | 'Failed' | 'Unknown';
   originalTotalCents: number;
   sourceAuditRows: SourceAuditRow[];
+};
+
+type ValidationSegmentResult = {
+  sourceInvoiceId: string;
+  docNumber: string;
+  ok: boolean;
+  blockingBlocks: ProcessingBlock[];
+  nonBlockingBlocks: ProcessingBlock[];
 };
 
 let dbClient: typeof import('@/lib/db').db | null = null;
@@ -719,6 +738,161 @@ function buildUkDraftFromAuditSource(source: RebuildSource): UkSettlementDraft {
   };
 }
 
+async function validateRebuildDrafts(input: {
+  rebuildDrafts: Array<{ source: RebuildSource; draft: UkSettlementDraft }>;
+  processingRows: Array<{ id: string }>;
+}): Promise<ValidationSegmentResult[]> {
+  const db = requireDb();
+  const excludedProcessingIds = input.processingRows.map((row) => row.id);
+
+  const historicalSalesFromDb = await db.orderSale.findMany({
+    where: {
+      marketplace: 'amazon.co.uk',
+      ...(excludedProcessingIds.length > 0 ? { NOT: { settlementProcessingId: { in: excludedProcessingIds } } } : {}),
+    },
+    select: {
+      orderId: true,
+      sku: true,
+      saleDate: true,
+      quantity: true,
+      principalCents: true,
+      costManufacturingCents: true,
+      costFreightCents: true,
+      costDutyCents: true,
+      costMfgAccessoriesCents: true,
+    },
+    orderBy: [{ saleDate: 'asc' }, { orderId: 'asc' }, { sku: 'asc' }],
+  });
+
+  const historicalReturnsFromDb = await db.orderReturn.findMany({
+    where: {
+      marketplace: 'amazon.co.uk',
+      ...(excludedProcessingIds.length > 0 ? { NOT: { settlementProcessingId: { in: excludedProcessingIds } } } : {}),
+    },
+    select: {
+      orderId: true,
+      sku: true,
+      returnDate: true,
+      quantity: true,
+    },
+    orderBy: [{ returnDate: 'asc' }, { orderId: 'asc' }, { sku: 'asc' }],
+  });
+
+  const simulatedHistoricalSales: RefundSaleLayer[] = historicalSalesFromDb.map((sale) => ({
+    orderId: sale.orderId,
+    sku: normalizeSku(sale.sku),
+    date: sale.saleDate.toISOString().slice(0, 10),
+    quantity: sale.quantity,
+    principalCents: sale.principalCents,
+    costByComponentCents: {
+      manufacturing: sale.costManufacturingCents,
+      freight: sale.costFreightCents,
+      duty: sale.costDutyCents,
+      mfgAccessories: sale.costMfgAccessoriesCents,
+    },
+  }));
+
+  const simulatedHistoricalReturns: ExistingReturnLayer[] = historicalReturnsFromDb.map((ret) => ({
+    orderId: ret.orderId,
+    sku: normalizeSku(ret.sku),
+    date: ret.returnDate.toISOString().slice(0, 10),
+    quantity: ret.quantity,
+  }));
+
+  const results: ValidationSegmentResult[] = [];
+
+  for (const entry of input.rebuildDrafts) {
+    for (const segment of entry.draft.segments) {
+      const rows = segment.auditRows.map((row) => ({
+        invoiceId: row.invoiceId,
+        market: row.market,
+        date: row.date,
+        orderId: row.orderId,
+        sku: row.sku,
+        quantity: row.quantity,
+        description: row.description,
+        net: fromCents(row.netCents),
+      }));
+
+      const blocks: ProcessingBlock[] = [];
+      const saleGroups = buildPrincipalGroupsByDate(rows, isSalePrincipal);
+      const refundGroups = buildPrincipalGroupsByDate(rows, isRefundPrincipal);
+
+      const historicalSaleKeys = new Set(simulatedHistoricalSales.map((sale) => `${sale.orderId}::${sale.sku}`));
+      const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+      const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
+
+      for (const [refundKey, refund] of refundGroups.entries()) {
+        const key = `${refund.orderId}::${refund.sku}`;
+        if (historicalSaleKeys.has(key)) {
+          historicalRefundGroups.set(refundKey, refund);
+          continue;
+        }
+        currentSettlementRefundGroups.set(refundKey, refund);
+      }
+
+      const matchedReturnsFromHistory =
+        historicalRefundGroups.size === 0
+          ? []
+          : matchRefundsToSales(historicalRefundGroups, simulatedHistoricalSales, simulatedHistoricalReturns, blocks);
+
+      const currentSettlementSaleLayers: RefundSaleLayer[] = Array.from(saleGroups.values()).map((sale) => ({
+        orderId: sale.orderId,
+        sku: sale.sku,
+        date: sale.date,
+        quantity: Math.abs(sale.quantity),
+        principalCents: sale.principalCents,
+        costByComponentCents: {
+          manufacturing: 0,
+          freight: 0,
+          duty: 0,
+          mfgAccessories: 0,
+        },
+      }));
+
+      const matchedReturnsFromCurrentSettlement =
+        currentSettlementRefundGroups.size === 0
+          ? []
+          : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks, {
+              allowFutureSales: true,
+            });
+
+      const blockingBlocks = blocks.filter((block) => isBlockingProcessingBlock(block));
+      const nonBlockingBlocks = blocks.filter((block) => !isBlockingProcessingBlock(block));
+
+      results.push({
+        sourceInvoiceId: entry.source.sourceInvoiceId,
+        docNumber: segment.docNumber,
+        ok: blockingBlocks.length === 0,
+        blockingBlocks,
+        nonBlockingBlocks,
+      });
+
+      if (blockingBlocks.length > 0) {
+        return results;
+      }
+
+      simulatedHistoricalSales.push(...currentSettlementSaleLayers);
+      simulatedHistoricalReturns.push(
+        ...matchedReturnsFromHistory.map((ret) => ({
+          orderId: ret.orderId,
+          sku: ret.sku,
+          date: ret.date,
+          quantity: ret.quantity,
+        })),
+        ...matchedReturnsFromCurrentSettlement.map((ret) => ({
+          orderId: ret.orderId,
+          sku: ret.sku,
+          date: ret.date,
+          quantity: ret.quantity,
+        })),
+      );
+    }
+  }
+
+  return results;
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const startDate = requireIsoDay(options.startDate, 'startDate');
@@ -788,6 +962,8 @@ async function main(): Promise<void> {
   }
   const rebuildSources = collected.sources;
   const rebuildDrafts = rebuildSources.map((source) => ({ source, draft: buildUkDraftFromAuditSource(source) }));
+  const validationResults = await validateRebuildDrafts({ rebuildDrafts, processingRows });
+  const validationFailed = validationResults.some((result) => !result.ok);
 
   const invoiceIdsToDelete = new Set<string>();
   const auditUploadsMaybeEmpty = new Set<string>();
@@ -939,9 +1115,11 @@ async function main(): Promise<void> {
             auditInvoiceIdsToDelete: Array.from(invoiceIdsToDelete).length,
             rebuildSources: rebuildDrafts.length,
             rebuiltSegments: rebuiltSegmentCount,
+            validationFailed,
           },
           deletePlan: deletionPlan,
           rebuildPlan,
+          validationResults,
           next: {
             command: 'pnpm -C apps/plutus exec tsx scripts/uk-settlement-reset-from-audit.ts --apply --start-date <YYYY-MM-DD> [--end-date <YYYY-MM-DD>]',
           },
@@ -950,6 +1128,23 @@ async function main(): Promise<void> {
         2,
       ),
     );
+    return;
+  }
+
+  if (validationFailed) {
+    console.log(
+      JSON.stringify(
+        {
+          dryRun: false,
+          options: { startDate, endDate },
+          error: 'Rebuild validation failed; aborting before any QBO deletes.',
+          validationResults,
+        },
+        null,
+        2,
+      ),
+    );
+    process.exitCode = 1;
     return;
   }
 
