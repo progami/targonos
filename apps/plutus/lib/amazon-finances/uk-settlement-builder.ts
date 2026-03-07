@@ -387,11 +387,8 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   skuToBrandName: Map<string, string>;
   brandLabelByBrandName?: Map<string, string>;
   timeZone?: string;
-  /// When true, split the settlement into month-bounded segments with zero-total rollovers (LMB-style).
-  splitByMonth?: boolean;
 }): UkSettlementDraft {
   const timeZone = input.timeZone === undefined ? UK_TIME_ZONE : input.timeZone;
-  const splitByMonth = input.splitByMonth === true;
 
   const groupStartTs = requireEventGroupField(input.eventGroup.FinancialEventGroupStart, 'FinancialEventGroupStart', input.settlementId);
   const groupEndTs = requireEventGroupField(input.eventGroup.FinancialEventGroupEnd, 'FinancialEventGroupEnd', input.settlementId);
@@ -409,24 +406,11 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     input.settlementId,
   );
 
-  const segments: UkSettlementSegmentDraft[] = splitByMonth
-    ? buildMonthlySettlementSegments<UkSettlementAuditRowDraft>({
-        startIsoDay,
-        endIsoDay,
-        buildDocNumber: buildUkSettlementDocNumber,
-      })
-    : [
-        {
-          seq: 1,
-          yearMonth: isoDayToYearMonth(startIsoDay, 'group start day'),
-          startIsoDay,
-          endIsoDay,
-          txnDate: endIsoDay,
-          docNumber: buildUkSettlementDocNumber({ startIsoDay, endIsoDay, seq: 1 }),
-          memoTotalsCents: new Map(),
-          auditRows: [],
-        },
-      ];
+  const segments: UkSettlementSegmentDraft[] = buildMonthlySettlementSegments<UkSettlementAuditRowDraft>({
+    startIsoDay,
+    endIsoDay,
+    buildDocNumber: buildUkSettlementDocNumber,
+  });
 
   const lastSegment = segments[segments.length - 1];
   if (!lastSegment) throw new Error('No settlement segment built');
@@ -437,7 +421,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   }
 
   const requireSegmentForIsoDay = (localIsoDay: string): UkSettlementSegmentDraft => {
-    if (!splitByMonth) return lastSegment;
     const yearMonth = isoDayToYearMonth(localIsoDay, 'event day');
     const segment = segmentsByYearMonth.get(yearMonth);
     if (!segment) {

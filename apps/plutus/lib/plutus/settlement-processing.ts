@@ -1065,7 +1065,9 @@ export async function computeSettlementPreview(input: {
   const matchedReturnsFromCurrentSettlement =
     currentSettlementRefundGroups.size === 0
       ? []
-      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks);
+      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks, {
+          allowFutureSales: true,
+        });
 
   const matchedReturns = [...matchedReturnsFromHistory, ...matchedReturnsFromCurrentSettlement];
 
