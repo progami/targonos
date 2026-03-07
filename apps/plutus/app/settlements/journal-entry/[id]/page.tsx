@@ -10,6 +10,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { buildLegacySettlementApiPath } from '@/lib/plutus/legacy-settlement-routes';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -31,7 +32,7 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
 }
 
 async function fetchLegacySettlement(id: string): Promise<LegacySettlementResponse> {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${id}`);
+  const res = await fetch(`${basePath}${buildLegacySettlementApiPath(id)}`);
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.details ?? data.error ?? 'Failed to resolve settlement route');
