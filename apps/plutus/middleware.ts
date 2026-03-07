@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+import { remapLegacySettlementPath } from '@/lib/plutus/legacy-settlement-routes'
 
 function normalizeBasePath(value?: string | null) {
   if (!value || value === '/') return ''
@@ -52,6 +53,13 @@ export async function middleware(request: NextRequest) {
   const normalizedPath = appBasePath && pathname.startsWith(appBasePath)
     ? pathname.slice(appBasePath.length) || '/'
     : pathname
+
+  const remappedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+  if (remappedLegacySettlementPath !== null) {
+    const url = request.nextUrl.clone()
+    url.pathname = appBasePath ? `${appBasePath}${remappedLegacySettlementPath}` : remappedLegacySettlementPath
+    return NextResponse.rewrite(url)
+  }
 
   const isPublic =
     normalizedPath === '/no-access' ||
