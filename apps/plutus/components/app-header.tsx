@@ -209,6 +209,8 @@ export function AppHeader() {
         bgcolor: 'rgba(255,255,255,0.95)',
         backdropFilter: 'blur(12px)',
         '.dark &': { bgcolor: 'rgba(4, 19, 36, 0.9)' },
+        borderBottom: 1,
+        borderColor: 'divider',
       }}
     >
       <Box
@@ -328,13 +330,6 @@ export function AppHeader() {
         </Box>
       </Box>
 
-      {/* Bottom gradient border */}
-      <Box
-        sx={{
-          height: 1,
-          background: 'linear-gradient(to right, transparent, rgba(0, 194, 185, 0.3), transparent)',
-        }}
-      />
 
       {/* Mobile nav drawer */}
       <Drawer
