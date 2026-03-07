@@ -4,7 +4,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/daily-account-health.log"
-NODE_BIN="/opt/homebrew/bin/node"
+NODE_BIN="$(command -v node)"
+
+if [ -z "$NODE_BIN" ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — Node binary not found in PATH" >> "$LOG"
+  exit 1
+fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting account health API collection" >> "$LOG"
 
