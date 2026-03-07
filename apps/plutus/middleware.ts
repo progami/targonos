@@ -77,10 +77,10 @@ export async function middleware(request: NextRequest) {
     )
 
   if (allowDevAuthBypass) {
-    const remappedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
-    if (remappedLegacySettlementPath !== null) {
+    const bypassLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+    if (bypassLegacySettlementPath !== null) {
       const url = request.nextUrl.clone()
-      url.pathname = remappedLegacySettlementPath
+      url.pathname = bypassLegacySettlementPath
       return NextResponse.rewrite(url)
     }
 
@@ -123,10 +123,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(login)
   }
 
-  const remappedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
-  if (remappedLegacySettlementPath !== null) {
+  const authorizedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+  if (authorizedLegacySettlementPath !== null) {
     const url = request.nextUrl.clone()
-    url.pathname = remappedLegacySettlementPath
+    url.pathname = authorizedLegacySettlementPath
     return NextResponse.rewrite(url)
   }
 
