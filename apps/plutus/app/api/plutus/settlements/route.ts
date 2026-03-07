@@ -13,11 +13,19 @@ import {
   parseSettlementDocNumber,
   type SettlementMarketplace,
 } from '@/lib/plutus/settlement-doc-number';
+import {
+  groupSettlementChildren,
+  type PlutusSettlementStatus,
+  type SettlementChildSummary,
+  type SettlementParentSummary,
+} from '@/lib/plutus/settlement-parents';
 
 const logger = createLogger({ name: 'plutus-settlements' });
 
-type SettlementRow = {
-  id: string;
+type SettlementRow = SettlementParentSummary<SettlementChildSummary>;
+
+type SettlementListRow = {
+  qboJournalEntryId: string;
   docNumber: string;
   postedDate: string;
   memo: string;
@@ -25,8 +33,7 @@ type SettlementRow = {
   periodStart: string | null;
   periodEnd: string | null;
   settlementTotal: number | null;
-  qboStatus: 'Posted';
-  plutusStatus: 'Pending' | 'Processed' | 'RolledBack';
+  plutusStatus: PlutusSettlementStatus;
 };
 
 const LIST_SETTLEMENT_STATUSES = ['Pending', 'Processed', 'RolledBack'] as const;
@@ -57,13 +64,6 @@ function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): Q
 
   return a.Id > b.Id ? a : b;
 }
-
-type SettlementMeta = {
-  marketplace: SettlementMarketplace;
-  normalizedDocNumber: string;
-  periodStart: string | null;
-  periodEnd: string | null;
-};
 
 export async function GET(req: NextRequest) {
   try {
@@ -99,13 +99,11 @@ export async function GET(req: NextRequest) {
     const page = parseInt(rawPage === null ? '1' : rawPage, 10);
     const pageSize = parseInt(rawPageSize === null ? '25' : rawPageSize, 10);
 
-    const docNumberContains = search !== undefined ? search : marketplaceFilter !== null ? `${marketplaceFilter}-` : null;
-
     let activeConnection = connection;
     const queryPageSize = 100;
     const allJournalEntries: QboJournalEntry[] = [];
 
-    const docNumberQueries = docNumberContains ? [docNumberContains] : ['US-', 'UK-'];
+    const docNumberQueries = marketplaceFilter !== null ? [`${marketplaceFilter}-`] : ['US-', 'UK-'];
 
     for (const docQuery of docNumberQueries) {
       let startPosition = 1;
@@ -154,23 +152,6 @@ export async function GET(req: NextRequest) {
       return aDoc.localeCompare(bDoc);
     });
 
-    const settlementMetaByJournalEntryId = new Map<string, SettlementMeta>();
-
-    for (const journalEntry of uniqueJournalEntries) {
-      const docNumber = journalEntry.DocNumber;
-      if (!docNumber) {
-        throw new Error(`Missing DocNumber on journal entry ${journalEntry.Id}`);
-      }
-
-      const meta = parseSettlementDocNumber(docNumber);
-      settlementMetaByJournalEntryId.set(journalEntry.Id, {
-        marketplace: meta.marketplace,
-        normalizedDocNumber: meta.normalizedDocNumber,
-        periodStart: meta.periodStart,
-        periodEnd: meta.periodEnd,
-      });
-    }
-
     const accountsResult = await fetchAccounts(activeConnection, {
       includeInactive: true,
     });
@@ -200,13 +181,13 @@ export async function GET(req: NextRequest) {
     });
     const rolledBackSet = new Set(rolledBack.map((r) => r.qboSettlementJournalEntryId));
 
-    const allRows: SettlementRow[] = uniqueJournalEntries.map((je) => {
-      const settlementMeta = settlementMetaByJournalEntryId.get(je.Id);
-      if (!settlementMeta) {
-        throw new Error(`Missing settlement metadata for journal entry ${je.Id}`);
+    const allChildRows: SettlementListRow[] = uniqueJournalEntries.map((je) => {
+      if (!je.DocNumber) {
+        throw new Error(`Missing DocNumber on journal entry ${je.Id}`);
       }
 
-      let plutusStatus: SettlementRow['plutusStatus'] = 'Pending';
+      const settlementMeta = parseSettlementDocNumber(je.DocNumber);
+      let plutusStatus: SettlementListRow['plutusStatus'] = 'Pending';
       if (processedSet.has(je.Id)) {
         plutusStatus = 'Processed';
       } else if (rolledBackSet.has(je.Id)) {
@@ -214,7 +195,7 @@ export async function GET(req: NextRequest) {
       }
 
       return {
-        id: je.Id,
+        qboJournalEntryId: je.Id,
         docNumber: settlementMeta.normalizedDocNumber,
         postedDate: je.TxnDate,
         memo: je.PrivateNote ? je.PrivateNote : '',
@@ -222,10 +203,35 @@ export async function GET(req: NextRequest) {
         periodStart: settlementMeta.periodStart,
         periodEnd: settlementMeta.periodEnd,
         settlementTotal: computeSettlementTotalFromJournalEntry(je, accountsById),
-        qboStatus: 'Posted',
         plutusStatus,
       };
     });
+
+    let allRows = groupSettlementChildren(
+      allChildRows.map((row) => ({
+        qboJournalEntryId: row.qboJournalEntryId,
+        docNumber: row.docNumber,
+        postedDate: row.postedDate,
+        memo: row.memo,
+        marketplace: row.marketplace,
+        periodStart: row.periodStart,
+        periodEnd: row.periodEnd,
+        settlementTotal: row.settlementTotal,
+        plutusStatus: row.plutusStatus,
+      })),
+    );
+
+    if (search !== undefined && search !== '') {
+      const searchLower = search.toLowerCase();
+      allRows = allRows.filter((row) => {
+        if (row.sourceSettlementId.toLowerCase().includes(searchLower)) return true;
+        if (row.parentId.toLowerCase().includes(searchLower)) return true;
+        return row.children.some((child) => {
+          if (child.docNumber.toLowerCase().includes(searchLower)) return true;
+          return child.memo.toLowerCase().includes(searchLower);
+        });
+      });
+    }
 
     // Apply status and total filters before pagination
     const filteredRows = allRows.filter((row) => {

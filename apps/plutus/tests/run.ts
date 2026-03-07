@@ -64,6 +64,10 @@ import {
   parseSettlementDocNumber,
   stripPlutusDocPrefix,
 } from '../lib/plutus/settlement-doc-number';
+import {
+  extractSourceSettlementIdFromPrivateNote,
+  groupSettlementChildren,
+} from '../lib/plutus/settlement-parents';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
@@ -107,6 +111,106 @@ test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
   assert.equal(meta.marketplace.id, 'amazon.co.uk');
   assert.equal(meta.periodStart, '2026-01-16');
   assert.equal(meta.periodEnd, '2026-01-30');
+});
+
+test('extractSourceSettlementIdFromPrivateNote reads opaque source ids', () => {
+  assert.equal(
+    extractSourceSettlementIdFromPrivateNote('Region: UK | Settlement: EG5abc-12_Z | Group: Group-01'),
+    'EG5abc-12_Z',
+  );
+});
+
+test('groupSettlementChildren collapses split postings into one parent settlement', () => {
+  const parents = groupSettlementChildren([
+    {
+      qboJournalEntryId: '100',
+      docNumber: 'UK-251205-251231-S1',
+      postedDate: '2025-12-31',
+      memo: 'Region: UK | Settlement: EG5abc-12_Z | Group: G1',
+      marketplace: {
+        id: 'amazon.co.uk',
+        label: 'Amazon.co.uk',
+        currency: 'GBP',
+        region: 'UK',
+      },
+      periodStart: '2025-12-05',
+      periodEnd: '2025-12-31',
+      settlementTotal: 112,
+      plutusStatus: 'Pending' as const,
+    },
+    {
+      qboJournalEntryId: '101',
+      docNumber: 'UK-260101-260102-S2',
+      postedDate: '2026-01-02',
+      memo: 'Region: UK | Settlement: EG5abc-12_Z | Group: G1',
+      marketplace: {
+        id: 'amazon.co.uk',
+        label: 'Amazon.co.uk',
+        currency: 'GBP',
+        region: 'UK',
+      },
+      periodStart: '2026-01-01',
+      periodEnd: '2026-01-02',
+      settlementTotal: -491.83,
+      plutusStatus: 'Pending' as const,
+    },
+  ]);
+
+  assert.equal(parents.length, 1);
+  assert.equal(parents[0]?.parentId, 'UK:EG5abc-12_Z');
+  assert.equal(parents[0]?.sourceSettlementId, 'EG5abc-12_Z');
+  assert.equal(parents[0]?.periodStart, '2025-12-05');
+  assert.equal(parents[0]?.periodEnd, '2026-01-02');
+  assert.equal(parents[0]?.postedDate, '2026-01-02');
+  assert.equal(parents[0]?.splitCount, 2);
+  assert.equal(parents[0]?.childCount, 2);
+  assert.equal(parents[0]?.isSplit, true);
+  assert.equal(parents[0]?.plutusStatus, 'Pending');
+  assert.equal(parents[0]?.hasInconsistency, false);
+  assert.deepEqual(parents[0]?.eventGroupIds, ['G1']);
+  assert.equal(parents[0]?.children[0]?.docNumber, 'UK-251205-251231-S1');
+  assert.equal(parents[0]?.children[1]?.docNumber, 'UK-260101-260102-S2');
+});
+
+test('groupSettlementChildren marks mixed child states as inconsistent parent settlement', () => {
+  const parents = groupSettlementChildren([
+    {
+      qboJournalEntryId: '200',
+      docNumber: 'UK-260130-260131-S1',
+      postedDate: '2026-01-31',
+      memo: 'Region: UK | Settlement: MIXED-SETTLEMENT | Group: G2',
+      marketplace: {
+        id: 'amazon.co.uk',
+        label: 'Amazon.co.uk',
+        currency: 'GBP',
+        region: 'UK',
+      },
+      periodStart: '2026-01-30',
+      periodEnd: '2026-01-31',
+      settlementTotal: 0,
+      plutusStatus: 'Processed' as const,
+    },
+    {
+      qboJournalEntryId: '201',
+      docNumber: 'UK-260201-260213-S2',
+      postedDate: '2026-02-13',
+      memo: 'Region: UK | Settlement: MIXED-SETTLEMENT | Group: G2',
+      marketplace: {
+        id: 'amazon.co.uk',
+        label: 'Amazon.co.uk',
+        currency: 'GBP',
+        region: 'UK',
+      },
+      periodStart: '2026-02-01',
+      periodEnd: '2026-02-13',
+      settlementTotal: 6702.34,
+      plutusStatus: 'RolledBack' as const,
+    },
+  ]);
+
+  assert.equal(parents.length, 1);
+  assert.equal(parents[0]?.plutusStatus, 'Pending');
+  assert.equal(parents[0]?.hasInconsistency, true);
 });
 
 test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
@@ -444,7 +548,7 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
   assert.equal(sum(seg3.memoTotalsCents), -300);
 });
 
-test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-UK-1',
     eventGroupId: 'GROUP-SPLIT-UK-1',
@@ -469,7 +573,6 @@ test('buildUkSettlementDraftFromSpApiFinances can split multi-month settlements 
       ],
     },
     skuToBrandName: new Map(),
-    splitByMonth: true,
   });
 
   assert.equal(draft.segments.length, 3);
@@ -2123,6 +2226,46 @@ test('matchRefundsToSales uses remaining sale layers after prior returns', () =>
     manufacturing: 300,
     freight: 0,
     duty: 0,
+    mfgAccessories: 0,
+  });
+});
+
+test('matchRefundsToSales can use later sale layers within the current settlement when enabled', () => {
+  const blocks: ProcessingBlock[] = [];
+  const matchedReturns = matchRefundsToSales(
+    new Map([
+      [
+        'ORDER-3::SKU-3',
+        {
+          orderId: 'ORDER-3',
+          sku: 'SKU-3',
+          date: '2026-02-24',
+          quantity: -1,
+          principalCents: -1_000,
+        },
+      ],
+    ]),
+    [
+      {
+        orderId: 'ORDER-3',
+        sku: 'SKU-3',
+        date: '2026-02-25',
+        quantity: 1,
+        principalCents: 1_000,
+        costByComponentCents: { manufacturing: 100, freight: 10, duty: 5, mfgAccessories: 0 },
+      },
+    ],
+    [],
+    blocks,
+    { allowFutureSales: true },
+  );
+
+  assert.equal(blocks.length, 0);
+  assert.equal(matchedReturns.length, 1);
+  assert.deepEqual(matchedReturns[0]?.costByComponentCents, {
+    manufacturing: 100,
+    freight: 10,
+    duty: 5,
     mfgAccessories: 0,
   });
 });

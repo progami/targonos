@@ -239,7 +239,9 @@ export function matchRefundsToSales(
   saleLayers: RefundSaleLayer[],
   existingReturns: ExistingReturnLayer[],
   blocks: ProcessingBlock[],
+  options?: { allowFutureSales?: boolean },
 ): ProcessingReturn[] {
+  const allowFutureSales = options?.allowFutureSales === true;
   const matchedReturns: ProcessingReturn[] = [];
   const saleLayersByKey = buildMutableSaleLayersByKey(saleLayers);
   applyExistingReturnsToSaleLayers(saleLayersByKey, existingReturns);
@@ -259,7 +261,7 @@ export function matchRefundsToSales(
     const refundQty = Math.abs(refund.quantity);
     if (!Number.isInteger(refundQty) || refundQty <= 0) continue;
 
-    const saleLayersBeforeRefund = saleLayersForKey.filter((saleLayer) => saleLayer.date <= refund.date);
+    const saleLayersBeforeRefund = saleLayersForKey.filter((saleLayer) => allowFutureSales || saleLayer.date <= refund.date);
     if (saleLayersBeforeRefund.length === 0) {
       blocks.push({
         code: 'REFUND_UNMATCHED',
