@@ -68,6 +68,13 @@ import {
   extractSourceSettlementIdFromPrivateNote,
   groupSettlementChildren,
 } from '../lib/plutus/settlement-parents';
+import {
+  buildLegacySettlementApiPath,
+  buildLegacySettlementApiPreviewPath,
+  buildLegacySettlementApiProcessPath,
+  buildLegacySettlementPagePath,
+  remapLegacySettlementPath,
+} from '../lib/plutus/legacy-settlement-routes';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
@@ -220,6 +227,24 @@ test('groupSettlementChildren marks mixed child states as inconsistent parent se
   assert.equal(parents.length, 1);
   assert.equal(parents[0]?.plutusStatus, 'Pending');
   assert.equal(parents[0]?.hasInconsistency, true);
+});
+
+test('legacy settlement route helpers move JE-centric paths under a static namespace', () => {
+  assert.equal(buildLegacySettlementPagePath('942'), '/settlements/journal-entry/942');
+  assert.equal(buildLegacySettlementApiPath('942'), '/api/plutus/settlements/journal-entry/942');
+  assert.equal(buildLegacySettlementApiPreviewPath('942'), '/api/plutus/settlements/journal-entry/942/preview');
+  assert.equal(buildLegacySettlementApiProcessPath('942'), '/api/plutus/settlements/journal-entry/942/process');
+});
+
+test('remapLegacySettlementPath rewrites only the old JE-centric paths', () => {
+  assert.equal(remapLegacySettlementPath('/settlements/942'), '/settlements/journal-entry/942');
+  assert.equal(
+    remapLegacySettlementPath('/api/plutus/settlements/942/process'),
+    '/api/plutus/settlements/journal-entry/942/process',
+  );
+  assert.equal(remapLegacySettlementPath('/settlements/UK/EG5abc-12_Z'), null);
+  assert.equal(remapLegacySettlementPath('/api/plutus/settlements/UK/EG5abc-12_Z/preview'), null);
+  assert.equal(remapLegacySettlementPath('/settlements/journal-entry/942'), null);
 });
 
 test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {
