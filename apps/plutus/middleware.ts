@@ -84,6 +84,13 @@ export async function middleware(request: NextRequest) {
     )
 
   if (allowDevAuthBypass) {
+    const bypassLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+    if (bypassLegacySettlementPath !== null) {
+      const url = request.nextUrl.clone()
+      url.pathname = bypassLegacySettlementPath
+      return NextResponse.rewrite(url)
+    }
+
     return NextResponse.next()
   }
 
@@ -121,6 +128,13 @@ export async function middleware(request: NextRequest) {
     const login = buildPortalUrl('/login', { request })
     login.searchParams.set('callbackUrl', callbackUrlForRequest(request, appBasePath))
     return NextResponse.redirect(login)
+  }
+
+  const authorizedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+  if (authorizedLegacySettlementPath !== null) {
+    const url = request.nextUrl.clone()
+    url.pathname = authorizedLegacySettlementPath
+    return NextResponse.rewrite(url)
   }
 
   return NextResponse.next()
