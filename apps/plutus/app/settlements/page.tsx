@@ -7,7 +7,6 @@ import { useSnackbar } from 'notistack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import SearchIcon from '@mui/icons-material/Search';
@@ -45,7 +44,6 @@ import {
   useSettlementsListStore,
   type SettlementListStatus,
 } from '@/lib/store/settlements';
-import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -53,10 +51,9 @@ if (basePath === undefined) {
 }
 
 type SettlementRow = {
-  id: string;
-  docNumber: string;
+  parentId: string;
+  sourceSettlementId: string;
   postedDate: string;
-  memo: string;
   marketplace: {
     id: 'amazon.com' | 'amazon.co.uk';
     label: 'Amazon.com' | 'Amazon.co.uk';
@@ -68,6 +65,16 @@ type SettlementRow = {
   settlementTotal: number | null;
   qboStatus: 'Posted';
   plutusStatus: SettlementListStatus;
+  splitCount: number;
+  isSplit: boolean;
+  childCount: number;
+  hasInconsistency: boolean;
+  children: Array<{
+    qboJournalEntryId: string;
+    docNumber: string;
+    postedDate: string;
+    memo: string;
+  }>;
 };
 
 type SettlementsResponse = {
@@ -121,20 +128,6 @@ function formatMoney(amount: number, currency: string): string {
 
   if (amount < 0) return `(${formatted})`;
   return formatted;
-}
-
-
-function displaySettlementDocNumber(docNumber: string): string {
-  const raw = docNumber.trim();
-  if (!isSettlementDocNumber(raw)) return raw;
-  return normalizeSettlementDocNumber(raw);
-}
-
-function extractSettlementIdFromMemo(memo: string): string | null {
-  const matchSpapi = memo.match(/Settlement:\s*([0-9]+)/);
-  if (matchSpapi) return matchSpapi[1]!;
-
-  return null;
 }
 
 function isoDaySubtractDays(isoDay: string, days: number): string {
@@ -248,6 +241,10 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
       sx={{ ...chipBase, borderColor: 'rgba(34, 197, 94, 0.5)', color: 'success.dark', bgcolor: 'rgba(34, 197, 94, 0.05)' }}
     />
   );
+}
+
+function buildParentSettlementHref(settlement: SettlementRow): string {
+  return `/settlements/${settlement.marketplace.region}/${encodeURIComponent(settlement.sourceSettlementId)}`;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -612,7 +609,7 @@ export default function SettlementsPage() {
                       <TextField
                         value={searchInput}
                         onChange={(e) => setSearchInput(e.target.value)}
-                        placeholder="Doc number, memo…"
+                        placeholder="Amazon settlement ID, posting doc number, memo…"
                         size="small"
                         variant="outlined"
                         fullWidth
@@ -839,77 +836,84 @@ export default function SettlementsPage() {
                     {!isLoading &&
                       !error &&
                       settlements.map((s) => {
-                        const settlementId = extractSettlementIdFromMemo(s.memo);
+                        const settlementHref = buildParentSettlementHref(s);
 
                         return (
                           <MuiTableRow
-                            key={s.id}
+                            key={s.parentId}
                             sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}
-                            onClick={() => router.push(`/settlements/${s.id}`)}
+                            onClick={() => router.push(settlementHref)}
                           >
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
-                              <MarketplaceFlag region={s.marketplace.region} />
-                              <Box sx={{ minWidth: 0 }}>
-                                <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
-                                  {s.marketplace.label}
-                                </Box>
-                                <Box sx={{ mt: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
-                                  {displaySettlementDocNumber(s.docNumber)}
-                                </Box>
-                                <Box
-                                  component="a"
-                                  href={`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                                  sx={{ mt: 0.25, display: 'inline-flex', alignItems: 'center', gap: 0.5, textDecoration: 'none', color: 'text.disabled', fontSize: '0.75rem', transition: 'color 0.15s', '&:hover': { color: 'text.secondary' } }}
-                                >
-                                  QBO
-                                  <OpenInNewIcon sx={{ fontSize: 10 }} />
+                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
+                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
+                                <MarketplaceFlag region={s.marketplace.region} />
+                                <Box sx={{ minWidth: 0 }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
+                                      {s.marketplace.label}
+                                    </Box>
+                                    {s.isSplit && (
+                                      <Chip
+                                        label={`Split into ${s.splitCount} month-end postings`}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{
+                                          ...chipBase,
+                                          borderColor: 'rgba(0, 194, 185, 0.35)',
+                                          bgcolor: 'rgba(0, 194, 185, 0.08)',
+                                          color: '#007d76',
+                                        }}
+                                      />
+                                    )}
+                                  </Box>
+                                  <Box sx={{ mt: 0.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', color: 'text.secondary' }}>
+                                    {s.sourceSettlementId}
+                                  </Box>
+                                  <Box sx={{ mt: 0.35, fontSize: '0.75rem', color: 'text.secondary' }}>
+                                    {s.childCount === 1 ? '1 month-end posting' : `${s.childCount} month-end postings`}
+                                  </Box>
+                                  {s.hasInconsistency && (
+                                    <Box sx={{ mt: 0.5, fontSize: '0.75rem', color: 'warning.dark', fontWeight: 600 }}>
+                                      Child posting states need review
+                                    </Box>
+                                  )}
                                 </Box>
                               </Box>
-                            </Box>
-                          </MuiTableCell>
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
-                            <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
-                              {formatPeriod(s.periodStart, s.periodEnd)}
-                            </Box>
-                            <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
-                              Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                            </Box>
-                          </MuiTableCell>
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                            {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                          </MuiTableCell>
-                          <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                              <PlutusPill status={s.plutusStatus} />
-                              <SplitButton
-                                onClick={() => router.push(`/settlements/${s.id}`)}
-                                dropdownItems={[
-                                  { label: 'Sales & Fees', onClick: () => router.push(`/settlements/${s.id}?tab=settlement`) },
-                                  { label: 'Processing', onClick: () => router.push(`/settlements/${s.id}?tab=plutus`) },
-                                  ...(settlementId !== null
-                                    ? [
-                                        {
-                                          label: 'Sync from Amazon',
-                                          onClick: () =>
-                                            openSyncDialog({
-                                              region: s.marketplace.region,
-                                              settlementId,
-                                              postedDate: s.postedDate,
-                                            }),
-                                        },
-                                      ]
-                                    : []),
-                                  { label: 'Open in QBO', onClick: () => window.open(`https://app.qbo.intuit.com/app/journal?txnId=${s.id}`, '_blank') },
-                                ]}
-                              >
-                                Action
-                              </SplitButton>
-                            </Box>
-                          </MuiTableCell>
+                            </MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
+                              <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
+                                {formatPeriod(s.periodStart, s.periodEnd)}
+                              </Box>
+                              <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
+                                Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                              </Box>
+                            </MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                              {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
+                            </MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+                                <PlutusPill status={s.plutusStatus} />
+                                <SplitButton
+                                  onClick={() => router.push(settlementHref)}
+                                  dropdownItems={[
+                                    { label: 'Open settlement', onClick: () => router.push(settlementHref) },
+                                    { label: 'History', onClick: () => router.push(`${settlementHref}?tab=history`) },
+                                    {
+                                      label: 'Sync from Amazon',
+                                      onClick: () =>
+                                        openSyncDialog({
+                                          region: s.marketplace.region,
+                                          settlementId: s.sourceSettlementId,
+                                          postedDate: s.postedDate,
+                                        }),
+                                    },
+                                  ]}
+                                >
+                                  Action
+                                </SplitButton>
+                              </Box>
+                            </MuiTableCell>
                           </MuiTableRow>
                         );
                       })}
@@ -1062,7 +1066,7 @@ export default function SettlementsPage() {
                       <MuiTableBody>
                         {syncResult.segments.map((seg, idx) => (
                           <MuiTableRow key={`${seg.docNumber}-${idx}`} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                            <MuiTableCell sx={{ ...tdSx, fontFamily: 'monospace' }}>{displaySettlementDocNumber(seg.docNumber)}</MuiTableCell>
+                            <MuiTableCell sx={{ ...tdSx, fontFamily: 'JetBrains Mono, monospace' }}>{seg.docNumber}</MuiTableCell>
                             <MuiTableCell sx={tdSx}>
                               {seg.qboAction === 'posted' && <Chip label="Posted" size="small" color="success" sx={chipBase} />}
                               {seg.qboAction === 'existing' && <Chip label="Existing" size="small" color="default" sx={chipBase} />}

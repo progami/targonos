@@ -2,22 +2,18 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 import type { QboAccount } from '@/lib/qbo/api';
-import { deleteJournalEntry, fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
+import { fetchAccounts, fetchJournalEntryById, QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { computeSettlementTotalFromJournalEntry, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
-import { isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { resolveParentRouteForSettlementJournalEntry } from '@/lib/plutus/settlement-parents-server';
+import { rollbackProcessedSettlementByJournalEntryId } from '@/lib/plutus/settlement-rollback';
 
 const logger = createLogger({ name: 'plutus-settlement-detail' });
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-function isQboNotFoundError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.includes('Object Not Found') && error.message.includes('"code":"610"');
-}
 
 export async function GET(_req: NextRequest, context: RouteContext) {
   try {
@@ -56,6 +52,10 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
     const meta = parseSettlementDocNumber(je.DocNumber);
     const settlementTotal = computeSettlementTotalFromJournalEntry(je, accountsById);
+    const parentRoute = await resolveParentRouteForSettlementJournalEntry({
+      connection: activeConnection,
+      settlementJournalEntryId: settlementId,
+    });
 
     const processing = await db.settlementProcessing.findUnique({
       where: { qboSettlementJournalEntryId: settlementId },
@@ -96,6 +96,10 @@ export async function GET(_req: NextRequest, context: RouteContext) {
             accountType: account?.AccountType,
           };
         }),
+      },
+      parent: {
+        region: parentRoute.region,
+        sourceSettlementId: parentRoute.sourceSettlementId,
       },
       processing: processing
         ? {
@@ -157,76 +161,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }
 
     const { id: settlementId } = await context.params;
-
-    const existing = await db.settlementProcessing.findUnique({
-      where: { qboSettlementJournalEntryId: settlementId },
-      select: {
-        marketplace: true,
-        qboSettlementJournalEntryId: true,
-        settlementDocNumber: true,
-        settlementPostedDate: true,
-        invoiceId: true,
-        processingHash: true,
-        sourceFilename: true,
-        uploadedAt: true,
-        qboCogsJournalEntryId: true,
-        qboPnlReclassJournalEntryId: true,
-        _count: { select: { orderSales: true, orderReturns: true } },
-      },
+    const rolledBack = await rollbackProcessedSettlementByJournalEntryId({
+      connection: activeConnection,
+      settlementJournalEntryId: settlementId,
     });
-
-    if (!existing) {
-      return NextResponse.json({ error: 'Settlement not processed' }, { status: 404 });
-    }
-
-    // Delete the COGS + P&L reclass journal entries created by Plutus so rollback is a true undo.
-    // We only delete IDs that look like QBO JournalEntry IDs (digits). NOOP ids are left alone.
-    if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
-      try {
-        const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
-        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
-      } catch (error) {
-        if (!isQboNotFoundError(error)) throw error;
-        logger.warn('COGS Journal Entry already missing in QBO; skipping delete during rollback', {
-          journalEntryId: existing.qboCogsJournalEntryId,
-          settlementId,
-        });
-      }
-    }
-    if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
-      try {
-        const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
-        if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
-      } catch (error) {
-        if (!isQboNotFoundError(error)) throw error;
-        logger.warn('P&L Reclass Journal Entry already missing in QBO; skipping delete during rollback', {
-          journalEntryId: existing.qboPnlReclassJournalEntryId,
-          settlementId,
-        });
-      }
-    }
-
-    await db.$transaction([
-      db.settlementRollback.create({
-        data: {
-          marketplace: existing.marketplace,
-          qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
-          settlementDocNumber: existing.settlementDocNumber,
-          settlementPostedDate: existing.settlementPostedDate,
-          invoiceId: existing.invoiceId,
-          processingHash: existing.processingHash,
-          sourceFilename: existing.sourceFilename,
-          processedAt: existing.uploadedAt,
-          qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
-          qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
-          orderSalesCount: existing._count.orderSales,
-          orderReturnsCount: existing._count.orderReturns,
-        },
-      }),
-      db.settlementProcessing.delete({
-        where: { qboSettlementJournalEntryId: settlementId },
-      }),
-    ]);
+    activeConnection = rolledBack.updatedConnection;
 
     const user = await getCurrentUser();
     await logAudit({
@@ -236,8 +175,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
       entityType: 'SettlementProcessing',
       entityId: settlementId,
       details: {
-        marketplace: existing.marketplace,
-        invoiceId: existing.invoiceId,
+        marketplace: rolledBack.rollback.marketplace,
+        invoiceId: rolledBack.rollback.invoiceId,
       },
     });
 
