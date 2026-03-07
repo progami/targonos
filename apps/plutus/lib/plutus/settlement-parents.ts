@@ -40,7 +40,12 @@ function extractPrivateNoteField(privateNote: string, label: string): string | n
 }
 
 export function extractSourceSettlementIdFromPrivateNote(privateNote: string): string | null {
-  return extractPrivateNoteField(privateNote, 'Settlement');
+  const labels = ['Settlement', 'Source settlement', 'Source invoice'];
+  for (const label of labels) {
+    const value = extractPrivateNoteField(privateNote, label);
+    if (value) return value;
+  }
+  return null;
 }
 
 export function extractEventGroupIdFromPrivateNote(privateNote: string): string | null {

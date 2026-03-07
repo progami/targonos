@@ -120,6 +120,15 @@ test('extractSourceSettlementIdFromPrivateNote reads opaque source ids', () => {
   );
 });
 
+test('extractSourceSettlementIdFromPrivateNote falls back to audit rebuild source invoice metadata', () => {
+  assert.equal(
+    extractSourceSettlementIdFromPrivateNote(
+      'Plutus (audit rebuild) | Region: UK | Source invoice: UK-251205-260102-S1 | Upload: cmmffymev0000t93rviqvaytb',
+    ),
+    'UK-251205-260102-S1',
+  );
+});
+
 test('groupSettlementChildren collapses split postings into one parent settlement', () => {
   const parents = groupSettlementChildren([
     {
