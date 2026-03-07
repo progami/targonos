@@ -36,7 +36,6 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { PageHeader } from '@/components/page-header';
 import { SplitButton } from '@/components/ui/split-button';
-import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import {
@@ -446,14 +445,6 @@ export default function SettlementsPage() {
   }, [data]);
 
   // Compute KPI stats from loaded data
-  const stats = useMemo(() => {
-    const total = data?.pagination.totalCount ?? 0;
-    const hasAnyTotal = settlements.some((s) => s.settlementTotal !== null);
-    const totalAmount = settlements.reduce((sum, s) => sum + (s.settlementTotal ?? 0), 0);
-    const primaryCurrency = settlements[0]?.marketplace.currency ?? 'USD';
-    return { total, hasAnyTotal, totalAmount, primaryCurrency };
-  }, [data, settlements]);
-
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncStartDate, setSyncStartDate] = useState(() => {
     const date = new Date();
@@ -572,26 +563,6 @@ export default function SettlementsPage() {
             </MuiButton>
           </Box>
         </Box>
-
-        {/* KPI Strip */}
-        {!isLoading && data && (
-          <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', lg: 'repeat(2, 1fr)' }, gap: 1.5 }}>
-            <StatCard
-              label="Total Settlements"
-              value={stats.total}
-              icon={
-                <svg style={{ height: 20, width: 20 }} viewBox="0 0 20 20" fill="none">
-                  <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M7 6h6M7 10h4M7 14h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                </svg>
-              }
-            />
-            <StatCard
-              label="Settlement Value"
-              value={stats.hasAnyTotal ? formatMoney(stats.totalAmount, stats.primaryCurrency) : 'No data'}
-            />
-          </Box>
-        )}
 
         <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
           {/* Filter Bar */}
@@ -793,7 +764,7 @@ export default function SettlementsPage() {
                       '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                     }}
                   >
-                    <MuiTableRow sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
+                    <MuiTableRow>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                       <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
@@ -922,7 +893,7 @@ export default function SettlementsPage() {
               </Box>
 
               {data && data.pagination.totalPages > 1 && (
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'rgba(245, 245, 245, 0.5)' }}>
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
                   <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
                     Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
                   </Typography>
@@ -1043,7 +1014,7 @@ export default function SettlementsPage() {
 
               {syncResult && (
                 <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'rgba(245, 245, 245, 0.5)' }}>
+                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
                     <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                       Results
                     </Typography>
@@ -1055,7 +1026,7 @@ export default function SettlementsPage() {
                   </Box>
                   <Box sx={{ overflow: 'auto' }}>
                     <MuiTable size="small" sx={{ width: '100%', fontSize: '0.875rem' }}>
-                      <MuiTableHead sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
+                      <MuiTableHead>
                         <MuiTableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
                           <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Doc #</MuiTableCell>
                           <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>

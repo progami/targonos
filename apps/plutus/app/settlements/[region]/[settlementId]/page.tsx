@@ -30,7 +30,6 @@ import Typography from '@mui/material/Typography';
 import { BackButton } from '@/components/back-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
-import { StatCard } from '@/components/ui/stat-card';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
@@ -593,9 +592,22 @@ export default function ParentSettlementDetailPage() {
             </Card>
 
             <Box sx={{ mt: 3, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
-              <StatCard label="Total Settlements" value={1} />
-              <StatCard label="Month-end Postings" value={data.settlement.splitCount} />
-              <StatCard label="Marketplace" value={data.settlement.marketplace.label} />
+              {[
+                { label: 'Total Settlements', value: '1' },
+                { label: 'Month-end Postings', value: String(data.settlement.splitCount) },
+                { label: 'Marketplace', value: data.settlement.marketplace.label },
+              ].map((metric) => (
+                <Card key={metric.label} sx={{ border: 1, borderColor: 'divider' }}>
+                  <CardContent sx={{ p: 2 }}>
+                    <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+                      {metric.label}
+                    </Typography>
+                    <Typography sx={{ mt: 0.5, fontSize: '1.4rem', fontWeight: 700, color: 'text.primary' }}>
+                      {metric.value}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))}
             </Box>
 
             <Box sx={{ mt: 3 }}>

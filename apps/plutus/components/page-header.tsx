@@ -59,14 +59,6 @@ export function PageHeader({ title, kicker, description, actions, sx, variant = 
             {description}
           </Typography>
         )}
-        <Box
-          sx={{
-            mt: 1.5,
-            height: 1,
-            width: 96,
-            background: 'linear-gradient(to right, rgba(0, 194, 185, 0.5), transparent)',
-          }}
-        />
       </Box>
 
       {actions && (
