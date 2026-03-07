@@ -7,8 +7,6 @@ import DownloadIcon from '@mui/icons-material/Download';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SettingsIcon from '@mui/icons-material/Settings';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import CloseIcon from '@mui/icons-material/Close';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -40,7 +38,6 @@ import {
 
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { PageHeader } from '@/components/page-header';
-import { StatCard } from '@/components/ui/stat-card';
 import {
   CASHFLOW_SOURCE_LABELS,
   type CashflowEvent,
@@ -267,7 +264,7 @@ function CashflowChart({ snapshot }: { snapshot: CashflowSnapshotPayload }) {
   }));
 
   return (
-    <Card sx={{ borderColor: 'rgba(203,213,225,0.7)' }}>
+    <Card sx={{ borderColor: 'divider' }}>
       <CardContent sx={{ p: 2.5 }}>
         <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>
           <Box>
@@ -567,43 +564,39 @@ export default function CashflowPage() {
 
       {isLoading ? (
         <>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' } }}>
-            <Skeleton sx={{ height: 112, width: '100%' }} />
-            <Skeleton sx={{ height: 112, width: '100%' }} />
-            <Skeleton sx={{ height: 112, width: '100%' }} />
-          </Box>
+          <Skeleton sx={{ height: 64, width: '100%' }} />
           <Skeleton sx={{ height: 288, width: '100%' }} />
           <Skeleton sx={{ height: 384, width: '100%' }} />
         </>
       ) : (
         <>
-          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' } }}>
-            <StatCard
-              label="Current Starting Cash"
-              value={formatMoneyFromCents(snapshot.forecast.startingCashCents, snapshot.currencyCode)}
-              icon={<AccountBalanceWalletIcon sx={{ fontSize: 20 }} />}
-            />
-            <StatCard
-              label="Minimum Projected Ending Cash"
-              value={formatMoneyFromCents(snapshot.forecast.summary.minCashCents, snapshot.currencyCode)}
-              icon={<TrendingDownIcon sx={{ fontSize: 20 }} />}
-              trend={{
-                direction: snapshot.forecast.summary.minCashCents < 0 ? 'down' : 'neutral',
-                label: `Week of ${formatDateLabel(snapshot.forecast.summary.minCashWeekStart)}`,
-              }}
-            />
-            <StatCard
-              label="Week 13 Ending Cash"
-              value={formatMoneyFromCents(snapshot.forecast.summary.endCashCents, snapshot.currencyCode)}
-              icon={<AccountBalanceWalletIcon sx={{ fontSize: 20 }} />}
-            />
-          </Box>
+          <Table size="small" sx={{ '& td, & th': { border: 0 } }}>
+            <TableHead>
+              <TableRow>
+                <TableCell>Starting Cash</TableCell>
+                <TableCell>Min Projected Ending Cash</TableCell>
+                <TableCell>Week 13 Ending Cash</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoneyFromCents(snapshot.forecast.startingCashCents, snapshot.currencyCode)}</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                  {formatMoneyFromCents(snapshot.forecast.summary.minCashCents, snapshot.currencyCode)}
+                  <Typography component="span" variant="caption" sx={{ ml: 1, color: snapshot.forecast.summary.minCashCents < 0 ? 'error.main' : 'text.secondary' }}>
+                    Week of {formatDateLabel(snapshot.forecast.summary.minCashWeekStart)}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{formatMoneyFromCents(snapshot.forecast.summary.endCashCents, snapshot.currencyCode)}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
 
           <CashflowChart key={chartKey} snapshot={snapshot} />
 
-          <Card sx={{ borderColor: 'rgba(203,213,225,0.7)' }}>
+          <Card sx={{ borderColor: 'divider' }}>
             <CardContent sx={{ p: 0 }}>
-              <Box sx={{ borderBottom: 1, borderColor: 'rgba(203,213,225,0.7)', px: 2.5, py: 2 }}>
+              <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 2.5, py: 2 }}>
                 <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>Weekly Forecast</Typography>
               </Box>
 
@@ -675,7 +668,7 @@ export default function CashflowPage() {
                                               gap: 1,
                                               borderRadius: 1.5,
                                               border: 1,
-                                              borderColor: 'rgba(203,213,225,0.6)',
+                                              borderColor: 'divider',
                                               bgcolor: 'background.paper',
                                               px: 1.5,
                                               py: 1,
