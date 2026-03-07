@@ -54,6 +54,13 @@ export async function middleware(request: NextRequest) {
     ? pathname.slice(appBasePath.length) || '/'
     : pathname
 
+  const remappedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
+  if (remappedLegacySettlementPath !== null) {
+    const url = request.nextUrl.clone()
+    url.pathname = remappedLegacySettlementPath
+    return NextResponse.rewrite(url)
+  }
+
   const isPublic =
     normalizedPath === '/no-access' ||
     normalizedPath === '/api/health' ||
