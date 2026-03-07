@@ -242,9 +242,12 @@ test('remapLegacySettlementPath rewrites only the old JE-centric paths', () => {
     remapLegacySettlementPath('/api/plutus/settlements/942/process'),
     '/api/plutus/settlements/journal-entry/942/process',
   );
+  assert.equal(remapLegacySettlementPath('/settlements/UK'), null);
+  assert.equal(remapLegacySettlementPath('/settlements/EG-woKl-tLp497yRl0l9XoJFbQ0JvdTtCpgj_zxCUFb1nc'), null);
   assert.equal(remapLegacySettlementPath('/settlements/UK/EG5abc-12_Z'), null);
   assert.equal(remapLegacySettlementPath('/api/plutus/settlements/UK/EG5abc-12_Z/preview'), null);
   assert.equal(remapLegacySettlementPath('/settlements/journal-entry/942'), null);
+  assert.equal(remapLegacySettlementPath('/api/plutus/settlements/journal-entry/942'), null);
 });
 
 test('selectAuditInvoiceForSettlement picks unique contained invoice', () => {

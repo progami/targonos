@@ -1,6 +1,10 @@
 const LEGACY_SETTLEMENT_PAGE_PREFIX = '/settlements/journal-entry';
 const LEGACY_SETTLEMENT_API_PREFIX = '/api/plutus/settlements/journal-entry';
 
+function isLegacySettlementJournalEntryId(value: string): boolean {
+  return /^\d+$/.test(value);
+}
+
 function requireSettlementJournalEntryId(value: string): string {
   const trimmed = value.trim();
   if (trimmed === '') {
@@ -34,7 +38,7 @@ export function remapLegacySettlementPath(pathname: string): string | null {
     if (segment === undefined) {
       throw new Error(`Invalid legacy settlement pathname: ${pathname}`);
     }
-    if (segment.toLowerCase() === 'journal-entry') {
+    if (!isLegacySettlementJournalEntryId(segment)) {
       return null;
     }
     return buildLegacySettlementPagePath(decodeURIComponent(segment));
@@ -49,7 +53,7 @@ export function remapLegacySettlementPath(pathname: string): string | null {
   if (segment === undefined) {
     throw new Error(`Invalid legacy settlement API pathname: ${pathname}`);
   }
-  if (segment.toLowerCase() === 'journal-entry') {
+  if (!isLegacySettlementJournalEntryId(segment)) {
     return null;
   }
 
