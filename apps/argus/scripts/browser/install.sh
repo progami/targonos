@@ -15,8 +15,21 @@ mkdir -p "$LAUNCH_AGENTS_DIR"
 
 KEEPALIVE_PLIST="$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-browser-sources.plist"
-DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 DAILY_VISUALS_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-visuals.plist"
+LEGACY_DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
+BROWSER_DAILY_AH_SCRIPT="$SCRIPT_DIR/daily-account-health/collect.sh"
+
+cleanup_legacy_daily_account_health_agent() {
+  if [ ! -f "$LEGACY_DAILY_AH_PLIST" ]; then
+    return
+  fi
+
+  PROGRAM_PATH=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:1' "$LEGACY_DAILY_AH_PLIST" 2>/dev/null || printf '')
+  if [ "$PROGRAM_PATH" = "$BROWSER_DAILY_AH_SCRIPT" ]; then
+    launchctl unload "$LEGACY_DAILY_AH_PLIST" 2>/dev/null || true
+    rm -f "$LEGACY_DAILY_AH_PLIST"
+  fi
+}
 
 # Make all scripts executable
 chmod +x "$SCRIPT_DIR/keepalive.sh"
@@ -32,9 +45,9 @@ if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling browser launchd agents..."
   launchctl unload "$KEEPALIVE_PLIST" 2>/dev/null || true
   launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
-  launchctl unload "$DAILY_AH_PLIST" 2>/dev/null || true
   launchctl unload "$DAILY_VISUALS_PLIST" 2>/dev/null || true
-  rm -f "$KEEPALIVE_PLIST" "$WEEKLY_PLIST" "$DAILY_AH_PLIST" "$DAILY_VISUALS_PLIST"
+  rm -f "$KEEPALIVE_PLIST" "$WEEKLY_PLIST" "$DAILY_VISUALS_PLIST"
+  cleanup_legacy_daily_account_health_agent
   echo "Done. All browser agents removed."
   exit 0
 fi
@@ -137,6 +150,7 @@ launchctl unload "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.pl
 launchctl unload "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist" 2>/dev/null || true
 rm -f "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist"
 rm -f "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist"
+cleanup_legacy_daily_account_health_agent
 
 launchctl load "$KEEPALIVE_PLIST"
 launchctl load "$WEEKLY_PLIST"
