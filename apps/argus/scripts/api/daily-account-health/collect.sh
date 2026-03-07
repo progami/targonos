@@ -4,10 +4,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/daily-account-health.log"
-NODE_BIN="$(command -v node)"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-if [ -z "$NODE_BIN" ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') — Node binary not found in PATH" >> "$LOG"
+if ! NODE_BIN="$(command -v node)"; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED (node not found in PATH=$PATH)" >> "$LOG"
   exit 1
 fi
 
