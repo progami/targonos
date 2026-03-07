@@ -57,7 +57,7 @@ export async function middleware(request: NextRequest) {
   const remappedLegacySettlementPath = remapLegacySettlementPath(normalizedPath)
   if (remappedLegacySettlementPath !== null) {
     const url = request.nextUrl.clone()
-    url.pathname = appBasePath ? `${appBasePath}${remappedLegacySettlementPath}` : remappedLegacySettlementPath
+    url.pathname = remappedLegacySettlementPath
     return NextResponse.rewrite(url)
   }
 
