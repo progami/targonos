@@ -634,8 +634,7 @@ function BrandsInventorySection({
             <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
               <TableHead
                 sx={{
-                  bgcolor: 'rgba(245, 245, 245, 0.8)',
-                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  bgcolor: 'action.hover',
                   '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                 }}
               >
@@ -709,8 +708,7 @@ function BrandsInventorySection({
                           sx={{
                             borderBottom: 1,
                             borderColor: 'divider',
-                            bgcolor: 'rgba(245, 245, 245, 0.5)',
-                            '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.02)' },
+                            bgcolor: 'action.hover',
                             transition: 'background-color 0.15s',
                             '&:hover': { bgcolor: 'action.hover' },
                           }}
@@ -861,8 +859,7 @@ function BrandsInventorySection({
                 {/* Add Brand row */}
                 <TableRow
                   sx={{
-                    bgcolor: 'rgba(245, 245, 245, 0.5)',
-                    '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.02)' },
+                    bgcolor: 'action.hover',
                   }}
                 >
                   <TableCell sx={{ p: 0, width: 40 }}>
@@ -1222,8 +1219,7 @@ function AccountsSection({
           <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
             <TableHead
               sx={{
-                bgcolor: 'rgba(245, 245, 245, 0.8)',
-                '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                bgcolor: 'action.hover',
                 '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
               }}
             >
@@ -1622,8 +1618,7 @@ function SettlementSection({
             <Table sx={{ width: '100%', fontSize: '0.875rem' }}>
               <TableHead
                 sx={{
-                  bgcolor: 'rgba(245, 245, 245, 0.8)',
-                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  bgcolor: 'action.hover',
                   '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                 }}
               >

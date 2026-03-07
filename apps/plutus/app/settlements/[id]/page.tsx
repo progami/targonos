@@ -33,7 +33,6 @@ import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
-import { StatCard } from '@/components/ui/stat-card';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
@@ -1466,13 +1465,9 @@ export default function SettlementDetailPage() {
                       </Box>
                     )}
 
-                    {/* Summary cards */}
-                    <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' } }}>
-                      <StatCard label="Sales" value={previewData.sales.length} />
-                      <StatCard label="Returns" value={previewData.returns.length} />
-                      <StatCard label="COGS Lines" value={previewData.cogsJournalEntry.lines.length} />
-                      <StatCard label="P&L Lines" value={previewData.pnlJournalEntry.lines.length} />
-                    </Box>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      {previewData.sales.length} sales &middot; {previewData.returns.length} returns &middot; {previewData.cogsJournalEntry.lines.length} COGS lines &middot; {previewData.pnlJournalEntry.lines.length} P&amp;L lines
+                    </Typography>
 
                     {/* Blocks */}
                     {isProcessedPreview && previewBlockingCount > 0 && (

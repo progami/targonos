@@ -542,7 +542,7 @@ export default function ChartOfAccountsPage() {
               <Box sx={{ overflowX: 'auto' }}>
                 <MuiTable>
                   <TableHead>
-                    <TableRow sx={{ bgcolor: 'rgba(245, 245, 245, 0.8)' }}>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
                       <TableCell sx={{ fontWeight: 600, width: 80 }}>Code</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                       <TableCell sx={{ fontWeight: 600 }}>
