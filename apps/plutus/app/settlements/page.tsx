@@ -37,6 +37,7 @@ import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { PageHeader } from '@/components/page-header';
 import { SplitButton } from '@/components/ui/split-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { normalizeSettlementMarketplaceQuery } from '@/lib/plutus/settlement-marketplace-query';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
 import {
   SETTLEMENT_LIST_STATUSES,
@@ -394,6 +395,7 @@ export default function SettlementsPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
+  const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
   const search = useSettlementsListStore((s) => s.search);
   const page = useSettlementsListStore((s) => s.page);
@@ -421,6 +423,14 @@ export default function SettlementsPage() {
     }, 300);
     return () => window.clearTimeout(handle);
   }, [searchInput, setPage, setSearch]);
+
+  useEffect(() => {
+    const nextMarketplace = normalizeSettlementMarketplaceQuery(new URLSearchParams(window.location.search).get('marketplace'));
+    if (nextMarketplace === null) return;
+    if (nextMarketplace === marketplace) return;
+    setMarketplace(nextMarketplace);
+    setPage(1);
+  }, [marketplace, setMarketplace, setPage]);
 
   useEffect(() => {
     const normalized = statusFilter.filter((status) =>
