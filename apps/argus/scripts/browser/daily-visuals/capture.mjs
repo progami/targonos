@@ -41,7 +41,10 @@ async function main() {
 
   const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
 
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launch({
+    headless: true,
+    channel: 'chrome',
+  })
   const context = await browser.newContext({
     viewport: { width: 1400, height: 900 },
     userAgent:
@@ -71,4 +74,3 @@ main().catch((error) => {
   console.error(error?.stack || error?.message || String(error))
   process.exit(1)
 })
-
