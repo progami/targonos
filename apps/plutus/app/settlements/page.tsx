@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -392,7 +392,6 @@ const textFieldInputSlotProps = {
 
 export default function SettlementsPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
@@ -427,17 +426,15 @@ export default function SettlementsPage() {
   }, [searchInput, setPage, setSearch]);
 
   useEffect(() => {
-    const queryMarketplace = searchParams.get('marketplace');
+    const queryMarketplace = new URLSearchParams(window.location.search).get('marketplace');
     if (appliedQueryMarketplaceRef.current === queryMarketplace) return;
-
     appliedQueryMarketplaceRef.current = queryMarketplace;
-
     const nextMarketplace = normalizeSettlementMarketplaceQuery(queryMarketplace);
     if (nextMarketplace === null) return;
-    if (nextMarketplace === marketplace) return;
+    if (nextMarketplace === useMarketplaceStore.getState().marketplace) return;
     setMarketplace(nextMarketplace);
     setPage(1);
-  }, [marketplace, searchParams, setMarketplace, setPage]);
+  }, [setMarketplace, setPage]);
 
   useEffect(() => {
     const normalized = statusFilter.filter((status) =>
