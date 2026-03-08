@@ -6,6 +6,10 @@ import {
   type AuditInvoiceSummary,
 } from '../lib/plutus/audit-invoice-matching';
 import {
+  formatAuditInvoiceResolutionMessage,
+  resolveAuditInvoiceForSettlementChild,
+} from '../lib/plutus/audit-invoice-resolution';
+import {
   computeSaleCostFromAverage,
   createEmptyLedgerSnapshot,
   replayInventoryLedger,
@@ -347,6 +351,52 @@ test('selectAuditInvoiceForSettlement prefers invoiceId matching settlement DocN
   });
 
   assert.deepEqual(match, { kind: 'match', matchType: 'doc_number', invoiceId: 'US-260201-260214-S1' });
+});
+
+test('resolveAuditInvoiceForSettlementChild reuses processed invoice before recomputing matches', () => {
+  const invoices: AuditInvoiceSummary[] = [
+    { invoiceId: 'UK-260213-260227-S1', marketplace: 'amazon.co.uk', markets: ['Amazon.co.uk'], minDate: '2026-02-13', maxDate: '2026-02-27', rowCount: 10 },
+  ];
+
+  const resolution = resolveAuditInvoiceForSettlementChild({
+    marketplace: 'amazon.co.uk',
+    periodStart: '2026-02-13',
+    periodEnd: '2026-02-27',
+    settlementDocNumber: 'UK-260213-260227-S1',
+    processingInvoiceId: 'I7978898',
+    invoices,
+  });
+
+  assert.deepEqual(resolution, {
+    status: 'resolved',
+    invoiceId: 'I7978898',
+    source: 'processing',
+  });
+});
+
+test('resolveAuditInvoiceForSettlementChild returns unresolved ambiguity instead of requiring a client selector', () => {
+  const invoices: AuditInvoiceSummary[] = [
+    { invoiceId: 'A', marketplace: 'amazon.co.uk', markets: ['Amazon.co.uk'], minDate: '2026-01-01', maxDate: '2026-01-07', rowCount: 5 },
+    { invoiceId: 'B', marketplace: 'amazon.co.uk', markets: ['Amazon.co.uk'], minDate: '2026-01-08', maxDate: '2026-01-14', rowCount: 5 },
+  ];
+
+  const resolution = resolveAuditInvoiceForSettlementChild({
+    marketplace: 'amazon.co.uk',
+    periodStart: '2026-01-01',
+    periodEnd: '2026-01-14',
+    settlementDocNumber: 'UK-260101-260114-S1',
+    invoices,
+  });
+
+  assert.deepEqual(resolution, {
+    status: 'unresolved',
+    reason: 'ambiguous',
+    candidateInvoiceIds: ['A', 'B'],
+  });
+  assert.equal(
+    formatAuditInvoiceResolutionMessage(resolution),
+    'Multiple stored audit invoices match this posting period: A, B',
+  );
 });
 
 test('parseAmazonTransactionCsv parses required totals', () => {

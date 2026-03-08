@@ -15,8 +15,6 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
 import Skeleton from '@mui/material/Skeleton';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
@@ -30,7 +28,6 @@ import Typography from '@mui/material/Typography';
 import { BackButton } from '@/components/back-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
-import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
@@ -110,6 +107,18 @@ type ParentSettlementDetailResponse = {
       orderSalesCount: number;
       orderReturnsCount: number;
     };
+    invoiceResolution:
+      | {
+          status: 'resolved';
+          invoiceId: string;
+          source: 'processing' | 'rollback' | 'doc_number' | 'contained' | 'overlap';
+        }
+      | {
+          status: 'unresolved';
+          reason: 'missing_period' | 'none' | 'ambiguous';
+          candidateInvoiceIds: string[];
+        };
+    invoiceResolutionMessage: string;
   }>;
   history: Array<{
     id: string;
@@ -119,21 +128,6 @@ type ParentSettlementDetailResponse = {
     childDocNumber: string;
     kind: 'posted' | 'processed' | 'rolled_back';
   }>;
-};
-
-type InvoiceSummary = {
-  invoiceId: string;
-  marketplace: MarketplaceId;
-  rowCount: number;
-  minDate: string;
-  maxDate: string;
-  markets: string[];
-};
-
-type AuditDataResponse = {
-  uploads: Array<{ id: string; filename: string; rowCount: number; invoiceCount: number; uploadedAt: string }>;
-  invoiceIds: string[];
-  invoices: InvoiceSummary[];
 };
 
 type ParentPreviewResponse = {
@@ -226,11 +220,6 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   return res.json();
 }
 
-async function fetchAuditData(): Promise<AuditDataResponse> {
-  const res = await fetch(`${basePath}/api/plutus/audit-data`);
-  return res.json();
-}
-
 async function fetchParentSettlement(region: string, settlementId: string): Promise<ParentSettlementDetailResponse> {
   const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}`);
   const data = await res.json();
@@ -240,11 +229,9 @@ async function fetchParentSettlement(region: string, settlementId: string): Prom
   return data as ParentSettlementDetailResponse;
 }
 
-async function previewParentSettlement(region: string, settlementId: string, selections: Array<{ qboJournalEntryId: string; invoiceId: string }>): Promise<ParentPreviewResponse> {
+async function previewParentSettlement(region: string, settlementId: string): Promise<ParentPreviewResponse> {
   const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}/preview`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ selections }),
   });
   const data = await res.json();
   if (!res.ok && !data.children) {
@@ -253,11 +240,9 @@ async function previewParentSettlement(region: string, settlementId: string, sel
   return data as ParentPreviewResponse;
 }
 
-async function processParentSettlement(region: string, settlementId: string, selections: Array<{ qboJournalEntryId: string; invoiceId: string }>) {
+async function processParentSettlement(region: string, settlementId: string) {
   const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}/process`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ selections }),
   });
   const data = await res.json();
   return { ok: res.ok, data };
@@ -296,7 +281,6 @@ export default function ParentSettlementDetailPage() {
   }
 
   const [tab, setTab] = useState<DetailTab>(() => readDetailTab(searchParams.get('tab')));
-  const [selectedInvoices, setSelectedInvoices] = useState<Record<string, string>>({});
   const [preview, setPreview] = useState<ParentPreviewResponse | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -318,73 +302,15 @@ export default function ParentSettlementDetailPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: auditData } = useQuery({
-    queryKey: ['plutus-audit-data'],
-    queryFn: fetchAuditData,
-    staleTime: 60 * 1000,
-  });
-
-  const childRecommendations = useMemo(() => {
-    if (!data || !auditData) return new Map<string, string>();
-
-    const result = new Map<string, string>();
-    for (const child of data.children) {
-      const match = selectAuditInvoiceForSettlement({
-        settlementMarketplace: child.marketplace.id,
-        settlementPeriodStart: child.periodStart,
-        settlementPeriodEnd: child.periodEnd,
-        settlementDocNumber: child.docNumber,
-        invoices: auditData.invoices,
-      });
-      if (child.processing?.invoiceId) {
-        result.set(child.qboJournalEntryId, child.processing.invoiceId);
-        continue;
-      }
-      if (child.rollback?.invoiceId) {
-        result.set(child.qboJournalEntryId, child.rollback.invoiceId);
-        continue;
-      }
-      if (match.kind === 'match') {
-        result.set(child.qboJournalEntryId, match.invoiceId);
-      }
-    }
-    return result;
-  }, [auditData, data]);
-
-  useEffect(() => {
-    if (!data) return;
-    setSelectedInvoices((current) => {
-      const next = { ...current };
-      let changed = false;
-      for (const child of data.children) {
-        if (typeof next[child.qboJournalEntryId] === 'string' && next[child.qboJournalEntryId] !== '') continue;
-        const recommended = childRecommendations.get(child.qboJournalEntryId);
-        if (!recommended) continue;
-        next[child.qboJournalEntryId] = recommended;
-        changed = true;
-      }
-      return changed ? next : current;
-    });
-  }, [childRecommendations, data]);
-
   useEffect(() => {
     const nextTab = readDetailTab(searchParams.get('tab'));
     setTab((current) => (current === nextTab ? current : nextTab));
   }, [searchParams]);
-
-  const selectionPayload = useMemo(() => {
-    if (!data) return [] as Array<{ qboJournalEntryId: string; invoiceId: string }>;
-    return data.children.map((child) => ({
-      qboJournalEntryId: child.qboJournalEntryId,
-      invoiceId: selectedInvoices[child.qboJournalEntryId] ?? '',
-    }));
-  }, [data, selectedInvoices]);
-
-  const missingSelections = useMemo(
-    () => selectionPayload.filter((selection) => selection.invoiceId.trim() === '').map((selection) => selection.qboJournalEntryId),
-    [selectionPayload],
-  );
   const visibleSettlementId = useMemo(() => (data ? buildVisibleSettlementId(data) : ''), [data]);
+  const unresolvedChildren = useMemo(
+    () => (data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : []),
+    [data],
+  );
 
   function handleTabChange(nextTab: DetailTab) {
     setTab(nextTab);
@@ -404,15 +330,15 @@ export default function ParentSettlementDetailPage() {
   }
 
   async function handlePreview() {
-    if (missingSelections.length > 0) {
-      setActionError('Select an invoice for each month-end posting before previewing.');
+    if (unresolvedChildren.length > 0) {
+      setActionError('Plutus could not resolve an audit invoice for one or more month-end postings.');
       return;
     }
 
     setActionError(null);
     setIsPreviewLoading(true);
     try {
-      const nextPreview = await previewParentSettlement(region, settlementId, selectionPayload);
+      const nextPreview = await previewParentSettlement(region, settlementId);
       setPreview(nextPreview);
     } catch (nextError) {
       setActionError(nextError instanceof Error ? nextError.message : String(nextError));
@@ -422,15 +348,15 @@ export default function ParentSettlementDetailPage() {
   }
 
   async function handleProcess() {
-    if (missingSelections.length > 0) {
-      setActionError('Select an invoice for each month-end posting before processing.');
+    if (unresolvedChildren.length > 0) {
+      setActionError('Plutus could not resolve an audit invoice for one or more month-end postings.');
       return;
     }
 
     setActionError(null);
     setIsProcessing(true);
     try {
-      const result = await processParentSettlement(region, settlementId, selectionPayload);
+      const result = await processParentSettlement(region, settlementId);
       if (!result.ok) {
         if (result.data.children) {
           setPreview(result.data as ParentPreviewResponse);
@@ -474,7 +400,7 @@ export default function ParentSettlementDetailPage() {
     setRepairOpen(false);
     try {
       await rollbackParentSettlement(region, settlementId);
-      const result = await processParentSettlement(region, settlementId, selectionPayload);
+      const result = await processParentSettlement(region, settlementId);
       if (!result.ok) {
         if (result.data.children) {
           setPreview(result.data as ParentPreviewResponse);
@@ -512,7 +438,7 @@ export default function ParentSettlementDetailPage() {
           {data && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {data.settlement.plutusStatus !== 'Processed' && (
-                <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing}>
+                <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
                   {isProcessing
                     ? 'Processing…'
                     : data.settlement.plutusStatus === 'RolledBack'
@@ -632,62 +558,85 @@ export default function ParentSettlementDetailPage() {
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                       <Box>
-                        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Processing plan</Typography>
+                        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Audit invoice mapping</Typography>
                         <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                          Choose the invoice for each month-end posting, then preview or process the full settlement as one parent action.
+                          {data.settlement.plutusStatus === 'Processed'
+                            ? 'Plutus already processed this settlement with the invoice mappings shown below.'
+                            : 'Plutus resolves the audit invoice for each month-end posting in the backend before previewing or processing.'}
                         </Typography>
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading}>
-                          {isPreviewLoading ? 'Previewing…' : 'Preview'}
-                        </Button>
-                        {data.settlement.plutusStatus !== 'Processed' && (
-                          <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing}>
+                      {data.settlement.plutusStatus !== 'Processed' && (
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
+                            {isPreviewLoading ? 'Previewing…' : 'Preview'}
+                          </Button>
+                          <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
                             {isProcessing
                               ? 'Processing…'
                               : data.settlement.plutusStatus === 'RolledBack'
                                 ? 'Reprocess settlement'
                                 : 'Process settlement'}
                           </Button>
-                        )}
-                      </Box>
+                        </Box>
+                      )}
                     </Box>
 
+                    {unresolvedChildren.length > 0 && (
+                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5 }}>
+                        <WarningAmberIcon sx={{ fontSize: 18, color: 'warning.dark', mt: 0.1 }} />
+                        <Typography sx={{ fontSize: '0.875rem', color: 'warning.dark' }}>
+                          Preview and processing stay blocked until every month-end posting resolves to exactly one stored audit invoice.
+                        </Typography>
+                      </Box>
+                    )}
+
                     <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                      {data.children.map((child) => {
-                        const selected = selectedInvoices[child.qboJournalEntryId] ?? '';
-                        const invoiceOptions = (auditData?.invoices ?? []).filter((invoice) => invoice.marketplace === child.marketplace.id);
-                        return (
-                          <Box key={child.qboJournalEntryId} sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', lg: '1.2fr 1fr' }, alignItems: 'center', border: 1, borderColor: 'divider', borderRadius: 2, p: 1.5, bgcolor: 'background.paper' }}>
-                            <Box>
-                              <Typography sx={{ fontWeight: 600 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
-                              <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                Posting {child.docNumber}
-                              </Typography>
-                            </Box>
-                            <Select
-                              size="small"
-                              value={selected}
-                              onChange={(event) =>
-                                setSelectedInvoices((current) => ({
-                                  ...current,
-                                  [child.qboJournalEntryId]: String(event.target.value),
-                                }))
-                              }
-                              displayEmpty
-                            >
-                              <MenuItem value="">
-                                <em>Select invoice…</em>
-                              </MenuItem>
-                              {invoiceOptions.map((invoice) => (
-                                <MenuItem key={`${invoice.marketplace}:${invoice.invoiceId}`} value={invoice.invoiceId}>
-                                  {invoice.invoiceId} · {invoice.minDate} to {invoice.maxDate}
-                                </MenuItem>
-                              ))}
-                            </Select>
+                      {data.children.map((child) => (
+                        <Box
+                          key={child.qboJournalEntryId}
+                          sx={{
+                            display: 'grid',
+                            gap: 1,
+                            gridTemplateColumns: { xs: '1fr', lg: '1.2fr 1fr' },
+                            alignItems: 'center',
+                            border: 1,
+                            borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
+                            borderRadius: 2,
+                            p: 1.5,
+                            bgcolor: 'background.paper',
+                          }}
+                        >
+                          <Box>
+                            <Typography sx={{ fontWeight: 600 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
+                            <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
+                              Posting {child.docNumber}
+                            </Typography>
                           </Box>
-                        );
-                      })}
+
+                          <Box
+                            sx={{
+                              borderRadius: 2,
+                              border: 1,
+                              borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
+                              bgcolor: child.invoiceResolution.status === 'resolved' ? 'action.hover' : 'warning.50',
+                              px: 1.25,
+                              py: 1,
+                            }}
+                          >
+                            <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: child.invoiceResolution.status === 'resolved' ? 'text.secondary' : 'warning.dark' }}>
+                              {child.invoiceResolution.status === 'resolved' ? 'Invoice' : 'Resolution blocked'}
+                            </Typography>
+                            <Typography sx={{ mt: 0.35, fontWeight: 600, color: child.invoiceResolution.status === 'resolved' ? 'text.primary' : 'warning.dark' }}>
+                              {child.invoiceResolution.status === 'resolved' ? child.invoiceResolution.invoiceId : child.invoiceResolutionMessage}
+                            </Typography>
+                            {child.invoiceResolution.status === 'resolved' && (
+                              <Typography sx={{ mt: 0.25, fontSize: '0.78rem', color: 'text.secondary' }}>
+                                {child.invoiceResolutionMessage}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      ))}
                     </Box>
                   </CardContent>
                 </Card>
