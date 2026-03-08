@@ -73,6 +73,7 @@ import {
   groupSettlementChildren,
 } from '../lib/plutus/settlement-parents';
 import { getSettlementDisplayId } from '../lib/plutus/settlement-display';
+import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
 import {
   buildLegacySettlementApiPath,
   buildLegacySettlementApiPreviewPath,
@@ -252,6 +253,14 @@ test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the 
     }),
     'UK-260130-260131-S1',
   );
+});
+
+test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
+  assert.equal(normalizeSettlementMarketplaceQuery('UK'), 'UK');
+  assert.equal(normalizeSettlementMarketplaceQuery('us'), 'US');
+  assert.equal(normalizeSettlementMarketplaceQuery(' all '), 'all');
+  assert.equal(normalizeSettlementMarketplaceQuery(''), null);
+  assert.equal(normalizeSettlementMarketplaceQuery('eu'), null);
 });
 
 test('legacy settlement route helpers move JE-centric paths under a static namespace', () => {
