@@ -6,6 +6,10 @@ import { QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import {
+  formatAuditInvoiceResolutionMessage,
+  resolveAuditInvoicesForSettlementChildren,
+} from '@/lib/plutus/audit-invoice-resolution';
 import { fetchSettlementParentDetail } from '@/lib/plutus/settlement-parents-server';
 import { rollbackProcessedSettlementByJournalEntryId } from '@/lib/plutus/settlement-rollback';
 
@@ -86,6 +90,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       await saveServerQboConnection(detail.updatedConnection);
     }
 
+    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(detail.parent.children);
+
     return NextResponse.json({
       settlement: {
         parentId: detail.parent.parentId,
@@ -102,7 +108,17 @@ export async function GET(_req: NextRequest, context: RouteContext) {
         childCount: detail.parent.childCount,
         hasInconsistency: detail.parent.hasInconsistency,
       },
-      children: detail.parent.children,
+      children: detail.parent.children.map((child) => {
+        const invoiceResolution = invoiceResolutions.get(child.qboJournalEntryId);
+        if (!invoiceResolution) {
+          throw new Error(`Missing invoice resolution for ${child.docNumber}`);
+        }
+        return {
+          ...child,
+          invoiceResolution,
+          invoiceResolutionMessage: formatAuditInvoiceResolutionMessage(invoiceResolution),
+        };
+      }),
       history: buildHistory(detail.parent),
     });
   } catch (error) {

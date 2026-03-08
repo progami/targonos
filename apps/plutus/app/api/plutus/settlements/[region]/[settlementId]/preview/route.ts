@@ -4,6 +4,10 @@ import { createLogger } from '@targon/logger';
 import { QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { loadAuditRowsFromDb } from '@/lib/plutus/audit-data';
+import {
+  formatAuditInvoiceResolutionMessage,
+  resolveAuditInvoicesForSettlementChildren,
+} from '@/lib/plutus/audit-invoice-resolution';
 import { fetchSettlementParentDetail } from '@/lib/plutus/settlement-parents-server';
 import { computeSettlementPreview } from '@/lib/plutus/settlement-processing';
 import { isBlockingProcessingBlock, type SettlementProcessingPreview } from '@/lib/plutus/settlement-types';
@@ -12,62 +16,48 @@ const logger = createLogger({ name: 'plutus-parent-settlement-preview' });
 
 type RouteContext = { params: Promise<{ region: string; settlementId: string }> };
 
-type ParentSelection = {
-  qboJournalEntryId: string;
-  invoiceId: string;
-};
-
 function requireRegion(value: string): 'US' | 'UK' {
   const trimmed = value.trim().toUpperCase();
   if (trimmed === 'US' || trimmed === 'UK') return trimmed;
   throw new Error(`Unsupported settlement region: ${value}`);
 }
 
-function readSelections(body: unknown): Map<string, string> {
-  if (typeof body !== 'object' || body === null) {
-    throw new Error('Missing selections payload');
-  }
-
-  const selections = (body as { selections?: unknown }).selections;
-  if (!Array.isArray(selections)) {
-    throw new Error('Missing selections');
-  }
-
-  const result = new Map<string, string>();
-  for (const selection of selections as ParentSelection[]) {
-    const qboJournalEntryId = typeof selection.qboJournalEntryId === 'string' ? selection.qboJournalEntryId.trim() : '';
-    const invoiceId = typeof selection.invoiceId === 'string' ? selection.invoiceId.trim() : '';
-    if (qboJournalEntryId === '' || invoiceId === '') {
-      throw new Error('Every selection must include qboJournalEntryId and invoiceId');
-    }
-    result.set(qboJournalEntryId, invoiceId);
-  }
-
-  return result;
-}
-
-export async function POST(req: NextRequest, context: RouteContext) {
+export async function POST(_req: NextRequest, context: RouteContext) {
   try {
     const connection = await getQboConnection();
     if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
     }
 
-    const contentType = req.headers.get('content-type') ?? '';
-    if (!contentType.includes('application/json')) {
-      return NextResponse.json({ error: 'Unsupported content type (expected application/json)' }, { status: 415 });
-    }
-
     const params = await context.params;
     const region = requireRegion(params.region);
     const sourceSettlementId = decodeURIComponent(params.settlementId);
-    const selectionMap = readSelections(await req.json());
 
     const detail = await fetchSettlementParentDetail({
       connection,
       region,
       sourceSettlementId,
     });
+
+    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(detail.parent.children);
+    const unresolved = detail.parent.children.flatMap((child) => {
+      const resolution = invoiceResolutions.get(child.qboJournalEntryId);
+      if (!resolution) {
+        throw new Error(`Missing invoice resolution for ${child.docNumber}`);
+      }
+      if (resolution.status === 'resolved') return [];
+      return [`${child.docNumber}: ${formatAuditInvoiceResolutionMessage(resolution)}`];
+    });
+
+    if (unresolved.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Cannot preview parent settlement',
+          details: unresolved.join(' '),
+        },
+        { status: 400 },
+      );
+    }
 
     let activeConnection = detail.updatedConnection;
     const children: Array<{
@@ -79,10 +69,14 @@ export async function POST(req: NextRequest, context: RouteContext) {
     }> = [];
 
     for (const child of detail.parent.children) {
-      const invoiceId = selectionMap.get(child.qboJournalEntryId);
-      if (!invoiceId) {
-        throw new Error(`Missing invoice selection for ${child.docNumber}`);
+      const resolution = invoiceResolutions.get(child.qboJournalEntryId);
+      if (!resolution) {
+        throw new Error(`Missing invoice resolution for ${child.docNumber}`);
       }
+      if (resolution.status !== 'resolved') {
+        throw new Error(`Unresolved audit invoice for ${child.docNumber}`);
+      }
+      const invoiceId = resolution.invoiceId;
 
       const audit = await loadAuditRowsFromDb({
         settlementJournalEntryId: child.qboJournalEntryId,
