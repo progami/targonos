@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
@@ -415,6 +415,7 @@ export default function SettlementsPage() {
   const clear = useSettlementsListStore((s) => s.clear);
 
   const [statusAnchorEl, setStatusAnchorEl] = useState<HTMLElement | null>(null);
+  const appliedQueryMarketplaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -425,12 +426,15 @@ export default function SettlementsPage() {
   }, [searchInput, setPage, setSearch]);
 
   useEffect(() => {
-    const nextMarketplace = normalizeSettlementMarketplaceQuery(new URLSearchParams(window.location.search).get('marketplace'));
+    const queryMarketplace = new URLSearchParams(window.location.search).get('marketplace');
+    if (appliedQueryMarketplaceRef.current === queryMarketplace) return;
+    appliedQueryMarketplaceRef.current = queryMarketplace;
+    const nextMarketplace = normalizeSettlementMarketplaceQuery(queryMarketplace);
     if (nextMarketplace === null) return;
-    if (nextMarketplace === marketplace) return;
+    if (nextMarketplace === useMarketplaceStore.getState().marketplace) return;
     setMarketplace(nextMarketplace);
     setPage(1);
-  }, [marketplace, setMarketplace, setPage]);
+  }, [setMarketplace, setPage]);
 
   useEffect(() => {
     const normalized = statusFilter.filter((status) =>
