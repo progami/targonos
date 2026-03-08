@@ -31,6 +31,7 @@ import { BackButton } from '@/components/back-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { selectAuditInvoiceForSettlement, type MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
 import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -201,6 +202,13 @@ function formatTimestamp(value: string): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function buildVisibleSettlementId(data: ParentSettlementDetailResponse): string {
+  return getSettlementDisplayId({
+    sourceSettlementId: data.settlement.sourceSettlementId,
+    childDocNumbers: data.children.map((child) => child.docNumber),
+  })
 }
 
 function PlutusPill({ status }: { status: ParentSettlementDetailResponse['settlement']['plutusStatus'] }) {
@@ -376,6 +384,7 @@ export default function ParentSettlementDetailPage() {
     () => selectionPayload.filter((selection) => selection.invoiceId.trim() === '').map((selection) => selection.qboJournalEntryId),
     [selectionPayload],
   );
+  const visibleSettlementId = useMemo(() => (data ? buildVisibleSettlementId(data) : ''), [data]);
 
   function handleTabChange(nextTab: DetailTab) {
     setTab(nextTab);
@@ -493,7 +502,7 @@ export default function ParentSettlementDetailPage() {
               <>
                 <MarketplaceFlag region={data.settlement.marketplace.region} />
                 <Typography variant="h4" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                  {data.settlement.sourceSettlementId}
+                  {visibleSettlementId}
                 </Typography>
                 <PlutusPill status={data.settlement.plutusStatus} />
               </>

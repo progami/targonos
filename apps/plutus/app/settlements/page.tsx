@@ -43,6 +43,7 @@ import {
   useSettlementsListStore,
   type SettlementListStatus,
 } from '@/lib/store/settlements';
+import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -244,6 +245,13 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
 
 function buildParentSettlementHref(settlement: SettlementRow): string {
   return `/settlements/${settlement.marketplace.region}/${encodeURIComponent(settlement.sourceSettlementId)}`;
+}
+
+function buildVisibleSettlementId(settlement: SettlementRow): string {
+  return getSettlementDisplayId({
+    sourceSettlementId: settlement.sourceSettlementId,
+    childDocNumbers: settlement.children.map((child) => child.docNumber),
+  })
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -808,6 +816,7 @@ export default function SettlementsPage() {
                       !error &&
                       settlements.map((s) => {
                         const settlementHref = buildParentSettlementHref(s);
+                        const visibleSettlementId = buildVisibleSettlementId(s);
 
                         return (
                           <MuiTableRow
@@ -838,7 +847,7 @@ export default function SettlementsPage() {
                                     )}
                                   </Box>
                                   <Box sx={{ mt: 0.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', color: 'text.secondary' }}>
-                                    {s.sourceSettlementId}
+                                    {visibleSettlementId}
                                   </Box>
                                   <Box sx={{ mt: 0.35, fontSize: '0.75rem', color: 'text.secondary' }}>
                                     {s.childCount === 1 ? '1 month-end posting' : `${s.childCount} month-end postings`}

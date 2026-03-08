@@ -68,6 +68,7 @@ import {
   extractSourceSettlementIdFromPrivateNote,
   groupSettlementChildren,
 } from '../lib/plutus/settlement-parents';
+import { getSettlementDisplayId } from '../lib/plutus/settlement-display';
 import {
   buildLegacySettlementApiPath,
   buildLegacySettlementApiPreviewPath,
@@ -227,6 +228,26 @@ test('groupSettlementChildren marks mixed child states as inconsistent parent se
   assert.equal(parents.length, 1);
   assert.equal(parents[0]?.plutusStatus, 'Pending');
   assert.equal(parents[0]?.hasInconsistency, true);
+});
+
+test('getSettlementDisplayId keeps human-readable source settlement ids unchanged', () => {
+  assert.equal(
+    getSettlementDisplayId({
+      sourceSettlementId: 'UK-251205-260102-S1',
+      childDocNumbers: ['UK-251205-251231-S1', 'UK-260101-260102-S2'],
+    }),
+    'UK-251205-260102-S1',
+  );
+});
+
+test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the first posting doc number', () => {
+  assert.equal(
+    getSettlementDisplayId({
+      sourceSettlementId: 'EG-6QWxMpvzArNB_-_BvUqJY_vKMMCH8T-3X9i0SUeXnbM',
+      childDocNumbers: ['UK-260130-260131-S1', 'UK-260201-260213-S2'],
+    }),
+    'UK-260130-260131-S1',
+  );
 });
 
 test('legacy settlement route helpers move JE-centric paths under a static namespace', () => {
