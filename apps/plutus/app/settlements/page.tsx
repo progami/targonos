@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
@@ -390,6 +390,30 @@ const textFieldInputSlotProps = {
   input: { sx: { fontSize: '0.875rem', height: 36 } },
 } as const;
 
+function SettlementMarketplaceQuerySync({
+  setMarketplace,
+  setPage,
+}: {
+  setMarketplace: (marketplace: Marketplace) => void;
+  setPage: (page: number) => void;
+}) {
+  const searchParams = useSearchParams();
+  const appliedQueryMarketplaceRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const queryMarketplace = searchParams.get('marketplace');
+    if (appliedQueryMarketplaceRef.current === queryMarketplace) return;
+    appliedQueryMarketplaceRef.current = queryMarketplace;
+    const nextMarketplace = normalizeSettlementMarketplaceQuery(queryMarketplace);
+    if (nextMarketplace === null) return;
+    if (nextMarketplace === useMarketplaceStore.getState().marketplace) return;
+    setMarketplace(nextMarketplace);
+    setPage(1);
+  }, [searchParams, setMarketplace, setPage]);
+
+  return null;
+}
+
 export default function SettlementsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -415,7 +439,6 @@ export default function SettlementsPage() {
   const clear = useSettlementsListStore((s) => s.clear);
 
   const [statusAnchorEl, setStatusAnchorEl] = useState<HTMLElement | null>(null);
-  const appliedQueryMarketplaceRef = useRef<string | null>(null);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -424,17 +447,6 @@ export default function SettlementsPage() {
     }, 300);
     return () => window.clearTimeout(handle);
   }, [searchInput, setPage, setSearch]);
-
-  useEffect(() => {
-    const queryMarketplace = new URLSearchParams(window.location.search).get('marketplace');
-    if (appliedQueryMarketplaceRef.current === queryMarketplace) return;
-    appliedQueryMarketplaceRef.current = queryMarketplace;
-    const nextMarketplace = normalizeSettlementMarketplaceQuery(queryMarketplace);
-    if (nextMarketplace === null) return;
-    if (nextMarketplace === useMarketplaceStore.getState().marketplace) return;
-    setMarketplace(nextMarketplace);
-    setPage(1);
-  }, [setMarketplace, setPage]);
 
   useEffect(() => {
     const normalized = statusFilter.filter((status) =>
@@ -555,6 +567,9 @@ export default function SettlementsPage() {
 
   return (
     <Box component="main" sx={{ flex: 1 }}>
+      <Suspense fallback={null}>
+        <SettlementMarketplaceQuerySync setMarketplace={setMarketplace} setPage={setPage} />
+      </Suspense>
       <Box sx={{ mx: 'auto', maxWidth: '72rem', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
