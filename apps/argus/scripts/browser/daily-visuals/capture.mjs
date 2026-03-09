@@ -60,18 +60,18 @@ async function main() {
   const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-daily-visuals-'))
-  const context = await chromium.launchPersistentContext(userDataDir, {
-    headless: true,
-    channel: 'chrome',
-    viewport: { width: 1400, height: 900 },
-    userAgent:
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    locale: 'en-US',
-  })
-  const page = context.pages()[0] ?? await context.newPage()
-  page.setDefaultTimeout(90_000)
-
   try {
+    const context = await chromium.launchPersistentContext(userDataDir, {
+      headless: true,
+      channel: 'chrome',
+      viewport: { width: 1400, height: 900 },
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+      locale: 'en-US',
+    })
+    const page = context.pages()[0] ?? await context.newPage()
+    page.setDefaultTimeout(90_000)
+
     await page.goto(url, { waitUntil: 'domcontentloaded' })
     await page.waitForSelector('#productTitle', { timeout: 60_000 })
 
