@@ -6,6 +6,8 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { chromium } from 'playwright'
 
+const CAPTURE_TIMEOUT_MS = 120_000
+
 function argValue(flag) {
   const index = process.argv.indexOf(flag)
   if (index === -1) return null
@@ -61,26 +63,39 @@ async function main() {
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-daily-visuals-'))
   try {
-    const context = await chromium.launchPersistentContext(userDataDir, {
-      headless: true,
-      channel: 'chrome',
-      viewport: { width: 1400, height: 900 },
-      userAgent:
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-      locale: 'en-US',
-    })
-    const page = context.pages()[0] ?? await context.newPage()
-    page.setDefaultTimeout(90_000)
+    await Promise.race([
+      (async () => {
+        const context = await chromium.launchPersistentContext(userDataDir, {
+          headless: true,
+          channel: 'chrome',
+          viewport: { width: 1400, height: 900 },
+          userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+          locale: 'en-US',
+        })
+        try {
+          const page = context.pages()[0] ?? await context.newPage()
+          page.setDefaultTimeout(90_000)
+          page.setDefaultNavigationTimeout(90_000)
 
-    await page.goto(url, { waitUntil: 'domcontentloaded' })
-    await page.waitForSelector('#productTitle', { timeout: 60_000 })
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 })
+          await page.waitForSelector('#productTitle', { timeout: 60_000 })
 
-    // Trigger lazy-loaded sections (reviews, A+ / EBD, etc.)
-    await page.waitForTimeout(1500)
-    await autoScroll(page)
-    await page.waitForTimeout(1500)
+          await page.waitForTimeout(1500)
+          await autoScroll(page)
+          await page.waitForTimeout(1500)
 
-    await page.screenshot({ path: outputPath, fullPage: true })
+          await page.screenshot({ path: outputPath, fullPage: true, timeout: 30_000 })
+        } finally {
+          await context.close().catch(() => {})
+        }
+      })(),
+      new Promise((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Capture timed out after ${CAPTURE_TIMEOUT_MS}ms for ${asin}`))
+        }, CAPTURE_TIMEOUT_MS)
+      }),
+    ])
   } finally {
     killChromeForUserDataDir(userDataDir)
     fs.rmSync(userDataDir, { recursive: true, force: true })
