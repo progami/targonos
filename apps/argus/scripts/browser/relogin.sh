@@ -1,6 +1,6 @@
 #!/bin/bash
 # Seller Central Relogin — Amazon SSO + OTP via Google Voice
-# Called by keepalive.sh and collector scripts when signin redirect detected.
+# Called by collector scripts when signin redirect detected.
 #
 # Flow:
 #   1. Fill email → click Continue
