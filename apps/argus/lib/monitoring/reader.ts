@@ -18,7 +18,7 @@ import type {
 } from './types'
 
 const MONITORING_BASE =
-  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring'
+  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
 
 const LISTING_ATTRIBUTES_BASE = path.join(MONITORING_BASE, 'Hourly/Listing Attributes (API)')
 const LATEST_STATE_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'latest_state.json')

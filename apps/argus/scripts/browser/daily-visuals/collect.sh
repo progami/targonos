@@ -5,13 +5,13 @@
 #
 # Tracked:
 #   All ASINs present in Monitoring hourly listing state:
-#   /Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Listing Attributes (API)/latest_state.json
+#   /Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)/latest_state.json
 #
 # Runs daily at 3:30 AM CT via launchd.
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Daily/Visuals"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Visuals"
 LOG="/tmp/daily-visuals.log"
 TODAY=$(date '+%Y-%m-%d')
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
