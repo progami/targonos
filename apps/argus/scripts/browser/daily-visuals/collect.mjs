@@ -11,6 +11,7 @@ const LOG = '/tmp/daily-visuals.log'
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
+const CAPTURE_CHILD_TIMEOUT_MS = 150_000
 
 function log(message) {
   fs.appendFileSync(LOG, `${timestamp()} — ${message}\n`)
@@ -114,7 +115,10 @@ function captureListing(asin, brand) {
   const tmpPng = path.join(os.tmpdir(), `${asin}.png`)
   try {
     log(`Capturing ${brand} (${asin})`)
-    runFile(NODE_BIN, [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output', tmpPng])
+    runFile(NODE_BIN, [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output', tmpPng], {
+      timeout: CAPTURE_CHILD_TIMEOUT_MS,
+      killSignal: 'SIGKILL',
+    })
 
     const { width, height } = identifySize(tmpPng)
     cropScreenshot(tmpPng, destDir, width, height)
