@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 
-const STATE_PATH = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Listing Attributes (API)/latest_state.json'
+const STATE_PATH = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)/latest_state.json'
 
 function normalizeBrand(brandRaw) {
   const brand = String(brandRaw || '').trim()
