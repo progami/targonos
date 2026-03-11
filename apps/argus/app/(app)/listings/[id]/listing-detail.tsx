@@ -45,6 +45,7 @@ function normalizeBasePath(value: string): string {
 
 const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
 const CLOUDFLARE_MAX_UPLOAD_BYTES = 100_000_000
+const SNAPSHOT_ZIP_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 function formatBytes(bytes: number): string {
   const mb = bytes / 1_000_000
@@ -185,6 +186,11 @@ export function ListingDetail({
   const [ebcModuleEditorTarget, setEbcModuleEditorTarget] = useState<{ sectionType: string; modulePosition: number } | null>(null)
   const [ebcModuleDraft, setEbcModuleDraft] = useState({ headline: '', bodyText: '' })
   const [ebcModuleFiles, setEbcModuleFiles] = useState<File[]>([])
+
+  const [snapshotIngestOpen, setSnapshotIngestOpen] = useState(false)
+  const [snapshotIngestFile, setSnapshotIngestFile] = useState<File | null>(null)
+  const [snapshotIngestBusy, setSnapshotIngestBusy] = useState(false)
+  const [snapshotIngestError, setSnapshotIngestError] = useState<string | null>(null)
 
   const callbacksRef = useRef({
     titlePrev: () => {},
@@ -968,6 +974,58 @@ export function ListingDetail({
           Replica template mismatch: {formatAmazonPdpReplicaContractError(replicaContractError)}
         </div>
       )}
+      {listing ? (
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 30,
+            px: 2.5,
+            py: 1.25,
+            bgcolor: 'rgba(255, 255, 255, 0.92)',
+            borderBottom: '1px solid rgba(15, 23, 42, 0.12)',
+            backdropFilter: 'blur(10px)',
+          }}
+        >
+          <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+            <Stack spacing={0.2} sx={{ minWidth: 0 }}>
+              <Typography
+                variant="subtitle2"
+                sx={{ fontWeight: 800, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}
+              >
+                {listing.asin}
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: 'text.secondary',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: { xs: 240, sm: 520, md: 760 },
+                }}
+              >
+                {listing.label}
+              </Typography>
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <MuiButton
+                type="button"
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setSnapshotIngestError(null)
+                  setSnapshotIngestFile(null)
+                  setSnapshotIngestOpen(true)
+                }}
+              >
+                Ingest snapshot zip
+              </MuiButton>
+            </Stack>
+          </Stack>
+        </Box>
+      ) : null}
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
@@ -976,6 +1034,164 @@ export function ListingDetail({
         title={listing ? listing.label : listingId}
         sandbox="allow-same-origin allow-scripts"
       />
+      {snapshotIngestOpen && listing && (
+        <Dialog
+          open={snapshotIngestOpen}
+          onClose={() => {
+            if (snapshotIngestBusy) return
+            setSnapshotIngestOpen(false)
+          }}
+          fullWidth
+          maxWidth="sm"
+          slotProps={{
+            paper: {
+              sx: {
+                borderRadius: 3,
+                border: '1px solid',
+                borderColor: 'divider',
+                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
+              },
+            },
+            backdrop: {
+              sx: {
+                backdropFilter: 'blur(2px)',
+                backgroundColor: 'rgba(15, 23, 42, 0.45)',
+              },
+            },
+          }}
+        >
+          <DialogTitle sx={{ pb: 1.5 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+              <Box>
+                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
+                  Ingest snapshot zip
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Chrome → Save Page As → Webpage, Complete. Zip the HTML + the assets folder.
+                </Typography>
+              </Box>
+              <Chip
+                label={`ASIN ${listing.asin}`}
+                size="small"
+                color="primary"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            </Stack>
+          </DialogTitle>
+          <DialogContent dividers sx={{ py: 2.5 }}>
+            <Stack spacing={1.5}>
+              <Stack spacing={1}>
+                <MuiButton component="label" variant="outlined" sx={{ alignSelf: 'flex-start', fontWeight: 600 }}>
+                  Choose zip
+                  <input
+                    hidden
+                    type="file"
+                    accept=".zip,application/zip"
+                    onChange={(event) => {
+                      setSnapshotIngestError(null)
+                      const file = event.target.files?.[0] ?? null
+                      setSnapshotIngestFile(file)
+                    }}
+                  />
+                </MuiButton>
+                <Typography
+                  variant="caption"
+                  sx={{ fontFamily: 'var(--font-mono)', color: snapshotIngestFile ? 'text.primary' : 'text.secondary' }}
+                >
+                  {snapshotIngestFile
+                    ? `${snapshotIngestFile.name} (${formatBytes(snapshotIngestFile.size)})`
+                    : `Max zip size: ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}`}
+                </Typography>
+              </Stack>
+
+              {snapshotIngestError ? (
+                <Typography variant="caption" color="error">
+                  {snapshotIngestError}
+                </Typography>
+              ) : null}
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <MuiButton
+              type="button"
+              variant="text"
+              color="inherit"
+              disabled={snapshotIngestBusy}
+              onClick={() => setSnapshotIngestOpen(false)}
+            >
+              Cancel
+            </MuiButton>
+            <MuiButton
+              type="button"
+              variant="contained"
+              disabled={!snapshotIngestFile || snapshotIngestBusy}
+              sx={{ px: 2.5, fontWeight: 600 }}
+              onClick={async () => {
+                const file = snapshotIngestFile
+                if (!file) return
+                if (file.size > SNAPSHOT_ZIP_MAX_UPLOAD_BYTES) {
+                  setSnapshotIngestError(
+                    `“${file.name}” is ${formatBytes(file.size)}. Max zip size is ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}.`,
+                  )
+                  return
+                }
+
+                setSnapshotIngestBusy(true)
+                setSnapshotIngestError(null)
+
+                try {
+                  const formData = new FormData()
+                  formData.append('snapshot', file)
+
+                  const res = await fetch(`${basePath}/api/listings/${listing.id}/ingest`, {
+                    method: 'POST',
+                    body: formData,
+                  })
+
+                  const text = await res.text()
+                  if (!res.ok) {
+                    let message = text
+                    try {
+                      const parsed = JSON.parse(text) as { error?: unknown }
+                      if (typeof parsed?.error === 'string' && parsed.error.trim().length > 0) {
+                        message = parsed.error
+                      }
+                    } catch {
+                      // no-op
+                    }
+                    if (message && message.trim().length > 0) {
+                      setSnapshotIngestError(message)
+                    } else {
+                      setSnapshotIngestError('Snapshot ingest failed.')
+                    }
+                    return
+                  }
+
+                  try {
+                    const parsed = JSON.parse(text) as { changes?: unknown }
+                    if (Array.isArray(parsed?.changes) && parsed.changes.length > 0) {
+                      window.alert(`Ingested snapshot:\\n${parsed.changes.join('\\n')}`)
+                    } else {
+                      window.alert('Ingested snapshot (no content changes detected).')
+                    }
+                  } catch {
+                    window.alert('Ingested snapshot.')
+                  }
+
+                  setSnapshotIngestOpen(false)
+                  setSnapshotIngestFile(null)
+                  setRefreshKey((current) => current + 1)
+                } finally {
+                  setSnapshotIngestBusy(false)
+                }
+              }}
+            >
+              {snapshotIngestBusy ? 'Ingesting...' : 'Ingest'}
+            </MuiButton>
+          </DialogActions>
+        </Dialog>
+      )}
       {titleEditorOpen && listing && (
         <Dialog
           open={titleEditorOpen}
@@ -2093,9 +2309,11 @@ function injectArgusVersionControls(
         gap: 6px;
         padding: 4px 6px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.92);
+        background: rgba(255, 255, 255, 0.98);
         border: 1px solid rgba(180, 180, 180, 0.9);
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
         z-index: 2147483647;
         font-family: Arial, sans-serif;
         font-size: 12px;
