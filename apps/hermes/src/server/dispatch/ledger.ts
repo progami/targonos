@@ -2,6 +2,7 @@ import crypto from "crypto";
 
 // NOTE: use relative imports so this module can run both in Next.js and in a standalone worker.
 import { getPgPool } from "../db/pool";
+import { isReviewRequestMarketplaceEnabled } from "../../lib/amazon/policy";
 
 export type DispatchType = "request_review" | "buyer_message";
 
@@ -63,6 +64,10 @@ export async function queueRequestReview(params: {
   templateId?: string | null;
   metadata?: unknown;
 }): Promise<QueueResult> {
+  if (!isReviewRequestMarketplaceEnabled(params.marketplaceId)) {
+    throw new Error("Review requests are disabled for US marketplace orders.");
+  }
+
   const pool = getPgPool();
   const id = newId();
   const scheduledAt = params.scheduledAt ?? new Date();

@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { isReviewRequestMarketplaceEnabled } from "@/lib/amazon/policy";
 import { hermesApiUrl } from "@/lib/base-path";
 import { useConnectionsStore } from "@/stores/connections-store";
 import { useHermesUiPreferencesStore, type OrdersPreferences } from "@/stores/ui-preferences-store";
@@ -234,6 +235,24 @@ export function OrdersClient() {
   const cancelRef = React.useRef(false);
   const [syncNote, setSyncNote] = React.useState<string | null>(null);
 
+  const backfillMarketplaceId = connection?.marketplaceIds[0] ?? "";
+  const backfillReviewRequestsEnabled =
+    backfillMarketplaceId.length > 0 && isReviewRequestMarketplaceEnabled(backfillMarketplaceId);
+  const detailsReviewRequestsEnabled = detailsOrder ? isReviewRequestMarketplaceEnabled(detailsOrder.marketplaceId) : false;
+  let detailsRequeueTitle: string | undefined;
+  if (!detailsReviewRequestsEnabled) {
+    detailsRequeueTitle = "US review requests are disabled";
+  } else if (detailsOrder?.dispatchState === "sending") {
+    detailsRequeueTitle = "Cannot requeue while sending";
+  }
+
+  let detailsDispatchHint = "Creates a review-request dispatch (worker sends asynchronously).";
+  if (!detailsReviewRequestsEnabled) {
+    detailsDispatchHint = "US review requests are disabled for this order.";
+  } else if (detailsOrder?.dispatchId) {
+    detailsDispatchHint = "Applies to this order’s review-request dispatch.";
+  }
+
   React.useEffect(() => {
     // Keep date inputs in sync with preset.
     setCreatedAfter(isoDaysAgo(presetDays));
@@ -385,6 +404,10 @@ export function OrdersClient() {
     if (!detailsOrder) return;
     if (!connectionId) return;
     if (detailsOrder.dispatchId) return;
+    if (!detailsReviewRequestsEnabled) {
+      toast.error("Review requests are disabled for US marketplace orders");
+      return;
+    }
 
     setDetailsActionLoading("queue");
     try {
@@ -533,7 +556,7 @@ export function OrdersClient() {
         const body: any = {
           connectionId,
           marketplaceId,
-          enqueueReviewRequests: enqueue,
+          enqueueReviewRequests: enqueue && backfillReviewRequestsEnabled,
           schedule: {
             delayDays,
             windowEnabled,
@@ -752,9 +775,18 @@ export function OrdersClient() {
                     <div className="flex items-center justify-between rounded-md border p-3">
                       <div className="flex items-center gap-2">
                         <Send className="h-4 w-4" />
-                        <div className="text-sm font-medium">Queue eligible orders</div>
+                        <div>
+                          <div className="text-sm font-medium">Queue eligible orders</div>
+                          {!backfillReviewRequestsEnabled && backfillMarketplaceId ? (
+                            <div className="text-xs text-muted-foreground">US review requests are disabled.</div>
+                          ) : null}
+                        </div>
                       </div>
-                      <Switch checked={enqueue} onCheckedChange={setEnqueue} />
+                      <Switch
+                        checked={backfillReviewRequestsEnabled && enqueue}
+                        onCheckedChange={setEnqueue}
+                        disabled={!backfillReviewRequestsEnabled}
+                      />
                     </div>
                   </div>
 
@@ -1119,8 +1151,13 @@ export function OrdersClient() {
                       type="button"
                       size="sm"
                       variant="secondary"
-                      disabled={detailsActionLoading !== null || detailsOrder.dispatchState === "sent" || detailsOrder.dispatchState === "sending"}
-                      title={(detailsOrder.dispatchState === "sending") ? "Cannot requeue while sending" : undefined}
+                      disabled={
+                        detailsActionLoading !== null ||
+                        detailsOrder.dispatchState === "sent" ||
+                        detailsOrder.dispatchState === "sending" ||
+                        !detailsReviewRequestsEnabled
+                      }
+                      title={detailsRequeueTitle}
                       onClick={requeueDetailsDispatchNow}
                     >
                       {detailsActionLoading === "requeue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
@@ -1143,16 +1180,14 @@ export function OrdersClient() {
                     type="button"
                     size="sm"
                     variant="secondary"
-                    disabled={detailsActionLoading !== null}
+                    disabled={detailsActionLoading !== null || !detailsReviewRequestsEnabled}
                     onClick={queueReviewRequestForDetailsOrder}
                   >
                     {detailsActionLoading === "queue" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                    Queue review request
+                    {detailsReviewRequestsEnabled ? "Queue review request" : "Review requests disabled"}
                   </Button>
                 )}
-                <span className="text-xs text-muted-foreground">
-                  {detailsOrder.dispatchId ? "Applies to this order’s review-request dispatch." : "Creates a review-request dispatch (worker sends asynchronously)."}
-                </span>
+                <span className="text-xs text-muted-foreground">{detailsDispatchHint}</span>
               </div>
 
               <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-4">

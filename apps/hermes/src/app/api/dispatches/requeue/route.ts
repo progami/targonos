@@ -5,6 +5,7 @@ import { withApiLogging } from "@/server/api-logging";
 import { maybeAutoMigrate } from "@/server/db/migrate";
 import { getPgPool } from "@/server/db/pool";
 import { isHermesDryRun } from "@/server/env/flags";
+import { isReviewRequestMarketplaceEnabled } from "@/lib/amazon/policy";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,25 @@ async function handlePost(req: Request) {
   }
 
   const pool = getPgPool();
+  const dispatchRes = await pool.query<{ marketplace_id: string }>(
+    `
+    SELECT marketplace_id
+      FROM hermes_dispatches
+     WHERE id = $1
+       AND connection_id = $2
+       AND type = 'request_review'
+     LIMIT 1;
+    `,
+    [parsed.data.dispatchId, parsed.data.connectionId]
+  );
+  const dispatchRow = dispatchRes.rows[0];
+  if (dispatchRow && !isReviewRequestMarketplaceEnabled(dispatchRow.marketplace_id)) {
+    return NextResponse.json(
+      { ok: false, error: "Review requests are disabled for US marketplace orders." },
+      { status: 409 }
+    );
+  }
+
   const res = await pool.query<{
     id: string;
     state: string;

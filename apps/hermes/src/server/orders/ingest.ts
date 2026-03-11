@@ -1,5 +1,6 @@
 import crypto from "crypto";
 
+import { AMAZON_US_MARKETPLACE_ID, isReviewRequestMarketplaceEnabled } from "../../lib/amazon/policy";
 import { getPgPool } from "../db/pool";
 import { isOrderRefundedOrReturned } from "./review-eligibility";
 
@@ -269,6 +270,10 @@ export async function enqueueRequestReviewsForOrders(params: {
   }> = [];
 
   for (const o of params.orders) {
+    if (!isReviewRequestMarketplaceEnabled(o.marketplaceId)) {
+      continue;
+    }
+
     if (typeof o.orderStatus === "string") {
       const s = o.orderStatus.trim();
       if (s !== "Shipped" && s !== "PartiallyShipped") {
@@ -403,11 +408,12 @@ export async function listShippedOrdersMissingDispatch(params: {
      AND d.type = 'request_review'
     WHERE o.connection_id = $1
       AND o.order_status IN ('Shipped', 'PartiallyShipped')
+      AND o.marketplace_id <> $3
       AND d.id IS NULL
     ORDER BY COALESCE(o.latest_delivery_date, o.earliest_delivery_date, o.latest_ship_date, o.purchase_date) DESC NULLS LAST
     LIMIT $2;
     `,
-    [params.connectionId, limit]
+    [params.connectionId, limit, AMAZON_US_MARKETPLACE_ID]
   );
 
   return res.rows.map((row) => ({

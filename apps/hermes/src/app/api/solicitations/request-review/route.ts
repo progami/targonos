@@ -6,6 +6,7 @@ import { queueRequestReview } from "@/server/dispatch/ledger";
 import { withApiLogging } from "@/server/api-logging";
 import { isHermesDryRun } from "@/server/env/flags";
 import { isOrderRefundedOrReturned } from "@/server/orders/review-eligibility";
+import { isReviewRequestMarketplaceEnabled } from "@/lib/amazon/policy";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,13 @@ async function handlePost(req: Request) {
   }
 
   try {
+    if (!isReviewRequestMarketplaceEnabled(parsed.data.marketplaceId)) {
+      return NextResponse.json(
+        { ok: false, error: "Review requests are disabled for US marketplace orders." },
+        { status: 409 }
+      );
+    }
+
     const pool = getPgPool();
     const orderRes = await pool.query<{ order_status: string | null; raw: unknown }>(
       `
