@@ -56,6 +56,7 @@ export async function middleware(request: NextRequest) {
   const isPublic =
     normalizedPath === '/no-access' ||
     normalizedPath === '/api/health' ||
+    normalizedPath === '/api/tracking/fetch' ||
     normalizedPath.startsWith('/_next') ||
     normalizedPath === '/favicon.ico' ||
     normalizedPath === '/favicon.svg'
@@ -121,4 +122,3 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
-

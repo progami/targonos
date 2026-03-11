@@ -38,6 +38,7 @@ import {
   OwnerChip,
   SeverityChip,
   formatCount,
+  formatDate,
   formatDateTime,
   formatMoney,
   humanizeFieldName,
@@ -254,7 +255,7 @@ export default function TrackingDetailPage() {
                             data={filteredSnapshots
                               .filter((item) => item.landedPrice !== null)
                               .map((item) => ({
-                                label: new Date(item.capturedAt).toLocaleDateString(),
+                                label: formatDate(item.capturedAt),
                                 value: item.landedPrice,
                               }))}
                           >
@@ -298,7 +299,7 @@ export default function TrackingDetailPage() {
                             data={filteredSnapshots
                               .filter((item) => item.rootBsrRank !== null)
                               .map((item) => ({
-                                label: new Date(item.capturedAt).toLocaleDateString(),
+                                label: formatDate(item.capturedAt),
                                 value: item.rootBsrRank,
                               }))}
                           >

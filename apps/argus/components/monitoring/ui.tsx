@@ -160,7 +160,28 @@ export function formatMoney(value: number | null, currency: string | null): stri
 
 export function formatDateTime(value: string | null): string {
   if (!value) return '—'
-  return new Date(value).toLocaleString()
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Invalid Date'
+
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+
+  return `${formatDate(value)} ${time}`
+}
+
+export function formatDate(value: string | null): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Invalid Date'
+
+  const month = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date)
+  const day = date.getDate()
+  const year = date.getFullYear()
+
+  return `${month} ${day}${ordinalSuffix(day)} ${year}`
 }
 
 export function formatCount(value: number | null): string {
@@ -185,5 +206,21 @@ function getSeverityPalette(severity: MonitoringSeverity) {
       return { main: '#7f5f00' }
     case 'low':
       return { main: '#41576d' }
+  }
+}
+
+function ordinalSuffix(value: number): string {
+  const remainder100 = value % 100
+  if (remainder100 >= 11 && remainder100 <= 13) return 'th'
+
+  switch (value % 10) {
+    case 1:
+      return 'st'
+    case 2:
+      return 'nd'
+    case 3:
+      return 'rd'
+    default:
+      return 'th'
   }
 }
