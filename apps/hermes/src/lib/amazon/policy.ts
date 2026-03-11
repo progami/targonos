@@ -10,6 +10,7 @@
 
 export const DEFAULT_EARLIEST_DAYS_AFTER_DELIVERY = 5;
 export const DEFAULT_LATEST_DAYS_AFTER_DELIVERY = 30;
+export const AMAZON_US_MARKETPLACE_ID = "ATVPDKIKX0DER";
 
 export function computeDefaultEligibilityWindow(deliveredAt: Date) {
   const earliest = new Date(deliveredAt);
@@ -23,4 +24,8 @@ export function computeDefaultEligibilityWindow(deliveredAt: Date) {
 
 export function isWithinWindow(now: Date, window: { earliest: Date; latest: Date }) {
   return now.getTime() >= window.earliest.getTime() && now.getTime() <= window.latest.getTime();
+}
+
+export function isReviewRequestMarketplaceEnabled(marketplaceId: string): boolean {
+  return marketplaceId.trim() !== AMAZON_US_MARKETPLACE_ID;
 }
