@@ -11,7 +11,7 @@ const LOG = '/tmp/daily-visuals.log'
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
-const CAPTURE_CHILD_TIMEOUT_MS = 150_000
+const CAPTURE_CHILD_TIMEOUT_MS = 210_000
 
 function log(message) {
   fs.appendFileSync(LOG, `${timestamp()} — ${message}\n`)

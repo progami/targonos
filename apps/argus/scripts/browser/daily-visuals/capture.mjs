@@ -6,7 +6,8 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { chromium } from 'playwright'
 
-const CAPTURE_TIMEOUT_MS = 120_000
+const CAPTURE_TIMEOUT_MS = 180_000
+const AUTOSCROLL_MAX_MS = 25_000
 
 function argValue(flag) {
   const index = process.argv.indexOf(flag)
@@ -20,20 +21,25 @@ function requiredArg(name, value) {
 }
 
 async function autoScroll(page) {
-  await page.evaluate(async () => {
+  await page.evaluate(async (maxDurationMs) => {
     await new Promise((resolve) => {
-      let totalHeight = 0
-      const distance = Math.max(400, Math.floor(window.innerHeight * 0.8))
+      const start = Date.now()
+      const distance = Math.max(600, Math.floor(window.innerHeight * 0.9))
+      let lastScrollTop = window.scrollY
       const timer = window.setInterval(() => {
         window.scrollBy(0, distance)
-        totalHeight += distance
-        if (totalHeight >= document.body.scrollHeight - window.innerHeight) {
+        const scrollTop = window.scrollY
+        const reachedBottom = scrollTop + window.innerHeight >= document.body.scrollHeight - 2
+        const stalled = scrollTop === lastScrollTop
+        lastScrollTop = scrollTop
+
+        if (reachedBottom || stalled || Date.now() - start >= maxDurationMs) {
           window.clearInterval(timer)
           resolve(undefined)
         }
-      }, 450)
+      }, 250)
     })
-  })
+  }, AUTOSCROLL_MAX_MS)
 }
 
 function killChromeForUserDataDir(userDataDir) {
@@ -62,7 +68,15 @@ async function main() {
   const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-daily-visuals-'))
+  let timeoutId
   try {
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Capture timed out after ${CAPTURE_TIMEOUT_MS}ms for ${asin}`))
+      }, CAPTURE_TIMEOUT_MS)
+      if (typeof timeoutId.unref === 'function') timeoutId.unref()
+    })
+
     await Promise.race([
       (async () => {
         const context = await chromium.launchPersistentContext(userDataDir, {
@@ -78,6 +92,11 @@ async function main() {
           page.setDefaultTimeout(90_000)
           page.setDefaultNavigationTimeout(90_000)
 
+          await page.route('**/*', (route) => {
+            if (route.request().resourceType() === 'media') return route.abort()
+            return route.continue()
+          })
+
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 })
           await page.waitForSelector('#productTitle', { timeout: 60_000 })
 
@@ -90,13 +109,10 @@ async function main() {
           await context.close().catch(() => {})
         }
       })(),
-      new Promise((_, reject) => {
-        setTimeout(() => {
-          reject(new Error(`Capture timed out after ${CAPTURE_TIMEOUT_MS}ms for ${asin}`))
-        }, CAPTURE_TIMEOUT_MS)
-      }),
+      timeoutPromise,
     ])
   } finally {
+    clearTimeout(timeoutId)
     killChromeForUserDataDir(userDataDir)
     fs.rmSync(userDataDir, { recursive: true, force: true })
   }
