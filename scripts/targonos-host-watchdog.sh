@@ -121,6 +121,27 @@ ensure_pm2_processes_healthy() {
   done
 }
 
+ensure_pm2_http_endpoint_healthy() {
+  local pm_name="$1"
+  local url="$2"
+
+  if check_http_not_5xx "$url"; then
+    return 0
+  fi
+
+  log "pm2 restarting: ${pm_name} (endpoint unhealthy: ${url})"
+  pm2 restart "$pm_name" --update-env >/dev/null
+
+  sleep 3
+
+  check_http_not_5xx "$url"
+}
+
+ensure_internal_services_healthy() {
+  ensure_pm2_http_endpoint_healthy "main-kairos-ml" "http://127.0.0.1:3011/healthz" || exit 1
+  ensure_pm2_http_endpoint_healthy "dev-kairos-ml" "http://127.0.0.1:3111/healthz" || exit 1
+}
+
 check_http_not_5xx() {
   local url="$1"
   local code rc
@@ -246,6 +267,7 @@ main() {
   ensure_pm2_alive
   ensure_no_deploy_lock
   ensure_pm2_processes_healthy
+  ensure_internal_services_healthy
   check_nginx_routes
 }
 
