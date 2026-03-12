@@ -425,7 +425,7 @@ export default function SettingsPage() {
                 Autopost
               </Typography>
               <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                Automatically process settlements that have matching audit data.
+                Automatically process settlements after the background sync imports new Amazon settlements and matching audit data is available.
               </Typography>
 
               <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5 }}>

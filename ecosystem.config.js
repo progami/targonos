@@ -140,6 +140,24 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
+      name: 'dev-plutus-settlement-sync',
+      cwd: path.join(DEV_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/settlement-sync-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '0',
+        PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
+        PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
       name: 'dev-hermes',
       cwd: path.join(DEV_DIR, 'apps/hermes'),
       script: 'node_modules/next/dist/bin/next',
@@ -306,6 +324,24 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1',
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
+      },
+      autorestart: true,
+      watch: false,
+      max_memory_restart: '300M'
+    },
+    {
+      name: 'main-plutus-settlement-sync',
+      cwd: path.join(MAIN_DIR, 'apps/plutus'),
+      script: 'node_modules/.bin/tsx',
+      args: 'scripts/settlement-sync-worker.ts',
+      interpreter: 'none',
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '1',
+        PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
+        PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
         PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
       },
       autorestart: true,

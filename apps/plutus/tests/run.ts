@@ -49,6 +49,10 @@ import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified
 import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
 import { buildUkSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/uk-settlement-builder';
 import {
+  buildSyntheticUkSettlementId,
+  extractEventGroupIdFromSyntheticUkSettlementId,
+} from '../lib/amazon-finances/uk-settlement-id';
+import {
   buildSettlementAuditCsvBytes,
   buildSettlementAuditFilename,
   buildSettlementFullAuditTrailCsvBytes,
@@ -140,6 +144,16 @@ test('extractSourceSettlementIdFromPrivateNote falls back to audit rebuild sourc
     ),
     'UK-251205-260102-S1',
   );
+});
+
+test('buildSyntheticUkSettlementId and extractEventGroupIdFromSyntheticUkSettlementId round-trip opaque group ids', () => {
+  const settlementId = buildSyntheticUkSettlementId('qQC9cUJ2CXKttlN6XhO9yHqPd7Yz8LTTsB7biek6vM4');
+  assert.equal(settlementId, 'EG-qQC9cUJ2CXKttlN6XhO9yHqPd7Yz8LTTsB7biek6vM4');
+  assert.equal(
+    extractEventGroupIdFromSyntheticUkSettlementId(settlementId),
+    'qQC9cUJ2CXKttlN6XhO9yHqPd7Yz8LTTsB7biek6vM4',
+  );
+  assert.equal(extractEventGroupIdFromSyntheticUkSettlementId('26583430662'), null);
 });
 
 test('groupSettlementChildren collapses split postings into one parent settlement', () => {

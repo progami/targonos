@@ -29,6 +29,10 @@ import {
   type QboJournalEntry,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import {
+  buildSyntheticUkSettlementId,
+  extractEventGroupIdFromSyntheticUkSettlementId,
+} from '@/lib/amazon-finances/uk-settlement-id';
 
 type SettlementDraftBundle = {
   settlementId: string;
@@ -478,12 +482,15 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   if (settlementIds.length > 0) {
     settlementToGroupId = new Map<string, string>();
     for (const settlementId of Array.from(new Set(settlementIds)).sort()) {
-      const eventGroupId = await findFinancialEventGroupIdForSettlementId({
-        tenantCode: 'UK',
-        settlementId,
-        postedAfterIso,
-        postedBeforeIso,
-      });
+      const syntheticEventGroupId = extractEventGroupIdFromSyntheticUkSettlementId(settlementId);
+      const eventGroupId = syntheticEventGroupId
+        ? syntheticEventGroupId
+        : await findFinancialEventGroupIdForSettlementId({
+            tenantCode: 'UK',
+            settlementId,
+            postedAfterIso,
+            postedBeforeIso,
+          });
       settlementToGroupId.set(settlementId, eventGroupId);
     }
   } else {
@@ -505,7 +512,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
       if (endMs > postedBeforeMs) continue;
 
       // Synthetic settlement id: stable, unique, and still shows the canonical SP-API group id in the result.
-      settlementToGroupId.set(`EG-${groupId}`, groupId);
+      settlementToGroupId.set(buildSyntheticUkSettlementId(groupId), groupId);
     }
   }
 
