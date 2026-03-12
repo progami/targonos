@@ -5,7 +5,6 @@ SELECT set_config('portal.external_role', :'external_role', false);
 DO $do$
 DECLARE
   external_role text := current_setting('portal.external_role');
-  talos_role text := 'portal_talos';
   schema_record record;
   relation_record record;
   type_record record;
@@ -105,28 +104,13 @@ BEGIN
       );
     END LOOP;
 
+    -- FK checks can execute under the owning role; keep owner access explicit.
+    EXECUTE format('GRANT USAGE ON SCHEMA %I TO %I', schema_record.schema_name, schema_record.owner_role);
+    EXECUTE format('GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA %I TO %I', schema_record.schema_name, schema_record.owner_role);
+    EXECUTE format('GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %I TO %I', schema_record.schema_name, schema_record.owner_role);
+    EXECUTE format('GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA %I TO %I', schema_record.schema_name, schema_record.owner_role);
     EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %I', schema_record.schema_name, external_role);
   END LOOP;
-
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = talos_role) THEN
-    FOR schema_record IN
-      SELECT m.schema_name
-      FROM (
-        VALUES
-          ('dev_talos_us'),
-          ('dev_talos_uk'),
-          ('main_talos_us'),
-          ('main_talos_uk')
-      ) AS m(schema_name)
-      JOIN pg_namespace n ON n.nspname = m.schema_name
-    LOOP
-      EXECUTE format('REVOKE USAGE ON SCHEMA %I FROM %I', schema_record.schema_name, talos_role);
-      EXECUTE format('REVOKE CREATE ON SCHEMA %I FROM %I', schema_record.schema_name, talos_role);
-      EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA %I FROM %I', schema_record.schema_name, talos_role);
-      EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA %I FROM %I', schema_record.schema_name, talos_role);
-      EXECUTE format('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA %I FROM %I', schema_record.schema_name, talos_role);
-    END LOOP;
-  END IF;
 
   EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), external_role);
   EXECUTE format('REVOKE CREATE ON SCHEMA public FROM %I', external_role);
