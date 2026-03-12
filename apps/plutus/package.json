@@ -15,6 +15,7 @@
     "format:write": "prettier --write \"{app,components,lib}/**/*.{ts,tsx,mdx}\"",
     "qbo": "tsx scripts/qbo.ts",
     "autopost:check": "tsx scripts/autopost-check.ts",
+    "settlements:auto-sync:worker": "tsx scripts/settlement-sync-worker.ts",
     "settlements:us:rematch": "tsx scripts/us-settlement-rematch.ts",
     "settlements:us:reconcile:spapi": "tsx scripts/us-settlement-reconcile-spapi.ts",
     "settlements:us:ingest:spapi": "tsx scripts/us-settlement-ingest-spapi.ts",

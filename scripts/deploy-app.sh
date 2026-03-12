@@ -806,6 +806,15 @@ if [[ "$app_key" == "hermes" ]]; then
   done
 fi
 
+if [[ "$app_key" == "plutus" ]]; then
+  plutus_workers=("${PM2_PREFIX}-plutus-cashflow-refresh" "${PM2_PREFIX}-plutus-settlement-sync")
+  for worker in "${plutus_workers[@]}"; do
+    log "Step 7: Starting $worker"
+    start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
+    log "$worker started and verified"
+  done
+fi
+
 # Step 8: Save PM2 state
 if is_truthy "$skip_pm2_save"; then
   log "Step 8: Skipping PM2 save (DEPLOY_SKIP_PM2_SAVE=$skip_pm2_save)"
