@@ -2,7 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { getCompetitivePricing, getCatalogItemWithRanks } from '@/lib/sp-api'
 
+function extractBearerToken(header: string | null): string | null {
+  if (!header) return null
+  const match = header.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() ? match[1].trim() : null
+}
+
+function requireCronAuth(request: NextRequest): NextResponse | null {
+  const expected = process.env.ARGUS_TRACKING_FETCH_TOKEN?.trim()
+  if (!expected) {
+    return NextResponse.json({ error: 'Missing ARGUS_TRACKING_FETCH_TOKEN' }, { status: 500 })
+  }
+
+  const provided = extractBearerToken(request.headers.get('authorization'))
+  if (!provided || provided !== expected) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  return null
+}
+
 export async function POST(request: NextRequest) {
+  const authError = requireCronAuth(request)
+  if (authError) return authError
+
   const body = await request.json().catch(() => ({}))
   const triggeredBy = (body as { triggeredBy?: string }).triggeredBy ?? 'manual'
 

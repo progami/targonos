@@ -1,8 +1,7 @@
 #!/bin/bash
 # Install launchd plists for browser-automated Argus collectors:
-#   1. Session keepalive — SC + ScaleInsights + Ads (every 55 min)
-#   2. Weekly browser sources collection (Monday 3 AM CT)
-#   3. Daily Visuals screenshot collector (3:30 AM CT daily)
+#   1. Weekly browser sources collection in Safari (Monday 3 AM CT)
+#   2. Daily Visuals screenshot collector (3:30 AM CT daily)
 #
 # Usage: bash apps/argus/scripts/browser/install.sh
 # To uninstall: bash apps/argus/scripts/browser/install.sh --uninstall
@@ -13,7 +12,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
-KEEPALIVE_PLIST="$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-browser-sources.plist"
 DAILY_VISUALS_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-visuals.plist"
 LEGACY_DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
@@ -32,9 +30,9 @@ cleanup_legacy_daily_account_health_agent() {
 }
 
 # Make all scripts executable
-chmod +x "$SCRIPT_DIR/keepalive.sh"
 chmod +x "$SCRIPT_DIR/relogin.sh"
 chmod +x "$SCRIPT_DIR/run-weekly.sh"
+chmod +x "$SCRIPT_DIR/common.sh"
 chmod +x "$SCRIPT_DIR/weekly-category-insights/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-poe/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-scaleinsights/collect.sh"
@@ -43,10 +41,10 @@ chmod +x "$SCRIPT_DIR/daily-visuals/collect.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling browser launchd agents..."
-  launchctl unload "$KEEPALIVE_PLIST" 2>/dev/null || true
   launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
   launchctl unload "$DAILY_VISUALS_PLIST" 2>/dev/null || true
-  rm -f "$KEEPALIVE_PLIST" "$WEEKLY_PLIST" "$DAILY_VISUALS_PLIST"
+  launchctl unload "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
+  rm -f "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" "$WEEKLY_PLIST" "$DAILY_VISUALS_PLIST"
   cleanup_legacy_daily_account_health_agent
   echo "Done. All browser agents removed."
   exit 0
@@ -54,32 +52,7 @@ fi
 
 echo "Installing browser launchd agents..."
 
-# 1. Keepalive — every 55 minutes (SC + ScaleInsights + Ads)
-cat > "$KEEPALIVE_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.targon.sc-keepalive</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/bin/bash</string>
-    <string>${SCRIPT_DIR}/keepalive.sh</string>
-  </array>
-  <key>StartInterval</key>
-  <integer>3300</integer>
-  <key>RunAtLoad</key>
-  <false/>
-  <key>StandardOutPath</key>
-  <string>/tmp/sc-keepalive-stdout.log</string>
-  <key>StandardErrorPath</key>
-  <string>/tmp/sc-keepalive-stderr.log</string>
-</dict>
-</plist>
-PLIST
-
-# 2. Weekly browser sources — Monday 3:00 AM CT
+# 1. Weekly browser sources — Monday 3:00 AM CT
 cat > "$WEEKLY_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -111,7 +84,7 @@ cat > "$WEEKLY_PLIST" <<PLIST
 </plist>
 PLIST
 
-# 3. Daily Visuals — 3:30 AM CT daily
+# 2. Daily Visuals — 3:30 AM CT daily
 cat > "$DAILY_VISUALS_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -142,31 +115,30 @@ cat > "$DAILY_VISUALS_PLIST" <<PLIST
 PLIST
 
 # Load the agents
-launchctl unload "$KEEPALIVE_PLIST" 2>/dev/null || true
 launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
 launchctl unload "$DAILY_VISUALS_PLIST" 2>/dev/null || true
+launchctl unload "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
 # Unload old agents that may still be registered
 launchctl unload "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist" 2>/dev/null || true
 launchctl unload "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist" 2>/dev/null || true
+rm -f "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 rm -f "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist"
 rm -f "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist"
 cleanup_legacy_daily_account_health_agent
 
-launchctl load "$KEEPALIVE_PLIST"
 launchctl load "$WEEKLY_PLIST"
 launchctl load "$DAILY_VISUALS_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Keepalive:         $KEEPALIVE_PLIST (every 55 min)"
-echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT)"
+echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT, Safari)"
 echo "  Daily Visuals:     $DAILY_VISUALS_PLIST (daily 3:30 AM CT)"
 echo ""
 echo "Weekly master runner calls:"
 echo "  1. weekly-category-insights (text extraction)"
 echo "  2. weekly-poe (CSV download)"
 echo "  3. weekly-scaleinsights (XLSX export)"
-echo "  4. weekly-brand-metrics (CSV download)"
+echo "  4. weekly-brand-metrics (text capture)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
@@ -175,6 +147,5 @@ echo "To uninstall:"
 echo "  bash $SCRIPT_DIR/install.sh --uninstall"
 echo ""
 echo "Logs:"
-echo "  Keepalive:       /tmp/sc-keepalive.log"
 echo "  Weekly:          /tmp/weekly-browser-sources.log"
 echo "  Daily Visuals:   /tmp/daily-visuals.log"

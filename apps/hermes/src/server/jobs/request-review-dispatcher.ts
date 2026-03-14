@@ -37,6 +37,7 @@ import {
 import { isHermesDryRun } from "../env/flags";
 import { loadHermesEnv } from "./load-env";
 import { isOrderRefundedOrReturned } from "../orders/review-eligibility";
+import { isReviewRequestMarketplaceEnabled } from "../../lib/amazon/policy";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -237,6 +238,19 @@ async function processDispatch(row: DispatchRow, opts: {
   // never attempt to send again.
   if (await hasSentAttempt(row.id)) {
     await markDispatchSent(row.id);
+    return;
+  }
+
+  if (!isReviewRequestMarketplaceEnabled(row.marketplace_id)) {
+    const attemptNo = await getAttemptNo(row.id);
+    await appendAttempt({
+      dispatchId: row.id,
+      attemptNo,
+      status: "ineligible",
+      errorCode: "MARKETPLACE_DISABLED",
+      errorMessage: "Review requests are disabled for US marketplace orders.",
+    });
+    await markDispatchSkipped(row.id, "marketplace_disabled");
     return;
   }
 

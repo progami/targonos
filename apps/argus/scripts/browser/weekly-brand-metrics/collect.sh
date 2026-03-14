@@ -1,100 +1,72 @@
 #!/bin/bash
-# Weekly Brand Metrics CSV Download
-# Navigates to Amazon Advertising Brand Metrics page with date params,
-# clicks Export, saves CSV to Google Drive.
-# Runs Monday 3 AM CT via launchd (called by run-weekly.sh).
-#
-# Supports override: bash collect.sh 2026-02-02 2026-02-08
-# (pass startDate endDate to backfill a specific week)
+# Weekly Brand Metrics text capture via Safari.
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Ad Console/Brand Metrics"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../common.sh"
+
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/Brand Metrics"
 DL="$HOME/Downloads"
 LOG="/tmp/weekly-brand-metrics.log"
 
-EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
-
-# Allow date override for backfill: collect.sh <startDate> <endDate>
-if [ $# -eq 2 ]; then
+if [ "$#" -eq 2 ]; then
   START_DATE="$1"
   END_DATE="$2"
-  EPOCH_END=$(date -j -f '%Y-%m-%d' "$END_DATE" '+%s')
-  WEEKS=$(( (EPOCH_END - EPOCH_START) / 604800 + 1 ))
-  WEEK_NUM=$(printf "W%02d" $WEEKS)
-  PREFIX="${WEEK_NUM}_${END_DATE}"
+  IFS='|' read -r WEEK_NUM _ _ PREFIX <<<"$(week_context_for_end_date "$END_DATE")"
 else
-  # Previous week: Sunday to Saturday
-  LAST_SAT=$(date -v-sat '+%Y-%m-%d')
-  LAST_SUN=$(date -j -v-6d -f '%Y-%m-%d' "$LAST_SAT" '+%Y-%m-%d')
-  START_DATE="$LAST_SUN"
-  END_DATE="$LAST_SAT"
-  EPOCH_SAT=$(date -j -f '%Y-%m-%d' "$LAST_SAT" '+%s')
-  WEEKS=$(( (EPOCH_SAT - EPOCH_START) / 604800 + 1 ))
-  WEEK_NUM=$(printf "W%02d" $WEEKS)
-  PREFIX="${WEEK_NUM}_${LAST_SAT}"
+  IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 fi
+
+TARGET_URL="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899&startDate=${START_DATE}&endDate=${END_DATE}"
+
+mkdir -p "$DEST"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+run_js() { osascript "$SAFARI_HELPER" run-js "$1" "$2" "$3"; }
+wait_tab() { osascript "$SAFARI_HELPER" wait-tab "$1" "$2" >/dev/null; }
+tab_url() { osascript "$SAFARI_HELPER" get-url "$1" "$2"; }
+
 log "Starting weekly Brand Metrics: $PREFIX ($START_DATE to $END_DATE)"
 
-if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
-  log "ABORT: Chrome not running"; exit 1
-fi
-
-# Find the Advertising tab and navigate (don't hijack the SC tab)
-# Must use window.location.href via JS to force full page reload (SPA ignores set URL)
-URL="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899&startDate=${START_DATE}&endDate=${END_DATE}"
-
-osascript -e "
-tell application \"Google Chrome\"
-  set w to first window
-  repeat with i from 1 to (count of tabs of w)
-    if URL of tab i of w contains \"advertising.amazon.com\" then
-      set active tab index of w to i
-      tell tab i of w
-        execute javascript \"window.location.href = '$URL'; 'ok'\"
-      end tell
-      return
-    end if
-  end repeat
-  tell active tab of w
-    execute javascript \"window.location.href = '$URL'; 'ok'\"
-  end tell
-end tell
-"
+tab_info=$(osascript "$SAFARI_HELPER" open-tab "$TARGET_URL")
+parse_tab_info "$tab_info"
 sleep 25
+wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
 
-# Click Export button
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    execute javascript "
-      var btns = document.querySelectorAll(\"button\");
-      var found = false;
-      for (var i = 0; i < btns.length; i++) {
-        if (btns[i].textContent.trim() === \"Export\") {
-          btns[i].click();
-          found = true;
-          break;
-        }
-      }
-      found ? \"clicked\" : \"not found\";
-    "
-  end tell
-end tell
-'
-sleep 15
-
-# Find and copy the downloaded CSV
-# Filename pattern: Caelum_Star_Paint,_Wall_Treatments_&_Supplies_Overview_*.csv
-LATEST_CSV=$(ls -t "$DL"/Caelum_Star_*Overview_*.csv 2>/dev/null | head -1)
-if [ -n "$LATEST_CSV" ]; then
-  cp "$LATEST_CSV" "$DEST/${PREFIX}_BrandMetrics.csv"
-  log "Saved: ${PREFIX}_BrandMetrics.csv"
-else
-  log "WARNING: No Brand Metrics CSV found in Downloads"
+current_url=$(tab_url "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX")
+if is_amazon_login_url "$current_url"; then
+  log "Amazon Ads session expired — attempting relogin"
+  bash "$SCRIPT_DIR/../relogin.sh" "$TARGET_URL"
+  tab_info=$(osascript "$SAFARI_HELPER" open-tab "$TARGET_URL")
+  parse_tab_info "$tab_info"
+  sleep 25
+  wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
 fi
 
+extract_js='(() => {
+  const main = document.querySelector("#sc-content-container, #app-content") || document.body;
+  const url = location.href || "";
+  const title = document.title || "";
+  const text = (main?.innerText || "").trim();
+  if (!text) return "";
+  return [
+    "Brand Metrics",
+    "Source URL: " + url,
+    "Page Title: " + title,
+    "",
+    text
+  ].join("\n");
+})();'
+
+PAGE_DATA=$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$extract_js")
+if [ -z "${PAGE_DATA// }" ]; then
+  log "FAILED: Brand Metrics page content is empty"
+  exit 1
+fi
+
+OUTFILE="$DEST/${PREFIX}_BrandMetrics.txt"
+printf '%s\n' "$PAGE_DATA" | write_stdin_to_file_with_node "$OUTFILE"
+log "Saved: ${PREFIX}_BrandMetrics.txt"
 log "Done"
 tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

@@ -6,6 +6,7 @@ import { queueRequestReview } from "@/server/dispatch/ledger";
 import { withApiLogging } from "@/server/api-logging";
 import { isHermesDryRun } from "@/server/env/flags";
 import { isOrderRefundedOrReturned } from "@/server/orders/review-eligibility";
+import { isReviewRequestMarketplaceEnabled } from "@/lib/amazon/policy";
 
 export const runtime = "nodejs";
 
@@ -57,9 +58,9 @@ async function handlePost(req: Request) {
 
   try {
     const pool = getPgPool();
-    const orderRes = await pool.query<{ order_status: string | null; raw: unknown }>(
+    const orderRes = await pool.query<{ marketplace_id: string; order_status: string | null; raw: unknown }>(
       `
-      SELECT order_status, raw
+      SELECT marketplace_id, order_status, raw
         FROM hermes_orders
        WHERE connection_id = $1
          AND order_id = $2
@@ -68,8 +69,28 @@ async function handlePost(req: Request) {
       [parsed.data.connectionId, parsed.data.orderId]
     );
     const orderRow = orderRes.rows[0];
+    if (!orderRow) {
+      return NextResponse.json(
+        { ok: false, error: "Order was not found in Hermes." },
+        { status: 404 }
+      );
+    }
+
+    if (orderRow.marketplace_id !== parsed.data.marketplaceId) {
+      return NextResponse.json(
+        { ok: false, error: "Order marketplace does not match the request." },
+        { status: 409 }
+      );
+    }
+
+    if (!isReviewRequestMarketplaceEnabled(orderRow.marketplace_id)) {
+      return NextResponse.json(
+        { ok: false, error: "Review requests are disabled for US marketplace orders." },
+        { status: 409 }
+      );
+    }
+
     if (
-      orderRow &&
       isOrderRefundedOrReturned({
         orderStatus: orderRow.order_status,
         raw: orderRow.raw,
@@ -84,7 +105,7 @@ async function handlePost(req: Request) {
     const res = await queueRequestReview({
       connectionId: parsed.data.connectionId,
       orderId: parsed.data.orderId,
-      marketplaceId: parsed.data.marketplaceId,
+      marketplaceId: orderRow.marketplace_id,
     });
 
     // Note: we intentionally do NOT send here; sending belongs to the worker.
