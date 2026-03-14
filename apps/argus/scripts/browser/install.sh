@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install launchd plists for browser-automated Argus collectors:
-#   1. Weekly browser sources collection (Monday 3 AM CT)
+#   1. Weekly browser sources collection in Safari (Monday 3 AM CT)
 #   2. Daily Visuals screenshot collector (3:30 AM CT daily)
 #
 # Usage: bash apps/argus/scripts/browser/install.sh
@@ -32,6 +32,7 @@ cleanup_legacy_daily_account_health_agent() {
 # Make all scripts executable
 chmod +x "$SCRIPT_DIR/relogin.sh"
 chmod +x "$SCRIPT_DIR/run-weekly.sh"
+chmod +x "$SCRIPT_DIR/common.sh"
 chmod +x "$SCRIPT_DIR/weekly-category-insights/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-poe/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-scaleinsights/collect.sh"
@@ -130,14 +131,14 @@ launchctl load "$DAILY_VISUALS_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT)"
+echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT, Safari)"
 echo "  Daily Visuals:     $DAILY_VISUALS_PLIST (daily 3:30 AM CT)"
 echo ""
 echo "Weekly master runner calls:"
 echo "  1. weekly-category-insights (text extraction)"
 echo "  2. weekly-poe (CSV download)"
 echo "  3. weekly-scaleinsights (XLSX export)"
-echo "  4. weekly-brand-metrics (CSV download)"
+echo "  4. weekly-brand-metrics (text capture)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
