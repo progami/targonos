@@ -29,7 +29,7 @@ export function CaelumStarHeader() {
           </nav>
 
           <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer" className={styles.primaryButton}>
-            Buy 6 Pack
+            Buy Now
           </a>
         </div>
       </div>
