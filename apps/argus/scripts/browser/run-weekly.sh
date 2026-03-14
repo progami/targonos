@@ -3,85 +3,20 @@
 # Calls each weekly collection script in sequence.
 # Runs Monday 3 AM CT via launchd.
 #
-# No Claude needed. Pure AppleScript + screencapture + JS extraction.
+# Uses AppleScript to drive Safari directly.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/common.sh"
+
 LOG="/tmp/weekly-browser-sources.log"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 log "=== Weekly Master Run Starting ==="
 
-# Check Chrome is running
-if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
-  log "ABORT: Chrome not running"
-  osascript -e 'display notification "Weekly sources: Chrome not running" with title "Weekly Monitor"' 2>/dev/null
-  exit 1
-fi
-
-# Find and activate the Seller Central tab (scripts use "active tab of first window")
-osascript -e '
-tell application "Google Chrome"
-  set w to first window
-  repeat with i from 1 to (count of tabs of w)
-    if URL of tab i of w contains "sellercentral.amazon.com" then
-      set active tab index of w to i
-      set URL of tab i of w to "https://sellercentral.amazon.com/home"
-      return
-    end if
-  end repeat
-  -- No SC tab found, use active tab
-  tell active tab of w
-    set URL to "https://sellercentral.amazon.com/home"
-  end tell
-end tell
-'
-sleep 20
-
-PAGE_URL=$(osascript -e '
-tell application "Google Chrome"
-  return URL of active tab of first window
-end tell
-')
-if [[ "$PAGE_URL" == *"signin"* ]]; then
-  log "SC session expired — attempting relogin"
-  if bash "$SCRIPT_DIR/relogin.sh"; then
-    log "Relogin successful — retrying navigation"
-    osascript -e '
-    tell application "Google Chrome"
-      set w to first window
-      repeat with i from 1 to (count of tabs of w)
-        if URL of tab i of w contains "sellercentral.amazon.com" then
-          set active tab index of w to i
-          set URL of tab i of w to "https://sellercentral.amazon.com/home"
-          return
-        end if
-      end repeat
-      tell active tab of w
-        set URL to "https://sellercentral.amazon.com/home"
-      end tell
-    end tell
-    '
-    sleep 20
-    PAGE_URL=$(osascript -e '
-    tell application "Google Chrome"
-      return URL of active tab of first window
-    end tell
-    ')
-    if [[ "$PAGE_URL" == *"signin"* ]]; then
-      log "ABORT: Still on signin after relogin"
-      osascript -e 'display notification "Weekly sources: relogin failed" with title "Weekly Monitor"' 2>/dev/null
-      exit 1
-    fi
-  else
-    log "ABORT: Relogin failed"
-    osascript -e 'display notification "Weekly sources: relogin failed" with title "Weekly Monitor"' 2>/dev/null
-    exit 1
-  fi
-fi
-
-log "Session OK"
+open -a Safari
+sleep 2
 
 FAILED=0
 
@@ -92,7 +27,8 @@ run_script() {
   if bash "$script"; then
     log "OK: $name"
   else
-    log "FAILED: $name (exit $?)"
+    local exit_code=$?
+    log "FAILED: $name (exit $exit_code)"
     FAILED=$((FAILED + 1))
   fi
   sleep 5
@@ -105,11 +41,14 @@ run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh"
 
 log "=== Weekly Master Run Done ($FAILED failures) ==="
 
-if [ $FAILED -gt 0 ]; then
+if [ "$FAILED" -gt 0 ]; then
   osascript -e "display notification \"Weekly sources: $FAILED script(s) failed\" with title \"Weekly Monitor\"" 2>/dev/null
 else
   osascript -e 'display notification "Weekly sources: All collections complete" with title "Weekly Monitor"' 2>/dev/null
 fi
 
-# Trim log
 tail -200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+
+if [ "$FAILED" -gt 0 ]; then
+  exit 1
+fi
