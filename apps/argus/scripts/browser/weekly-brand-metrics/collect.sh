@@ -10,24 +10,12 @@ DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.co
 DL="$HOME/Downloads"
 LOG="/tmp/weekly-brand-metrics.log"
 
-EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
-
 if [ "$#" -eq 2 ]; then
   START_DATE="$1"
   END_DATE="$2"
-  EPOCH_END=$(date -j -f '%Y-%m-%d' "$END_DATE" '+%s')
-  WEEKS=$(( (EPOCH_END - EPOCH_START) / 604800 + 1 ))
-  WEEK_NUM=$(printf "W%02d" "$WEEKS")
-  PREFIX="${WEEK_NUM}_${END_DATE}"
+  IFS='|' read -r WEEK_NUM _ _ PREFIX <<<"$(week_context_for_end_date "$END_DATE")"
 else
-  LAST_SAT=$(date -v-sat '+%Y-%m-%d')
-  LAST_SUN=$(date -j -v-6d -f '%Y-%m-%d' "$LAST_SAT" '+%Y-%m-%d')
-  START_DATE="$LAST_SUN"
-  END_DATE="$LAST_SAT"
-  EPOCH_SAT=$(date -j -f '%Y-%m-%d' "$LAST_SAT" '+%s')
-  WEEKS=$(( (EPOCH_SAT - EPOCH_START) / 604800 + 1 ))
-  WEEK_NUM=$(printf "W%02d" "$WEEKS")
-  PREFIX="${WEEK_NUM}_${LAST_SAT}"
+  IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 fi
 
 TARGET_URL="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899&startDate=${START_DATE}&endDate=${END_DATE}"

@@ -63,6 +63,38 @@ load_monitoring_env() {
   load_env_file "$REPO_ROOT/apps/argus/.env.local"
 }
 
+week_context_for_end_date() {
+  local end_date="$1"
+
+  "$PYTHON_BIN" - "$end_date" <<'PY'
+from datetime import date, timedelta
+import sys
+
+base_start = date(2025, 12, 28)
+week_end = date.fromisoformat(sys.argv[1])
+week_start = week_end - timedelta(days=6)
+week_number = ((week_start - base_start).days // 7) + 1
+week_code = f"W{week_number:02d}"
+print(f"{week_code}|{week_start.isoformat()}|{week_end.isoformat()}|{week_code}_{week_end.isoformat()}")
+PY
+}
+
+latest_complete_week_context() {
+  "$PYTHON_BIN" <<'PY'
+from datetime import date, timedelta
+
+base_start = date(2025, 12, 28)
+today = date.today()
+weekday = today.weekday()
+days_back = 7 if weekday == 5 else (weekday - 5) % 7
+week_end = today - timedelta(days=days_back)
+week_start = week_end - timedelta(days=6)
+week_number = ((week_start - base_start).days // 7) + 1
+week_code = f"W{week_number:02d}"
+print(f"{week_code}|{week_start.isoformat()}|{week_end.isoformat()}|{week_code}_{week_end.isoformat()}")
+PY
+}
+
 require_env() {
   local name="$1"
   local value="${!name:-}"

@@ -10,12 +10,7 @@ DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.co
 LOG="/tmp/weekly-poe.log"
 TARGET_URL="https://sellercentral.amazon.com/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326/product"
 
-EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
-LAST_SAT=$(date -v-sat '+%Y-%m-%d')
-EPOCH_SAT=$(date -j -f '%Y-%m-%d' "$LAST_SAT" '+%s')
-WEEKS=$(( (EPOCH_SAT - EPOCH_START) / 604800 + 1 ))
-WEEK_NUM=$(printf "W%02d" "$WEEKS")
-PREFIX="${WEEK_NUM}_${LAST_SAT}"
+IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 
 mkdir -p "$DEST"
 

@@ -13,13 +13,13 @@ DL="$HOME/Downloads"
 LOG="/tmp/weekly-scaleinsights.log"
 TARGET_URL="https://portal.scaleinsights.com/KeywordRanking"
 
-EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')
-LAST_SAT=$(date -v-sat '+%Y-%m-%d')
-LAST_SUN=$(date -j -v-6d -f '%Y-%m-%d' "$LAST_SAT" '+%Y-%m-%d')
-EPOCH_SAT=$(date -j -f '%Y-%m-%d' "$LAST_SAT" '+%s')
-WEEKS=$(( (EPOCH_SAT - EPOCH_START) / 604800 + 1 ))
-WEEK_NUM=$(printf "W%02d" "$WEEKS")
-PREFIX="${WEEK_NUM}_${LAST_SAT}"
+if [ "$#" -eq 2 ]; then
+  START_DATE="$1"
+  END_DATE="$2"
+  IFS='|' read -r WEEK_NUM _ _ PREFIX <<<"$(week_context_for_end_date "$END_DATE")"
+else
+  IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
+fi
 
 mkdir -p "$DEST"
 
@@ -93,8 +93,8 @@ range_js="(() => {
   if (!window.jQuery) return 'NO_JQUERY';
   const picker = jQuery('#reportrange').data('daterangepicker');
   if (!picker) return 'NO_DATE_PICKER';
-  picker.setStartDate('${LAST_SUN}');
-  picker.setEndDate('${LAST_SAT}');
+  picker.setStartDate('${START_DATE}');
+  picker.setEndDate('${END_DATE}');
   picker.clickApply();
   return 'DATE_RANGE_SET';
 })();"
