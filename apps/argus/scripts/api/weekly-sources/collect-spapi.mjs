@@ -22,7 +22,10 @@ const __dirname = path.dirname(__filename)
 
 const HERO_ASIN = 'B09HXC3NL8'
 const TST_FILTER_KEYWORD = 'drop cloth'
+const TST_REPORT_TYPE = 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
+const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
+const DONE_REPORT_STATUSES = new Set(['DONE'])
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
 const BA_BASE = path.join(WEEKLY_ROOT, 'Brand Analytics (API)')
@@ -52,6 +55,10 @@ async function createAndWaitReport(client, body, label) {
   const reportId = created?.reportId
   if (!reportId) throw new Error(`${label}: missing reportId`)
 
+  return waitForReport(client, reportId, label)
+}
+
+async function waitForReport(client, reportId, label) {
   const deadline = Date.now() + 45 * 60 * 1000
   while (true) {
     const report = await client.callAPI({
@@ -72,6 +79,73 @@ async function createAndWaitReport(client, body, label) {
     }
     await sleep(8000)
   }
+}
+
+function sameInstant(left, right) {
+  if (!left || !right) return false
+
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return false
+
+  return leftTime === rightTime
+}
+
+async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, statuses }) {
+  const response = await client.callAPI({
+    operation: 'getReports',
+    endpoint: 'reports',
+    query: {
+      reportTypes: [reportType],
+      pageSize: 20,
+    },
+  })
+
+  const reports = response?.reports ?? []
+  return (
+    reports
+      .filter((report) => report?.marketplaceIds?.includes(marketplaceId))
+      .filter((report) => sameInstant(report?.dataStartTime, dataStartTime))
+      .filter((report) => sameInstant(report?.dataEndTime, dataEndTime))
+      .filter((report) => statuses.has(report?.processingStatus))
+      .sort((left, right) => String(right?.createdTime ?? '').localeCompare(String(left?.createdTime ?? '')))[0] ?? null
+  )
+}
+
+async function resolveTstReportId(client, reportWindow, label) {
+  const completedReport = await findReusableReport(client, {
+    reportType: TST_REPORT_TYPE,
+    marketplaceId: reportWindow.marketplaceIds[0],
+    dataStartTime: reportWindow.dataStartTime,
+    dataEndTime: reportWindow.dataEndTime,
+    statuses: DONE_REPORT_STATUSES,
+  })
+  if (completedReport?.reportId) {
+    console.log(`[SP-API] ${label} reusing DONE reportId=${completedReport.reportId}`)
+    return completedReport.reportId
+  }
+
+  const activeReport = await findReusableReport(client, {
+    reportType: TST_REPORT_TYPE,
+    marketplaceId: reportWindow.marketplaceIds[0],
+    dataStartTime: reportWindow.dataStartTime,
+    dataEndTime: reportWindow.dataEndTime,
+    statuses: ACTIVE_REPORT_STATUSES,
+  })
+  if (activeReport?.reportId) {
+    console.log(`[SP-API] ${label} reusing active reportId=${activeReport.reportId}`)
+    return waitForReport(client, activeReport.reportId, label)
+  }
+
+  return createAndWaitReport(
+    client,
+    {
+      reportType: TST_REPORT_TYPE,
+      ...reportWindow,
+      reportOptions: { reportPeriod: 'WEEK' },
+    },
+    label,
+  )
 }
 
 async function downloadJsonReport(client, reportId) {
@@ -140,6 +214,12 @@ function rowsToCsv(file, rows) {
   const { headers, rows: flatRows } = flattenRows(rows)
   const safeHeaders = headers.length ? headers : ['value']
   writeCsv(file, safeHeaders, flatRows)
+}
+
+function readJsonFile(file) {
+  if (!fs.existsSync(file)) return null
+
+  return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
 function runTstFilter(rawPath, outputPath) {
@@ -243,25 +323,27 @@ async function main() {
   rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`), salesData.parsed?.salesAndTrafficByDate || [])
   rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`), salesData.parsed?.salesAndTrafficByAsin || [])
 
-  const tstReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT',
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK' },
-    },
-    `${scopeLabel} TST`,
-  )
+  const tstReportId = await resolveTstReportId(client, reportWindow, `${scopeLabel} TST`)
 
-  const tstDoc = await reportDocumentInfo(client, tstReportId)
-  const rawTstPath = path.join('/tmp', `${weekPrefix}_TST.raw.json${String(tstDoc?.compressionAlgorithm || '').toUpperCase() === 'GZIP' ? '.gz' : ''}`)
   const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
-
-  await downloadUrlToFile(tstDoc.url, rawTstPath)
-  runTstFilter(rawTstPath, filteredTstPath)
-  fs.rmSync(rawTstPath, { force: true })
-
   const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
+  const existingManifest = readJsonFile(manifestPath)
+  const canReuseFilteredTst =
+    existingManifest?.reports?.tstReportId === tstReportId &&
+    existingManifest?.filterKeyword === TST_FILTER_KEYWORD &&
+    fs.existsSync(filteredTstPath)
+
+  if (canReuseFilteredTst) {
+    console.log(`[SP-API] ${scopeLabel} TST output already current for reportId=${tstReportId}`)
+  } else {
+    const tstDoc = await reportDocumentInfo(client, tstReportId)
+    const rawTstPath = path.join('/tmp', `${weekPrefix}_TST.raw.json${String(tstDoc?.compressionAlgorithm || '').toUpperCase() === 'GZIP' ? '.gz' : ''}`)
+
+    await downloadUrlToFile(tstDoc.url, rawTstPath)
+    runTstFilter(rawTstPath, filteredTstPath)
+    fs.rmSync(rawTstPath, { force: true })
+  }
+
   fs.writeFileSync(
     manifestPath,
     JSON.stringify(
