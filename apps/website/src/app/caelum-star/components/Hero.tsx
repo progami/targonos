@@ -22,8 +22,8 @@ export function CaelumStarHero({ children }: CaelumStarHeroProps) {
           <div className={`${styles.heroVisual} ${styles.fadeInDelay}`}>
             <div className={styles.imageFrame}>
               <Image
-                src="/images/products/dust-essential-6pk.webp"
-                alt="Caelum Star 6 Pack Extra Large Dust Sheets"
+                src="/images/dust-sheets-without-background.png"
+                alt="Caelum Star Extra Large Dust Sheets"
                 width={360}
                 height={360}
                 className={styles.heroImage}
