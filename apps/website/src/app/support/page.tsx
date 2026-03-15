@@ -89,12 +89,12 @@ export default function SupportPage() {
               <p className="cs-overline text-[#3AF3FF]">Help Centre</p>
             </Reveal>
             <Reveal delay={60}>
-              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
+              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] 2xl:text-[clamp(4rem,4.5vw,5.5rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
                 We&apos;re Here to Help.
               </h1>
             </Reveal>
             <Reveal delay={140}>
-              <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg">
+              <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg 2xl:max-w-xl 2xl:text-xl">
                 Got questions about our dust sheets? Need help choosing the right pack? We&apos;ve got you covered.
               </p>
             </Reveal>
@@ -132,7 +132,7 @@ export default function SupportPage() {
         <Container className="relative z-10">
           <Reveal>
             <p className="cs-overline text-center text-lg text-[#3AF3FF]">Get in Touch</p>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               How Can We Help?
             </h2>
           </Reveal>
@@ -256,7 +256,7 @@ export default function SupportPage() {
               <BookOpen className="h-6 w-6 text-[#3AF3FF]" />
               <p className="cs-overline text-lg text-[#3AF3FF]">Quick Guide</p>
             </div>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Using Your Dust Sheets
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
@@ -264,7 +264,7 @@ export default function SupportPage() {
             </p>
           </Reveal>
 
-          <div className="mx-auto mt-14 grid max-w-4xl gap-8 md:grid-cols-3">
+          <div className="mx-auto mt-14 grid max-w-4xl 2xl:max-w-6xl gap-8 md:grid-cols-3">
             {steps.map((step, i) => (
               <Reveal key={step.title} variant="media" delay={i * 120}>
                 <div className="cs-step-card group flex flex-col items-center text-center">
@@ -321,7 +321,7 @@ export default function SupportPage() {
               <HelpCircle className="h-6 w-6 text-[#3AF3FF]" />
               <p className="cs-overline text-lg text-[#3AF3FF]">FAQ</p>
             </div>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Frequently Asked Questions
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
@@ -329,7 +329,7 @@ export default function SupportPage() {
             </p>
           </Reveal>
           <Reveal variant="media" delay={120}>
-            <div className="mx-auto mt-12 max-w-3xl">
+            <div className="mx-auto mt-12 max-w-3xl 2xl:max-w-5xl">
               <FAQ items={faqs} variant="dark" />
             </div>
           </Reveal>
@@ -363,7 +363,7 @@ export default function SupportPage() {
 
                 <div className="relative z-10 grid gap-8 md:grid-cols-12 md:items-center">
                   <div className="md:col-span-8">
-                    <h3 className="text-balance text-[clamp(1.5rem,3.2vw,2.25rem)] font-bold leading-tight tracking-[-0.02em] text-white">
+                    <h3 className="text-balance text-[clamp(1.5rem,3.2vw,2.25rem)] 2xl:text-[clamp(2.25rem,2.5vw,3rem)] font-bold leading-tight tracking-[-0.02em] text-white">
                       Ready to get started?
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-white/50">

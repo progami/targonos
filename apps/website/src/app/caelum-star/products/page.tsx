@@ -56,12 +56,12 @@ export default function ProductsPage() {
               <p className="cs-overline text-[#3AF3FF]">Our Range</p>
             </Reveal>
             <Reveal delay={60}>
-              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
+              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] 2xl:text-[clamp(4rem,4.5vw,5.5rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
                 Dust Sheet Packs.
               </h1>
             </Reveal>
             <Reveal delay={140}>
-              <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg">
+              <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg 2xl:max-w-xl 2xl:text-xl">
                 Pick your coverage. Four pack sizes, one extra-large sheet. Available exclusively on Amazon.
               </p>
             </Reveal>
@@ -124,7 +124,7 @@ export default function ProductsPage() {
         <Container className="relative z-10">
           <Reveal>
             <p className="cs-overline text-center text-[#3AF3FF]">Compare</p>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Choose Your Pack
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
@@ -187,12 +187,12 @@ export default function ProductsPage() {
               <Leaf className="h-6 w-6 text-[#3AF3FF]" />
               <p className="cs-overline text-lg text-[#3AF3FF]">Why Caelum Star</p>
             </div>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Built Different
             </h2>
           </Reveal>
 
-          <div className="mx-auto mt-14 grid max-w-4xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mx-auto mt-14 grid max-w-4xl 2xl:max-w-6xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[
               { title: 'Extra Large', desc: 'Every sheet is 12ft × 9ft — bigger than standard alternatives.' },
               { title: 'Recycled Material', desc: '55% recycled plastic with GRS certification.' },
@@ -239,7 +239,7 @@ export default function ProductsPage() {
 
                 <div className="relative z-10 grid gap-8 md:grid-cols-12 md:items-center">
                   <div className="md:col-span-8">
-                    <h3 className="text-balance text-[clamp(1.5rem,3.2vw,2.25rem)] font-bold leading-tight tracking-[-0.02em] text-white">
+                    <h3 className="text-balance text-[clamp(1.5rem,3.2vw,2.25rem)] 2xl:text-[clamp(2.25rem,2.5vw,3rem)] font-bold leading-tight tracking-[-0.02em] text-white">
                       Not sure which pack to get?
                     </h3>
                     <p className="mt-4 text-base leading-relaxed text-white/50">
