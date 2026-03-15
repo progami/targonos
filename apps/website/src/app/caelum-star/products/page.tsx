@@ -1,11 +1,20 @@
 import Link from 'next/link';
-import { ArrowRight, Ruler, Recycle } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUpRight,
+  Leaf,
+  Recycle,
+  Ruler,
+  Truck
+} from 'lucide-react';
 import { Container } from '@/components/Container';
 import { ProductCard } from '@/components/ProductCard';
 import { Button } from '@/components/Button';
 import { Reveal } from '@/components/Reveal';
 import { products } from '@/content/products';
 import { site } from '@/content/site';
+import { CaelumStarHeader } from '../components/Header';
+import { CaelumStarFooter } from '../components/Footer';
 
 export const metadata = {
   title: 'Packs'
@@ -13,32 +22,77 @@ export const metadata = {
 
 export default function ProductsPage() {
   return (
-    <div>
+    <div style={{ paddingTop: 88 }}>
+      <CaelumStarHeader />
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+            body > header,
+            main#main-content + footer,
+            a[href="#main-content"] {
+              display: none;
+            }
+          `
+        }}
+      />
+
       {/* ─── HERO ─── */}
-      <section className="pg-hero relative overflow-hidden">
+      <section className="cs-prussian-hero relative min-h-[calc(100vh-88px)] overflow-hidden">
+        <div
+          className="absolute inset-0 z-0"
+          style={{
+            backgroundImage: "url('/images/home/6%20Pk%20-%20Img%205.jpg')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.12
+          }}
+        />
         <div className="cs-hero-ambient" />
+
         <Container className="relative z-10">
-          <div className="pb-16 pt-14 md:pb-24 md:pt-20">
-            <Reveal>
-              <p className="cs-overline text-accent">Our Range</p>
-              <h1 className="mt-3 text-balance text-[clamp(2.5rem,5.5vw,4.5rem)] font-bold leading-[0.92] tracking-[-0.04em] text-white">
+          <div className="py-[clamp(4rem,8vw,7rem)]">
+            <Reveal delay={0}>
+              <p className="cs-overline text-[#3AF3FF]">Our Range</p>
+            </Reveal>
+            <Reveal delay={60}>
+              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
                 Dust Sheet Packs.
               </h1>
             </Reveal>
-            <Reveal delay={80}>
-              <p className="mt-4 max-w-md text-base text-white/50 md:text-lg">
-                Pick your coverage. Available at select retailers.
+            <Reveal delay={140}>
+              <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg">
+                Pick your coverage. Four pack sizes, one extra-large sheet. Available exclusively on Amazon.
               </p>
             </Reveal>
-            <Reveal delay={160}>
-              <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button asChild variant="accent">
-                  <Link href="/caelum-star/where-to-buy">Where to buy</Link>
+            <Reveal delay={200}>
+              <div className="cs-hero-stats mt-10">
+                <div className="cs-hero-stat">
+                  <span className="cs-hero-stat-value">4</span>
+                  <span className="cs-hero-stat-label">Pack Options</span>
+                </div>
+                <div className="cs-hero-stat">
+                  <span className="cs-hero-stat-value">12×9</span>
+                  <span className="cs-hero-stat-label">ft Per Sheet</span>
+                </div>
+                <div className="cs-hero-stat">
+                  <span className="cs-hero-stat-value">55%</span>
+                  <span className="cs-hero-stat-label">Recycled</span>
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={280}>
+              <div className="mt-10 flex flex-wrap items-center gap-3">
+                <Button asChild variant="accent" size="lg" className="cs-btn-glow">
+                  <Link href="/caelum-star/where-to-buy">
+                    Where to Buy <ArrowRight className="cs-arrow-slide h-4 w-4" />
+                  </Link>
                 </Button>
                 <Button
                   asChild
                   variant="outline"
-                  className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]"
+                  size="lg"
+                  className="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
                 >
                   <Link href="/caelum-star">About Caelum Star</Link>
                 </Button>
@@ -46,86 +100,183 @@ export default function ProductsPage() {
             </Reveal>
           </div>
         </Container>
-        <div className="cs-hero-fade" />
       </section>
 
       {/* ─── PRODUCT GRID ─── */}
-      <section className="py-10 md:py-14">
-        <Container>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+        <div className="absolute inset-0 bg-[#012D44]" />
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url('/images/home/value-curiosity.webp')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.1
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(58, 243, 255, 0.04), transparent 70%)'
+          }}
+        />
+
+        <Container className="relative z-10">
+          <Reveal>
+            <p className="cs-overline text-center text-[#3AF3FF]">Compare</p>
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+              Choose Your Pack
+            </h2>
+            <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
+              Every sheet is 12ft × 9ft. Choose the pack that fits your project.
+            </p>
+          </Reveal>
+
+          <div className="cs-product-showcase mt-14">
             {products.map((p, i) => (
-              <Reveal key={p.slug} variant="media" delay={i * 60}>
+              <Reveal key={p.slug} variant="media" delay={i * 100}>
                 <ProductCard product={p} />
               </Reveal>
             ))}
           </div>
-          <Reveal delay={280}>
-            <p className="mt-4 text-center text-xs text-muted">
+
+          <Reveal delay={440}>
+            <p className="mt-6 text-center text-sm text-white/50">
               Prices shown are RRP. Actual prices may vary by retailer.
             </p>
           </Reveal>
         </Container>
       </section>
 
-      {/* ─── INFO STRIP ─── Dark section */}
-      <section className="cs-dark-section--navy py-16 md:py-20">
+      {/* ─── QUICK FACTS ─── */}
+      <section className="relative overflow-hidden py-[clamp(3.5rem,6vw,5rem)]">
+        <div className="absolute inset-0 bg-[#0B273F]" />
         <Container className="relative z-10">
           <Reveal>
-            <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
-                <span className="flex items-center gap-2.5 text-sm text-white/70">
-                  <Ruler className="h-4 w-4 text-accent" />
-                  All sheets: 12ft × 9ft (3.6m × 2.7m)
-                </span>
-                <span className="flex items-center gap-2.5 text-sm text-white/70">
-                  <Recycle className="h-4 w-4 text-accent" />
-                  55% recycled plastic (GRS certified)
-                </span>
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
+              <div className="cs-glass-card flex items-center gap-3">
+                <Ruler className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
+                <span className="text-base text-white/80">All sheets: 12ft × 9ft (3.6m × 2.7m)</span>
               </div>
-              <Link
-                href="/caelum-star/where-to-buy"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-accent transition hover:text-white"
-              >
-                Where to buy <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
+              <div className="cs-glass-card flex items-center gap-3">
+                <Recycle className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
+                <span className="text-base text-white/80">55% recycled plastic (GRS certified)</span>
+              </div>
+              <div className="cs-glass-card flex items-center gap-3">
+                <Truck className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
+                <span className="text-base text-white/80">Fast Amazon delivery</span>
+              </div>
             </div>
           </Reveal>
         </Container>
       </section>
 
-      {/* ─── SUPPORT CTA ─── */}
-      <section className="py-10 pb-20">
-        <Container>
-          <Reveal variant="media">
-            <div className="cs-support-card rounded-[28px] p-8 md:p-12">
-              <div className="grid gap-8 md:grid-cols-12 md:items-center">
-                <div className="md:col-span-8">
-                  <h3 className="text-balance text-[clamp(1.4rem,3vw,2rem)] font-bold leading-tight tracking-[-0.03em] text-white">
-                    Not sure which pack to get?
-                  </h3>
-                  <p className="mt-3 text-sm text-white/50">
-                    Email{' '}
-                    <a
-                      className="text-white/80 underline decoration-white/20 underline-offset-2 transition hover:text-white hover:decoration-white/50"
-                      href={`mailto:${site.contactEmail}`}
-                    >
-                      {site.contactEmail}
-                    </a>
-                    .
-                  </p>
-                </div>
-                <div className="md:col-span-4 md:flex md:justify-end">
-                  <Button asChild variant="accent" size="lg">
-                    <Link href="/support">
-                      Get support <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  </Button>
-                </div>
-              </div>
+      {/* ─── WHY CAELUM STAR ─── */}
+      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+        <div className="absolute inset-0 bg-[#012D44]" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(58, 243, 255, 0.03), transparent 70%)'
+          }}
+        />
+
+        <Container className="relative z-10">
+          <Reveal>
+            <div className="flex items-center justify-center gap-3">
+              <Leaf className="h-6 w-6 text-[#3AF3FF]" />
+              <p className="cs-overline text-lg text-[#3AF3FF]">Why Caelum Star</p>
             </div>
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+              Built Different
+            </h2>
           </Reveal>
+
+          <div className="mx-auto mt-14 grid max-w-4xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              { title: 'Extra Large', desc: 'Every sheet is 12ft × 9ft — bigger than standard alternatives.' },
+              { title: 'Recycled Material', desc: '55% recycled plastic with GRS certification.' },
+              { title: 'Fast Delivery', desc: 'Available on Amazon with Prime delivery options.' },
+              { title: 'Easy Cleanup', desc: 'Fold, store, reuse. Designed for quick setup and teardown.' },
+              { title: 'Pack Options', desc: 'From 1 sheet to 12 — pick the size for your project.' },
+              { title: 'Eco Packaging', desc: 'Eco-kind packaging as standard across all packs.' }
+            ].map((item, i) => (
+              <Reveal key={item.title} variant="media" delay={i * 80}>
+                <div className="cs-step-card group flex h-full flex-col items-center text-center">
+                  <h3 className="text-lg font-bold tracking-[-0.01em] text-white">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-white/50">{item.desc}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
         </Container>
       </section>
+
+      {/* ─── CTA + FOOTER ─── */}
+      <div className="relative overflow-hidden">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage: "url('/images/home/mission-abstract.webp')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            opacity: 0.08
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#012D44] via-[#012D44]/95 to-[#001220]" />
+
+        <section className="relative z-10 py-[clamp(3rem,6vw,5rem)]">
+          <Container>
+            <Reveal variant="media">
+              <div className="relative overflow-hidden rounded-[20px] border border-white/10 p-10 shadow-lg md:p-14" style={{ background: 'rgba(230, 250, 255, 0.05)', backdropFilter: 'blur(12px)' }}>
+                <div
+                  className="pointer-events-none absolute -right-20 -top-20 h-60 w-60 rounded-full opacity-30"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(58,243,255,0.35), transparent 70%)',
+                    filter: 'blur(40px)'
+                  }}
+                />
+
+                <div className="relative z-10 grid gap-8 md:grid-cols-12 md:items-center">
+                  <div className="md:col-span-8">
+                    <h3 className="text-balance text-[clamp(1.5rem,3.2vw,2.25rem)] font-bold leading-tight tracking-[-0.02em] text-white">
+                      Not sure which pack to get?
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-white/50">
+                      Email{' '}
+                      <a
+                        className="font-semibold text-[#3AF3FF] underline decoration-[#3AF3FF]/30 underline-offset-2 transition hover:decoration-[#3AF3FF]"
+                        href={`mailto:${site.contactEmail}`}
+                      >
+                        {site.contactEmail}
+                      </a>{' '}
+                      or visit our{' '}
+                      <Link
+                        href="/support"
+                        className="font-semibold text-[#3AF3FF] underline decoration-[#3AF3FF]/30 underline-offset-2 transition hover:decoration-[#3AF3FF]"
+                      >
+                        support page
+                      </Link>
+                      .
+                    </p>
+                  </div>
+                  <div className="md:col-span-4 md:flex md:justify-end">
+                    <Button asChild variant="accent" size="lg" className="cs-btn-glow">
+                      <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+                        Buy Now <ArrowUpRight className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          </Container>
+        </section>
+
+        <div className="relative z-10 [&>footer]:mt-0">
+          <CaelumStarFooter />
+        </div>
+      </div>
     </div>
   );
 }
