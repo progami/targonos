@@ -217,7 +217,7 @@ export default function AboutPage() {
 
           <div className="mx-auto mt-14 grid max-w-5xl 2xl:max-w-7xl gap-6 sm:grid-cols-2">
             {values.map((v, i) => (
-              <Reveal key={v.title} variant="media" delay={i * 100}>
+              <Reveal key={v.title} variant="media" delay={i * 100} className="h-full">
                 <div className="cs-step-card group flex h-full gap-5 text-left">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-[#3AF3FF]/20 bg-[#3AF3FF]/10 transition-all duration-300 group-hover:border-[#3AF3FF]/40 group-hover:bg-[#3AF3FF]/15">
                     <v.icon className="h-6 w-6 text-[#3AF3FF]" />
@@ -282,7 +282,7 @@ export default function AboutPage() {
         <Container className="relative z-10">
           <div className="grid gap-8 md:grid-cols-2">
             {/* Contact Card */}
-            <Reveal variant="media">
+            <Reveal variant="media" className="h-full">
               <div className="cs-retailer-card cs-retailer-card--primary flex h-full flex-col">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#3AF3FF]/15">
                   <Mail className="h-7 w-7 text-[#3AF3FF]" />
@@ -302,7 +302,7 @@ export default function AboutPage() {
             </Reveal>
 
             {/* Shop Card */}
-            <Reveal variant="media" delay={150}>
+            <Reveal variant="media" delay={150} className="h-full">
               <div className="cs-retailer-card flex h-full flex-col">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
                   <Sparkles className="h-7 w-7 text-white/60" />

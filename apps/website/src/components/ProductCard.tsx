@@ -1,21 +1,38 @@
 import Image from 'next/image';
-import Link from 'next/link';
-import { ArrowUpRight } from 'lucide-react';
+import { ArrowUpRight, Maximize2 } from 'lucide-react';
 import type { Product } from '@/content/products';
-import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { cn } from '@/lib/utils';
 
+function DurabilityBars({ level }: { level: string }) {
+  const filled = level === 'Strong' ? 3 : level === 'Standard' ? 2 : 1;
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className={cn('cs-durability-bar', i <= filled && 'cs-durability-bar--filled')}
+        />
+      ))}
+    </span>
+  );
+}
+
 export function ProductCard({ product }: { product: Product }) {
   return (
-    <Card className={cn(
-      "group overflow-hidden transition-shadow will-change-transform motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-lg",
-      product.primary && "ring-2 ring-accent"
-    )}>
+    <div
+      className={cn(
+        'cs-product-card group flex h-full flex-col overflow-hidden rounded-card',
+        'border border-white/20 shadow-lg',
+        'backdrop-blur-3xl bg-ink/80 text-white',
+        product.primary && 'ring-2 ring-accent'
+      )}
+    >
       {/* Image */}
-      <div className="relative aspect-[4/3] w-full bg-white">
+      <div className="relative aspect-[4/3] w-full overflow-hidden">
+        {product.primary && <div className="cs-product-glow--strong" />}
         {product.primary && (
-          <div className="absolute left-4 top-4 z-10 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
+          <div className="cs-badge-shimmer absolute left-4 top-4 z-10 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
             Most Popular
           </div>
         )}
@@ -23,49 +40,68 @@ export function ProductCard({ product }: { product: Product }) {
           src={product.image.src}
           alt={product.image.alt}
           fill
-          className="object-contain p-6 transition-all duration-500 ease-out group-hover:scale-[1.03]"
+          className="cs-card-image object-contain p-6"
           sizes="(min-width: 768px) 450px, 100vw"
         />
       </div>
 
       {/* Content */}
-      <div className="p-5">
-        {/* Name + Price row */}
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="text-xl font-semibold tracking-tight">{product.name}</h3>
-          <div className="text-right">
-            <div className="text-2xl font-bold text-accent">
-              {product.price ?? <span className="text-base text-muted">See store</span>}
+      <div className="flex flex-1 flex-col p-5">
+        {/* Name */}
+        <h3 className="text-xl font-semibold tracking-tight">{product.name}</h3>
+
+        {/* Amazon-style pricing */}
+        <div className="mt-2">
+          {product.priceBadge && (
+            <div className="mb-1.5 inline-block rounded bg-red-600 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+              {product.priceBadge}
             </div>
-            <div className="text-[10px] font-medium uppercase tracking-wider text-muted">RRP</div>
+          )}
+          <div className="flex items-baseline gap-2">
+            {product.discount && (
+              <span className="text-lg font-semibold text-red-400">{product.discount}</span>
+            )}
+            <span className="text-2xl font-bold text-white">
+              <sup className="text-sm font-semibold">$</sup>
+              {product.price?.replace('$', '').split('.')[0]}
+              <sup className="text-sm font-semibold">{product.price?.split('.')[1]}</sup>
+            </span>
+            {product.unitPrice && (
+              <span className="text-xs text-white/40">({product.unitPrice})</span>
+            )}
           </div>
+          {product.typicalPrice && (
+            <div className="mt-0.5 text-xs text-white/40">
+              Typical price: <span className="line-through">{product.typicalPrice}</span>
+            </div>
+          )}
         </div>
 
         {/* Specs row */}
-        <div className="mt-2 flex items-center gap-3 text-sm text-muted">
-          <span>{product.thicknessLabel} durability</span>
+        <div className="mt-3 flex items-center gap-3 text-sm text-white/60">
+          <span className="inline-flex items-center gap-1.5">
+            <DurabilityBars level={product.thicknessLabel} />
+            {product.thicknessLabel} durability
+          </span>
           <span className="text-border">|</span>
-          <span>{product.coverageLabel} coverage</span>
+          <span className="inline-flex items-center gap-1.5">
+            <Maximize2 className="h-3 w-3 text-accent" />
+            {product.coverageLabel} coverage
+          </span>
         </div>
 
         {/* Tagline */}
-        <p className="mt-3 text-sm text-muted">{product.tagline}</p>
+        <p className="mt-2 text-sm text-white/60">{product.tagline}</p>
 
         {/* Actions */}
-        <div className="mt-4 flex items-center gap-3">
-          <Button asChild variant="accent" size="sm" className="flex-1">
+        <div className="mt-auto pt-4">
+          <Button asChild variant="accent" size="sm" className="w-full">
             <a href={product.amazonUrl} target="_blank" rel="noreferrer">
-              Buy Now <ArrowUpRight className="h-4 w-4" />
+              Buy Now <ArrowUpRight className="cs-buy-arrow h-4 w-4" />
             </a>
           </Button>
-          <Link
-            href={`/caelum-star/products/${product.slug}`}
-            className="text-sm font-medium text-muted underline-offset-4 hover:text-ink hover:underline"
-          >
-            Details
-          </Link>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
