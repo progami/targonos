@@ -139,7 +139,7 @@ export default function SupportPage() {
 
           <div className="mt-14 grid gap-8 md:grid-cols-3">
             {/* Email Support */}
-            <Reveal variant="media" delay={100}>
+            <Reveal variant="media" delay={100} className="h-full">
               <div className="cs-retailer-card cs-retailer-card--primary flex h-full flex-col">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#3AF3FF]/15">
                   <Mail className="h-7 w-7 text-[#3AF3FF]" />
@@ -162,7 +162,7 @@ export default function SupportPage() {
             </Reveal>
 
             {/* Browse Packs */}
-            <Reveal variant="media" delay={200}>
+            <Reveal variant="media" delay={200} className="h-full">
               <div className="cs-retailer-card flex h-full flex-col">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
                   <Package className="h-7 w-7 text-white/60" />
@@ -187,7 +187,7 @@ export default function SupportPage() {
             </Reveal>
 
             {/* Where to Buy */}
-            <Reveal variant="media" delay={300}>
+            <Reveal variant="media" delay={300} className="h-full">
               <div className="cs-retailer-card flex h-full flex-col">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10">
                   <ShieldCheck className="h-7 w-7 text-white/60" />
@@ -266,8 +266,8 @@ export default function SupportPage() {
 
           <div className="mx-auto mt-14 grid max-w-4xl 2xl:max-w-6xl gap-8 md:grid-cols-3">
             {steps.map((step, i) => (
-              <Reveal key={step.title} variant="media" delay={i * 120}>
-                <div className="cs-step-card group flex flex-col items-center text-center">
+              <Reveal key={step.title} variant="media" delay={i * 120} className="h-full">
+                <div className="cs-step-card group flex h-full flex-col items-center text-center">
                   <div className="relative">
                     <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-[#3AF3FF]/20 bg-[#3AF3FF]/10 transition-all duration-300 group-hover:border-[#3AF3FF]/40 group-hover:bg-[#3AF3FF]/15">
                       <step.icon className="h-8 w-8 text-[#3AF3FF]" />

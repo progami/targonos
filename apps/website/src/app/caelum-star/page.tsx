@@ -14,14 +14,16 @@ const regions = [
     title: 'USA',
     subtitle: 'Free Shipping & Fast Delivery.\nSelect Region.',
     buttonLabel: 'Shop USA Store',
-    href: '/caelum-star-us'
+    href: 'https://www.amazon.com/CS-Decorating-Sheet-Plastic-Sheeting-Dust-Painting-Polythene/dp/B09HXC3NL8?th=1&ref=nosim',
+    external: true
   },
   {
     flag: '🇬🇧',
     title: 'UK & Europe',
     subtitle: 'Next Day Delivery Available.\nSelect Region.',
     buttonLabel: 'Shop UK Store',
-    href: '/caelum-star-uk'
+    href: 'https://www.amazon.co.uk/dp/B09HXC3NL8?th=1',
+    external: true
   }
 ];
 
@@ -40,6 +42,7 @@ export default function CaelumStarPage() {
                 subtitle={region.subtitle}
                 buttonLabel={region.buttonLabel}
                 href={region.href}
+                external={region.external}
               />
             ))}
           </div>
