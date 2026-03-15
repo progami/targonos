@@ -90,14 +90,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  padding: 0.75rem 1.45rem;
-  background: var(--cs-accent);
-  color: var(--cs-foundation);
+  border-radius: 14px;
+  padding: 0.7rem 1.8rem;
+  background: #3AF3FF;
+  color: #012D44;
   font-size: 0.95rem;
   font-weight: 700;
-  box-shadow: 0 0 0 1px rgba(58, 243, 255, 0.45), 0 10px 24px rgba(58, 243, 255, 0.25);
-  transition: transform 180ms ease, box-shadow 240ms ease, background 220ms ease;
+  border: 3px solid rgba(58, 243, 255, 0.5);
+  box-shadow: 0 0 12px rgba(58, 243, 255, 0.5), 0 0 30px rgba(58, 243, 255, 0.25), 0 4px 16px rgba(58, 243, 255, 0.3);
+  transition: transform 180ms ease, box-shadow 240ms ease, background 220ms ease, border-color 220ms ease;
+}
+
+.primaryButton:hover {
+  transform: translateY(-1px);
+  border-color: rgba(58, 243, 255, 0.7);
+  box-shadow: 0 0 16px rgba(58, 243, 255, 0.6), 0 0 40px rgba(58, 243, 255, 0.35), 0 6px 24px rgba(58, 243, 255, 0.4);
 }
 
 .headerLinks {
@@ -126,7 +133,7 @@
 .primaryButton:hover {
   transform: translateY(-1px);
   background: #5dfaff;
-  box-shadow: 0 0 0 1px rgba(58, 243, 255, 0.55), 0 12px 30px rgba(58, 243, 255, 0.35);
+  box-shadow: 0 0 16px rgba(58, 243, 255, 0.6), 0 0 40px rgba(58, 243, 255, 0.35), 0 6px 24px rgba(58, 243, 255, 0.4);
 }
 
 .hero {
@@ -335,7 +342,7 @@
 .footerBrandName {
   font-size: 1.3rem;
   font-weight: 800;
-  color: var(--cs-white);
+  color: #ffffff;
   letter-spacing: -0.01em;
 }
 
@@ -353,14 +360,14 @@
 }
 
 .footerContactLink {
-  color: var(--cs-white);
+  color: #ffffff;
   font-weight: 600;
   text-decoration: none;
   transition: color 180ms ease;
 }
 
 .footerContactLink:hover {
-  color: var(--cs-accent);
+  color: #3AF3FF;
 }
 
 .footerLinkCol {
@@ -373,7 +380,7 @@
   margin: 0;
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--cs-white);
+  color: #ffffff;
   letter-spacing: 0.01em;
 }
 
@@ -394,7 +401,7 @@
 }
 
 .footerLink:hover {
-  color: var(--cs-accent);
+  color: #3AF3FF;
 }
 
 .footerBottom {
