@@ -28,6 +28,18 @@
   margin: 0 auto;
 }
 
+@media (min-width: 1440px) {
+  .contentWrap {
+    width: min(1440px, calc(100% - 6rem));
+  }
+}
+
+@media (min-width: 1920px) {
+  .contentWrap {
+    width: min(1680px, calc(100% - 10rem));
+  }
+}
+
 .siteHeader {
   position: fixed;
   top: 0;
@@ -538,5 +550,97 @@
 
   .footerBrandCol {
     grid-column: 1 / -1;
+  }
+}
+
+/* ─── Large screens (1440px+) ─── */
+@media (min-width: 1440px) {
+  .heroTitle,
+  .heroHighlight,
+  .heroSheets {
+    font-size: clamp(4rem, 5.5vw, 5.5rem);
+  }
+
+  .heroSubheading {
+    font-size: 1.35rem;
+    max-width: 28ch;
+  }
+
+  .regionCard {
+    padding: 2rem;
+    min-height: 300px;
+  }
+
+  .regionTitle {
+    font-size: 1.75rem;
+  }
+
+  .regionSubtitle {
+    font-size: 1.1rem;
+  }
+
+  .headerNav {
+    gap: 3rem;
+  }
+
+  .headerNavLink {
+    font-size: 1.12rem;
+  }
+
+  .footerGrid {
+    gap: 2.5rem 4rem;
+  }
+}
+
+/* ─── Extra-large screens (1920px+) ─── */
+@media (min-width: 1920px) {
+  .heroTitle,
+  .heroHighlight,
+  .heroSheets {
+    font-size: clamp(5rem, 4.5vw, 6.5rem);
+  }
+
+  .heroSubheading {
+    font-size: 1.5rem;
+    max-width: 32ch;
+  }
+
+  .hero {
+    padding: clamp(3rem, 4vw, 5.5rem) 0;
+  }
+
+  .regionCard {
+    padding: 2.5rem;
+    min-height: 340px;
+  }
+
+  .regionTitle {
+    font-size: 2rem;
+  }
+
+  .regionSubtitle {
+    font-size: 1.2rem;
+  }
+
+  .regionButton {
+    padding: 0.85rem 1.4rem;
+    font-size: 1.05rem;
+  }
+
+  .headerNavLink {
+    font-size: 1.2rem;
+  }
+
+  .primaryButton {
+    padding: 0.85rem 2.2rem;
+    font-size: 1.05rem;
+  }
+
+  .imageFrame {
+    max-height: 480px;
+  }
+
+  .heroImage {
+    height: 480px;
   }
 }

@@ -921,3 +921,106 @@ button:hover .cs-arrow-slide {
     transform: none;
   }
 }
+
+/* ─── Large screens (1440px+) ─── */
+@media (min-width: 1440px) {
+  .cs-hero-stat-value {
+    font-size: 2.25rem;
+  }
+
+  .cs-hero-stat-label {
+    font-size: 0.85rem;
+  }
+
+  .cs-hero-stats {
+    gap: 4rem;
+  }
+
+  .cs-overline {
+    font-size: 0.8rem;
+    letter-spacing: 0.25em;
+  }
+
+  .cs-retailer-card {
+    padding: 3.5rem 3.5rem 4rem;
+  }
+
+  .cs-step-card {
+    padding: 3rem 2.5rem;
+  }
+
+  .cs-compare-table th {
+    padding: 1.25rem 2rem;
+    font-size: 0.8rem;
+  }
+
+  .cs-compare-table td {
+    padding: 1.25rem 2rem;
+    font-size: 1rem;
+  }
+
+  .cs-proof-strip {
+    gap: 4rem;
+  }
+
+  .cs-intl-link {
+    padding: 1.5rem 2.5rem;
+  }
+}
+
+/* ─── Extra-large screens (1920px+) ─── */
+@media (min-width: 1920px) {
+  .cs-hero-stat-value {
+    font-size: 2.75rem;
+  }
+
+  .cs-hero-stat-label {
+    font-size: 0.9rem;
+  }
+
+  .cs-hero-stats {
+    gap: 5rem;
+  }
+
+  .cs-overline {
+    font-size: 0.85rem;
+  }
+
+  .cs-retailer-card {
+    padding: 4rem 4rem 4.5rem;
+    border-radius: 24px;
+  }
+
+  .cs-step-card {
+    padding: 3.5rem 3rem;
+    border-radius: 24px;
+  }
+
+  .cs-compare-table th {
+    padding: 1.5rem 2.5rem;
+    font-size: 0.85rem;
+  }
+
+  .cs-compare-table td {
+    padding: 1.5rem 2.5rem;
+    font-size: 1.05rem;
+  }
+
+  .cs-proof-strip {
+    gap: 5rem;
+  }
+
+  .cs-glass-card {
+    padding: 1rem 1.75rem;
+  }
+
+  .cs-intl-link {
+    padding: 1.75rem 3rem;
+    border-radius: 20px;
+  }
+
+  .cs-retailer-badge {
+    font-size: 0.75rem;
+    padding: 0.5rem 1.25rem;
+  }
+}
