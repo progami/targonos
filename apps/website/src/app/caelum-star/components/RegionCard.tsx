@@ -7,6 +7,7 @@ type RegionCardProps = {
   subtitle: string;
   buttonLabel: string;
   href: string;
+  external?: boolean;
 };
 
 export function CaelumStarRegionCard({
@@ -14,7 +15,8 @@ export function CaelumStarRegionCard({
   title,
   subtitle,
   buttonLabel,
-  href
+  href,
+  external
 }: RegionCardProps) {
   return (
     <article className={`${styles.regionCard} ${styles.fadeIn}`}>
@@ -23,9 +25,15 @@ export function CaelumStarRegionCard({
       </span>
       <h2 className={styles.regionTitle}>{title}</h2>
       <p className={styles.regionSubtitle}>{subtitle}</p>
-      <Link href={href} className={styles.regionButton}>
-        {buttonLabel}
-      </Link>
+      {external ? (
+        <a href={href} target="_blank" rel="noreferrer" className={styles.regionButton}>
+          {buttonLabel}
+        </a>
+      ) : (
+        <Link href={href} className={styles.regionButton}>
+          {buttonLabel}
+        </Link>
+      )}
     </article>
   );
 }

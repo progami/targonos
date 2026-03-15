@@ -57,6 +57,18 @@ export type Product = {
    */
   price?: string;
 
+  /** Original/typical price before discount */
+  typicalPrice?: string;
+
+  /** Discount percentage e.g. “-11%” */
+  discount?: string;
+
+  /** Per-unit price e.g. “$1.33 / count” */
+  unitPrice?: string;
+
+  /** Special price badge e.g. “Lowest price in 30 days” */
+  priceBadge?: string;
+
   /**
    * Coverage callout used in Apple-style comparisons.
    * Example: “648 sq ft”.
@@ -101,7 +113,10 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    price: '$9.99',
+    price: '$7.99',
+    typicalPrice: '$8.99',
+    discount: '-11%',
+    unitPrice: '$1.33 / count',
     tagline: 'Essential coverage for standard projects.',
     description: 'Extra‑large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
@@ -138,12 +153,54 @@ export const products: Product[] = [
     amazonUrl: AMAZON_US_6PK
   },
   {
+    slug: '1pk-strong',
+    name: '1 Pack',
+    packLabel: '1 PK',
+    thicknessLabel: 'Strong',
+    coverageLabel: '108 sq ft',
+    price: '$5.99',
+    typicalPrice: '$6.99',
+    discount: '-14%',
+    priceBadge: 'Lowest price in 30 days',
+    tagline: 'Core coverage for spot projects.',
+    description: 'One extra‑large sheet with strong durability for quick jobs.',
+    longDescription: [
+      'Core coverage, ideal for spot projects.',
+      'Strong durability for reliable protection.',
+      '55% recycled plastic, globally certified.'
+    ],
+    highlights: ['12ft × 9ft sheet', 'Strong durability', '55% recycled plastic (GRS)'],
+    specs: [
+      { label: 'Pack', value: '1 sheet' },
+      { label: 'Coverage', value: '108 sq ft (≈10 m²)' },
+      { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft)' },
+      { label: 'Durability', value: 'Strong' },
+      { label: 'Material', value: 'LDPE (plastic sheeting)' }
+    ],
+    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
+    gallery: [
+      {
+        src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
+        alt: 'Core coverage — perfect for spot projects (1 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/uk/1pk-strong-hero.webp', alt: '1 pack coverage and thickness', variant: 'square' },
+      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
+      { src: '/images/amazon/strong-vs-light.webp', alt: 'Strong vs light durability comparison', variant: 'wide' },
+      { src: '/images/amazon/aplus-4.webp', alt: 'One sheet, multiple benefits', variant: 'wide' }
+    ],
+    amazonUrl: AMAZON_US_1PK
+  },
+  {
     slug: '3pk-standard',
     name: '3 Pack',
     packLabel: '3 PK',
     thicknessLabel: 'Standard',
     coverageLabel: '324 sq ft',
-    price: '$15.99',
+    price: '$11.99',
+    typicalPrice: '$15.99',
+    discount: '-25%',
+    unitPrice: '$4.00 / count',
     tagline: 'Basic coverage for single‑room work.',
     description: 'Extra‑large dust sheets built for standard decorating use.',
     longDescription: [
@@ -175,48 +232,15 @@ export const products: Product[] = [
     amazonUrl: AMAZON_US_3PK
   },
   {
-    slug: '1pk-strong',
-    name: '1 Pack',
-    packLabel: '1 PK',
-    thicknessLabel: 'Strong',
-    coverageLabel: '108 sq ft',
-    price: '$6.99',
-    tagline: 'Core coverage for spot projects.',
-    description: 'One extra‑large sheet with strong durability for quick jobs.',
-    longDescription: [
-      'Core coverage, ideal for spot projects.',
-      'Strong durability for reliable protection.',
-      '55% recycled plastic, globally certified.'
-    ],
-    highlights: ['12ft × 9ft sheet', 'Strong durability', '55% recycled plastic (GRS)'],
-    specs: [
-      { label: 'Pack', value: '1 sheet' },
-      { label: 'Coverage', value: '108 sq ft (≈10 m²)' },
-      { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft)' },
-      { label: 'Durability', value: 'Strong' },
-      { label: 'Material', value: 'LDPE (plastic sheeting)' }
-    ],
-    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
-    gallery: [
-      {
-        src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
-        alt: 'Core coverage — perfect for spot projects (1 pack)',
-        variant: 'square'
-      },
-      { src: '/images/amazon/uk/1pk-strong-hero.webp', alt: '1 pack coverage and thickness', variant: 'square' },
-      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
-      { src: '/images/amazon/strong-vs-light.webp', alt: 'Strong vs light durability comparison', variant: 'wide' },
-      { src: '/images/amazon/aplus-4.webp', alt: 'One sheet, multiple benefits', variant: 'wide' }
-    ],
-    amazonUrl: AMAZON_US_1PK
-  },
-  {
     slug: '12pk-light',
     name: '12 Pack',
     packLabel: '12 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1296 sq ft',
-    price: '$14.99',
+    price: '$11.99',
+    typicalPrice: '$12.99',
+    discount: '-8%',
+    unitPrice: '$1.00 / count',
     tagline: 'Deluxe coverage for multi‑room renovations.',
     description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
@@ -296,6 +320,42 @@ export const productsUK: Product[] = [
     amazonUrl: AMAZON_UK_6PK
   },
   {
+    slug: '1pk-strong',
+    name: '1 Pack',
+    packLabel: '1 PK',
+    thicknessLabel: 'Strong',
+    coverageLabel: '108 sq ft',
+    price: '£5.99',
+    tagline: 'Core coverage for spot projects.',
+    description: 'One extra‑large sheet with strong durability for quick jobs.',
+    longDescription: [
+      'Core coverage, ideal for spot projects.',
+      'Strong durability for reliable protection.',
+      '55% recycled plastic, globally certified.'
+    ],
+    highlights: ['12ft × 9ft sheet', 'Strong durability', '55% recycled plastic (GRS)'],
+    specs: [
+      { label: 'Pack', value: '1 sheet' },
+      { label: 'Coverage', value: '108 sq ft (≈10 m²)' },
+      { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft)' },
+      { label: 'Durability', value: 'Strong' },
+      { label: 'Material', value: 'LDPE (plastic sheeting)' }
+    ],
+    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
+    gallery: [
+      {
+        src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
+        alt: 'Core coverage — perfect for spot projects (1 pack)',
+        variant: 'square'
+      },
+      { src: '/images/amazon/uk/1pk-strong-hero.webp', alt: '1 pack coverage and thickness', variant: 'square' },
+      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
+      { src: '/images/amazon/strong-vs-light.webp', alt: 'Strong vs light durability comparison', variant: 'wide' },
+      { src: '/images/amazon/aplus-4.webp', alt: 'One sheet, multiple benefits', variant: 'wide' }
+    ],
+    amazonUrl: AMAZON_UK_1PK
+  },
+  {
     slug: '3pk-standard',
     name: '3 Pack',
     packLabel: '3 PK',
@@ -331,42 +391,6 @@ export const productsUK: Product[] = [
       { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' }
     ],
     amazonUrl: AMAZON_UK_3PK
-  },
-  {
-    slug: '1pk-strong',
-    name: '1 Pack',
-    packLabel: '1 PK',
-    thicknessLabel: 'Strong',
-    coverageLabel: '108 sq ft',
-    price: '£5.99',
-    tagline: 'Core coverage for spot projects.',
-    description: 'One extra‑large sheet with strong durability for quick jobs.',
-    longDescription: [
-      'Core coverage, ideal for spot projects.',
-      'Strong durability for reliable protection.',
-      '55% recycled plastic, globally certified.'
-    ],
-    highlights: ['12ft × 9ft sheet', 'Strong durability', '55% recycled plastic (GRS)'],
-    specs: [
-      { label: 'Pack', value: '1 sheet' },
-      { label: 'Coverage', value: '108 sq ft (≈10 m²)' },
-      { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft)' },
-      { label: 'Durability', value: 'Strong' },
-      { label: 'Material', value: 'LDPE (plastic sheeting)' }
-    ],
-    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
-    gallery: [
-      {
-        src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
-        alt: 'Core coverage — perfect for spot projects (1 pack)',
-        variant: 'square'
-      },
-      { src: '/images/amazon/uk/1pk-strong-hero.webp', alt: '1 pack coverage and thickness', variant: 'square' },
-      { src: '/images/amazon/pick-protection.webp', alt: 'Pick your protection: pack options at a glance', variant: 'wide' },
-      { src: '/images/amazon/strong-vs-light.webp', alt: 'Strong vs light durability comparison', variant: 'wide' },
-      { src: '/images/amazon/aplus-4.webp', alt: 'One sheet, multiple benefits', variant: 'wide' }
-    ],
-    amazonUrl: AMAZON_UK_1PK
   },
   {
     slug: '12pk-light',

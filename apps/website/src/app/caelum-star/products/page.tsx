@@ -134,7 +134,7 @@ export default function ProductsPage() {
 
           <div className="cs-product-showcase mt-14">
             {products.map((p, i) => (
-              <Reveal key={p.slug} variant="media" delay={i * 100}>
+              <Reveal key={p.slug} variant="media" delay={i * 100} className="h-full">
                 <ProductCard product={p} />
               </Reveal>
             ))}
@@ -201,7 +201,7 @@ export default function ProductsPage() {
               { title: 'Pack Options', desc: 'From 1 sheet to 12 — pick the size for your project.' },
               { title: 'Eco Packaging', desc: 'Eco-kind packaging as standard across all packs.' }
             ].map((item, i) => (
-              <Reveal key={item.title} variant="media" delay={i * 80}>
+              <Reveal key={item.title} variant="media" delay={i * 80} className="h-full">
                 <div className="cs-step-card group flex h-full flex-col items-center text-center">
                   <h3 className="text-lg font-bold tracking-[-0.01em] text-white">{item.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-white/50">{item.desc}</p>

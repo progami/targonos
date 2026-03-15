@@ -29,10 +29,7 @@ const rawInternationalAmazonLinks = [
   { label: '6 Pack — Light', region: 'US', url: site.amazonStoreUrl },
   { label: '12 Pack — Light', region: 'US', url: bySlug('12pk-light') ?? site.amazonStoreAltUrl ?? '#' },
   { label: '1 Pack — Strong', region: 'US', url: bySlug('1pk-strong') ?? '#' },
-  { label: '3 Pack — Standard', region: 'US', url: bySlug('3pk-standard') ?? '#' },
-  site.amazonStoreAltUrl && site.amazonStoreAltUrl !== (bySlug('12pk-light') ?? '')
-    ? { label: '12 Pack — Light (Alternate)', region: 'US', url: site.amazonStoreAltUrl }
-    : null
+  { label: '3 Pack — Standard', region: 'US', url: bySlug('3pk-standard') ?? '#' }
 ].filter(Boolean) as { label: string; region: string; url: string }[];
 
 const internationalAmazonLinks = Array.from(
@@ -152,7 +149,7 @@ export default function WhereToBuyPage() {
 
           <div className="mt-20 grid gap-8 md:grid-cols-2">
             {/* Amazon Card */}
-            <Reveal variant="media" delay={100}>
+            <Reveal variant="media" delay={100} className="h-full">
               <div className="cs-retailer-card cs-retailer-card--primary flex h-full flex-col">
                 <div className="cs-retailer-badge bg-[#3AF3FF]/15 text-[#3AF3FF]">
                   <ShoppingCart className="h-3.5 w-3.5" />
@@ -189,7 +186,7 @@ export default function WhereToBuyPage() {
             </Reveal>
 
             {/* Bulk / Wholesale Card */}
-            <Reveal variant="media" delay={200}>
+            <Reveal variant="media" delay={200} className="h-full">
               <div className="cs-retailer-card flex h-full flex-col">
                 <div className="cs-retailer-badge bg-white/10 text-white/70">
                   <Package className="h-3.5 w-3.5" />
@@ -255,7 +252,7 @@ export default function WhereToBuyPage() {
 
           <div className="cs-product-showcase mt-14">
             {products.map((p, i) => (
-              <Reveal key={p.slug} variant="media" delay={i * 100}>
+              <Reveal key={p.slug} variant="media" delay={i * 100} className="h-full">
                 <ProductCard product={p} />
               </Reveal>
             ))}
