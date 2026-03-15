@@ -482,17 +482,9 @@ body.tg-home .tg-ring--core {
   }
 }
 
-/* Dark section: navy gradient with fades into page bg */
+/* Dark section: navy flat */
 .cs-dark-section--navy {
-  background: linear-gradient(
-    to bottom,
-    rgb(var(--bg)),
-    #0B273F 100px,
-    #002C51 220px,
-    #002C51 calc(100% - 220px),
-    #0B273F calc(100% - 100px),
-    rgb(var(--bg))
-  );
+  background: #0B273F;
 }
 
 /* Dark section: deeper navy for sustainability */
@@ -520,20 +512,412 @@ body.tg-home .tg-ring--core {
 
 /* Shorter dark hero gradient for interior pages */
 .pg-hero {
-  background: linear-gradient(
-    180deg,
-    #001220 0%,
-    #002C51 30%,
-    #0B273F 65%,
-    rgb(var(--bg)) 100%
-  );
+  background: #0B273F;
 }
 
 /* Dark gradient CTA card */
 .cs-support-card {
-  background: linear-gradient(135deg, #002C51 0%, #0B273F 100%);
+  background:
+    radial-gradient(ellipse 50% 60% at 90% 20%, rgba(0, 194, 185, 0.06), transparent 70%),
+    linear-gradient(135deg, #002C51 0%, #0B273F 100%);
   border: 1px solid rgba(0, 194, 185, 0.1);
   box-shadow:
     0 20px 60px rgba(0, 44, 81, 0.18),
-    0 0 0 1px rgba(0, 194, 185, 0.04);
+    0 0 30px rgba(0, 194, 185, 0.04);
+  transition: box-shadow 0.4s ease;
+}
+
+.cs-support-card:hover {
+  box-shadow:
+    0 24px 64px rgba(0, 44, 81, 0.22),
+    0 0 40px rgba(0, 194, 185, 0.08);
+}
+
+/* ============================================
+   Packs page — enhanced product cards
+   ============================================ */
+
+/* Product card lift + ring on hover */
+.cs-product-card {
+  transition:
+    transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1),
+    box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.cs-product-card:hover {
+  transform: translateY(-8px);
+  box-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.12),
+    0 0 0 2px rgb(var(--accent));
+}
+
+/* Image zoom on card hover */
+.cs-product-card .cs-card-image {
+  transition: transform 0.5s ease-out;
+}
+
+.cs-product-card:hover .cs-card-image {
+  transform: scale(1.05);
+}
+
+/* Price scale on card hover */
+.cs-product-card .cs-card-price {
+  transition: transform 0.3s ease;
+}
+
+.cs-product-card:hover .cs-card-price {
+  transform: scale(1.08);
+}
+
+/* Buy button arrow slide */
+.cs-buy-arrow {
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.cs-product-card:hover .cs-buy-arrow {
+  transform: translateX(3px);
+}
+
+/* "Most Popular" badge shimmer */
+.cs-badge-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.cs-badge-shimmer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 100%
+  );
+  animation: cs-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes cs-shimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* Durability bars visual indicator */
+.cs-durability-bar {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: rgb(var(--border));
+  transition: background 0.3s ease;
+}
+
+.cs-durability-bar--filled {
+  background: rgb(var(--accent));
+}
+
+/* Info strip glass card */
+.cs-glass-card {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 1.15rem 1.5rem;
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.cs-glass-card:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 194, 185, 0.2);
+}
+
+/* Animated arrow for links */
+.cs-arrow-slide {
+  transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+a:hover .cs-arrow-slide,
+button:hover .cs-arrow-slide {
+  transform: translateX(4px);
+}
+
+/* Enhanced product glow for primary card */
+.cs-product-glow--strong {
+  position: absolute;
+  inset: 4%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(0, 194, 185, 0.25) 0%,
+    rgba(0, 44, 81, 0.08) 50%,
+    transparent 70%
+  );
+  filter: blur(50px);
+  z-index: 0;
+  animation: cs-glow-pulse 4s ease-in-out infinite;
+}
+
+/* Hero H1 text glow */
+.cs-hero-glow {
+  text-shadow: 0 0 40px rgba(0, 194, 185, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-badge-shimmer::after {
+    animation: none;
+  }
+
+  .cs-product-card:hover {
+    transform: none;
+  }
+
+  .cs-product-card:hover .cs-card-image {
+    transform: none;
+  }
+
+  .cs-product-glow--strong {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ============================================
+   Where to Buy / Support — immersive pages
+   ============================================ */
+
+/* Prussian Blue atmospheric hero with radial glow */
+.cs-prussian-hero {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(58, 243, 255, 0.06), transparent 70%),
+    linear-gradient(180deg, #012D44 0%, #0B273F 50%, #0B273F 100%);
+}
+
+/* Retailer card — glassmorphic with accent glow */
+.cs-retailer-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background:
+    rgba(230, 250, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 3rem 3rem 3.5rem;
+  transition: transform 0.3s ease-in-out,
+              box-shadow 0.3s ease-in-out,
+              border-color 0.3s ease-in-out;
+}
+
+.cs-retailer-card:hover {
+  transform: scale(1.02) translateY(-4px);
+  border-color: rgba(58, 243, 255, 0.3);
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.3),
+    0 0 40px rgba(58, 243, 255, 0.06);
+}
+
+/* Inner radial glow on cards */
+.cs-retailer-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at 14% 0%, rgba(58, 243, 255, 0.08), transparent 56%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.cs-retailer-card:hover::after {
+  opacity: 1;
+}
+
+/* Primary retailer card — accent border glow */
+.cs-retailer-card--primary {
+  border-color: rgba(58, 243, 255, 0.25);
+  box-shadow:
+    0 0 0 1px rgba(58, 243, 255, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.2);
+}
+
+.cs-retailer-card--primary:hover {
+  border-color: rgba(58, 243, 255, 0.5);
+  box-shadow:
+    0 0 0 1px rgba(58, 243, 255, 0.15),
+    0 0 30px rgba(58, 243, 255, 0.12),
+    0 24px 64px rgba(0, 0, 0, 0.3);
+}
+
+/* Accent CTA button with glow */
+.cs-btn-glow {
+  background: linear-gradient(180deg, #3AF3FF 0%, #00D1FF 100%) !important;
+  box-shadow: 0 0 15px rgba(58, 243, 255, 0.4);
+  transition: box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out !important;
+}
+
+.cs-btn-glow:hover {
+  box-shadow: 0 0 25px rgba(58, 243, 255, 0.55), 0 8px 24px rgba(58, 243, 255, 0.25);
+}
+
+/* Product showcase grid */
+.cs-product-showcase {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+  .cs-product-showcase {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .cs-product-showcase {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+    margin: 0 auto;
+  }
+}
+
+/* International link row */
+.cs-intl-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(230, 250, 255, 0.03);
+  backdrop-filter: blur(8px);
+  transition: background 0.3s ease-in-out, border-color 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.cs-intl-link:hover {
+  background: rgba(58, 243, 255, 0.06);
+  border-color: rgba(58, 243, 255, 0.25);
+  transform: translateX(4px) scale(1.01);
+}
+
+/* Floating badge for retailer cards */
+.cs-retailer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+/* Stats row for hero */
+.cs-hero-stats {
+  display: flex;
+  gap: 3rem;
+  flex-wrap: wrap;
+}
+
+.cs-hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.cs-hero-stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #3AF3FF;
+  text-shadow: 0 0 20px rgba(58, 243, 255, 0.3);
+}
+
+.cs-hero-stat-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Comparison table */
+.cs-compare-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cs-compare-table th {
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cs-compare-table td {
+  padding: 1rem 1.5rem;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cs-compare-table tr:last-child td {
+  border-bottom: none;
+}
+
+.cs-compare-table td:first-child {
+  font-weight: 600;
+  color: white;
+}
+
+/* Step card with number */
+.cs-step-card {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(230, 250, 255, 0.03);
+  backdrop-filter: blur(10px);
+  padding: 2.5rem 2rem;
+  transition: border-color 0.3s ease-in-out, transform 0.3s ease-in-out;
+}
+
+.cs-step-card:hover {
+  border-color: rgba(58, 243, 255, 0.2);
+  transform: translateY(-4px);
+}
+
+/* Social proof logos strip */
+.cs-proof-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3rem;
+  flex-wrap: wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-retailer-card:hover {
+    transform: none;
+  }
+
+  .cs-intl-link:hover {
+    transform: none;
+  }
+
+  .cs-step-card:hover {
+    transform: none;
+  }
 }
