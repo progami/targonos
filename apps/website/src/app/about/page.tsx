@@ -82,12 +82,12 @@ export default function AboutPage() {
               <p className="cs-overline text-[#3AF3FF]">Company</p>
             </Reveal>
             <Reveal delay={60}>
-              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
+              <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] 2xl:text-[clamp(4rem,4.5vw,5.5rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
                 Built for Clean Work.
               </h1>
             </Reveal>
             <Reveal delay={140}>
-              <p className="mt-5 max-w-xl text-[1.05rem] leading-relaxed text-white/60 md:text-lg">
+              <p className="mt-5 max-w-xl text-[1.05rem] leading-relaxed text-white/60 md:text-lg 2xl:max-w-2xl 2xl:text-xl">
                 {site.name} builds protection products for decorating. Big coverage, simple choices, clear details — available on Amazon worldwide.
               </p>
             </Reveal>
@@ -151,7 +151,7 @@ export default function AboutPage() {
           {/* Centered heading */}
           <Reveal>
             <p className="cs-overline text-center text-lg text-[#3AF3FF]">Our Mission</p>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Protection Made Simple
             </h2>
           </Reveal>
@@ -174,7 +174,7 @@ export default function AboutPage() {
             {/* Text — right side */}
             <div className="md:col-span-7">
               <Reveal delay={150}>
-                <div className="space-y-5 text-base leading-relaxed text-white/55">
+                <div className="space-y-5 text-base leading-relaxed text-white/55 2xl:text-lg">
                   <p className="text-lg text-white/70">
                     We believe protecting your space shouldn&apos;t be complicated. One product, four pack sizes, honest specs — that&apos;s it.
                   </p>
@@ -184,15 +184,6 @@ export default function AboutPage() {
                   <p>
                     We sell on Amazon so you get fast shipping, easy returns, and real reviews from real customers.
                   </p>
-                </div>
-              </Reveal>
-              <Reveal delay={250}>
-                <div className="mt-8">
-                  <Button asChild variant="accent" size="lg" className="cs-btn-glow">
-                    <Link href="/caelum-star">
-                      Learn More <ArrowRight className="cs-arrow-slide h-4 w-4" />
-                    </Link>
-                  </Button>
                 </div>
               </Reveal>
             </div>
@@ -219,12 +210,12 @@ export default function AboutPage() {
               <Sparkles className="h-6 w-6 text-[#3AF3FF]" />
               <p className="cs-overline text-lg text-[#3AF3FF]">What We Stand For</p>
             </div>
-            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] font-bold tracking-[-0.01em] text-white">
+            <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
               Our Values
             </h2>
           </Reveal>
 
-          <div className="mx-auto mt-14 grid max-w-5xl gap-6 sm:grid-cols-2">
+          <div className="mx-auto mt-14 grid max-w-5xl 2xl:max-w-7xl gap-6 sm:grid-cols-2">
             {values.map((v, i) => (
               <Reveal key={v.title} variant="media" delay={i * 100}>
                 <div className="cs-step-card group flex h-full gap-5 text-left">
