@@ -12,6 +12,8 @@ const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicag
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
 const CAPTURE_CHILD_TIMEOUT_MS = 210_000
+const PART_WIDTH = 1400
+const PART_HEIGHT = 4300
 
 function log(message) {
   fs.appendFileSync(LOG, `${timestamp()} — ${message}\n`)
@@ -93,18 +95,22 @@ function identifySize(filePath) {
   return { width, height }
 }
 
-function cropScreenshot(sourcePath, destBaseDir, width, height) {
-  const partHeight = Math.floor(height / 4)
+function cropScreenshot(sourcePath, destBaseDir, width) {
   for (let index = 1; index <= 4; index += 1) {
-    const top = (index - 1) * partHeight
-    const cropHeight = index === 4 ? height - top : partHeight
+    const top = (index - 1) * PART_HEIGHT
     const partDir = path.join(destBaseDir, `part${index}`)
     fs.mkdirSync(partDir, { recursive: true })
     runFile('magick', [
       sourcePath,
+      '-background',
+      'white',
       '-crop',
-      `${width}x${cropHeight}+0+${top}`,
+      `${Math.min(width, PART_WIDTH)}x${PART_HEIGHT}+0+${top}`,
       '+repage',
+      '-gravity',
+      'northwest',
+      '-extent',
+      `${PART_WIDTH}x${PART_HEIGHT}`,
       path.join(partDir, `${TODAY}.png`),
     ])
   }
@@ -121,8 +127,8 @@ function captureListing(asin, brand) {
       killSignal: 'SIGKILL',
     })
 
-    const { width, height } = identifySize(tmpPng)
-    cropScreenshot(tmpPng, destBaseDir, width, height)
+    const { width } = identifySize(tmpPng)
+    cropScreenshot(tmpPng, destBaseDir, width)
     log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
     return true
   } catch (error) {
