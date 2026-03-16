@@ -20,6 +20,7 @@ export const GET = withAuth(async (req, session) => {
  const warehouseId = searchParams.get('warehouseId')
  const date = searchParams.get('date')
  const skuCode = searchParams.get('skuCode')
+ const hasExplicitPagination = searchParams.has('page') || searchParams.has('limit')
 
  const paginationParams = getPaginationParams(req)
 
@@ -68,9 +69,7 @@ export const GET = withAuth(async (req, session) => {
 
   const transactions = await prisma.inventoryTransaction.findMany({
     where: transactionWhere,
-    orderBy: pointInTime
-      ? [{ transactionDate: 'asc' }, { createdAt: 'asc' }]
-      : [{ createdAt: 'asc' }],
+    orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
     include: {
       purchaseOrder: {
         select: { orderNumber: true },
@@ -83,32 +82,33 @@ export const GET = withAuth(async (req, session) => {
 
   const ledgerTransactions = transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
     ...transaction,
-    transactionDate: pointInTime ? transaction.transactionDate : transaction.createdAt,
+    transactionDate: transaction.transactionDate,
     purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
     fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
   }))
 
   const aggregated = aggregateInventoryTransactions(ledgerTransactions)
 
-  const paginatedBalances = date
-    ? aggregated.balances
-    : aggregated.balances.slice(skip, skip + take)
+  const selectedBalances =
+    date || !hasExplicitPagination
+      ? aggregated.balances
+      : aggregated.balances.slice(skip, skip + take)
 
-  const warehouseCodes = [...new Set(paginatedBalances.map(b => b.warehouseCode))]
+  const warehouseCodes = [...new Set(selectedBalances.map(b => b.warehouseCode))]
   const warehouses = await prisma.warehouse.findMany({
     where: { code: { in: warehouseCodes } },
     select: { id: true, code: true }
   })
   const warehouseMap = new Map(warehouses.map(w => [w.code, w.id]))
 
-  const skuCodes = [...new Set(paginatedBalances.map(b => b.skuCode))]
+  const skuCodes = [...new Set(selectedBalances.map(b => b.skuCode))]
   const skus = await prisma.sku.findMany({
     where: { skuCode: { in: skuCodes } },
     select: { id: true, skuCode: true }
   })
   const skuMap = new Map(skus.map(s => [s.skuCode, s.id]))
 
-  const results = paginatedBalances.map(balance => {
+  const results = selectedBalances.map(balance => {
     const receiveTransaction = balance.firstReceive
       ? {
           createdBy: {
@@ -153,6 +153,13 @@ export const GET = withAuth(async (req, session) => {
   const summary = aggregated.summary
 
   if (date) {
+    return NextResponse.json({
+      data: results,
+      summary
+    })
+  }
+
+  if (!hasExplicitPagination) {
     return NextResponse.json({
       data: results,
       summary
