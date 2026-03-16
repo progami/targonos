@@ -67,6 +67,7 @@ import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import {
   PO_COST_CURRENCIES,
   normalizePoCostCurrency,
+  PURCHASE_ORDER_BASE_CURRENCY,
   type PoCostCurrency,
 } from '@/lib/constants/cost-currency'
 
@@ -407,6 +408,25 @@ type SupplierAdjustmentEntry = {
 function resolveCostCurrency(value: unknown, fallback: PoCostCurrency = 'USD'): PoCostCurrency {
   const normalized = normalizePoCostCurrency(value)
   return normalized ?? fallback
+}
+
+function formatCostAmount(amount: number): string {
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatCurrencyAmount(currency: PoCostCurrency, amount: number): string {
+  return `${currency} ${formatCostAmount(amount)}`
+}
+
+function formatCurrencySummary(amounts: Partial<Record<PoCostCurrency, number>>): string {
+  const parts = PO_COST_CURRENCIES.flatMap(currency => {
+    const amount = amounts[currency] ?? 0
+    return amount !== 0 ? [formatCurrencyAmount(currency, amount)] : []
+  })
+  return parts.length > 0 ? parts.join(' + ') : '—'
 }
 
 const STAGE_DOCUMENTS: Record<
@@ -807,8 +827,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [draftLines, setDraftLines] = useState<PurchaseOrderLineSummary[]>([])
   const [tenantDestination, setTenantDestination] = useState<string>('')
   const [tenantDisplayCode, setTenantDisplayCode] = useState<string>('')
-  const [tenantCurrency, setTenantCurrency] = useState<string>('USD')
-  const defaultCostCurrency = resolveCostCurrency(tenantCurrency)
+  const purchaseOrderCurrency = PURCHASE_ORDER_BASE_CURRENCY
+  const defaultCostCurrency = purchaseOrderCurrency
   const [transitioning, setTransitioning] = useState(false)
   const [creating, setCreating] = useState(false)
   const [orderInfoEditing, setOrderInfoEditing] = useState(false)
@@ -1047,12 +1067,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         })
         if (!response.ok) return
         const payload = await response.json().catch(() => null)
-        const currency = payload?.current?.currency
         const tenantName = payload?.current?.name
         const tenantShortCode = payload?.current?.displayName ?? payload?.current?.code
-        if (typeof currency === 'string' && currency.trim()) {
-          setTenantCurrency(currency.trim().toUpperCase())
-        }
         if (typeof tenantShortCode === 'string' && tenantShortCode.trim()) {
           setTenantDisplayCode(tenantShortCode.trim().toUpperCase())
         }
@@ -1424,7 +1440,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       setSupplierAdjustmentDraft({
         kind: 'credit',
         amount: '',
-        currency: defaultCostCurrency,
+        currency: purchaseOrderCurrency,
         notes: '',
       })
       return
@@ -1434,10 +1450,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     setSupplierAdjustmentDraft({
       kind,
       amount: Math.abs(supplierAdjustment.amount).toFixed(2),
-      currency: resolveCostCurrency(supplierAdjustment.currency, defaultCostCurrency),
+      currency: purchaseOrderCurrency,
       notes: supplierAdjustment.notes ? supplierAdjustment.notes : '',
     })
-  }, [supplierAdjustment, supplierAdjustmentEditing, defaultCostCurrency])
+  }, [supplierAdjustment, supplierAdjustmentEditing, purchaseOrderCurrency])
 
   const refreshManualWarehouseCosts = useCallback(async () => {
     if (!order?.id) return
@@ -1467,7 +1483,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           category: String(entry.category),
           costName: String(entry.costName),
           amount: Number(entry.amount),
-          currency: resolveCostCurrency(entry.currency, defaultCostCurrency),
+          currency: purchaseOrderCurrency,
           createdByName: String(entry.createdByName),
           createdAt: String(entry.createdAt),
           notes: typeof entry.notes === 'string' ? entry.notes : null,
@@ -1478,7 +1494,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     } finally {
       setManualWarehouseCostsLoading(false)
     }
-  }, [tenantFetchHeaders, order?.id, defaultCostCurrency])
+  }, [tenantFetchHeaders, order?.id, purchaseOrderCurrency])
 
   useEffect(() => {
     void refreshManualWarehouseCosts()
@@ -1508,7 +1524,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             category,
             costName: warehouseCostDraft.costName.trim(),
             amount,
-            currency: warehouseCostDraft.currency,
+            currency: purchaseOrderCurrency,
             notes: warehouseCostDraft.notes.trim() ? warehouseCostDraft.notes.trim() : undefined,
           }),
           tenantOverride,
@@ -1523,7 +1539,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         setWarehouseCostDraft({
           costName: '',
           amount: '',
-          currency: defaultCostCurrency,
+          currency: purchaseOrderCurrency,
           notes: '',
         })
         void refreshManualWarehouseCosts()
@@ -1536,13 +1552,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     },
     [
       order,
+      purchaseOrderCurrency,
       refreshManualWarehouseCosts,
       warehouseCostDraft.costName,
       warehouseCostDraft.amount,
-      warehouseCostDraft.currency,
       warehouseCostDraft.notes,
       warehouseCostSaving,
-      defaultCostCurrency,
       tenantOverride,
     ]
   )
@@ -1588,7 +1603,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           body: JSON.stringify({
             kind: supplierAdjustmentDraft.kind,
             amount,
-            currency: supplierAdjustmentDraft.currency,
+            currency: purchaseOrderCurrency,
             notes: supplierAdjustmentDraft.notes.trim()
               ? supplierAdjustmentDraft.notes.trim()
               : undefined,
@@ -1612,18 +1627,30 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     }
   }, [
     order,
+    purchaseOrderCurrency,
     refreshSupplierAdjustment,
     supplierAdjustmentDraft.amount,
-    supplierAdjustmentDraft.currency,
     supplierAdjustmentDraft.kind,
     supplierAdjustmentDraft.notes,
     supplierAdjustmentSaving,
     tenantOverride,
   ])
 
-  const forwardingSubtotal = useMemo(
-    () => forwardingCosts.reduce((sum, row) => sum + Number(row.totalCost), 0),
-    [forwardingCosts]
+  const forwardingSubtotalByCurrency = useMemo<Record<PoCostCurrency, number>>(
+    () =>
+      forwardingCosts.reduce<Record<PoCostCurrency, number>>(
+        (totals, row) => {
+          const currency = resolveCostCurrency(row.currency, defaultCostCurrency)
+          totals[currency] += Number(row.totalCost)
+          return totals
+        },
+        { USD: 0, GBP: 0 }
+      ),
+    [defaultCostCurrency, forwardingCosts]
+  )
+  const forwardingUsdSubtotal = forwardingSubtotalByCurrency.USD
+  const forwardingHasCosts = PO_COST_CURRENCIES.some(
+    currency => (forwardingSubtotalByCurrency[currency] ?? 0) !== 0
   )
 
   const inboundCostRows = costLedgerSummary?.breakdown?.inbound ?? []
@@ -2277,9 +2304,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const dutyAmount = wh?.dutyAmount
     const normalizedDutyAmount =
       dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
-    const dutyCurrency = wh?.dutyCurrency
-    const normalizedDutyCurrency =
-      typeof dutyCurrency === 'string' && dutyCurrency.trim().length > 0 ? dutyCurrency : ''
+    const normalizedDutyCurrency = normalizedDutyAmount ? purchaseOrderCurrency : ''
 
     setReceiveFormData({
       warehouseCode: order.warehouseCode ?? '',
@@ -2291,7 +2316,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       dutyCurrency: normalizedDutyCurrency,
       discrepancyNotes: wh?.discrepancyNotes ?? '',
     })
-  }, [activeViewStage, order])
+  }, [activeViewStage, order, purchaseOrderCurrency])
 
   const gateTabIssues = useMemo(() => {
     const details: Record<'details' | 'cargo' | 'costs' | 'documents', boolean> = {
@@ -2445,7 +2470,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         stageData.customsClearedDate = receiveFormData.customsClearedDate
         stageData.receivedDate = receiveFormData.receivedDate
         stageData.dutyAmount = receiveFormData.dutyAmount
-        stageData.dutyCurrency = receiveFormData.dutyCurrency
+        stageData.dutyCurrency = receiveFormData.dutyAmount.trim().length
+          ? purchaseOrderCurrency
+          : null
         stageData.discrepancyNotes = receiveFormData.discrepancyNotes
       }
 
@@ -2526,10 +2553,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             receiveFormData.dutyAmount.trim().length > 0
               ? Number(receiveFormData.dutyAmount)
               : null,
-          dutyCurrency:
-            receiveFormData.dutyCurrency.trim().length > 0
-              ? receiveFormData.dutyCurrency.trim().toUpperCase()
-              : null,
+          dutyCurrency: receiveFormData.dutyAmount.trim().length > 0 ? purchaseOrderCurrency : null,
           warehouseCode: receiveFormData.warehouseCode,
           receiveType: receiveFormData.receiveType,
           customsEntryNumber: receiveFormData.customsEntryNumber,
@@ -2618,15 +2642,21 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const productSubtotal = flowLines.reduce((sum, line) => sum + (line.totalCost ?? 0), 0)
   const supplierAdjustmentSubtotal = supplierAdjustment ? supplierAdjustment.amount : 0
   const dutySubtotal = order?.stageData.warehouse?.dutyAmount ?? 0
+  const warehouseSubtotal =
+    inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal
   const totalCostSummary =
     productSubtotal +
-    forwardingSubtotal +
+    forwardingUsdSubtotal +
     inboundSubtotal +
     manualInboundSubtotal +
     storageSubtotal +
     manualStorageSubtotal +
     dutySubtotal +
     supplierAdjustmentSubtotal
+  const totalCostSummaryByCurrency: Partial<Record<PoCostCurrency, number>> = {
+    USD: totalCostSummary,
+    GBP: forwardingSubtotalByCurrency.GBP,
+  }
   const isTerminalStatus = order ? order.status === 'SHIPPED' || order.status === 'CLOSED' : false
   const isReadOnly = isTerminalStatus
   const canEdit = isCreate ? true : !isReadOnly
@@ -2807,7 +2837,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             unitsOrdered: line.unitsOrdered,
             unitsPerCarton: line.unitsPerCarton,
             totalCost: line.totalCost !== null ? line.totalCost : undefined,
-            currency: line.currency ? line.currency : tenantCurrency,
+            currency: purchaseOrderCurrency,
             notes: line.lineNotes ? line.lineNotes : undefined,
           })),
         }),
@@ -2915,7 +2945,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         quantity,
         unitCost: null,
         totalCost: null,
-        currency: tenantCurrency,
+        currency: purchaseOrderCurrency,
         status: 'PENDING',
         postedQuantity: 0,
         quantityReceived: null,
@@ -2948,7 +2978,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           skuDescription: selectedSku.description,
           unitsOrdered,
           unitsPerCarton,
-          currency: tenantCurrency,
+          currency: purchaseOrderCurrency,
           notes: newLineDraft.notes.trim() ? newLineDraft.notes.trim() : undefined,
         }),
         tenantOverride,
@@ -5489,7 +5519,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 Product Subtotal
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                {tenantCurrency}{' '}
+                                {purchaseOrderCurrency}{' '}
                                 {draftLines
                                   .reduce(
                                     (sum, line) =>
@@ -5560,11 +5590,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   totalCost !== null && line.unitsOrdered > 0
                                     ? totalCost / line.unitsOrdered
                                     : null
-                                const currencyLabel =
-                                  typeof line.currency === 'string' &&
-                                  line.currency.trim().length > 0
-                                    ? line.currency.trim().toUpperCase()
-                                    : tenantCurrency
+                                const currencyLabel = purchaseOrderCurrency
 
                                 const gateKey = `costs.lines.${line.id}.totalCost`
                                 const issue = gateIssues ? (gateIssues[gateKey] ?? null) : null
@@ -5676,7 +5702,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   Product Subtotal
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                  {tenantCurrency}{' '}
+                                  {purchaseOrderCurrency}{' '}
                                   {flowLines
                                     .reduce(
                                       (sum, line) =>
@@ -5935,9 +5961,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   Freight Subtotal
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                  {forwardingSubtotal > 0
-                                    ? `${tenantCurrency} ${forwardingSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                    : '—'}
+                                  {formatCurrencySummary(forwardingSubtotalByCurrency)}
                                 </td>
                                 {canEditFreightCost && <td />}
                               </tr>
@@ -6017,7 +6041,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       </td>
                                       <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {tenantCurrency}{' '}
+                                        {purchaseOrderCurrency}{' '}
                                         {row.totalCost.toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
@@ -6038,7 +6062,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         {entry.notes ? entry.notes : '—'}
                                       </td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {entry.currency}{' '}
+                                        {purchaseOrderCurrency}{' '}
                                         {entry.amount.toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
@@ -6070,7 +6094,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         {supplierAdjustment.notes ? supplierAdjustment.notes : '—'}
                                       </td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {supplierAdjustment.currency}{' '}
+                                        {purchaseOrderCurrency}{' '}
                                         {supplierAdjustment.amount.toLocaleString(undefined, {
                                           minimumFractionDigits: 2,
                                           maximumFractionDigits: 2,
@@ -6104,7 +6128,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           —
                                         </td>
                                         <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                          {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
+                                          {purchaseOrderCurrency}{' '}
                                           {order.stageData.warehouse.dutyAmount.toLocaleString(
                                             undefined,
                                             { minimumFractionDigits: 2, maximumFractionDigits: 2 }
@@ -6175,7 +6199,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             disabled={warehouseCostSaving}
                                             className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                           >
-                                            {PO_COST_CURRENCIES.map(currency => (
+                                            {[purchaseOrderCurrency].map(currency => (
                                               <option key={currency} value={currency}>
                                                 {currency}
                                               </option>
@@ -6289,7 +6313,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             disabled={supplierAdjustmentSaving}
                                             className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                           >
-                                            {PO_COST_CURRENCIES.map(currency => (
+                                            {[purchaseOrderCurrency].map(currency => (
                                               <option key={currency} value={currency}>
                                                 {currency}
                                               </option>
@@ -6356,12 +6380,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       Warehouse Subtotal
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                      {inboundSubtotal +
-                                        manualInboundSubtotal +
-                                        supplierAdjustmentSubtotal +
-                                        dutySubtotal !==
-                                      0
-                                        ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                      {warehouseSubtotal !== 0
+                                        ? formatCurrencyAmount(
+                                            purchaseOrderCurrency,
+                                            warehouseSubtotal
+                                          )
                                         : '—'}
                                     </td>
                                     <td />
@@ -6383,43 +6406,25 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 <tr className="border-b border-slate-200 dark:border-slate-700">
                                   <td className="px-3 py-2 text-muted-foreground">Product</td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                    {tenantCurrency}{' '}
-                                    {productSubtotal.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
+                                    {formatCurrencyAmount(purchaseOrderCurrency, productSubtotal)}
                                   </td>
                                 </tr>
-                                {forwardingSubtotal > 0 && (
+                                {forwardingHasCosts && (
                                   <tr className="border-b border-slate-200 dark:border-slate-700">
                                     <td className="px-3 py-2 text-muted-foreground">Freight</td>
                                     <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                      {tenantCurrency}{' '}
-                                      {forwardingSubtotal.toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}
+                                      {formatCurrencySummary(forwardingSubtotalByCurrency)}
                                     </td>
                                   </tr>
                                 )}
-                                {inboundSubtotal +
-                                  manualInboundSubtotal +
-                                  supplierAdjustmentSubtotal +
-                                  dutySubtotal !==
-                                  0 && (
+                                {warehouseSubtotal !== 0 && (
                                   <tr className="border-b border-slate-200 dark:border-slate-700">
                                     <td className="px-3 py-2 text-muted-foreground">Warehouse</td>
                                     <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                      {tenantCurrency}{' '}
-                                      {(
-                                        inboundSubtotal +
-                                        manualInboundSubtotal +
-                                        supplierAdjustmentSubtotal +
-                                        dutySubtotal
-                                      ).toLocaleString(undefined, {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: 2,
-                                      })}
+                                      {formatCurrencyAmount(
+                                        purchaseOrderCurrency,
+                                        warehouseSubtotal
+                                      )}
                                     </td>
                                   </tr>
                                 )}
@@ -6428,11 +6433,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
                                   <td className="px-3 py-2 font-semibold">Total</td>
                                   <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                    {tenantCurrency}{' '}
-                                    {totalCostSummary.toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                      maximumFractionDigits: 2,
-                                    })}
+                                    {formatCurrencySummary(totalCostSummaryByCurrency)}
                                   </td>
                                 </tr>
                               </tfoot>

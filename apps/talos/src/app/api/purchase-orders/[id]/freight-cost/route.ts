@@ -1,15 +1,19 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
-import { PO_COST_CURRENCIES, normalizePoCostCurrency } from '@/lib/constants/cost-currency'
+import {
+  PO_COST_CURRENCIES,
+  PURCHASE_ORDER_BASE_CURRENCY,
+  normalizePoCostCurrency,
+} from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { syncPurchaseOrderForwardingCostLedger } from '@/lib/services/po-forwarding-cost-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
-import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import { PurchaseOrderStatus, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
-const AmountSchema = z.preprocess((value) => {
+const AmountSchema = z.preprocess(value => {
   if (value === undefined || value === null) return value
   if (typeof value === 'number') return value
   if (typeof value === 'string') {
@@ -97,11 +101,6 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
   }
 
   const prisma = await getTenantPrisma()
-  const tenant = await getCurrentTenant()
-  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
-  if (!tenantCurrency) {
-    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
-  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -126,7 +125,10 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
     return crossTenantGuard
   }
 
-  if (order.status !== PurchaseOrderStatus.OCEAN && order.status !== PurchaseOrderStatus.WAREHOUSE) {
+  if (
+    order.status !== PurchaseOrderStatus.OCEAN &&
+    order.status !== PurchaseOrderStatus.WAREHOUSE
+  ) {
     return ApiResponses.conflict('Freight cost can be set during OCEAN or WAREHOUSE stages')
   }
 
@@ -152,7 +154,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
   }
 
   const normalizedAmount = Number(parsed.data.amount.toFixed(2))
-  const currency = parsed.data.currency ?? tenantCurrency
+  const currency = parsed.data.currency ?? PURCHASE_ORDER_BASE_CURRENCY
 
   const createdByName = session.user.name ?? session.user.email ?? null
 
@@ -226,11 +228,6 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   const prisma = await getTenantPrisma()
-  const tenant = await getCurrentTenant()
-  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
-  if (!tenantCurrency) {
-    return ApiResponses.badRequest(`Unsupported tenant currency: ${tenant.currency}`)
-  }
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
@@ -255,7 +252,10 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (order.status !== PurchaseOrderStatus.OCEAN && order.status !== PurchaseOrderStatus.WAREHOUSE) {
+  if (
+    order.status !== PurchaseOrderStatus.OCEAN &&
+    order.status !== PurchaseOrderStatus.WAREHOUSE
+  ) {
     return ApiResponses.conflict('Freight cost can be added during OCEAN or WAREHOUSE stages')
   }
 
@@ -281,7 +281,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   }
 
   const normalizedAmount = Number(parsed.data.amount.toFixed(2))
-  const currency = parsed.data.currency ?? tenantCurrency
+  const currency = parsed.data.currency ?? PURCHASE_ORDER_BASE_CURRENCY
   const createdByName = session.user.name ?? session.user.email ?? null
 
   const created = await prisma.purchaseOrderForwardingCost.create({
@@ -371,7 +371,10 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, ses
     return crossTenantGuard
   }
 
-  if (order.status !== PurchaseOrderStatus.OCEAN && order.status !== PurchaseOrderStatus.WAREHOUSE) {
+  if (
+    order.status !== PurchaseOrderStatus.OCEAN &&
+    order.status !== PurchaseOrderStatus.WAREHOUSE
+  ) {
     return ApiResponses.conflict('Freight cost can be removed during OCEAN or WAREHOUSE stages')
   }
 

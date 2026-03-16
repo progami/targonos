@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
-import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
+import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
@@ -88,7 +89,6 @@ function toMoneyNumberOrNull(value: unknown): number | null {
 export const GET = withAuthAndParams(async (request: NextRequest, params, _session) => {
   const id = params.id as string
   const lineId = params.lineId as string
-  const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
 
   const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
@@ -133,7 +133,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     quantity: line.quantity,
     unitCost: toMoneyNumberOrNull(line.unitCost),
     totalCost: toMoneyNumberOrNull(line.totalCost),
-    currency: line.currency ?? tenant.currency,
+    currency: PURCHASE_ORDER_BASE_CURRENCY,
     status: line.status,
     postedQuantity: line.postedQuantity,
     quantityReceived: line.quantityReceived,
@@ -196,9 +196,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
   const allowCommercialEdits =
-    order.status !== 'CLOSED' &&
-    order.status !== 'CANCELLED' &&
-    order.status !== 'REJECTED'
+    order.status !== 'CLOSED' && order.status !== 'CANCELLED' && order.status !== 'REJECTED'
   const allowIssuedPackagingEdits = allowCommercialEdits
   const allowPiNumberEdits = allowCommercialEdits
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
@@ -207,7 +205,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
       updateData.skuDescription = result.data.skuDescription
-    if (result.data.currency !== undefined) updateData.currency = result.data.currency
+    if (result.data.currency !== undefined) updateData.currency = PURCHASE_ORDER_BASE_CURRENCY
     if (result.data.notes !== undefined) updateData.lineNotes = result.data.notes
 
     const unitsChanged =
@@ -546,7 +544,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     quantity: updated.quantity,
     unitCost: toMoneyNumberOrNull(updated.unitCost),
     totalCost: toMoneyNumberOrNull(updated.totalCost),
-    currency: updated.currency,
+    currency: PURCHASE_ORDER_BASE_CURRENCY,
     status: updated.status,
     postedQuantity: updated.postedQuantity,
     quantityReceived: updated.quantityReceived,
@@ -587,11 +585,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     return crossTenantGuard
   }
 
-  if (
-    order.status === 'CLOSED' ||
-    order.status === 'CANCELLED' ||
-    order.status === 'REJECTED'
-  ) {
+  if (order.status === 'CLOSED' || order.status === 'CANCELLED' || order.status === 'REJECTED') {
     return ApiResponses.badRequest('Cannot delete line items from terminal orders')
   }
 

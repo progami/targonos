@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
-import { getTenantPrisma, getCurrentTenant } from '@/lib/tenant/server'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
+import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
@@ -77,7 +78,6 @@ function computeCartonsOrdered(input: {
  */
 export const GET = withAuthAndParams(async (request: NextRequest, params, _session) => {
   const id = params.id as string
-  const tenant = await getCurrentTenant()
   const prisma = await getTenantPrisma()
 
   const order = await prisma.purchaseOrder.findUnique({
@@ -122,7 +122,7 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
       quantity: line.quantity,
       unitCost: toMoneyNumberOrNull(line.unitCost),
       totalCost: toMoneyNumberOrNull(line.totalCost),
-      currency: line.currency ?? tenant.currency,
+      currency: PURCHASE_ORDER_BASE_CURRENCY,
       status: line.status,
       postedQuantity: line.postedQuantity,
       quantityReceived: line.quantityReceived,
@@ -140,7 +140,6 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
 export const POST = withAuthAndParams(async (request: NextRequest, params, session) => {
   const id = params.id as string
   const prisma = await getTenantPrisma()
-  const tenant = await getCurrentTenant()
 
   const canEdit = await hasPermission(session.user.id, 'po.edit')
   if (!canEdit) {
@@ -171,11 +170,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (
-    order.status === 'CLOSED' ||
-    order.status === 'CANCELLED' ||
-    order.status === 'REJECTED'
-  ) {
+  if (order.status === 'CLOSED' || order.status === 'CANCELLED' || order.status === 'REJECTED') {
     return ApiResponses.badRequest('Cannot add line items to terminal orders')
   }
 
@@ -253,10 +248,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       : null
   })()
 
-  const currency =
-    typeof result.data.currency === 'string' && result.data.currency.trim().length > 0
-      ? result.data.currency.trim().toUpperCase()
-      : tenant.currency
+  const currency = PURCHASE_ORDER_BASE_CURRENCY
   const normalizedTotalCost =
     typeof result.data.totalCost === 'number' && Number.isFinite(result.data.totalCost)
       ? Number(Math.abs(result.data.totalCost).toFixed(2))
@@ -287,7 +279,11 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     poNumber: order.poNumber,
     skuGroup: effectiveSkuGroup,
   })
-  const lotRef = buildLotReference(orderReferenceSeed.sequence, orderReferenceSeed.skuGroup, sku.skuCode)
+  const lotRef = buildLotReference(
+    orderReferenceSeed.sequence,
+    orderReferenceSeed.skuGroup,
+    sku.skuCode
+  )
 
   try {
     line = await prisma.purchaseOrderLine.create({
@@ -320,9 +316,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return ApiResponses.conflict(
-        'A line with this SKU already exists for the purchase order'
-      )
+      return ApiResponses.conflict('A line with this SKU already exists for the purchase order')
     }
     throw error
   }
@@ -384,7 +378,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     quantity: line.quantity,
     unitCost: toMoneyNumberOrNull(line.unitCost),
     totalCost: toMoneyNumberOrNull(line.totalCost),
-    currency: line.currency ?? tenant.currency,
+    currency: PURCHASE_ORDER_BASE_CURRENCY,
     status: line.status,
     postedQuantity: line.postedQuantity,
     quantityReceived: line.quantityReceived,

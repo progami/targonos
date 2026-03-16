@@ -1,13 +1,17 @@
 import { NextRequest } from 'next/server'
 import { withAuth, ApiResponses, z } from '@/lib/api'
-import { getPurchaseOrders, getPurchaseOrdersBySplitGroup } from '@/lib/services/purchase-order-service'
+import {
+  getPurchaseOrders,
+  getPurchaseOrdersBySplitGroup,
+} from '@/lib/services/purchase-order-service'
 import {
   createPurchaseOrder,
   serializePurchaseOrder as serializeNewPO,
 } from '@/lib/services/po-stage-service'
 import type { UserContext } from '@/lib/services/po-stage-service'
+import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
-import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 
 export const GET = withAuth(async (request: NextRequest, _session) => {
@@ -16,9 +20,10 @@ export const GET = withAuth(async (request: NextRequest, _session) => {
     typeof splitGroupId === 'string' && splitGroupId.trim().length > 0
       ? await getPurchaseOrdersBySplitGroup(splitGroupId)
       : await getPurchaseOrders()
-  const tenant = await getCurrentTenant()
   return ApiResponses.success({
-    data: orders.map(order => serializeNewPO(order, { defaultCurrency: tenant.currency })),
+    data: orders.map(order =>
+      serializeNewPO(order, { defaultCurrency: PURCHASE_ORDER_BASE_CURRENCY })
+    ),
   })
 })
 
@@ -111,14 +116,13 @@ export const POST = withAuth(async (request: NextRequest, session) => {
       userContext
     )
 
-    const tenant = await getCurrentTenant()
     const prisma = await getTenantPrisma()
     const supplier = await prisma.supplier.findFirst({
       where: { name: { equals: order.counterpartyName?.trim() ?? '', mode: 'insensitive' } },
       select: { phone: true, bankingDetails: true, address: true },
     })
     return ApiResponses.success({
-      ...serializeNewPO(order, { defaultCurrency: tenant.currency }),
+      ...serializeNewPO(order, { defaultCurrency: PURCHASE_ORDER_BASE_CURRENCY }),
       supplier: supplier
         ? {
             phone: supplier.phone ?? null,
