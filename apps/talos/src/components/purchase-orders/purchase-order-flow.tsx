@@ -57,7 +57,16 @@ import {
   formatPurchaseOrderUnitCost,
 } from '@/lib/purchase-order-line-costs'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
-import { convertLengthToCm, convertWeightFromKg, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel } from '@/lib/measurements'
+import {
+  convertLengthToCm,
+  convertWeightFromKg,
+  convertWeightToKg,
+  formatLengthFromCm,
+  formatWeightFromKg,
+  getDefaultUnitSystem,
+  getLengthUnitLabel,
+  getWeightUnitLabel,
+} from '@/lib/measurements'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import {
   PO_COST_CURRENCIES,
@@ -66,13 +75,7 @@ import {
 } from '@/lib/constants/cost-currency'
 
 // 5-Stage State Machine Types
-type POStageStatus =
-  | 'ISSUED'
-  | 'MANUFACTURING'
-  | 'OCEAN'
-  | 'WAREHOUSE'
-  | 'SHIPPED'
-  | 'CLOSED'
+type POStageStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED' | 'CLOSED'
 
 interface PurchaseOrderLineSummary {
   id: string
@@ -309,7 +312,12 @@ interface PurchaseOrderSummary {
   warehouseCode: string | null
   warehouseName: string | null
   counterpartyName: string | null
-  supplier: { phone: string | null; bankingDetails: string | null; address: string | null; country: string | null } | null
+  supplier: {
+    phone: string | null
+    bankingDetails: string | null
+    address: string | null
+    country: string | null
+  } | null
   expectedDate: string | null
   incoterms: string | null
   paymentTerms: string | null
@@ -335,12 +343,7 @@ type SplitGroupOrderSummary = {
   createdAt: string
 }
 
-type PurchaseOrderDocumentStage =
-  | 'ISSUED'
-  | 'MANUFACTURING'
-  | 'OCEAN'
-  | 'WAREHOUSE'
-  | 'SHIPPED'
+type PurchaseOrderDocumentStage = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED'
 
 interface PurchaseOrderDocumentSummary {
   id: string
@@ -410,7 +413,6 @@ function resolveCostCurrency(value: unknown, fallback: PoCostCurrency = 'USD'): 
   return normalized ?? fallback
 }
 
-
 const STAGE_DOCUMENTS: Record<
   Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
   Array<{ id: string; label: string }>
@@ -471,7 +473,11 @@ function buildPiDocumentType(piNumber: string): string {
   return `pi_${sanitized.toLowerCase()}`
 }
 
-function getDocumentLabel(stage: PurchaseOrderDocumentStage, documentType: string, lines?: PurchaseOrderLineSummary[]) {
+function getDocumentLabel(
+  stage: PurchaseOrderDocumentStage,
+  documentType: string,
+  lines?: PurchaseOrderLineSummary[]
+) {
   if (stage !== 'SHIPPED') {
     const required = lines ? getStageDocuments(stage, lines) : (STAGE_DOCUMENTS[stage] ?? [])
     const match = required.find(candidate => candidate.id === documentType)
@@ -654,21 +660,31 @@ function describeAuditChangeRows(entry: AuditLogEntry): AuditChangeRow[] {
     case 'LINE_ADD': {
       if (!newValue) return []
       const rows: AuditChangeRow[] = []
-      if (typeof newValue.skuCode === 'string') rows.push({ field: 'SKU', previous: '—', current: newValue.skuCode })
-      if (typeof newValue.lotRef === 'string') rows.push({ field: 'Lot', previous: '—', current: newValue.lotRef })
-      if (typeof newValue.quantity === 'number') rows.push({ field: 'Qty', previous: '—', current: newValue.quantity.toLocaleString() })
+      if (typeof newValue.skuCode === 'string')
+        rows.push({ field: 'SKU', previous: '—', current: newValue.skuCode })
+      if (typeof newValue.lotRef === 'string')
+        rows.push({ field: 'Lot', previous: '—', current: newValue.lotRef })
+      if (typeof newValue.quantity === 'number')
+        rows.push({ field: 'Qty', previous: '—', current: newValue.quantity.toLocaleString() })
       if (typeof newValue.unitCost === 'number' && Number.isFinite(newValue.unitCost)) {
         const currency = typeof newValue.currency === 'string' ? ` ${newValue.currency}` : ''
-        rows.push({ field: 'Unit Cost', previous: '—', current: `${formatPurchaseOrderUnitCost(newValue.unitCost)}${currency}` })
+        rows.push({
+          field: 'Unit Cost',
+          previous: '—',
+          current: `${formatPurchaseOrderUnitCost(newValue.unitCost)}${currency}`,
+        })
       }
       return rows
     }
     case 'LINE_DELETE': {
       if (!oldValue) return []
       const rows: AuditChangeRow[] = []
-      if (typeof oldValue.skuCode === 'string') rows.push({ field: 'SKU', previous: oldValue.skuCode, current: '—' })
-      if (typeof oldValue.lotRef === 'string') rows.push({ field: 'Lot', previous: oldValue.lotRef, current: '—' })
-      if (typeof oldValue.quantity === 'number') rows.push({ field: 'Qty', previous: oldValue.quantity.toLocaleString(), current: '—' })
+      if (typeof oldValue.skuCode === 'string')
+        rows.push({ field: 'SKU', previous: oldValue.skuCode, current: '—' })
+      if (typeof oldValue.lotRef === 'string')
+        rows.push({ field: 'Lot', previous: oldValue.lotRef, current: '—' })
+      if (typeof oldValue.quantity === 'number')
+        rows.push({ field: 'Qty', previous: oldValue.quantity.toLocaleString(), current: '—' })
       return rows
     }
     case 'CONTAINER_ADD':
@@ -677,18 +693,36 @@ function describeAuditChangeRows(entry: AuditLogEntry): AuditChangeRow[] {
       if (!value) return []
       const isDelete = entry.action === 'CONTAINER_DELETE'
       const rows: AuditChangeRow[] = []
-      if (typeof value.containerNumber === 'string') rows.push({ field: 'Container #', previous: isDelete ? value.containerNumber : '—', current: isDelete ? '—' : value.containerNumber })
-      if (typeof value.containerSize === 'string') rows.push({ field: 'Size', previous: isDelete ? value.containerSize : '—', current: isDelete ? '—' : value.containerSize })
-      if (typeof value.sealNumber === 'string' && value.sealNumber.trim()) rows.push({ field: 'Seal', previous: isDelete ? value.sealNumber : '—', current: isDelete ? '—' : value.sealNumber })
+      if (typeof value.containerNumber === 'string')
+        rows.push({
+          field: 'Container #',
+          previous: isDelete ? value.containerNumber : '—',
+          current: isDelete ? '—' : value.containerNumber,
+        })
+      if (typeof value.containerSize === 'string')
+        rows.push({
+          field: 'Size',
+          previous: isDelete ? value.containerSize : '—',
+          current: isDelete ? '—' : value.containerSize,
+        })
+      if (typeof value.sealNumber === 'string' && value.sealNumber.trim())
+        rows.push({
+          field: 'Seal',
+          previous: isDelete ? value.sealNumber : '—',
+          current: isDelete ? '—' : value.sealNumber,
+        })
       return rows
     }
     case 'DOCUMENT_UPLOAD':
     case 'DOCUMENT_REPLACE': {
       if (!newValue) return []
       const rows: AuditChangeRow[] = []
-      if (typeof newValue.stage === 'string') rows.push({ field: 'Stage', previous: '—', current: newValue.stage })
-      if (typeof newValue.documentType === 'string') rows.push({ field: 'Type', previous: '—', current: newValue.documentType })
-      if (typeof newValue.fileName === 'string') rows.push({ field: 'File', previous: '—', current: newValue.fileName })
+      if (typeof newValue.stage === 'string')
+        rows.push({ field: 'Stage', previous: '—', current: newValue.stage })
+      if (typeof newValue.documentType === 'string')
+        rows.push({ field: 'Type', previous: '—', current: newValue.documentType })
+      if (typeof newValue.fileName === 'string')
+        rows.push({ field: 'File', previous: '—', current: newValue.fileName })
       return rows
     }
   }
@@ -767,7 +801,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const orderId = props.orderId
   const tenantOverride = props.tenantCode
   const tenantFetchHeaders = useMemo<HeadersInit>(
-    () => tenantOverride ? { 'x-tenant': tenantOverride } : {},
+    () => (tenantOverride ? { 'x-tenant': tenantOverride } : {}),
     [tenantOverride]
   )
   const [loading, setLoading] = useState(true)
@@ -801,7 +835,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   // Stage transition form data
   const [stageFormData, setStageFormData] = useState<Record<string, string>>({})
-  const [dispatchSplitAllocations, setDispatchSplitAllocations] = useState<Record<string, string>>({})
+  const [dispatchSplitAllocations, setDispatchSplitAllocations] = useState<Record<string, string>>(
+    {}
+  )
   const setStageField = useCallback((key: string, value: string) => {
     setStageFormData(prev => {
       const next = { ...prev }
@@ -840,13 +876,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const [documents, setDocuments] = useState<PurchaseOrderDocumentSummary[]>([])
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [uploadingDoc, setUploadingDoc] = useState<Record<string, boolean>>({})
-  const [uploadingDocProgress, setUploadingDocProgress] = useState<Record<string, number | null>>({})
+  const [uploadingDocProgress, setUploadingDocProgress] = useState<Record<string, number | null>>(
+    {}
+  )
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([])
   const [auditLogsLoading, setAuditLogsLoading] = useState(false)
 
-  const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>(
-    []
-  )
+  const [forwardingCosts, setForwardingCosts] = useState<PurchaseOrderForwardingCostSummary[]>([])
   const [freightLineAdding, setFreightLineAdding] = useState(false)
   const [freightLineDraft, setFreightLineDraft] = useState<{
     costName: string
@@ -884,7 +920,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     notes: '',
   })
 
-
   // Manual warehouse cost state
   const [manualWarehouseCosts, setManualWarehouseCosts] = useState<
     Array<{
@@ -899,7 +934,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     }>
   >([])
   const [manualWarehouseCostsLoading, setManualWarehouseCostsLoading] = useState(false)
-  const [warehouseCostEditing, setWarehouseCostEditing] = useState<'inbound' | 'storage' | null>(null)
+  const [warehouseCostEditing, setWarehouseCostEditing] = useState<'inbound' | 'storage' | null>(
+    null
+  )
   const [warehouseCostSaving, setWarehouseCostSaving] = useState(false)
   const [warehouseCostDraft, setWarehouseCostDraft] = useState<{
     costName: string
@@ -927,7 +964,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     unitsPerCarton: null as number | null,
     notes: '',
   })
-  
+
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
@@ -939,7 +976,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   // Stage-based navigation - which stage view is currently selected
   const [selectedStageView, setSelectedStageView] = useState<string | null>(null)
-  const [inlinePreviewDocument, setInlinePreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
+  const [inlinePreviewDocument, setInlinePreviewDocument] =
+    useState<PurchaseOrderDocumentSummary | null>(null)
   const [previewDocument, setPreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
 
   useEffect(() => {
@@ -954,10 +992,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         !isCreate && tenantOverride
           ? `${returnPath}?tenant=${encodeURIComponent(tenantOverride)}`
           : returnPath
-      redirectToPortal(
-        '/login',
-        `${window.location.origin}${withBasePath(returnPathWithTenant)}`
-      )
+      redirectToPortal('/login', `${window.location.origin}${withBasePath(returnPathWithTenant)}`)
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -968,7 +1003,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const loadWarehouses = async () => {
       try {
         setWarehousesLoading(true)
-        const response = await fetch(withBasePath('/api/warehouses'), { credentials: 'include', headers: tenantFetchHeaders })
+        const response = await fetch(withBasePath('/api/warehouses'), {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        })
         if (!response.ok) return
         const payload: unknown = await response.json().catch(() => null)
 
@@ -989,7 +1027,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             const id = record.id
             const code = record.code
             const name = record.name
-            if (typeof id !== 'string' || typeof code !== 'string' || typeof name !== 'string') return null
+            if (typeof id !== 'string' || typeof code !== 'string' || typeof name !== 'string')
+              return null
             if (!id.trim()) return null
             if (!code.trim() || !name.trim()) return null
             return { id, code, name }
@@ -1006,7 +1045,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     const loadTenant = async () => {
       try {
-        const response = await fetch(withBasePath('/api/tenant/current'), { credentials: 'include', headers: tenantFetchHeaders })
+        const response = await fetch(withBasePath('/api/tenant/current'), {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        })
         if (!response.ok) return
         const payload = await response.json().catch(() => null)
         const currency = payload?.current?.currency
@@ -1223,10 +1265,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!orderId) return
 
     try {
-      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/forwarding-costs`), {
-        credentials: 'include',
-        headers: tenantFetchHeaders,
-      })
+      const response = await fetch(
+        withBasePath(`/api/purchase-orders/${orderId}/forwarding-costs`),
+        {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        }
+      )
       if (!response.ok) {
         setForwardingCosts([])
         return
@@ -1286,10 +1331,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSupplierAdjustmentLoading(true)
-      const response = await fetch(withBasePath(`/api/purchase-orders/${orderId}/supplier-adjustments`), {
-        credentials: 'include',
-        headers: tenantFetchHeaders,
-      })
+      const response = await fetch(
+        withBasePath(`/api/purchase-orders/${orderId}/supplier-adjustments`),
+        {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        }
+      )
       if (!response.ok) {
         setSupplierAdjustment(null)
         return
@@ -1337,7 +1385,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         return
       }
 
-      if (typeof currency !== 'string' || typeof effectiveAt !== 'string' || typeof createdAt !== 'string') {
+      if (
+        typeof currency !== 'string' ||
+        typeof effectiveAt !== 'string' ||
+        typeof createdAt !== 'string'
+      ) {
         setSupplierAdjustment(null)
         return
       }
@@ -1395,10 +1447,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!order?.id) return
     try {
       setManualWarehouseCostsLoading(true)
-      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/warehouse-costs`), {
-        credentials: 'include',
-        headers: tenantFetchHeaders,
-      })
+      const response = await fetch(
+        withBasePath(`/api/purchase-orders/${order.id}/warehouse-costs`),
+        {
+          credentials: 'include',
+          headers: tenantFetchHeaders,
+        }
+      )
       if (!response.ok) {
         setManualWarehouseCosts([])
         return
@@ -1529,19 +1584,22 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSupplierAdjustmentSaving(true)
-      const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/supplier-adjustments`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kind: supplierAdjustmentDraft.kind,
-          amount,
-          currency: supplierAdjustmentDraft.currency,
-          notes: supplierAdjustmentDraft.notes.trim()
-            ? supplierAdjustmentDraft.notes.trim()
-            : undefined,
-        }),
-        tenantOverride,
-      })
+      const response = await fetchWithCSRF(
+        `/api/purchase-orders/${order.id}/supplier-adjustments`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            kind: supplierAdjustmentDraft.kind,
+            amount,
+            currency: supplierAdjustmentDraft.currency,
+            notes: supplierAdjustmentDraft.notes.trim()
+              ? supplierAdjustmentDraft.notes.trim()
+              : undefined,
+          }),
+          tenantOverride,
+        }
+      )
 
       if (!response.ok) {
         toast.error(`Failed to save supplier adjustment (HTTP ${response.status})`)
@@ -1643,42 +1701,39 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     tenantOverride,
   ])
 
-  const deleteFreightLine = useCallback(async (costId: string) => {
-    if (!order) return
-    if (freightLineDeleting) return
+  const deleteFreightLine = useCallback(
+    async (costId: string) => {
+      if (!order) return
+      if (freightLineDeleting) return
 
-    try {
-      setFreightLineDeleting(costId)
-      const response = await fetchWithCSRF(
-        `/api/purchase-orders/${order.id}/freight-cost?costId=${encodeURIComponent(costId)}`,
-        {
-          method: 'DELETE',
-          tenantOverride,
+      try {
+        setFreightLineDeleting(costId)
+        const response = await fetchWithCSRF(
+          `/api/purchase-orders/${order.id}/freight-cost?costId=${encodeURIComponent(costId)}`,
+          {
+            method: 'DELETE',
+            tenantOverride,
+          }
+        )
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null)
+          const message = typeof payload?.error === 'string' ? payload.error : null
+          toast.error(message ? message : `Failed to delete freight line (HTTP ${response.status})`)
+          return
         }
-      )
 
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        const message = typeof payload?.error === 'string' ? payload.error : null
-        toast.error(message ? message : `Failed to delete freight line (HTTP ${response.status})`)
-        return
+        void refreshForwardingCosts()
+        void refreshCostLedgerSummary()
+        toast.success('Freight line removed')
+      } catch {
+        toast.error('Failed to delete freight line')
+      } finally {
+        setFreightLineDeleting(null)
       }
-
-      void refreshForwardingCosts()
-      void refreshCostLedgerSummary()
-      toast.success('Freight line removed')
-    } catch {
-      toast.error('Failed to delete freight line')
-    } finally {
-      setFreightLineDeleting(null)
-    }
-  }, [
-    freightLineDeleting,
-    order,
-    refreshCostLedgerSummary,
-    refreshForwardingCosts,
-    tenantOverride,
-  ])
+    },
+    [freightLineDeleting, order, refreshCostLedgerSummary, refreshForwardingCosts, tenantOverride]
+  )
 
   const handleDocumentUpload = useCallback(
     async (
@@ -1910,7 +1965,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSkusLoading(true)
-      const response = await fetch(withBasePath('/api/skus'), { credentials: 'include', headers: tenantFetchHeaders })
+      const response = await fetch(withBasePath('/api/skus'), {
+        credentials: 'include',
+        headers: tenantFetchHeaders,
+      })
       if (!response.ok) {
         setSkus([])
         return
@@ -1997,7 +2055,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     try {
       setSuppliersLoading(true)
-      const response = await fetch(withBasePath('/api/suppliers'), { credentials: 'include', headers: tenantFetchHeaders })
+      const response = await fetch(withBasePath('/api/suppliers'), {
+        credentials: 'include',
+        headers: tenantFetchHeaders,
+      })
       if (!response.ok) {
         setSuppliers([])
         return
@@ -2218,7 +2279,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
     const wh = order.stageData.warehouse
     const dutyAmount = wh?.dutyAmount
-    const normalizedDutyAmount = dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
+    const normalizedDutyAmount =
+      dutyAmount === null || dutyAmount === undefined ? '' : String(dutyAmount)
     const dutyCurrency = wh?.dutyCurrency
     const normalizedDutyCurrency =
       typeof dutyCurrency === 'string' && dutyCurrency.trim().length > 0 ? dutyCurrency : ''
@@ -2255,7 +2317,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return details
   }, [gateIssues])
 
-
   const cargoLineIssueCountById = useMemo(() => {
     const counts: Record<string, number> = {}
     if (!gateIssues) return counts
@@ -2272,9 +2333,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     return counts
   }, [gateIssues])
 
-  const tabForGateKey = (
-    key: string
-  ): 'details' | 'cargo' | 'costs' | 'documents' | 'history' => {
+  const tabForGateKey = (key: string): 'details' | 'cargo' | 'costs' | 'documents' | 'history' => {
     if (key.startsWith('cargo.')) return 'cargo'
     if (key.startsWith('costs.')) return 'costs'
     if (key.startsWith('documents.')) return 'documents'
@@ -2459,16 +2518,18 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       const lineReceipts = order.lines
         .filter(line => line.status !== 'CANCELLED')
         .map(line => ({
-        lineId: line.id,
-        quantityReceived: line.quantityReceived ?? line.quantity,
-      }))
+          lineId: line.id,
+          quantityReceived: line.quantityReceived ?? line.quantity,
+        }))
 
       const response = await fetchWithCSRF(`/api/purchase-orders/${order.id}/receive`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           dutyAmount:
-            receiveFormData.dutyAmount.trim().length > 0 ? Number(receiveFormData.dutyAmount) : null,
+            receiveFormData.dutyAmount.trim().length > 0
+              ? Number(receiveFormData.dutyAmount)
+              : null,
           dutyCurrency:
             receiveFormData.dutyCurrency.trim().length > 0
               ? receiveFormData.dutyCurrency.trim().toUpperCase()
@@ -2570,17 +2631,21 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     manualStorageSubtotal +
     dutySubtotal +
     supplierAdjustmentSubtotal
-  const isTerminalStatus = order
-    ? order.status === 'SHIPPED' || order.status === 'CLOSED'
-    : false
+  const isTerminalStatus = order ? order.status === 'SHIPPED' || order.status === 'CLOSED' : false
   const isReadOnly = isTerminalStatus
   const canEdit = isCreate ? true : !isReadOnly
-  const canEditDispatchAllocation =
-    !isCreate && !isReadOnly && activeViewStage === 'MANUFACTURING'
-  const canEditFreightCost =
-    !isCreate && !isReadOnly && activeViewStage === 'OCEAN'
-  const canEditWarehouseCosts =
-    !isCreate && !isReadOnly && activeViewStage === 'WAREHOUSE'
+  const canEditDispatchAllocation = !isCreate && !isReadOnly && activeViewStage === 'MANUFACTURING'
+  const canEditFreightCost = !isCreate && !isReadOnly && activeViewStage === 'OCEAN'
+  const canEditWarehouseCosts = !isCreate && !isReadOnly && activeViewStage === 'WAREHOUSE'
+  const showIssuedPiColumn = activeViewStage === 'ISSUED'
+  const showReceivedColumns = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
+  const detailCargoLineColumnCount =
+    11 +
+    (canEditDispatchAllocation ? 1 : 0) +
+    (showIssuedPiColumn ? 1 : 0) +
+    (showReceivedColumns ? 2 : 0) +
+    (canEdit ? 1 : 0)
+  const draftCargoLineColumnCount = 11 + (showReceivedColumns ? 2 : 0) + (canEdit ? 1 : 0)
 
   const showProductCostsStage =
     activeViewStage === 'ISSUED' ||
@@ -2590,16 +2655,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const showCargoCostsStage = activeViewStage === 'OCEAN'
   const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
   const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED'
-  const showShippingMarksDownload =
-    !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus
-  const displayOrderNumber = isCreate
-    ? 'New Purchase Order'
-    : order.poNumber ?? order.orderNumber
+  const showShippingMarksDownload = !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus
+  const displayOrderNumber = isCreate ? 'New Purchase Order' : (order.poNumber ?? order.orderNumber)
   const historyCount = isCreate
     ? 0
     : auditLogs.length > 0
       ? auditLogs.length
-      : order.approvalHistory?.length ?? 0
+      : (order.approvalHistory?.length ?? 0)
   const selectedSku = newLineDraft.skuId
     ? skus.find(sku => sku.id === newLineDraft.skuId)
     : undefined
@@ -2618,8 +2680,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const InlineStageIcon = inlineStageMeta ? inlineStageMeta.icon : null
   const inlineIsPdf = Boolean(
     inlinePreviewDocument &&
-      (inlinePreviewDocument.contentType === 'application/pdf' ||
-        inlinePreviewDocument.fileName.toLowerCase().endsWith('.pdf'))
+    (inlinePreviewDocument.contentType === 'application/pdf' ||
+      inlinePreviewDocument.fileName.toLowerCase().endsWith('.pdf'))
   )
   const inlineIsImage = Boolean(
     inlinePreviewDocument && inlinePreviewDocument.contentType.startsWith('image/')
@@ -2629,8 +2691,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const PreviewStageIcon = previewStageMeta ? previewStageMeta.icon : null
   const previewIsPdf = Boolean(
     previewDocument &&
-      (previewDocument.contentType === 'application/pdf' ||
-        previewDocument.fileName.toLowerCase().endsWith('.pdf'))
+    (previewDocument.contentType === 'application/pdf' ||
+      previewDocument.fileName.toLowerCase().endsWith('.pdf'))
   )
   const previewIsImage = Boolean(
     previewDocument && previewDocument.contentType.startsWith('image/')
@@ -2728,30 +2790,30 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       const response = await fetchWithCSRF('/api/purchase-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            counterpartyName,
-            expectedDate,
-            incoterms,
-            paymentTerms,
-            notes: notes ? notes : undefined,
-	          lines: draftLines.map(line => ({
-	            skuCode: line.skuCode,
-	            skuDescription: line.skuDescription ? line.skuDescription : undefined,
-	            piNumber: line.piNumber ? line.piNumber : undefined,
-	            commodityCode: line.commodityCode ? line.commodityCode : undefined,
-	            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
-	            netWeightKg: line.netWeightKg !== null ? line.netWeightKg : undefined,
-	            cartonWeightKg: line.cartonWeightKg != null ? line.cartonWeightKg : undefined,
-	            cartonSide1Cm: line.cartonSide1Cm != null ? line.cartonSide1Cm : undefined,
-	            cartonSide2Cm: line.cartonSide2Cm != null ? line.cartonSide2Cm : undefined,
-	            cartonSide3Cm: line.cartonSide3Cm != null ? line.cartonSide3Cm : undefined,
-	            material: line.material ? line.material : undefined,
-	            unitsOrdered: line.unitsOrdered,
-	            unitsPerCarton: line.unitsPerCarton,
-	            totalCost: line.totalCost !== null ? line.totalCost : undefined,
-	            currency: line.currency ? line.currency : tenantCurrency,
-	            notes: line.lineNotes ? line.lineNotes : undefined,
-	          })),
+        body: JSON.stringify({
+          counterpartyName,
+          expectedDate,
+          incoterms,
+          paymentTerms,
+          notes: notes ? notes : undefined,
+          lines: draftLines.map(line => ({
+            skuCode: line.skuCode,
+            skuDescription: line.skuDescription ? line.skuDescription : undefined,
+            piNumber: line.piNumber ? line.piNumber : undefined,
+            commodityCode: line.commodityCode ? line.commodityCode : undefined,
+            countryOfOrigin: line.countryOfOrigin ? line.countryOfOrigin : undefined,
+            netWeightKg: line.netWeightKg !== null ? line.netWeightKg : undefined,
+            cartonWeightKg: line.cartonWeightKg != null ? line.cartonWeightKg : undefined,
+            cartonSide1Cm: line.cartonSide1Cm != null ? line.cartonSide1Cm : undefined,
+            cartonSide2Cm: line.cartonSide2Cm != null ? line.cartonSide2Cm : undefined,
+            cartonSide3Cm: line.cartonSide3Cm != null ? line.cartonSide3Cm : undefined,
+            material: line.material ? line.material : undefined,
+            unitsOrdered: line.unitsOrdered,
+            unitsPerCarton: line.unitsPerCarton,
+            totalCost: line.totalCost !== null ? line.totalCost : undefined,
+            currency: line.currency ? line.currency : tenantCurrency,
+            notes: line.lineNotes ? line.lineNotes : undefined,
+          })),
         }),
       })
 
@@ -2956,10 +3018,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!order) return
 
     try {
-      const response = await fetch(withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`), {
-        method: 'POST',
-        headers: tenantFetchHeaders,
-      })
+      const response = await fetch(
+        withBasePath(`/api/purchase-orders/${order.id}/shipping-marks`),
+        {
+          method: 'POST',
+          headers: tenantFetchHeaders,
+        }
+      )
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
         const details = payload?.details
@@ -2996,12 +3061,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         icon={Package2}
         backHref="/operations/purchase-orders"
         backLabel="Back"
-	        actions={
-	          <>
-	            {showPoPdfDownload && (
-	              <Button
-	                variant="outline"
-	                size="sm"
+        actions={
+          <>
+            {showPoPdfDownload && (
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleDownloadPdf()}
                 className="gap-2"
               >
@@ -3034,50 +3099,49 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           </>
         }
       />
-	      <PageContent>
-	        <div className="flex flex-col gap-6">
-	          {/* Stage Progress Bar */}
-		          {(isCreate ||
-		            (order && !order.isLegacy && order.status !== 'CLOSED')) && (
-	            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
-                {!isCreate && order?.splitGroupId && (
-                  <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="font-semibold text-muted-foreground uppercase tracking-wide">
-                        Split Group
-                      </span>
-                      {splitGroupLoading ? (
-                        <span className="text-muted-foreground">Loading…</span>
-                      ) : splitGroupOrders.length === 0 ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {splitGroupOrders.map(member => {
-                            const label = member.poNumber ?? member.orderNumber
-                            const isCurrent = member.id === order.id
-                            return (
-                              <div key={member.id} className="flex items-center gap-1.5">
-                                {isCurrent ? (
-                                  <span className="font-semibold text-foreground">{label}</span>
-                                ) : (
-                                  <Link
-                                    href={`/operations/purchase-orders/${member.id}`}
-                                    className="text-emerald-700 dark:text-emerald-400 hover:underline"
-                                  >
-                                    {label}
-                                  </Link>
-                                )}
-                                <Badge variant="outline" className="text-[10px]">
-                                  {formatStatusLabel(member.status)}
-                                </Badge>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
+      <PageContent>
+        <div className="flex flex-col gap-6">
+          {/* Stage Progress Bar */}
+          {(isCreate || (order && !order.isLegacy && order.status !== 'CLOSED')) && (
+            <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
+              {!isCreate && order?.splitGroupId && (
+                <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-semibold text-muted-foreground uppercase tracking-wide">
+                      Split Group
+                    </span>
+                    {splitGroupLoading ? (
+                      <span className="text-muted-foreground">Loading…</span>
+                    ) : splitGroupOrders.length === 0 ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {splitGroupOrders.map(member => {
+                          const label = member.poNumber ?? member.orderNumber
+                          const isCurrent = member.id === order.id
+                          return (
+                            <div key={member.id} className="flex items-center gap-1.5">
+                              {isCurrent ? (
+                                <span className="font-semibold text-foreground">{label}</span>
+                              ) : (
+                                <Link
+                                  href={`/operations/purchase-orders/${member.id}`}
+                                  className="text-emerald-700 dark:text-emerald-400 hover:underline"
+                                >
+                                  {label}
+                                </Link>
+                              )}
+                              <Badge variant="outline" className="text-[10px]">
+                                {formatStatusLabel(member.status)}
+                              </Badge>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
 
               <div className="flex items-center justify-between gap-4">
                 {/* Stage Steps */}
@@ -3092,9 +3156,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     return (
                       <Fragment key={stage.value}>
                         {index > 0 && (
-                          <div className={`h-px w-4 flex-shrink-0 ${
-                            isCompleted || isCurrent ? 'bg-emerald-400' : 'bg-slate-200 dark:bg-slate-600'
-                          }`} />
+                          <div
+                            className={`h-px w-4 flex-shrink-0 ${
+                              isCompleted || isCurrent
+                                ? 'bg-emerald-400'
+                                : 'bg-slate-200 dark:bg-slate-600'
+                            }`}
+                          />
                         )}
                         <button
                           type="button"
@@ -3149,18 +3217,20 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       }}
                       disabled={transitioning || (order ? activeViewStage !== order.status : false)}
                       className="gap-1.5"
-	                    >
-	                      {`Advance to ${nextStage.label}`}
-	                      <ChevronRight className="h-3.5 w-3.5" />
-	                    </Button>
-	                  )}
+                    >
+                      {`Advance to ${nextStage.label}`}
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
 
                   {order?.status === 'WAREHOUSE' && !isReadOnly && (
                     <Button
                       size="sm"
                       type="button"
                       onClick={() => void handleReceiveInventory()}
-                      disabled={receivingInventory || (order ? activeViewStage !== order.status : false)}
+                      disabled={
+                        receivingInventory || (order ? activeViewStage !== order.status : false)
+                      }
                       className="gap-1.5"
                     >
                       {receivingInventory && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
@@ -3168,31 +3238,30 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     </Button>
                   )}
 
-	                  {isCreate && (
-	                    <Button
-	                      size="sm"
-	                      onClick={() => void handleCreatePurchaseOrder()}
-	                      disabled={creating}
-	                      className="gap-1.5"
-	                    >
-	                      {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-	                      Create Purchase Order
-	                    </Button>
-	                  )}
+                  {isCreate && (
+                    <Button
+                      size="sm"
+                      onClick={() => void handleCreatePurchaseOrder()}
+                      disabled={creating}
+                      className="gap-1.5"
+                    >
+                      {creating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      Create Purchase Order
+                    </Button>
+                  )}
                 </div>
               </div>
-
             </div>
-	          )}
+          )}
 
-		          {/* Closed banner */}
-		          {order && order.status === 'CLOSED' && (
-		            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-		              <p className="text-sm text-slate-700 dark:text-slate-300">
-		                This order is closed and cannot be modified.
-		              </p>
-		            </div>
-		          )}
+          {/* Closed banner */}
+          {order && order.status === 'CLOSED' && (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4">
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                This order is closed and cannot be modified.
+              </p>
+            </div>
+          )}
 
           {/* Details, Cargo, Costs, Documents & History Tabs */}
           <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-sm">
@@ -3312,513 +3381,1305 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             {activeBottomTab === 'cargo' && (
               <>
                 {!isCreate && order ? (
-              <div>
-                {/* Summary Stats */}
-                <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Units
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {totalUnits.toLocaleString()}
-                      </p>
+                  <div>
+                    {/* Summary Stats */}
+                    <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Units
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {totalUnits.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Cartons
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {totalCartons.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Pallets
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {order.stageData.manufacturing?.totalPallets != null
+                              ? order.stageData.manufacturing.totalPallets.toLocaleString()
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Weight ({weightUnit})
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {order.stageData.manufacturing?.totalWeightKg != null
+                              ? convertWeightFromKg(
+                                  order.stageData.manufacturing.totalWeightKg,
+                                  unitSystem
+                                ).toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })
+                              : '—'}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Volume (CBM)
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {order.stageData.manufacturing?.totalVolumeCbm != null
+                              ? order.stageData.manufacturing.totalVolumeCbm.toLocaleString()
+                              : '—'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Cartons
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {totalCartons.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Pallets
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {order.stageData.manufacturing?.totalPallets != null
-                          ? order.stageData.manufacturing.totalPallets.toLocaleString()
-                          : '—'}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Weight ({weightUnit})
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {order.stageData.manufacturing?.totalWeightKg != null
-                          ? convertWeightFromKg(order.stageData.manufacturing.totalWeightKg, unitSystem).toLocaleString(undefined, {
-                              maximumFractionDigits: 2,
-                            })
-                          : '—'}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Volume (CBM)
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {order.stageData.manufacturing?.totalVolumeCbm != null
-                          ? order.stageData.manufacturing.totalVolumeCbm.toLocaleString()
-                          : '—'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Cargo Lines Table */}
-                  <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
-                    data-gate-key="cargo.lines"
-                  >
-                    <table className="w-full text-sm table-fixed" style={{ minWidth: '960px' }}>
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[60px]">
-                            SKU
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
-                            Lot Ref
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
-                            Units
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
-                            Units/Ctn
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
-                            Cartons
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
-                            HS Code
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
-                            Country
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[128px]">
-                            Carton Size ({lengthUnit})
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                            Net ({weightUnit})
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                            Gross ({weightUnit})
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[68px]">
-                            Material
-                          </th>
-                          {canEditDispatchAllocation && (
-                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[80px]">
-                              Ship Now
+                    {/* Cargo Lines Table */}
+                    <div
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
+                      data-gate-key="cargo.lines"
+                    >
+                      <table className="min-w-full w-max text-sm table-auto">
+                        <thead>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
+                              SKU
                             </th>
-                          )}
-                          {activeViewStage === 'ISSUED' && (
-                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
-                              PI #
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[132px]">
+                              Lot Ref
                             </th>
-                          )}
-                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-                            <>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                                Recvd
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[92px]">
+                              Units
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
+                              Units/Ctn
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[82px]">
+                              Cartons
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[112px]">
+                              HS Code
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[104px]">
+                              Country
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[172px]">
+                              Carton Size ({lengthUnit})
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
+                              Net ({weightUnit})
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
+                              Gross ({weightUnit})
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[112px]">
+                              Material
+                            </th>
+                            {canEditDispatchAllocation && (
+                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
+                                Ship Now
                               </th>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[52px]">
-                                Delta
+                            )}
+                            {showIssuedPiColumn && (
+                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[128px]">
+                                PI #
                               </th>
-                            </>
-                          )}
-                          {canEdit && <th className="w-[60px]"></th>}
-                        </tr>
-                      </thead>
-	                      <tbody>
-	                        {flowLines.length === 0 ? (
-	                          <tr>
-	                            <td
-	                              colSpan={
-	                                11 +
-	                                (canEditDispatchAllocation ? 1 : 0) +
-	                                (activeViewStage === 'ISSUED' ? 1 : 0) +
-	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
-	                                (canEdit ? 1 : 0)
-	                              }
-	                              className="px-3 py-6 text-center text-muted-foreground"
-	                            >
-                              No lines added to this order yet.
-                            </td>
+                            )}
+                            {showReceivedColumns && (
+                              <>
+                                <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[88px]">
+                                  Recvd
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
+                                  Delta
+                                </th>
+                              </>
+                            )}
+                            {canEdit && <th className="w-[60px]"></th>}
                           </tr>
-                        ) : (
-                          flowLines.map(line => {
-	                            const canEditAttributes =
-	                              !isReadOnly
-                            const issuePrefix = `cargo.lines.${line.id}`
-                            const issue = (suffix: string): string | null => {
-                              const key = `${issuePrefix}.${suffix}`
-                              return gateIssues ? gateIssues[key] ?? null : null
-                            }
-                            const cartonDimsIssue = gateIssues ? gateIssues[`${issuePrefix}.cartonDimensions`] ?? null : null
-                            const cartonTriplet = resolveDimensionTripletCm({
-                              side1Cm: line.cartonSide1Cm ?? null,
-                              side2Cm: line.cartonSide2Cm ?? null,
-                              side3Cm: line.cartonSide3Cm ?? null,
-                              legacy: line.cartonDimensionsCm ?? null,
-                            })
+                        </thead>
+                        <tbody>
+                          {flowLines.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={detailCargoLineColumnCount}
+                                className="px-3 py-6 text-center text-muted-foreground"
+                              >
+                                No lines added to this order yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            flowLines.map(line => {
+                              const canEditAttributes = !isReadOnly
+                              const issuePrefix = `cargo.lines.${line.id}`
+                              const issue = (suffix: string): string | null => {
+                                const key = `${issuePrefix}.${suffix}`
+                                return gateIssues ? (gateIssues[key] ?? null) : null
+                              }
+                              const cartonDimsIssue = gateIssues
+                                ? (gateIssues[`${issuePrefix}.cartonDimensions`] ?? null)
+                                : null
+                              const cartonTriplet = resolveDimensionTripletCm({
+                                side1Cm: line.cartonSide1Cm ?? null,
+                                side2Cm: line.cartonSide2Cm ?? null,
+                                side3Cm: line.cartonSide3Cm ?? null,
+                                legacy: line.cartonDimensionsCm ?? null,
+                              })
 
-                            return (
-                            <tr
-                              key={line.id}
-                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                            >
-                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-1">
-                                  {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                    <span className="text-xs font-semibold text-rose-600">!</span>
-                                  )}
-                                  <span className="truncate" title={line.skuDescription ?? undefined}>
-                                    {line.skuCode}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {canEdit ? (
-                                  <div className="flex justify-end">
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={String(line.unitsOrdered)}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) return
-                                        const parsed = Number.parseInt(trimmed, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) {
-                                          toast.error('Units must be a positive integer')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { unitsOrdered: parsed })
-                                      }}
-                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                    />
-                                  </div>
-                                ) : (
-                                  line.unitsOrdered.toLocaleString()
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                                {canEdit ? (
-                                  <div className="flex justify-end">
-                                    <Input
-                                      type="number"
-                                      inputMode="numeric"
-                                      min="1"
-                                      step="1"
-                                      defaultValue={String(line.unitsPerCarton)}
-                                      onBlur={e => {
-                                        const trimmed = e.target.value.trim()
-                                        if (!trimmed) return
-                                        const parsed = Number.parseInt(trimmed, 10)
-                                        if (!Number.isInteger(parsed) || parsed <= 0) {
-                                          toast.error('Units per carton must be a positive integer')
-                                          return
-                                        }
-                                        void patchOrderLine(line.id, { unitsPerCarton: parsed })
-                                      }}
-                                      className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                    />
-                                  </div>
-                                ) : (
-                                  line.unitsPerCarton.toLocaleString()
-                                )}
-                              </td>
-                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                {line.quantity.toLocaleString()}
-                              </td>
-                              {/* Attribute columns */}
-                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.commodityCode ?? ''}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, { commodityCode: trimmed.length > 0 ? trimmed : null })
-                                    }}
-                                    className={cn('h-7 w-24 px-1 py-0 text-xs', issue('commodityCode') && 'border-rose-500')}
-                                  />
-                                ) : (
-                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.commodityCode ?? '—'}</span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <span className={cn('text-xs', issue('countryOfOrigin') ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300')}>
-                                  {supplierCountry ?? '—'}
-                                </span>
-                              </td>
-                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                {canEditAttributes ? (
-                                  <div className="flex gap-0.5">
-                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
-                                      defaultValue={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                      data-carton-side-line={line.id} data-carton-side-axis="1"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
-                                    />
-                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
-                                      defaultValue={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                      data-carton-side-line={line.id} data-carton-side-axis="2"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
-                                    />
-                                    <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
-                                      defaultValue={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                      data-carton-side-line={line.id} data-carton-side-axis="3"
-                                      onBlur={() => maybePatchCartonDimensions(line.id)}
-                                      className={cn('h-7 w-12 px-1 py-0 text-xs text-center', cartonDimsIssue && 'border-rose-500')}
-                                    />
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-slate-700 dark:text-slate-300">
-                                    {cartonTriplet
-                                      ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
-                                      : '—'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
-                                {canEditAttributes ? (
-                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
-                                    defaultValue={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) { void patchOrderLine(line.id, { netWeightKg: null }); return }
-                                      const parsed = Number(trimmed)
-                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Net weight must be a positive number'); return }
-                                      void patchOrderLine(line.id, { netWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                    }}
-                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('netWeightKg') && 'border-rose-500')}
-                                  />
-                                ) : (
-                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
-                                    {line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : '—'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
-                                {canEditAttributes ? (
-                                  <Input type="number" inputMode="decimal" min="0" step="0.001"
-                                    defaultValue={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      if (!trimmed) { void patchOrderLine(line.id, { cartonWeightKg: null }); return }
-                                      const parsed = Number(trimmed)
-                                      if (!Number.isFinite(parsed) || parsed <= 0) { toast.error('Gross weight must be a positive number'); return }
-                                      void patchOrderLine(line.id, { cartonWeightKg: convertWeightToKg(parsed, unitSystem) })
-                                    }}
-                                    className={cn('h-7 w-16 px-1 py-0 text-xs text-right', issue('cartonWeightKg') && 'border-rose-500')}
-                                  />
-                                ) : (
-                                  <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
-                                    {line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : '—'}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
-                                {canEditAttributes ? (
-                                  <Input
-                                    defaultValue={line.material ?? ''}
-                                    onBlur={e => {
-                                      const trimmed = e.target.value.trim()
-                                      void patchOrderLine(line.id, { material: trimmed.length > 0 ? trimmed : null })
-                                    }}
-                                    className={cn('h-7 w-16 px-1 py-0 text-xs', issue('material') && 'border-rose-500')}
-                                  />
-                                ) : (
-                                  <span className="text-xs text-slate-700 dark:text-slate-300">{line.material ?? '—'}</span>
-                                )}
-                              </td>
-                              {canEditDispatchAllocation && (
-                                <td
-                                  className="px-2 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
-                                  data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
+                              return (
+                                <tr
+                                  key={line.id}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
                                 >
-                                  {(() => {
-                                    const gateKey = `cargo.lines.${line.id}.shipNowCartons`
-                                    const issue = gateIssues ? gateIssues[gateKey] : null
-                                    return (
-                                      <div className="flex flex-col items-end space-y-1" data-gate-key={gateKey}>
+                                  <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                    <div className="flex min-w-0 items-center gap-1">
+                                      {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                        <span className="text-xs font-semibold text-rose-600">
+                                          !
+                                        </span>
+                                      )}
+                                      <span
+                                        className="truncate"
+                                        title={line.skuDescription ?? undefined}
+                                      >
+                                        {line.skuCode}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                                    <span
+                                      className="block truncate"
+                                      title={line.lotRef ? line.lotRef : undefined}
+                                    >
+                                      {line.lotRef ? line.lotRef : '—'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                    {canEdit ? (
+                                      <div className="flex justify-end">
                                         <Input
                                           type="number"
                                           inputMode="numeric"
-                                          min="0"
+                                          min="1"
                                           step="1"
-                                          max={line.quantity}
-                                          value={dispatchSplitAllocations[line.id] ?? String(line.quantity)}
-                                          onChange={e =>
-                                            setDispatchSplitAllocations(prev => ({
-                                              ...prev,
-                                              [line.id]: e.target.value,
-                                            }))
-                                          }
-                                          className={cn(
-                                            'h-7 w-20 px-2 py-0 text-xs text-right',
-                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                          )}
-                                          data-gate-key={gateKey}
+                                          defaultValue={String(line.unitsOrdered)}
+                                          onBlur={e => {
+                                            const trimmed = e.target.value.trim()
+                                            if (!trimmed) return
+                                            const parsed = Number.parseInt(trimmed, 10)
+                                            if (!Number.isInteger(parsed) || parsed <= 0) {
+                                              toast.error('Units must be a positive integer')
+                                              return
+                                            }
+                                            void patchOrderLine(line.id, { unitsOrdered: parsed })
+                                          }}
+                                          className="h-7 w-20 px-2 py-0 text-xs text-right"
                                         />
-                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
                                       </div>
-                                    )
-                                  })()}
-                                </td>
-                              )}
-	                              {activeViewStage === 'ISSUED' && (
-	                                <td className="px-3 py-1 text-muted-foreground min-w-0">
-	                                  {(() => {
-                                    const gateKey = `cargo.lines.${line.id}.piNumber`
-                                    const issue = gateIssues ? gateIssues[gateKey] : null
-	                                    const canEditPiNumber =
-	                                      !isReadOnly
-
-                                    if (canEditPiNumber) {
-                                      return (
-                                        <div className="space-y-1" data-gate-key={gateKey}>
-                                          <Input
-                                            defaultValue={line.piNumber ?? ''}
-                                            placeholder="PI-..."
-                                            data-gate-key={gateKey}
-                                            onBlur={e => {
-                                              const trimmed = e.target.value.trim()
-                                              void patchOrderLine(line.id, {
-                                                piNumber: trimmed.length > 0 ? trimmed : null,
-                                              })
-                                            }}
-                                            className={cn(
-                                              'h-7 w-full px-2 py-0 text-xs',
-                                              issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                            )}
-                                          />
-                                          {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                        </div>
-                                      )
-                                    }
-
-                                    return (
-                                      <span data-gate-key={gateKey}>
-                                        {line.piNumber ? line.piNumber : '—'}
+                                    ) : (
+                                      line.unitsOrdered.toLocaleString()
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                                    {canEdit ? (
+                                      <div className="flex justify-end">
+                                        <Input
+                                          type="number"
+                                          inputMode="numeric"
+                                          min="1"
+                                          step="1"
+                                          defaultValue={String(line.unitsPerCarton)}
+                                          onBlur={e => {
+                                            const trimmed = e.target.value.trim()
+                                            if (!trimmed) return
+                                            const parsed = Number.parseInt(trimmed, 10)
+                                            if (!Number.isInteger(parsed) || parsed <= 0) {
+                                              toast.error(
+                                                'Units per carton must be a positive integer'
+                                              )
+                                              return
+                                            }
+                                            void patchOrderLine(line.id, { unitsPerCarton: parsed })
+                                          }}
+                                          className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                        />
+                                      </div>
+                                    ) : (
+                                      line.unitsPerCarton.toLocaleString()
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                    {line.quantity.toLocaleString()}
+                                  </td>
+                                  {/* Attribute columns */}
+                                  <td
+                                    className="px-2 py-1 min-w-0"
+                                    data-gate-key={`${issuePrefix}.commodityCode`}
+                                  >
+                                    {canEditAttributes ? (
+                                      <Input
+                                        defaultValue={line.commodityCode ?? ''}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          void patchOrderLine(line.id, {
+                                            commodityCode: trimmed.length > 0 ? trimmed : null,
+                                          })
+                                        }}
+                                        className={cn(
+                                          'h-7 w-24 px-1 py-0 text-xs',
+                                          issue('commodityCode') && 'border-rose-500'
+                                        )}
+                                      />
+                                    ) : (
+                                      <span className="text-xs text-slate-700 dark:text-slate-300">
+                                        {line.commodityCode ?? '—'}
                                       </span>
-                                    )
-	                                  })()}
-	                                </td>
-	                              )}
-	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
-	                                (() => {
-	                                  const gateKey = `cargo.lines.${line.id}.quantityReceived`
-	                                  const issue = gateIssues ? gateIssues[gateKey] ?? null : null
-	                                  const canEditReceiving =
-	                                    !isReadOnly && activeViewStage === 'WAREHOUSE'
-	                                  const received = line.quantityReceived ?? null
-	                                  const delta = received !== null ? received - line.quantity : null
-	                                  const displayedReceived = (line.quantityReceived ?? line.postedQuantity).toLocaleString()
+                                    )}
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.countryOfOrigin`}
+                                  >
+                                    <span
+                                      className={cn(
+                                        'text-xs',
+                                        issue('countryOfOrigin')
+                                          ? 'text-rose-600'
+                                          : 'text-slate-700 dark:text-slate-300'
+                                      )}
+                                    >
+                                      {supplierCountry ?? '—'}
+                                    </span>
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.cartonDimensions`}
+                                  >
+                                    {canEditAttributes ? (
+                                      <div className="flex gap-0.5">
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          placeholder="L"
+                                          defaultValue={
+                                            line.cartonSide1Cm != null
+                                              ? formatLengthFromCm(line.cartonSide1Cm, unitSystem)
+                                              : ''
+                                          }
+                                          data-carton-side-line={line.id}
+                                          data-carton-side-axis="1"
+                                          onBlur={() => maybePatchCartonDimensions(line.id)}
+                                          className={cn(
+                                            'h-7 w-12 px-1 py-0 text-xs text-center',
+                                            cartonDimsIssue && 'border-rose-500'
+                                          )}
+                                        />
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          placeholder="W"
+                                          defaultValue={
+                                            line.cartonSide2Cm != null
+                                              ? formatLengthFromCm(line.cartonSide2Cm, unitSystem)
+                                              : ''
+                                          }
+                                          data-carton-side-line={line.id}
+                                          data-carton-side-axis="2"
+                                          onBlur={() => maybePatchCartonDimensions(line.id)}
+                                          className={cn(
+                                            'h-7 w-12 px-1 py-0 text-xs text-center',
+                                            cartonDimsIssue && 'border-rose-500'
+                                          )}
+                                        />
+                                        <Input
+                                          type="number"
+                                          inputMode="decimal"
+                                          min="0"
+                                          step="0.01"
+                                          placeholder="H"
+                                          defaultValue={
+                                            line.cartonSide3Cm != null
+                                              ? formatLengthFromCm(line.cartonSide3Cm, unitSystem)
+                                              : ''
+                                          }
+                                          data-carton-side-line={line.id}
+                                          data-carton-side-axis="3"
+                                          onBlur={() => maybePatchCartonDimensions(line.id)}
+                                          className={cn(
+                                            'h-7 w-12 px-1 py-0 text-xs text-center',
+                                            cartonDimsIssue && 'border-rose-500'
+                                          )}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-slate-700 dark:text-slate-300">
+                                        {cartonTriplet
+                                          ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
+                                          : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 text-right whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.netWeightKg`}
+                                  >
+                                    {canEditAttributes ? (
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.001"
+                                        defaultValue={
+                                          line.netWeightKg != null
+                                            ? formatWeightFromKg(line.netWeightKg, unitSystem)
+                                            : ''
+                                        }
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) {
+                                            void patchOrderLine(line.id, { netWeightKg: null })
+                                            return
+                                          }
+                                          const parsed = Number(trimmed)
+                                          if (!Number.isFinite(parsed) || parsed <= 0) {
+                                            toast.error('Net weight must be a positive number')
+                                            return
+                                          }
+                                          void patchOrderLine(line.id, {
+                                            netWeightKg: convertWeightToKg(parsed, unitSystem),
+                                          })
+                                        }}
+                                        className={cn(
+                                          'h-7 w-16 px-1 py-0 text-xs text-right',
+                                          issue('netWeightKg') && 'border-rose-500'
+                                        )}
+                                      />
+                                    ) : (
+                                      <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                        {line.netWeightKg != null
+                                          ? formatWeightFromKg(line.netWeightKg, unitSystem)
+                                          : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 text-right whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                  >
+                                    {canEditAttributes ? (
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.001"
+                                        defaultValue={
+                                          line.cartonWeightKg != null
+                                            ? formatWeightFromKg(line.cartonWeightKg, unitSystem)
+                                            : ''
+                                        }
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          if (!trimmed) {
+                                            void patchOrderLine(line.id, { cartonWeightKg: null })
+                                            return
+                                          }
+                                          const parsed = Number(trimmed)
+                                          if (!Number.isFinite(parsed) || parsed <= 0) {
+                                            toast.error('Gross weight must be a positive number')
+                                            return
+                                          }
+                                          void patchOrderLine(line.id, {
+                                            cartonWeightKg: convertWeightToKg(parsed, unitSystem),
+                                          })
+                                        }}
+                                        className={cn(
+                                          'h-7 w-16 px-1 py-0 text-xs text-right',
+                                          issue('cartonWeightKg') && 'border-rose-500'
+                                        )}
+                                      />
+                                    ) : (
+                                      <span className="text-xs tabular-nums text-slate-700 dark:text-slate-300">
+                                        {line.cartonWeightKg != null
+                                          ? formatWeightFromKg(line.cartonWeightKg, unitSystem)
+                                          : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 min-w-0"
+                                    data-gate-key={`${issuePrefix}.material`}
+                                  >
+                                    {canEditAttributes ? (
+                                      <Input
+                                        defaultValue={line.material ?? ''}
+                                        onBlur={e => {
+                                          const trimmed = e.target.value.trim()
+                                          void patchOrderLine(line.id, {
+                                            material: trimmed.length > 0 ? trimmed : null,
+                                          })
+                                        }}
+                                        className={cn(
+                                          'h-7 w-16 px-1 py-0 text-xs',
+                                          issue('material') && 'border-rose-500'
+                                        )}
+                                      />
+                                    ) : (
+                                      <span className="text-xs text-slate-700 dark:text-slate-300">
+                                        {line.material ?? '—'}
+                                      </span>
+                                    )}
+                                  </td>
+                                  {canEditDispatchAllocation && (
+                                    <td
+                                      className="px-2 py-1 text-right tabular-nums text-foreground whitespace-nowrap"
+                                      data-gate-key={`cargo.lines.${line.id}.shipNowCartons`}
+                                    >
+                                      {(() => {
+                                        const gateKey = `cargo.lines.${line.id}.shipNowCartons`
+                                        const issue = gateIssues ? gateIssues[gateKey] : null
+                                        return (
+                                          <div
+                                            className="flex flex-col items-end space-y-1"
+                                            data-gate-key={gateKey}
+                                          >
+                                            <Input
+                                              type="number"
+                                              inputMode="numeric"
+                                              min="0"
+                                              step="1"
+                                              max={line.quantity}
+                                              value={
+                                                dispatchSplitAllocations[line.id] ??
+                                                String(line.quantity)
+                                              }
+                                              onChange={e =>
+                                                setDispatchSplitAllocations(prev => ({
+                                                  ...prev,
+                                                  [line.id]: e.target.value,
+                                                }))
+                                              }
+                                              className={cn(
+                                                'h-7 w-20 px-2 py-0 text-xs text-right',
+                                                issue &&
+                                                  'border-rose-500 focus-visible:ring-rose-500'
+                                              )}
+                                              data-gate-key={gateKey}
+                                            />
+                                            {issue && (
+                                              <p className="text-xs text-rose-600">{issue}</p>
+                                            )}
+                                          </div>
+                                        )
+                                      })()}
+                                    </td>
+                                  )}
+                                  {showIssuedPiColumn && (
+                                    <td className="px-3 py-1 text-muted-foreground min-w-0">
+                                      {(() => {
+                                        const gateKey = `cargo.lines.${line.id}.piNumber`
+                                        const issue = gateIssues ? gateIssues[gateKey] : null
+                                        const canEditPiNumber = !isReadOnly
 
-	                                  return (
-	                                    <>
-	                                      <td
-	                                        className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
-	                                        data-gate-key={gateKey}
-	                                      >
-	                                        {canEditReceiving ? (
-	                                          <div className="flex flex-col items-end gap-1">
-	                                            <Input
-	                                              type="number"
-	                                              inputMode="numeric"
-	                                              min="0"
-	                                              step="1"
-	                                              defaultValue={received !== null ? String(received) : ''}
-	                                              data-gate-key={gateKey}
-	                                              onBlur={e => {
-	                                                const trimmed = e.target.value.trim()
-	                                                if (!trimmed) {
-	                                                  void patchOrderLine(line.id, { quantityReceived: null })
-	                                                  return
-	                                                }
-	                                                const parsed = Number.parseInt(trimmed, 10)
-	                                                if (!Number.isInteger(parsed) || parsed < 0) {
-	                                                  toast.error('Received cartons must be a non-negative integer')
-	                                                  return
-	                                                }
-	                                                void patchOrderLine(line.id, { quantityReceived: parsed })
-	                                              }}
-	                                              className={cn(
-	                                                'h-7 w-16 px-2 py-0 text-xs text-right',
-	                                                issue && 'border-rose-500 focus-visible:ring-rose-500'
-	                                              )}
-	                                            />
-	                                            {issue && <p className="text-xs text-rose-600">{issue}</p>}
-	                                          </div>
-	                                        ) : (
-	                                          <span className="text-muted-foreground">{displayedReceived}</span>
-	                                        )}
-	                                      </td>
-	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-	                                        {delta !== null ? (
-	                                          <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
-	                                            {delta.toLocaleString()}
-	                                          </span>
-	                                        ) : (
-	                                          <span className="text-muted-foreground">—</span>
-	                                        )}
-	                                      </td>
-	                                    </>
-	                                  )
-	                                })()}
-	                              {canEdit && (
-	                                <td className="px-2 py-2 whitespace-nowrap text-right">
-	                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
-                                      onClick={() => {
-                                        setProductCostsEditing(true)
-                                        jumpToGateKey(`costs.lines.${line.id}.totalCost`)
-                                      }}
-                                      title="Edit costs"
-                                    >
-                                      <DollarSign className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                      onClick={() =>
-                                        setConfirmDialog({
-	                                          open: true,
-	                                          type: 'delete-line',
-	                                          title: 'Remove line item',
-	                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this purchase order?`,
-	                                          lineId: line.id,
-	                                        })
-	                                      }
-                                      title="Remove line"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
+                                        if (canEditPiNumber) {
+                                          return (
+                                            <div className="space-y-1" data-gate-key={gateKey}>
+                                              <Input
+                                                defaultValue={line.piNumber ?? ''}
+                                                placeholder="PI-..."
+                                                data-gate-key={gateKey}
+                                                onBlur={e => {
+                                                  const trimmed = e.target.value.trim()
+                                                  void patchOrderLine(line.id, {
+                                                    piNumber: trimmed.length > 0 ? trimmed : null,
+                                                  })
+                                                }}
+                                                className={cn(
+                                                  'h-7 w-full px-2 py-0 text-xs',
+                                                  issue &&
+                                                    'border-rose-500 focus-visible:ring-rose-500'
+                                                )}
+                                              />
+                                              {issue && (
+                                                <p className="text-xs text-rose-600">{issue}</p>
+                                              )}
+                                            </div>
+                                          )
+                                        }
+
+                                        return (
+                                          <span data-gate-key={gateKey}>
+                                            {line.piNumber ? line.piNumber : '—'}
+                                          </span>
+                                        )
+                                      })()}
+                                    </td>
+                                  )}
+                                  {showReceivedColumns &&
+                                    (() => {
+                                      const gateKey = `cargo.lines.${line.id}.quantityReceived`
+                                      const issue = gateIssues
+                                        ? (gateIssues[gateKey] ?? null)
+                                        : null
+                                      const canEditReceiving =
+                                        !isReadOnly && activeViewStage === 'WAREHOUSE'
+                                      const received = line.quantityReceived ?? null
+                                      const delta =
+                                        received !== null ? received - line.quantity : null
+                                      const displayedReceived = (
+                                        line.quantityReceived ?? line.postedQuantity
+                                      ).toLocaleString()
+
+                                      return (
+                                        <>
+                                          <td
+                                            className="px-3 py-2 text-right tabular-nums whitespace-nowrap"
+                                            data-gate-key={gateKey}
+                                          >
+                                            {canEditReceiving ? (
+                                              <div className="flex flex-col items-end gap-1">
+                                                <Input
+                                                  type="number"
+                                                  inputMode="numeric"
+                                                  min="0"
+                                                  step="1"
+                                                  defaultValue={
+                                                    received !== null ? String(received) : ''
+                                                  }
+                                                  data-gate-key={gateKey}
+                                                  onBlur={e => {
+                                                    const trimmed = e.target.value.trim()
+                                                    if (!trimmed) {
+                                                      void patchOrderLine(line.id, {
+                                                        quantityReceived: null,
+                                                      })
+                                                      return
+                                                    }
+                                                    const parsed = Number.parseInt(trimmed, 10)
+                                                    if (!Number.isInteger(parsed) || parsed < 0) {
+                                                      toast.error(
+                                                        'Received cartons must be a non-negative integer'
+                                                      )
+                                                      return
+                                                    }
+                                                    void patchOrderLine(line.id, {
+                                                      quantityReceived: parsed,
+                                                    })
+                                                  }}
+                                                  className={cn(
+                                                    'h-7 w-16 px-2 py-0 text-xs text-right',
+                                                    issue &&
+                                                      'border-rose-500 focus-visible:ring-rose-500'
+                                                  )}
+                                                />
+                                                {issue && (
+                                                  <p className="text-xs text-rose-600">{issue}</p>
+                                                )}
+                                              </div>
+                                            ) : (
+                                              <span className="text-muted-foreground">
+                                                {displayedReceived}
+                                              </span>
+                                            )}
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                            {delta !== null ? (
+                                              <span
+                                                className={
+                                                  delta === 0
+                                                    ? 'text-muted-foreground'
+                                                    : 'text-amber-600'
+                                                }
+                                              >
+                                                {delta.toLocaleString()}
+                                              </span>
+                                            ) : (
+                                              <span className="text-muted-foreground">—</span>
+                                            )}
+                                          </td>
+                                        </>
+                                      )
+                                    })()}
+                                  {canEdit && (
+                                    <td className="px-2 py-2 whitespace-nowrap text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
+                                          onClick={() => {
+                                            setProductCostsEditing(true)
+                                            jumpToGateKey(`costs.lines.${line.id}.totalCost`)
+                                          }}
+                                          title="Edit costs"
+                                        >
+                                          <DollarSign className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                          onClick={() =>
+                                            setConfirmDialog({
+                                              open: true,
+                                              type: 'delete-line',
+                                              title: 'Remove line item',
+                                              message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this purchase order?`,
+                                              lineId: line.id,
+                                            })
+                                          }
+                                          title="Remove line"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              )
+                            })
+                          )}
+                          {/* Inline Add Row */}
+                          {canEdit && (
+                            <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
+                              <td className="px-3 py-2 min-w-0">
+                                <select
+                                  value={newLineDraft.skuId}
+                                  onChange={e => {
+                                    const skuId = e.target.value
+                                    setNewLineDraft(prev => ({
+                                      ...prev,
+                                      skuId,
+                                      unitsOrdered: 1,
+                                      unitsPerCarton: null,
+                                      notes: '',
+                                    }))
+                                  }}
+                                  disabled={skusLoading || addLineSubmitting}
+                                  className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
+                                >
+                                  <option value="">Select SKU</option>
+                                  {skus.map(sku => (
+                                    <option key={sku.id} value={sku.id}>
+                                      {sku.skuCode}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                                Auto
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="1"
+                                  step="1"
+                                  value={newLineDraft.unitsOrdered}
+                                  onChange={e => {
+                                    const parsed = Number.parseInt(e.target.value, 10)
+                                    setNewLineDraft(prev => ({
+                                      ...prev,
+                                      unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
+                                    }))
+                                  }}
+                                  disabled={addLineSubmitting}
+                                  className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-3 py-2">
+                                <Input
+                                  type="number"
+                                  inputMode="numeric"
+                                  min="1"
+                                  step="1"
+                                  value={newLineDraft.unitsPerCarton ?? ''}
+                                  onChange={e =>
+                                    setNewLineDraft(prev => ({
+                                      ...prev,
+                                      unitsPerCarton: (() => {
+                                        const parsed = Number.parseInt(e.target.value, 10)
+                                        return Number.isInteger(parsed) && parsed > 0
+                                          ? parsed
+                                          : null
+                                      })(),
+                                    }))
+                                  }
+                                  disabled={!newLineDraft.skuId || addLineSubmitting}
+                                  placeholder="—"
+                                  className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                {(() => {
+                                  if (!newLineDraft.unitsPerCarton) return '—'
+                                  if (newLineDraft.unitsOrdered <= 0) return '—'
+                                  return Math.ceil(
+                                    newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton
+                                  ).toLocaleString()
+                                })()}
+                              </td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
+                              {canEditDispatchAllocation && <td className="px-2 py-2">—</td>}
+                              {showIssuedPiColumn && <td className="px-2 py-2">—</td>}
+                              {showReceivedColumns && (
+                                <>
+                                  <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                                  <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                                </>
                               )}
+                              <td className="px-2 py-2 whitespace-nowrap text-right">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void handleAddLineItem()}
+                                  disabled={
+                                    !newLineDraft.skuId ||
+                                    !newLineDraft.unitsPerCarton ||
+                                    newLineDraft.unitsOrdered <= 0 ||
+                                    addLineSubmitting
+                                  }
+                                  className="h-7 gap-1"
+                                >
+                                  {addLineSubmitting ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <Plus className="h-3.5 w-3.5" />
+                                  )}
+                                  Add
+                                </Button>
+                              </td>
                             </tr>
                           )}
-                          )
-                        )}
-                        {/* Inline Add Row */}
-                        {canEdit && (
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Summary Stats */}
+                    <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
+                      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Units
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {totalUnits.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Cartons
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {totalCartons.toLocaleString()}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Pallets
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            —
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Weight ({weightUnit})
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            —
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Total Volume (CBM)
+                          </p>
+                          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            —
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Cargo Lines Table */}
+                    <div
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
+                      data-gate-key="cargo.lines"
+                    >
+                      <table className="min-w-full w-max text-sm table-auto">
+                        <thead>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
+                              SKU
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[132px]">
+                              Lot Ref
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[92px]">
+                              Units
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
+                              Units/Ctn
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[82px]">
+                              Cartons
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[112px]">
+                              HS Code
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[104px]">
+                              Country
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[172px]">
+                              Carton Size ({lengthUnit})
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
+                              Net ({weightUnit})
+                            </th>
+                            <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
+                              Gross ({weightUnit})
+                            </th>
+                            <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[112px]">
+                              Material
+                            </th>
+                            {showReceivedColumns && (
+                              <>
+                                <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[88px]">
+                                  Recvd
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
+                                  Delta
+                                </th>
+                              </>
+                            )}
+                            {canEdit && <th className="w-[60px]"></th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {draftLines.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={draftCargoLineColumnCount}
+                                className="px-3 py-6 text-center text-muted-foreground"
+                              >
+                                No lines added to this order yet.
+                              </td>
+                            </tr>
+                          ) : (
+                            draftLines.map(line => {
+                              const issuePrefix = `cargo.lines.${line.id}`
+                              const updateLine = (
+                                updater: (
+                                  current: PurchaseOrderLineSummary
+                                ) => PurchaseOrderLineSummary
+                              ) => {
+                                setDraftLines(prev =>
+                                  prev.map(candidate =>
+                                    candidate.id === line.id ? updater(candidate) : candidate
+                                  )
+                                )
+                              }
+
+                              return (
+                                <tr
+                                  key={line.id}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                >
+                                  <td className="px-2 py-2 font-medium text-foreground min-w-0">
+                                    <div className="flex min-w-0 items-center gap-1">
+                                      {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
+                                        <span className="text-xs font-semibold text-rose-600">
+                                          !
+                                        </span>
+                                      )}
+                                      <span
+                                        className="truncate"
+                                        title={line.skuDescription ?? undefined}
+                                      >
+                                        {line.skuCode}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
+                                    <span
+                                      className="block truncate"
+                                      title={line.lotRef ? line.lotRef : undefined}
+                                    >
+                                      {line.lotRef ? line.lotRef : '—'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex justify-end">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="1"
+                                        step="1"
+                                        value={String(line.unitsOrdered)}
+                                        onChange={e => {
+                                          const parsed = Number.parseInt(e.target.value, 10)
+                                          setDraftLines(prev =>
+                                            prev.map(candidate => {
+                                              if (candidate.id !== line.id) return candidate
+                                              const unitsOrdered = Number.isFinite(parsed)
+                                                ? parsed
+                                                : 0
+                                              const unitsPerCarton = candidate.unitsPerCarton
+                                              const quantity =
+                                                Number.isFinite(unitsPerCarton) &&
+                                                unitsPerCarton > 0 &&
+                                                unitsOrdered > 0
+                                                  ? Math.ceil(unitsOrdered / unitsPerCarton)
+                                                  : 0
+                                              return { ...candidate, unitsOrdered, quantity }
+                                            })
+                                          )
+                                        }}
+                                        className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex justify-end">
+                                      <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        min="1"
+                                        step="1"
+                                        value={String(line.unitsPerCarton)}
+                                        onChange={e => {
+                                          const parsed = Number.parseInt(e.target.value, 10)
+                                          setDraftLines(prev =>
+                                            prev.map(candidate => {
+                                              if (candidate.id !== line.id) return candidate
+                                              const unitsPerCarton = Number.isFinite(parsed)
+                                                ? parsed
+                                                : 0
+                                              const unitsOrdered = candidate.unitsOrdered
+                                              const quantity =
+                                                unitsPerCarton > 0 && unitsOrdered > 0
+                                                  ? Math.ceil(unitsOrdered / unitsPerCarton)
+                                                  : 0
+                                              return { ...candidate, unitsPerCarton, quantity }
+                                            })
+                                          )
+                                        }}
+                                        className="h-7 w-20 px-2 py-0 text-xs text-right"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                    {line.quantity.toLocaleString()}
+                                  </td>
+                                  {/* Attribute columns */}
+                                  <td
+                                    className="px-2 py-1 min-w-0"
+                                    data-gate-key={`${issuePrefix}.commodityCode`}
+                                  >
+                                    <Input
+                                      value={line.commodityCode ?? ''}
+                                      onChange={e => {
+                                        const value = e.target.value
+                                        updateLine(current => ({
+                                          ...current,
+                                          commodityCode: value.trim() ? value : null,
+                                        }))
+                                      }}
+                                      className="h-7 w-24 px-1 py-0 text-xs"
+                                    />
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.countryOfOrigin`}
+                                  >
+                                    <span className="text-xs text-slate-700 dark:text-slate-300">
+                                      {supplierCountry ?? '—'}
+                                    </span>
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.cartonDimensions`}
+                                  >
+                                    <div className="flex gap-0.5">
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="L"
+                                        value={
+                                          line.cartonSide1Cm != null
+                                            ? formatLengthFromCm(line.cartonSide1Cm, unitSystem)
+                                            : ''
+                                        }
+                                        onChange={e => {
+                                          const parsed = Number(e.target.value)
+                                          const nextInput =
+                                            Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                          const next =
+                                            nextInput === null
+                                              ? null
+                                              : convertLengthToCm(nextInput, unitSystem)
+                                          updateLine(current => {
+                                            const triplet = resolveDimensionTripletCm({
+                                              side1Cm: next,
+                                              side2Cm: current.cartonSide2Cm ?? null,
+                                              side3Cm: current.cartonSide3Cm ?? null,
+                                              legacy: current.cartonDimensionsCm ?? null,
+                                            })
+                                            return {
+                                              ...current,
+                                              cartonSide1Cm: next,
+                                              cartonDimensionsCm: triplet
+                                                ? formatDimensionTripletCm(triplet)
+                                                : (current.cartonDimensionsCm ?? null),
+                                            }
+                                          })
+                                        }}
+                                        className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                      />
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="W"
+                                        value={
+                                          line.cartonSide2Cm != null
+                                            ? formatLengthFromCm(line.cartonSide2Cm, unitSystem)
+                                            : ''
+                                        }
+                                        onChange={e => {
+                                          const parsed = Number(e.target.value)
+                                          const nextInput =
+                                            Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                          const next =
+                                            nextInput === null
+                                              ? null
+                                              : convertLengthToCm(nextInput, unitSystem)
+                                          updateLine(current => {
+                                            const triplet = resolveDimensionTripletCm({
+                                              side1Cm: current.cartonSide1Cm ?? null,
+                                              side2Cm: next,
+                                              side3Cm: current.cartonSide3Cm ?? null,
+                                              legacy: current.cartonDimensionsCm ?? null,
+                                            })
+                                            return {
+                                              ...current,
+                                              cartonSide2Cm: next,
+                                              cartonDimensionsCm: triplet
+                                                ? formatDimensionTripletCm(triplet)
+                                                : (current.cartonDimensionsCm ?? null),
+                                            }
+                                          })
+                                        }}
+                                        className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                      />
+                                      <Input
+                                        type="number"
+                                        inputMode="decimal"
+                                        min="0"
+                                        step="0.01"
+                                        placeholder="H"
+                                        value={
+                                          line.cartonSide3Cm != null
+                                            ? formatLengthFromCm(line.cartonSide3Cm, unitSystem)
+                                            : ''
+                                        }
+                                        onChange={e => {
+                                          const parsed = Number(e.target.value)
+                                          const nextInput =
+                                            Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                          const next =
+                                            nextInput === null
+                                              ? null
+                                              : convertLengthToCm(nextInput, unitSystem)
+                                          updateLine(current => {
+                                            const triplet = resolveDimensionTripletCm({
+                                              side1Cm: current.cartonSide1Cm ?? null,
+                                              side2Cm: current.cartonSide2Cm ?? null,
+                                              side3Cm: next,
+                                              legacy: current.cartonDimensionsCm ?? null,
+                                            })
+                                            return {
+                                              ...current,
+                                              cartonSide3Cm: next,
+                                              cartonDimensionsCm: triplet
+                                                ? formatDimensionTripletCm(triplet)
+                                                : (current.cartonDimensionsCm ?? null),
+                                            }
+                                          })
+                                        }}
+                                        className="h-7 w-12 px-1 py-0 text-xs text-center"
+                                      />
+                                    </div>
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 text-right whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.netWeightKg`}
+                                  >
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      value={
+                                        line.netWeightKg != null
+                                          ? formatWeightFromKg(line.netWeightKg, unitSystem)
+                                          : ''
+                                      }
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const nextInput =
+                                          Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => ({
+                                          ...current,
+                                          netWeightKg:
+                                            nextInput === null
+                                              ? null
+                                              : convertWeightToKg(nextInput, unitSystem),
+                                        }))
+                                      }}
+                                      className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                    />
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 text-right whitespace-nowrap"
+                                    data-gate-key={`${issuePrefix}.cartonWeightKg`}
+                                  >
+                                    <Input
+                                      type="number"
+                                      inputMode="decimal"
+                                      min="0"
+                                      step="0.001"
+                                      value={
+                                        line.cartonWeightKg != null
+                                          ? formatWeightFromKg(line.cartonWeightKg, unitSystem)
+                                          : ''
+                                      }
+                                      onChange={e => {
+                                        const parsed = Number(e.target.value)
+                                        const nextInput =
+                                          Number.isFinite(parsed) && parsed > 0 ? parsed : null
+                                        updateLine(current => ({
+                                          ...current,
+                                          cartonWeightKg:
+                                            nextInput === null
+                                              ? null
+                                              : convertWeightToKg(nextInput, unitSystem),
+                                        }))
+                                      }}
+                                      className="h-7 w-16 px-1 py-0 text-xs text-right"
+                                    />
+                                  </td>
+                                  <td
+                                    className="px-2 py-1 min-w-0"
+                                    data-gate-key={`${issuePrefix}.material`}
+                                  >
+                                    <Input
+                                      value={line.material ?? ''}
+                                      onChange={e => {
+                                        const value = e.target.value
+                                        updateLine(current => ({
+                                          ...current,
+                                          material: value.trim() ? value : null,
+                                        }))
+                                      }}
+                                      className="h-7 w-20 px-1 py-0 text-xs"
+                                    />
+                                  </td>
+                                  {showReceivedColumns &&
+                                    (() => {
+                                      const received = line.quantityReceived ?? null
+                                      const delta =
+                                        received !== null ? received - line.quantity : null
+                                      const displayedReceived = (
+                                        line.quantityReceived ?? line.postedQuantity
+                                      ).toLocaleString()
+
+                                      return (
+                                        <>
+                                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                            <span className="text-muted-foreground">
+                                              {displayedReceived}
+                                            </span>
+                                          </td>
+                                          <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
+                                            {delta !== null ? (
+                                              <span
+                                                className={
+                                                  delta === 0
+                                                    ? 'text-muted-foreground'
+                                                    : 'text-amber-600'
+                                                }
+                                              >
+                                                {delta.toLocaleString()}
+                                              </span>
+                                            ) : (
+                                              <span className="text-muted-foreground">—</span>
+                                            )}
+                                          </td>
+                                        </>
+                                      )
+                                    })()}
+                                  {canEdit && (
+                                    <td className="px-2 py-2 whitespace-nowrap text-right">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
+                                          onClick={() =>
+                                            jumpToGateKey(`costs.lines.${line.id}.totalCost`)
+                                          }
+                                          title="Edit costs"
+                                        >
+                                          <DollarSign className="h-3.5 w-3.5" />
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
+                                          onClick={() =>
+                                            setConfirmDialog({
+                                              open: true,
+                                              type: 'delete-line',
+                                              title: 'Remove line item',
+                                              message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this draft purchase order?`,
+                                              lineId: line.id,
+                                            })
+                                          }
+                                          title="Remove line"
+                                        >
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </div>
+                                    </td>
+                                  )}
+                                </tr>
+                              )
+                            })
+                          )}
+                          {/* Inline Add Row for Create Mode */}
                           <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
                             <td className="px-3 py-2 min-w-0">
                               <select
@@ -3834,7 +4695,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   }))
                                 }}
                                 disabled={skusLoading || addLineSubmitting}
-                                className="w-full h-7 px-2 border rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
+                                className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
                               >
                                 <option value="">Select SKU</option>
                                 {skus.map(sku => (
@@ -3890,7 +4751,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               {(() => {
                                 if (!newLineDraft.unitsPerCarton) return '—'
                                 if (newLineDraft.unitsOrdered <= 0) return '—'
-                                return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
+                                return Math.ceil(
+                                  newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton
+                                ).toLocaleString()
                               })()}
                             </td>
                             <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
@@ -3899,9 +4762,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
                             <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
                             <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                            {canEditDispatchAllocation && <td className="px-2 py-2">—</td>}
-                            {activeViewStage === 'ISSUED' && <td className="px-2 py-2">—</td>}
-                            <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                            {showReceivedColumns && (
+                              <>
+                                <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                                <td className="px-2 py-2 text-right text-muted-foreground">—</td>
+                              </>
+                            )}
                             <td className="px-2 py-2 whitespace-nowrap text-right">
                               <Button
                                 type="button"
@@ -3924,469 +4790,13 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               </Button>
                             </td>
                           </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-	              </div>
-	            ) : (
-	              <div>
-	                {/* Summary Stats */}
-                <div className="border-b bg-slate-50/50 dark:bg-slate-700/50 px-4 py-3">
-                  <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Units
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {totalUnits.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Cartons
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {totalCartons.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Pallets
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">—</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Weight ({weightUnit})
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">—</p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Total Volume (CBM)
-                      </p>
-                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">—</p>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                </div>
-
-                {/* Cargo Lines Table */}
-                  <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-x-auto"
-                    data-gate-key="cargo.lines"
-                  >
-                    <table className="w-full text-sm table-fixed" style={{ minWidth: '960px' }}>
-                      <thead>
-                        <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[60px]">
-                            SKU
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[110px]">
-                            Lot Ref
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
-                            Units
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
-                            Units/Ctn
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
-                            Cartons
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[96px]">
-                            HS Code
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[58px]">
-                            Country
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[128px]">
-                            Carton Size ({lengthUnit})
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                            Net ({weightUnit})
-                          </th>
-                          <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                            Gross ({weightUnit})
-                          </th>
-                          <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[68px]">
-                            Material
-                          </th>
-                          {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') && (
-                            <>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[72px]">
-                                Recvd
-                              </th>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[52px]">
-                                Delta
-                              </th>
-                            </>
-                          )}
-                          {canEdit && <th className="w-[60px]"></th>}
-                        </tr>
-                      </thead>
-	                      <tbody>
-	                        {draftLines.length === 0 ? (
-	                          <tr>
-	                            <td
-	                              colSpan={
-	                                11 +
-	                                (activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED' ? 2 : 0) +
-	                                (canEdit ? 1 : 0)
-	                              }
-	                              className="px-3 py-6 text-center text-muted-foreground"
-	                            >
-	                              No lines added to this order yet.
-	                            </td>
-	                          </tr>
-                        ) : (
-                          draftLines.map(line => {
-                            const issuePrefix = `cargo.lines.${line.id}`
-                            const updateLine = (updater: (current: PurchaseOrderLineSummary) => PurchaseOrderLineSummary) => {
-                              setDraftLines(prev =>
-                                prev.map(candidate => (candidate.id === line.id ? updater(candidate) : candidate))
-                              )
-                            }
-
-                            return (
-                            <tr
-                              key={line.id}
-                              className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                            >
-                              <td className="px-2 py-2 font-medium text-foreground min-w-0">
-                                <div className="flex min-w-0 items-center gap-1">
-                                  {(cargoLineIssueCountById[line.id] ?? 0) > 0 && (
-                                    <span className="text-xs font-semibold text-rose-600">!</span>
-                                  )}
-                                  <span className="truncate" title={line.skuDescription ?? undefined}>
-                                    {line.skuCode}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="px-2 py-2 text-slate-600 dark:text-slate-400 min-w-0">
-                                <span className="block truncate" title={line.lotRef ? line.lotRef : undefined}>
-                                  {line.lotRef ? line.lotRef : '—'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex justify-end">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    value={String(line.unitsOrdered)}
-                                    onChange={e => {
-                                      const parsed = Number.parseInt(e.target.value, 10)
-                                      setDraftLines(prev =>
-                                        prev.map(candidate => {
-                                          if (candidate.id !== line.id) return candidate
-                                          const unitsOrdered = Number.isFinite(parsed) ? parsed : 0
-                                          const unitsPerCarton = candidate.unitsPerCarton
-                                          const quantity =
-                                            Number.isFinite(unitsPerCarton) &&
-                                            unitsPerCarton > 0 &&
-                                            unitsOrdered > 0
-                                              ? Math.ceil(unitsOrdered / unitsPerCarton)
-                                              : 0
-                                          return { ...candidate, unitsOrdered, quantity }
-                                        })
-                                      )
-                                    }}
-                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                  />
-                                </div>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex justify-end">
-                                  <Input
-                                    type="number"
-                                    inputMode="numeric"
-                                    min="1"
-                                    step="1"
-                                    value={String(line.unitsPerCarton)}
-                                    onChange={e => {
-                                      const parsed = Number.parseInt(e.target.value, 10)
-                                      setDraftLines(prev =>
-                                        prev.map(candidate => {
-                                          if (candidate.id !== line.id) return candidate
-                                          const unitsPerCarton = Number.isFinite(parsed) ? parsed : 0
-                                          const unitsOrdered = candidate.unitsOrdered
-                                          const quantity =
-                                            unitsPerCarton > 0 && unitsOrdered > 0
-                                              ? Math.ceil(unitsOrdered / unitsPerCarton)
-                                              : 0
-                                          return { ...candidate, unitsPerCarton, quantity }
-                                        })
-                                      )
-                                    }}
-                                    className="h-7 w-20 px-2 py-0 text-xs text-right"
-                                  />
-                                </div>
-                              </td>
-	                              <td className="px-2 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-	                                {line.quantity.toLocaleString()}
-	                              </td>
-                              {/* Attribute columns */}
-                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.commodityCode`}>
-                                <Input
-                                  value={line.commodityCode ?? ''}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, commodityCode: value.trim() ? value : null }))
-                                  }}
-                                  className="h-7 w-24 px-1 py-0 text-xs"
-                                />
-                              </td>
-                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.countryOfOrigin`}>
-                                <span className="text-xs text-slate-700 dark:text-slate-300">{supplierCountry ?? '—'}</span>
-                              </td>
-                              <td className="px-2 py-1 whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonDimensions`}>
-                                <div className="flex gap-0.5">
-                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="L"
-                                    value={line.cartonSide1Cm != null ? formatLengthFromCm(line.cartonSide1Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({ side1Cm: next, side2Cm: current.cartonSide2Cm ?? null, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
-                                        return { ...current, cartonSide1Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
-                                      })
-                                    }}
-                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="W"
-                                    value={line.cartonSide2Cm != null ? formatLengthFromCm(line.cartonSide2Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: next, side3Cm: current.cartonSide3Cm ?? null, legacy: current.cartonDimensionsCm ?? null })
-                                        return { ...current, cartonSide2Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
-                                      })
-                                    }}
-                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
-                                  />
-                                  <Input type="number" inputMode="decimal" min="0" step="0.01" placeholder="H"
-                                    value={line.cartonSide3Cm != null ? formatLengthFromCm(line.cartonSide3Cm, unitSystem) : ''}
-                                    onChange={e => {
-                                      const parsed = Number(e.target.value)
-                                      const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                      const next = nextInput === null ? null : convertLengthToCm(nextInput, unitSystem)
-                                      updateLine(current => {
-                                        const triplet = resolveDimensionTripletCm({ side1Cm: current.cartonSide1Cm ?? null, side2Cm: current.cartonSide2Cm ?? null, side3Cm: next, legacy: current.cartonDimensionsCm ?? null })
-                                        return { ...current, cartonSide3Cm: next, cartonDimensionsCm: triplet ? formatDimensionTripletCm(triplet) : current.cartonDimensionsCm ?? null }
-                                      })
-                                    }}
-                                    className="h-7 w-12 px-1 py-0 text-xs text-center"
-                                  />
-                                </div>
-                              </td>
-                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.netWeightKg`}>
-                                <Input type="number" inputMode="decimal" min="0" step="0.001"
-                                  value={line.netWeightKg != null ? formatWeightFromKg(line.netWeightKg, unitSystem) : ''}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({ ...current, netWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
-                                  }}
-                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
-                                />
-                              </td>
-                              <td className="px-2 py-1 text-right whitespace-nowrap" data-gate-key={`${issuePrefix}.cartonWeightKg`}>
-                                <Input type="number" inputMode="decimal" min="0" step="0.001"
-                                  value={line.cartonWeightKg != null ? formatWeightFromKg(line.cartonWeightKg, unitSystem) : ''}
-                                  onChange={e => {
-                                    const parsed = Number(e.target.value)
-                                    const nextInput = Number.isFinite(parsed) && parsed > 0 ? parsed : null
-                                    updateLine(current => ({ ...current, cartonWeightKg: nextInput === null ? null : convertWeightToKg(nextInput, unitSystem) }))
-                                  }}
-                                  className="h-7 w-16 px-1 py-0 text-xs text-right"
-                                />
-                              </td>
-                              <td className="px-2 py-1 min-w-0" data-gate-key={`${issuePrefix}.material`}>
-                                <Input
-                                  value={line.material ?? ''}
-                                  onChange={e => {
-                                    const value = e.target.value
-                                    updateLine(current => ({ ...current, material: value.trim() ? value : null }))
-                                  }}
-                                  className="h-7 w-20 px-1 py-0 text-xs"
-                                />
-                              </td>
-	                              {(activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED') &&
-	                                (() => {
-	                                  const received = line.quantityReceived ?? null
-	                                  const delta = received !== null ? received - line.quantity : null
-	                                  const displayedReceived = (line.quantityReceived ?? line.postedQuantity).toLocaleString()
-
-	                                  return (
-	                                    <>
-	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-	                                        <span className="text-muted-foreground">{displayedReceived}</span>
-	                                      </td>
-	                                      <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">
-	                                        {delta !== null ? (
-	                                          <span className={delta === 0 ? 'text-muted-foreground' : 'text-amber-600'}>
-	                                            {delta.toLocaleString()}
-	                                          </span>
-	                                        ) : (
-	                                          <span className="text-muted-foreground">—</span>
-	                                        )}
-	                                      </td>
-	                                    </>
-	                                  )
-	                                })()}
-	                              {canEdit && (
-	                                <td className="px-2 py-2 whitespace-nowrap text-right">
-	                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50"
-                                      onClick={() => jumpToGateKey(`costs.lines.${line.id}.totalCost`)}
-                                      title="Edit costs"
-                                    >
-                                      <DollarSign className="h-3.5 w-3.5" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-red-600 hover:bg-red-50"
-                                      onClick={() =>
-                                        setConfirmDialog({
-	                                          open: true,
-	                                          type: 'delete-line',
-	                                          title: 'Remove line item',
-	                                          message: `Remove SKU ${line.skuCode} (${line.lotRef ? line.lotRef : '—'}) from this draft purchase order?`,
-	                                          lineId: line.id,
-	                                        })
-	                                      }
-                                      title="Remove line"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              )}
-                            </tr>
-                          )}
-                          )
-                        )}
-                        {/* Inline Add Row for Create Mode */}
-                        <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
-                          <td className="px-3 py-2 min-w-0">
-                            <select
-                              value={newLineDraft.skuId}
-                              onChange={e => {
-                                const skuId = e.target.value
-                                setNewLineDraft(prev => ({
-                                  ...prev,
-                                  skuId,
-                                  unitsOrdered: 1,
-                                  unitsPerCarton: null,
-                                  notes: '',
-                                }))
-                              }}
-                              disabled={skusLoading || addLineSubmitting}
-                              className="w-full h-7 px-2 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-xs"
-                            >
-                              <option value="">Select SKU</option>
-                              {skus.map(sku => (
-                                <option key={sku.id} value={sku.id}>
-                                  {sku.skuCode}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">Auto</td>
-                          <td className="px-3 py-2">
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              step="1"
-                              value={newLineDraft.unitsOrdered}
-                              onChange={e => {
-                                const parsed = Number.parseInt(e.target.value, 10)
-                                setNewLineDraft(prev => ({
-                                  ...prev,
-                                  unitsOrdered: Number.isFinite(parsed) ? parsed : 0,
-                                }))
-                              }}
-                              disabled={addLineSubmitting}
-                              className="h-7 w-20 px-2 py-0 text-xs text-right"
-                            />
-                          </td>
-                          <td className="px-3 py-2">
-                            <Input
-                              type="number"
-                              inputMode="numeric"
-                              min="1"
-                              step="1"
-                              value={newLineDraft.unitsPerCarton ?? ''}
-                              onChange={e =>
-                                setNewLineDraft(prev => ({
-                                  ...prev,
-                                  unitsPerCarton: (() => {
-                                    const parsed = Number.parseInt(e.target.value, 10)
-                                    return Number.isInteger(parsed) && parsed > 0 ? parsed : null
-                                  })(),
-                                }))
-                              }
-                              disabled={!newLineDraft.skuId || addLineSubmitting}
-                              placeholder="—"
-                              className="h-7 w-20 px-2 py-0 text-xs text-right"
-                            />
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                            {(() => {
-                              if (!newLineDraft.unitsPerCarton) return '—'
-                              if (newLineDraft.unitsOrdered <= 0) return '—'
-                              return Math.ceil(newLineDraft.unitsOrdered / newLineDraft.unitsPerCarton).toLocaleString()
-                            })()}
-                          </td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground">—</td>
-                          <td className="px-2 py-2 text-right text-muted-foreground">—</td>
-                          <td className="px-2 py-2 whitespace-nowrap text-right">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => void handleAddLineItem()}
-                              disabled={
-                                !newLineDraft.skuId ||
-                                !newLineDraft.unitsPerCarton ||
-                                newLineDraft.unitsOrdered <= 0 ||
-                                addLineSubmitting
-                              }
-                              className="h-7 gap-1"
-                            >
-                              {addLineSubmitting ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Plus className="h-3.5 w-3.5" />
-                              )}
-                              Add
-                            </Button>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-              </div>
-            )}
+                )}
               </>
             )}
-
 
             {activeBottomTab === 'documents' && (
               <>
@@ -4399,30 +4809,30 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     </div>
 
                     {(() => {
-	                      const items: Array<{
-	                        id: 'poPdf' | 'shippingMarks'
-	                        label: string
-	                        meta: PurchaseOrderOutputMeta
-	                        canDownload: boolean
-	                        onDownload: () => void
-	                      }> = []
+                      const items: Array<{
+                        id: 'poPdf' | 'shippingMarks'
+                        label: string
+                        meta: PurchaseOrderOutputMeta
+                        canDownload: boolean
+                        onDownload: () => void
+                      }> = []
 
-	                      if (activeViewStage === 'ISSUED') {
-	                        items.push({
-	                          id: 'poPdf',
-	                          label: 'PO PDF',
-	                          meta: order.outputs.poPdf,
-	                          canDownload: true,
-	                          onDownload: () => void handleDownloadPdf(),
-	                        })
-	                        items.push({
-	                          id: 'shippingMarks',
-	                          label: 'Shipping Marks',
-	                          meta: order.outputs.shippingMarks,
-	                          canDownload: true,
-	                          onDownload: () => void handleDownloadShippingMarks(),
-	                        })
-	                      }
+                      if (activeViewStage === 'ISSUED') {
+                        items.push({
+                          id: 'poPdf',
+                          label: 'PO PDF',
+                          meta: order.outputs.poPdf,
+                          canDownload: true,
+                          onDownload: () => void handleDownloadPdf(),
+                        })
+                        items.push({
+                          id: 'shippingMarks',
+                          label: 'Shipping Marks',
+                          meta: order.outputs.shippingMarks,
+                          canDownload: true,
+                          onDownload: () => void handleDownloadShippingMarks(),
+                        })
+                      }
 
                       if (items.length === 0) {
                         return (
@@ -4437,8 +4847,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Document</th>
-                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Generated</th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                  Document
+                                </th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                  Generated
+                                </th>
                                 <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]"></th>
                               </tr>
                             </thead>
@@ -4449,18 +4863,26 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   ? `${formatDate(meta.generatedAt)}${meta.generatedByName ? ` by ${meta.generatedByName}` : ''}`
                                   : '—'
                                 return (
-                                  <tr key={item.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                  <tr
+                                    key={item.id}
+                                    className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                  >
                                     <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
                                       <div className="flex items-center gap-2">
                                         {item.label}
                                         {meta.outOfDate && (
-                                          <Badge variant="warning" className="uppercase tracking-wide text-[10px]">
+                                          <Badge
+                                            variant="warning"
+                                            className="uppercase tracking-wide text-[10px]"
+                                          >
                                             Out of date
                                           </Badge>
                                         )}
                                       </div>
                                     </td>
-                                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">{generatedSummary}</td>
+                                    <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                                      {generatedSummary}
+                                    </td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
                                       <Button
                                         type="button"
@@ -4487,383 +4909,435 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                 {/* Stage requirements & documents */}
                 <div className="p-6">
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  Stage Documents
-                </h4>
-                {documentsLoading && <span className="text-xs text-muted-foreground">Loading…</span>}
-              </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Stage Documents
+                    </h4>
+                    {documentsLoading && (
+                      <span className="text-xs text-muted-foreground">Loading…</span>
+                    )}
+                  </div>
 
-	              {isCreate ? (
-	                <p className="text-sm text-muted-foreground">
-	                  Create the purchase order to upload stage documents.
-	                </p>
-	              ) : (
-                (() => {
-                  if (!order) return null
-                  const stage = activeViewStage as PurchaseOrderDocumentStage
-                  const stageKey = stage as keyof typeof STAGE_DOCUMENTS
-                  const canUpload = !isReadOnly
-                  const stageDocs = documents.filter(doc => doc.stage === stage)
-                  const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
-                  const issuedPiNumbers =
-                    stage === 'ISSUED'
-                      ? Array.from(
-                          new Set(
-                            flowLines
-                              .map(line => (typeof line.piNumber === 'string' ? line.piNumber.trim() : ''))
-                              .filter(value => value.length > 0)
+                  {isCreate ? (
+                    <p className="text-sm text-muted-foreground">
+                      Create the purchase order to upload stage documents.
+                    </p>
+                  ) : (
+                    (() => {
+                      if (!order) return null
+                      const stage = activeViewStage as PurchaseOrderDocumentStage
+                      const stageKey = stage as keyof typeof STAGE_DOCUMENTS
+                      const canUpload = !isReadOnly
+                      const stageDocs = documents.filter(doc => doc.stage === stage)
+                      const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
+                      const issuedPiNumbers =
+                        stage === 'ISSUED'
+                          ? Array.from(
+                              new Set(
+                                flowLines
+                                  .map(line =>
+                                    typeof line.piNumber === 'string' ? line.piNumber.trim() : ''
+                                  )
+                                  .filter(value => value.length > 0)
+                              )
+                            )
+                          : []
+
+                      const rows = (() => {
+                        if (stage === 'ISSUED') {
+                          const requiredPiDocs = issuedPiNumbers
+                            .map(pi => ({ piNumber: pi, docType: buildPiDocumentType(pi) }))
+                            .filter(entry => entry.docType.length > 0)
+                            .map(entry => ({
+                              id: entry.docType,
+                              label: entry.piNumber,
+                              required: true,
+                              doc: docsByType.get(entry.docType),
+                              gateKey: `documents.pi.${entry.docType}`,
+                            }))
+
+                          const artworkDocs = getStageDocuments('ISSUED', order.lines).map(doc => ({
+                            id: doc.id,
+                            label: doc.label,
+                            required: true,
+                            doc: docsByType.get(doc.id),
+                            gateKey: `documents.${doc.id}`,
+                          }))
+
+                          const requiredDocTypes = new Set([
+                            ...requiredPiDocs.map(doc => doc.id),
+                            ...artworkDocs.map(doc => doc.id),
+                          ])
+                          const otherDocs = stageDocs.filter(
+                            doc => !requiredDocTypes.has(doc.documentType)
                           )
+                          return [
+                            ...requiredPiDocs,
+                            ...artworkDocs,
+                            ...otherDocs.map(doc => ({
+                              id: doc.documentType,
+                              label: getDocumentLabel(stage, doc.documentType),
+                              required: false,
+                              doc,
+                              gateKey: `documents.${doc.documentType}`,
+                            })),
+                          ]
+                        }
+
+                        const requiredDocs =
+                          stage === 'SHIPPED' ? [] : getStageDocuments(stageKey, order.lines)
+                        const requiredIds = new Set(requiredDocs.map(doc => doc.id))
+                        const otherDocs = stageDocs.filter(
+                          doc => !requiredIds.has(doc.documentType)
                         )
-                      : []
 
-                  const rows = (() => {
-                    if (stage === 'ISSUED') {
-                      const requiredPiDocs = issuedPiNumbers
-                        .map(pi => ({ piNumber: pi, docType: buildPiDocumentType(pi) }))
-                        .filter(entry => entry.docType.length > 0)
-                        .map(entry => ({
-                          id: entry.docType,
-                          label: entry.piNumber,
-                          required: true,
-                          doc: docsByType.get(entry.docType),
-                          gateKey: `documents.pi.${entry.docType}`,
-                        }))
+                        return [
+                          ...requiredDocs.map(doc => ({
+                            id: doc.id,
+                            label: doc.label,
+                            required: true,
+                            doc: docsByType.get(doc.id),
+                            gateKey: `documents.${doc.id}`,
+                          })),
+                          ...otherDocs.map(doc => ({
+                            id: doc.documentType,
+                            label: getDocumentLabel(stage, doc.documentType),
+                            required: false,
+                            doc,
+                            gateKey: `documents.${doc.documentType}`,
+                          })),
+                        ]
+                      })()
 
-                      const artworkDocs = getStageDocuments('ISSUED', order.lines).map(doc => ({
-                        id: doc.id,
-                        label: doc.label,
-                        required: true,
-                        doc: docsByType.get(doc.id),
-                        gateKey: `documents.${doc.id}`,
-                      }))
-
-                      const requiredDocTypes = new Set([
-                        ...requiredPiDocs.map(doc => doc.id),
-                        ...artworkDocs.map(doc => doc.id),
-                      ])
-                      const otherDocs = stageDocs.filter(doc => !requiredDocTypes.has(doc.documentType))
-                      return [
-                        ...requiredPiDocs,
-                        ...artworkDocs,
-                        ...otherDocs.map(doc => ({
-                          id: doc.documentType,
-                          label: getDocumentLabel(stage, doc.documentType),
-                          required: false,
-                          doc,
-                          gateKey: `documents.${doc.documentType}`,
-                        })),
-                      ]
-                    }
-
-                    const requiredDocs = stage === 'SHIPPED' ? [] : getStageDocuments(stageKey, order.lines)
-                    const requiredIds = new Set(requiredDocs.map(doc => doc.id))
-                    const otherDocs = stageDocs.filter(doc => !requiredIds.has(doc.documentType))
-
-                    return [
-                      ...requiredDocs.map(doc => ({
-                        id: doc.id,
-                        label: doc.label,
-                        required: true,
-                        doc: docsByType.get(doc.id),
-                        gateKey: `documents.${doc.id}`,
-                      })),
-                      ...otherDocs.map(doc => ({
-                        id: doc.documentType,
-                        label: getDocumentLabel(stage, doc.documentType),
-                        required: false,
-                        doc,
-                        gateKey: `documents.${doc.documentType}`,
-                      })),
-                    ]
-                  })()
-
-                  if (rows.length === 0) {
-                    if (stage === 'ISSUED' && issuedPiNumbers.length === 0) {
-                      return (
-                        <p className="text-sm text-muted-foreground">
-                          Add PI numbers to Cargo lines to unlock PI document uploads.
-                        </p>
-                      )
-                    }
-
-                    return (
-                      <p className="text-sm text-muted-foreground">
-                        No documents have been uploaded for this stage.
-                      </p>
-                    )
-                  }
-
-                  return (
-                    <div>
-                      {stage === 'OCEAN' && (
-                        <div className="mb-4" data-gate-key="documents.transactionCertNumber">
-                          <div className="space-y-1">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              TC Number
+                      if (rows.length === 0) {
+                        if (stage === 'ISSUED' && issuedPiNumbers.length === 0) {
+                          return (
+                            <p className="text-sm text-muted-foreground">
+                              Add PI numbers to Cargo lines to unlock PI document uploads.
                             </p>
-                            {canUpload ? (
-                              <Input
-                                data-gate-key="documents.transactionCertNumber"
-                                value={
-                                  getStageField('transactionCertNumber') ??
-                                  (typeof order.stageData.warehouse.transactionCertNumber === 'string'
-                                    ? order.stageData.warehouse.transactionCertNumber
-                                    : '')
-                                }
-                                onChange={e => setStageField('transactionCertNumber', e.target.value)}
-                                placeholder="Enter TC number"
-                                className={
-                                  gateIssues?.['documents.transactionCertNumber']
-                                    ? 'border-rose-500 focus-visible:ring-rose-500'
-                                    : undefined
-                                }
-                              />
-                            ) : (
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(order.stageData.warehouse.transactionCertNumber)}
-                              </p>
-                            )}
-                            {gateIssues?.['documents.transactionCertNumber'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="documents.transactionCertNumber">
-                                {gateIssues['documents.transactionCertNumber']}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                              <th className="w-[28px] px-2 py-2"></th>
-                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">Document</th>
-                              <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">File</th>
-                              <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[120px]"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rows.map(row => {
-                              const key = `${stage}::${row.id}`
-                              const existing = row.doc
-                              const isUploading = Boolean(uploadingDoc[key])
-                              const uploadDisabled = isUploading || !canUpload
-                              const uploadProgress = Object.prototype.hasOwnProperty.call(uploadingDocProgress, key)
-                                ? uploadingDocProgress[key]
-                                : null
-                              const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
-                              const gateMessage = gateKey && gateIssues ? gateIssues[gateKey] : null
+                          )
+                        }
 
-                              return (
-                                <tr
-                                  key={key}
-                                  data-gate-key={gateKey ?? undefined}
-                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
-                                >
-                                  <td className="px-2 py-2 text-center">
-                                    {existing ? (
-                                      <Check className="h-4 w-4 text-emerald-600 inline-block" />
-                                    ) : row.required ? (
-                                      <XCircle className="h-4 w-4 text-amber-600 inline-block" />
-                                    ) : (
-                                      <XCircle className="h-4 w-4 text-slate-400 inline-block" />
+                        return (
+                          <p className="text-sm text-muted-foreground">
+                            No documents have been uploaded for this stage.
+                          </p>
+                        )
+                      }
+
+                      return (
+                        <div>
+                          {stage === 'OCEAN' && (
+                            <div className="mb-4" data-gate-key="documents.transactionCertNumber">
+                              <div className="space-y-1">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  TC Number
+                                </p>
+                                {canUpload ? (
+                                  <Input
+                                    data-gate-key="documents.transactionCertNumber"
+                                    value={
+                                      getStageField('transactionCertNumber') ??
+                                      (typeof order.stageData.warehouse.transactionCertNumber ===
+                                      'string'
+                                        ? order.stageData.warehouse.transactionCertNumber
+                                        : '')
+                                    }
+                                    onChange={e =>
+                                      setStageField('transactionCertNumber', e.target.value)
+                                    }
+                                    placeholder="Enter TC number"
+                                    className={
+                                      gateIssues?.['documents.transactionCertNumber']
+                                        ? 'border-rose-500 focus-visible:ring-rose-500'
+                                        : undefined
+                                    }
+                                  />
+                                ) : (
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatTextOrDash(
+                                      order.stageData.warehouse.transactionCertNumber
                                     )}
-                                  </td>
-                                  <td className="px-2 py-2 font-medium text-foreground whitespace-nowrap">
-                                    {row.label}
-                                    {gateMessage && (
-                                      <p className="text-xs text-rose-600 font-normal">{gateMessage}</p>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2 whitespace-nowrap max-w-[240px]">
-                                    {existing ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setInlinePreviewDocument(existing)}
-                                        className="text-xs text-primary hover:underline truncate block max-w-full"
-                                        title={existing.fileName}
-                                      >
-                                        {existing.fileName}
-                                      </button>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">Not uploaded yet</span>
-                                    )}
-                                  </td>
-                                  <td className="px-2 py-2 text-right whitespace-nowrap">
-                                    <div className="flex items-center justify-end gap-0.5">
-                                      {existing && (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="ghost"
-                                          onClick={() => setPreviewDocument(existing)}
-                                          className="h-7 w-7 p-0"
-                                          title="Preview"
-                                        >
-                                          <Eye className="h-3.5 w-3.5" />
-                                        </Button>
-                                      )}
-                                      {existing && (
-                                        <Button
-                                          asChild
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-7 w-7 p-0"
-                                          title="Open in new tab"
-                                        >
-                                          <a href={existing.viewUrl} target="_blank" rel="noreferrer">
-                                            <ExternalLink className="h-3.5 w-3.5" />
-                                          </a>
-                                        </Button>
-                                      )}
-                                      <label
-                                        className={`inline-flex flex-col items-start rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
-                                          isUploading
-                                            ? 'opacity-70 cursor-wait'
-                                            : canUpload
-                                              ? 'hover:bg-slate-100 cursor-pointer'
-                                              : 'opacity-50 cursor-not-allowed'
-                                        }`}
-                                        aria-busy={isUploading}
-                                        aria-disabled={uploadDisabled}
-                                      >
-                                        <span className="inline-flex items-center gap-1.5">
-                                          {isUploading ? (
-                                            <Loader2 className="h-3 w-3 animate-spin" />
-                                          ) : (
-                                            <Upload className="h-3 w-3" />
-                                          )}
-                                          {isUploading
-                                            ? uploadProgress !== null
-                                              ? `Uploading ${uploadProgress}%`
-                                              : 'Uploading…'
-                                            : existing
-                                              ? 'Replace'
-                                              : 'Upload'}
-                                        </span>
-                                        {isUploading && (
-                                          <span className="mt-1 h-1 w-full rounded bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
-                                            {uploadProgress !== null ? (
-                                              <span
-                                                className="block h-full bg-emerald-500 transition-[width] duration-300"
-                                                style={{ width: `${uploadProgress}%` }}
-                                              />
-                                            ) : (
-                                              <span className="block h-full w-1/3 bg-emerald-500 animate-pulse" />
-                                            )}
+                                  </p>
+                                )}
+                                {gateIssues?.['documents.transactionCertNumber'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="documents.transactionCertNumber"
+                                  >
+                                    {gateIssues['documents.transactionCertNumber']}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                  <th className="w-[28px] px-2 py-2"></th>
+                                  <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                    Document
+                                  </th>
+                                  <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs">
+                                    File
+                                  </th>
+                                  <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[120px]"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map(row => {
+                                  const key = `${stage}::${row.id}`
+                                  const existing = row.doc
+                                  const isUploading = Boolean(uploadingDoc[key])
+                                  const uploadDisabled = isUploading || !canUpload
+                                  const uploadProgress = Object.prototype.hasOwnProperty.call(
+                                    uploadingDocProgress,
+                                    key
+                                  )
+                                    ? uploadingDocProgress[key]
+                                    : null
+                                  const gateKey = 'gateKey' in row ? (row.gateKey as string) : null
+                                  const gateMessage =
+                                    gateKey && gateIssues ? gateIssues[gateKey] : null
+
+                                  return (
+                                    <tr
+                                      key={key}
+                                      data-gate-key={gateKey ?? undefined}
+                                      className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                    >
+                                      <td className="px-2 py-2 text-center">
+                                        {existing ? (
+                                          <Check className="h-4 w-4 text-emerald-600 inline-block" />
+                                        ) : row.required ? (
+                                          <XCircle className="h-4 w-4 text-amber-600 inline-block" />
+                                        ) : (
+                                          <XCircle className="h-4 w-4 text-slate-400 inline-block" />
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-2 font-medium text-foreground whitespace-nowrap">
+                                        {row.label}
+                                        {gateMessage && (
+                                          <p className="text-xs text-rose-600 font-normal">
+                                            {gateMessage}
+                                          </p>
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-2 whitespace-nowrap max-w-[240px]">
+                                        {existing ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setInlinePreviewDocument(existing)}
+                                            className="text-xs text-primary hover:underline truncate block max-w-full"
+                                            title={existing.fileName}
+                                          >
+                                            {existing.fileName}
+                                          </button>
+                                        ) : (
+                                          <span className="text-xs text-muted-foreground">
+                                            Not uploaded yet
                                           </span>
                                         )}
-                                        <input
-                                          type="file"
-                                          className="hidden"
-                                          disabled={uploadDisabled}
-                                          onChange={e => void handleDocumentUpload(e, stage, row.id)}
-                                        />
-                                      </label>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                                      </td>
+                                      <td className="px-2 py-2 text-right whitespace-nowrap">
+                                        <div className="flex items-center justify-end gap-0.5">
+                                          {existing && (
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={() => setPreviewDocument(existing)}
+                                              className="h-7 w-7 p-0"
+                                              title="Preview"
+                                            >
+                                              <Eye className="h-3.5 w-3.5" />
+                                            </Button>
+                                          )}
+                                          {existing && (
+                                            <Button
+                                              asChild
+                                              size="sm"
+                                              variant="ghost"
+                                              className="h-7 w-7 p-0"
+                                              title="Open in new tab"
+                                            >
+                                              <a
+                                                href={existing.viewUrl}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                              >
+                                                <ExternalLink className="h-3.5 w-3.5" />
+                                              </a>
+                                            </Button>
+                                          )}
+                                          <label
+                                            className={`inline-flex flex-col items-start rounded-md border bg-white dark:bg-slate-800 px-2 py-1 text-xs font-medium text-slate-700 dark:text-slate-300 transition-colors ${
+                                              isUploading
+                                                ? 'opacity-70 cursor-wait'
+                                                : canUpload
+                                                  ? 'hover:bg-slate-100 cursor-pointer'
+                                                  : 'opacity-50 cursor-not-allowed'
+                                            }`}
+                                            aria-busy={isUploading}
+                                            aria-disabled={uploadDisabled}
+                                          >
+                                            <span className="inline-flex items-center gap-1.5">
+                                              {isUploading ? (
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                              ) : (
+                                                <Upload className="h-3 w-3" />
+                                              )}
+                                              {isUploading
+                                                ? uploadProgress !== null
+                                                  ? `Uploading ${uploadProgress}%`
+                                                  : 'Uploading…'
+                                                : existing
+                                                  ? 'Replace'
+                                                  : 'Upload'}
+                                            </span>
+                                            {isUploading && (
+                                              <span className="mt-1 h-1 w-full rounded bg-slate-200/80 dark:bg-slate-700/80 overflow-hidden">
+                                                {uploadProgress !== null ? (
+                                                  <span
+                                                    className="block h-full bg-emerald-500 transition-[width] duration-300"
+                                                    style={{ width: `${uploadProgress}%` }}
+                                                  />
+                                                ) : (
+                                                  <span className="block h-full w-1/3 bg-emerald-500 animate-pulse" />
+                                                )}
+                                              </span>
+                                            )}
+                                            <input
+                                              type="file"
+                                              className="hidden"
+                                              disabled={uploadDisabled}
+                                              onChange={e =>
+                                                void handleDocumentUpload(e, stage, row.id)
+                                              }
+                                            />
+                                          </label>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
 
-                      {inlinePreviewDocument && inlineStageMeta && (
-                        <div className="mt-4 rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
-                          <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-3">
-                                <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                                  {InlineStageIcon && <InlineStageIcon className="h-4 w-4" />}
-                                </span>
+                          {inlinePreviewDocument && inlineStageMeta && (
+                            <div className="mt-4 rounded-lg border bg-slate-50 dark:bg-slate-700 overflow-hidden">
+                              <div className="flex flex-wrap items-start justify-between gap-3 border-b bg-white/60 dark:bg-slate-800/60 px-4 py-3">
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                                    {inlinePreviewDocument.fileName}
-                                  </p>
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                    {inlineStageMeta.label} •{' '}
-                                    {getDocumentLabel(inlinePreviewDocument.stage, inlinePreviewDocument.documentType)}{' '}
-                                    • Uploaded {formatDate(inlinePreviewDocument.uploadedAt)}
-                                    {inlinePreviewDocument.uploadedByName
-                                      ? ` by ${inlinePreviewDocument.uploadedByName}`
-                                      : ''}
-                                  </p>
+                                  <div className="flex items-center gap-3">
+                                    <span className="flex h-9 w-9 items-center justify-center rounded-full border bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                      {InlineStageIcon && <InlineStageIcon className="h-4 w-4" />}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                                        {inlinePreviewDocument.fileName}
+                                      </p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        {inlineStageMeta.label} •{' '}
+                                        {getDocumentLabel(
+                                          inlinePreviewDocument.stage,
+                                          inlinePreviewDocument.documentType
+                                        )}{' '}
+                                        • Uploaded {formatDate(inlinePreviewDocument.uploadedAt)}
+                                        {inlinePreviewDocument.uploadedByName
+                                          ? ` by ${inlinePreviewDocument.uploadedByName}`
+                                          : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setPreviewDocument(inlinePreviewDocument)}
+                                    title="Full screen preview"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    asChild
+                                    variant="ghost"
+                                    size="icon"
+                                    title="Open in new tab"
+                                  >
+                                    <a
+                                      href={inlinePreviewDocument.viewUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                    >
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => setInlinePreviewDocument(null)}
+                                    aria-label="Close inline preview"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="bg-slate-50 dark:bg-slate-700">
+                                <div className="h-[480px] w-full">
+                                  {inlineIsImage ? (
+                                    <div
+                                      className="h-full w-full bg-center bg-no-repeat bg-contain"
+                                      style={{
+                                        backgroundImage: `url(${inlinePreviewDocument.viewUrl})`,
+                                      }}
+                                    />
+                                  ) : inlineIsPdf ? (
+                                    <ZoomablePdfIframe
+                                      title={inlinePreviewDocument.fileName}
+                                      src={inlinePreviewDocument.viewUrl}
+                                      className="h-full w-full"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+                                      <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
+                                        <FileText className="h-5 w-5" />
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                          Preview not available
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                          Open the file in a new tab to view or download.
+                                        </p>
+                                      </div>
+                                      <Button asChild className="gap-2">
+                                        <a
+                                          href={inlinePreviewDocument.viewUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                        >
+                                          <ExternalLink className="h-4 w-4" />
+                                          Open file
+                                        </a>
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
-
-                            <div className="flex items-center gap-1">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setPreviewDocument(inlinePreviewDocument)}
-                                title="Full screen preview"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button asChild variant="ghost" size="icon" title="Open in new tab">
-                                <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
-                                  <ExternalLink className="h-4 w-4" />
-                                </a>
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setInlinePreviewDocument(null)}
-                                aria-label="Close inline preview"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-50 dark:bg-slate-700">
-                            <div className="h-[480px] w-full">
-                              {inlineIsImage ? (
-                                <div
-                                  className="h-full w-full bg-center bg-no-repeat bg-contain"
-                                  style={{ backgroundImage: `url(${inlinePreviewDocument.viewUrl})` }}
-                                />
-                              ) : inlineIsPdf ? (
-                                <ZoomablePdfIframe
-                                  title={inlinePreviewDocument.fileName}
-                                  src={inlinePreviewDocument.viewUrl}
-                                  className="h-full w-full"
-                                />
-                              ) : (
-                                <div className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
-                                  <div className="rounded-full border bg-white dark:bg-slate-800 p-3 text-slate-700 dark:text-slate-300 shadow-sm">
-                                    <FileText className="h-5 w-5" />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                      Preview not available
-                                    </p>
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      Open the file in a new tab to view or download.
-                                    </p>
-                                  </div>
-                                  <Button asChild className="gap-2">
-                                    <a href={inlinePreviewDocument.viewUrl} target="_blank" rel="noreferrer">
-                                      <ExternalLink className="h-4 w-4" />
-                                      Open file
-                                    </a>
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )
-                })()
-              )}
+                      )
+                    })()
+                  )}
                 </div>
-
               </>
             )}
 
@@ -4871,49 +5345,72 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               <>
                 {isCreate && (
                   <div className="p-6">
-	                    {draftLines.length === 0 ? (
-	                      <p className="text-sm text-muted-foreground">Add cargo lines to enter targeted costs.</p>
-	                    ) : (
-	                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-	                        <table className="w-full table-fixed text-sm">
-	                          <thead>
-	                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-	                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Cost</th>
-	                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Target Total</th>
-	                            </tr>
-	                          </thead>
-	                          <tbody>
-	                            {draftLines.map(line => {
+                    {draftLines.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        Add cargo lines to enter targeted costs.
+                      </p>
+                    ) : (
+                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                        <table className="w-full table-fixed text-sm">
+                          <thead>
+                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">
+                                SKU
+                              </th>
+                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                                Lot Ref
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                                Units
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">
+                                Unit Cost
+                              </th>
+                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">
+                                Target Total
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {draftLines.map(line => {
                               const totalCost = line.totalCost !== null ? line.totalCost : null
-                              const unitCost = totalCost !== null && line.unitsOrdered > 0 ? totalCost / line.unitsOrdered : null
+                              const unitCost =
+                                totalCost !== null && line.unitsOrdered > 0
+                                  ? totalCost / line.unitsOrdered
+                                  : null
                               const gateKey = `costs.lines.${line.id}.totalCost`
-                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+                              const issue = gateIssues ? (gateIssues[gateKey] ?? null) : null
 
-	                              return (
-	                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-	                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
-	                                    <span className="block truncate" title={line.skuCode}>
-	                                      {line.skuCode}
-	                                    </span>
-	                                  </td>
-	                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
-	                                    <span
-	                                      className="block truncate"
-	                                      title={line.lotRef ? line.lotRef : undefined}
-	                                    >
-	                                      {line.lotRef ? line.lotRef : '—'}
-	                                    </span>
-	                                  </td>
-	                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-	                                    {line.unitsOrdered.toLocaleString()}
-	                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    {unitCost !== null ? formatPurchaseOrderUnitCost(unitCost) : '—'}
+                              return (
+                                <tr
+                                  key={line.id}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                >
+                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                    <span className="block truncate" title={line.skuCode}>
+                                      {line.skuCode}
+                                    </span>
                                   </td>
-                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
+                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                    <span
+                                      className="block truncate"
+                                      title={line.lotRef ? line.lotRef : undefined}
+                                    >
+                                      {line.lotRef ? line.lotRef : '—'}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                    {line.unitsOrdered.toLocaleString()}
+                                  </td>
+                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                    {unitCost !== null
+                                      ? formatPurchaseOrderUnitCost(unitCost)
+                                      : '—'}
+                                  </td>
+                                  <td
+                                    className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap"
+                                    data-gate-key={gateKey}
+                                  >
                                     <div className="flex flex-col items-end gap-1">
                                       <Input
                                         type="number"
@@ -4922,7 +5419,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         step="0.01"
                                         key={`${line.id}-${totalCost ?? 'null'}`}
                                         defaultValue={
-                                          totalCost !== null ? String(Number(totalCost.toFixed(2))) : ''
+                                          totalCost !== null
+                                            ? String(Number(totalCost.toFixed(2)))
+                                            : ''
                                         }
                                         placeholder="0.00"
                                         data-gate-key={gateKey}
@@ -4932,7 +5431,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             setDraftLines(prev =>
                                               prev.map(candidate =>
                                                 candidate.id === line.id
-                                                  ? { ...candidate, totalCost: null, unitCost: null }
+                                                  ? {
+                                                      ...candidate,
+                                                      totalCost: null,
+                                                      unitCost: null,
+                                                    }
                                                   : candidate
                                               )
                                             )
@@ -4948,7 +5451,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                           setDraftLines(prev =>
                                             prev.map(candidate => {
                                               if (candidate.id !== line.id) return candidate
-                                              const nextTotalCost = Number(Math.abs(parsed).toFixed(2))
+                                              const nextTotalCost = Number(
+                                                Math.abs(parsed).toFixed(2)
+                                              )
                                               const nextUnitCost = derivePurchaseOrderUnitCost(
                                                 nextTotalCost,
                                                 candidate.unitsOrdered
@@ -4975,14 +5480,24 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </tbody>
                           <tfoot>
                             <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                              <td colSpan={4} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                              <td
+                                colSpan={4}
+                                className="px-3 py-2 text-right font-medium text-muted-foreground"
+                              >
                                 Product Subtotal
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums font-semibold">
                                 {tenantCurrency}{' '}
                                 {draftLines
-                                  .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
-                                  .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  .reduce(
+                                    (sum, line) =>
+                                      sum + (line.totalCost !== null ? line.totalCost : 0),
+                                    0
+                                  )
+                                  .toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
                               </td>
                             </tr>
                           </tfoot>
@@ -4995,7 +5510,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                 {!isCreate && order && showProductCostsStage && (
                   <div className="p-6">
                     {flowLines.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No lines added to this order yet.</p>
+                      <p className="text-sm text-muted-foreground">
+                        No lines added to this order yet.
+                      </p>
                     ) : (
                       <>
                         {canEdit && (
@@ -5011,131 +5528,168 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           </div>
                         )}
 
-                      <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                        <table className="w-full table-fixed text-sm">
-                          <thead>
-                            <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">SKU</th>
-                              <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">Lot Ref</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">Units</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Unit Cost</th>
-                              <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {flowLines.map(line => {
-                              const canEditProductCosts =
-                                canEdit &&
-                                productCostsEditing
+                        <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+                          <table className="w-full table-fixed text-sm">
+                            <thead>
+                              <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">
+                                  SKU
+                                </th>
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[160px]">
+                                  Lot Ref
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[96px]">
+                                  Units
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">
+                                  Unit Cost
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">
+                                  Total
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {flowLines.map(line => {
+                                const canEditProductCosts = canEdit && productCostsEditing
 
-                              const totalCost = line.totalCost !== null ? line.totalCost : null
-                              const unitCost =
-                                totalCost !== null && line.unitsOrdered > 0 ? totalCost / line.unitsOrdered : null
-                              const currencyLabel =
-                                typeof line.currency === 'string' && line.currency.trim().length > 0
-                                  ? line.currency.trim().toUpperCase()
-                                  : tenantCurrency
+                                const totalCost = line.totalCost !== null ? line.totalCost : null
+                                const unitCost =
+                                  totalCost !== null && line.unitsOrdered > 0
+                                    ? totalCost / line.unitsOrdered
+                                    : null
+                                const currencyLabel =
+                                  typeof line.currency === 'string' &&
+                                  line.currency.trim().length > 0
+                                    ? line.currency.trim().toUpperCase()
+                                    : tenantCurrency
 
-                              const gateKey = `costs.lines.${line.id}.totalCost`
-                              const issue = gateIssues ? gateIssues[gateKey] ?? null : null
+                                const gateKey = `costs.lines.${line.id}.totalCost`
+                                const issue = gateIssues ? (gateIssues[gateKey] ?? null) : null
 
-                              return (
-                                <tr key={line.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground min-w-0">
-                                    <span className="block truncate" title={line.skuCode}>
-                                      {line.skuCode}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-muted-foreground min-w-0">
-                                    <span
-                                      className="block truncate"
-                                      title={line.lotRef ? line.lotRef : undefined}
+                                return (
+                                  <tr
+                                    key={line.id}
+                                    className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                  >
+                                    <td className="px-3 py-2 font-medium text-foreground min-w-0">
+                                      <span className="block truncate" title={line.skuCode}>
+                                        {line.skuCode}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-muted-foreground min-w-0">
+                                      <span
+                                        className="block truncate"
+                                        title={line.lotRef ? line.lotRef : undefined}
+                                      >
+                                        {line.lotRef ? line.lotRef : '—'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
+                                      {line.unitsOrdered.toLocaleString()}
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        'px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap',
+                                        canEditProductCosts ? 'py-1' : 'py-2'
+                                      )}
                                     >
-                                      {line.lotRef ? line.lotRef : '—'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-foreground whitespace-nowrap">
-                                    {line.unitsOrdered.toLocaleString()}
-                                  </td>
-                                  <td
-                                    className={cn(
-                                      'px-3 text-right tabular-nums text-muted-foreground whitespace-nowrap',
-                                      canEditProductCosts ? 'py-1' : 'py-2'
-                                    )}
-                                  >
-                                    <span>{unitCost !== null ? `${currencyLabel} ${formatPurchaseOrderUnitCost(unitCost)}` : '—'}</span>
-                                  </td>
-                                  <td
-                                    className={cn(
-                                      'px-3 text-right tabular-nums font-medium whitespace-nowrap',
-                                      canEditProductCosts ? 'py-1' : 'py-2'
-                                    )}
-                                    data-gate-key={gateKey}
-                                  >
-                                    {canEditProductCosts ? (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <Input
-                                          type="number"
-                                          inputMode="decimal"
-                                          min="0"
-                                          step="0.01"
-                                          key={`${line.id}-${totalCost ?? 'null'}`}
-                                          defaultValue={
-                                            totalCost !== null ? String(Number(totalCost.toFixed(2))) : ''
-                                          }
-                                          placeholder="0.00"
-                                          data-gate-key={gateKey}
-                                          onBlur={e => {
-                                            const trimmed = e.target.value.trim()
-                                            if (!trimmed) {
-                                              void patchOrderLine(line.id, { totalCost: null })
-                                              return
-                                            }
-
-                                            const parsed = Number(trimmed)
-                                            if (!Number.isFinite(parsed)) {
-                                              toast.error('Total cost must be a number')
-                                              return
-                                            }
-                                            void patchOrderLine(line.id, { totalCost: Number(Math.abs(parsed).toFixed(2)) })
-                                          }}
-                                          className={cn(
-                                            'h-7 px-2 py-0 text-xs text-right w-28',
-                                            issue && 'border-rose-500 focus-visible:ring-rose-500'
-                                          )}
-                                        />
-                                        {issue && <p className="text-xs text-rose-600">{issue}</p>}
-                                      </div>
-                                    ) : (
-                                      <span className="text-muted-foreground">
-                                        {totalCost !== null
-                                          ? `${currencyLabel} ${totalCost.toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}`
+                                      <span>
+                                        {unitCost !== null
+                                          ? `${currencyLabel} ${formatPurchaseOrderUnitCost(unitCost)}`
                                           : '—'}
                                       </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                              <td colSpan={4} className="px-3 py-2 text-right font-medium text-muted-foreground">
-                                Product Subtotal
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                {tenantCurrency}{' '}
-                                {flowLines
-                                  .reduce((sum, line) => sum + (line.totalCost !== null ? line.totalCost : 0), 0)
-                                  .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        'px-3 text-right tabular-nums font-medium whitespace-nowrap',
+                                        canEditProductCosts ? 'py-1' : 'py-2'
+                                      )}
+                                      data-gate-key={gateKey}
+                                    >
+                                      {canEditProductCosts ? (
+                                        <div className="flex flex-col items-end gap-1">
+                                          <Input
+                                            type="number"
+                                            inputMode="decimal"
+                                            min="0"
+                                            step="0.01"
+                                            key={`${line.id}-${totalCost ?? 'null'}`}
+                                            defaultValue={
+                                              totalCost !== null
+                                                ? String(Number(totalCost.toFixed(2)))
+                                                : ''
+                                            }
+                                            placeholder="0.00"
+                                            data-gate-key={gateKey}
+                                            onBlur={e => {
+                                              const trimmed = e.target.value.trim()
+                                              if (!trimmed) {
+                                                void patchOrderLine(line.id, { totalCost: null })
+                                                return
+                                              }
+
+                                              const parsed = Number(trimmed)
+                                              if (!Number.isFinite(parsed)) {
+                                                toast.error('Total cost must be a number')
+                                                return
+                                              }
+                                              void patchOrderLine(line.id, {
+                                                totalCost: Number(Math.abs(parsed).toFixed(2)),
+                                              })
+                                            }}
+                                            className={cn(
+                                              'h-7 px-2 py-0 text-xs text-right w-28',
+                                              issue && 'border-rose-500 focus-visible:ring-rose-500'
+                                            )}
+                                          />
+                                          {issue && (
+                                            <p className="text-xs text-rose-600">{issue}</p>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-muted-foreground">
+                                          {totalCost !== null
+                                            ? `${currencyLabel} ${totalCost.toLocaleString(
+                                                undefined,
+                                                {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                }
+                                              )}`
+                                            : '—'}
+                                        </span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
+                                <td
+                                  colSpan={4}
+                                  className="px-3 py-2 text-right font-medium text-muted-foreground"
+                                >
+                                  Product Subtotal
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                                  {tenantCurrency}{' '}
+                                  {flowLines
+                                    .reduce(
+                                      (sum, line) =>
+                                        sum + (line.totalCost !== null ? line.totalCost : 0),
+                                      0
+                                    )
+                                    .toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
                       </>
                     )}
                   </div>
@@ -5181,58 +5735,79 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
-                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">Qty</th>
-                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">Unit Rate</th>
-                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Total</th>
-                                {canEditFreightCost && (
-                                  <th className="w-[40px]" />
-                                )}
+                                <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                  Cost
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[100px]">
+                                  Qty
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[120px]">
+                                  Unit Rate
+                                </th>
+                                <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">
+                                  Total
+                                </th>
+                                {canEditFreightCost && <th className="w-[40px]" />}
                               </tr>
                             </thead>
                             <tbody>
-                              {forwardingCosts.length > 0 && forwardingCosts.map(row => (
-                                <tr key={row.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                  <td className="px-3 py-2 font-medium text-foreground">
-                                    {row.costName}
-                                    {row.notes && (
-                                      <span className="ml-2 text-xs text-muted-foreground">({row.notes})</span>
-                                    )}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    {row.quantity.toLocaleString()}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
-                                    {row.unitRate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                  <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
-                                    {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
-                                    {Number(row.totalCost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                  </td>
-                                  {canEditFreightCost && (
-                                    <td className="px-1 py-2 text-center">
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-600"
-                                        onClick={() => void deleteFreightLine(row.id)}
-                                        disabled={freightLineDeleting === row.id}
-                                      >
-                                        {freightLineDeleting === row.id ? (
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                          <Trash2 className="h-3.5 w-3.5" />
-                                        )}
-                                      </Button>
+                              {forwardingCosts.length > 0 &&
+                                forwardingCosts.map(row => (
+                                  <tr
+                                    key={row.id}
+                                    className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                  >
+                                    <td className="px-3 py-2 font-medium text-foreground">
+                                      {row.costName}
+                                      {row.notes && (
+                                        <span className="ml-2 text-xs text-muted-foreground">
+                                          ({row.notes})
+                                        </span>
+                                      )}
                                     </td>
-                                  )}
-                                </tr>
-                              ))}
+                                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                      {row.quantity.toLocaleString()}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
+                                      {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
+                                      {row.unitRate.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </td>
+                                    <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap">
+                                      {resolveCostCurrency(row.currency, defaultCostCurrency)}{' '}
+                                      {Number(row.totalCost).toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
+                                    </td>
+                                    {canEditFreightCost && (
+                                      <td className="px-1 py-2 text-center">
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-6 w-6 p-0 text-muted-foreground hover:text-rose-600"
+                                          onClick={() => void deleteFreightLine(row.id)}
+                                          disabled={freightLineDeleting === row.id}
+                                        >
+                                          {freightLineDeleting === row.id ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <Trash2 className="h-3.5 w-3.5" />
+                                          )}
+                                        </Button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
                               {forwardingCosts.length === 0 && !freightLineAdding && (
                                 <tr>
-                                  <td colSpan={canEditFreightCost ? 5 : 4} className="px-3 py-3 text-sm text-muted-foreground">
+                                  <td
+                                    colSpan={canEditFreightCost ? 5 : 4}
+                                    className="px-3 py-3 text-sm text-muted-foreground"
+                                  >
                                     No freight costs recorded.
                                   </td>
                                 </tr>
@@ -5243,7 +5818,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     <Input
                                       type="text"
                                       value={freightLineDraft.costName}
-                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, costName: e.target.value }))}
+                                      onChange={e =>
+                                        setFreightLineDraft(prev => ({
+                                          ...prev,
+                                          costName: e.target.value,
+                                        }))
+                                      }
                                       disabled={freightLineSaving}
                                       className="h-8 text-sm"
                                       placeholder="e.g., Ocean Freight"
@@ -5257,7 +5837,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         onChange={e =>
                                           setFreightLineDraft(prev => ({
                                             ...prev,
-                                            currency: resolveCostCurrency(e.target.value, defaultCostCurrency),
+                                            currency: resolveCostCurrency(
+                                              e.target.value,
+                                              defaultCostCurrency
+                                            ),
                                           }))
                                         }
                                         disabled={freightLineSaving}
@@ -5273,7 +5856,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                         type="text"
                                         value={freightLineDraft.notes}
                                         onChange={e =>
-                                          setFreightLineDraft(prev => ({ ...prev, notes: e.target.value }))
+                                          setFreightLineDraft(prev => ({
+                                            ...prev,
+                                            notes: e.target.value,
+                                          }))
                                         }
                                         disabled={freightLineSaving}
                                         className="h-8 text-sm"
@@ -5288,7 +5874,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       min="0"
                                       step="0.01"
                                       value={freightLineDraft.amount}
-                                      onChange={e => setFreightLineDraft(prev => ({ ...prev, amount: e.target.value }))}
+                                      onChange={e =>
+                                        setFreightLineDraft(prev => ({
+                                          ...prev,
+                                          amount: e.target.value,
+                                        }))
+                                      }
                                       disabled={freightLineSaving}
                                       className="h-8 text-sm text-right tabular-nums"
                                       placeholder="0.00"
@@ -5335,7 +5926,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                             </tbody>
                             <tfoot>
                               <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                                <td colSpan={3} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                <td
+                                  colSpan={3}
+                                  className="px-3 py-2 text-right font-medium text-muted-foreground"
+                                >
                                   Freight Subtotal
                                 </td>
                                 <td className="px-3 py-2 text-right tabular-nums font-semibold">
@@ -5355,10 +5949,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     {showWarehouseCostsStage && (
                       <div className="space-y-6">
                         <div className="space-y-3">
-	                          <div className="flex items-center justify-between">
-	                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-	                              Warehouse Costs
-	                            </h4>
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Warehouse Costs
+                            </h4>
                             {canEditWarehouseCosts && (
                               <Button
                                 type="button"
@@ -5374,51 +5968,79 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     notes: '',
                                   })
                                 }}
-                                disabled={warehouseCostSaving || !order.warehouseCode || !order.warehouseName}
+                                disabled={
+                                  warehouseCostSaving ||
+                                  !order.warehouseCode ||
+                                  !order.warehouseName
+                                }
                               >
                                 + Add Cost
                               </Button>
-	                            )}
-	                          </div>
+                            )}
+                          </div>
                           <p className="text-xs text-muted-foreground">
-                            Auto-calculated costs use the warehouse rate template. Add invoice costs here during the
-                            Warehouse stage.
+                            Auto-calculated costs use the warehouse rate template. Add invoice costs
+                            here during the Warehouse stage.
                           </p>
-	
-	                          {costLedgerLoading && manualWarehouseCostsLoading ? (
-	                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
-	                              <p className="text-sm text-muted-foreground">Loading costs…</p>
-	                            </div>
+
+                          {costLedgerLoading && manualWarehouseCostsLoading ? (
+                            <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30 p-4">
+                              <p className="text-sm text-muted-foreground">Loading costs…</p>
+                            </div>
                           ) : (
                             <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                               <table className="w-full text-sm">
                                 <thead>
                                   <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Cost</th>
-                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">Notes</th>
-                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">Amount</th>
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                                      Cost
+                                    </th>
+                                    <th className="text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[180px]">
+                                      Notes
+                                    </th>
+                                    <th className="text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs w-[140px]">
+                                      Amount
+                                    </th>
                                     <th className="w-12" />
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {inboundCostRows.map(row => (
-                                    <tr key={`inbound-ledger-${row.costName}`} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">{row.costName}</td>
+                                    <tr
+                                      key={`inbound-ledger-${row.costName}`}
+                                      className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                    >
+                                      <td className="px-3 py-2 font-medium text-foreground">
+                                        {row.costName}
+                                      </td>
                                       <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
                                         {tenantCurrency}{' '}
-                                        {row.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        {row.totalCost.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
                                       </td>
                                       <td />
                                     </tr>
                                   ))}
                                   {manualInboundCosts.map(entry => (
-                                    <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">{entry.costName}</td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">{entry.notes ? entry.notes : '—'}</td>
+                                    <tr
+                                      key={entry.id}
+                                      className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                                    >
+                                      <td className="px-3 py-2 font-medium text-foreground">
+                                        {entry.costName}
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">
+                                        {entry.notes ? entry.notes : '—'}
+                                      </td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
                                         {entry.currency}{' '}
-                                        {entry.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        {entry.amount.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
                                       </td>
                                       <td className="px-1 py-2 text-center">
                                         {canEditWarehouseCosts && (
@@ -5438,12 +6060,19 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   {supplierAdjustment && !supplierAdjustmentEditing && (
                                     <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                                       <td className="px-3 py-2 font-medium text-foreground">
-                                        {supplierAdjustment.amount < 0 ? 'Supplier Credit' : 'Supplier Debit'}
+                                        {supplierAdjustment.amount < 0
+                                          ? 'Supplier Credit'
+                                          : 'Supplier Debit'}
                                       </td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">{supplierAdjustment.notes ? supplierAdjustment.notes : '—'}</td>
+                                      <td className="px-3 py-2 text-muted-foreground text-xs">
+                                        {supplierAdjustment.notes ? supplierAdjustment.notes : '—'}
+                                      </td>
                                       <td className="px-3 py-2 text-right tabular-nums font-medium">
                                         {supplierAdjustment.currency}{' '}
-                                        {supplierAdjustment.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        {supplierAdjustment.amount.toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}
                                       </td>
                                       <td className="px-1 py-2 text-center">
                                         {canEditWarehouseCosts && (
@@ -5453,7 +6082,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             variant="ghost"
                                             className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                                             onClick={() => setSupplierAdjustmentEditing(true)}
-                                            disabled={supplierAdjustmentLoading || supplierAdjustmentSaving}
+                                            disabled={
+                                              supplierAdjustmentLoading || supplierAdjustmentSaving
+                                            }
                                           >
                                             <FileEdit className="h-3 w-3" />
                                           </Button>
@@ -5461,30 +6092,52 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       </td>
                                     </tr>
                                   )}
-                                  {order.stageData.warehouse?.dutyAmount != null && order.stageData.warehouse.dutyAmount !== 0 && (
-                                    <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                                      <td className="px-3 py-2 font-medium text-foreground">Customs & Duty</td>
-                                      <td className="px-3 py-2 text-muted-foreground text-xs">—</td>
-                                      <td className="px-3 py-2 text-right tabular-nums font-medium">
-                                        {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
-                                        {order.stageData.warehouse.dutyAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                      </td>
-                                      <td />
-                                    </tr>
-                                  )}
-                                  {inboundCostRows.length === 0 && manualInboundCosts.length === 0 && !supplierAdjustment && warehouseCostEditing !== 'inbound' && !supplierAdjustmentEditing && (order.stageData.warehouse?.dutyAmount == null || order.stageData.warehouse.dutyAmount === 0) && (
-                                    <tr>
-                                      <td colSpan={4} className="px-3 py-3 text-sm text-muted-foreground">
-                                        No warehouse costs recorded.
-                                      </td>
-                                    </tr>
-                                  )}
+                                  {order.stageData.warehouse?.dutyAmount != null &&
+                                    order.stageData.warehouse.dutyAmount !== 0 && (
+                                      <tr className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                                        <td className="px-3 py-2 font-medium text-foreground">
+                                          Customs & Duty
+                                        </td>
+                                        <td className="px-3 py-2 text-muted-foreground text-xs">
+                                          —
+                                        </td>
+                                        <td className="px-3 py-2 text-right tabular-nums font-medium">
+                                          {order.stageData.warehouse.dutyCurrency ?? 'USD'}{' '}
+                                          {order.stageData.warehouse.dutyAmount.toLocaleString(
+                                            undefined,
+                                            { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+                                          )}
+                                        </td>
+                                        <td />
+                                      </tr>
+                                    )}
+                                  {inboundCostRows.length === 0 &&
+                                    manualInboundCosts.length === 0 &&
+                                    !supplierAdjustment &&
+                                    warehouseCostEditing !== 'inbound' &&
+                                    !supplierAdjustmentEditing &&
+                                    (order.stageData.warehouse?.dutyAmount == null ||
+                                      order.stageData.warehouse.dutyAmount === 0) && (
+                                      <tr>
+                                        <td
+                                          colSpan={4}
+                                          className="px-3 py-3 text-sm text-muted-foreground"
+                                        >
+                                          No warehouse costs recorded.
+                                        </td>
+                                      </tr>
+                                    )}
                                   {warehouseCostEditing === 'inbound' && (
                                     <tr className="border-t border-slate-200 dark:border-slate-700 bg-slate-50/30 dark:bg-slate-800/30">
                                       <td className="px-3 py-2">
                                         <Input
                                           value={warehouseCostDraft.costName}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, costName: e.target.value }))}
+                                          onChange={e =>
+                                            setWarehouseCostDraft(prev => ({
+                                              ...prev,
+                                              costName: e.target.value,
+                                            }))
+                                          }
                                           disabled={warehouseCostSaving}
                                           placeholder="Cost name"
                                           className="h-8 text-sm"
@@ -5493,7 +6146,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       <td className="px-3 py-2">
                                         <Input
                                           value={warehouseCostDraft.notes}
-                                          onChange={e => setWarehouseCostDraft(prev => ({ ...prev, notes: e.target.value }))}
+                                          onChange={e =>
+                                            setWarehouseCostDraft(prev => ({
+                                              ...prev,
+                                              notes: e.target.value,
+                                            }))
+                                          }
                                           disabled={warehouseCostSaving}
                                           placeholder="Notes (optional)"
                                           className="h-8 text-sm"
@@ -5565,7 +6223,11 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             variant="ghost"
                                             className="h-6 w-6 p-0 text-primary hover:text-primary"
                                             onClick={() => void saveWarehouseCost('Inbound')}
-                                            disabled={warehouseCostSaving || !warehouseCostDraft.costName.trim() || !warehouseCostDraft.amount.trim()}
+                                            disabled={
+                                              warehouseCostSaving ||
+                                              !warehouseCostDraft.costName.trim() ||
+                                              !warehouseCostDraft.amount.trim()
+                                            }
                                           >
                                             {warehouseCostSaving ? (
                                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -5582,7 +6244,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       <td className="px-3 py-2">
                                         <select
                                           value={supplierAdjustmentDraft.kind}
-                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, kind: e.target.value as 'credit' | 'debit' }))}
+                                          onChange={e =>
+                                            setSupplierAdjustmentDraft(prev => ({
+                                              ...prev,
+                                              kind: e.target.value as 'credit' | 'debit',
+                                            }))
+                                          }
                                           disabled={supplierAdjustmentSaving}
                                           className="h-8 px-2 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                                         >
@@ -5593,7 +6260,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       <td className="px-3 py-2">
                                         <Input
                                           value={supplierAdjustmentDraft.notes}
-                                          onChange={e => setSupplierAdjustmentDraft(prev => ({ ...prev, notes: e.target.value }))}
+                                          onChange={e =>
+                                            setSupplierAdjustmentDraft(prev => ({
+                                              ...prev,
+                                              notes: e.target.value,
+                                            }))
+                                          }
                                           disabled={supplierAdjustmentSaving}
                                           placeholder="Notes"
                                           className="h-8 text-sm"
@@ -5657,7 +6329,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             variant="ghost"
                                             className="h-6 w-6 p-0 text-primary hover:text-primary"
                                             onClick={() => void saveSupplierAdjustment()}
-                                            disabled={supplierAdjustmentSaving || !supplierAdjustmentDraft.amount.trim()}
+                                            disabled={
+                                              supplierAdjustmentSaving ||
+                                              !supplierAdjustmentDraft.amount.trim()
+                                            }
                                           >
                                             {supplierAdjustmentSaving ? (
                                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -5672,11 +6347,18 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </tbody>
                                 <tfoot>
                                   <tr className="border-t-2 border-slate-200 dark:border-slate-600 bg-slate-50/50 dark:bg-slate-700/50">
-                                    <td colSpan={2} className="px-3 py-2 text-right font-medium text-muted-foreground">
+                                    <td
+                                      colSpan={2}
+                                      className="px-3 py-2 text-right font-medium text-muted-foreground"
+                                    >
                                       Warehouse Subtotal
                                     </td>
                                     <td className="px-3 py-2 text-right tabular-nums font-semibold">
-                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0
+                                      {inboundSubtotal +
+                                        manualInboundSubtotal +
+                                        supplierAdjustmentSubtotal +
+                                        dutySubtotal !==
+                                      0
                                         ? `${tenantCurrency} ${(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                                         : '—'}
                                     </td>
@@ -5700,7 +6382,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   <td className="px-3 py-2 text-muted-foreground">Product</td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium">
                                     {tenantCurrency}{' '}
-                                    {productSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {productSubtotal.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </td>
                                 </tr>
                                 {forwardingSubtotal > 0 && (
@@ -5708,16 +6393,31 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                     <td className="px-3 py-2 text-muted-foreground">Freight</td>
                                     <td className="px-3 py-2 text-right tabular-nums font-medium">
                                       {tenantCurrency}{' '}
-                                      {forwardingSubtotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {forwardingSubtotal.toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
                                     </td>
                                   </tr>
                                 )}
-                                {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal) !== 0 && (
+                                {inboundSubtotal +
+                                  manualInboundSubtotal +
+                                  supplierAdjustmentSubtotal +
+                                  dutySubtotal !==
+                                  0 && (
                                   <tr className="border-b border-slate-200 dark:border-slate-700">
                                     <td className="px-3 py-2 text-muted-foreground">Warehouse</td>
                                     <td className="px-3 py-2 text-right tabular-nums font-medium">
                                       {tenantCurrency}{' '}
-                                      {(inboundSubtotal + manualInboundSubtotal + supplierAdjustmentSubtotal + dutySubtotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      {(
+                                        inboundSubtotal +
+                                        manualInboundSubtotal +
+                                        supplierAdjustmentSubtotal +
+                                        dutySubtotal
+                                      ).toLocaleString(undefined, {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      })}
                                     </td>
                                   </tr>
                                 )}
@@ -5727,7 +6427,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   <td className="px-3 py-2 font-semibold">Total</td>
                                   <td className="px-3 py-2 text-right tabular-nums font-semibold">
                                     {tenantCurrency}{' '}
-                                    {totalCostSummary.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    {totalCostSummary.toLocaleString(undefined, {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    })}
                                   </td>
                                 </tr>
                               </tfoot>
@@ -5738,1185 +6441,1310 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                     )}
                   </div>
                 )}
-
               </>
             )}
 
             {activeBottomTab === 'details' && (
               <>
                 {isCreate ? (
-              <div className="p-6">
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Order Info
-                    </h4>
-                    <div className="flex items-center gap-2">
-                      {orderInfoEditing ? (
-                        <>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setOrderInfoEditing(false)}
-                            disabled={orderInfoSaving}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={() => void handleSaveOrderInfo()}
-                            disabled={orderInfoSaving || !orderInfoDraft.counterpartyName.trim()}
-                            className="gap-2"
-                          >
-                            {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                            Save
-                          </Button>
-                        </>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setOrderInfoEditing(true)}
-                        >
-                          Edit
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        PO Number
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {displayOrderNumber}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Supplier
-                      </p>
-                      {orderInfoEditing ? (
-                        <select
-                          value={orderInfoDraft.counterpartyName}
-                          onChange={e => applySupplierSelection(e.target.value)}
-                          disabled={orderInfoSaving}
-                          className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
-                        >
-                          <option value="">Select supplier</option>
-                          {suppliers.map(supplier => (
-                            <option key={supplier.id} value={supplier.name}>
-                              {supplier.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {orderInfoDraft.counterpartyName.trim()
-                            ? orderInfoDraft.counterpartyName
-                            : '—'}
-                        </p>
-                      )}
-                      {selectedSupplier?.phone && selectedSupplier.phone.trim().length > 0 && (
-                        <p className="text-xs text-muted-foreground">Tel: {selectedSupplier.phone.trim()}</p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Destination
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {tenantDestination.trim() ? tenantDestination : '—'}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Cargo Ready Date
-                      </p>
-                      {orderInfoEditing ? (
-                        <Input
-                          type="date"
-                          value={orderInfoDraft.expectedDate}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              expectedDate: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                        />
-                      ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {orderInfoDraft.expectedDate.trim() ? orderInfoDraft.expectedDate : '—'}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Incoterms
-                      </p>
-                      {orderInfoEditing ? (
-                        <select
-                          value={orderInfoDraft.incoterms}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              incoterms: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                          className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
-                        >
-                          <option value="">Select incoterms</option>
-                          {INCOTERMS_OPTIONS.map(option => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {orderInfoDraft.incoterms.trim() ? orderInfoDraft.incoterms : '—'}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Payment Terms
-                      </p>
-                      {orderInfoEditing ? (
-                        <Input
-                          value={orderInfoDraft.paymentTerms}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              paymentTerms: e.target.value,
-                            }))
-                          }
-                          placeholder="Payment terms"
-                          disabled={orderInfoSaving}
-                        />
-                      ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {orderInfoDraft.paymentTerms.trim()
-                            ? orderInfoDraft.paymentTerms
-                            : '—'}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Mfg Start Date
-                      </p>
-                      {orderInfoEditing ? (
-                        <Input
-                          type="date"
-                          value={orderInfoDraft.manufacturingStartDate}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              manufacturingStartDate: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                        />
-                      ) : (
-                        <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {orderInfoDraft.manufacturingStartDate.trim()
-                            ? orderInfoDraft.manufacturingStartDate
-                            : '—'}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {(orderInfoDraft.notes.trim() || orderInfoEditing) && (
-                    <div className="mt-4">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                        Notes
-                      </p>
-                      {orderInfoEditing ? (
-                        <Textarea
-                          value={orderInfoDraft.notes}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
-                          }
-                          placeholder="Optional internal notes..."
-                          disabled={orderInfoSaving}
-                          className="min-h-[88px]"
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-700 dark:text-slate-300">
-                          {orderInfoDraft.notes}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : order ? (
-              <div className="p-6">
-                {/* Order Info Section */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                      Order Info
-                    </h4>
-                    {canEdit && (
-                      <div className="flex items-center gap-2">
-                        {orderInfoEditing ? (
-                          <>
+                  <div className="p-6">
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Order Info
+                        </h4>
+                        <div className="flex items-center gap-2">
+                          {orderInfoEditing ? (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setOrderInfoEditing(false)}
+                                disabled={orderInfoSaving}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => void handleSaveOrderInfo()}
+                                disabled={
+                                  orderInfoSaving || !orderInfoDraft.counterpartyName.trim()
+                                }
+                                className="gap-2"
+                              >
+                                {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                Save
+                              </Button>
+                            </>
+                          ) : (
                             <Button
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => setOrderInfoEditing(false)}
-                              disabled={orderInfoSaving}
+                              onClick={() => setOrderInfoEditing(true)}
                             >
-                              Cancel
+                              Edit
                             </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={() => void handleSaveOrderInfo()}
-                              disabled={orderInfoSaving || !orderInfoDraft.counterpartyName.trim()}
-                              className="gap-2"
-                            >
-                              {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                              Save
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setOrderInfoEditing(true)}
-                          >
-                            Edit
-                          </Button>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        PO Number
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {displayOrderNumber}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Supplier
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <select
-                          data-gate-key="details.counterpartyName"
-                          value={orderInfoDraft.counterpartyName}
-                          onChange={e => applySupplierSelection(e.target.value)}
-                          disabled={orderInfoSaving}
-                          className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
-                            gateIssues?.['details.counterpartyName'] ? 'border-rose-500' : ''
-                          }`}
-                        >
-                          <option value="">Select supplier</option>
-                          {suppliers.map(supplier => (
-                            <option key={supplier.id} value={supplier.name}>
-                              {supplier.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p
-                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                          data-gate-key="details.counterpartyName"
-                        >
-                          {order.counterpartyName ?? '—'}
-                        </p>
-                      )}
-                      {!orderInfoEditing && order.supplier?.phone && order.supplier.phone.trim().length > 0 && (
-                        <p className="text-xs text-muted-foreground">Tel: {order.supplier.phone.trim()}</p>
-                      )}
-                      {gateIssues?.['details.counterpartyName'] && (
-                        <p className="text-xs text-rose-600" data-gate-key="details.counterpartyName">
-                          {gateIssues['details.counterpartyName']} <Link href="/config/suppliers" className="underline">Open Suppliers</Link>
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Destination
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {formatTextOrDash(tenantDestination)}
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Cargo Ready Date
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <Input
-                          type="date"
-                          data-gate-key="details.expectedDate"
-                          value={orderInfoDraft.expectedDate}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              expectedDate: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                          className={
-                            gateIssues?.['details.expectedDate']
-                              ? 'border-rose-500 focus-visible:ring-rose-500'
-                              : undefined
-                          }
-                        />
-                      ) : (
-                        <p
-                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                          data-gate-key="details.expectedDate"
-                        >
-                          {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
-                        </p>
-                      )}
-                      {gateIssues?.['details.expectedDate'] && (
-                        <p className="text-xs text-rose-600" data-gate-key="details.expectedDate">
-                          {gateIssues['details.expectedDate']}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Incoterms
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <select
-                          data-gate-key="details.incoterms"
-                          value={orderInfoDraft.incoterms}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              incoterms: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                          className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
-                            gateIssues?.['details.incoterms'] ? 'border-rose-500' : ''
-                          }`}
-                        >
-                          <option value="">Select incoterms</option>
-                          {INCOTERMS_OPTIONS.map(option => (
-                            <option key={option} value={option}>
-                              {option}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <p
-                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                          data-gate-key="details.incoterms"
-                        >
-                          {order.incoterms ?? '—'}
-                        </p>
-                      )}
-                      {gateIssues?.['details.incoterms'] && (
-                        <p className="text-xs text-rose-600" data-gate-key="details.incoterms">
-                          {gateIssues['details.incoterms']}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Payment Terms
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <Input
-                          data-gate-key="details.paymentTerms"
-                          value={orderInfoDraft.paymentTerms}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              paymentTerms: e.target.value,
-                            }))
-                          }
-                          placeholder="Payment terms"
-                          disabled={orderInfoSaving}
-                          className={
-                            gateIssues?.['details.paymentTerms']
-                              ? 'border-rose-500 focus-visible:ring-rose-500'
-                              : undefined
-                          }
-                        />
-                      ) : (
-                        <p
-                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                          data-gate-key="details.paymentTerms"
-                        >
-                          {order.paymentTerms ?? '—'}
-                        </p>
-                      )}
-                      {gateIssues?.['details.paymentTerms'] && (
-                        <p className="text-xs text-rose-600" data-gate-key="details.paymentTerms">
-                          {gateIssues['details.paymentTerms']}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Mfg Start Date
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <Input
-                          type="date"
-                          data-gate-key="details.manufacturingStartDate"
-                          value={orderInfoDraft.manufacturingStartDate}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({
-                              ...prev,
-                              manufacturingStartDate: e.target.value,
-                            }))
-                          }
-                          disabled={orderInfoSaving}
-                          className={
-                            gateIssues?.['details.manufacturingStartDate']
-                              ? 'border-rose-500 focus-visible:ring-rose-500'
-                              : undefined
-                          }
-                        />
-                      ) : (
-                        <p
-                          className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                          data-gate-key="details.manufacturingStartDate"
-                        >
-                          {order.manufacturingStartDate ? formatDateOnly(order.manufacturingStartDate) : '—'}
-                        </p>
-                      )}
-                      {gateIssues?.['details.manufacturingStartDate'] && (
-                        <p className="text-xs text-rose-600" data-gate-key="details.manufacturingStartDate">
-                          {gateIssues['details.manufacturingStartDate']}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Created
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {formatTextOrDash(formatDateOnly(order.createdAt))}
-                        {order.createdByName ? ` by ${order.createdByName}` : ''}
-                      </p>
-                    </div>
 
-                    <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Ship To
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {(() => {
-                          const parts: string[] = []
-                          parts.push(BUYER_LEGAL_ENTITY.name)
-                          parts.push(BUYER_LEGAL_ENTITY.address)
-                          if (tenantDisplayCode.trim().length > 0) {
-                            parts.push(tenantDisplayCode.trim().toUpperCase())
-                          }
-                          parts.push(BUYER_LEGAL_ENTITY.phone)
-                          return parts.join(' • ')
-                        })()}
-                      </p>
-                    </div>
-
-                    <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                        Supplier Banking
-                      </p>
-                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                        {order.supplier?.bankingDetails?.trim() ? 'Configured' : 'Not configured'}
-                      </p>
-                      {!order.supplier?.bankingDetails?.trim() && (
-                        <p className="text-xs text-muted-foreground">
-                          Set supplier banking details in Suppliers.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {(order.notes || (canEdit && orderInfoEditing)) && (
-                    <div className="mt-4">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                        Notes
-                      </p>
-                      {canEdit && orderInfoEditing ? (
-                        <Textarea
-                          value={orderInfoDraft.notes}
-                          onChange={e =>
-                            setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
-                          }
-                          placeholder="Optional internal notes..."
-                          disabled={orderInfoSaving}
-                          className="min-h-[88px]"
-                        />
-                      ) : (
-                        <p className="text-sm text-slate-700 dark:text-slate-300">{order.notes}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Manufacturing Section */}
-                {(() => {
-                  if (activeViewStage !== 'MANUFACTURING') return null
-                  const mfg = order.stageData.manufacturing
-                  const canEditStage = !isReadOnly
-
-                  const expectedCompletionValue =
-                    getStageField('expectedCompletionDate') ?? formatDateOnly(mfg?.expectedCompletionDate ?? null)
-                  const packagingNotesValue =
-                    getStageField('packagingNotes') ??
-                    (typeof mfg?.packagingNotes === 'string' ? mfg.packagingNotes : '')
-
-                  return (
-                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        Manufacturing
-                      </h4>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Expected Completion
+                            PO Number
                           </p>
-                          {canEditStage ? (
-                            <Input
-                              type="date"
-                              value={expectedCompletionValue}
-                              onChange={e => setStageField('expectedCompletionDate', e.target.value)}
-                            />
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {displayOrderNumber}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Supplier
+                          </p>
+                          {orderInfoEditing ? (
+                            <select
+                              value={orderInfoDraft.counterpartyName}
+                              onChange={e => applySupplierSelection(e.target.value)}
+                              disabled={orderInfoSaving}
+                              className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="">Select supplier</option>
+                              {suppliers.map(supplier => (
+                                <option key={supplier.id} value={supplier.name}>
+                                  {supplier.name}
+                                </option>
+                              ))}
+                            </select>
                           ) : (
                             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {formatTextOrDash(formatDateOnly(mfg?.expectedCompletionDate ?? null))}
+                              {orderInfoDraft.counterpartyName.trim()
+                                ? orderInfoDraft.counterpartyName
+                                : '—'}
+                            </p>
+                          )}
+                          {selectedSupplier?.phone && selectedSupplier.phone.trim().length > 0 && (
+                            <p className="text-xs text-muted-foreground">
+                              Tel: {selectedSupplier.phone.trim()}
                             </p>
                           )}
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Cartons
+                            Destination
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalCartons?.toLocaleString() ?? '—'}
+                            {tenantDestination.trim() ? tenantDestination : '—'}
                           </p>
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Pallets
+                            Cargo Ready Date
                           </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalPallets?.toLocaleString() ?? '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Weight ({weightUnit})
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalWeightKg != null
-                              ? convertWeightFromKg(mfg.totalWeightKg, unitSystem).toLocaleString(undefined, {
-                                  maximumFractionDigits: 2,
-                                })
-                              : '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Volume (CBM)
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {mfg?.totalVolumeCbm?.toLocaleString() ?? '—'}
-                          </p>
-                        </div>
-                        <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Packaging Notes
-                          </p>
-                          {canEditStage ? (
-                            <Textarea
-                              value={packagingNotesValue}
-                              onChange={e => setStageField('packagingNotes', e.target.value)}
-                              placeholder="Optional packaging notes..."
-                              className="min-h-[88px]"
+                          {orderInfoEditing ? (
+                            <Input
+                              type="date"
+                              value={orderInfoDraft.expectedDate}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  expectedDate: e.target.value,
+                                }))
+                              }
+                              disabled={orderInfoSaving}
                             />
                           ) : (
-                            <p className="text-sm text-slate-700 dark:text-slate-300">
-                              {typeof mfg?.packagingNotes === 'string' && mfg.packagingNotes.trim().length > 0
-                                ? mfg.packagingNotes
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {orderInfoDraft.expectedDate.trim()
+                                ? orderInfoDraft.expectedDate
+                                : '—'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Incoterms
+                          </p>
+                          {orderInfoEditing ? (
+                            <select
+                              value={orderInfoDraft.incoterms}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  incoterms: e.target.value,
+                                }))
+                              }
+                              disabled={orderInfoSaving}
+                              className="w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="">Select incoterms</option>
+                              {INCOTERMS_OPTIONS.map(option => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {orderInfoDraft.incoterms.trim() ? orderInfoDraft.incoterms : '—'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Payment Terms
+                          </p>
+                          {orderInfoEditing ? (
+                            <Input
+                              value={orderInfoDraft.paymentTerms}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  paymentTerms: e.target.value,
+                                }))
+                              }
+                              placeholder="Payment terms"
+                              disabled={orderInfoSaving}
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {orderInfoDraft.paymentTerms.trim()
+                                ? orderInfoDraft.paymentTerms
+                                : '—'}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Mfg Start Date
+                          </p>
+                          {orderInfoEditing ? (
+                            <Input
+                              type="date"
+                              value={orderInfoDraft.manufacturingStartDate}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  manufacturingStartDate: e.target.value,
+                                }))
+                              }
+                              disabled={orderInfoSaving}
+                            />
+                          ) : (
+                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {orderInfoDraft.manufacturingStartDate.trim()
+                                ? orderInfoDraft.manufacturingStartDate
                                 : '—'}
                             </p>
                           )}
                         </div>
                       </div>
+
+                      {(orderInfoDraft.notes.trim() || orderInfoEditing) && (
+                        <div className="mt-4">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                            Notes
+                          </p>
+                          {orderInfoEditing ? (
+                            <Textarea
+                              value={orderInfoDraft.notes}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
+                              }
+                              placeholder="Optional internal notes..."
+                              disabled={orderInfoSaving}
+                              className="min-h-[88px]"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-700 dark:text-slate-300">
+                              {orderInfoDraft.notes}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )
-                })()}
-
-                {/* Transit Section */}
-                {(() => {
-                  if (activeViewStage !== 'OCEAN') return null
-                  const ocean = order.stageData.ocean
-                  const canEditStage = !isReadOnly
-                  const textField = (key: string, existing: string | null | undefined): string =>
-                    getStageField(key) ?? (typeof existing === 'string' ? existing : '')
-                  const issue = (key: string): string | null => gateIssues?.[`details.${key}`] ?? null
-
-                  return (
-                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        Transit
-                      </h4>
+                  </div>
+                ) : order ? (
+                  <div className="p-6">
+                    {/* Order Info Section */}
+                    <div className="mb-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Order Info
+                        </h4>
+                        {canEdit && (
+                          <div className="flex items-center gap-2">
+                            {orderInfoEditing ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setOrderInfoEditing(false)}
+                                  disabled={orderInfoSaving}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => void handleSaveOrderInfo()}
+                                  disabled={
+                                    orderInfoSaving || !orderInfoDraft.counterpartyName.trim()
+                                  }
+                                  className="gap-2"
+                                >
+                                  {orderInfoSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                                  Save
+                                </Button>
+                              </>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setOrderInfoEditing(true)}
+                              >
+                                Edit
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            House B/L
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.houseBillOfLading"
-                              value={textField('houseBillOfLading', ocean?.houseBillOfLading)}
-                              onChange={e => setStageField('houseBillOfLading', e.target.value)}
-                              placeholder="Enter bill of lading reference"
-                              className={
-                                issue('houseBillOfLading')
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.houseBillOfLading"
-                            >
-                              {formatTextOrDash(ocean?.houseBillOfLading)}
-                            </p>
-                          )}
-                          {issue('houseBillOfLading') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.houseBillOfLading">
-                              {issue('houseBillOfLading')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Master B/L
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              value={textField('masterBillOfLading', ocean?.masterBillOfLading)}
-                              onChange={e => setStageField('masterBillOfLading', e.target.value)}
-                              placeholder="Optional"
-                            />
-                          ) : (
-                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {formatTextOrDash(ocean?.masterBillOfLading)}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Vessel
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.vesselName"
-                              value={textField('vesselName', ocean?.vesselName)}
-                              onChange={e => setStageField('vesselName', e.target.value)}
-                              placeholder="Enter vessel name"
-                              className={
-                                issue('vesselName') ? 'border-rose-500 focus-visible:ring-rose-500' : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.vesselName"
-                            >
-                              {formatTextOrDash(ocean?.vesselName)}
-                            </p>
-                          )}
-                          {issue('vesselName') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.vesselName">
-                              {issue('vesselName')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Voyage
+                            PO Number
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(ocean?.voyageNumber)}
+                            {displayOrderNumber}
                           </p>
                         </div>
                         <div className="space-y-1">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Port of Loading
+                            Supplier
                           </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.portOfLoading"
-                              value={textField('portOfLoading', ocean?.portOfLoading)}
-                              onChange={e => setStageField('portOfLoading', e.target.value)}
-                              placeholder="Enter port of loading"
-                              className={
-                                issue('portOfLoading')
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.portOfLoading"
-                            >
-                              {formatTextOrDash(ocean?.portOfLoading)}
-                            </p>
-                          )}
-                          {issue('portOfLoading') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.portOfLoading">
-                              {issue('portOfLoading')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Port of Discharge
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.portOfDischarge"
-                              value={textField('portOfDischarge', ocean?.portOfDischarge)}
-                              onChange={e => setStageField('portOfDischarge', e.target.value)}
-                              placeholder="Enter port of discharge"
-                              className={
-                                issue('portOfDischarge')
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.portOfDischarge"
-                            >
-                              {formatTextOrDash(ocean?.portOfDischarge)}
-                            </p>
-                          )}
-                          {issue('portOfDischarge') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.portOfDischarge">
-                              {issue('portOfDischarge')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            ETD
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(formatDateOnly(ocean?.estimatedDeparture ?? null))}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            ETA
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(formatDateOnly(ocean?.estimatedArrival ?? null))}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Commercial Invoice
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.commercialInvoiceNumber"
-                              value={textField('commercialInvoiceNumber', ocean?.commercialInvoiceNumber)}
-                              onChange={e => setStageField('commercialInvoiceNumber', e.target.value)}
-                              placeholder="Enter invoice number"
-                              className={
-                                issue('commercialInvoiceNumber')
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.commercialInvoiceNumber"
-                            >
-                              {formatTextOrDash(ocean?.commercialInvoiceNumber)}
-                            </p>
-                          )}
-                          {issue('commercialInvoiceNumber') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.commercialInvoiceNumber">
-                              {issue('commercialInvoiceNumber')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Packing List Ref
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              data-gate-key="details.packingListRef"
-                              value={textField('packingListRef', ocean?.packingListRef)}
-                              onChange={e => setStageField('packingListRef', e.target.value)}
-                              placeholder="Enter packing list reference"
-                              className={
-                                issue('packingListRef')
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                          ) : (
-                            <p
-                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
-                              data-gate-key="details.packingListRef"
-                            >
-                              {formatTextOrDash(ocean?.packingListRef)}
-                            </p>
-                          )}
-                          {issue('packingListRef') && (
-                            <p className="text-xs text-rose-600" data-gate-key="details.packingListRef">
-                              {issue('packingListRef')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            BL Surrender
-                          </p>
-                          {canEditStage ? (
-                            <Input
-                              type="date"
-                              value={textField('surrenderBlDate', order.stageData.warehouse?.surrenderBlDate)}
-                              onChange={e => setStageField('surrenderBlDate', e.target.value)}
-                            />
-                          ) : (
-                            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                              {formatTextOrDash(formatDateOnly(order.stageData.warehouse?.surrenderBlDate ?? null))}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                {/* Warehouse Section */}
-                {(() => {
-                  if (activeViewStage !== 'WAREHOUSE') return null
-                  const wh = order.stageData.warehouse
-                  const canEditStage = !isReadOnly
-
-                  return (
-                    <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        Warehouse
-                      </h4>
-                      {canEditStage ? (
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                          <div className="space-y-1" data-gate-key="details.warehouseCode">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Warehouse
-                            </p>
+                          {canEdit && orderInfoEditing ? (
                             <select
-                              data-gate-key="details.warehouseCode"
-                              value={receiveFormData.warehouseCode}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, warehouseCode: e.target.value }))
-                              }
-                              disabled={warehousesLoading}
-                              className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
-                                gateIssues?.['details.warehouseCode'] ? 'border-rose-500' : ''
+                              data-gate-key="details.counterpartyName"
+                              value={orderInfoDraft.counterpartyName}
+                              onChange={e => applySupplierSelection(e.target.value)}
+                              disabled={orderInfoSaving}
+                              className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
+                                gateIssues?.['details.counterpartyName'] ? 'border-rose-500' : ''
                               }`}
                             >
-                              <option value="">
-                                {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
-                              </option>
-                              {warehouses.map(w => (
-                                <option key={w.code} value={w.code}>
-                                  {w.name} ({w.code})
+                              <option value="">Select supplier</option>
+                              {suppliers.map(supplier => (
+                                <option key={supplier.id} value={supplier.name}>
+                                  {supplier.name}
                                 </option>
                               ))}
                             </select>
-                            {gateIssues?.['details.warehouseCode'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.warehouseCode">
-                                {gateIssues['details.warehouseCode']}
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.counterpartyName"
+                            >
+                              {order.counterpartyName ?? '—'}
+                            </p>
+                          )}
+                          {!orderInfoEditing &&
+                            order.supplier?.phone &&
+                            order.supplier.phone.trim().length > 0 && (
+                              <p className="text-xs text-muted-foreground">
+                                Tel: {order.supplier.phone.trim()}
                               </p>
                             )}
-                          </div>
-
-                          <div className="space-y-1" data-gate-key="details.receiveType">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Receive Type
+                          {gateIssues?.['details.counterpartyName'] && (
+                            <p
+                              className="text-xs text-rose-600"
+                              data-gate-key="details.counterpartyName"
+                            >
+                              {gateIssues['details.counterpartyName']}{' '}
+                              <Link href="/config/suppliers" className="underline">
+                                Open Suppliers
+                              </Link>
                             </p>
-                            <select
-                              data-gate-key="details.receiveType"
-                              value={receiveFormData.receiveType}
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Destination
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatTextOrDash(tenantDestination)}
+                          </p>
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Cargo Ready Date
+                          </p>
+                          {canEdit && orderInfoEditing ? (
+                            <Input
+                              type="date"
+                              data-gate-key="details.expectedDate"
+                              value={orderInfoDraft.expectedDate}
                               onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, receiveType: e.target.value }))
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  expectedDate: e.target.value,
+                                }))
                               }
-                              className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
-                                gateIssues?.['details.receiveType'] ? 'border-rose-500' : ''
+                              disabled={orderInfoSaving}
+                              className={
+                                gateIssues?.['details.expectedDate']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.expectedDate"
+                            >
+                              {order.expectedDate ? formatDateOnly(order.expectedDate) : '—'}
+                            </p>
+                          )}
+                          {gateIssues?.['details.expectedDate'] && (
+                            <p
+                              className="text-xs text-rose-600"
+                              data-gate-key="details.expectedDate"
+                            >
+                              {gateIssues['details.expectedDate']}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Incoterms
+                          </p>
+                          {canEdit && orderInfoEditing ? (
+                            <select
+                              data-gate-key="details.incoterms"
+                              value={orderInfoDraft.incoterms}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  incoterms: e.target.value,
+                                }))
+                              }
+                              disabled={orderInfoSaving}
+                              className={`w-full h-10 px-3 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm text-slate-900 dark:text-slate-100 ${
+                                gateIssues?.['details.incoterms'] ? 'border-rose-500' : ''
                               }`}
                             >
-                              <option value="">Select receive type</option>
-                              <option value="LCL">LCL</option>
-                              <option value="CONTAINER_20">20&apos; Container</option>
-                              <option value="CONTAINER_40">40&apos; Container</option>
-                              <option value="CONTAINER_40_HQ">40&apos; HQ Container</option>
-                              <option value="CONTAINER_45_HQ">45&apos; HQ Container</option>
+                              <option value="">Select incoterms</option>
+                              {INCOTERMS_OPTIONS.map(option => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
                             </select>
-                            {gateIssues?.['details.receiveType'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.receiveType">
-                                {gateIssues['details.receiveType']}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1 col-span-2" data-gate-key="details.customsEntryNumber">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Import Entry / MRN (optional)
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.incoterms"
+                            >
+                              {order.incoterms ?? '—'}
                             </p>
-                            <Input
-                              data-gate-key="details.customsEntryNumber"
-                              value={receiveFormData.customsEntryNumber}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, customsEntryNumber: e.target.value }))
-                              }
-                              placeholder="Optional (e.g., entry #, MRN, or broker reference)"
-                              className={
-                                gateIssues?.['details.customsEntryNumber']
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                            {gateIssues?.['details.customsEntryNumber'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.customsEntryNumber">
-                                {gateIssues['details.customsEntryNumber']}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1" data-gate-key="details.customsClearedDate">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Customs Cleared Date
-                            </p>
-                            <Input
-                              type="date"
-                              data-gate-key="details.customsClearedDate"
-                              value={receiveFormData.customsClearedDate}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, customsClearedDate: e.target.value }))
-                              }
-                              className={
-                                gateIssues?.['details.customsClearedDate']
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                            {gateIssues?.['details.customsClearedDate'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.customsClearedDate">
-                                {gateIssues['details.customsClearedDate']}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1" data-gate-key="details.receivedDate">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Received Date
-                            </p>
-                            <Input
-                              type="date"
-                              data-gate-key="details.receivedDate"
-                              value={receiveFormData.receivedDate}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, receivedDate: e.target.value }))
-                              }
-                              className={
-                                gateIssues?.['details.receivedDate']
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                            {gateIssues?.['details.receivedDate'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.receivedDate">
-                                {gateIssues['details.receivedDate']}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4" data-gate-key="details.discrepancyNotes">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                              Discrepancy Notes
-                            </p>
-                            <Textarea
-                              value={receiveFormData.discrepancyNotes}
-                              onChange={e =>
-                                setReceiveFormData(prev => ({ ...prev, discrepancyNotes: e.target.value }))
-                              }
-                              placeholder="Required if received cartons differ from ordered..."
-                              className={
-                                gateIssues?.['details.discrepancyNotes']
-                                  ? 'border-rose-500 focus-visible:ring-rose-500'
-                                  : undefined
-                              }
-                            />
-                            {gateIssues?.['details.discrepancyNotes'] && (
-                              <p className="text-xs text-rose-600" data-gate-key="details.discrepancyNotes">
-                                {gateIssues['details.discrepancyNotes']}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Warehouse
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(wh?.warehouseName ?? wh?.warehouseCode)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Import Entry
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(wh?.customsEntryNumber)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Customs Cleared
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(formatDateOnly(wh?.customsClearedDate ?? null))}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Received Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(formatDateOnly(wh?.receivedDate ?? null))}
-                              </p>
-                            </div>
-                          </div>
-                          {wh?.discrepancyNotes && (
-                            <div className="mt-4">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-                                Discrepancy Notes
-                              </p>
-                              <p className="text-sm text-slate-700 dark:text-slate-300">
-                                {wh.discrepancyNotes}
-                              </p>
-                            </div>
                           )}
-                        </>
-                      )}
-                    </div>
-                  )
-                })()}
+                          {gateIssues?.['details.incoterms'] && (
+                            <p className="text-xs text-rose-600" data-gate-key="details.incoterms">
+                              {gateIssues['details.incoterms']}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Payment Terms
+                          </p>
+                          {canEdit && orderInfoEditing ? (
+                            <Input
+                              data-gate-key="details.paymentTerms"
+                              value={orderInfoDraft.paymentTerms}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  paymentTerms: e.target.value,
+                                }))
+                              }
+                              placeholder="Payment terms"
+                              disabled={orderInfoSaving}
+                              className={
+                                gateIssues?.['details.paymentTerms']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.paymentTerms"
+                            >
+                              {order.paymentTerms ?? '—'}
+                            </p>
+                          )}
+                          {gateIssues?.['details.paymentTerms'] && (
+                            <p
+                              className="text-xs text-rose-600"
+                              data-gate-key="details.paymentTerms"
+                            >
+                              {gateIssues['details.paymentTerms']}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Mfg Start Date
+                          </p>
+                          {canEdit && orderInfoEditing ? (
+                            <Input
+                              type="date"
+                              data-gate-key="details.manufacturingStartDate"
+                              value={orderInfoDraft.manufacturingStartDate}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({
+                                  ...prev,
+                                  manufacturingStartDate: e.target.value,
+                                }))
+                              }
+                              disabled={orderInfoSaving}
+                              className={
+                                gateIssues?.['details.manufacturingStartDate']
+                                  ? 'border-rose-500 focus-visible:ring-rose-500'
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <p
+                              className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                              data-gate-key="details.manufacturingStartDate"
+                            >
+                              {order.manufacturingStartDate
+                                ? formatDateOnly(order.manufacturingStartDate)
+                                : '—'}
+                            </p>
+                          )}
+                          {gateIssues?.['details.manufacturingStartDate'] && (
+                            <p
+                              className="text-xs text-rose-600"
+                              data-gate-key="details.manufacturingStartDate"
+                            >
+                              {gateIssues['details.manufacturingStartDate']}
+                            </p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                            Created
+                          </p>
+                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {formatTextOrDash(formatDateOnly(order.createdAt))}
+                            {order.createdByName ? ` by ${order.createdByName}` : ''}
+                          </p>
+                        </div>
 
-                {/* Shipped Section */}
-                {(() => {
-                  if (activeViewStage !== 'SHIPPED') return null
-                  const shipped = order.stageData.shipped
-                  const hasData =
-                    shipped?.shipToName ||
-                    shipped?.shippingCarrier ||
-                    shipped?.trackingNumber ||
-                    shipped?.shippedDate
-                  if (!hasData) return null
-                  return (
-                    <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                        Shipped
-                      </h4>
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                        <div className="space-y-1 col-span-2">
+                        <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                             Ship To
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(
-                              [
-                                shipped?.shipToName,
-                                shipped?.shipToAddress,
-                                shipped?.shipToCity,
-                                shipped?.shipToCountry,
-                              ]
-                                .filter(Boolean)
-                                .join(', ')
-                            )}
+                            {(() => {
+                              const parts: string[] = []
+                              parts.push(BUYER_LEGAL_ENTITY.name)
+                              parts.push(BUYER_LEGAL_ENTITY.address)
+                              if (tenantDisplayCode.trim().length > 0) {
+                                parts.push(tenantDisplayCode.trim().toUpperCase())
+                              }
+                              parts.push(BUYER_LEGAL_ENTITY.phone)
+                              return parts.join(' • ')
+                            })()}
                           </p>
                         </div>
-                        <div className="space-y-1">
+
+                        <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
                           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Carrier
+                            Supplier Banking
                           </p>
                           <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(shipped?.shippingCarrier)}
+                            {order.supplier?.bankingDetails?.trim()
+                              ? 'Configured'
+                              : 'Not configured'}
                           </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Method
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(shipped?.shippingMethod)}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Tracking
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(shipped?.trackingNumber)}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Shipped Date
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(
-                              formatDateOnly(shipped?.shippedDate ?? shipped?.shippedAt ?? null)
-                            )}
-                          </p>
-                        </div>
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                            Delivered Date
-                          </p>
-                          <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {formatTextOrDash(formatDateOnly(shipped?.deliveredDate ?? null))}
-                          </p>
+                          {!order.supplier?.bankingDetails?.trim() && (
+                            <p className="text-xs text-muted-foreground">
+                              Set supplier banking details in Suppliers.
+                            </p>
+                          )}
                         </div>
                       </div>
+                      {(order.notes || (canEdit && orderInfoEditing)) && (
+                        <div className="mt-4">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                            Notes
+                          </p>
+                          {canEdit && orderInfoEditing ? (
+                            <Textarea
+                              value={orderInfoDraft.notes}
+                              onChange={e =>
+                                setOrderInfoDraft(prev => ({ ...prev, notes: e.target.value }))
+                              }
+                              placeholder="Optional internal notes..."
+                              disabled={orderInfoSaving}
+                              className="min-h-[88px]"
+                            />
+                          ) : (
+                            <p className="text-sm text-slate-700 dark:text-slate-300">
+                              {order.notes}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
-                  )
-                })()}
-              </div>
+
+                    {/* Manufacturing Section */}
+                    {(() => {
+                      if (activeViewStage !== 'MANUFACTURING') return null
+                      const mfg = order.stageData.manufacturing
+                      const canEditStage = !isReadOnly
+
+                      const expectedCompletionValue =
+                        getStageField('expectedCompletionDate') ??
+                        formatDateOnly(mfg?.expectedCompletionDate ?? null)
+                      const packagingNotesValue =
+                        getStageField('packagingNotes') ??
+                        (typeof mfg?.packagingNotes === 'string' ? mfg.packagingNotes : '')
+
+                      return (
+                        <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                            Manufacturing
+                          </h4>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Expected Completion
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  type="date"
+                                  value={expectedCompletionValue}
+                                  onChange={e =>
+                                    setStageField('expectedCompletionDate', e.target.value)
+                                  }
+                                />
+                              ) : (
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  {formatTextOrDash(
+                                    formatDateOnly(mfg?.expectedCompletionDate ?? null)
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Cartons
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {mfg?.totalCartons?.toLocaleString() ?? '—'}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Pallets
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {mfg?.totalPallets?.toLocaleString() ?? '—'}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Weight ({weightUnit})
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {mfg?.totalWeightKg != null
+                                  ? convertWeightFromKg(
+                                      mfg.totalWeightKg,
+                                      unitSystem
+                                    ).toLocaleString(undefined, {
+                                      maximumFractionDigits: 2,
+                                    })
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Volume (CBM)
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {mfg?.totalVolumeCbm?.toLocaleString() ?? '—'}
+                              </p>
+                            </div>
+                            <div className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Packaging Notes
+                              </p>
+                              {canEditStage ? (
+                                <Textarea
+                                  value={packagingNotesValue}
+                                  onChange={e => setStageField('packagingNotes', e.target.value)}
+                                  placeholder="Optional packaging notes..."
+                                  className="min-h-[88px]"
+                                />
+                              ) : (
+                                <p className="text-sm text-slate-700 dark:text-slate-300">
+                                  {typeof mfg?.packagingNotes === 'string' &&
+                                  mfg.packagingNotes.trim().length > 0
+                                    ? mfg.packagingNotes
+                                    : '—'}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Transit Section */}
+                    {(() => {
+                      if (activeViewStage !== 'OCEAN') return null
+                      const ocean = order.stageData.ocean
+                      const canEditStage = !isReadOnly
+                      const textField = (
+                        key: string,
+                        existing: string | null | undefined
+                      ): string =>
+                        getStageField(key) ?? (typeof existing === 'string' ? existing : '')
+                      const issue = (key: string): string | null =>
+                        gateIssues?.[`details.${key}`] ?? null
+
+                      return (
+                        <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                            Transit
+                          </h4>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                House B/L
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.houseBillOfLading"
+                                  value={textField('houseBillOfLading', ocean?.houseBillOfLading)}
+                                  onChange={e => setStageField('houseBillOfLading', e.target.value)}
+                                  placeholder="Enter bill of lading reference"
+                                  className={
+                                    issue('houseBillOfLading')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.houseBillOfLading"
+                                >
+                                  {formatTextOrDash(ocean?.houseBillOfLading)}
+                                </p>
+                              )}
+                              {issue('houseBillOfLading') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.houseBillOfLading"
+                                >
+                                  {issue('houseBillOfLading')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Master B/L
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  value={textField('masterBillOfLading', ocean?.masterBillOfLading)}
+                                  onChange={e =>
+                                    setStageField('masterBillOfLading', e.target.value)
+                                  }
+                                  placeholder="Optional"
+                                />
+                              ) : (
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  {formatTextOrDash(ocean?.masterBillOfLading)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Vessel
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.vesselName"
+                                  value={textField('vesselName', ocean?.vesselName)}
+                                  onChange={e => setStageField('vesselName', e.target.value)}
+                                  placeholder="Enter vessel name"
+                                  className={
+                                    issue('vesselName')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.vesselName"
+                                >
+                                  {formatTextOrDash(ocean?.vesselName)}
+                                </p>
+                              )}
+                              {issue('vesselName') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.vesselName"
+                                >
+                                  {issue('vesselName')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Voyage
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(ocean?.voyageNumber)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Port of Loading
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.portOfLoading"
+                                  value={textField('portOfLoading', ocean?.portOfLoading)}
+                                  onChange={e => setStageField('portOfLoading', e.target.value)}
+                                  placeholder="Enter port of loading"
+                                  className={
+                                    issue('portOfLoading')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.portOfLoading"
+                                >
+                                  {formatTextOrDash(ocean?.portOfLoading)}
+                                </p>
+                              )}
+                              {issue('portOfLoading') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.portOfLoading"
+                                >
+                                  {issue('portOfLoading')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Port of Discharge
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.portOfDischarge"
+                                  value={textField('portOfDischarge', ocean?.portOfDischarge)}
+                                  onChange={e => setStageField('portOfDischarge', e.target.value)}
+                                  placeholder="Enter port of discharge"
+                                  className={
+                                    issue('portOfDischarge')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.portOfDischarge"
+                                >
+                                  {formatTextOrDash(ocean?.portOfDischarge)}
+                                </p>
+                              )}
+                              {issue('portOfDischarge') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.portOfDischarge"
+                                >
+                                  {issue('portOfDischarge')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                ETD
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(
+                                  formatDateOnly(ocean?.estimatedDeparture ?? null)
+                                )}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                ETA
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(formatDateOnly(ocean?.estimatedArrival ?? null))}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Commercial Invoice
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.commercialInvoiceNumber"
+                                  value={textField(
+                                    'commercialInvoiceNumber',
+                                    ocean?.commercialInvoiceNumber
+                                  )}
+                                  onChange={e =>
+                                    setStageField('commercialInvoiceNumber', e.target.value)
+                                  }
+                                  placeholder="Enter invoice number"
+                                  className={
+                                    issue('commercialInvoiceNumber')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.commercialInvoiceNumber"
+                                >
+                                  {formatTextOrDash(ocean?.commercialInvoiceNumber)}
+                                </p>
+                              )}
+                              {issue('commercialInvoiceNumber') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.commercialInvoiceNumber"
+                                >
+                                  {issue('commercialInvoiceNumber')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Packing List Ref
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  data-gate-key="details.packingListRef"
+                                  value={textField('packingListRef', ocean?.packingListRef)}
+                                  onChange={e => setStageField('packingListRef', e.target.value)}
+                                  placeholder="Enter packing list reference"
+                                  className={
+                                    issue('packingListRef')
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                              ) : (
+                                <p
+                                  className="text-sm font-medium text-slate-900 dark:text-slate-100"
+                                  data-gate-key="details.packingListRef"
+                                >
+                                  {formatTextOrDash(ocean?.packingListRef)}
+                                </p>
+                              )}
+                              {issue('packingListRef') && (
+                                <p
+                                  className="text-xs text-rose-600"
+                                  data-gate-key="details.packingListRef"
+                                >
+                                  {issue('packingListRef')}
+                                </p>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                BL Surrender
+                              </p>
+                              {canEditStage ? (
+                                <Input
+                                  type="date"
+                                  value={textField(
+                                    'surrenderBlDate',
+                                    order.stageData.warehouse?.surrenderBlDate
+                                  )}
+                                  onChange={e => setStageField('surrenderBlDate', e.target.value)}
+                                />
+                              ) : (
+                                <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                  {formatTextOrDash(
+                                    formatDateOnly(
+                                      order.stageData.warehouse?.surrenderBlDate ?? null
+                                    )
+                                  )}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Warehouse Section */}
+                    {(() => {
+                      if (activeViewStage !== 'WAREHOUSE') return null
+                      const wh = order.stageData.warehouse
+                      const canEditStage = !isReadOnly
+
+                      return (
+                        <div className="mb-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                            Warehouse
+                          </h4>
+                          {canEditStage ? (
+                            <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                              <div className="space-y-1" data-gate-key="details.warehouseCode">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Warehouse
+                                </p>
+                                <select
+                                  data-gate-key="details.warehouseCode"
+                                  value={receiveFormData.warehouseCode}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      warehouseCode: e.target.value,
+                                    }))
+                                  }
+                                  disabled={warehousesLoading}
+                                  className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                                    gateIssues?.['details.warehouseCode'] ? 'border-rose-500' : ''
+                                  }`}
+                                >
+                                  <option value="">
+                                    {warehousesLoading ? 'Loading warehouses…' : 'Select warehouse'}
+                                  </option>
+                                  {warehouses.map(w => (
+                                    <option key={w.code} value={w.code}>
+                                      {w.name} ({w.code})
+                                    </option>
+                                  ))}
+                                </select>
+                                {gateIssues?.['details.warehouseCode'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.warehouseCode"
+                                  >
+                                    {gateIssues['details.warehouseCode']}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1" data-gate-key="details.receiveType">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Receive Type
+                                </p>
+                                <select
+                                  data-gate-key="details.receiveType"
+                                  value={receiveFormData.receiveType}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      receiveType: e.target.value,
+                                    }))
+                                  }
+                                  className={`w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm ${
+                                    gateIssues?.['details.receiveType'] ? 'border-rose-500' : ''
+                                  }`}
+                                >
+                                  <option value="">Select receive type</option>
+                                  <option value="LCL">LCL</option>
+                                  <option value="CONTAINER_20">20&apos; Container</option>
+                                  <option value="CONTAINER_40">40&apos; Container</option>
+                                  <option value="CONTAINER_40_HQ">40&apos; HQ Container</option>
+                                  <option value="CONTAINER_45_HQ">45&apos; HQ Container</option>
+                                </select>
+                                {gateIssues?.['details.receiveType'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.receiveType"
+                                  >
+                                    {gateIssues['details.receiveType']}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div
+                                className="space-y-1 col-span-2"
+                                data-gate-key="details.customsEntryNumber"
+                              >
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Import Entry / MRN (optional)
+                                </p>
+                                <Input
+                                  data-gate-key="details.customsEntryNumber"
+                                  value={receiveFormData.customsEntryNumber}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      customsEntryNumber: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Optional (e.g., entry #, MRN, or broker reference)"
+                                  className={
+                                    gateIssues?.['details.customsEntryNumber']
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                                {gateIssues?.['details.customsEntryNumber'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.customsEntryNumber"
+                                  >
+                                    {gateIssues['details.customsEntryNumber']}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1" data-gate-key="details.customsClearedDate">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Customs Cleared Date
+                                </p>
+                                <Input
+                                  type="date"
+                                  data-gate-key="details.customsClearedDate"
+                                  value={receiveFormData.customsClearedDate}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      customsClearedDate: e.target.value,
+                                    }))
+                                  }
+                                  className={
+                                    gateIssues?.['details.customsClearedDate']
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                                {gateIssues?.['details.customsClearedDate'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.customsClearedDate"
+                                  >
+                                    {gateIssues['details.customsClearedDate']}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="space-y-1" data-gate-key="details.receivedDate">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Received Date
+                                </p>
+                                <Input
+                                  type="date"
+                                  data-gate-key="details.receivedDate"
+                                  value={receiveFormData.receivedDate}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      receivedDate: e.target.value,
+                                    }))
+                                  }
+                                  className={
+                                    gateIssues?.['details.receivedDate']
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                                {gateIssues?.['details.receivedDate'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.receivedDate"
+                                  >
+                                    {gateIssues['details.receivedDate']}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div
+                                className="space-y-1 col-span-2 md:col-span-3 lg:col-span-4"
+                                data-gate-key="details.discrepancyNotes"
+                              >
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                  Discrepancy Notes
+                                </p>
+                                <Textarea
+                                  value={receiveFormData.discrepancyNotes}
+                                  onChange={e =>
+                                    setReceiveFormData(prev => ({
+                                      ...prev,
+                                      discrepancyNotes: e.target.value,
+                                    }))
+                                  }
+                                  placeholder="Required if received cartons differ from ordered..."
+                                  className={
+                                    gateIssues?.['details.discrepancyNotes']
+                                      ? 'border-rose-500 focus-visible:ring-rose-500'
+                                      : undefined
+                                  }
+                                />
+                                {gateIssues?.['details.discrepancyNotes'] && (
+                                  <p
+                                    className="text-xs text-rose-600"
+                                    data-gate-key="details.discrepancyNotes"
+                                  >
+                                    {gateIssues['details.discrepancyNotes']}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    Warehouse
+                                  </p>
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatTextOrDash(wh?.warehouseName ?? wh?.warehouseCode)}
+                                  </p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    Import Entry
+                                  </p>
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatTextOrDash(wh?.customsEntryNumber)}
+                                  </p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    Customs Cleared
+                                  </p>
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatTextOrDash(
+                                      formatDateOnly(wh?.customsClearedDate ?? null)
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                    Received Date
+                                  </p>
+                                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatTextOrDash(formatDateOnly(wh?.receivedDate ?? null))}
+                                  </p>
+                                </div>
+                              </div>
+                              {wh?.discrepancyNotes && (
+                                <div className="mt-4">
+                                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
+                                    Discrepancy Notes
+                                  </p>
+                                  <p className="text-sm text-slate-700 dark:text-slate-300">
+                                    {wh.discrepancyNotes}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
+
+                    {/* Shipped Section */}
+                    {(() => {
+                      if (activeViewStage !== 'SHIPPED') return null
+                      const shipped = order.stageData.shipped
+                      const hasData =
+                        shipped?.shipToName ||
+                        shipped?.shippingCarrier ||
+                        shipped?.trackingNumber ||
+                        shipped?.shippedDate
+                      if (!hasData) return null
+                      return (
+                        <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+                            Shipped
+                          </h4>
+                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
+                            <div className="space-y-1 col-span-2">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Ship To
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(
+                                  [
+                                    shipped?.shipToName,
+                                    shipped?.shipToAddress,
+                                    shipped?.shipToCity,
+                                    shipped?.shipToCountry,
+                                  ]
+                                    .filter(Boolean)
+                                    .join(', ')
+                                )}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Carrier
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(shipped?.shippingCarrier)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Method
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(shipped?.shippingMethod)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Tracking
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(shipped?.trackingNumber)}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Shipped Date
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(
+                                  formatDateOnly(shipped?.shippedDate ?? shipped?.shippedAt ?? null)
+                                )}
+                              </p>
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                                Delivered Date
+                              </p>
+                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                {formatTextOrDash(formatDateOnly(shipped?.deliveredDate ?? null))}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
                 ) : null}
               </>
             )}
@@ -6933,106 +7761,143 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                 {!isCreate && order && (
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
-                {auditLogsLoading ? (
-                  <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Loading history…
-                  </div>
-                ) : (
-                  <table className="w-full table-fixed text-sm">
-                    <thead>
-                      <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                        <th className="w-8 font-medium text-muted-foreground px-2 py-2 text-xs"></th>
-                        <th className="w-[160px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Action</th>
-                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">Previous</th>
-                        <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">New</th>
-                        <th className="w-[100px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">By</th>
-                        <th className="w-[120px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditLogs.length > 0 ? (
-                        auditLogs.map(entry => {
-                          const newValue = toAuditRecord(entry.newValue)
-                          const title = describeAuditAction(entry.action, newValue)
-                          const changeRows = describeAuditChangeRows(entry)
-                          const actor = entry.changedBy?.fullName || 'Unknown'
-                          const { Icon, iconClassName } = getAuditActionTheme(entry.action)
+                    {auditLogsLoading ? (
+                      <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Loading history…
+                      </div>
+                    ) : (
+                      <table className="w-full table-fixed text-sm">
+                        <thead>
+                          <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                            <th className="w-8 font-medium text-muted-foreground px-2 py-2 text-xs"></th>
+                            <th className="w-[160px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">
+                              Action
+                            </th>
+                            <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">
+                              Previous
+                            </th>
+                            <th className="font-medium text-muted-foreground px-2 py-2 text-xs text-left">
+                              New
+                            </th>
+                            <th className="w-[100px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">
+                              By
+                            </th>
+                            <th className="w-[120px] font-medium text-muted-foreground px-2 py-2 text-xs text-left">
+                              Date
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditLogs.length > 0 ? (
+                            auditLogs.map(entry => {
+                              const newValue = toAuditRecord(entry.newValue)
+                              const title = describeAuditAction(entry.action, newValue)
+                              const changeRows = describeAuditChangeRows(entry)
+                              const actor = entry.changedBy?.fullName || 'Unknown'
+                              const { Icon, iconClassName } = getAuditActionTheme(entry.action)
 
-                          return (
-                            <tr key={entry.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 align-top">
-                              <td className="px-2 py-2">
-                                <Icon className={`h-4 w-4 ${iconClassName}`} />
-                              </td>
-                              <td className="px-2 py-2 font-medium text-foreground overflow-hidden">
-                                <span className="block truncate" title={title}>
-                                  {title}
-                                </span>
-                              </td>
-                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
-                                {changeRows.length > 0 ? (
-                                  <div className="space-y-0.5">
-                                    {changeRows.map((row, i) => (
-                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.previous}`}>
-                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
-                                        {row.previous}
+                              return (
+                                <tr
+                                  key={entry.id}
+                                  className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 align-top"
+                                >
+                                  <td className="px-2 py-2">
+                                    <Icon className={`h-4 w-4 ${iconClassName}`} />
+                                  </td>
+                                  <td className="px-2 py-2 font-medium text-foreground overflow-hidden">
+                                    <span className="block truncate" title={title}>
+                                      {title}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                    {changeRows.length > 0 ? (
+                                      <div className="space-y-0.5">
+                                        {changeRows.map((row, i) => (
+                                          <div
+                                            key={i}
+                                            className="text-xs truncate"
+                                            title={`${row.field}: ${row.previous}`}
+                                          >
+                                            <span className="text-muted-foreground/70">
+                                              {row.field}:
+                                            </span>{' '}
+                                            {row.previous}
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : '—'}
-                              </td>
-                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
-                                {changeRows.length > 0 ? (
-                                  <div className="space-y-0.5">
-                                    {changeRows.map((row, i) => (
-                                      <div key={i} className="text-xs truncate" title={`${row.field}: ${row.current}`}>
-                                        <span className="text-muted-foreground/70">{row.field}:</span>{' '}
-                                        {row.current}
+                                    ) : (
+                                      '—'
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                    {changeRows.length > 0 ? (
+                                      <div className="space-y-0.5">
+                                        {changeRows.map((row, i) => (
+                                          <div
+                                            key={i}
+                                            className="text-xs truncate"
+                                            title={`${row.field}: ${row.current}`}
+                                          >
+                                            <span className="text-muted-foreground/70">
+                                              {row.field}:
+                                            </span>{' '}
+                                            {row.current}
+                                          </div>
+                                        ))}
                                       </div>
-                                    ))}
-                                  </div>
-                                ) : '—'}
-                              </td>
-                              <td className="px-2 py-2 text-muted-foreground overflow-hidden">
-                                <span className="block truncate" title={actor}>
-                                  {actor}
-                                </span>
-                              </td>
-                              <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
-                                {formatDateTime(entry.createdAt)}
+                                    ) : (
+                                      '—'
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                    <span className="block truncate" title={actor}>
+                                      {actor}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
+                                    {formatDateTime(entry.createdAt)}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          ) : order.approvalHistory && order.approvalHistory.length > 0 ? (
+                            order.approvalHistory.map((approval, index) => (
+                              <tr
+                                key={index}
+                                className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                              >
+                                <td className="px-2 py-2">
+                                  <Check className="h-4 w-4 text-emerald-600" />
+                                </td>
+                                <td className="px-2 py-2 font-medium text-foreground">
+                                  {approval.stage}
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground">—</td>
+                                <td className="px-2 py-2 text-muted-foreground">—</td>
+                                <td className="px-2 py-2 text-muted-foreground overflow-hidden">
+                                  <span className="block truncate">
+                                    {approval.approvedBy || 'Unknown'}
+                                  </span>
+                                </td>
+                                <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
+                                  {approval.approvedAt ? formatDateTime(approval.approvedAt) : '—'}
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td
+                                colSpan={6}
+                                className="px-2 py-6 text-center text-muted-foreground"
+                              >
+                                No activity recorded yet.
                               </td>
                             </tr>
-                          )
-                        })
-                      ) : order.approvalHistory && order.approvalHistory.length > 0 ? (
-                        order.approvalHistory.map((approval, index) => (
-                          <tr key={index} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
-                            <td className="px-2 py-2">
-                              <Check className="h-4 w-4 text-emerald-600" />
-                            </td>
-                            <td className="px-2 py-2 font-medium text-foreground">
-                              {approval.stage}
-                            </td>
-                            <td className="px-2 py-2 text-muted-foreground">—</td>
-                            <td className="px-2 py-2 text-muted-foreground">—</td>
-                            <td className="px-2 py-2 text-muted-foreground overflow-hidden">
-                              <span className="block truncate">{approval.approvedBy || 'Unknown'}</span>
-                            </td>
-                            <td className="px-2 py-2 text-muted-foreground whitespace-nowrap text-xs">
-                              {approval.approvedAt ? formatDateTime(approval.approvedAt) : '—'}
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={6} className="px-2 py-6 text-center text-muted-foreground">
-                            No activity recorded yet.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                )}
+                          )}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </>
@@ -7040,7 +7905,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           </div>
         </div>
 
-        
         {/* Confirmation Dialog */}
         <ConfirmDialog
           isOpen={confirmDialog.open}

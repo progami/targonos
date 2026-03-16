@@ -8,6 +8,7 @@ import { chromium } from 'playwright'
 
 const CAPTURE_TIMEOUT_MS = 180_000
 const AUTOSCROLL_MAX_MS = 25_000
+const CLOSE_TIMEOUT_MS = 5_000
 
 function argValue(flag) {
   const index = process.argv.indexOf(flag)
@@ -58,6 +59,23 @@ function killChromeForUserDataDir(userDataDir) {
   }
 }
 
+async function closeContextWithTimeout(context) {
+  let timeoutId
+  try {
+    await Promise.race([
+      context.close(),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Closing browser context timed out after ${CLOSE_TIMEOUT_MS}ms`))
+        }, CLOSE_TIMEOUT_MS)
+        if (typeof timeoutId.unref === 'function') timeoutId.unref()
+      }),
+    ])
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
 async function main() {
   const asin = requiredArg('--asin', argValue('--asin'))
   const outputPath = requiredArg('--output', argValue('--output'))
@@ -68,11 +86,14 @@ async function main() {
   const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-daily-visuals-'))
+  let captureCompleted = false
+  let captureError = null
+  let stage = 'launch'
   let timeoutId
   try {
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`Capture timed out after ${CAPTURE_TIMEOUT_MS}ms for ${asin}`))
+        reject(new Error(`Capture timed out after ${CAPTURE_TIMEOUT_MS}ms for ${asin} during ${stage}`))
       }, CAPTURE_TIMEOUT_MS)
       if (typeof timeoutId.unref === 'function') timeoutId.unref()
     })
@@ -88,6 +109,7 @@ async function main() {
           locale: 'en-US',
         })
         try {
+          stage = 'page'
           const page = context.pages()[0] ?? await context.newPage()
           page.setDefaultTimeout(90_000)
           page.setDefaultNavigationTimeout(90_000)
@@ -97,16 +119,33 @@ async function main() {
             return route.continue()
           })
 
+          stage = 'goto'
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 })
+          stage = 'productTitle'
           await page.waitForSelector('#productTitle', { timeout: 60_000 })
 
+          stage = 'settle-before-scroll'
           await page.waitForTimeout(1500)
+          stage = 'autoscroll'
           await autoScroll(page)
+          stage = 'settle-before-screenshot'
           await page.waitForTimeout(1500)
 
+          stage = 'screenshot'
           await page.screenshot({ path: outputPath, fullPage: true, timeout: 30_000 })
+          captureCompleted = true
+        } catch (error) {
+          captureError = error
+          throw error
         } finally {
-          await context.close().catch(() => {})
+          stage = 'close-context'
+          try {
+            await closeContextWithTimeout(context)
+          } catch (error) {
+            if (!captureCompleted && !captureError) {
+              throw error
+            }
+          }
         }
       })(),
       timeoutPromise,
