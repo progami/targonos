@@ -6,14 +6,14 @@ import { usePageState } from '@/lib/store/page-state'
 import { useRouter } from 'next/navigation'
 import { useClientLogger } from '@/hooks/useClientLogger'
 import {
- Home,
- TrendingUp,
- Calendar,
- ChevronDown,
- Package,
- FileText,
- AlertTriangle,
- DollarSign,
+  Home,
+  TrendingUp,
+  Calendar,
+  ChevronDown,
+  Package,
+  FileText,
+  AlertTriangle,
+  DollarSign,
 } from '@/lib/lucide-icons'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
@@ -28,386 +28,425 @@ import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import { withBasePath } from '@/lib/utils/base-path'
 
 interface DashboardStats {
- totalInventory: number
- inventoryChange: string
- inventoryTrend: 'up' | 'down' | 'neutral'
- storageCost: string
- costChange: string
- costTrend: 'up' | 'down' | 'neutral'
- activeSkus: number
- costBreakdown: {
-   inbound: number
-   outbound: number
-   storage: number
-   forwarding: number
-   other: number
-   total: number
- }
- fbaDiscrepancies: {
-   total: number
-   mismatch: number
-   warnings: number
- }
- orderPipeline: {
-   draft: number
-   issued: number
-   manufacturing: number
-   inTransit: number
-   atWarehouse: number
- }
- pendingFulfillmentOrders: number
- topWarehouses: Array<{
-   code: string
-   name: string
-   cartons: number
- }>
+  totalInventory: number
+  inventoryChange: string
+  inventoryTrend: 'up' | 'down' | 'neutral'
+  storageCost: string
+  costChange: string
+  costTrend: 'up' | 'down' | 'neutral'
+  activeSkus: number
+  costBreakdown: {
+    inbound: number
+    outbound: number
+    storage: number
+    forwarding: number
+    other: number
+    total: number
+  }
+  fbaDiscrepancies: {
+    total: number
+    mismatch: number
+    warnings: number
+  }
+  orderPipeline: {
+    draft: number
+    issued: number
+    manufacturing: number
+    inTransit: number
+    atWarehouse: number
+  }
+  pendingFulfillmentOrders: number
+  topWarehouses: Array<{
+    code: string
+    name: string
+    cartons: number
+  }>
 }
 
-
 interface TimeRange {
- label: string
- value: string
- startDate: Date
- endDate: Date
+  label: string
+  value: string
+  startDate: Date | null
+  endDate: Date | null
 }
 
 interface ChartData {
- inventoryTrend: Array<{ date: string; inventory: number }>
- costTrend: Array<{ date: string; cost: number }>
- warehouseDistribution: Array<{ name: string; value: number; percentage: number }>
- recentTransactions: Array<{
- id: string
- type: string
- sku: string
- quantity: number
- warehouse: string
- date: string
- details?: string
- }>
- // Market data
- amazonMetrics?: {
- pendingShipments: number
- inboundInventory: number
- activeListings: number
- }
- reorderAlerts?: number
- plannedShipments?: number
+  inventoryTrend: Array<{ date: string; inventory: number }>
+  costTrend: Array<{ date: string; cost: number }>
+  warehouseDistribution: Array<{ name: string; value: number; percentage: number }>
+  recentTransactions: Array<{
+    id: string
+    type: string
+    sku: string
+    quantity: number
+    warehouse: string
+    date: string
+    details?: string
+  }>
+  // Market data
+  amazonMetrics?: {
+    pendingShipments: number
+    inboundInventory: number
+    activeListings: number
+  }
+  reorderAlerts?: number
+  plannedShipments?: number
 }
 
 const PAGE_KEY = '/dashboard'
 
 export default function DashboardPage() {
- const { data: session, status } = useSession()
- const router = useRouter()
- const { logAction, logPerformance, logError } = useClientLogger()
- const pageState = usePageState(PAGE_KEY)
- const [stats, setStats] = useState<DashboardStats | null>(null)
- const [chartData, setChartData] = useState<ChartData | null>(null)
- const [loadingStats, setLoadingStats] = useState(true)
- const selectedTimeRange = (pageState.custom?.timeRange as string) ?? 'yearToDate'
- const setSelectedTimeRange = (value: string) => pageState.setCustom('timeRange', value)
- const [showTimeRangeDropdown, setShowTimeRangeDropdown] = useState(false)
- const [hasError, setHasError] = useState(false)
- 
- // Trust middleware auth check - don't redirect on client
- // The middleware already validates the portal session
- useEffect(() => {
- // Commented out to trust middleware auth
- // if (status === 'unauthenticated') {
- // router.push('/auth/login?callbackUrl=/dashboard')
- // }
- }, [status, router])
- 
- // Always use real data, never demo data
- const useDemoData = false
- const _isAdmin = session?.user?.role === 'admin'
- 
- const timeRanges: Record<string, TimeRange> = useMemo(() => ({
- current: {
- label: 'Current Month',
- value: 'current',
- startDate: startOfMonth(new Date()),
- endDate: endOfMonth(new Date())
- },
- last30: {
- label: 'Last 30 Days',
- value: 'last30',
- startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
- endDate: new Date()
- },
- last90: {
- label: 'Last 90 Days',
- value: 'last90',
- startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
- endDate: new Date()
- },
- lastMonth: {
- label: 'Last Month',
- value: 'lastMonth',
- startDate: startOfMonth(subMonths(new Date(), 1)),
- endDate: endOfMonth(subMonths(new Date(), 1))
- },
- yearToDate: {
- label: 'Year to Date',
- value: 'yearToDate',
- startDate: new Date(new Date().getFullYear(), 0, 1),
- endDate: new Date()
- },
- lastYear: {
- label: 'Last Year',
- value: 'lastYear',
- startDate: new Date(new Date().getFullYear() - 1, 0, 1),
- endDate: new Date(new Date().getFullYear() - 1, 11, 31)
- }
- }), [])
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const { logAction, logPerformance, logError } = useClientLogger()
+  const pageState = usePageState(PAGE_KEY)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [chartData, setChartData] = useState<ChartData | null>(null)
+  const [loadingStats, setLoadingStats] = useState(true)
+  const selectedTimeRange = (pageState.custom?.timeRange as string) ?? 'yearToDate'
+  const setSelectedTimeRange = (value: string) => pageState.setCustom('timeRange', value)
+  const [showTimeRangeDropdown, setShowTimeRangeDropdown] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
- const fetchDashboardStats = useCallback(async () => {
- const startTime = performance.now()
- 
- try {
- logAction('dashboard_stats_fetch_started', { timeRange: selectedTimeRange })
- const params = new URLSearchParams({
- timeRange: selectedTimeRange,
- startDate: timeRanges[selectedTimeRange].startDate.toISOString(),
- endDate: timeRanges[selectedTimeRange].endDate.toISOString()
- })
- 
- const response = await fetch(withBasePath(`/api/dashboard/stats?${params}`), { credentials: 'include' })
- 
- if (response.ok) {
- const data = await response.json()
- setStats(data.stats || data)
- 
- // Use real chart data from API
- if (data.chartData) {
- setChartData(data.chartData)
- }
- 
- const duration = performance.now() - startTime
- logPerformance('dashboard_stats_fetch', duration, {
- timeRange: selectedTimeRange,
- hasData: !!data
- })
- } else {
- setHasError(true)
- const errorText = await response.text()
- try {
- const errorData = JSON.parse(errorText)
- toast.error(errorData.details || errorData.error || 'Failed to load dashboard stats')
- } catch {
- toast.error(`API Error (${response.status}): ${errorText}`)
- }
- }
- } catch (_error) {
- const duration = performance.now() - startTime
- logError('Failed to fetch dashboard stats', _error)
- logPerformance('dashboard_stats_fetch_error', duration)
- setHasError(true)
- 
-	 // Check if it's an authentication error
-	 if (_error instanceof Error && _error.message.includes('401')) {
-	 const callbackUrl = '/dashboard'
-	 router.push(`/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
-	 } else {
-	 toast.error(_error instanceof Error ? _error.message : 'Failed to load dashboard stats')
-	 }
-	 } finally {
-	 setLoadingStats(false)
- }
- // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [selectedTimeRange, timeRanges, logAction, logPerformance, logError])
+  // Trust middleware auth check - don't redirect on client
+  // The middleware already validates the portal session
+  useEffect(() => {
+    // Commented out to trust middleware auth
+    // if (status === 'unauthenticated') {
+    // router.push('/auth/login?callbackUrl=/dashboard')
+    // }
+  }, [status, router])
 
+  // Always use real data, never demo data
+  const useDemoData = false
+  const _isAdmin = session?.user?.role === 'admin'
 
- // Fetch data when authenticated or when time range changes
- useEffect(() => {
- if (status === 'authenticated') {
- fetchDashboardStats()
- }
- }, [status, selectedTimeRange, fetchDashboardStats])
+  const timeRanges: Record<string, TimeRange> = useMemo(
+    () => ({
+      current: {
+        label: 'Current Month',
+        value: 'current',
+        startDate: startOfMonth(new Date()),
+        endDate: endOfMonth(new Date()),
+      },
+      last30: {
+        label: 'Last 30 Days',
+        value: 'last30',
+        startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        endDate: new Date(),
+      },
+      last90: {
+        label: 'Last 90 Days',
+        value: 'last90',
+        startDate: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000),
+        endDate: new Date(),
+      },
+      lastMonth: {
+        label: 'Last Month',
+        value: 'lastMonth',
+        startDate: startOfMonth(subMonths(new Date(), 1)),
+        endDate: endOfMonth(subMonths(new Date(), 1)),
+      },
+      yearToDate: {
+        label: 'Year to Date',
+        value: 'yearToDate',
+        startDate: new Date(new Date().getFullYear(), 0, 1),
+        endDate: new Date(),
+      },
+      allTime: {
+        label: 'All Time',
+        value: 'allTime',
+        startDate: null,
+        endDate: null,
+      },
+      lastYear: {
+        label: 'Last Year',
+        value: 'lastYear',
+        startDate: new Date(new Date().getFullYear() - 1, 0, 1),
+        endDate: new Date(new Date().getFullYear() - 1, 11, 31),
+      },
+    }),
+    []
+  )
 
- // Show loading only while checking authentication
- if (status === 'loading') {
- return (
- <DashboardLayout>
- <div className="flex items-center justify-center h-96">
- <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent " />
- </div>
- </DashboardLayout>
- )
- }
+  const currentTimeRange = timeRanges[selectedTimeRange] ?? timeRanges.yearToDate
 
- // If unauthenticated, the useEffect redirect will handle it
- if (status === 'unauthenticated' || !session) {
- return (
- <DashboardLayout>
- <div className="flex items-center justify-center h-96">
- <div className="text-center">
- <p className="text-slate-500">Redirecting to login...</p>
- </div>
- </div>
- </DashboardLayout>
- )
- }
+  const fetchDashboardStats = useCallback(async () => {
+    const startTime = performance.now()
 
- // Show loading while fetching stats (only for authenticated users)
- if (loadingStats) {
- return (
- <DashboardLayout>
- <PageContainer>
- <DashboardSkeleton />
- </PageContainer>
- </DashboardLayout>
- )
- }
+    try {
+      logAction('dashboard_stats_fetch_started', { timeRange: selectedTimeRange })
+      const params = new URLSearchParams({
+        timeRange: selectedTimeRange,
+      })
+      if (currentTimeRange.startDate && currentTimeRange.endDate) {
+        params.set('startDate', currentTimeRange.startDate.toISOString())
+        params.set('endDate', currentTimeRange.endDate.toISOString())
+      }
 
- // Show error state if data fetch failed
- if (hasError && !stats && !useDemoData) {
- return (
- <DashboardLayout>
- <div className="flex items-center justify-center h-96">
- <div className="text-center space-y-4">
- <p className="text-red-500 text-lg">Failed to load dashboard data</p>
- <p className="text-slate-500">Please check your connection and try again</p>
- <button
- onClick={() => {
- setHasError(false)
- fetchDashboardStats()
- }}
- className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
- >
- Retry
- </button>
- </div>
- </div>
- </DashboardLayout>
- )
- }
+      const response = await fetch(withBasePath(`/api/dashboard/stats?${params}`), {
+        credentials: 'include',
+      })
 
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data.stats || data)
 
- // Prepare data for sections
- const marketData = {
- data: {
- amazonMetrics: chartData?.amazonMetrics,
- reorderAlerts: chartData?.reorderAlerts,
- plannedShipments: chartData?.plannedShipments,
- inventoryTrend: chartData?.inventoryTrend
- }
- }
+        // Use real chart data from API
+        if (data.chartData) {
+          setChartData(data.chartData)
+        }
 
- const _opsData = {
- data: {
- totalInventory: stats?.totalInventory,
- inventoryChange: stats?.inventoryChange,
- inventoryTrend: stats?.inventoryTrend,
- activeSkus: stats?.activeSkus,
- warehouseDistribution: chartData?.warehouseDistribution,
- recentTransactions: chartData?.recentTransactions
- }
- }
+        const duration = performance.now() - startTime
+        logPerformance('dashboard_stats_fetch', duration, {
+          timeRange: selectedTimeRange,
+          hasData: !!data,
+        })
+      } else {
+        setHasError(true)
+        const errorText = await response.text()
+        try {
+          const errorData = JSON.parse(errorText)
+          toast.error(errorData.details || errorData.error || 'Failed to load dashboard stats')
+        } catch {
+          toast.error(`API Error (${response.status}): ${errorText}`)
+        }
+      }
+    } catch (_error) {
+      const duration = performance.now() - startTime
+      logError('Failed to fetch dashboard stats', _error)
+      logPerformance('dashboard_stats_fetch_error', duration)
+      setHasError(true)
 
- return (
- <DashboardLayout>
- <PageContainer>
- <PageHeaderSection
- title="Dashboard"
- description="Home"
- icon={Home}
- />
-  <PageContent>
-  {/* Stats Cards */}
- <StatsCardGrid cols={4} className="mb-6">
- <StatsCard
- title="Total Inventory"
- value={stats?.totalInventory ?? 0}
- subtitle="cartons"
- icon={Package}
- variant={stats?.inventoryTrend === 'up' ? 'success' : stats?.inventoryTrend === 'down' ? 'default' : 'default'}
- trend={stats?.inventoryChange ? {
- value: parseFloat(stats.inventoryChange.replace('%', '').replace('+', '')),
- label: 'vs last period'
- } : undefined}
- />
- <StatsCard
- title="Active SKUs"
- value={stats?.activeSkus ?? 0}
- subtitle="products"
- icon={FileText}
- variant="info"
- />
- <StatsCard
- title="Monthly Costs"
- value={`£${(stats?.costBreakdown?.total ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
- icon={DollarSign}
- variant="default"
- />
- <StatsCard
- title="FBA Discrepancies"
- value={(stats?.fbaDiscrepancies?.mismatch ?? 0) + (stats?.fbaDiscrepancies?.warnings ?? 0)}
- subtitle="need attention"
- icon={AlertTriangle}
- variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
- onClick={() => router.push('/amazon/fba-fee-discrepancies')}
- />
- </StatsCardGrid>
+      // Check if it's an authentication error
+      if (_error instanceof Error && _error.message.includes('401')) {
+        const callbackUrl = '/dashboard'
+        router.push(`/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+      } else {
+        toast.error(_error instanceof Error ? _error.message : 'Failed to load dashboard stats')
+      }
+    } finally {
+      setLoadingStats(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTimeRange, selectedTimeRange, logAction, logPerformance, logError])
 
- {/* Order Pipeline and Cost Breakdown */}
- <div className="grid gap-4 md:grid-cols-2 mb-6">
- <OrderPipeline
-   pipeline={stats?.orderPipeline ?? { issued: 0, manufacturing: 0, inTransit: 0, atWarehouse: 0 }}
-   pendingFulfillmentOrders={stats?.pendingFulfillmentOrders ?? 0}
- />
- <CostBreakdown
-   costs={stats?.costBreakdown ?? { inbound: 0, outbound: 0, storage: 0, forwarding: 0, other: 0, total: 0 }}
- />
- </div>
+  // Fetch data when authenticated or when time range changes
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchDashboardStats()
+    }
+  }, [status, selectedTimeRange, fetchDashboardStats])
 
- {/* Inventory Levels Chart */}
- <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800 mb-6">
- <div className="flex items-center justify-between mb-4">
-   <div className="flex items-center gap-3">
-     <TrendingUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-     <div>
-       <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Inventory Levels</h3>
-       <p className="text-xs text-slate-500 dark:text-slate-400">Daily inventory trend</p>
-     </div>
-   </div>
-   <div className="relative">
-     <button
-       onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
-       className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm bg-white dark:bg-slate-800"
-     >
-       <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-       <span className="text-slate-700 dark:text-slate-300">{timeRanges[selectedTimeRange].label}</span>
-       <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
-     </button>
-     {showTimeRangeDropdown && (
-       <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10">
-         {Object.entries(timeRanges).map(([key, range]) => (
-           <button
-             key={key}
-             onClick={() => {
-               setSelectedTimeRange(key)
-               setShowTimeRangeDropdown(false)
-             }}
-             className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${selectedTimeRange === key ? 'bg-slate-100 dark:bg-slate-700 text-cyan-600 dark:text-cyan-400' : 'text-slate-700 dark:text-slate-300'}`}
-           >
-             {range.label}
-           </button>
-         ))}
-       </div>
-     )}
-   </div>
- </div>
- <MarketSection data={marketData.data} loading={loadingStats} />
- </div>
+  // Show loading only while checking authentication
+  if (status === 'loading') {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-600 border-t-transparent " />
+        </div>
+      </DashboardLayout>
+    )
+  }
 
- {/* Inventory by Warehouse */}
- <WarehouseInventory
-   warehouses={stats?.topWarehouses ?? []}
- />
+  // If unauthenticated, the useEffect redirect will handle it
+  if (status === 'unauthenticated' || !session) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <p className="text-slate-500">Redirecting to login...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
 
- </PageContent>
- </PageContainer>
- </DashboardLayout>
- )
+  // Show loading while fetching stats (only for authenticated users)
+  if (loadingStats) {
+    return (
+      <DashboardLayout>
+        <PageContainer>
+          <DashboardSkeleton />
+        </PageContainer>
+      </DashboardLayout>
+    )
+  }
+
+  // Show error state if data fetch failed
+  if (hasError && !stats && !useDemoData) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center space-y-4">
+            <p className="text-red-500 text-lg">Failed to load dashboard data</p>
+            <p className="text-slate-500">Please check your connection and try again</p>
+            <button
+              onClick={() => {
+                setHasError(false)
+                fetchDashboardStats()
+              }}
+              className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      </DashboardLayout>
+    )
+  }
+
+  // Prepare data for sections
+  const marketData = {
+    data: {
+      amazonMetrics: chartData?.amazonMetrics,
+      reorderAlerts: chartData?.reorderAlerts,
+      plannedShipments: chartData?.plannedShipments,
+      inventoryTrend: chartData?.inventoryTrend,
+    },
+  }
+
+  const _opsData = {
+    data: {
+      totalInventory: stats?.totalInventory,
+      inventoryChange: stats?.inventoryChange,
+      inventoryTrend: stats?.inventoryTrend,
+      activeSkus: stats?.activeSkus,
+      warehouseDistribution: chartData?.warehouseDistribution,
+      recentTransactions: chartData?.recentTransactions,
+    },
+  }
+
+  return (
+    <DashboardLayout>
+      <PageContainer>
+        <PageHeaderSection title="Dashboard" description="Home" icon={Home} />
+        <PageContent>
+          {/* Stats Cards */}
+          <StatsCardGrid cols={4} className="mb-6">
+            <StatsCard
+              title="Total Inventory"
+              value={stats?.totalInventory ?? 0}
+              subtitle="cartons"
+              icon={Package}
+              variant={
+                stats?.inventoryTrend === 'up'
+                  ? 'success'
+                  : stats?.inventoryTrend === 'down'
+                    ? 'default'
+                    : 'default'
+              }
+              trend={
+                stats?.inventoryChange
+                  ? {
+                      value: parseFloat(stats.inventoryChange.replace('%', '').replace('+', '')),
+                      label: 'vs last period',
+                    }
+                  : undefined
+              }
+            />
+            <StatsCard
+              title="Active SKUs"
+              value={stats?.activeSkus ?? 0}
+              subtitle="products"
+              icon={FileText}
+              variant="info"
+            />
+            <StatsCard
+              title="Monthly Costs"
+              value={`£${(stats?.costBreakdown?.total ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              icon={DollarSign}
+              variant="default"
+            />
+            <StatsCard
+              title="FBA Discrepancies"
+              value={
+                (stats?.fbaDiscrepancies?.mismatch ?? 0) + (stats?.fbaDiscrepancies?.warnings ?? 0)
+              }
+              subtitle="need attention"
+              icon={AlertTriangle}
+              variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
+              onClick={() => router.push('/amazon/fba-fee-discrepancies')}
+            />
+          </StatsCardGrid>
+
+          {/* Order Pipeline and Cost Breakdown */}
+          <div className="grid gap-4 md:grid-cols-2 mb-6">
+            <OrderPipeline
+              pipeline={
+                stats?.orderPipeline ?? {
+                  issued: 0,
+                  manufacturing: 0,
+                  inTransit: 0,
+                  atWarehouse: 0,
+                }
+              }
+              pendingFulfillmentOrders={stats?.pendingFulfillmentOrders ?? 0}
+            />
+            <CostBreakdown
+              costs={
+                stats?.costBreakdown ?? {
+                  inbound: 0,
+                  outbound: 0,
+                  storage: 0,
+                  forwarding: 0,
+                  other: 0,
+                  total: 0,
+                }
+              }
+            />
+          </div>
+
+          {/* Inventory Levels Chart */}
+          <div className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 bg-white dark:bg-slate-800 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <TrendingUp className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Inventory Levels
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Daily inventory trend
+                  </p>
+                </div>
+              </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowTimeRangeDropdown(!showTimeRangeDropdown)}
+                  className="flex items-center gap-2 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm bg-white dark:bg-slate-800"
+                >
+                  <Calendar className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  <span className="text-slate-700 dark:text-slate-300">
+                    {currentTimeRange.label}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                </button>
+                {showTimeRangeDropdown && (
+                  <div className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-10">
+                    {Object.entries(timeRanges).map(([key, range]) => (
+                      <button
+                        key={key}
+                        onClick={() => {
+                          setSelectedTimeRange(key)
+                          setShowTimeRangeDropdown(false)
+                        }}
+                        className={`w-full px-4 py-2 text-left text-sm hover:bg-slate-50 dark:hover:bg-slate-700 first:rounded-t-lg last:rounded-b-lg ${selectedTimeRange === key ? 'bg-slate-100 dark:bg-slate-700 text-cyan-600 dark:text-cyan-400' : 'text-slate-700 dark:text-slate-300'}`}
+                      >
+                        {range.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <MarketSection data={marketData.data} loading={loadingStats} />
+          </div>
+
+          {/* Inventory by Warehouse */}
+          <WarehouseInventory warehouses={stats?.topWarehouses ?? []} />
+        </PageContent>
+      </PageContainer>
+    </DashboardLayout>
+  )
 }

@@ -278,7 +278,7 @@ export const GET = async (_request: Request, context: { params: Promise<RoutePar
           category: supplierAdjustment.category,
           costName: supplierAdjustment.costName,
           amount: Number(supplierAdjustment.amount),
-          currency: supplierAdjustment.currency,
+          currency: PURCHASE_ORDER_BASE_CURRENCY,
           effectiveAt: supplierAdjustment.effectiveAt.toISOString(),
           createdAt: supplierAdjustment.createdAt.toISOString(),
           createdByName: supplierAdjustment.createdByName,

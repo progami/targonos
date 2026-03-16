@@ -42,6 +42,7 @@
     "db:migrate:supply-chain-reference-convention": "tsx scripts/migrations/supply-chain-reference-convention.ts",
     "db:migrate:erd-v10-views": "tsx scripts/migrations/ensure-erd-v10-views.ts",
     "db:migrate:po-line-packaging-snapshots": "tsx scripts/migrations/backfill-po-line-packaging-snapshots.ts",
+    "db:migrate:po-base-currency": "tsx scripts/migrations/normalize-po-base-currency.ts",
     "db:migrate:sku-description-42": "tsx scripts/migrations/truncate-sku-description-42.ts",
     "db:studio": "prisma studio",
     "demo": "tsx scripts/demo.ts",
