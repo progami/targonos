@@ -1559,8 +1559,10 @@ export async function createPurchaseOrder(
       }
       keySet.add(key)
 
-      if (typeof line.currency !== 'string' || line.currency.trim().length === 0) {
-        throw new ValidationError(`Currency is required for SKU ${line.skuCode}`)
+      if (normalizePoCostCurrency(line.currency) !== PURCHASE_ORDER_BASE_CURRENCY) {
+        throw new ValidationError(
+          `Purchase order currency must be ${PURCHASE_ORDER_BASE_CURRENCY} for SKU ${line.skuCode}`
+        )
       }
 
       computeCartonsOrdered({

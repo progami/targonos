@@ -61,7 +61,7 @@ function formatEntry(entry: {
     category: entry.category,
     costName: entry.costName,
     amount: Number(entry.amount),
-    currency: entry.currency,
+    currency: PURCHASE_ORDER_BASE_CURRENCY,
     effectiveAt: entry.effectiveAt.toISOString(),
     createdAt: entry.createdAt.toISOString(),
     createdByName: entry.createdByName ?? 'Unknown',

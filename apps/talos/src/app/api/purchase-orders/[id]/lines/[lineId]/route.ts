@@ -211,7 +211,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
       updateData.skuDescription = result.data.skuDescription
-    if (result.data.currency !== undefined) updateData.currency = PURCHASE_ORDER_BASE_CURRENCY
+    updateData.currency = PURCHASE_ORDER_BASE_CURRENCY
     if (result.data.notes !== undefined) updateData.lineNotes = result.data.notes
 
     const unitsChanged =
