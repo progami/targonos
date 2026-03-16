@@ -9,7 +9,10 @@ import {
   serializePurchaseOrder as serializeNewPO,
 } from '@/lib/services/po-stage-service'
 import type { UserContext } from '@/lib/services/po-stage-service'
-import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
+import {
+  normalizePoCostCurrency,
+  PURCHASE_ORDER_BASE_CURRENCY,
+} from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
@@ -42,7 +45,14 @@ const LineItemSchema = z.object({
   unitsOrdered: z.number().int().positive(),
   unitsPerCarton: z.number().int().positive(),
   totalCost: z.number().min(0).optional(),
-  currency: z.string().trim().min(1, 'Currency is required'),
+  currency: z
+    .string()
+    .trim()
+    .min(1, 'Currency is required')
+    .refine(
+      value => normalizePoCostCurrency(value) === PURCHASE_ORDER_BASE_CURRENCY,
+      `Purchase order currency must be ${PURCHASE_ORDER_BASE_CURRENCY}`
+    ),
   notes: z.string().optional(),
 })
 
