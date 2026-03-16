@@ -48,14 +48,8 @@ export function Header() {
   return (
     <header
       className={cn(
-        onHome
-          ? 'sticky top-0 z-50 border-b border-white/10 bg-black/30 backdrop-blur-xl transition-shadow'
-          : 'sticky top-0 z-50 border-b border-border bg-bg/80 backdrop-blur transition-shadow',
-        scrolled
-          ? onHome
-            ? 'shadow-[0_1px_0_rgba(0,0,0,0.55)]'
-            : 'shadow-[0_1px_0_rgba(0,0,0,0.08)]'
-          : null
+        'sticky top-0 z-50 border-b border-white/10 bg-[#002C51] transition-shadow',
+        scrolled ? 'shadow-[0_1px_0_rgba(0,0,0,0.55)]' : null
       )}
     >
       <Container className="flex h-16 items-center justify-between">
@@ -65,7 +59,7 @@ export function Header() {
           className="flex items-center gap-3 font-semibold tracking-tightish"
         >
           <Image
-            src={onHome ? '/brand/logo-inverted.svg' : '/brand/logo.svg'}
+            src="/brand/logo-inverted.svg"
             alt=""
             width={160}
             height={32}
@@ -83,8 +77,8 @@ export function Header() {
                 href={l.href}
                 className={cn(
                   'relative rounded-full px-3 py-1.5 text-sm font-semibold transition-all duration-200',
-                  onHome ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-muted hover:text-ink hover:bg-surface',
-                  active && (onHome ? 'text-white bg-white/15' : 'text-ink bg-accent/10')
+                  'text-white/70 hover:text-white hover:bg-white/10',
+                  active && 'text-white bg-white/15'
                 )}
               >
                 {l.label}
@@ -126,10 +120,8 @@ export function Header() {
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
             className={cn(
-              onHome
-                ? 'inline-flex h-10 w-10 items-center justify-center rounded-pill border border-white/15 bg-black/20 text-white shadow-softer transition hover:bg-black/30 md:hidden'
-                : 'inline-flex h-10 w-10 items-center justify-center rounded-pill border border-border bg-surface text-ink shadow-softer transition hover:bg-bg md:hidden',
-              mobileOpen ? (onHome ? 'bg-black/30' : 'bg-bg') : null
+              'inline-flex h-10 w-10 items-center justify-center rounded-pill border border-white/15 bg-black/20 text-white shadow-softer transition hover:bg-black/30 md:hidden',
+              mobileOpen ? 'bg-black/30' : null
             )}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
             aria-expanded={mobileOpen}
@@ -141,12 +133,7 @@ export function Header() {
 
       {mobileOpen ? (
         <div
-          className={cn(
-            'md:hidden motion-safe:animate-slide-down-fade',
-            onHome
-              ? 'border-t border-white/10 bg-black/85 backdrop-blur'
-              : 'border-t border-border bg-bg/95 backdrop-blur'
-          )}
+          className="md:hidden motion-safe:animate-slide-down-fade border-t border-white/10 bg-black/85 backdrop-blur"
         >
           <Container className="py-4">
             <div className="grid gap-2">
@@ -157,10 +144,8 @@ export function Header() {
                     key={l.href}
                     href={l.href}
                     className={cn(
-                      onHome
-                        ? 'rounded-pill px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white'
-                        : 'rounded-pill px-4 py-3 text-sm font-semibold text-muted hover:bg-surface hover:text-ink',
-                      active ? (onHome ? 'bg-white/5 text-white' : 'bg-surface text-ink') : null
+                      'rounded-pill px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white',
+                      active ? 'bg-white/5 text-white' : null
                     )}
                   >
                     {l.label}

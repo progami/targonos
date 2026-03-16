@@ -192,7 +192,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   Clean coverage
                 </div>
                 <p className="mt-3 text-sm text-muted">
-                  Extra‑large sheets help you cover faster with fewer joins.
+                  Extra large sheets help you cover faster with fewer joins.
                 </p>
               </Card>
             </Reveal>

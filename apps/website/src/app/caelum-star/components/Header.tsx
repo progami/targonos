@@ -11,26 +11,31 @@ const navLinks = [
   { label: 'About', href: '/about' }
 ];
 
-export function CaelumStarHeader() {
+export function CaelumStarHeader({ hideNav = false, hideBuyNow = false, region }: { hideNav?: boolean; hideBuyNow?: boolean; region?: string }) {
+  const regionQuery = region ? `?region=${region}` : '';
   return (
     <header className={styles.siteHeader}>
       <div className={styles.contentWrap}>
         <div className={styles.headerTopRow}>
-          <div className={styles.brandWrap}>
+          <Link href="/caelum-star" className={styles.brandWrap}>
             <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={186} height={42} className={styles.brandLogo} priority />
-          </div>
+          </Link>
 
-          <nav aria-label="Main navigation" className={styles.headerNav}>
-            {navLinks.map((link) => (
-              <Link key={link.label} href={link.href} className={styles.headerNavLink}>
-                {link.label}
-              </Link>
-            ))}
-          </nav>
+          {!hideNav && (
+            <nav aria-label="Main navigation" className={styles.headerNav}>
+              {navLinks.map((link) => (
+                <Link key={link.label} href={`${link.href}${regionQuery}`} className={styles.headerNavLink}>
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          )}
 
-          <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer" className={styles.primaryButton}>
-            Buy Now
-          </a>
+          {!hideBuyNow && (
+            <a href={region === 'uk' ? 'https://www.amazon.co.uk/dp/B09HXC3NL8' : site.amazonStoreUrl} target="_blank" rel="noreferrer" className={styles.primaryButton}>
+              Buy Now
+            </a>
+          )}
         </div>
       </div>
     </header>
