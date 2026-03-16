@@ -93,24 +93,25 @@ function identifySize(filePath) {
   return { width, height }
 }
 
-function cropScreenshot(sourcePath, destDir, width, height) {
+function cropScreenshot(sourcePath, destBaseDir, width, height) {
   const partHeight = Math.floor(height / 4)
   for (let index = 1; index <= 4; index += 1) {
     const top = (index - 1) * partHeight
     const cropHeight = index === 4 ? height - top : partHeight
+    const partDir = path.join(destBaseDir, `part${index}`)
+    fs.mkdirSync(partDir, { recursive: true })
     runFile('magick', [
       sourcePath,
       '-crop',
       `${width}x${cropHeight}+0+${top}`,
       '+repage',
-      path.join(destDir, `part${index}.png`),
+      path.join(partDir, `${TODAY}.png`),
     ])
   }
 }
 
 function captureListing(asin, brand) {
-  const destDir = path.join(DEST, brand, asin, TODAY)
-  fs.mkdirSync(destDir, { recursive: true })
+  const destBaseDir = path.join(DEST, brand, asin)
 
   const tmpPng = path.join(os.tmpdir(), `${asin}.png`)
   try {
@@ -121,8 +122,8 @@ function captureListing(asin, brand) {
     })
 
     const { width, height } = identifySize(tmpPng)
-    cropScreenshot(tmpPng, destDir, width, height)
-    log(`Saved: ${brand}/${asin}/${TODAY}/part{1..4}.png`)
+    cropScreenshot(tmpPng, destBaseDir, width, height)
+    log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
     return true
   } catch (error) {
     appendErrorOutput(error)
