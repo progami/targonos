@@ -2,6 +2,10 @@ import { getTenantPrisma } from '@/lib/tenant/server'
 import { NotFoundError, ConflictError, ValidationError } from '@/lib/api'
 import { Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { auditLog } from '@/lib/security/audit-logger'
+import {
+  resolvePurchaseOrderUnitCost,
+  toPurchaseOrderTotalCostNumberOrNull,
+} from '@/lib/purchase-order-line-costs'
 import { toPublicOrderNumber } from './purchase-order-utils'
 
 export interface UserContext {
@@ -79,14 +83,12 @@ export function serializePurchaseOrder(
     orderNumber: toPublicOrderNumber(order.orderNumber),
     lines: order.lines.map(line => ({
       ...line,
-      unitCost:
-        line.unitCost !== null && line.unitCost !== undefined
-          ? Number(Number(line.unitCost).toFixed(2))
-          : null,
-      totalCost:
-        line.totalCost !== null && line.totalCost !== undefined
-          ? Number(Number(line.totalCost).toFixed(2))
-          : null,
+      unitCost: resolvePurchaseOrderUnitCost({
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        unitsOrdered: line.unitsOrdered,
+      }),
+      totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
       createdAt: line.createdAt.toISOString(),
       updatedAt: line.updatedAt.toISOString(),
     })),
