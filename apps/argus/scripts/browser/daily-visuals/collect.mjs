@@ -12,6 +12,7 @@ const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicag
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
 const CAPTURE_CHILD_TIMEOUT_MS = 210_000
+const MAX_CAPTURE_ATTEMPTS = 2
 const PART_WIDTH = 1400
 const PART_HEIGHT = 4300
 
@@ -118,25 +119,31 @@ function cropScreenshot(sourcePath, destBaseDir, width) {
 
 function captureListing(asin, brand) {
   const destBaseDir = path.join(DEST, brand, asin)
-
   const tmpPng = path.join(os.tmpdir(), `${asin}.png`)
-  try {
-    log(`Capturing ${brand} (${asin})`)
-    runFile(NODE_BIN, [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output', tmpPng], {
-      timeout: CAPTURE_CHILD_TIMEOUT_MS,
-      killSignal: 'SIGKILL',
-    })
+  for (let attempt = 1; attempt <= MAX_CAPTURE_ATTEMPTS; attempt += 1) {
+    try {
+      log(`Capturing ${brand} (${asin}) [attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}]`)
+      runFile(NODE_BIN, [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output', tmpPng], {
+        timeout: CAPTURE_CHILD_TIMEOUT_MS,
+        killSignal: 'SIGKILL',
+      })
 
-    const { width } = identifySize(tmpPng)
-    cropScreenshot(tmpPng, destBaseDir, width)
-    log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
-    return true
-  } catch (error) {
-    appendErrorOutput(error)
-    log(`WARNING: Daily visuals failed for ${brand} (${asin})`)
-    return false
-  } finally {
-    fs.rmSync(tmpPng, { force: true })
+      const { width } = identifySize(tmpPng)
+      cropScreenshot(tmpPng, destBaseDir, width)
+      log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
+      return true
+    } catch (error) {
+      appendErrorOutput(error)
+      fs.rmSync(tmpPng, { force: true })
+
+      if (attempt === MAX_CAPTURE_ATTEMPTS) {
+        log(`WARNING: Daily visuals failed for ${brand} (${asin})`)
+        return false
+      }
+
+      log(`Retrying ${brand} (${asin}) after failed attempt ${attempt}`)
+      sleep(2000)
+    }
   }
 }
 
