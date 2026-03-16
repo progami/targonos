@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server'
 import { ApiResponses } from '@/lib/api'
 import { auth } from '@/lib/auth'
+import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import { isSuperAdmin } from '@/lib/services/permission-service'
 import { getAccessibleTenantCodesForEmail, getPrismaForTenant } from '@/lib/tenant/access'
-import { TENANT_CODES, type TenantCode, getTenantConfig } from '@/lib/tenant/constants'
+import { TENANT_CODES, type TenantCode } from '@/lib/tenant/constants'
 import { getAssignedSkuCodesAcrossTenants } from '@/lib/services/po-product-assignment-service'
 
 export const dynamic = 'force-dynamic'
@@ -44,7 +45,6 @@ export const GET = async (_request: NextRequest) => {
 
   for (const tenantCode of tenantCodes) {
     const prisma = await getPrismaForTenant(tenantCode)
-    const tenant = getTenantConfig(tenantCode)
 
     const orders = await prisma.purchaseOrder.findMany({
       where: {
@@ -77,18 +77,18 @@ export const GET = async (_request: NextRequest) => {
 
     for (const order of orders) {
       const serialized = serializePurchaseOrder(order, {
-        defaultCurrency: tenant.currency,
+        defaultCurrency: PURCHASE_ORDER_BASE_CURRENCY,
       }) as SerializedManufacturingOrder
 
       const lineSkuCodes = Array.isArray(serialized.lines)
         ? serialized.lines
-            .map((line) => line.skuCode)
+            .map(line => line.skuCode)
             .filter((skuCode): skuCode is string => typeof skuCode === 'string')
         : []
 
       const matchedSkuCodes = superAdmin
         ? Array.from(new Set(lineSkuCodes))
-        : Array.from(new Set(lineSkuCodes.filter((skuCode) => assignedSkuSet.has(skuCode))))
+        : Array.from(new Set(lineSkuCodes.filter(skuCode => assignedSkuSet.has(skuCode))))
 
       rows.push({
         ...serialized,
