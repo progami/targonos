@@ -14,6 +14,11 @@ type ScriptOptions = {
   help?: boolean
 }
 
+type SchemaCheck = {
+  label: string
+  sql: string
+}
+
 function loadEnv() {
   const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
   const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -63,7 +68,7 @@ function parseArgs(): ScriptOptions {
 }
 
 function showHelp() {
-  console.log(`
+  console.info(`
 Ensure Talos Tenant Schema
 
 Brings each tenant schema in sync with required baseline tables/columns used by
@@ -82,6 +87,290 @@ Options:
 `)
 }
 
+function sqlString(value: string) {
+  return `'${value.replaceAll("'", "''")}'`
+}
+
+function buildTableExistsCheck(label: string, table: string): SchemaCheck {
+  return {
+    label,
+    sql: `
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = ${sqlString(table)}
+      ) AS value
+    `,
+  }
+}
+
+function buildTypeExistsCheck(label: string, typeName: string): SchemaCheck {
+  return {
+    label,
+    sql: `
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_type t
+        JOIN pg_namespace n ON n.oid = t.typnamespace
+        WHERE n.nspname = current_schema()
+          AND t.typname = ${sqlString(typeName)}
+      ) AS value
+    `,
+  }
+}
+
+function buildRequiredColumnsCheck(label: string, table: string, columns: string[]): SchemaCheck {
+  const requiredColumns = columns.map(column => `(${sqlString(column)})`).join(',\n          ')
+  return {
+    label,
+    sql: `
+      SELECT NOT EXISTS (
+        SELECT required.column_name
+        FROM (
+          VALUES
+          ${requiredColumns}
+        ) AS required(column_name)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM information_schema.columns c
+          WHERE c.table_schema = current_schema()
+            AND c.table_name = ${sqlString(table)}
+            AND c.column_name = required.column_name
+        )
+      ) AS value
+    `,
+  }
+}
+
+function buildRequiredIndexesCheck(label: string, indexes: string[]): SchemaCheck {
+  const requiredIndexes = indexes
+    .map(indexName => `(${sqlString(indexName)})`)
+    .join(',\n          ')
+  return {
+    label,
+    sql: `
+      SELECT NOT EXISTS (
+        SELECT required.index_name
+        FROM (
+          VALUES
+          ${requiredIndexes}
+        ) AS required(index_name)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM pg_indexes i
+          WHERE i.schemaname = current_schema()
+            AND i.indexname = required.index_name
+        )
+      ) AS value
+    `,
+  }
+}
+
+function buildRequiredConstraintsCheck(label: string, constraints: string[]): SchemaCheck {
+  const requiredConstraints = constraints
+    .map(constraintName => `(${sqlString(constraintName)})`)
+    .join(',\n          ')
+  return {
+    label,
+    sql: `
+      SELECT NOT EXISTS (
+        SELECT required.constraint_name
+        FROM (
+          VALUES
+          ${requiredConstraints}
+        ) AS required(constraint_name)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE n.nspname = current_schema()
+            AND c.conname = required.constraint_name
+        )
+      ) AS value
+    `,
+  }
+}
+
+function buildRequiredEnumValuesCheck(
+  label: string,
+  typeName: string,
+  enumValues: string[]
+): SchemaCheck {
+  const requiredValues = enumValues
+    .map(enumValue => `(${sqlString(enumValue)})`)
+    .join(',\n          ')
+  return {
+    label,
+    sql: `
+      SELECT NOT EXISTS (
+        SELECT required.enumlabel
+        FROM (
+          VALUES
+          ${requiredValues}
+        ) AS required(enumlabel)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM pg_enum e
+          JOIN pg_type t ON t.oid = e.enumtypid
+          JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE n.nspname = current_schema()
+            AND t.typname = ${sqlString(typeName)}
+            AND e.enumlabel = required.enumlabel
+        )
+      ) AS value
+    `,
+  }
+}
+
+const baselineChecks: SchemaCheck[] = [
+  buildTableExistsCheck('suppliers table', 'suppliers'),
+  buildRequiredColumnsCheck('suppliers columns', 'suppliers', [
+    'id',
+    'name',
+    'contact_name',
+    'email',
+    'phone',
+    'address',
+    'notes',
+    'is_active',
+    'created_at',
+    'updated_at',
+  ]),
+  buildRequiredIndexesCheck('suppliers indexes', ['suppliers_is_active_idx', 'suppliers_name_key']),
+  buildRequiredColumnsCheck('skus supplier columns', 'skus', [
+    'default_supplier_id',
+    'secondary_supplier_id',
+  ]),
+  buildRequiredColumnsCheck('skus amazon fee columns', 'skus', [
+    'amazon_category',
+    'amazon_size_tier',
+    'amazon_referral_fee_percent',
+    'amazon_fba_fulfillment_fee',
+  ]),
+  buildRequiredIndexesCheck('skus supplier indexes', [
+    'skus_default_supplier_id_idx',
+    'skus_secondary_supplier_id_idx',
+  ]),
+  buildRequiredConstraintsCheck('skus supplier constraints', [
+    'skus_supplier_ids_distinct_check',
+    'skus_default_supplier_id_fkey',
+    'skus_secondary_supplier_id_fkey',
+  ]),
+  buildTypeExistsCheck('AmazonFbaFeeAlertStatus enum', 'AmazonFbaFeeAlertStatus'),
+  buildTableExistsCheck('amazon_fba_fee_alerts table', 'amazon_fba_fee_alerts'),
+  buildRequiredColumnsCheck('amazon_fba_fee_alerts columns', 'amazon_fba_fee_alerts', [
+    'id',
+    'sku_id',
+    'reference_size_tier',
+    'reference_fba_fulfillment_fee',
+    'amazon_fba_fulfillment_fee',
+    'currency_code',
+    'listing_price',
+    'status',
+    'message',
+    'checked_at',
+    'created_at',
+    'updated_at',
+  ]),
+  buildRequiredIndexesCheck('amazon_fba_fee_alerts indexes', [
+    'amazon_fba_fee_alerts_sku_id_key',
+    'amazon_fba_fee_alerts_status_idx',
+    'amazon_fba_fee_alerts_checked_at_idx',
+  ]),
+  buildRequiredConstraintsCheck('amazon_fba_fee_alerts constraints', [
+    'amazon_fba_fee_alerts_sku_id_fkey',
+  ]),
+  buildRequiredEnumValuesCheck('PurchaseOrderStatus enum values', 'PurchaseOrderStatus', [
+    'ISSUED',
+    'REJECTED',
+  ]),
+  buildRequiredColumnsCheck('purchase_orders stage fields', 'purchase_orders', [
+    'incoterms',
+    'payment_terms',
+    'counterparty_address',
+  ]),
+  buildRequiredColumnsCheck('purchase_order_lines packaging columns', 'purchase_order_lines', [
+    'carton_dimensions_cm',
+    'carton_side1_cm',
+    'carton_side2_cm',
+    'carton_side3_cm',
+    'carton_weight_kg',
+    'packaging_type',
+    'storage_cartons_per_pallet',
+    'shipping_cartons_per_pallet',
+  ]),
+  buildRequiredConstraintsCheck('purchase_order_lines pallet constraints', [
+    'purchase_order_lines_storage_cartons_per_pallet_check',
+    'purchase_order_lines_shipping_cartons_per_pallet_check',
+  ]),
+  buildTableExistsCheck('purchase_order_forwarding_costs table', 'purchase_order_forwarding_costs'),
+  buildRequiredColumnsCheck(
+    'purchase_order_forwarding_costs columns',
+    'purchase_order_forwarding_costs',
+    [
+      'id',
+      'purchase_order_id',
+      'warehouse_id',
+      'cost_rate_id',
+      'cost_name',
+      'quantity',
+      'unit_rate',
+      'total_cost',
+      'currency',
+      'notes',
+      'created_at',
+      'updated_at',
+      'created_by_id',
+      'created_by_name',
+    ]
+  ),
+  buildRequiredIndexesCheck('purchase_order_forwarding_costs indexes', [
+    'purchase_order_forwarding_costs_purchase_order_id_idx',
+    'purchase_order_forwarding_costs_warehouse_id_idx',
+    'purchase_order_forwarding_costs_cost_rate_id_idx',
+  ]),
+  buildRequiredConstraintsCheck('purchase_order_forwarding_costs constraints', [
+    'purchase_order_forwarding_costs_purchase_order_id_fkey',
+    'purchase_order_forwarding_costs_warehouse_id_fkey',
+    'purchase_order_forwarding_costs_cost_rate_id_fkey',
+  ]),
+]
+
+class SkipRemainingTenantDdl extends Error {}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function isSchemaPermissionDenied(error: unknown): boolean {
+  if (!isRecord(error)) return false
+  const meta = error.meta
+  if (!isRecord(meta)) return false
+  return meta.code === '42501'
+}
+
+async function queryBoolean(prisma: PrismaClient, sql: string) {
+  const rows = await prisma.$queryRawUnsafe<Array<{ value: boolean }>>(sql)
+  if (rows.length !== 1) {
+    throw new Error(`Expected one row from schema verification query, received ${rows.length}`)
+  }
+  return rows[0].value
+}
+
+async function findMissingBaselineChecks(prisma: PrismaClient) {
+  const missingChecks: string[] = []
+
+  for (const check of baselineChecks) {
+    if (!(await queryBoolean(prisma, check.sql))) {
+      missingChecks.push(check.label)
+    }
+  }
+
+  return missingChecks
+}
+
 async function execute(
   prisma: PrismaClient,
   tenant: TenantCode,
@@ -91,18 +380,36 @@ async function execute(
   const trimmed = sql.trim()
   if (!trimmed) return
   if (options.dryRun) {
-    console.log(
+    console.info(
       `[${tenant}] DRY RUN: ${trimmed.replaceAll(/\s+/g, ' ').slice(0, 240)}${trimmed.length > 240 ? '…' : ''}`
     )
     return
   }
-  await prisma.$executeRawUnsafe(sql)
+
+  try {
+    await prisma.$executeRawUnsafe(sql)
+  } catch (error) {
+    if (!isSchemaPermissionDenied(error)) {
+      throw error
+    }
+
+    const missingChecks = await findMissingBaselineChecks(prisma)
+    if (missingChecks.length > 0) {
+      throw new Error(
+        `[${tenant}] Missing baseline schema objects but current database role cannot apply DDL: ${missingChecks.join(', ')}`
+      )
+    }
+
+    throw new SkipRemainingTenantDdl(
+      `[${tenant}] Baseline schema already present; current database role cannot apply no-op DDL`
+    )
+  }
 }
 
 async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const prisma = await getTenantPrismaClient(tenant)
 
-  console.log(`\n[${tenant}] Ensuring baseline schema is present`)
+  console.info(`\n[${tenant}] Ensuring baseline schema is present`)
 
   const ddlStatements: string[] = [
     // suppliers table (missing in some schemas)
@@ -186,8 +493,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         END IF;
       END $$;
     `,
-
-
 
     // Amazon defaults on SKUs for fee tracking
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_category" text`,
@@ -475,7 +780,15 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   ]
 
   for (const statement of ddlStatements) {
-    await execute(prisma, tenant, statement, options)
+    try {
+      await execute(prisma, tenant, statement, options)
+    } catch (error) {
+      if (error instanceof SkipRemainingTenantDdl) {
+        console.info(error.message)
+        break
+      }
+      throw error
+    }
   }
 }
 
