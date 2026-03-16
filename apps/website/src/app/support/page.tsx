@@ -53,10 +53,13 @@ const trustPoints = [
   { icon: ShieldCheck, label: 'Buyer Protected' }
 ];
 
-export default function SupportPage() {
+export default async function SupportPage({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
+  const { region } = await searchParams;
+  const isUS = region === 'us';
+  const regionQuery = region ? `?region=${region}` : '';
   return (
-    <div style={{ paddingTop: 88 }}>
-      <CaelumStarHeader />
+    <div className="cs-scroll-wrap">
+      <CaelumStarHeader region={region} />
 
       <style
         dangerouslySetInnerHTML={{
@@ -84,7 +87,7 @@ export default function SupportPage() {
         <div className="cs-hero-ambient" />
 
         <Container className="relative z-10">
-          <div className="py-[clamp(4rem,8vw,7rem)]">
+          <div className="cs-section--hero">
             <Reveal delay={0}>
               <p className="cs-overline text-[#3AF3FF]">Help Centre</p>
             </Reveal>
@@ -95,7 +98,7 @@ export default function SupportPage() {
             </Reveal>
             <Reveal delay={140}>
               <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg 2xl:max-w-xl 2xl:text-xl">
-                Got questions about our dust sheets? Need help choosing the right pack? We&apos;ve got you covered.
+                Got questions about our {isUS ? 'drop cloths' : 'dust sheets'}? Need help choosing the right pack? We&apos;ve got you covered.
               </p>
             </Reveal>
             <Reveal delay={220}>
@@ -120,7 +123,7 @@ export default function SupportPage() {
       </section>
 
       {/* ─── CONTACT CARDS ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="cs-section relative overflow-hidden">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -145,7 +148,7 @@ export default function SupportPage() {
                   <Mail className="h-7 w-7 text-[#3AF3FF]" />
                 </div>
                 <h3 className="mt-6 text-xl font-bold tracking-[-0.01em] text-white">Email Support</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">
+                <p className="mt-2 text-sm leading-relaxed text-white/55 2xl:text-lg">
                   The fastest way to reach us. We typically respond within 24 hours.
                 </p>
                 <div className="mt-auto pt-8">
@@ -168,7 +171,7 @@ export default function SupportPage() {
                   <Package className="h-7 w-7 text-white/60" />
                 </div>
                 <h3 className="mt-6 text-xl font-bold tracking-[-0.01em] text-white">Compare Packs</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">
+                <p className="mt-2 text-sm leading-relaxed text-white/55 2xl:text-lg">
                   Not sure which pack to get? Compare all options side by side.
                 </p>
                 <div className="mt-auto pt-8">
@@ -178,7 +181,7 @@ export default function SupportPage() {
                     size="lg"
                     className="w-full border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
                   >
-                    <Link href="/caelum-star/products">
+                    <Link href={`/caelum-star/products${regionQuery}`}>
                       View Packs <ArrowRight className="cs-arrow-slide h-4 w-4" />
                     </Link>
                   </Button>
@@ -193,7 +196,7 @@ export default function SupportPage() {
                   <ShieldCheck className="h-7 w-7 text-white/60" />
                 </div>
                 <h3 className="mt-6 text-xl font-bold tracking-[-0.01em] text-white">Where to Buy</h3>
-                <p className="mt-2 text-sm leading-relaxed text-white/55">
+                <p className="mt-2 text-sm leading-relaxed text-white/55 2xl:text-lg">
                   Find direct Amazon links for every pack with fast delivery.
                 </p>
                 <div className="mt-auto pt-8">
@@ -215,7 +218,7 @@ export default function SupportPage() {
       </section>
 
       {/* ─── TRUSTED BY ─── */}
-      <section className="relative overflow-hidden py-[clamp(3rem,6vw,4.5rem)]">
+      <section className="cs-section--compact relative overflow-hidden">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -238,7 +241,7 @@ export default function SupportPage() {
       </section>
 
       {/* ─── QUICK GUIDE ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="cs-section relative overflow-hidden">
         <div
           className="absolute inset-0"
           style={{
@@ -257,7 +260,7 @@ export default function SupportPage() {
               <p className="cs-overline text-lg text-[#3AF3FF]">Quick Guide</p>
             </div>
             <h2 className="mt-3 text-center text-[clamp(1.75rem,4vw,2.625rem)] 2xl:text-[clamp(2.625rem,3vw,3.5rem)] font-bold tracking-[-0.01em] text-white">
-              Using Your Dust Sheets
+              {isUS ? 'Using Your Drop Cloths' : 'Using Your Dust Sheets'}
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
               Three simple steps for the best protection.
@@ -297,7 +300,7 @@ export default function SupportPage() {
       </section>
 
       {/* ─── FAQ ─── */}
-      <section id="faq" className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section id="faq" className="cs-section relative overflow-hidden">
         <div className="absolute inset-0 bg-[#0B273F]" />
         <div
           className="absolute inset-0"
@@ -325,7 +328,7 @@ export default function SupportPage() {
               Frequently Asked Questions
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45">
-              Quick answers to common questions about our dust sheets.
+              Quick answers to common questions about our {isUS ? 'drop cloths' : 'dust sheets'}.
             </p>
           </Reveal>
           <Reveal variant="media" delay={120}>
@@ -337,7 +340,7 @@ export default function SupportPage() {
       </section>
 
       {/* ─── CTA + FOOTER ─── */}
-      <div className="relative overflow-hidden">
+      <div className="cs-snap-section relative overflow-hidden">
         <div
           className="absolute inset-0"
           style={{
@@ -349,7 +352,7 @@ export default function SupportPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#012D44] via-[#012D44]/95 to-[#001220]" />
 
-        <section className="relative z-10 py-[clamp(3rem,6vw,5rem)]">
+        <section className="cs-section--compact relative z-10">
           <Container>
             <Reveal variant="media">
               <div className="relative overflow-hidden rounded-[20px] border border-white/10 p-10 shadow-lg md:p-14" style={{ background: 'rgba(230, 250, 255, 0.05)', backdropFilter: 'blur(12px)' }}>
@@ -372,7 +375,7 @@ export default function SupportPage() {
                   </div>
                   <div className="md:col-span-4 md:flex md:justify-end">
                     <Button asChild variant="accent" size="lg" className="cs-btn-glow">
-                      <Link href="/caelum-star/products">
+                      <Link href={`/caelum-star/products${regionQuery}`}>
                         Browse Packs <ArrowRight className="cs-arrow-slide h-4 w-4" />
                       </Link>
                     </Button>

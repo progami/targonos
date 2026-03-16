@@ -18,23 +18,20 @@ import { Container } from '@/components/Container';
 import { ProductCard } from '@/components/ProductCard';
 import { Button } from '@/components/Button';
 import { Reveal } from '@/components/Reveal';
-import { products } from '@/content/products';
+import { products, productsUK } from '@/content/products';
 import { site } from '@/content/site';
 import { CaelumStarHeader } from '../components/Header';
 import { CaelumStarFooter } from '../components/Footer';
 
-const bySlug = (slug: string) => products.find((p) => p.slug === slug)?.amazonUrl;
-
-const rawInternationalAmazonLinks = [
-  { label: '6 Pack — Light', region: 'US', url: site.amazonStoreUrl },
-  { label: '12 Pack — Light', region: 'US', url: bySlug('12pk-light') ?? site.amazonStoreAltUrl ?? '#' },
-  { label: '1 Pack — Strong', region: 'US', url: bySlug('1pk-strong') ?? '#' },
-  { label: '3 Pack — Standard', region: 'US', url: bySlug('3pk-standard') ?? '#' }
-].filter(Boolean) as { label: string; region: string; url: string }[];
-
-const internationalAmazonLinks = Array.from(
-  new Map(rawInternationalAmazonLinks.map((l) => [l.url, l])).values()
-);
+function getAmazonLinks(catalog: typeof products) {
+  const bySlug = (slug: string) => catalog.find((p) => p.slug === slug)?.amazonUrl;
+  const raw = catalog.map((p) => ({
+    label: `${p.name} — ${p.thicknessLabel}`,
+    region: catalog === products ? 'US' : 'UK',
+    url: bySlug(p.slug) ?? '#'
+  }));
+  return Array.from(new Map(raw.map((l) => [l.url, l])).values());
+}
 
 const comparisonRows = [
   { feature: 'Sheet size', caelum: '12ft × 9ft (extra large)', standard: 'Varies (often smaller)' },
@@ -48,10 +45,15 @@ export const metadata = {
   title: 'Where to buy'
 };
 
-export default function WhereToBuyPage() {
+export default async function WhereToBuyPage({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
+  const { region } = await searchParams;
+  const isUK = region === 'uk';
+  const catalog = isUK ? productsUK : products;
+  const internationalAmazonLinks = getAmazonLinks(catalog);
+  const regionQuery = region ? `?region=${region}` : '';
   return (
-    <div style={{ paddingTop: 88 }}>
-      <CaelumStarHeader />
+    <div className="cs-scroll-wrap">
+      <CaelumStarHeader region={region} />
 
       <style
         dangerouslySetInnerHTML={{
@@ -79,13 +81,13 @@ export default function WhereToBuyPage() {
         <div className="cs-hero-ambient" />
 
         <Container className="relative z-10">
-          <div className="pt-[clamp(4rem,8vw,7rem)] pb-[clamp(10rem,18vw,16rem)]">
+          <div className="cs-section--hero">
             <Reveal delay={0}>
               <p className="cs-overline text-[#3AF3FF]">Purchase</p>
             </Reveal>
             <Reveal delay={60}>
               <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] 2xl:text-[clamp(4rem,4.5vw,5.5rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
-                Get Your Sheets.
+                Get Your Drop Cloths.
               </h1>
             </Reveal>
             <Reveal delay={140}>
@@ -122,7 +124,7 @@ export default function WhereToBuyPage() {
                   size="lg"
                   className="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]"
                 >
-                  <Link href="/caelum-star/products">Compare Packs</Link>
+                  <Link href={`/caelum-star/products${regionQuery}`}>Compare Packs</Link>
                 </Button>
               </div>
             </Reveal>
@@ -131,7 +133,7 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── RETAILERS ─── */}
-      <section className="relative overflow-hidden pt-[clamp(7rem,12vw,10rem)] pb-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -227,7 +229,7 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── PRODUCT SHOWCASE ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div
           className="absolute inset-0"
           style={{
@@ -251,7 +253,7 @@ export default function WhereToBuyPage() {
           </Reveal>
 
           <div className="cs-product-showcase mt-14">
-            {products.map((p, i) => (
+            {catalog.map((p, i) => (
               <Reveal key={p.slug} variant="media" delay={i * 100} className="h-full">
                 <ProductCard product={p} />
               </Reveal>
@@ -267,7 +269,7 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── WHY CAELUM STAR ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -286,7 +288,7 @@ export default function WhereToBuyPage() {
               Built Different
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-center text-base text-white/45">
-              See how Caelum Star compares to standard plastic sheets.
+              See how Caelum Star compares to standard drop cloths.
             </p>
           </Reveal>
 
@@ -297,7 +299,7 @@ export default function WhereToBuyPage() {
                   <tr>
                     <th>Feature</th>
                     <th>Caelum Star</th>
-                    <th>Standard Sheets</th>
+                    <th>Standard Drop Cloths</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -336,13 +338,13 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── QUICK FACTS ─── */}
-      <section className="cs-dark-section--navy py-[clamp(3.5rem,6vw,5rem)]">
+      <section className="cs-dark-section--navy cs-section--compact">
         <Container className="relative z-10">
           <Reveal>
             <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
               <div className="cs-glass-card flex items-center gap-3">
                 <Ruler className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
-                <span className="text-base text-white/80">All sheets: 12ft × 9ft (3.6m × 2.7m)</span>
+                <span className="text-base text-white/80">All drop cloths: 12ft × 9ft (3.6m × 2.7m)</span>
               </div>
               <div className="cs-glass-card flex items-center gap-3">
                 <Recycle className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
@@ -358,7 +360,7 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── INTERNATIONAL LINKS ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div
           className="absolute inset-0"
           style={{
@@ -410,7 +412,7 @@ export default function WhereToBuyPage() {
       </section>
 
       {/* ─── SUPPORT CTA + FOOTER ─── */}
-      <div className="relative overflow-hidden">
+      <div className="cs-snap-section relative overflow-hidden">
         <div
           className="absolute inset-0"
           style={{
@@ -422,7 +424,7 @@ export default function WhereToBuyPage() {
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#012D44] via-[#012D44]/95 to-[#001220]" />
 
-        <section className="relative z-10 py-[clamp(3rem,6vw,5rem)]">
+        <section className="relative z-10 cs-section--compact">
           <Container>
             <Reveal variant="media">
               <div className="relative overflow-hidden rounded-[20px] border border-white/10 p-10 shadow-lg md:p-14" style={{ background: 'rgba(230, 250, 255, 0.05)', backdropFilter: 'blur(12px)' }}>
@@ -442,7 +444,7 @@ export default function WhereToBuyPage() {
                     <p className="mt-4 text-base leading-relaxed text-white/50">
                       Compare all options on our{' '}
                       <Link
-                        href="/caelum-star/products"
+                        href={`/caelum-star/products${regionQuery}`}
                         className="font-semibold text-[#3AF3FF] underline decoration-[#3AF3FF]/30 underline-offset-2 transition hover:decoration-[#3AF3FF]"
                       >
                         Packs page

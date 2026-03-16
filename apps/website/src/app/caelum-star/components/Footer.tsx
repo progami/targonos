@@ -34,7 +34,7 @@ export function CaelumStarFooter() {
         <div className={styles.footerGrid}>
           <div className={styles.footerBrandCol}>
             <span className={styles.footerBrandName}>Caelum Star</span>
-            <p className={styles.footerBrandDesc}>Premium extra-large dust sheets for professional results.</p>
+            <p className={styles.footerBrandDesc}>Premium extra large dust sheets for professional results.</p>
             <p className={styles.footerContact}>
               Contact: <a href="mailto:support@targonglobal.com" className={styles.footerContactLink}>support@targonglobal.com</a>
             </p>
