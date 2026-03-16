@@ -8,6 +8,14 @@ import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import {
+  PURCHASE_ORDER_TOTAL_COST_DECIMALS,
+  PURCHASE_ORDER_UNIT_COST_DECIMALS,
+  derivePurchaseOrderUnitCost,
+  normalizePurchaseOrderTotalCost,
+  resolvePurchaseOrderUnitCost,
+  toPurchaseOrderTotalCostNumberOrNull,
+} from '@/lib/purchase-order-line-costs'
+import {
   buildLotReference,
   normalizeSkuGroup,
   resolveOrderReferenceSeed,
@@ -75,12 +83,6 @@ function toNumberOrNull(value: unknown): number | null {
   return null
 }
 
-function toMoneyNumberOrNull(value: unknown): number | null {
-  const parsed = toNumberOrNull(value)
-  if (parsed === null) return null
-  return Number(Math.abs(parsed).toFixed(2))
-}
-
 /**
  * GET /api/purchase-orders/[id]/lines/[lineId]
  * Get a specific line item
@@ -131,8 +133,12 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: toMoneyNumberOrNull(line.unitCost),
-    totalCost: toMoneyNumberOrNull(line.totalCost),
+    unitCost: resolvePurchaseOrderUnitCost({
+      unitCost: line.unitCost,
+      totalCost: line.totalCost,
+      unitsOrdered: line.unitsOrdered,
+    }),
+    totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
     currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
@@ -241,7 +247,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
       result.data.totalCost !== undefined ? result.data.totalCost : existingTotalCost
     const normalizedTotalCost =
       typeof nextTotalCost === 'number' && Number.isFinite(nextTotalCost)
-        ? Number(Math.abs(nextTotalCost).toFixed(2))
+        ? normalizePurchaseOrderTotalCost(nextTotalCost)
         : null
 
     if (totalCostChanged) {
@@ -250,14 +256,19 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         updateData.unitCost = null
       } else {
         updateData.totalCost =
-          normalizedTotalCost !== null ? normalizedTotalCost.toFixed(2) : undefined
+          normalizedTotalCost !== null
+            ? normalizedTotalCost.toFixed(PURCHASE_ORDER_TOTAL_COST_DECIMALS)
+            : undefined
       }
     }
 
     if ((totalCostChanged || unitsChanged) && normalizedTotalCost !== null) {
       const nextUnitsOrdered = result.data.unitsOrdered ?? line.unitsOrdered
       if (nextUnitsOrdered > 0) {
-        updateData.unitCost = (normalizedTotalCost / nextUnitsOrdered).toFixed(2)
+        updateData.unitCost = derivePurchaseOrderUnitCost(
+          normalizedTotalCost,
+          nextUnitsOrdered
+        )?.toFixed(PURCHASE_ORDER_UNIT_COST_DECIMALS)
       }
     }
   }
@@ -468,8 +479,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: toMoneyNumberOrNull(line.unitCost),
-    totalCost: toMoneyNumberOrNull(line.totalCost),
+    unitCost: resolvePurchaseOrderUnitCost({
+      unitCost: line.unitCost,
+      totalCost: line.totalCost,
+      unitsOrdered: line.unitsOrdered,
+    }),
+    totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
     currency: line.currency ?? null,
     notes: line.lineNotes ?? null,
     quantityReceived: line.quantityReceived ?? null,
@@ -495,8 +510,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: updated.unitsOrdered,
     unitsPerCarton: updated.unitsPerCarton,
     quantity: updated.quantity,
-    unitCost: toMoneyNumberOrNull(updated.unitCost),
-    totalCost: toMoneyNumberOrNull(updated.totalCost),
+    unitCost: resolvePurchaseOrderUnitCost({
+      unitCost: updated.unitCost,
+      totalCost: updated.totalCost,
+      unitsOrdered: updated.unitsOrdered,
+    }),
+    totalCost: toPurchaseOrderTotalCostNumberOrNull(updated.totalCost),
     currency: updated.currency ?? null,
     notes: updated.lineNotes ?? null,
     quantityReceived: updated.quantityReceived ?? null,
@@ -544,8 +563,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     unitsOrdered: updated.unitsOrdered,
     unitsPerCarton: updated.unitsPerCarton,
     quantity: updated.quantity,
-    unitCost: toMoneyNumberOrNull(updated.unitCost),
-    totalCost: toMoneyNumberOrNull(updated.totalCost),
+    unitCost: resolvePurchaseOrderUnitCost({
+      unitCost: updated.unitCost,
+      totalCost: updated.totalCost,
+      unitsOrdered: updated.unitsOrdered,
+    }),
+    totalCost: toPurchaseOrderTotalCostNumberOrNull(updated.totalCost),
     currency: updated.currency,
     status: updated.status,
     postedQuantity: updated.postedQuantity,
@@ -631,8 +654,12 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
       quantity: line.quantity,
-      unitCost: toMoneyNumberOrNull(line.unitCost),
-      totalCost: toMoneyNumberOrNull(line.totalCost),
+      unitCost: resolvePurchaseOrderUnitCost({
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        unitsOrdered: line.unitsOrdered,
+      }),
+      totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
       currency: line.currency ?? null,
       notes: line.lineNotes ?? null,
     },

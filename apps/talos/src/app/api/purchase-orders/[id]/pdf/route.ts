@@ -41,6 +41,11 @@ function formatCurrency(value: number | null): string {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+function formatUnitCostCurrency(value: number | null): string {
+  if (value === null) return '—'
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+}
+
 // Convert number to words (for amounts)
 function numberToWords(num: number): string {
   const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
@@ -227,7 +232,7 @@ function renderOrderDocumentHtml(params: {
               ${line.cartonDetails ? `<div class="sku-detail"><span class="detail-label">Carton:</span> ${escapeHtml(line.cartonDetails)}</div>` : ''}
             </td>
             <td class="qty-cell">${line.unitsOrdered.toLocaleString()}</td>
-            <td class="price-cell">${unitCost !== null ? formatCurrency(unitCost) : '—'}</td>
+            <td class="price-cell">${unitCost !== null ? formatUnitCostCurrency(unitCost) : '—'}</td>
             <td class="total-cell">${lineTotal !== null ? formatCurrency(lineTotal) : '—'}</td>
           </tr>
         `

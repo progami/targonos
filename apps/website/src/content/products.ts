@@ -177,7 +177,7 @@ export const products: Product[] = [
       { label: 'Durability', value: 'Strong' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
-    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
+    image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
     gallery: [
       {
         src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
@@ -216,7 +216,7 @@ export const products: Product[] = [
       { label: 'Durability', value: 'Standard' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
-    image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
+    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
       {
         src: '/images/amazon/uk/3pk-standard-lifestyle.webp',
@@ -341,7 +341,7 @@ export const productsUK: Product[] = [
       { label: 'Durability', value: 'Strong' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
-    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
+    image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 1 Pack Extra Large Dust Sheet by Caelum Star' },
     gallery: [
       {
         src: '/images/amazon/uk/1pk-strong-lifestyle.webp',
@@ -377,7 +377,7 @@ export const productsUK: Product[] = [
       { label: 'Durability', value: 'Standard' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
-    image: { src: '/images/products/dust-basic-3pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
+    image: { src: '/images/products/dust-core-1pk.webp', alt: 'CS 3 Pack Extra Large Dust Sheets by Caelum Star' },
     gallery: [
       {
         src: '/images/amazon/uk/3pk-standard-lifestyle.webp',
