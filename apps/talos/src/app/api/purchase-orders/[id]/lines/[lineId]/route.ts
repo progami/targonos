@@ -208,11 +208,12 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
 
   if (allowCommercialEdits) {
-    if (result.data.skuCode !== undefined) updateData.skuCode = result.data.skuCode
+    const commercialUpdateData: Prisma.PurchaseOrderLineUpdateInput = {}
+
+    if (result.data.skuCode !== undefined) commercialUpdateData.skuCode = result.data.skuCode
     if (result.data.skuDescription !== undefined)
-      updateData.skuDescription = result.data.skuDescription
-    updateData.currency = PURCHASE_ORDER_BASE_CURRENCY
-    if (result.data.notes !== undefined) updateData.lineNotes = result.data.notes
+      commercialUpdateData.skuDescription = result.data.skuDescription
+    if (result.data.notes !== undefined) commercialUpdateData.lineNotes = result.data.notes
 
     const unitsChanged =
       result.data.unitsOrdered !== undefined || result.data.unitsPerCarton !== undefined
@@ -235,9 +236,9 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
         )
       }
 
-      updateData.unitsOrdered = nextUnitsOrdered
-      updateData.unitsPerCarton = nextUnitsPerCarton
-      updateData.quantity = cartonsOrdered
+      commercialUpdateData.unitsOrdered = nextUnitsOrdered
+      commercialUpdateData.unitsPerCarton = nextUnitsPerCarton
+      commercialUpdateData.quantity = cartonsOrdered
     }
 
     const existingTotalCost = toNumberOrNull(line.totalCost)
@@ -250,10 +251,10 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
     if (totalCostChanged) {
       if (nextTotalCost === null) {
-        updateData.totalCost = null
-        updateData.unitCost = null
+        commercialUpdateData.totalCost = null
+        commercialUpdateData.unitCost = null
       } else {
-        updateData.totalCost =
+        commercialUpdateData.totalCost =
           normalizedTotalCost !== null
             ? normalizedTotalCost.toFixed(PURCHASE_ORDER_TOTAL_COST_DECIMALS)
             : undefined
@@ -263,11 +264,16 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
     if ((totalCostChanged || unitsChanged) && normalizedTotalCost !== null) {
       const nextUnitsOrdered = result.data.unitsOrdered ?? line.unitsOrdered
       if (nextUnitsOrdered > 0) {
-        updateData.unitCost = derivePurchaseOrderUnitCost(
+        commercialUpdateData.unitCost = derivePurchaseOrderUnitCost(
           normalizedTotalCost,
           nextUnitsOrdered
         )?.toFixed(PURCHASE_ORDER_UNIT_COST_DECIMALS)
       }
+    }
+
+    if (Object.keys(commercialUpdateData).length > 0) {
+      commercialUpdateData.currency = PURCHASE_ORDER_BASE_CURRENCY
+      Object.assign(updateData, commercialUpdateData)
     }
   }
 
