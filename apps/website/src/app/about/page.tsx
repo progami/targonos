@@ -27,7 +27,7 @@ const values = [
   {
     icon: Target,
     title: 'Coverage First',
-    desc: 'Extra-large sheets designed for real rooms. Big enough for sofas, beds, and full floor areas.'
+    desc: 'Extra large sheets designed for real rooms. Big enough for sofas, beds, and full floor areas.'
   },
   {
     icon: Eye,
@@ -46,10 +46,13 @@ const values = [
   }
 ];
 
-export default function AboutPage() {
+export default async function AboutPage({ searchParams }: { searchParams: Promise<{ region?: string }> }) {
+  const { region } = await searchParams;
+  const isUS = region === 'us';
+  const regionQuery = region ? `?region=${region}` : '';
   return (
-    <div style={{ paddingTop: 88 }}>
-      <CaelumStarHeader />
+    <div className="cs-scroll-wrap">
+      <CaelumStarHeader region={region} />
 
       <style
         dangerouslySetInnerHTML={{
@@ -77,7 +80,7 @@ export default function AboutPage() {
         <div className="cs-hero-ambient" />
 
         <Container className="relative z-10">
-          <div className="py-[clamp(4rem,8vw,7rem)]">
+          <div className="cs-section--hero">
             <Reveal delay={0}>
               <p className="cs-overline text-[#3AF3FF]">Company</p>
             </Reveal>
@@ -110,7 +113,7 @@ export default function AboutPage() {
             <Reveal delay={300}>
               <div className="mt-10 flex flex-wrap items-center gap-3">
                 <Button asChild variant="accent" size="lg" className="cs-btn-glow">
-                  <Link href="/caelum-star/products">
+                  <Link href={`/caelum-star/products${regionQuery}`}>
                     Browse Packs <ArrowRight className="cs-arrow-slide h-4 w-4" />
                   </Link>
                 </Button>
@@ -129,7 +132,7 @@ export default function AboutPage() {
       </section>
 
       {/* ─── MISSION ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -162,7 +165,7 @@ export default function AboutPage() {
               <Reveal variant="media" delay={100}>
                 <Image
                   src="/images/home/6 Pk - Img 5.jpg"
-                  alt="Caelum Star dust sheet pack"
+                  alt={isUS ? 'Caelum Star drop cloth pack' : 'Caelum Star dust sheet pack'}
                   width={600}
                   height={600}
                   className="w-full h-auto rounded-[20px]"
@@ -179,7 +182,7 @@ export default function AboutPage() {
                     We believe protecting your space shouldn&apos;t be complicated. One product, four pack sizes, honest specs — that&apos;s it.
                   </p>
                   <p>
-                    Every Caelum Star sheet is extra-large at 12ft × 9ft, made with 55% recycled plastic, and globally certified. We focus on what matters: coverage that works and details you can trust.
+                    Every Caelum Star sheet is extra large at 12ft × 9ft, made with 55% recycled plastic, and globally certified. We focus on what matters: coverage that works and details you can trust.
                   </p>
                   <p>
                     We sell on Amazon so you get fast shipping, easy returns, and real reviews from real customers.
@@ -192,7 +195,7 @@ export default function AboutPage() {
       </section>
 
       {/* ─── VALUES ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div className="absolute inset-0 bg-[#0B273F]" />
         <div
           className="absolute inset-0"
@@ -234,7 +237,7 @@ export default function AboutPage() {
       </section>
 
       {/* ─── SALES CHANNELS ─── */}
-      <section className="relative overflow-hidden py-[clamp(3rem,6vw,4.5rem)]">
+      <section className="relative overflow-hidden cs-section--compact">
         <div className="absolute inset-0 bg-[#012D44]" />
         <div
           className="absolute inset-0"
@@ -267,7 +270,7 @@ export default function AboutPage() {
       </section>
 
       {/* ─── CONTACT + CTA ─── */}
-      <section className="relative overflow-hidden py-[clamp(5rem,10vw,7.5rem)]">
+      <section className="relative overflow-hidden cs-section">
         <div className="absolute inset-0 bg-[#0B273F]" />
         <div
           className="absolute inset-0"
@@ -313,12 +316,12 @@ export default function AboutPage() {
                 </p>
                 <div className="mt-auto pt-8 flex gap-3">
                   <Button asChild variant="outline" size="lg" className="flex-1 border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]">
-                    <Link href="/caelum-star/products">
+                    <Link href={`/caelum-star/products${regionQuery}`}>
                       View Packs <ArrowRight className="cs-arrow-slide h-4 w-4" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="flex-1 border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08]">
-                    <Link href="/caelum-star/where-to-buy">
+                    <Link href={`/caelum-star/where-to-buy${regionQuery}`}>
                       Buy Now <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -330,7 +333,7 @@ export default function AboutPage() {
       </section>
 
       {/* ─── FOOTER ─── */}
-      <div className="relative overflow-hidden">
+      <div className="cs-snap-section relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#0B273F] to-[#001220]" />
         <div className="relative z-10 [&>footer]:mt-0">
           <CaelumStarFooter />

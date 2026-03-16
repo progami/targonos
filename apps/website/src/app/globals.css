@@ -685,6 +685,91 @@ button:hover .cs-arrow-slide {
 }
 
 /* ============================================
+   CS page wrapper
+   ============================================ */
+
+.cs-scroll-wrap {
+  padding-top: 88px;
+}
+
+/* Section spacing */
+.cs-section {
+  padding-top: clamp(2rem, 3vw, 3rem);
+  padding-bottom: clamp(2rem, 3vw, 3rem);
+}
+
+.cs-section--hero {
+  padding-top: clamp(2rem, 4vw, 3rem);
+  padding-bottom: clamp(2rem, 4vw, 3rem);
+}
+
+.cs-section--compact {
+  padding-top: clamp(1rem, 2vw, 1.75rem);
+  padding-bottom: clamp(1rem, 2vw, 1.75rem);
+}
+
+/* Tighter inner spacing within sections */
+.cs-scroll-wrap h2 {
+  margin-top: 0.35rem;
+}
+
+.cs-scroll-wrap .mt-3 {
+  margin-top: 0.5rem;
+}
+
+.cs-scroll-wrap .mt-4 {
+  margin-top: 0.5rem;
+}
+
+.cs-scroll-wrap .mt-5 {
+  margin-top: 0.5rem;
+}
+
+.cs-scroll-wrap .mt-6 {
+  margin-top: 0.75rem;
+}
+
+.cs-scroll-wrap .mt-8 {
+  margin-top: 1rem;
+}
+
+.cs-scroll-wrap .mt-10 {
+  margin-top: 1.25rem;
+}
+
+.cs-scroll-wrap .mt-12 {
+  margin-top: 1.5rem;
+}
+
+.cs-scroll-wrap .mt-14 {
+  margin-top: 1.5rem;
+}
+
+.cs-scroll-wrap .mt-20 {
+  margin-top: 2rem;
+}
+
+.cs-scroll-wrap .pt-8 {
+  padding-top: 1.25rem;
+}
+
+.cs-scroll-wrap .pt-10 {
+  padding-top: 1.5rem;
+}
+
+.cs-scroll-wrap .gap-8 {
+  gap: 1.25rem;
+}
+
+.cs-scroll-wrap .gap-6 {
+  gap: 1rem;
+}
+
+.cs-scroll-wrap .space-y-4 > * + * {
+  margin-top: 0.75rem;
+}
+
+/* ============================================
    Where to Buy / Support — immersive pages
    ============================================ */
 
@@ -751,15 +836,16 @@ button:hover .cs-arrow-slide {
     0 24px 64px rgba(0, 0, 0, 0.3);
 }
 
-/* Accent CTA button with glow */
+/* Accent CTA button — flat fill */
 .cs-btn-glow {
-  background: linear-gradient(180deg, #3AF3FF 0%, #00D1FF 100%) !important;
-  box-shadow: 0 0 15px rgba(58, 243, 255, 0.4);
-  transition: box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out !important;
+  background: #3AF3FF !important;
+  box-shadow: none;
+  transition: background 0.2s ease-in-out !important;
 }
 
 .cs-btn-glow:hover {
-  box-shadow: 0 0 25px rgba(58, 243, 255, 0.55), 0 8px 24px rgba(58, 243, 255, 0.25);
+  background: #2de0ed !important;
+  box-shadow: none;
 }
 
 /* Product showcase grid */

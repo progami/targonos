@@ -13,7 +13,7 @@ export function CaelumStarHero({ children }: CaelumStarHeroProps) {
         <div className={styles.heroGrid}>
           <div className={`${styles.heroCopy} ${styles.fadeIn}`}>
             <h1 className={styles.heroTitle}>
-              <span className={styles.heroHighlight}>EXTRA-LARGE</span>
+              <span className={styles.heroHighlight}>EXTRA LARGE</span>
               <span className={styles.heroSheets}> dust sheets</span>
             </h1>
             <p className={styles.heroSubheading}>Premium Protection for Professional Results.</p>
