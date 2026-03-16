@@ -90,7 +90,10 @@ function InventoryPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/inventory')}`)
+      redirectToPortal(
+        '/login',
+        `${window.location.origin}${withBasePath('/operations/inventory')}`
+      )
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -103,7 +106,9 @@ function InventoryPage() {
     try {
       setLoading(true)
 
-      const response = await fetch(withBasePath('/api/inventory/balances'), { credentials: 'include' })
+      const response = await fetch(withBasePath('/api/inventory/balances'), {
+        credentials: 'include',
+      })
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
         toast.error(`Failed to load inventory balances: ${errorData.error || response.statusText}`)
@@ -170,14 +175,9 @@ function InventoryPage() {
     const totalPallets = balances.reduce((sum, balance) => sum + balance.currentPallets, 0)
     const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
     const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
-    const lotsWithInventoryFallback = balances.filter(
-      balance => balance.currentCartons > 0
-    ).length
+    const lotsWithInventoryFallback = balances.filter(balance => balance.currentCartons > 0).length
     const totalLotCountFallback = balances.length
-    const lotsOutOfStockFallback = Math.max(
-      totalLotCountFallback - lotsWithInventoryFallback,
-      0
-    )
+    const lotsOutOfStockFallback = Math.max(totalLotCountFallback - lotsWithInventoryFallback, 0)
 
     return {
       totalCartons,
@@ -205,11 +205,7 @@ function InventoryPage() {
 
   return (
     <PageContainer>
-      <PageHeaderSection
-        title="Inventory Ledger"
-        description="Operations"
-        icon={BookOpen}
-      />
+      <PageHeaderSection title="Inventory Ledger" description="Operations" icon={BookOpen} />
       <PageContent className="flex-1 overflow-hidden px-4 py-6 sm:px-6 lg:px-8 flex flex-col">
         <div className="flex flex-col gap-6 flex-1 min-h-0">
           <StatsCardGrid cols={3}>
@@ -236,16 +232,16 @@ function InventoryPage() {
             />
           </StatsCardGrid>
 
-          <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-x-auto flex-1">
+          <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden flex-1">
             {/* Scrollable table area */}
-            <div className="relative min-h-0 overflow-y-auto scrollbar-gutter-stable flex-1">
-              <table className="w-full table-fixed text-sm">
+            <div className="relative min-h-0 overflow-auto scrollbar-gutter-stable flex-1">
+              <table className="w-full min-w-[1100px] table-auto text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '9%' }}>
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <span>Source</span>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '10%' }}>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -310,7 +306,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -373,7 +369,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '13%' }}>
+                    <th className="w-48 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center gap-1">
                         <span>Description</span>
                         <Popover>
@@ -417,7 +413,7 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -480,10 +476,10 @@ function InventoryPage() {
                         </Popover>
                       </div>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <span>Ref ID</span>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '6%' }}>
+                    <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -493,7 +489,7 @@ function InventoryPage() {
                         {getSortIcon('cartons')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '6%' }}>
+                    <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -503,7 +499,7 @@ function InventoryPage() {
                         {getSortIcon('pallets')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-right" style={{ width: '7%' }}>
+                    <th className="w-24 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <button
                         type="button"
                         className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
@@ -513,8 +509,10 @@ function InventoryPage() {
                         {getSortIcon('units')}
                       </button>
                     </th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '8%' }}>Type</th>
-                    <th className="font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs text-left" style={{ width: '17%' }}>
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      Type
+                    </th>
+                    <th className="w-40 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center justify-between gap-1">
                         <button
                           type="button"
@@ -632,7 +630,10 @@ function InventoryPage() {
                       : null
 
                     return (
-                      <tr key={balance.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                      <tr
+                        key={balance.id}
+                        className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                      >
                         <td
                           className="px-2 py-2 text-sm font-semibold text-foreground truncate"
                           title={
@@ -712,7 +713,9 @@ function InventoryPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/80 text-xs uppercase tracking-wide text-muted-foreground">
-                    <td colSpan={6} className="px-2 py-2 font-semibold text-left">Totals</td>
+                    <td colSpan={6} className="px-2 py-2 font-semibold text-left">
+                      Totals
+                    </td>
                     <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">
                       {tableTotals.cartons.toLocaleString()}
                     </td>
