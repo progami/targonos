@@ -34,6 +34,14 @@ import {
 import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
+import {
+  PURCHASE_ORDER_TOTAL_COST_DECIMALS,
+  PURCHASE_ORDER_UNIT_COST_DECIMALS,
+  derivePurchaseOrderUnitCost,
+  normalizePurchaseOrderTotalCost,
+  resolvePurchaseOrderUnitCost,
+  toPurchaseOrderTotalCostNumberOrNull,
+} from '@/lib/purchase-order-line-costs'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem } from '@/lib/measurements'
@@ -1676,13 +1684,18 @@ export async function createPurchaseOrder(
                         }),
                         totalCost:
                           typeof line.totalCost === 'number' && Number.isFinite(line.totalCost)
-                            ? Math.abs(line.totalCost).toFixed(2)
+                            ? normalizePurchaseOrderTotalCost(line.totalCost).toFixed(
+                                PURCHASE_ORDER_TOTAL_COST_DECIMALS
+                              )
                             : undefined,
                         unitCost:
                           typeof line.totalCost === 'number' &&
                           Number.isFinite(line.totalCost) &&
                           line.unitsOrdered > 0
-                            ? (Number(Math.abs(line.totalCost).toFixed(2)) / line.unitsOrdered).toFixed(2)
+                            ? derivePurchaseOrderUnitCost(
+                                normalizePurchaseOrderTotalCost(line.totalCost),
+                                line.unitsOrdered
+                              )?.toFixed(PURCHASE_ORDER_UNIT_COST_DECIMALS)
                             : undefined,
                         currency: line.currency.trim().toUpperCase(),
                         lineNotes: line.notes,
@@ -2045,12 +2058,12 @@ export async function transitionPurchaseOrderStage(
         throw new ValidationError(`Dispatch cartons (ship now) cannot exceed ${availableCartons} for line ${line.id}`)
       }
 
-      const unitCost =
-        line.unitCost !== null && line.unitCost !== undefined
-          ? new Prisma.Decimal(line.unitCost)
-          : line.totalCost !== null && line.totalCost !== undefined && line.unitsOrdered > 0
-            ? new Prisma.Decimal(line.totalCost).div(line.unitsOrdered)
-            : null
+      const resolvedUnitCost = resolvePurchaseOrderUnitCost({
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        unitsOrdered: line.unitsOrdered,
+      })
+      const unitCost = resolvedUnitCost !== null ? new Prisma.Decimal(resolvedUnitCost) : null
 
       if (unitCost === null) {
         throw new ValidationError(
@@ -2125,7 +2138,7 @@ export async function transitionPurchaseOrderStage(
           unitsOrdered: remainderUnits,
           unitsPerCarton: line.unitsPerCarton,
           quantity: remainderCartons,
-          unitCost: new Prisma.Decimal(unitCost.toFixed(2)),
+          unitCost: new Prisma.Decimal(unitCost.toFixed(PURCHASE_ORDER_UNIT_COST_DECIMALS)),
           totalCost: new Prisma.Decimal(remainderCostRounded.toFixed(2)),
           currency: line.currency,
           status: PurchaseOrderLineStatus.PENDING,
@@ -2178,7 +2191,7 @@ export async function transitionPurchaseOrderStage(
           status: PurchaseOrderLineStatus.PENDING,
           quantity: shipNowCartons,
           unitsOrdered: shipNowUnits,
-          unitCost: new Prisma.Decimal(unitCost.toFixed(2)),
+          unitCost: new Prisma.Decimal(unitCost.toFixed(PURCHASE_ORDER_UNIT_COST_DECIMALS)),
           totalCost: new Prisma.Decimal(shipNowCostRounded.toFixed(2)),
           cartonRangeStart: shipNowRange?.start ?? null,
           cartonRangeEnd: shipNowRange?.end ?? null,
@@ -3835,8 +3848,12 @@ export function serializePurchaseOrder(
 	      unitsOrdered: line.unitsOrdered,
 	      unitsPerCarton: line.unitsPerCarton,
 	      quantity: line.quantity,
-	      unitCost: line.unitCost !== null && line.unitCost !== undefined ? Number(Math.abs(Number(line.unitCost)).toFixed(2)) : null,
-	      totalCost: line.totalCost !== null && line.totalCost !== undefined ? Number(Math.abs(Number(line.totalCost)).toFixed(2)) : null,
+	      unitCost: resolvePurchaseOrderUnitCost({
+	        unitCost: line.unitCost,
+	        totalCost: line.totalCost,
+	        unitsOrdered: line.unitsOrdered,
+	      }),
+	      totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
 	      currency: line.currency ?? defaultCurrency,
 	      status: line.status,
 	      postedQuantity: line.postedQuantity,

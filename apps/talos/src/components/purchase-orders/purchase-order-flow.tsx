@@ -52,6 +52,10 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { PO_STATUS_LABELS } from '@/lib/constants/status-mappings'
 import { BUYER_LEGAL_ENTITY } from '@/lib/config/legal-entity'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import {
+  derivePurchaseOrderUnitCost,
+  formatPurchaseOrderUnitCost,
+} from '@/lib/purchase-order-line-costs'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { convertLengthToCm, convertWeightFromKg, convertWeightToKg, formatLengthFromCm, formatWeightFromKg, getDefaultUnitSystem, getLengthUnitLabel, getWeightUnitLabel } from '@/lib/measurements'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
@@ -655,7 +659,7 @@ function describeAuditChangeRows(entry: AuditLogEntry): AuditChangeRow[] {
       if (typeof newValue.quantity === 'number') rows.push({ field: 'Qty', previous: '—', current: newValue.quantity.toLocaleString() })
       if (typeof newValue.unitCost === 'number' && Number.isFinite(newValue.unitCost)) {
         const currency = typeof newValue.currency === 'string' ? ` ${newValue.currency}` : ''
-        rows.push({ field: 'Unit Cost', previous: '—', current: `${newValue.unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${currency}` })
+        rows.push({ field: 'Unit Cost', previous: '—', current: `${formatPurchaseOrderUnitCost(newValue.unitCost)}${currency}` })
       }
       return rows
     }
@@ -4907,7 +4911,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 	                                    {line.unitsOrdered.toLocaleString()}
 	                                  </td>
                                   <td className="px-3 py-2 text-right tabular-nums text-muted-foreground whitespace-nowrap">
-                                    {unitCost !== null ? unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}
+                                    {unitCost !== null ? formatPurchaseOrderUnitCost(unitCost) : '—'}
                                   </td>
                                   <td className="px-3 py-2 text-right tabular-nums font-medium whitespace-nowrap" data-gate-key={gateKey}>
                                     <div className="flex flex-col items-end gap-1">
@@ -4945,12 +4949,14 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                             prev.map(candidate => {
                                               if (candidate.id !== line.id) return candidate
                                               const nextTotalCost = Number(Math.abs(parsed).toFixed(2))
-                                              const nextUnitCost =
-                                                candidate.unitsOrdered > 0 ? nextTotalCost / candidate.unitsOrdered : null
+                                              const nextUnitCost = derivePurchaseOrderUnitCost(
+                                                nextTotalCost,
+                                                candidate.unitsOrdered
+                                              )
                                               return {
                                                 ...candidate,
                                                 totalCost: nextTotalCost,
-                                                unitCost: nextUnitCost !== null ? Number(nextUnitCost.toFixed(2)) : null,
+                                                unitCost: nextUnitCost,
                                               }
                                             })
                                           )
@@ -5057,7 +5063,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                       canEditProductCosts ? 'py-1' : 'py-2'
                                     )}
                                   >
-                                    <span>{unitCost !== null ? `${currencyLabel} ${unitCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+                                    <span>{unitCost !== null ? `${currencyLabel} ${formatPurchaseOrderUnitCost(unitCost)}` : '—'}</span>
                                   </td>
                                   <td
                                     className={cn(
