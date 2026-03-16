@@ -7,6 +7,14 @@ import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/servi
 import { auditLog } from '@/lib/security/audit-logger'
 import { Prisma } from '@targon/prisma-talos'
 import {
+  PURCHASE_ORDER_TOTAL_COST_DECIMALS,
+  PURCHASE_ORDER_UNIT_COST_DECIMALS,
+  derivePurchaseOrderUnitCost,
+  normalizePurchaseOrderTotalCost,
+  resolvePurchaseOrderUnitCost,
+  toPurchaseOrderTotalCostNumberOrNull,
+} from '@/lib/purchase-order-line-costs'
+import {
   buildLotReference,
   normalizeSkuGroup,
   resolveOrderReferenceSeed,
@@ -44,12 +52,6 @@ function toNumberOrNull(value: unknown): number | null {
     }
   }
   return null
-}
-
-function toMoneyNumberOrNull(value: unknown): number | null {
-  const parsed = toNumberOrNull(value)
-  if (parsed === null) return null
-  return Number(Math.abs(parsed).toFixed(2))
 }
 
 function computeCartonsOrdered(input: {
@@ -120,8 +122,12 @@ export const GET = withAuthAndParams(async (request: NextRequest, params, _sessi
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
       quantity: line.quantity,
-      unitCost: toMoneyNumberOrNull(line.unitCost),
-      totalCost: toMoneyNumberOrNull(line.totalCost),
+      unitCost: resolvePurchaseOrderUnitCost({
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        unitsOrdered: line.unitsOrdered,
+      }),
+      totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
       currency: line.currency ?? tenant.currency,
       status: line.status,
       postedQuantity: line.postedQuantity,
@@ -259,7 +265,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       : tenant.currency
   const normalizedTotalCost =
     typeof result.data.totalCost === 'number' && Number.isFinite(result.data.totalCost)
-      ? Number(Math.abs(result.data.totalCost).toFixed(2))
+      ? normalizePurchaseOrderTotalCost(result.data.totalCost)
       : null
 
   const effectiveSkuGroup =
@@ -308,10 +314,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
         unitsOrdered: result.data.unitsOrdered,
         unitsPerCarton: result.data.unitsPerCarton,
         quantity: cartonsOrdered,
-        totalCost: normalizedTotalCost !== null ? normalizedTotalCost.toFixed(2) : undefined,
+        totalCost:
+          normalizedTotalCost !== null
+            ? normalizedTotalCost.toFixed(PURCHASE_ORDER_TOTAL_COST_DECIMALS)
+            : undefined,
         unitCost:
           normalizedTotalCost !== null && result.data.unitsOrdered > 0
-            ? (normalizedTotalCost / result.data.unitsOrdered).toFixed(2)
+            ? derivePurchaseOrderUnitCost(normalizedTotalCost, result.data.unitsOrdered)?.toFixed(
+                PURCHASE_ORDER_UNIT_COST_DECIMALS
+              )
             : undefined,
         currency,
         lineNotes: result.data.notes,
@@ -354,9 +365,13 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
       unitsOrdered: line.unitsOrdered,
       unitsPerCarton: line.unitsPerCarton,
       quantity: line.quantity,
-      unitCost: toMoneyNumberOrNull(line.unitCost),
+      unitCost: resolvePurchaseOrderUnitCost({
+        unitCost: line.unitCost,
+        totalCost: line.totalCost,
+        unitsOrdered: line.unitsOrdered,
+      }),
       currency: line.currency ?? null,
-      totalCost: toMoneyNumberOrNull(line.totalCost),
+      totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
       notes: line.lineNotes ?? null,
     },
   })
@@ -382,8 +397,12 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     unitsOrdered: line.unitsOrdered,
     unitsPerCarton: line.unitsPerCarton,
     quantity: line.quantity,
-    unitCost: toMoneyNumberOrNull(line.unitCost),
-    totalCost: toMoneyNumberOrNull(line.totalCost),
+    unitCost: resolvePurchaseOrderUnitCost({
+      unitCost: line.unitCost,
+      totalCost: line.totalCost,
+      unitsOrdered: line.unitsOrdered,
+    }),
+    totalCost: toPurchaseOrderTotalCostNumberOrNull(line.totalCost),
     currency: line.currency ?? tenant.currency,
     status: line.status,
     postedQuantity: line.postedQuantity,
