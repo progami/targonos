@@ -8,8 +8,11 @@ import {
   TransactionType,
 } from '@targon/prisma-talos'
 import { ValidationError } from '@/lib/api'
-import { normalizePoCostCurrency } from '@/lib/constants/cost-currency'
-import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
+import {
+  normalizePoCostCurrency,
+  PURCHASE_ORDER_BASE_CURRENCY,
+} from '@/lib/constants/cost-currency'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 
 export async function syncPurchaseOrderForwardingCostLedger(params: {
@@ -17,11 +20,7 @@ export async function syncPurchaseOrderForwardingCostLedger(params: {
   createdByName: string
 }) {
   const prisma = await getTenantPrisma()
-  const tenant = await getCurrentTenant()
-  const tenantCurrency = normalizePoCostCurrency(tenant.currency)
-  if (!tenantCurrency) {
-    throw new ValidationError(`Unsupported tenant currency: ${tenant.currency}`)
-  }
+  const tenantCurrency = PURCHASE_ORDER_BASE_CURRENCY
 
   await prisma.$transaction(async tx => {
     const order = await tx.purchaseOrder.findUnique({

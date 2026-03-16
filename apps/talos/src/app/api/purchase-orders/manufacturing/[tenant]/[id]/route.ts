@@ -1,15 +1,11 @@
 import { ApiResponses } from '@/lib/api'
 import { auth } from '@/lib/auth'
+import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { getS3Service } from '@/services/s3.service'
 import { serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import { isSuperAdmin } from '@/lib/services/permission-service'
 import { getAccessibleTenantCodesForEmail, getPrismaForTenant } from '@/lib/tenant/access'
-import {
-  TENANT_CODES,
-  getTenantConfig,
-  isValidTenantCode,
-  type TenantCode,
-} from '@/lib/tenant/constants'
+import { TENANT_CODES, isValidTenantCode, type TenantCode } from '@/lib/tenant/constants'
 import { getAssignedSkuCodesAcrossTenants } from '@/lib/services/po-product-assignment-service'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import { CostCategory, FinancialLedgerSourceType } from '@targon/prisma-talos'
@@ -33,10 +29,7 @@ function roundMoney(value: number): number {
 const buildSupplierAdjustmentSourceId = (purchaseOrderId: string) =>
   `po_receiving_discrepancy:${purchaseOrderId}`
 
-export const GET = async (
-  _request: Request,
-  context: { params: Promise<RouteParams> }
-) => {
+export const GET = async (_request: Request, context: { params: Promise<RouteParams> }) => {
   const session = await auth()
   if (!session) {
     return ApiResponses.unauthorized()
@@ -79,7 +72,6 @@ export const GET = async (
   }
 
   const prisma = await getPrismaForTenant(tenantCode)
-  const tenant = getTenantConfig(tenantCode)
 
   const order = await prisma.purchaseOrder.findFirst({
     where: {
@@ -102,8 +94,8 @@ export const GET = async (
   const matchedSkuCodes = Array.from(
     new Set(
       order.lines
-        .map((line) => line.skuCode)
-        .filter((skuCode) => superAdmin || assignedSkuSet.has(skuCode))
+        .map(line => line.skuCode)
+        .filter(skuCode => superAdmin || assignedSkuSet.has(skuCode))
     )
   )
 
@@ -120,7 +112,7 @@ export const GET = async (
       : null
 
   const serialized = serializePurchaseOrder(order, {
-    defaultCurrency: tenant.currency,
+    defaultCurrency: PURCHASE_ORDER_BASE_CURRENCY,
   })
 
   const s3Service = getS3Service()
@@ -130,7 +122,7 @@ export const GET = async (
   })
 
   const documents = await Promise.all(
-    docs.map(async (doc) => ({
+    docs.map(async doc => ({
       id: doc.id,
       stage: doc.stage,
       documentType: doc.documentType,
@@ -249,7 +241,7 @@ export const GET = async (
         }
       : null,
     documents,
-    forwardingCosts: forwardingCosts.map((row) => ({
+    forwardingCosts: forwardingCosts.map(row => ({
       id: row.id,
       purchaseOrderId: row.purchaseOrderId,
       warehouse: row.warehouse,
