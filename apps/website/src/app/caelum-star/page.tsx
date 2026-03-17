@@ -31,7 +31,7 @@ export default function CaelumStarPage() {
   return (
     <>
       <div className={styles.pageWrap}>
-        <CaelumStarHeader hideNav hideBuyNow />
+        <CaelumStarHeader />
         <CaelumStarHero>
           <div className={styles.regionGrid}>
             {regions.map((region) => (

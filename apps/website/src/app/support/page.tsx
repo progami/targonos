@@ -74,7 +74,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
       />
 
       {/* ─── HERO ─── */}
-      <section className="cs-prussian-hero relative min-h-[calc(100vh-88px)] overflow-hidden">
+      <section className="cs-prussian-hero relative overflow-hidden">
         <div
           className="absolute inset-0 z-0"
           style={{
