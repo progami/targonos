@@ -67,7 +67,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             </Reveal>
             <Reveal delay={140}>
               <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-white/60 md:text-lg 2xl:max-w-xl 2xl:text-[1.25rem]">
-                Pick your coverage. Four pack sizes, one extra large {isUS ? 'drop cloth' : 'sheet'}. Available exclusively on Amazon.
+                Pick your coverage. Four pack sizes, one extra large {isUS ? 'drop cloth' : 'dust sheet'}. Available exclusively on Amazon.
               </p>
             </Reveal>
             <Reveal delay={200}>
@@ -133,7 +133,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
               Choose Your Pack
             </h2>
             <p className="mx-auto mt-3 max-w-md text-center text-base text-white/45 2xl:text-lg">
-              Every {isUS ? 'drop cloth' : 'sheet'} is 12ft × 9ft. Choose the pack that fits your project.
+              Every {isUS ? 'drop cloth' : 'dust sheet'} is 12ft × 9ft. Choose the pack that fits your project.
             </p>
           </Reveal>
 
@@ -161,7 +161,7 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
             <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
               <div className="cs-glass-card flex items-center gap-3">
                 <Ruler className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
-                <span className="text-base text-white/80">All {isUS ? 'drop cloths' : 'sheets'}: 12ft × 9ft (3.6m × 2.7m)</span>
+                <span className="text-base text-white/80">All {isUS ? 'drop cloths' : 'dust sheets'}: 12ft × 9ft (3.6m × 2.7m)</span>
               </div>
               <div className="cs-glass-card flex items-center gap-3">
                 <Recycle className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
@@ -199,11 +199,11 @@ export default async function ProductsPage({ searchParams }: { searchParams: Pro
 
           <div className="mx-auto mt-14 grid max-w-4xl 2xl:max-w-6xl gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {[
-              { title: 'Extra Large', desc: `Every ${isUS ? 'drop cloth' : 'sheet'} is 12ft × 9ft — bigger than standard alternatives.` },
+              { title: 'Extra Large', desc: `Every ${isUS ? 'drop cloth' : 'dust sheet'} is 12ft × 9ft — bigger than standard alternatives.` },
               { title: 'Recycled Material', desc: '55% recycled plastic with GRS certification.' },
               { title: 'Fast Delivery', desc: 'Available on Amazon with Prime delivery options.' },
               { title: 'Easy Cleanup', desc: 'Fold, store, reuse. Designed for quick setup and teardown.' },
-              { title: 'Pack Options', desc: `From 1 ${isUS ? 'drop cloth' : 'sheet'} to 12 — pick the size for your project.` },
+              { title: 'Pack Options', desc: `From 1 ${isUS ? 'drop cloth' : 'dust sheet'} to 12 — pick the size for your project.` },
               { title: 'Eco Packaging', desc: 'Eco-kind packaging as standard across all packs.' }
             ].map((item, i) => (
               <Reveal key={item.title} variant="media" delay={i * 80} className="h-full">
