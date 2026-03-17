@@ -87,7 +87,7 @@ export default async function WhereToBuyPage({ searchParams }: { searchParams: P
             </Reveal>
             <Reveal delay={60}>
               <h1 className="mt-4 text-balance text-[clamp(3rem,6.5vw,4rem)] 2xl:text-[clamp(4rem,4.5vw,5.5rem)] font-extrabold leading-[0.92] tracking-[-0.02em] text-white" style={{ textShadow: '0 0 40px rgba(58, 243, 255, 0.12)' }}>
-                Get Your Drop Cloths.
+                {isUK ? 'Get Your Dust Sheets.' : 'Get Your Drop Cloths.'}
               </h1>
             </Reveal>
             <Reveal delay={140}>
@@ -288,7 +288,7 @@ export default async function WhereToBuyPage({ searchParams }: { searchParams: P
               Built Different
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-center text-base text-white/45">
-              See how Caelum Star compares to standard drop cloths.
+              See how Caelum Star compares to standard {isUK ? 'dust sheets' : 'drop cloths'}.
             </p>
           </Reveal>
 
@@ -299,7 +299,7 @@ export default async function WhereToBuyPage({ searchParams }: { searchParams: P
                   <tr>
                     <th>Feature</th>
                     <th>Caelum Star</th>
-                    <th>Standard Drop Cloths</th>
+                    <th>{isUK ? 'Standard Dust Sheets' : 'Standard Drop Cloths'}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -344,7 +344,7 @@ export default async function WhereToBuyPage({ searchParams }: { searchParams: P
             <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-center sm:gap-4">
               <div className="cs-glass-card flex items-center gap-3">
                 <Ruler className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
-                <span className="text-base text-white/80">All drop cloths: 12ft × 9ft (3.6m × 2.7m)</span>
+                <span className="text-base text-white/80">All {isUK ? 'dust sheets' : 'drop cloths'}: 12ft × 9ft (3.6m × 2.7m)</span>
               </div>
               <div className="cs-glass-card flex items-center gap-3">
                 <Recycle className="h-5 w-5 shrink-0 text-[#3AF3FF]" />
