@@ -4,20 +4,13 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, Menu, X } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
 
-const homeNavLinks = [
-  { label: 'Mission', href: '/#mission' },
-  { label: 'Vision', href: '/#vision' },
-  { label: 'Values', href: '/#values' },
-  { label: 'Products', href: '/#products' }
-];
-
-const siteNavLinks = [
+const navLinks = [
   { label: 'Caelum Star', href: '/caelum-star' },
   { label: 'Packs', href: '/caelum-star/products' },
   { label: 'Where to buy', href: '/caelum-star/where-to-buy' },
@@ -27,8 +20,6 @@ const siteNavLinks = [
 
 export function Header() {
   const pathname = usePathname();
-  const onHome = pathname === '/';
-  const navLinks = onHome ? homeNavLinks : siteNavLinks;
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -70,7 +61,7 @@ export function Header() {
 
         <nav className="hidden items-center gap-6 md:flex">
           {navLinks.map((l) => {
-            const active = onHome ? false : pathname === l.href || pathname.startsWith(`${l.href}/`);
+            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
             return (
               <Link
                 key={l.href}
@@ -88,33 +79,11 @@ export function Header() {
         </nav>
 
         <div className="flex items-center gap-2">
-          {onHome ? (
-            <>
-              <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
-                <Link href="/caelum-star">
-                  Explore {site.productBrandName} <ArrowUpRight className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button asChild size="sm" variant="accent" className="sm:hidden">
-                <Link href="/caelum-star">
-                  Explore <ArrowUpRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button asChild size="sm" variant="accent" className="hidden sm:inline-flex">
-                <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-                  Buy 6 Pack <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </Button>
-              <Button asChild size="sm" variant="accent" className="sm:hidden">
-                <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-                  Buy <ArrowUpRight className="h-4 w-4" />
-                </a>
-              </Button>
-            </>
-          )}
+          <Button asChild size="sm" variant="accent">
+            <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+              Buy Now
+            </a>
+          </Button>
 
           <button
             type="button"
