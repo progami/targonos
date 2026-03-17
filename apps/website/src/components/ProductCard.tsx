@@ -25,14 +25,13 @@ export function ProductCard({ product }: { product: Product }) {
         'cs-product-card group flex h-full flex-col overflow-hidden rounded-card',
         'border border-white/20 shadow-lg',
         'backdrop-blur-3xl bg-ink/80 text-white',
-        product.primary && 'ring-2 ring-accent'
+        product.primary && ''
       )}
     >
       {/* Image */}
       <div className="relative aspect-[4/3] w-full overflow-hidden">
-        {product.primary && <div className="cs-product-glow--strong" />}
         {product.primary && (
-          <div className="cs-badge-shimmer absolute left-4 top-4 z-10 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
+          <div className="absolute left-4 top-4 z-10 rounded-full bg-accent px-3 py-1 text-xs font-semibold text-white">
             Most Popular
           </div>
         )}
