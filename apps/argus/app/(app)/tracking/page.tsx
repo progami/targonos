@@ -285,7 +285,7 @@ export default function TrackingDashboard() {
                   variant="overline"
                   sx={{ color: 'rgba(248, 250, 252, 0.6)', letterSpacing: '0.1em', fontSize: '0.65rem' }}
                 >
-                  Dust Sheets US
+                  Argus · US Marketplace
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
                   Monitoring
@@ -531,7 +531,7 @@ export default function TrackingDashboard() {
                                 >
                                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                      label={item.asin}
+                                      label={item.label ? `${item.label} · ${item.asin}` : item.asin}
                                       size="small"
                                       sx={{
                                         fontFamily: 'var(--font-mono)',
@@ -593,10 +593,10 @@ export default function TrackingDashboard() {
                                 variant="overline"
                                 sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
                               >
-                                Inspection
+                                {selectedEvent.asin}
                               </Typography>
                               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
-                                {selectedEvent.asin}
+                                {selectedEvent.label ?? selectedEvent.asin}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

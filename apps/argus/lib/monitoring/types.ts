@@ -43,6 +43,7 @@ export interface MonitoringSnapshotRecord extends MonitoringStateRecord {
 export interface MonitoringChangeEvent {
   id: string
   asin: string
+  label: string | null
   owner: MonitoringOwner
   timestamp: string
   baselineTimestamp: string | null
