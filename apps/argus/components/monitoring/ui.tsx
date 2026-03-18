@@ -143,6 +143,111 @@ export function DataField(props: {
   )
 }
 
+export function ComparisonRow(props: {
+  label: string
+  baseline: string | null
+  current: string | null
+  /** When both values are numeric strings, show a directional arrow with color */
+  numericBaseline?: number | null
+  numericCurrent?: number | null
+  /** Flip the color logic: lower = good (e.g. BSR rank) */
+  lowerIsBetter?: boolean
+}) {
+  const { label, baseline, current, numericBaseline, numericCurrent, lowerIsBetter } = props
+  const baselineDisplay = baseline ?? '—'
+  const currentDisplay = current ?? '—'
+  const unchanged = baselineDisplay === currentDisplay
+
+  let direction: 'up' | 'down' | null = null
+  let sentiment: 'positive' | 'negative' | 'neutral' = 'neutral'
+
+  if (numericBaseline != null && numericCurrent != null && numericBaseline !== numericCurrent) {
+    direction = numericCurrent > numericBaseline ? 'up' : 'down'
+    if (lowerIsBetter) {
+      sentiment = numericCurrent < numericBaseline ? 'positive' : 'negative'
+    } else {
+      sentiment = numericCurrent > numericBaseline ? 'positive' : 'negative'
+    }
+  }
+
+  const sentimentColor =
+    sentiment === 'positive' ? '#1a7a4c' : sentiment === 'negative' ? '#b5362d' : '#475569'
+  const arrow = direction === 'up' ? '↑' : direction === 'down' ? '↓' : null
+
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr)',
+        gap: 1,
+        alignItems: 'baseline',
+        py: 0.4,
+      }}
+    >
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', letterSpacing: '0.03em', lineHeight: 1.6 }}
+      >
+        {label}
+      </Typography>
+      {unchanged ? (
+        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748b' }}>
+          {currentDisplay}
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.6, flexWrap: 'wrap' }}>
+          <Typography
+            variant="body2"
+            sx={{ color: '#94a3b8', fontWeight: 500, textDecoration: 'line-through', fontSize: '0.8rem' }}
+          >
+            {baselineDisplay}
+          </Typography>
+          {arrow ? (
+            <Typography
+              component="span"
+              sx={{ color: sentimentColor, fontWeight: 800, fontSize: '0.7rem', lineHeight: 1 }}
+            >
+              {arrow}
+            </Typography>
+          ) : (
+            <Typography component="span" sx={{ color: '#94a3b8', fontSize: '0.7rem' }}>
+              →
+            </Typography>
+          )}
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 700, color: arrow ? sentimentColor : '#0f172a' }}
+          >
+            {currentDisplay}
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  )
+}
+
+export function CategorySection(props: { label: string; children: React.ReactNode }) {
+  return (
+    <Box sx={{ '&:not(:first-of-type)': { mt: 1.5 } }}>
+      <Typography
+        variant="caption"
+        sx={{
+          fontWeight: 800,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: '#64748b',
+          fontSize: '0.62rem',
+          display: 'block',
+          mb: 0.8,
+        }}
+      >
+        {props.label}
+      </Typography>
+      {props.children}
+    </Box>
+  )
+}
+
 export function formatMoney(value: number | null, currency: string | null): string {
   if (value === null) return '—'
   if (!currency) return value.toFixed(2)
