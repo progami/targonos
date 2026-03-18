@@ -152,9 +152,9 @@ export default async function SupportPage({ searchParams }: { searchParams: Prom
                   The fastest way to reach us. We typically respond within 24 hours.
                 </p>
                 <div className="mt-auto pt-8">
-                  <Button asChild variant="accent" size="lg" className="cs-btn-glow w-full">
+                  <Button asChild variant="accent" size="lg" className="cs-btn-glow w-full overflow-hidden">
                     <a href={`mailto:${site.contactEmail}`}>
-                      {site.contactEmail} <ArrowUpRight className="h-4 w-4" />
+                      <span className="truncate">{site.contactEmail}</span> <ArrowUpRight className="h-4 w-4 shrink-0" />
                     </a>
                   </Button>
                   <p className="mt-3 text-center text-xs text-white/35">
