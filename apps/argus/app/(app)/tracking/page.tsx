@@ -37,6 +37,8 @@ import type {
 } from '@/lib/monitoring/types'
 import {
   CategoryChip,
+  CategorySection,
+  ComparisonRow,
   DataField,
   OwnerChip,
   SeverityChip,
@@ -610,198 +612,165 @@ export default function TrackingDashboard() {
                             {selectedEvent.summary}
                           </Typography>
 
-                          <Divider />
-
-                          <Stack spacing={1.2}>
-                            <DataField label="Observed at" value={formatDateTime(selectedEvent.timestamp)} mono />
-                            <DataField
-                              label="Baseline"
-                              value={formatDateTime(selectedEvent.baselineTimestamp)}
-                              mono
-                            />
-                            <DataField
-                              label="Categories"
-                              value={selectedEvent.categories
-                                .map((item) => humanizeFieldName(item))
-                                .join(', ')}
-                            />
-                            <DataField
-                              label="Changed fields"
-                              value={selectedEvent.changedFields
-                                .map((item) => humanizeFieldName(item))
-                                .join(', ')}
-                            />
-                          </Stack>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              gap: 2,
+                              color: '#64748b',
+                              fontSize: '0.72rem',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span>{formatDateTime(selectedEvent.timestamp)}</span>
+                            <span style={{ opacity: 0.4 }}>vs</span>
+                            <span>{formatDateTime(selectedEvent.baselineTimestamp)}</span>
+                          </Box>
 
                           <Divider />
 
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                            What changed
-                          </Typography>
-
-                          <Stack spacing={1.2}>
+                          <Stack spacing={0}>
                             {selectedEvent.categories.includes('status') && (
-                              <DataField
-                                label="Status"
-                                value={comparisonLabel(
-                                  selectedEvent.baselineSnapshot?.status ?? null,
-                                  selectedEvent.currentSnapshot?.status ?? null,
-                                )}
-                              />
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Status' : ''}>
+                                <ComparisonRow
+                                  label="Status"
+                                  baseline={selectedEvent.baselineSnapshot?.status ?? null}
+                                  current={selectedEvent.currentSnapshot?.status ?? null}
+                                />
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('price') && (
-                              <>
-                                <DataField
-                                  label="Landed price"
-                                  value={comparisonLabel(
-                                    formatMoney(
-                                      selectedEvent.baselineSnapshot?.landedPrice ?? null,
-                                      selectedEvent.baselineSnapshot?.priceCurrency ?? null,
-                                    ),
-                                    formatMoney(
-                                      selectedEvent.currentSnapshot?.landedPrice ?? null,
-                                      selectedEvent.currentSnapshot?.priceCurrency ?? null,
-                                    ),
-                                  )}
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Price' : ''}>
+                                <ComparisonRow
+                                  label="Landed"
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.landedPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.landedPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.landedPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.landedPrice}
                                 />
-                                <DataField
-                                  label="Listing price"
-                                  value={comparisonLabel(
-                                    formatMoney(
-                                      selectedEvent.baselineSnapshot?.listingPrice ?? null,
-                                      selectedEvent.baselineSnapshot?.priceCurrency ?? null,
-                                    ),
-                                    formatMoney(
-                                      selectedEvent.currentSnapshot?.listingPrice ?? null,
-                                      selectedEvent.currentSnapshot?.priceCurrency ?? null,
-                                    ),
-                                  )}
+                                <ComparisonRow
+                                  label="Listing"
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.listingPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.listingPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.listingPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.listingPrice}
                                 />
-                                <DataField
+                                <ComparisonRow
                                   label="Shipping"
-                                  value={comparisonLabel(
-                                    formatMoney(
-                                      selectedEvent.baselineSnapshot?.shippingPrice ?? null,
-                                      selectedEvent.baselineSnapshot?.priceCurrency ?? null,
-                                    ),
-                                    formatMoney(
-                                      selectedEvent.currentSnapshot?.shippingPrice ?? null,
-                                      selectedEvent.currentSnapshot?.priceCurrency ?? null,
-                                    ),
-                                  )}
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.shippingPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.shippingPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.shippingPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.shippingPrice}
                                 />
-                              </>
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('rank') && (
-                              <>
-                                <DataField
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Rank' : ''}>
+                                <ComparisonRow
                                   label="Root BSR"
-                                  value={comparisonLabel(
-                                    formatCount(selectedEvent.baselineSnapshot?.rootBsrRank ?? null),
-                                    formatCount(selectedEvent.currentSnapshot?.rootBsrRank ?? null),
-                                  )}
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.rootBsrRank ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.rootBsrRank ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.rootBsrRank}
+                                  numericCurrent={selectedEvent.currentSnapshot?.rootBsrRank}
+                                  lowerIsBetter
                                 />
-                                <DataField
+                                <ComparisonRow
                                   label="Sub BSR"
-                                  value={comparisonLabel(
-                                    formatCount(selectedEvent.baselineSnapshot?.subBsrRank ?? null),
-                                    formatCount(selectedEvent.currentSnapshot?.subBsrRank ?? null),
-                                  )}
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.subBsrRank ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.subBsrRank ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.subBsrRank}
+                                  numericCurrent={selectedEvent.currentSnapshot?.subBsrRank}
+                                  lowerIsBetter
                                 />
-                              </>
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('offers') && (
-                              <DataField
-                                label="Offer count"
-                                value={comparisonLabel(
-                                  formatCount(selectedEvent.baselineSnapshot?.totalOfferCount ?? null),
-                                  formatCount(selectedEvent.currentSnapshot?.totalOfferCount ?? null),
-                                )}
-                              />
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Offers' : ''}>
+                                <ComparisonRow
+                                  label="Total offers"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.totalOfferCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.totalOfferCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.totalOfferCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.totalOfferCount}
+                                />
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('content') && (
-                              <>
-                                <DataField
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Content' : ''}>
+                                <ComparisonRow
                                   label="Title"
-                                  value={comparisonLabel(
-                                    selectedEvent.baselineSnapshot?.title ?? null,
-                                    selectedEvent.currentSnapshot?.title ?? null,
-                                  )}
+                                  baseline={selectedEvent.baselineSnapshot?.title ?? null}
+                                  current={selectedEvent.currentSnapshot?.title ?? null}
                                 />
-                                <DataField
+                                <ComparisonRow
                                   label="Bullets"
-                                  value={comparisonLabel(
-                                    formatCount(selectedEvent.baselineSnapshot?.bulletCount ?? null),
-                                    formatCount(selectedEvent.currentSnapshot?.bulletCount ?? null),
-                                  )}
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.bulletCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.bulletCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.bulletCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.bulletCount}
                                 />
-                                <DataField
-                                  label="Description length"
-                                  value={comparisonLabel(
-                                    formatCount(selectedEvent.baselineSnapshot?.descriptionLength ?? null),
-                                    formatCount(selectedEvent.currentSnapshot?.descriptionLength ?? null),
-                                  )}
+                                <ComparisonRow
+                                  label="Description"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.descriptionLength ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.descriptionLength ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.descriptionLength}
+                                  numericCurrent={selectedEvent.currentSnapshot?.descriptionLength}
                                 />
-                              </>
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('images') && (
-                              <>
-                                <DataField
-                                  label="Image count"
-                                  value={comparisonLabel(
-                                    formatCount(selectedEvent.baselineSnapshot?.imageCount ?? null),
-                                    formatCount(selectedEvent.currentSnapshot?.imageCount ?? null),
-                                  )}
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Images' : ''}>
+                                <ComparisonRow
+                                  label="Count"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.imageCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.imageCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.imageCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.imageCount}
                                 />
                                 {selectedEvent.currentSnapshot?.imageUrls.length ? (
-                                  <>
-                                    <Divider sx={{ my: 0.5 }} />
-                                    <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', letterSpacing: '0.04em' }}>
-                                      Current images
-                                    </Typography>
-                                    <Box
-                                      sx={{
-                                        display: 'grid',
-                                        gap: 1,
-                                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                                      }}
-                                    >
-                                      {selectedEvent.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
-                                        <Box
-                                          key={url}
-                                          component="img"
-                                          src={url}
-                                          alt=""
-                                          sx={{
-                                            width: '100%',
-                                            aspectRatio: '1 / 1',
-                                            objectFit: 'contain',
-                                            borderRadius: 2,
-                                            bgcolor: 'rgba(248, 250, 252, 0.96)',
-                                            border: '1px solid rgba(15, 23, 42, 0.08)',
-                                            p: 0.8,
-                                          }}
-                                        />
-                                      ))}
-                                    </Box>
-                                  </>
+                                  <Box
+                                    sx={{
+                                      display: 'grid',
+                                      gap: 0.8,
+                                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                      mt: 1,
+                                    }}
+                                  >
+                                    {selectedEvent.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
+                                      <Box
+                                        key={url}
+                                        component="img"
+                                        src={url}
+                                        alt=""
+                                        sx={{
+                                          width: '100%',
+                                          aspectRatio: '1 / 1',
+                                          objectFit: 'contain',
+                                          borderRadius: 1.5,
+                                          bgcolor: '#f8fafc',
+                                          border: '1px solid rgba(15, 23, 42, 0.06)',
+                                          p: 0.6,
+                                        }}
+                                      />
+                                    ))}
+                                  </Box>
                                 ) : null}
-                              </>
+                              </CategorySection>
                             )}
 
                             {selectedEvent.categories.includes('catalog') && (
-                              <DataField
-                                label="Brand"
-                                value={comparisonLabel(
-                                  selectedEvent.baselineSnapshot?.brand ?? null,
-                                  selectedEvent.currentSnapshot?.brand ?? null,
-                                )}
-                              />
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Catalog' : ''}>
+                                <ComparisonRow
+                                  label="Brand"
+                                  baseline={selectedEvent.baselineSnapshot?.brand ?? null}
+                                  current={selectedEvent.currentSnapshot?.brand ?? null}
+                                />
+                              </CategorySection>
                             )}
                           </Stack>
 
@@ -918,9 +887,3 @@ export default function TrackingDashboard() {
   )
 }
 
-function comparisonLabel(
-  baseline: string | null,
-  current: string | null,
-): string {
-  return `${baseline ?? '—'} -> ${current ?? '—'}`
-}
