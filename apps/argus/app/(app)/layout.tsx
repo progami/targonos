@@ -72,7 +72,7 @@ export default function AppLayout({
           variant="overline"
           sx={{ color: 'rgba(248, 250, 252, 0.66)', letterSpacing: '0.12em' }}
         >
-          Dust Sheets OS
+          Product Watcher
         </Typography>
         <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em', mt: 0.4 }}>
           Argus

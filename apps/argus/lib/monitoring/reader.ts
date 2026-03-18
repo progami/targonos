@@ -2,6 +2,7 @@ import 'server-only'
 
 import { promises as fs } from 'fs'
 import path from 'path'
+import prisma from '@/lib/db'
 import { parseCsvRows } from './csv'
 import type {
   MonitoringAsinDetail,
@@ -311,10 +312,13 @@ function countCategories(
 
 async function loadMonitoringModel() {
   const latestState = await readLatestState()
-  const [changeRows, snapshotRows] = await Promise.all([
+  const [changeRows, snapshotRows, trackedAsins] = await Promise.all([
     readChangeHistory(),
     readSnapshotHistory(),
+    prisma.trackedAsin.findMany({ select: { asin: true, label: true } }),
   ])
+
+  const labelsByAsin = new Map(trackedAsins.map((item) => [item.asin.trim().toUpperCase(), item.label]))
 
   const snapshotsByAsin = indexByAsin(snapshotRows)
   const currentItems = Object.entries(latestState.by_asin)
@@ -329,6 +333,7 @@ async function loadMonitoringModel() {
         row,
         snapshotsByAsin.get(row.asin.trim().toUpperCase()) ?? [],
         currentByAsin.get(row.asin.trim().toUpperCase()) ?? null,
+        labelsByAsin.get(row.asin.trim().toUpperCase()) ?? null,
         index,
       ),
     )
@@ -443,6 +448,7 @@ function normalizeChangeEvent(
   row: ChangeHistoryRow,
   snapshots: MonitoringSnapshotRecord[],
   currentState: MonitoringStateRecord | null,
+  label: string | null,
   index: number,
 ): MonitoringChangeEvent {
   const asin = row.asin.trim().toUpperCase()
@@ -466,8 +472,9 @@ function normalizeChangeEvent(
   })
 
   const owner = normalizeOwner(row.owner_type)
+  const displayName = label ?? asin
   const headline = buildHeadline({
-    asin,
+    asin: displayName,
     owner,
     primaryCategory,
     currentSnapshot,
@@ -485,6 +492,7 @@ function normalizeChangeEvent(
   return {
     id: `${asin}-${row.snapshot_timestamp_utc}-${index}`,
     asin,
+    label,
     owner,
     timestamp: row.snapshot_timestamp_utc,
     baselineTimestamp: readString(row.baseline_timestamp_utc),
