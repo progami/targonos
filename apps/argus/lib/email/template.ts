@@ -18,7 +18,7 @@ const TEXT_PRIMARY = '#0f172a'
 const TEXT_SECONDARY = '#475569'
 const TEXT_TERTIARY = '#94a3b8'
 const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
-const MONO = "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', monospace"
+const MONO = "Menlo, Consolas, 'Courier New', monospace"
 
 // ─── Severity ───────────────────────────────────────────────
 
@@ -60,23 +60,6 @@ const FIELD_MAP: Record<string, FieldMapping> = {
   description_length: { label: 'Desc Length', key: 'descriptionLength', format: 'number' },
 }
 
-const MAX_TABLE_ROWS = 8
-
-// ─── Logos (SVG → base64 data URI) ──────────────────────────
-
-const ARGUS_EYE_SVG = [
-  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">',
-  `<circle cx="16" cy="16" r="14" fill="none" stroke="${TEAL}" stroke-width="1" opacity="0.3"/>`,
-  `<path d="M3 16 C9 7, 23 7, 29 16 C23 25, 9 25, 3 16 Z" fill="${TEAL}" opacity="0.15"/>`,
-  `<path d="M3 16 C9 7, 23 7, 29 16 C23 25, 9 25, 3 16 Z" fill="none" stroke="${TEAL}" stroke-width="1.5"/>`,
-  `<circle cx="16" cy="16" r="5" fill="${TEAL}"/>`,
-  `<circle cx="16" cy="16" r="2" fill="${NAVY}"/>`,
-  '<circle cx="18" cy="14.5" r="1" fill="white" opacity="0.8"/>',
-  '</svg>',
-].join('')
-
-const ARGUS_LOGO_URI = `data:image/svg+xml;base64,${Buffer.from(ARGUS_EYE_SVG).toString('base64')}`
-
 // ─── Public API ─────────────────────────────────────────────
 
 export function buildAlertSubject(event: MonitoringChangeEvent): string {
@@ -92,10 +75,16 @@ export function buildAlertEmailHtml(
   const own = OWNER_CONFIG[event.owner]
   const detectedAt = formatEmailDateTime(event.timestamp)
   const comparedTo = event.baselineTimestamp ? formatEmailDateTime(event.baselineTimestamp) : null
+
+  // Product display name: prefer label, fallback to snapshot title, then ASIN
+  const productName = event.label
+    ?? event.currentSnapshot?.title
+    ?? event.baselineSnapshot?.title
+    ?? event.asin
+  const safeProductName = esc(productName.length > 70 ? productName.slice(0, 67) + '...' : productName)
+  const safeAsin = esc(event.asin)
   const safeHeadline = esc(event.headline)
   const safeSummary = esc(event.summary)
-  const safeAsin = esc(event.asin)
-  const safeLabel = event.label ? esc(event.label.length > 60 ? event.label.slice(0, 57) + '...' : event.label) : null
   const categoryLabel = event.primaryCategory.charAt(0).toUpperCase() + event.primaryCategory.slice(1)
   const trackingUrl = esc(`${appUrl}/tracking`)
 
@@ -110,7 +99,7 @@ export function buildAlertEmailHtml(
 <title>${esc(buildAlertSubject(event))}</title>
 </head>
 <body style="margin:0; padding:0; background:${BG}; -webkit-text-size-adjust:none; -ms-text-size-adjust:none;">
-<span style="display:none; max-height:0; overflow:hidden; mso-hide:all;">${safeSummary} &mdash; ${safeAsin}</span>
+<span style="display:none; max-height:0; overflow:hidden; mso-hide:all;">${safeSummary} &mdash; ${safeProductName}</span>
 
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:${BG};">
 <tr>
@@ -119,22 +108,14 @@ export function buildAlertEmailHtml(
 
 <!-- ═══ HEADER ═══ -->
 <tr>
-<td style="background:${NAVY}; border-radius:12px 12px 0 0; padding:16px 24px;">
+<td style="background:${NAVY}; padding:18px 24px;">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
 <tr>
 <td style="vertical-align:middle;">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-  <tr>
-  <td style="vertical-align:middle; padding-right:10px;">
-    <img src="${ARGUS_LOGO_URI}" width="28" height="28" alt="" style="display:block; border:0;">
-  </td>
-  <td style="vertical-align:middle; font-family:${FONT}; font-size:17px; font-weight:800; color:${TEAL}; letter-spacing:0.14em;">
-    ARGUS
-  </td>
-  </tr>
-  </table>
+  <span style="font-family:${FONT}; font-size:11px; font-weight:700; color:${NAVY}; background:${TEAL}; display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; border-radius:50%; vertical-align:middle;">&bull;</span>
+  <span style="font-family:${FONT}; font-size:16px; font-weight:800; color:${TEAL}; letter-spacing:0.14em; vertical-align:middle; padding-left:8px;">ARGUS</span>
 </td>
-<td align="right" style="vertical-align:middle; font-family:${FONT}; font-size:10px; font-weight:600; color:rgba(255,255,255,0.45); letter-spacing:0.18em; text-transform:uppercase;">
+<td align="right" style="vertical-align:middle; font-family:${FONT}; font-size:10px; font-weight:600; color:rgba(255,255,255,0.4); letter-spacing:0.18em; text-transform:uppercase;">
   TARGON
 </td>
 </tr>
@@ -142,33 +123,30 @@ export function buildAlertEmailHtml(
 </td>
 </tr>
 
-<!-- ═══ CONTENT CARD ═══ -->
+<!-- ═══ SEVERITY BAR ═══ -->
 <tr>
-<td style="padding:0;">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<td style="background:${sev.color}; height:4px; font-size:0; line-height:0;">&nbsp;</td>
+</tr>
+
+<!-- ═══ CONTENT ═══ -->
 <tr>
-
-<!-- Severity accent strip -->
-<td width="4" style="background:${sev.color}; font-size:0; line-height:0;">&nbsp;</td>
-
-<!-- Main content -->
-<td style="background:${CARD}; padding:24px; border-right:1px solid ${BORDER};">
+<td style="background:${CARD}; padding:24px; border-left:1px solid ${BORDER}; border-right:1px solid ${BORDER};">
 
   <!-- Badges -->
   <table role="presentation" cellpadding="0" cellspacing="0" border="0">
   <tr>
-  <td style="padding-right:6px; padding-bottom:14px;">
-    <span style="display:inline-block; padding:3px 8px; border-radius:4px; background:${sev.bg}; border:1px solid ${sev.border}; font-family:${FONT}; font-size:10px; font-weight:800; color:${sev.color}; letter-spacing:0.06em;">
+  <td style="padding-right:6px; padding-bottom:16px;">
+    <span style="display:inline-block; padding:3px 8px; background:${sev.bg}; border:1px solid ${sev.border}; font-family:${FONT}; font-size:10px; font-weight:800; color:${sev.color}; letter-spacing:0.06em;">
       ${sev.label}
     </span>
   </td>
-  <td style="padding-right:6px; padding-bottom:14px;">
-    <span style="display:inline-block; padding:3px 8px; border-radius:4px; background:${own.bg}; border:1px solid ${own.border}; font-family:${FONT}; font-size:10px; font-weight:700; color:${own.color};">
+  <td style="padding-right:6px; padding-bottom:16px;">
+    <span style="display:inline-block; padding:3px 8px; background:${own.bg}; border:1px solid ${own.border}; font-family:${FONT}; font-size:10px; font-weight:700; color:${own.color};">
       ${own.label}
     </span>
   </td>
-  <td style="padding-bottom:14px;">
-    <span style="display:inline-block; padding:3px 8px; border-radius:4px; border:1px solid ${BORDER}; font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_SECONDARY};">
+  <td style="padding-bottom:16px;">
+    <span style="display:inline-block; padding:3px 8px; border:1px solid ${BORDER}; font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_SECONDARY};">
       ${esc(categoryLabel)}
     </span>
   </td>
@@ -176,36 +154,35 @@ export function buildAlertEmailHtml(
   </table>
 
   <!-- Headline -->
-  <div style="font-family:${FONT}; font-size:18px; font-weight:700; color:${TEXT_PRIMARY}; line-height:1.3; margin:0 0 6px 0;">
+  <div style="font-family:${FONT}; font-size:18px; font-weight:700; color:${TEXT_PRIMARY}; line-height:1.3; margin:0 0 4px 0;">
     ${safeHeadline}
   </div>
 
   <!-- Summary -->
-  <div style="font-family:${FONT}; font-size:13px; color:${TEXT_SECONDARY}; line-height:1.45; margin:0 0 16px 0;">
+  <div style="font-family:${FONT}; font-size:13px; color:${TEXT_SECONDARY}; line-height:1.45; margin:0 0 20px 0;">
     ${safeSummary}
   </div>
 
-  <!-- Meta row -->
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;">
+  <!-- Product + Timestamps -->
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f8fafc; border:1px solid ${BORDER}; margin:0 0 24px 0;">
   <tr>
-  <td style="padding-right:24px;">
-    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 2px 0;">ASIN</div>
-    <div style="font-family:${MONO}; font-size:13px; font-weight:700; color:${TEXT_PRIMARY};">${safeAsin}</div>
-    ${safeLabel ? `<div style="font-family:${FONT}; font-size:11px; color:${TEXT_SECONDARY}; margin-top:2px;">${safeLabel}</div>` : ''}
+  <td style="padding:14px 16px; border-bottom:1px solid ${BORDER};" colspan="2">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 4px 0;">Product</div>
+    <div style="font-family:${FONT}; font-size:14px; font-weight:700; color:${TEXT_PRIMARY}; line-height:1.3;">${safeProductName}</div>
+    <div style="font-family:${MONO}; font-size:11px; color:${TEXT_TERTIARY}; margin-top:3px;">${safeAsin}</div>
   </td>
-  <td style="padding-right:24px;">
-    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 2px 0;">Detected</div>
+  </tr>
+  <tr>
+  <td style="padding:12px 16px;${comparedTo ? ` border-right:1px solid ${BORDER};` : ''}" width="50%">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 3px 0;">Detected</div>
     <div style="font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_PRIMARY};">${esc(detectedAt)}</div>
   </td>
-  ${comparedTo ? `<td>
-    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 2px 0;">Compared to</div>
+  ${comparedTo ? `<td style="padding:12px 16px;" width="50%">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 3px 0;">Baseline</div>
     <div style="font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_PRIMARY};">${esc(comparedTo)}</div>
   </td>` : ''}
   </tr>
   </table>
-
-  <!-- Divider -->
-  <div style="border-top:1px solid ${BORDER}; margin:0 0 20px 0;"></div>
 
   <!-- Changes table -->
   ${changesHtml}
@@ -213,8 +190,8 @@ export function buildAlertEmailHtml(
   <!-- CTA button -->
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0 0;">
   <tr>
-  <td align="center" bgcolor="${TEAL}" style="border-radius:8px;">
-    <a href="${trackingUrl}" target="_blank" style="display:inline-block; padding:11px 22px; font-family:${FONT}; font-size:13px; font-weight:700; color:${NAVY}; text-decoration:none; border-radius:8px;">
+  <td align="center" bgcolor="${TEAL}" style="mso-padding-alt:0;">
+    <a href="${trackingUrl}" target="_blank" style="display:inline-block; padding:12px 28px; font-family:${FONT}; font-size:13px; font-weight:700; color:${NAVY}; text-decoration:none;">
       View in Argus &rarr;
     </a>
   </td>
@@ -223,18 +200,12 @@ export function buildAlertEmailHtml(
 
 </td>
 </tr>
-</table>
-</td>
-</tr>
 
 <!-- ═══ FOOTER ═══ -->
 <tr>
-<td style="padding:16px 24px 0 24px; text-align:center;">
+<td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:16px 24px; text-align:center;">
   <div style="font-family:${FONT}; font-size:11px; color:${TEXT_TERTIARY}; line-height:1.6;">
     Automated alert from Argus &middot; Targon Global
-  </div>
-  <div style="font-family:${FONT}; font-size:10px; color:${TEXT_TERTIARY}; margin-top:4px; opacity:0.7;">
-    ${esc(event.changedFieldCount.toString())} field${event.changedFieldCount === 1 ? '' : 's'} changed
   </div>
 </td>
 </tr>
@@ -253,46 +224,36 @@ function buildChangesTable(event: MonitoringChangeEvent): string {
   const rows = extractChangeRows(event)
 
   if (rows.length === 0) {
-    return `<div style="font-family:${FONT}; font-size:13px; color:${TEXT_SECONDARY}; font-style:italic;">
+    return `<div style="font-family:${FONT}; font-size:13px; color:${TEXT_SECONDARY};">
       Fields changed: ${event.changedFields.map(humanize).join(', ')}
     </div>`
   }
 
-  const headerStyle = `padding:8px 12px; font-family:${FONT}; font-size:10px; font-weight:700; color:${TEXT_TERTIARY}; text-transform:uppercase; letter-spacing:0.06em; border-bottom:2px solid ${BORDER}; background:#f8fafc;`
-  const remaining = event.changedFields.length - rows.length
+  const thStyle = `padding:10px 14px; font-family:${FONT}; font-size:10px; font-weight:700; color:${TEXT_TERTIARY}; text-transform:uppercase; letter-spacing:0.06em; background:#f8fafc; border-bottom:2px solid ${BORDER};`
 
-  let html = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border:1px solid ${BORDER}; border-radius:8px; border-collapse:separate; overflow:hidden;">
+  let html = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER};">
 <tr>
-<td style="${headerStyle}">Field</td>
-<td style="${headerStyle}" align="right">Before</td>
-<td style="${headerStyle}" align="right">After</td>
+<td style="${thStyle} border-right:1px solid ${BORDER};">Field</td>
+<td style="${thStyle} border-right:1px solid ${BORDER};" align="right">Before</td>
+<td style="${thStyle}" align="right">After</td>
 </tr>`
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]
-    const isLast = i === rows.length - 1 && remaining <= 0
-    const borderBottom = isLast ? 'none' : `1px solid #f1f5f9`
+    const isLast = i === rows.length - 1
+    const bb = isLast ? '' : `border-bottom:1px solid #f1f5f9;`
     const bg = i % 2 === 1 ? '#fafbfc' : CARD
 
     html += `
 <tr>
-<td style="padding:10px 12px; font-family:${FONT}; font-size:12px; font-weight:600; color:${TEXT_SECONDARY}; border-bottom:${borderBottom}; background:${bg};">
+<td style="padding:10px 14px; font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_SECONDARY}; ${bb} background:${bg}; border-right:1px solid ${BORDER};">
   ${esc(row.label)}
 </td>
-<td style="padding:10px 12px; font-family:${MONO}; font-size:12px; color:${TEXT_TERTIARY}; border-bottom:${borderBottom}; background:${bg}; white-space:nowrap;" align="right">
+<td style="padding:10px 14px; font-family:${MONO}; font-size:12px; color:${TEXT_TERTIARY}; ${bb} background:${bg}; border-right:1px solid ${BORDER};" align="right">
   ${esc(row.before)}
 </td>
-<td style="padding:10px 12px; font-family:${MONO}; font-size:12px; font-weight:700; color:${TEXT_PRIMARY}; border-bottom:${borderBottom}; background:${bg}; white-space:nowrap;" align="right">
+<td style="padding:10px 14px; font-family:${MONO}; font-size:12px; font-weight:700; color:${TEXT_PRIMARY}; ${bb} background:${bg};" align="right">
   ${esc(row.after)}
-</td>
-</tr>`
-  }
-
-  if (remaining > 0) {
-    html += `
-<tr>
-<td colspan="3" style="padding:8px 12px; font-family:${FONT}; font-size:11px; color:${TEXT_TERTIARY}; font-style:italic; background:#fafbfc;">
-  + ${remaining} more field${remaining === 1 ? '' : 's'} changed
 </td>
 </tr>`
   }
@@ -317,16 +278,20 @@ function extractChangeRows(event: MonitoringChangeEvent): ChangeRow[] {
   const currency = current?.priceCurrency ?? baseline?.priceCurrency ?? null
 
   for (const field of event.changedFields) {
-    if (rows.length >= MAX_TABLE_ROWS) break
-
     const mapping = FIELD_MAP[field]
-    if (!mapping) continue
+
+    if (!mapping) {
+      // Include unmapped fields as text with "Changed" indicator
+      rows.push({
+        label: humanize(field),
+        before: '\u2014',
+        after: 'Changed',
+      })
+      continue
+    }
 
     const beforeVal = getSnapshotValue(baseline, mapping.key)
     const afterVal = getSnapshotValue(current, mapping.key)
-
-    // Skip if both values are missing
-    if (beforeVal === null && afterVal === null) continue
 
     rows.push({
       label: mapping.label,
