@@ -86,6 +86,7 @@ function buildSampleEvent(
   return {
     id: 'sample-alert-preview',
     asin: 'B001D8XVVU',
+    label: 'Premium Dust Sheets - Heavy Duty Cotton Twill 12ft x 9ft',
     owner,
     timestamp: now.toISOString(),
     baselineTimestamp: baseline.toISOString(),

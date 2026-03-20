@@ -95,6 +95,7 @@ export function buildAlertEmailHtml(
   const safeHeadline = esc(event.headline)
   const safeSummary = esc(event.summary)
   const safeAsin = esc(event.asin)
+  const safeLabel = event.label ? esc(event.label.length > 60 ? event.label.slice(0, 57) + '...' : event.label) : null
   const categoryLabel = event.primaryCategory.charAt(0).toUpperCase() + event.primaryCategory.slice(1)
   const trackingUrl = esc(`${appUrl}/tracking`)
 
@@ -190,6 +191,7 @@ export function buildAlertEmailHtml(
   <td style="padding-right:24px;">
     <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 2px 0;">ASIN</div>
     <div style="font-family:${MONO}; font-size:13px; font-weight:700; color:${TEXT_PRIMARY};">${safeAsin}</div>
+    ${safeLabel ? `<div style="font-family:${FONT}; font-size:11px; color:${TEXT_SECONDARY}; margin-top:2px;">${safeLabel}</div>` : ''}
   </td>
   <td style="padding-right:24px;">
     <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 2px 0;">Detected</div>

@@ -14,6 +14,7 @@ const SendAlertSchema = z.object({
   event: z.object({
     id: z.string(),
     asin: z.string(),
+    label: z.string().nullable(),
     owner: z.enum(['OURS', 'COMPETITOR', 'UNKNOWN']),
     timestamp: z.string(),
     baselineTimestamp: z.string().nullable(),
