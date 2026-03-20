@@ -87,6 +87,7 @@ export function buildAlertEmailHtml(
   const safeSummary = esc(event.summary)
   const categoryLabel = event.primaryCategory.charAt(0).toUpperCase() + event.primaryCategory.slice(1)
   const trackingUrl = esc(`${appUrl}/tracking`)
+  const logoUrl = esc(`${appUrl}/brand/targon-logo-white.png`)
 
   const changesHtml = buildChangesTable(event)
 
@@ -115,8 +116,8 @@ export function buildAlertEmailHtml(
   <span style="font-family:${FONT}; font-size:11px; font-weight:700; color:${NAVY}; background:${TEAL}; display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; border-radius:50%; vertical-align:middle;">&bull;</span>
   <span style="font-family:${FONT}; font-size:16px; font-weight:800; color:${TEAL}; letter-spacing:0.14em; vertical-align:middle; padding-left:8px;">ARGUS</span>
 </td>
-<td align="right" style="vertical-align:middle; font-family:${FONT}; font-size:10px; font-weight:600; color:rgba(255,255,255,0.4); letter-spacing:0.18em; text-transform:uppercase;">
-  TARGON
+<td align="right" style="vertical-align:middle;">
+  <img src="${logoUrl}" width="100" height="26" alt="TARGON" style="display:inline-block; border:0; vertical-align:middle;">
 </td>
 </tr>
 </table>
