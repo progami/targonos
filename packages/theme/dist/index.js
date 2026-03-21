@@ -1,25 +1,25 @@
 export const brandColors = {
-    /** Main brand navy */
-    main: '#002C51',
+    /** Main brand navy (from brand DNA) */
+    main: '#0b273f',
     /** Secondary brand teal/cyan */
     secondary: '#00C2B9',
     /** Accent muted gray */
     accent: '#6F7B8B',
     /** White */
     white: '#FFFFFF',
-    /** Navy color scale */
+    /** Navy color scale (based on brand DNA #0b273f) */
     navy: {
-        50: '#e6f0f9',
-        100: '#cce0f3',
-        200: '#99c2e6',
-        300: '#66a3da',
-        400: '#3385cd',
-        500: '#0066c1',
-        600: '#00528a',
-        700: '#003d68',
-        800: '#002C51',
-        900: '#001f3a',
-        950: '#001423',
+        50: '#f0f4f7',
+        100: '#dae4ec',
+        200: '#b5c9d9',
+        300: '#8faec6',
+        400: '#6a93b3',
+        500: '#3d6d8f',
+        600: '#2a5270',
+        700: '#1a3d56',
+        800: '#0b273f',
+        900: '#071c2d',
+        950: '#04111c',
     },
     /** Teal color scale */
     teal: {
@@ -49,11 +49,13 @@ export const brandColors = {
         900: '#6F7B8B',
         950: '#5a6372',
     },
-    /** Legacy aliases for backward compatibility */
-    primary: '#002C51',
-    primaryMuted: '#021B2B',
-    primaryDeep: '#011226',
-    primaryOverlay: '#00070F',
+    /** Light neutral (from brand DNA) */
+    light: '#F5F5F5',
+    /** Legacy aliases */
+    primary: '#0b273f',
+    primaryMuted: '#071c2d',
+    primaryDeep: '#04111c',
+    primaryOverlay: '#020a10',
     accentHover: '#00AFA8',
     accentShadow: 'rgba(0, 194, 185, 0.28)',
     accentShadowHover: 'rgba(0, 194, 185, 0.35)',
@@ -62,8 +64,12 @@ export const brandColors = {
     slate: '#6F7B8B',
 };
 export const brandFontFamilies = {
-    /** Primary sans-serif font */
-    primary: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    /** Headings — geometric, high-impact */
+    heading: 'League Spartan, system-ui, sans-serif',
+    /** Primary body/UI — clean, modern */
+    primary: 'Outfit, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    /** Secondary/accent — data labels, chips, metadata */
+    secondary: 'Montserrat, system-ui, sans-serif',
     /** Monospace font for code */
     mono: 'JetBrains Mono, Monaco, Consolas, monospace',
 };

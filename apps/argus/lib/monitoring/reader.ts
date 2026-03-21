@@ -4,6 +4,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import prisma from '@/lib/db'
 import { parseCsvRows } from './csv'
+import { formatMonitoringLabel } from './labels'
 import type {
   MonitoringAsinDetail,
   MonitoringCategory,
@@ -206,8 +207,14 @@ export async function getMonitoringAsinDetail(asin: string): Promise<MonitoringA
   const snapshots = model.snapshotsByAsin.get(normalizedAsin) ?? []
   const changes = model.changes.filter((item) => item.asin === normalizedAsin)
 
+  const trackedAsin = await prisma.trackedAsin.findFirst({
+    where: { asin: normalizedAsin },
+    select: { label: true },
+  })
+
   return {
     asin: normalizedAsin,
+    label: trackedAsin?.label ?? null,
     current,
     latestSnapshotAt: snapshots.at(-1)?.capturedAt ?? null,
     changes,
@@ -425,6 +432,7 @@ function normalizeStateRecord(
     owner: normalizeOwner(raw.owner_type),
     title: readString(raw.title),
     brand: readString(raw.brand),
+    size: readString(raw.size),
     status: readString(raw.status),
     sellerSku: readString(raw.seller_sku),
     imageCount: readNumber(raw.image_count),
@@ -642,38 +650,35 @@ function buildHeadline(input: {
   baselineSnapshot: MonitoringSnapshotRecord | null
   changedFields: string[]
 }): string {
-  const ownerLabel =
-    input.owner === 'OURS'
-      ? 'Our'
-      : input.owner === 'COMPETITOR'
-        ? 'Competitor'
-        : 'Tracked'
+  const name = formatMonitoringLabel(
+    input.currentSnapshot ?? input.baselineSnapshot ?? { asin: input.asin },
+  )
 
   switch (input.primaryCategory) {
     case 'status':
       if (valuesDiffer(input.baselineSnapshot?.status, input.currentSnapshot?.status)) {
-        return `${ownerLabel} ${input.asin} availability changed`
+        return `${name} availability changed`
       }
-      return `${ownerLabel} ${input.asin} operational signal changed`
+      return `${name} operational signal changed`
     case 'content':
-      return `${ownerLabel} ${input.asin} content changed`
+      return `${name} content changed`
     case 'images':
-      return `${ownerLabel} ${input.asin} gallery changed`
+      return `${name} gallery changed`
     case 'price':
-      return `${ownerLabel} ${input.asin} pricing changed`
+      return `${name} pricing changed`
     case 'offers':
-      return `${ownerLabel} ${input.asin} offer mix changed`
+      return `${name} offer mix changed`
     case 'rank': {
       const current = input.currentSnapshot?.rootBsrRank
       const baseline = input.baselineSnapshot?.rootBsrRank
       if (current !== null && baseline !== null && current !== undefined && baseline !== undefined) {
-        if (current < baseline) return `${ownerLabel} ${input.asin} rank improved`
-        if (current > baseline) return `${ownerLabel} ${input.asin} rank worsened`
+        if (current < baseline) return `${name} rank improved`
+        if (current > baseline) return `${name} rank worsened`
       }
-      return `${ownerLabel} ${input.asin} rank moved`
+      return `${name} rank moved`
     }
     case 'catalog':
-      return `${ownerLabel} ${input.asin} catalog data changed`
+      return `${name} catalog data changed`
   }
 }
 

@@ -35,6 +35,7 @@ import type {
   MonitoringOverview,
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
+import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
   CategorySection,
@@ -269,7 +270,7 @@ export default function TrackingDashboard() {
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
             background:
-              'linear-gradient(135deg, #13232f 0%, #243649 60%, #7a4520 100%)',
+              'linear-gradient(135deg, #0b273f 0%, #1a3d56 60%, #00C2B9 100%)',
             color: '#f8fafc',
           }}
         >
@@ -309,9 +310,9 @@ export default function TrackingDashboard() {
                   onClick={handleRefresh}
                   disabled={refreshing}
                   sx={{
-                    bgcolor: '#f8fafc',
-                    color: '#102032',
-                    '&:hover': { bgcolor: '#e2e8f0' },
+                    bgcolor: '#F5F5F5',
+                    color: '#0b273f',
+                    '&:hover': { bgcolor: '#dae4ec' },
                   }}
                 >
                   {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -327,8 +328,11 @@ export default function TrackingDashboard() {
                       borderColor: 'rgba(248, 250, 252, 0.28)',
                       color: '#f8fafc',
                     }}
+                    title={selectedEvent.asin}
                   >
-                    {selectedEvent.asin}
+                    {formatMonitoringLabel(
+                      selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                    )}
                   </Button>
                 ) : null}
               </Stack>
@@ -357,7 +361,7 @@ export default function TrackingDashboard() {
             borderRadius: 4,
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            backgroundColor: 'rgba(255, 252, 245, 0.92)',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
           }}
         >
           <Box sx={{ px: 2, pt: 1.5 }}>
@@ -478,6 +482,9 @@ export default function TrackingDashboard() {
                     <List sx={{ p: 0 }}>
                       {changes.map((item, index) => {
                         const selected = item.id === selectedEventId
+                        const listingLabel = formatMonitoringLabel(
+                          item.currentSnapshot ?? item.baselineSnapshot ?? { asin: item.asin },
+                        )
                         return (
                           <Box key={item.id}>
                             <ListItemButton
@@ -531,13 +538,14 @@ export default function TrackingDashboard() {
                                 >
                                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                      label={item.label ? `${item.label} · ${item.asin}` : item.asin}
+                                      label={listingLabel}
                                       size="small"
                                       sx={{
-                                        fontFamily: 'var(--font-mono)',
+                                        fontWeight: 700,
                                         borderRadius: 999,
                                         bgcolor: 'rgba(15, 23, 42, 0.06)',
                                       }}
+                                      title={item.asin}
                                     />
                                     {item.changedFields.slice(0, 4).map((field) => (
                                       <Chip
@@ -593,10 +601,12 @@ export default function TrackingDashboard() {
                                 variant="overline"
                                 sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
                               >
-                                {selectedEvent.asin}
+                                {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? `(${selectedEvent.asin})` : selectedEvent.asin}
                               </Typography>
                               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
-                                {selectedEvent.label ?? selectedEvent.asin}
+                                {formatMonitoringLabel(
+                                  selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                                )}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -616,7 +626,7 @@ export default function TrackingDashboard() {
                             sx={{
                               display: 'flex',
                               gap: 2,
-                              color: '#64748b',
+                              color: '#6a93b3',
                               fontSize: '0.72rem',
                               fontFamily: 'var(--font-mono)',
                               fontWeight: 600,
@@ -781,7 +791,7 @@ export default function TrackingDashboard() {
                             startIcon={<ArrowOutwardIcon />}
                             sx={{ alignSelf: 'flex-start' }}
                           >
-                            Open ASIN Detail
+                            View {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? selectedEvent.label : selectedEvent.asin}
                           </Button>
                         </Stack>
                       ) : (
@@ -886,4 +896,3 @@ export default function TrackingDashboard() {
     </Box>
   )
 }
-

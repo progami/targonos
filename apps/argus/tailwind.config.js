@@ -8,6 +8,12 @@ module.exports = {
   ],
   prefix: "",
   theme: {
+    fontFamily: {
+      sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+      heading: ['var(--font-heading)', 'system-ui', 'sans-serif'],
+      secondary: ['var(--font-secondary)', 'system-ui', 'sans-serif'],
+      mono: ['var(--font-mono)', 'Monaco', 'Consolas', 'monospace'],
+    },
     container: {
       center: true,
       padding: "2rem",
