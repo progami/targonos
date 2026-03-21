@@ -136,7 +136,7 @@ export default function TrackingDetailPage() {
                 border: '1px solid rgba(15, 23, 42, 0.08)',
                 boxShadow: '0 12px 32px rgba(15, 23, 42, 0.07)',
                 background:
-                  'radial-gradient(circle at top right, rgba(196, 119, 49, 0.08), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,242,234,0.96) 100%)',
+                  'radial-gradient(circle at top right, rgba(0, 194, 185, 0.06), transparent 34%), linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,245,245,0.96) 100%)',
               }}
             >
               <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
@@ -197,23 +197,23 @@ export default function TrackingDetailPage() {
                     <MetricCard
                       label="Status"
                       value={current.status ?? 'Unknown'}
-                      accent="#17324d"
+                      accent="#0b273f"
                     />
                     <MetricCard
                       label="Landed Price"
                       value={formatMoney(current.landedPrice, current.priceCurrency)}
-                      accent="#8c4b1f"
+                      accent="#0b273f"
                     />
                     <MetricCard
                       label="Root BSR"
                       value={formatCount(current.rootBsrRank)}
                       helper={`Sub ${formatCount(current.subBsrRank)}`}
-                      accent="#0f5c5c"
+                      accent="#007a6d"
                     />
                     <MetricCard
                       label="Offers"
                       value={formatCount(current.totalOfferCount)}
-                      accent="#32556d"
+                      accent="#1a3d56"
                     />
                     <MetricCard
                       label="Changes"

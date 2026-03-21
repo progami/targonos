@@ -54,7 +54,7 @@ export default function AppLayout({
         flexDirection: 'column',
         px: 2.25,
         py: 2,
-        bgcolor: '#0f1d2b',
+        bgcolor: '#0b273f',
         color: '#f8fafc',
       }}
     >
@@ -134,14 +134,14 @@ export default function AppLayout({
   )
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#f2eee6' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: '#F5F5F5' }}>
       <AppBar
         position="fixed"
         color="transparent"
         elevation={0}
         sx={{
           display: { md: 'none' },
-          bgcolor: 'rgba(242, 238, 230, 0.92)',
+          bgcolor: 'rgba(245, 245, 245, 0.92)',
           borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
           backdropFilter: 'blur(14px)',
         }}

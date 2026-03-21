@@ -9,15 +9,15 @@ import { formatEmailDateTime, formatEmailCurrency, formatEmailNumber } from './f
 
 // ─── Brand ──────────────────────────────────────────────────
 
-const NAVY = '#002C51'
+const NAVY = '#0b273f'
 const TEAL = '#00C2B9'
-const BG = '#f1f5f9'
+const BG = '#F5F5F5'
 const CARD = '#ffffff'
-const BORDER = '#e2e8f0'
-const TEXT_PRIMARY = '#0f172a'
-const TEXT_SECONDARY = '#475569'
-const TEXT_TERTIARY = '#94a3b8'
-const FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+const BORDER = '#dae4ec'
+const TEXT_PRIMARY = '#0b273f'
+const TEXT_SECONDARY = '#1a3d56'
+const TEXT_TERTIARY = '#6a93b3'
+const FONT = "Outfit, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
 const MONO = "Menlo, Consolas, 'Courier New', monospace"
 
 // ─── Severity ───────────────────────────────────────────────
