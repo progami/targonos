@@ -6,14 +6,16 @@ import { cn } from '@/lib/utils';
 
 export function ProductFeatureCard({
   product,
-  className
+  className,
+  region = 'us'
 }: {
   product: Product;
   className?: string;
+  region?: 'us' | 'uk';
 }) {
   return (
     <Link
-      href={`/caelum-star/products/${product.slug}`}
+      href={`/cs/${region}/packs/${product.slug}`}
       className={cn(
         'group relative flex h-[460px] w-[min(92vw,420px)] shrink-0 flex-col overflow-hidden rounded-card bg-ink shadow-soft transition hover:-translate-y-0.5 hover:shadow-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg',
         product.primary && 'ring-1 ring-accent/40',

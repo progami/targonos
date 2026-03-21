@@ -21,7 +21,7 @@ export default function NotFound() {
               <Link href="/">Go home</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/caelum-star/products">View packs</Link>
+              <Link href="/cs">View packs</Link>
             </Button>
           </div>
         </Reveal>
