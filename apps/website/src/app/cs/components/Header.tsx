@@ -17,8 +17,8 @@ export function CaelumStarHeader({ hideNav = false, hideBuyNow = false, region }
       <div className={styles.contentWrap}>
         <div className={styles.headerTopRow}>
           <div className="flex items-center gap-4">
-            <Link href="/" className="text-xs font-semibold uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-white">
-              Targon
+            <Link href="/" className="opacity-50 transition-opacity hover:opacity-100">
+              <Image src="/brand/logo-inverted.svg" alt="Targon" width={80} height={16} className="h-4 w-auto" />
             </Link>
             <span className="text-white/20">|</span>
             <Link href="/cs" className={styles.brandWrap}>
