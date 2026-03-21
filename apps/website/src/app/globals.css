@@ -170,9 +170,8 @@ body.tg-home {
   overflow-x: hidden;
 }
 
-body.tg-home > footer,
-body.tg-home main#main-content + footer {
-  display: none;
+body.tg-home footer {
+  margin-top: 0;
 }
 
 .tg-snap {

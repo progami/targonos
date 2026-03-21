@@ -278,86 +278,72 @@ export default function HomePage() {
       </section>
 
       {/* PRODUCTS */}
-      <section className="tg-snap bg-black" id="products">
+      <section className="relative overflow-hidden bg-black" id="products">
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
           <div className="absolute -left-24 top-24 h-[520px] w-[520px] rounded-full bg-accent/20 blur-3xl" />
           <div className="absolute -right-24 bottom-24 h-[520px] w-[520px] rounded-full bg-ink/30 blur-3xl" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col justify-between px-6">
-          <div className="flex flex-1 items-center py-16 md:py-20">
-            <div className="w-full max-w-6xl mx-auto">
-              <div className="grid items-end gap-8 md:grid-cols-12">
-                <div className="text-center md:col-span-5 md:text-left">
-                  <Reveal>
-                    <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
-                      Products
-                    </div>
-                  </Reveal>
-                  <Reveal delay={120}>
-                    <h2 className="mt-6 flex justify-center md:justify-start">
-                      <Image
-                        src="/brand/cs/logo-on-dark.webp"
-                        alt={site.productBrandName}
-                        width={1384}
-                        height={300}
-                        className="h-auto w-[min(420px,90%)] opacity-95"
-                      />
-                    </h2>
-                  </Reveal>
-                  <Reveal delay={200}>
-                    <p className="mt-4 max-w-xl text-pretty text-base text-white/70 md:text-lg">
-                      Extra large dust sheets built for clean decorating. Clear pack options. Available at select
-                      retailers.
-                    </p>
-                  </Reveal>
-                  <Reveal delay={280}>
-                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                      <Button asChild variant="accent" size="lg">
-                        <Link href="/cs">
-                          View {site.productBrandName} <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="lg"
-                        className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-                      >
-                        <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-                          Buy on Amazon
-                        </a>
-                      </Button>
-                    </div>
-                  </Reveal>
-                </div>
-
-                <div className="md:col-span-7">
-                  <Reveal variant="media" delay={140}>
-                    <HorizontalCarousel
-                      scrollerClassName="flex gap-6 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory cursor-grab active:cursor-grabbing"
+        <Container className="relative z-10 px-6 py-20 md:py-28">
+          <div className="w-full max-w-6xl mx-auto">
+            <div className="grid items-end gap-8 md:grid-cols-12">
+              <div className="text-center md:col-span-5 md:text-left">
+                <Reveal>
+                  <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
+                    Products
+                  </div>
+                </Reveal>
+                <Reveal delay={120}>
+                  <h2 className="mt-6 flex justify-center md:justify-start">
+                    <Image
+                      src="/brand/cs/logo-on-dark.webp"
+                      alt={site.productBrandName}
+                      width={1384}
+                      height={300}
+                      className="h-auto w-[min(420px,90%)] opacity-95"
+                    />
+                  </h2>
+                </Reveal>
+                <Reveal delay={200}>
+                  <p className="mt-4 max-w-xl text-pretty text-base text-white/70 md:text-lg">
+                    Extra large dust sheets built for clean decorating. Clear pack options. Available at select
+                    retailers.
+                  </p>
+                </Reveal>
+                <Reveal delay={280}>
+                  <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
+                    <Button asChild variant="accent" size="lg">
+                      <Link href="/cs">
+                        View {site.productBrandName} <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="lg"
+                      className="border-white/15 bg-white/5 text-white hover:bg-white/10"
                     >
-                      {products.map((product) => (
-                        <div key={product.slug} className="shrink-0 snap-start">
-                          <ProductFeatureCard product={product} className="motion-safe:hover:scale-[1.01]" />
-                        </div>
-                      ))}
-                    </HorizontalCarousel>
-                  </Reveal>
-                </div>
+                      <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
+                        Buy on Amazon
+                      </a>
+                    </Button>
+                  </div>
+                </Reveal>
               </div>
-            </div>
-          </div>
 
-          {/* Footer pinned to bottom of snap section */}
-          <div className="border-t border-white/10 py-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-white/50">
-              <span>© {new Date().getFullYear()} {site.name}. All rights reserved.</span>
-              <div className="flex gap-4">
-                <Link href="/legal/privacy" className="hover:text-white">Privacy</Link>
-                <Link href="/legal/terms" className="hover:text-white">Terms</Link>
-                <Link href={`mailto:${site.contactEmail}`} className="hover:text-white">{site.contactEmail}</Link>
+              <div className="md:col-span-7">
+                <Reveal variant="media" delay={140}>
+                  <HorizontalCarousel
+                    scrollerClassName="flex gap-6 overflow-x-auto pb-3 pt-1 scroll-smooth snap-x snap-mandatory cursor-grab active:cursor-grabbing"
+                  >
+                    {products.map((product) => (
+                      <div key={product.slug} className="shrink-0 snap-start">
+                        <ProductFeatureCard product={product} className="motion-safe:hover:scale-[1.01]" />
+                      </div>
+                    ))}
+                  </HorizontalCarousel>
+                </Reveal>
               </div>
             </div>
           </div>
