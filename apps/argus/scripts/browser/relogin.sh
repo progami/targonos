@@ -328,10 +328,10 @@ for _ in $(seq 1 45); do
       ;;
     OTP)
       log "Fetching Google Voice OTP"
-      otp_code="$(fetch_google_voice_code)" || {
+      if ! otp_code="$(fetch_google_voice_code)"; then
         log "FAILED: Google Voice OTP not found"
         exit 1
-      }
+      fi
       focus_tab "$window_id" "$tab_index"
       submit_seller_otp "$window_id" "$tab_index" "$otp_code"
       ;;

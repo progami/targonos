@@ -4,6 +4,7 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import prisma from '@/lib/db'
 import { parseCsvRows } from './csv'
+import { formatMonitoringLabel } from './labels'
 import type {
   MonitoringAsinDetail,
   MonitoringCategory,
@@ -431,6 +432,7 @@ function normalizeStateRecord(
     owner: normalizeOwner(raw.owner_type),
     title: readString(raw.title),
     brand: readString(raw.brand),
+    size: readString(raw.size),
     status: readString(raw.status),
     sellerSku: readString(raw.seller_sku),
     imageCount: readNumber(raw.image_count),
@@ -648,7 +650,9 @@ function buildHeadline(input: {
   baselineSnapshot: MonitoringSnapshotRecord | null
   changedFields: string[]
 }): string {
-  const name = input.asin
+  const name = formatMonitoringLabel(
+    input.currentSnapshot ?? input.baselineSnapshot ?? { asin: input.asin },
+  )
 
   switch (input.primaryCategory) {
     case 'status':

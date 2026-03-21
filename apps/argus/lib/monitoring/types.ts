@@ -18,6 +18,7 @@ export interface MonitoringStateRecord {
   owner: MonitoringOwner
   title: string | null
   brand: string | null
+  size: string | null
   status: string | null
   sellerSku: string | null
   imageCount: number | null
