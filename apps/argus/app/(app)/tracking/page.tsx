@@ -269,7 +269,7 @@ export default function TrackingDashboard() {
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
             background:
-              'linear-gradient(135deg, #13232f 0%, #243649 60%, #7a4520 100%)',
+              'linear-gradient(135deg, #0b273f 0%, #1a3d56 60%, #00C2B9 100%)',
             color: '#f8fafc',
           }}
         >
@@ -309,9 +309,9 @@ export default function TrackingDashboard() {
                   onClick={handleRefresh}
                   disabled={refreshing}
                   sx={{
-                    bgcolor: '#f8fafc',
-                    color: '#102032',
-                    '&:hover': { bgcolor: '#e2e8f0' },
+                    bgcolor: '#F5F5F5',
+                    color: '#0b273f',
+                    '&:hover': { bgcolor: '#dae4ec' },
                   }}
                 >
                   {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -357,7 +357,7 @@ export default function TrackingDashboard() {
             borderRadius: 4,
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            backgroundColor: 'rgba(255, 252, 245, 0.92)',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
           }}
         >
           <Box sx={{ px: 2, pt: 1.5 }}>
@@ -615,7 +615,7 @@ export default function TrackingDashboard() {
                             sx={{
                               display: 'flex',
                               gap: 2,
-                              color: '#64748b',
+                              color: '#6a93b3',
                               fontSize: '0.72rem',
                               fontFamily: 'var(--font-mono)',
                               fontWeight: 600,
