@@ -90,6 +90,7 @@ export interface MonitoringHealthReport {
 
 export interface MonitoringAsinDetail {
   asin: string
+  label: string | null
   current: MonitoringStateRecord | null
   latestSnapshotAt: string | null
   changes: MonitoringChangeEvent[]
