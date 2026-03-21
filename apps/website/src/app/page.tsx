@@ -278,7 +278,7 @@ export default function HomePage() {
       </section>
 
       {/* PRODUCTS */}
-      <section className="relative overflow-hidden bg-black" id="products">
+      <section className="tg-snap bg-black" id="products">
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
           <div className="absolute -left-24 top-24 h-[520px] w-[520px] rounded-full bg-accent/20 blur-3xl" />
