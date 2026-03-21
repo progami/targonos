@@ -20,10 +20,25 @@ TODAY=$(date '+%Y-%m-%d')
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 log "Starting daily collection"
 
+if ! NODE_BIN="$(command -v node)"; then
+  log "ABORT: Node.js not found in PATH=$PATH"
+  exit 1
+fi
+ALERT_EMAIL_SCRIPT="$SCRIPT_DIR/../../lib/send-alert-email.mjs"
+
+send_alert_email() {
+  local subject="$1"
+  local text="$2"
+
+  "$NODE_BIN" "$ALERT_EMAIL_SCRIPT" --subject "$subject" --text "$text" >> "$LOG" 2>&1
+}
+
 # Check Chrome is running
 if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
   log "ABORT: Chrome not running"
   osascript -e 'display notification "Account Health: Chrome not running" with title "Daily Monitor"' 2>/dev/null
+  LOG_TAIL="$(tail -200 "$LOG")"
+  send_alert_email "Argus: Account Health failed (Chrome not running)" "$(printf "Daily account health collection aborted: Chrome not running.\nDate: %s\nHost: %s\nLog: %s\n\nLast log lines:\n%s\n" "$TODAY" "$(hostname)" "$LOG" "$LOG_TAIL")"
   exit 1
 fi
 
@@ -74,6 +89,8 @@ if [[ "$PAGE_URL" != *"sellercentral.amazon.com"* ]] || [[ "$PAGE_URL" == *"sign
   else
     log "ABORT: Relogin failed"
     osascript -e 'display notification "Account Health: relogin failed" with title "Daily Monitor"' 2>/dev/null
+    LOG_TAIL="$(tail -200 "$LOG")"
+    send_alert_email "Argus: Account Health failed (relogin failed)" "$(printf "Daily account health collection aborted: relogin failed.\nDate: %s\nHost: %s\nLog: %s\n\nLast log lines:\n%s\n" "$TODAY" "$(hostname)" "$LOG" "$LOG_TAIL")"
     exit 1
   fi
 fi

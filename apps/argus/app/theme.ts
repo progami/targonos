@@ -5,9 +5,9 @@ import { createTheme } from '@mui/material/styles'
 export const theme = createTheme({
   palette: {
     primary: {
-      main: '#002C51',
-      light: '#3385cd',
-      dark: '#001f3a',
+      main: '#0b273f',
+      light: '#6a93b3',
+      dark: '#071c2d',
       contrastText: '#FFFFFF',
     },
     secondary: {
@@ -26,21 +26,26 @@ export const theme = createTheme({
       main: '#16a34a',
     },
     background: {
-      default: '#f7f8f9',
+      default: '#F5F5F5',
       paper: '#FFFFFF',
     },
     text: {
-      primary: '#002C51',
+      primary: '#0b273f',
       secondary: '#6F7B8B',
     },
     divider: '#dde1e5',
   },
   typography: {
-    fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
+    fontFamily: 'Outfit, system-ui, -apple-system, BlinkMacSystemFont, sans-serif',
     fontWeightBold: 700,
-    h5: { fontWeight: 700 },
-    h6: { fontWeight: 600 },
+    h1: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 700 },
+    h2: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 700 },
+    h3: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 600 },
+    h4: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 600 },
+    h5: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 700 },
+    h6: { fontFamily: 'League Spartan, system-ui, sans-serif', fontWeight: 600 },
     overline: {
+      fontFamily: 'Montserrat, system-ui, sans-serif',
       fontWeight: 600,
       letterSpacing: '0.08em',
       fontSize: '0.7rem',

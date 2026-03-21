@@ -10,6 +10,8 @@ export const targonPreset: Partial<Config> = {
     extend: {
       fontFamily: {
         sans: [brandFontFamilies.primary],
+        heading: [brandFontFamilies.heading],
+        secondary: [brandFontFamilies.secondary],
         mono: [brandFontFamilies.mono],
       },
       colors: {

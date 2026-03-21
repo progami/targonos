@@ -35,8 +35,11 @@ import type {
   MonitoringOverview,
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
+import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
+  CategorySection,
+  ComparisonRow,
   DataField,
   OwnerChip,
   SeverityChip,
@@ -267,7 +270,7 @@ export default function TrackingDashboard() {
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
             background:
-              'linear-gradient(135deg, #13232f 0%, #243649 60%, #7a4520 100%)',
+              'linear-gradient(135deg, #0b273f 0%, #1a3d56 60%, #00C2B9 100%)',
             color: '#f8fafc',
           }}
         >
@@ -283,7 +286,7 @@ export default function TrackingDashboard() {
                   variant="overline"
                   sx={{ color: 'rgba(248, 250, 252, 0.6)', letterSpacing: '0.1em', fontSize: '0.65rem' }}
                 >
-                  Dust Sheets US
+                  Argus · US Marketplace
                 </Typography>
                 <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
                   Monitoring
@@ -307,9 +310,9 @@ export default function TrackingDashboard() {
                   onClick={handleRefresh}
                   disabled={refreshing}
                   sx={{
-                    bgcolor: '#f8fafc',
-                    color: '#102032',
-                    '&:hover': { bgcolor: '#e2e8f0' },
+                    bgcolor: '#F5F5F5',
+                    color: '#0b273f',
+                    '&:hover': { bgcolor: '#dae4ec' },
                   }}
                 >
                   {refreshing ? 'Refreshing...' : 'Refresh'}
@@ -325,8 +328,11 @@ export default function TrackingDashboard() {
                       borderColor: 'rgba(248, 250, 252, 0.28)',
                       color: '#f8fafc',
                     }}
+                    title={selectedEvent.asin}
                   >
-                    {selectedEvent.asin}
+                    {formatMonitoringLabel(
+                      selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                    )}
                   </Button>
                 ) : null}
               </Stack>
@@ -355,7 +361,7 @@ export default function TrackingDashboard() {
             borderRadius: 4,
             border: '1px solid rgba(15, 23, 42, 0.08)',
             boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            backgroundColor: 'rgba(255, 252, 245, 0.92)',
+            backgroundColor: 'rgba(255, 255, 255, 0.92)',
           }}
         >
           <Box sx={{ px: 2, pt: 1.5 }}>
@@ -476,6 +482,9 @@ export default function TrackingDashboard() {
                     <List sx={{ p: 0 }}>
                       {changes.map((item, index) => {
                         const selected = item.id === selectedEventId
+                        const listingLabel = formatMonitoringLabel(
+                          item.currentSnapshot ?? item.baselineSnapshot ?? { asin: item.asin },
+                        )
                         return (
                           <Box key={item.id}>
                             <ListItemButton
@@ -529,13 +538,14 @@ export default function TrackingDashboard() {
                                 >
                                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                      label={item.asin}
+                                      label={listingLabel}
                                       size="small"
                                       sx={{
-                                        fontFamily: 'var(--font-mono)',
+                                        fontWeight: 700,
                                         borderRadius: 999,
                                         bgcolor: 'rgba(15, 23, 42, 0.06)',
                                       }}
+                                      title={item.asin}
                                     />
                                     {item.changedFields.slice(0, 4).map((field) => (
                                       <Chip
@@ -591,10 +601,12 @@ export default function TrackingDashboard() {
                                 variant="overline"
                                 sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
                               >
-                                Inspection
+                                {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? `(${selectedEvent.asin})` : selectedEvent.asin}
                               </Typography>
                               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
-                                {selectedEvent.asin}
+                                {formatMonitoringLabel(
+                                  selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                                )}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -610,112 +622,167 @@ export default function TrackingDashboard() {
                             {selectedEvent.summary}
                           </Typography>
 
-                          <Divider />
-
-                          <Stack spacing={1.2}>
-                            <DataField label="Observed at" value={formatDateTime(selectedEvent.timestamp)} mono />
-                            <DataField
-                              label="Baseline"
-                              value={formatDateTime(selectedEvent.baselineTimestamp)}
-                              mono
-                            />
-                            <DataField
-                              label="Categories"
-                              value={selectedEvent.categories
-                                .map((item) => humanizeFieldName(item))
-                                .join(', ')}
-                            />
-                            <DataField
-                              label="Changed fields"
-                              value={selectedEvent.changedFields
-                                .map((item) => humanizeFieldName(item))
-                                .join(', ')}
-                            />
-                          </Stack>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              gap: 2,
+                              color: '#6a93b3',
+                              fontSize: '0.72rem',
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            <span>{formatDateTime(selectedEvent.timestamp)}</span>
+                            <span style={{ opacity: 0.4 }}>vs</span>
+                            <span>{formatDateTime(selectedEvent.baselineTimestamp)}</span>
+                          </Box>
 
                           <Divider />
 
-                          <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                            Current vs baseline
-                          </Typography>
+                          <Stack spacing={0}>
+                            {selectedEvent.categories.includes('status') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Status' : ''}>
+                                <ComparisonRow
+                                  label="Status"
+                                  baseline={selectedEvent.baselineSnapshot?.status ?? null}
+                                  current={selectedEvent.currentSnapshot?.status ?? null}
+                                />
+                              </CategorySection>
+                            )}
 
-                          <Stack spacing={1.2}>
-                            <DataField
-                              label="Status"
-                              value={comparisonLabel(
-                                selectedEvent.baselineSnapshot?.status ?? null,
-                                selectedEvent.currentSnapshot?.status ?? null,
-                              )}
-                            />
-                            <DataField
-                              label="Landed price"
-                              value={comparisonLabel(
-                                formatMoney(
-                                  selectedEvent.baselineSnapshot?.landedPrice ?? null,
-                                  selectedEvent.baselineSnapshot?.priceCurrency ?? null,
-                                ),
-                                formatMoney(
-                                  selectedEvent.currentSnapshot?.landedPrice ?? null,
-                                  selectedEvent.currentSnapshot?.priceCurrency ?? null,
-                                ),
-                              )}
-                            />
-                            <DataField
-                              label="Root BSR"
-                              value={comparisonLabel(
-                                formatCount(selectedEvent.baselineSnapshot?.rootBsrRank ?? null),
-                                formatCount(selectedEvent.currentSnapshot?.rootBsrRank ?? null),
-                              )}
-                            />
-                            <DataField
-                              label="Offer count"
-                              value={comparisonLabel(
-                                formatCount(selectedEvent.baselineSnapshot?.totalOfferCount ?? null),
-                                formatCount(selectedEvent.currentSnapshot?.totalOfferCount ?? null),
-                              )}
-                            />
-                            <DataField
-                              label="Image count"
-                              value={comparisonLabel(
-                                formatCount(selectedEvent.baselineSnapshot?.imageCount ?? null),
-                                formatCount(selectedEvent.currentSnapshot?.imageCount ?? null),
-                              )}
-                            />
-                          </Stack>
+                            {selectedEvent.categories.includes('price') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Price' : ''}>
+                                <ComparisonRow
+                                  label="Landed"
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.landedPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.landedPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.landedPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.landedPrice}
+                                />
+                                <ComparisonRow
+                                  label="Listing"
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.listingPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.listingPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.listingPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.listingPrice}
+                                />
+                                <ComparisonRow
+                                  label="Shipping"
+                                  baseline={formatMoney(selectedEvent.baselineSnapshot?.shippingPrice ?? null, selectedEvent.baselineSnapshot?.priceCurrency ?? null)}
+                                  current={formatMoney(selectedEvent.currentSnapshot?.shippingPrice ?? null, selectedEvent.currentSnapshot?.priceCurrency ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.shippingPrice}
+                                  numericCurrent={selectedEvent.currentSnapshot?.shippingPrice}
+                                />
+                              </CategorySection>
+                            )}
 
-                          {selectedEvent.currentSnapshot?.imageUrls.length ? (
-                            <>
-                              <Divider />
-                              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-                                Current gallery
-                              </Typography>
-                              <Box
-                                sx={{
-                                  display: 'grid',
-                                  gap: 1,
-                                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                                }}
-                              >
-                                {selectedEvent.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
+                            {selectedEvent.categories.includes('rank') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Rank' : ''}>
+                                <ComparisonRow
+                                  label="Root BSR"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.rootBsrRank ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.rootBsrRank ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.rootBsrRank}
+                                  numericCurrent={selectedEvent.currentSnapshot?.rootBsrRank}
+                                  lowerIsBetter
+                                />
+                                <ComparisonRow
+                                  label="Sub BSR"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.subBsrRank ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.subBsrRank ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.subBsrRank}
+                                  numericCurrent={selectedEvent.currentSnapshot?.subBsrRank}
+                                  lowerIsBetter
+                                />
+                              </CategorySection>
+                            )}
+
+                            {selectedEvent.categories.includes('offers') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Offers' : ''}>
+                                <ComparisonRow
+                                  label="Total offers"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.totalOfferCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.totalOfferCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.totalOfferCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.totalOfferCount}
+                                />
+                              </CategorySection>
+                            )}
+
+                            {selectedEvent.categories.includes('content') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Content' : ''}>
+                                <ComparisonRow
+                                  label="Title"
+                                  baseline={selectedEvent.baselineSnapshot?.title ?? null}
+                                  current={selectedEvent.currentSnapshot?.title ?? null}
+                                />
+                                <ComparisonRow
+                                  label="Bullets"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.bulletCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.bulletCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.bulletCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.bulletCount}
+                                />
+                                <ComparisonRow
+                                  label="Description"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.descriptionLength ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.descriptionLength ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.descriptionLength}
+                                  numericCurrent={selectedEvent.currentSnapshot?.descriptionLength}
+                                />
+                              </CategorySection>
+                            )}
+
+                            {selectedEvent.categories.includes('images') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Images' : ''}>
+                                <ComparisonRow
+                                  label="Count"
+                                  baseline={formatCount(selectedEvent.baselineSnapshot?.imageCount ?? null)}
+                                  current={formatCount(selectedEvent.currentSnapshot?.imageCount ?? null)}
+                                  numericBaseline={selectedEvent.baselineSnapshot?.imageCount}
+                                  numericCurrent={selectedEvent.currentSnapshot?.imageCount}
+                                />
+                                {selectedEvent.currentSnapshot?.imageUrls.length ? (
                                   <Box
-                                    key={url}
-                                    component="img"
-                                    src={url}
-                                    alt=""
                                     sx={{
-                                      width: '100%',
-                                      aspectRatio: '1 / 1',
-                                      objectFit: 'contain',
-                                      borderRadius: 2,
-                                      bgcolor: 'rgba(248, 250, 252, 0.96)',
-                                      border: '1px solid rgba(15, 23, 42, 0.08)',
-                                      p: 0.8,
+                                      display: 'grid',
+                                      gap: 0.8,
+                                      gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                      mt: 1,
                                     }}
-                                  />
-                                ))}
-                              </Box>
-                            </>
-                          ) : null}
+                                  >
+                                    {selectedEvent.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
+                                      <Box
+                                        key={url}
+                                        component="img"
+                                        src={url}
+                                        alt=""
+                                        sx={{
+                                          width: '100%',
+                                          aspectRatio: '1 / 1',
+                                          objectFit: 'contain',
+                                          borderRadius: 1.5,
+                                          bgcolor: '#f8fafc',
+                                          border: '1px solid rgba(15, 23, 42, 0.06)',
+                                          p: 0.6,
+                                        }}
+                                      />
+                                    ))}
+                                  </Box>
+                                ) : null}
+                              </CategorySection>
+                            )}
+
+                            {selectedEvent.categories.includes('catalog') && (
+                              <CategorySection label={selectedEvent.categories.length > 1 ? 'Catalog' : ''}>
+                                <ComparisonRow
+                                  label="Brand"
+                                  baseline={selectedEvent.baselineSnapshot?.brand ?? null}
+                                  current={selectedEvent.currentSnapshot?.brand ?? null}
+                                />
+                              </CategorySection>
+                            )}
+                          </Stack>
 
                           <Button
                             component={Link}
@@ -724,7 +791,7 @@ export default function TrackingDashboard() {
                             startIcon={<ArrowOutwardIcon />}
                             sx={{ alignSelf: 'flex-start' }}
                           >
-                            Open ASIN Detail
+                            View {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? selectedEvent.label : selectedEvent.asin}
                           </Button>
                         </Stack>
                       ) : (
@@ -828,11 +895,4 @@ export default function TrackingDashboard() {
       </Stack>
     </Box>
   )
-}
-
-function comparisonLabel(
-  baseline: string | null,
-  current: string | null,
-): string {
-  return `${baseline ?? '—'} -> ${current ?? '—'}`
 }

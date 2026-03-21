@@ -18,6 +18,7 @@ export interface MonitoringStateRecord {
   owner: MonitoringOwner
   title: string | null
   brand: string | null
+  size: string | null
   status: string | null
   sellerSku: string | null
   imageCount: number | null
@@ -43,6 +44,7 @@ export interface MonitoringSnapshotRecord extends MonitoringStateRecord {
 export interface MonitoringChangeEvent {
   id: string
   asin: string
+  label: string | null
   owner: MonitoringOwner
   timestamp: string
   baselineTimestamp: string | null
@@ -89,6 +91,7 @@ export interface MonitoringHealthReport {
 
 export interface MonitoringAsinDetail {
   asin: string
+  label: string | null
   current: MonitoringStateRecord | null
   latestSnapshotAt: string | null
   changes: MonitoringChangeEvent[]
