@@ -23,8 +23,8 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t border-white/10 bg-black text-white">
-      <Container className="py-14">
+    <footer className="border-t border-white/10 bg-black text-white">
+      <Container className="py-6">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">
             <div className="text-base font-semibold tracking-tightish text-white">{site.name}</div>
@@ -61,7 +61,7 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-white/10 pt-6 text-xs text-white/50">
+        <div className="mt-6 border-t border-white/10 pt-4 text-xs text-white/50">
           <div>
             © {year} {site.name}. All rights reserved.
           </div>

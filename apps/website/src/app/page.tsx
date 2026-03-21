@@ -285,7 +285,7 @@ export default function HomePage() {
           <div className="absolute -right-24 bottom-24 h-[520px] w-[520px] rounded-full bg-ink/30 blur-3xl" />
         </div>
 
-        <Container className="relative z-10 flex flex-col items-center justify-center px-6 py-24 md:py-32">
+        <Container className="relative z-10 flex flex-col items-center justify-center px-6 py-16 md:py-20">
           <div className="w-full max-w-6xl">
             <div className="grid items-end gap-8 md:grid-cols-12">
               <div className="text-center md:col-span-5 md:text-left">
