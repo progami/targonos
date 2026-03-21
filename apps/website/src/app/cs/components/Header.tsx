@@ -16,9 +16,15 @@ export function CaelumStarHeader({ hideNav = false, hideBuyNow = false, region }
     <header className={styles.siteHeader}>
       <div className={styles.contentWrap}>
         <div className={styles.headerTopRow}>
-          <Link href="/cs" className={styles.brandWrap}>
-            <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={186} height={42} className={styles.brandLogo} priority />
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-xs font-semibold uppercase tracking-[0.15em] text-white/50 transition-colors hover:text-white">
+              Targon
+            </Link>
+            <span className="text-white/20">|</span>
+            <Link href="/cs" className={styles.brandWrap}>
+              <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={186} height={42} className={styles.brandLogo} priority />
+            </Link>
+          </div>
 
           {!hideNav && region && (
             <nav aria-label="Main navigation" className={styles.headerNav}>
