@@ -278,14 +278,14 @@ export default function HomePage() {
       </section>
 
       {/* PRODUCTS */}
-      <section className="bg-black" id="products">
+      <section className="tg-snap bg-black" id="products" style={{ minHeight: 'auto' }}>
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
           <div className="absolute -left-24 top-24 h-[520px] w-[520px] rounded-full bg-accent/20 blur-3xl" />
           <div className="absolute -right-24 bottom-24 h-[520px] w-[520px] rounded-full bg-ink/30 blur-3xl" />
         </div>
 
-        <Container className="relative z-10 flex flex-col items-center justify-center px-6 py-20 md:py-28">
+        <Container className="relative z-10 flex flex-col items-center justify-center px-6 py-24 md:py-32">
           <div className="w-full max-w-6xl">
             <div className="grid items-end gap-8 md:grid-cols-12">
               <div className="text-center md:col-span-5 md:text-left">
