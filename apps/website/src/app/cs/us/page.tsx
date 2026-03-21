@@ -19,5 +19,5 @@ const usImages: RegionImages = {
 };
 
 export default function CsUsPage() {
-  return <CaelumStarContent images={usImages} products={products} />;
+  return <CaelumStarContent images={usImages} products={products} region="us" />;
 }

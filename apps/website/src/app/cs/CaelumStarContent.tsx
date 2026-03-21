@@ -83,10 +83,12 @@ function SquareImage({
 
 export function CaelumStarContent({
   images,
-  products
+  products,
+  region
 }: {
   images: RegionImages;
   products: Product[];
+  region: 'us' | 'uk';
 }) {
   const primary = products.find((p) => p.primary);
   if (!primary) {
@@ -137,7 +139,7 @@ export function CaelumStarContent({
                     size="lg"
                     className="border-white/15 bg-white/[0.07] text-white hover:bg-white/[0.12]"
                   >
-                    <Link href={`/caelum-star/products/${primary.slug}`}>Learn more</Link>
+                    <Link href={`/cs/${region}/packs/${primary.slug}`}>Learn more</Link>
                   </Button>
                 </div>
               </Reveal>
@@ -196,7 +198,7 @@ export function CaelumStarContent({
             {products.map((product, i) => (
               <Reveal key={product.slug} delay={i * 80}>
                 <Link
-                  href={`/caelum-star/products/${product.slug}`}
+                  href={`/cs/${region}/packs/${product.slug}`}
                   className={cn(
                     'group flex flex-col items-center rounded-[20px] border border-white/[0.08] bg-white/[0.04] px-5 py-7 text-center transition-all duration-300 hover:border-accent/25 hover:bg-white/10',
                     product.primary && 'border-accent/25 bg-accent/[0.06] ring-1 ring-accent/15'
@@ -370,7 +372,7 @@ export function CaelumStarContent({
                 Explore packs.
               </h2>
               <Button asChild variant="ghost" className="hidden md:inline-flex">
-                <Link href="/caelum-star/products">
+                <Link href={`/cs/${region}/packs`}>
                   View all <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -409,7 +411,7 @@ export function CaelumStarContent({
                 </div>
                 <div className="md:col-span-4 md:flex md:justify-end">
                   <Button asChild variant="accent" size="lg">
-                    <Link href="/caelum-star/where-to-buy">
+                    <Link href={`/cs/${region}/where-to-buy`}>
                       Where to buy <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
