@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
 
 const DEST =
   '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Visuals'
@@ -39,7 +40,7 @@ function ensureBinary(name) {
     execFileSync('which', [name], { stdio: 'ignore' })
   } catch {
     log(`ABORT: Required binary not found: ${name}`)
-    process.exit(1)
+    throw new Error(`Required binary not found: ${name}`)
   }
 }
 
@@ -81,7 +82,7 @@ function resolveAsins() {
   } catch (error) {
     appendErrorOutput(error)
     log('ABORT: resolve-asins.mjs failed')
-    process.exit(1)
+    throw error
   }
 }
 
@@ -157,7 +158,21 @@ function sleep(milliseconds) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
-function main() {
+function formatError(error) {
+  if (error instanceof Error) {
+    if (error.stack) return error.stack
+    if (error.message) return error.message
+  }
+
+  return String(error)
+}
+
+function readLogTail(maxLines) {
+  const lines = fs.readFileSync(LOG, 'utf8').split('\n')
+  return lines.slice(-maxLines).join('\n')
+}
+
+async function main() {
   ensureBinary('node')
   ensureBinary('magick')
   log(`Starting daily visuals capture: ${TODAY}`)
@@ -176,8 +191,53 @@ function main() {
   trimLog()
 
   if (failed > 0) {
-    process.exit(1)
+    const subject = `Argus: Daily visuals failed (${failed})`
+    const logTail = readLogTail(200)
+    const text = [
+      `Daily visuals capture finished with ${failed} failure(s).`,
+      `Date: ${TODAY}`,
+      `Host: ${os.hostname()}`,
+      `Dest: ${DEST}`,
+      `Log: ${LOG}`,
+      '',
+      'Last log lines:',
+      logTail,
+      '',
+    ].join('\n')
+
+    await sendArgusAlertEmail({ subject, text })
+    process.exitCode = 1
   }
 }
 
-main()
+main().catch(async (error) => {
+  appendErrorOutput(error)
+  log('ABORT: daily visuals script failed')
+  trimLog()
+
+  const subject = `Argus: Daily visuals aborted`
+  const logTail = readLogTail(200)
+  const text = [
+    `Daily visuals capture aborted.`,
+    `Date: ${TODAY}`,
+    `Host: ${os.hostname()}`,
+    `Dest: ${DEST}`,
+    `Log: ${LOG}`,
+    '',
+    'Error:',
+    formatError(error),
+    '',
+    'Last log lines:',
+    logTail,
+    '',
+  ].join('\n')
+
+  try {
+    await sendArgusAlertEmail({ subject, text })
+  } catch (emailError) {
+    console.error(formatError(emailError))
+  }
+
+  console.error(formatError(error))
+  process.exit(1)
+})

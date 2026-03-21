@@ -63,6 +63,7 @@ function buildSampleEvent(
     owner,
     title: 'Premium Dust Sheets - Heavy Duty Cotton Twill 12ft x 9ft',
     brand: 'Targon',
+    size: '12ft x 9ft',
     status: 'Active',
     sellerSku: 'TG-DS-1209-WHT',
     imageCount: 7,

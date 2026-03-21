@@ -64,9 +64,17 @@ log "=== Weekly API Sources run done (failures=$FAILED) ==="
 
 if [ -z "$DRY_FLAG" ]; then
   if [ $FAILED -gt 0 ]; then
-    osascript -e "display notification \"Weekly API sources: $FAILED script(s) failed\" with title \"Weekly API Sources\"" 2>/dev/null || true
+    EMAIL_SUBJECT="Argus: Weekly API Sources failed ($FAILED)"
+    LOG_TAIL="$(tail -200 "$LOG")"
+    EMAIL_TEXT="$(printf "Weekly API Sources: %s script(s) failed.\nHost: %s\nLog: %s\n\nLast log lines:\n%s\n" "$FAILED" "$(hostname)" "$LOG" "$LOG_TAIL")"
+    "$NODE_BIN" "$SCRIPT_DIR/../../lib/send-alert-email.mjs" --subject "$EMAIL_SUBJECT" --text "$EMAIL_TEXT"
+    if ! osascript -e "display notification \"Weekly API sources: $FAILED script(s) failed\" with title \"Weekly API Sources\"" 2>/dev/null; then
+      log "WARN: Failed to display failure notification (osascript)."
+    fi
   else
-    osascript -e 'display notification "Weekly API sources completed" with title "Weekly API Sources"' 2>/dev/null || true
+    if ! osascript -e 'display notification "Weekly API sources completed" with title "Weekly API Sources"' 2>/dev/null; then
+      log "WARN: Failed to display success notification (osascript)."
+    fi
   fi
 fi
 

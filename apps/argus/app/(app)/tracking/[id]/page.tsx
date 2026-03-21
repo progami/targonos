@@ -31,6 +31,7 @@ import type {
   MonitoringChangeEvent,
   MonitoringSnapshotRecord,
 } from '@/lib/monitoring/types'
+import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
   DataField,
@@ -151,9 +152,19 @@ export default function TrackingDetailPage() {
                       <Stack spacing={0.3}>
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
-                            {detail.label && detail.label !== detail.asin ? detail.label : (current.title ?? detail.asin)}
+                            {formatMonitoringLabel(current)}
                           </Typography>
                           <OwnerChip owner={owner} />
+                          <Chip
+                            label={detail.asin}
+                            size="small"
+                            sx={{
+                              fontFamily: 'var(--font-mono)',
+                              fontWeight: 700,
+                              borderRadius: 999,
+                              bgcolor: 'rgba(15, 23, 42, 0.06)',
+                            }}
+                          />
                         </Stack>
                         <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
                           ({detail.asin}){current.title && detail.label && detail.label !== detail.asin ? ` · ${current.title}` : ''}

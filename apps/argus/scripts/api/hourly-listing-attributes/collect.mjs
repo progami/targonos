@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
+import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -57,6 +58,19 @@ function requiredEnv(name) {
     throw new Error(`Missing required env var: ${name}`)
   }
   return value.trim()
+}
+
+function formatListingLabel(row) {
+  const brand = row?.brand ? String(row.brand).trim() : ''
+  const size = row?.size ? String(row.size).trim() : ''
+  const title = row?.title ? String(row.title).trim() : ''
+  const asin = row?.asin ? String(row.asin).trim().toUpperCase() : ''
+
+  if (brand && size) return `${brand} - ${size}`
+  if (brand) return brand
+  if (size) return size
+  if (title) return title
+  return asin
 }
 
 function formatDateLocal(date) {
@@ -947,6 +961,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
     : []
 
   const diffs = []
+  const alerts = []
   const nextState = {
     timestamp_utc: snapshotTimestampUtc,
     snapshot_file: SNAPSHOT_HISTORY_FILE_NAME,
@@ -975,6 +990,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
     const removedImages = hasBaseline ? previousImages.filter((imageUrl) => !currentSet.has(imageUrl)) : []
 
     const changedFields = []
+    const fieldChanges = []
     const perAttributeChanges = {}
     for (const field of compareFields) {
       if (!hasBaseline) {
@@ -987,7 +1003,18 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
         : normalizeCompareValue(previousRow[field]) !== normalizeCompareValue(row[field])
 
       perAttributeChanges[`${field}_changed`] = fieldChanged ? 'yes' : 'no'
-      if (fieldChanged) changedFields.push(field)
+      if (fieldChanged) {
+        changedFields.push(field)
+        if (field === 'image_urls') {
+          fieldChanges.push({ field, added: addedImages, removed: removedImages })
+        } else {
+          fieldChanges.push({
+            field,
+            from: normalizeCompareValue(previousRow[field]),
+            to: normalizeCompareValue(row[field]),
+          })
+        }
+      }
     }
 
     const currentImageSet = [...new Set(currentImages)].sort()
@@ -1016,23 +1043,214 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       image_order_changed: '',
       ...perAttributeChanges,
     })
+
+    if (hasBaseline && changedFields.length > 0) {
+      alerts.push({
+        snapshot_timestamp_utc: snapshotTimestampUtc,
+        baseline_timestamp_utc: normalizeCompareValue(baselineTimestampUtc),
+        asin: row.asin,
+        label: formatListingLabel(row),
+        owner_type: row.owner_type,
+        changed_fields: [...changedFields],
+        field_changes: fieldChanges,
+      })
+    }
   }
 
   sortDiffs(diffs)
+  alerts.sort((a, b) => {
+    if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
+    if (a.owner_type === 'our') {
+      const left = OUR_ASIN_PRIORITY.get(a.asin)
+      const right = OUR_ASIN_PRIORITY.get(b.asin)
+      return (left ?? 99) - (right ?? 99)
+    }
+    return a.asin.localeCompare(b.asin)
+  })
 
   return {
     diffs,
+    alerts,
     nextState,
     statePath,
   }
 }
 
+// ─── HTML email builder ─────────────────────────────────────
+
+function esc(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function humanizeField(field) {
+  return field.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+}
+
+function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, timeLabel, appUrl }) {
+  const F = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
+  const M = "Menlo, Consolas, 'Courier New', monospace"
+  const NAVY = '#002C51'
+  const TEAL = '#00C2B9'
+  const BORDER = '#e2e8f0'
+  const logoUrl = `${appUrl}/brand/targon-logo-white.png`
+
+  let alertRows = ''
+  for (let i = 0; i < alerts.length; i++) {
+    const a = alerts[i]
+    const ownerLabel = String(a.owner_type).toUpperCase() === 'OUR' ? 'Ours' : 'Competitor'
+    const ownerColor = ownerLabel === 'Ours' ? '#0d9488' : '#c2410c'
+    const ownerBg = ownerLabel === 'Ours' ? '#f0fdfa' : '#fff7ed'
+    const ownerBorder = ownerLabel === 'Ours' ? '#99f6e4' : '#fed7aa'
+    const bg = i % 2 === 0 ? '#ffffff' : '#fafbfc'
+
+    // Build field changes rows
+    let changesRows = ''
+    for (const change of a.field_changes) {
+      if (change.field === 'image_urls') {
+        const added = Array.isArray(change.added) ? change.added : []
+        const removed = Array.isArray(change.removed) ? change.removed : []
+        changesRows += `<tr>
+          <td style="padding:6px 10px; font-family:${F}; font-size:12px; color:#475569; border-bottom:1px solid #f1f5f9;">Images</td>
+          <td style="padding:6px 10px; font-family:${M}; font-size:11px; color:#94a3b8; border-bottom:1px solid #f1f5f9;" align="right">${esc(String(removed.length))} removed</td>
+          <td style="padding:6px 10px; font-family:${M}; font-size:11px; font-weight:700; color:#0f172a; border-bottom:1px solid #f1f5f9;" align="right">${esc(String(added.length))} added</td>
+        </tr>`
+        continue
+      }
+      changesRows += `<tr>
+        <td style="padding:6px 10px; font-family:${F}; font-size:12px; color:#475569; border-bottom:1px solid #f1f5f9;">${esc(humanizeField(change.field))}</td>
+        <td style="padding:6px 10px; font-family:${M}; font-size:11px; color:#94a3b8; border-bottom:1px solid #f1f5f9;" align="right">${esc(String(change.from))}</td>
+        <td style="padding:6px 10px; font-family:${M}; font-size:11px; font-weight:700; color:#0f172a; border-bottom:1px solid #f1f5f9;" align="right">${esc(String(change.to))}</td>
+      </tr>`
+    }
+
+    alertRows += `
+<!-- Alert ${i + 1} -->
+<tr><td style="padding:0;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; background:${bg}; border-bottom:1px solid ${BORDER};">
+  <tr>
+    <td style="padding:16px 20px 10px 20px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding-right:8px;">
+            <span style="display:inline-block; padding:2px 7px; font-family:${F}; font-size:10px; font-weight:700; color:${ownerColor}; background:${ownerBg}; border:1px solid ${ownerBorder};">${esc(ownerLabel)}</span>
+          </td>
+          <td>
+            <span style="font-family:${F}; font-size:14px; font-weight:700; color:#0f172a;">${esc(a.label)}</span>
+          </td>
+        </tr>
+      </table>
+      <div style="font-family:${M}; font-size:10px; color:#94a3b8; margin-top:3px;">${esc(a.asin)}</div>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:0 20px 14px 20px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER};">
+        <tr>
+          <td style="padding:6px 10px; font-family:${F}; font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; background:#f8fafc; border-bottom:2px solid ${BORDER}; border-right:1px solid ${BORDER};">Field</td>
+          <td style="padding:6px 10px; font-family:${F}; font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; background:#f8fafc; border-bottom:2px solid ${BORDER}; border-right:1px solid ${BORDER};" align="right">Before</td>
+          <td style="padding:6px 10px; font-family:${F}; font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.05em; background:#f8fafc; border-bottom:2px solid ${BORDER};" align="right">After</td>
+        </tr>
+        ${changesRows}
+      </table>
+    </td>
+  </tr>
+</table>
+</td></tr>`
+  }
+
+  const overflowRow = totalAlerts > maxAlerts
+    ? `<tr><td style="padding:12px 20px; font-family:${F}; font-size:12px; color:#94a3b8; text-align:center; border-bottom:1px solid ${BORDER};">...and ${totalAlerts - maxAlerts} more alert${totalAlerts - maxAlerts === 1 ? '' : 's'}</td></tr>`
+    : ''
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+</head>
+<body style="margin:0; padding:0; background:#f1f5f9;">
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width:100%; max-width:600px;">
+
+<!-- HEADER -->
+<tr>
+<td style="background:${NAVY}; padding:18px 24px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+<tr>
+<td style="vertical-align:middle;">
+  <span style="font-family:${F}; font-size:11px; font-weight:700; color:${NAVY}; background:${TEAL}; display:inline-block; width:22px; height:22px; line-height:22px; text-align:center; border-radius:50%; vertical-align:middle;">&bull;</span>
+  <span style="font-family:${F}; font-size:16px; font-weight:800; color:${TEAL}; letter-spacing:0.14em; vertical-align:middle; padding-left:8px;">ARGUS</span>
+</td>
+<td align="right" style="vertical-align:middle;">
+  <img src="${esc(logoUrl)}" width="100" height="26" alt="TARGON" style="display:inline-block; border:0; vertical-align:middle;">
+</td>
+</tr>
+</table>
+</td>
+</tr>
+
+<!-- TEAL BAR -->
+<tr><td style="background:${TEAL}; height:3px; font-size:0; line-height:0;">&nbsp;</td></tr>
+
+<!-- SUMMARY -->
+<tr>
+<td style="background:#ffffff; padding:20px 24px; border-left:1px solid ${BORDER}; border-right:1px solid ${BORDER}; border-bottom:1px solid ${BORDER};">
+  <div style="font-family:${F}; font-size:16px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">
+    ${esc(String(totalAlerts))} monitoring alert${totalAlerts === 1 ? '' : 's'}
+  </div>
+  <div style="font-family:${F}; font-size:12px; color:#64748b;">
+    ${esc(snapshotDate)} ${esc(timeLabel)} CT
+  </div>
+</td>
+</tr>
+
+<!-- ALERTS -->
+${alertRows}
+${overflowRow}
+
+<!-- CTA -->
+<tr>
+<td style="background:#ffffff; padding:20px 24px; border-left:1px solid ${BORDER}; border-right:1px solid ${BORDER};">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+  <td bgcolor="${TEAL}" style="mso-padding-alt:0;">
+    <a href="${esc(appUrl)}/tracking?window=24h" target="_blank" style="display:inline-block; padding:11px 24px; font-family:${F}; font-size:13px; font-weight:700; color:${NAVY}; text-decoration:none;">
+      Open change feed &rarr;
+    </a>
+  </td>
+  </tr>
+  </table>
+</td>
+</tr>
+
+<!-- FOOTER -->
+<tr>
+<td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:14px 24px; text-align:center;">
+  <div style="font-family:${F}; font-size:11px; color:#94a3b8;">
+    Automated alert from Argus &middot; Targon Global
+  </div>
+</td>
+</tr>
+
+</table>
+</td></tr>
+</table>
+</body></html>`
+}
+
 async function main() {
   ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
 
+  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
@@ -1069,6 +1287,7 @@ async function main() {
 
   const {
     diffs,
+    alerts,
     nextState,
     statePath,
   } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal)
@@ -1079,6 +1298,65 @@ async function main() {
   appendCsv(snapshotHistoryFile, rows)
   appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
+
+  if (alerts.length > 0) {
+    const appUrl = requiredEnv('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
+    const timeLabel = snapshotTimeLocal.length === 4
+      ? `${snapshotTimeLocal.slice(0, 2)}:${snapshotTimeLocal.slice(2)}`
+      : snapshotTimeLocal
+
+    const subject = `Argus: ${alerts.length} monitoring alert${alerts.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
+    const lines = [
+      `Argus monitoring detected ${alerts.length} change${alerts.length === 1 ? '' : 's'}.`,
+      `Snapshot UTC: ${snapshotTimestampUtc}`,
+      '',
+      `Open change feed: ${appUrl}/tracking?window=24h`,
+      '',
+    ]
+
+    const maxAlerts = 40
+    const visibleAlerts = alerts.slice(0, maxAlerts)
+    for (const alert of visibleAlerts) {
+      lines.push(`${String(alert.owner_type).toUpperCase()} ${alert.label} (${alert.asin})`)
+      lines.push(`Baseline UTC: ${alert.baseline_timestamp_utc}`)
+      lines.push(`Fields: ${alert.changed_fields.join(', ')}`)
+      for (const change of alert.field_changes) {
+        if (change.field === 'image_urls') {
+          const added = Array.isArray(change.added) ? change.added : []
+          const removed = Array.isArray(change.removed) ? change.removed : []
+          lines.push(`- image_urls: +${added.length} -${removed.length}`)
+          if (added.length) lines.push(`  added: ${added.slice(0, 3).join(' | ')}${added.length > 3 ? ' | …' : ''}`)
+          if (removed.length) lines.push(`  removed: ${removed.slice(0, 3).join(' | ')}${removed.length > 3 ? ' | …' : ''}`)
+          continue
+        }
+
+        lines.push(`- ${change.field}: ${change.from} -> ${change.to}`)
+      }
+      lines.push(`Link: ${appUrl}/tracking/${alert.asin}`)
+      lines.push('')
+    }
+
+    if (alerts.length > maxAlerts) {
+      lines.push(`...and ${alerts.length - maxAlerts} more alert(s).`)
+      lines.push('')
+    }
+
+    const html = buildAlertDigestHtml({
+      alerts: visibleAlerts,
+      totalAlerts: alerts.length,
+      maxAlerts,
+      snapshotTimestampUtc,
+      snapshotDate,
+      timeLabel,
+      appUrl,
+    })
+
+    await sendArgusAlertEmail({
+      subject,
+      text: lines.join('\n'),
+      html,
+    })
+  }
 
   console.log('Hourly listing attributes collection complete')
   console.log(`competitor_variations=${competitorAsinCount}`)
