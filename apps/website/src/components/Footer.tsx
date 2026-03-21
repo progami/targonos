@@ -5,13 +5,13 @@ import { Container } from '@/components/Container';
 const footerLinks = {
   Explore: [
     { label: 'Home', href: '/' },
-    { label: 'Caelum Star', href: '/caelum-star' },
-    { label: 'Packs', href: '/caelum-star/products' },
-    { label: 'Where to buy', href: '/caelum-star/where-to-buy' }
+    { label: 'Caelum Star', href: '/cs' },
+    { label: 'Packs', href: '/cs/us/packs' },
+    { label: 'Where to buy', href: '/cs/us/where-to-buy' }
   ],
   Company: [
-    { label: 'About', href: '/about' },
-    { label: 'Support', href: '/support' }
+    { label: 'About', href: '/cs/us/about' },
+    { label: 'Support', href: '/cs/us/support' }
   ],
   Legal: [
     { label: 'Privacy', href: '/legal/privacy' },
@@ -23,7 +23,7 @@ export function Footer() {
   const year = new Date().getFullYear();
 
   return (
-    <footer className="mt-16 border-t border-white/10 bg-black text-white">
+    <footer className="border-t border-white/10 bg-black text-white">
       <Container className="py-14">
         <div className="grid gap-10 md:grid-cols-12">
           <div className="md:col-span-5">

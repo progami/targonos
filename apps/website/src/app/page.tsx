@@ -62,7 +62,7 @@ export default function HomePage() {
           <Reveal delay={220}>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
               <Button asChild variant="accent" size="lg">
-                <Link href="/caelum-star">
+                <Link href="/cs">
                   Explore products <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -72,7 +72,7 @@ export default function HomePage() {
                 size="lg"
                 className="border-white/15 bg-white/5 text-white hover:bg-white/10"
               >
-                <Link href="/about">About</Link>
+                <Link href="/cs/us/about">About</Link>
               </Button>
             </div>
           </Reveal>
@@ -278,14 +278,14 @@ export default function HomePage() {
       </section>
 
       {/* PRODUCTS */}
-      <section className="tg-snap bg-black" id="products">
+      <section className="bg-black" id="products">
         <div className="absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-b from-black via-black/80 to-black" />
           <div className="absolute -left-24 top-24 h-[520px] w-[520px] rounded-full bg-accent/20 blur-3xl" />
           <div className="absolute -right-24 bottom-24 h-[520px] w-[520px] rounded-full bg-ink/30 blur-3xl" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6">
+        <Container className="relative z-10 flex flex-col items-center justify-center px-6 py-20 md:py-28">
           <div className="w-full max-w-6xl">
             <div className="grid items-end gap-8 md:grid-cols-12">
               <div className="text-center md:col-span-5 md:text-left">
@@ -314,7 +314,7 @@ export default function HomePage() {
                 <Reveal delay={280}>
                   <div className="mt-8 flex flex-wrap items-center justify-center gap-3 md:justify-start">
                     <Button asChild variant="accent" size="lg">
-                      <Link href="/caelum-star">
+                      <Link href="/cs">
                         View {site.productBrandName} <ArrowRight className="h-4 w-4" />
                       </Link>
                     </Button>

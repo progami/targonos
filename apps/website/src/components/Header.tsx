@@ -11,11 +11,10 @@ import { Container } from '@/components/Container';
 import { Button } from '@/components/Button';
 
 const navLinks = [
-  { label: 'Caelum Star', href: '/caelum-star' },
-  { label: 'Packs', href: '/caelum-star/products' },
-  { label: 'Where to buy', href: '/caelum-star/where-to-buy' },
-  { label: 'Support', href: '/support' },
-  { label: 'About', href: '/about' }
+  { label: 'Packs', href: '/cs/us/packs' },
+  { label: 'Where to buy', href: '/cs/us/where-to-buy' },
+  { label: 'Support', href: '/cs/us/support' },
+  { label: 'About', href: '/cs/us/about' }
 ];
 
 export function Header() {
@@ -80,9 +79,9 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           <Button asChild size="sm" variant="accent">
-            <a href={site.amazonStoreUrl} target="_blank" rel="noreferrer">
-              Buy Now
-            </a>
+            <Link href="/cs">
+              Caelum Star
+            </Link>
           </Button>
 
           <button
