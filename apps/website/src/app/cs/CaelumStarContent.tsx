@@ -382,7 +382,7 @@ export function CaelumStarContent({
           <Reveal variant="media" delay={100}>
             <div className="mt-8 flex gap-6 overflow-x-auto pb-2">
               {products.map((product) => (
-                <ProductFeatureCard key={product.slug} product={product} />
+                <ProductFeatureCard key={product.slug} product={product} region={region} />
               ))}
             </div>
           </Reveal>
