@@ -1,25 +1,25 @@
 export declare const brandColors: {
-    /** Main brand navy */
-    readonly main: "#002C51";
+    /** Main brand navy (from brand DNA) */
+    readonly main: "#0b273f";
     /** Secondary brand teal/cyan */
     readonly secondary: "#00C2B9";
     /** Accent muted gray */
     readonly accent: "#6F7B8B";
     /** White */
     readonly white: "#FFFFFF";
-    /** Navy color scale */
+    /** Navy color scale (based on brand DNA #0b273f) */
     readonly navy: {
-        readonly 50: "#e6f0f9";
-        readonly 100: "#cce0f3";
-        readonly 200: "#99c2e6";
-        readonly 300: "#66a3da";
-        readonly 400: "#3385cd";
-        readonly 500: "#0066c1";
-        readonly 600: "#00528a";
-        readonly 700: "#003d68";
-        readonly 800: "#002C51";
-        readonly 900: "#001f3a";
-        readonly 950: "#001423";
+        readonly 50: "#f0f4f7";
+        readonly 100: "#dae4ec";
+        readonly 200: "#b5c9d9";
+        readonly 300: "#8faec6";
+        readonly 400: "#6a93b3";
+        readonly 500: "#3d6d8f";
+        readonly 600: "#2a5270";
+        readonly 700: "#1a3d56";
+        readonly 800: "#0b273f";
+        readonly 900: "#071c2d";
+        readonly 950: "#04111c";
     };
     /** Teal color scale */
     readonly teal: {
@@ -49,11 +49,13 @@ export declare const brandColors: {
         readonly 900: "#6F7B8B";
         readonly 950: "#5a6372";
     };
-    /** Legacy aliases for backward compatibility */
-    readonly primary: "#002C51";
-    readonly primaryMuted: "#021B2B";
-    readonly primaryDeep: "#011226";
-    readonly primaryOverlay: "#00070F";
+    /** Light neutral (from brand DNA) */
+    readonly light: "#F5F5F5";
+    /** Legacy aliases */
+    readonly primary: "#0b273f";
+    readonly primaryMuted: "#071c2d";
+    readonly primaryDeep: "#04111c";
+    readonly primaryOverlay: "#020a10";
     readonly accentHover: "#00AFA8";
     readonly accentShadow: "rgba(0, 194, 185, 0.28)";
     readonly accentShadowHover: "rgba(0, 194, 185, 0.35)";
@@ -63,8 +65,12 @@ export declare const brandColors: {
 };
 export type BrandColorToken = keyof typeof brandColors;
 export declare const brandFontFamilies: {
-    /** Primary sans-serif font */
-    readonly primary: "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+    /** Headings — geometric, high-impact */
+    readonly heading: "League Spartan, system-ui, sans-serif";
+    /** Primary body/UI — clean, modern */
+    readonly primary: "Outfit, system-ui, -apple-system, BlinkMacSystemFont, sans-serif";
+    /** Secondary/accent — data labels, chips, metadata */
+    readonly secondary: "Montserrat, system-ui, sans-serif";
     /** Monospace font for code */
     readonly mono: "JetBrains Mono, Monaco, Consolas, monospace";
 };

@@ -151,12 +151,12 @@ export default function TrackingDetailPage() {
                       <Stack spacing={0.3}>
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
-                            {detail.asin}
+                            {detail.label && detail.label !== detail.asin ? detail.label : (current.title ?? detail.asin)}
                           </Typography>
                           <OwnerChip owner={owner} />
                         </Stack>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {current.title ?? 'Untitled'}
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                          ({detail.asin}){current.title && detail.label && detail.label !== detail.asin ? ` · ${current.title}` : ''}
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                           {current.brand ? `${current.brand} · ` : ''}

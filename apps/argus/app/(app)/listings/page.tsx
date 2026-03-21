@@ -83,11 +83,11 @@ export default async function ListingsPage() {
                       <ListAltIcon sx={{ color: 'text.secondary', fontSize: 20 }} />
                     </Box>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body1" fontWeight={500}>
-                        {listing.label}
+                      <Typography variant="body1" fontWeight={600}>
+                        {listing.label !== listing.asin ? listing.label : listing.asin}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {listing.asin}
+                        {listing.label !== listing.asin ? `(${listing.asin})` : ''}
                         {listing.brandName && ` · ${listing.brandName}`}
                       </Typography>
                       <Stack direction="row" spacing={0.5} mt={1} flexWrap="wrap">

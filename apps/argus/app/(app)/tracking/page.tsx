@@ -328,7 +328,7 @@ export default function TrackingDashboard() {
                       color: '#f8fafc',
                     }}
                   >
-                    {selectedEvent.asin}
+                    {selectedEvent.label ?? selectedEvent.asin}
                   </Button>
                 ) : null}
               </Stack>
@@ -531,10 +531,9 @@ export default function TrackingDashboard() {
                                 >
                                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                      label={item.label ? `${item.label} · ${item.asin}` : item.asin}
+                                      label={item.label && item.label !== item.asin ? `${item.label} (${item.asin})` : item.asin}
                                       size="small"
                                       sx={{
-                                        fontFamily: 'var(--font-mono)',
                                         borderRadius: 999,
                                         bgcolor: 'rgba(15, 23, 42, 0.06)',
                                       }}
@@ -593,10 +592,10 @@ export default function TrackingDashboard() {
                                 variant="overline"
                                 sx={{ color: 'text.secondary', letterSpacing: '0.08em' }}
                               >
-                                {selectedEvent.asin}
+                                {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? `(${selectedEvent.asin})` : selectedEvent.asin}
                               </Typography>
                               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
-                                {selectedEvent.label ?? selectedEvent.asin}
+                                {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? selectedEvent.label : selectedEvent.asin}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -781,7 +780,7 @@ export default function TrackingDashboard() {
                             startIcon={<ArrowOutwardIcon />}
                             sx={{ alignSelf: 'flex-start' }}
                           >
-                            Open ASIN Detail
+                            View {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? selectedEvent.label : selectedEvent.asin}
                           </Button>
                         </Stack>
                       ) : (
