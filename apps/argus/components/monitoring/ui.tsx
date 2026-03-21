@@ -12,6 +12,12 @@ import type {
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
 
+/* ── Brand tokens ─────────────────────────────────────────────── */
+const NAVY = '#0b273f'
+const TEAL = '#00C2B9'
+const NAVY_LIGHT = '#1a3d56'
+const NAVY_MUTED = '#6a93b3'
+
 export function OwnerChip({ owner }: { owner: MonitoringOwner }) {
   const label =
     owner === 'OURS' ? 'Ours' : owner === 'COMPETITOR' ? 'Competitor' : 'Unknown'
@@ -25,12 +31,12 @@ export function OwnerChip({ owner }: { owner: MonitoringOwner }) {
         borderRadius: 999,
         bgcolor:
           owner === 'OURS'
-            ? alpha('#1f6a5a', 0.14)
+            ? alpha(TEAL, 0.14)
             : owner === 'COMPETITOR'
               ? alpha('#b46832', 0.16)
-              : alpha('#59697a', 0.18),
+              : alpha(NAVY_MUTED, 0.18),
         color:
-          owner === 'OURS' ? '#17483e' : owner === 'COMPETITOR' ? '#7b4215' : '#334155',
+          owner === 'OURS' ? '#007a6d' : owner === 'COMPETITOR' ? '#7b4215' : NAVY_LIGHT,
       }}
     />
   )
@@ -62,8 +68,8 @@ export function CategoryChip({ category }: { category: MonitoringCategory }) {
       variant="outlined"
       sx={{
         borderRadius: 999,
-        borderColor: alpha('#0f172a', 0.12),
-        color: '#334155',
+        borderColor: alpha(NAVY, 0.12),
+        color: NAVY_LIGHT,
         bgcolor: alpha('#ffffff', 0.72),
       }}
     />
@@ -82,7 +88,7 @@ export function MetricCard(props: {
         px: 2,
         py: 1.5,
         borderRadius: 2.5,
-        border: '1px solid rgba(15, 23, 42, 0.07)',
+        border: `1px solid ${alpha(NAVY, 0.07)}`,
         bgcolor: 'rgba(255, 255, 255, 0.72)',
       }}
     >
@@ -97,7 +103,7 @@ export function MetricCard(props: {
         sx={{
           fontWeight: 800,
           lineHeight: 1.15,
-          color: props.accent ?? '#0f172a',
+          color: props.accent ?? NAVY,
           mt: 0.2,
         }}
       >
@@ -147,10 +153,8 @@ export function ComparisonRow(props: {
   label: string
   baseline: string | null
   current: string | null
-  /** When both values are numeric strings, show a directional arrow with color */
   numericBaseline?: number | null
   numericCurrent?: number | null
-  /** Flip the color logic: lower = good (e.g. BSR rank) */
   lowerIsBetter?: boolean
 }) {
   const { label, baseline, current, numericBaseline, numericCurrent, lowerIsBetter } = props
@@ -171,7 +175,7 @@ export function ComparisonRow(props: {
   }
 
   const sentimentColor =
-    sentiment === 'positive' ? '#1a7a4c' : sentiment === 'negative' ? '#b5362d' : '#475569'
+    sentiment === 'positive' ? '#007a6d' : sentiment === 'negative' ? '#b5362d' : NAVY_MUTED
   const arrow = direction === 'up' ? '↑' : direction === 'down' ? '↓' : null
 
   return (
@@ -191,14 +195,14 @@ export function ComparisonRow(props: {
         {label}
       </Typography>
       {unchanged ? (
-        <Typography variant="body2" sx={{ fontWeight: 600, color: '#64748b' }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: NAVY_MUTED }}>
           {currentDisplay}
         </Typography>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.6, flexWrap: 'wrap' }}>
           <Typography
             variant="body2"
-            sx={{ color: '#94a3b8', fontWeight: 500, textDecoration: 'line-through', fontSize: '0.8rem' }}
+            sx={{ color: NAVY_MUTED, fontWeight: 500, textDecoration: 'line-through', fontSize: '0.8rem' }}
           >
             {baselineDisplay}
           </Typography>
@@ -210,13 +214,13 @@ export function ComparisonRow(props: {
               {arrow}
             </Typography>
           ) : (
-            <Typography component="span" sx={{ color: '#94a3b8', fontSize: '0.7rem' }}>
+            <Typography component="span" sx={{ color: NAVY_MUTED, fontSize: '0.7rem' }}>
               →
             </Typography>
           )}
           <Typography
             variant="body2"
-            sx={{ fontWeight: 700, color: arrow ? sentimentColor : '#0f172a' }}
+            sx={{ fontWeight: 700, color: arrow ? sentimentColor : NAVY }}
           >
             {currentDisplay}
           </Typography>
@@ -235,7 +239,7 @@ export function CategorySection(props: { label: string; children: React.ReactNod
           fontWeight: 800,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: '#64748b',
+          color: NAVY_MUTED,
           fontSize: '0.62rem',
           display: 'block',
           mb: 0.8,
@@ -310,7 +314,7 @@ function getSeverityPalette(severity: MonitoringSeverity) {
     case 'medium':
       return { main: '#7f5f00' }
     case 'low':
-      return { main: '#41576d' }
+      return { main: NAVY_LIGHT }
   }
 }
 
