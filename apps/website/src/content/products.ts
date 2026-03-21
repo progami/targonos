@@ -283,7 +283,7 @@ export const productsUK: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    price: '£7.89',
+    price: '£9.89',
     tagline: 'Multi coverage for standard projects.',
     description: 'Extra large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [
@@ -325,7 +325,7 @@ export const productsUK: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '648 sq ft',
-    price: '£9.95',
+    price: '£11.95',
     tagline: 'Multi coverage with strong durability.',
     description: 'Extra large plastic dust sheets with strong durability for decorating and painting.',
     longDescription: [
@@ -361,7 +361,7 @@ export const productsUK: Product[] = [
     packLabel: '1 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '108 sq ft',
-    price: '£7.99',
+    price: '£9.99',
     tagline: 'Spot coverage for quick jobs.',
     description: 'One extra large dust sheet with strong durability for quick jobs.',
     longDescription: [
@@ -397,7 +397,7 @@ export const productsUK: Product[] = [
     packLabel: '3 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '324 sq ft',
-    price: '£8.99',
+    price: '£10.99',
     tagline: 'Room coverage for single-room work.',
     description: 'Extra large dust sheets with strong durability for decorating.',
     longDescription: [
@@ -433,7 +433,7 @@ export const productsUK: Product[] = [
     packLabel: '3 PK',
     thicknessLabel: 'Light',
     coverageLabel: '324 sq ft',
-    price: '£8.99',
+    price: '£10.99',
     tagline: 'Room coverage with light durability.',
     description: 'Extra large dust sheets with light durability for decorating.',
     longDescription: [
@@ -469,7 +469,7 @@ export const productsUK: Product[] = [
     packLabel: '10 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1080 sq ft',
-    price: '£9.89',
+    price: '£11.89',
     tagline: 'Pro coverage for multi-room renovations.',
     description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
