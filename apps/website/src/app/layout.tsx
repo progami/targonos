@@ -40,7 +40,7 @@ export default function RootLayout({
       <body>
         <SkipLink />
         <Header />
-        <main id="main-content" className="min-h-[calc(100vh-12rem)]">{children}</main>
+        <main id="main-content">{children}</main>
         <Footer />
       </body>
     </html>
