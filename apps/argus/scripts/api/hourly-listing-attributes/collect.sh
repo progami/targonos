@@ -26,6 +26,10 @@ if "$NODE_BIN" "$SCRIPT_DIR/collect.mjs" >> "$LOG" 2>&1; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection OK" >> "$LOG"
 else
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED" >> "$LOG"
+  EMAIL_SUBJECT="Argus: Hourly Listing Attributes failed"
+  LOG_TAIL="$(tail -200 "$LOG")"
+  EMAIL_TEXT="$(printf "Hourly listing attributes API collection failed.\nHost: %s\nLog: %s\n\nLast log lines:\n%s\n" "$(hostname)" "$LOG" "$LOG_TAIL")"
+  "$NODE_BIN" "$SCRIPT_DIR/../../lib/send-alert-email.mjs" --subject "$EMAIL_SUBJECT" --text "$EMAIL_TEXT"
   exit 1
 fi
 

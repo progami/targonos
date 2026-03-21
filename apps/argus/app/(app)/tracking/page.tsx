@@ -35,6 +35,7 @@ import type {
   MonitoringOverview,
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
+import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
   CategorySection,
@@ -327,8 +328,11 @@ export default function TrackingDashboard() {
                       borderColor: 'rgba(248, 250, 252, 0.28)',
                       color: '#f8fafc',
                     }}
+                    title={selectedEvent.asin}
                   >
-                    {selectedEvent.label ?? selectedEvent.asin}
+                    {formatMonitoringLabel(
+                      selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                    )}
                   </Button>
                 ) : null}
               </Stack>
@@ -478,6 +482,9 @@ export default function TrackingDashboard() {
                     <List sx={{ p: 0 }}>
                       {changes.map((item, index) => {
                         const selected = item.id === selectedEventId
+                        const listingLabel = formatMonitoringLabel(
+                          item.currentSnapshot ?? item.baselineSnapshot ?? { asin: item.asin },
+                        )
                         return (
                           <Box key={item.id}>
                             <ListItemButton
@@ -531,12 +538,14 @@ export default function TrackingDashboard() {
                                 >
                                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                                     <Chip
-                                      label={item.label && item.label !== item.asin ? `${item.label} (${item.asin})` : item.asin}
+                                      label={listingLabel}
                                       size="small"
                                       sx={{
+                                        fontWeight: 700,
                                         borderRadius: 999,
                                         bgcolor: 'rgba(15, 23, 42, 0.06)',
                                       }}
+                                      title={item.asin}
                                     />
                                     {item.changedFields.slice(0, 4).map((field) => (
                                       <Chip
@@ -595,7 +604,9 @@ export default function TrackingDashboard() {
                                 {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? `(${selectedEvent.asin})` : selectedEvent.asin}
                               </Typography>
                               <Typography variant="h5" sx={{ fontWeight: 800, mt: 0.4 }}>
-                                {selectedEvent.label && selectedEvent.label !== selectedEvent.asin ? selectedEvent.label : selectedEvent.asin}
+                                {formatMonitoringLabel(
+                                  selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                                )}
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
@@ -885,4 +896,3 @@ export default function TrackingDashboard() {
     </Box>
   )
 }
-
