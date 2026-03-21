@@ -170,13 +170,9 @@ body.tg-home {
   overflow-x: hidden;
 }
 
-body.tg-home footer {
-  margin-top: 0;
-  min-height: 50svh;
-  display: flex;
-  align-items: flex-end;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
+body.tg-home > footer,
+body.tg-home main#main-content + footer {
+  display: none;
 }
 
 .tg-snap {
