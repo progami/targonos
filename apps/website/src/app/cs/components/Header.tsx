@@ -18,11 +18,11 @@ export function CaelumStarHeader({ hideNav = false, hideBuyNow = false, region }
         <div className={styles.headerTopRow}>
           <div className="flex items-center gap-4">
             <Link href="/" className="opacity-50 transition-opacity hover:opacity-100">
-              <Image src="/brand/logo-inverted.svg" alt="Targon" width={80} height={16} className="h-4 w-auto" />
+              <Image src="/brand/logo-inverted.svg" alt="Targon" width={120} height={28} className="h-7 w-auto" />
             </Link>
-            <span className="text-white/20">|</span>
+            <span className="text-white/20 text-lg">|</span>
             <Link href="/cs" className={styles.brandWrap}>
-              <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={186} height={42} className={styles.brandLogo} priority />
+              <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={140} height={32} className="h-7 w-auto" priority />
             </Link>
           </div>
 
