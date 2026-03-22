@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/Category Insights"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Category Insights"
 LOG="/tmp/weekly-category-insights.log"
 
 EPOCH_START=$(date -j -f '%Y-%m-%d' '2025-12-28' '+%s')

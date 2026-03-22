@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking"
 DL="$HOME/Downloads"
 LOG="/tmp/weekly-scaleinsights.log"
 

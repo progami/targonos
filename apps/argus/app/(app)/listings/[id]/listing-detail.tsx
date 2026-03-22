@@ -94,6 +94,10 @@ function parseUsdToCents(value: string): number | null {
   return Number.isFinite(cents) ? cents : null
 }
 
+function isInitialIframeDocument(iframe: HTMLIFrameElement, doc: Document): boolean {
+  return iframe.contentWindow?.location.href === 'about:blank' || doc.URL === 'about:blank'
+}
+
 interface ListingSummary {
   id: string
   asin: string
@@ -842,6 +846,7 @@ export function ListingDetail({
     const handleLoad = () => {
       const doc = iframe.contentDocument
       if (!doc) return
+      if (isInitialIframeDocument(iframe, doc)) return
       if (iframeDocRef.current === doc) return
       iframeDocRef.current = doc
       setIframeEpoch((current) => current + 1)
@@ -883,7 +888,8 @@ export function ListingDetail({
     }
 
     iframe.addEventListener('load', handleLoad)
-    if (iframe.contentDocument?.readyState === 'complete') {
+    const doc = iframe.contentDocument
+    if (doc?.readyState === 'complete' && !isInitialIframeDocument(iframe, doc)) {
       handleLoad()
     }
     return () => iframe.removeEventListener('load', handleLoad)

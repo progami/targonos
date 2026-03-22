@@ -10,7 +10,7 @@ const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '../../../../../')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 
-const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/04 Sales/Monitoring/Hourly/Listing Attributes (API)'
+const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)'
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
 const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
