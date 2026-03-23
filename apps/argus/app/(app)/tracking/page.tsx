@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import {
   Alert,
+  alpha,
   Box,
   Button,
   Card,
@@ -31,9 +32,12 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import type {
   MonitoringCategory,
   MonitoringChangeEvent,
+  MonitoringHealthDataset,
   MonitoringHealthReport,
   MonitoringOverview,
+  MonitoringSchedulerJob,
   MonitoringSeverity,
+  MonitoringSourceType,
 } from '@/lib/monitoring/types'
 import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
@@ -78,6 +82,111 @@ const SEVERITY_OPTIONS: Array<{ value: MonitoringSeverity | 'ALL'; label: string
   { value: 'medium', label: 'Medium' },
   { value: 'low', label: 'Low' },
 ]
+
+function getDatasetPalette(status: 'healthy' | 'stale' | 'missing') {
+  if (status === 'healthy') {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,249,244,0.88) 100%)',
+      chipBackground: 'rgba(35, 116, 70, 0.14)',
+      chipColor: '#1f6a5a',
+    }
+  }
+
+  if (status === 'stale') {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,245,229,0.88) 100%)',
+      chipBackground: 'rgba(180, 104, 50, 0.16)',
+      chipColor: '#8c4b1f',
+    }
+  }
+
+  return {
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,241,241,0.92) 100%)',
+    chipBackground: 'rgba(181, 54, 45, 0.16)',
+    chipColor: '#b5362d',
+  }
+}
+
+function getSchedulerPalette(status: MonitoringSchedulerJob['status']) {
+  if (status === 'running') {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(232,244,252,0.92) 100%)',
+      chipBackground: 'rgba(34, 94, 168, 0.14)',
+      chipColor: '#1d4f91',
+    }
+  }
+
+  if (status === 'healthy') {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,249,244,0.88) 100%)',
+      chipBackground: 'rgba(35, 116, 70, 0.14)',
+      chipColor: '#1f6a5a',
+    }
+  }
+
+  if (status === 'failed') {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,241,241,0.92) 100%)',
+      chipBackground: 'rgba(181, 54, 45, 0.16)',
+      chipColor: '#b5362d',
+    }
+  }
+
+  return {
+    background: 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,247,250,0.9) 100%)',
+    chipBackground: 'rgba(106, 147, 179, 0.18)',
+    chipColor: '#496981',
+  }
+}
+
+function formatSchedulerStatus(job: MonitoringSchedulerJob): string {
+  if (job.status === 'running') return `RUNNING${job.pid === null ? '' : ` · PID ${job.pid}`}`
+  if (job.status === 'healthy') return 'HEALTHY'
+  if (job.status === 'failed') {
+    return `FAILED${job.lastExitStatus === null ? '' : ` · EXIT ${job.lastExitStatus}`}`
+  }
+  return 'MISSING'
+}
+
+function getSourceTypePalette(sourceType: MonitoringSourceType) {
+  if (sourceType === 'API') {
+    return {
+      background: 'rgba(0, 44, 81, 0.08)',
+      color: '#0b273f',
+      border: 'rgba(0, 44, 81, 0.12)',
+      label: 'API',
+      helper: 'Automated data pull',
+    }
+  }
+
+  if (sourceType === 'BROWSER') {
+    return {
+      background: 'rgba(0, 194, 185, 0.12)',
+      color: '#007a6d',
+      border: 'rgba(0, 194, 185, 0.2)',
+      label: 'Browser',
+      helper: 'Automated browser capture',
+    }
+  }
+
+  return {
+    background: 'rgba(180, 104, 50, 0.12)',
+    color: '#7b4215',
+    border: 'rgba(180, 104, 50, 0.22)',
+    label: 'Manual',
+    helper: 'Operator-maintained',
+  }
+}
+
+function formatAgeLabel(ageMinutes: number | null): string {
+  if (ageMinutes === null) return 'Missing'
+  if (ageMinutes < 60) return `${ageMinutes.toLocaleString()} minutes`
+
+  const hours = ageMinutes / 60
+  if (hours < 48) return `${hours.toFixed(hours >= 10 ? 0 : 1)} hours`
+
+  return `${(hours / 24).toFixed(1)} days`
+}
 
 export default function TrackingDashboard() {
   const [activeTab, setActiveTab] = useState<'changes' | 'sources'>('changes')
@@ -213,6 +322,65 @@ export default function TrackingDashboard() {
       Math.round((Date.now() - new Date(overview.snapshotTimestamp).getTime()) / 60000),
     )
   }, [overview])
+
+  const schedulerSummary = useMemo(() => {
+    const jobs = health?.jobs ?? []
+    return {
+      total: jobs.length,
+      healthy: jobs.filter((job) => job.status === 'healthy' || job.status === 'running').length,
+      failed: jobs.filter((job) => job.status === 'failed').length,
+      missing: jobs.filter((job) => job.status === 'missing').length,
+    }
+  }, [health])
+
+  const datasetSummary = useMemo(() => {
+    const datasets = health?.datasets ?? []
+    return {
+      total: datasets.length,
+      healthy: datasets.filter((dataset) => dataset.status === 'healthy').length,
+      attention: datasets.filter((dataset) => dataset.status === 'stale' || dataset.status === 'missing').length,
+      manual: datasets.filter((dataset) => dataset.sourceType === 'MANUAL').length,
+    }
+  }, [health])
+
+  const datasetsBySourceType = useMemo(() => {
+    const groups: Record<MonitoringSourceType, MonitoringHealthDataset[]> = {
+      API: [],
+      BROWSER: [],
+      MANUAL: [],
+    }
+
+    for (const dataset of health?.datasets ?? []) {
+      groups[dataset.sourceType].push(dataset)
+    }
+
+    return groups
+  }, [health])
+
+  const jobsBySourceType = useMemo(() => {
+    const groups: Record<'API' | 'BROWSER', MonitoringSchedulerJob[]> = {
+      API: [],
+      BROWSER: [],
+    }
+
+    for (const job of health?.jobs ?? []) {
+      groups[job.sourceType].push(job)
+    }
+
+    return groups
+  }, [health])
+
+  const changePipeline = useMemo(() => {
+    if (!health) return null
+
+    return {
+      dataset: health.datasets.find((dataset) => dataset.id === 'hourly-changes') ?? null,
+      job: health.jobs.find((job) => job.id === 'hourly-listing-attributes-api') ?? null,
+    }
+  }, [health])
+
+  const pipelineJob = changePipeline?.job ?? null
+  const pipelineDataset = changePipeline?.dataset ?? null
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -813,79 +981,449 @@ export default function TrackingDashboard() {
                   </Alert>
                 ) : null}
 
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gap: 2,
-                    gridTemplateColumns: {
-                      xs: '1fr',
-                      md: 'repeat(2, minmax(0, 1fr))',
-                    },
-                  }}
-                >
-                  {health?.datasets.map((dataset) => (
-                    <Card
-                      key={dataset.id}
+                <Alert severity="info" sx={{ borderRadius: 3 }}>
+                  Source Health is grouped by the real monitoring outputs under Google Drive. The
+                  {' '}
+                  <code>launchd</code>
+                  {' '}
+                  jobs produce those outputs. For hourly listing attributes, the change history file is
+                  the canonical stream, and email alerts are downstream of that same change feed.
+                </Alert>
+
+                {health ? (
+                  <>
+                    <Paper
+                      variant="outlined"
                       sx={{
                         borderRadius: 4,
-                        border: '1px solid rgba(15, 23, 42, 0.08)',
-                        boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+                        overflow: 'hidden',
+                        borderColor: 'rgba(15, 23, 42, 0.08)',
                         background:
-                          dataset.status === 'healthy'
-                            ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(239,249,244,0.88) 100%)'
-                            : dataset.status === 'stale'
-                              ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,245,229,0.88) 100%)'
-                              : 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(252,241,241,0.92) 100%)',
+                          'linear-gradient(135deg, rgba(11,39,63,0.04) 0%, rgba(0,194,185,0.08) 100%)',
                       }}
                     >
                       <CardContent sx={{ p: 2.5 }}>
-                        <Stack spacing={1.2}>
-                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                        <Stack spacing={2}>
+                          <Stack
+                            direction={{ xs: 'column', md: 'row' }}
+                            justifyContent="space-between"
+                            spacing={1.5}
+                          >
                             <Box>
                               <Typography variant="overline" color="text.secondary">
-                                {dataset.cadence}
+                                Change Pipeline
                               </Typography>
                               <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                                {dataset.label}
+                                Change Feed → Email
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                One hourly API run writes the change history, the feed renders that stream,
+                                and email alerts are sent from the same canonical event set.
                               </Typography>
                             </Box>
-                            <Chip
-                              label={dataset.status.toUpperCase()}
-                              size="small"
-                              sx={{
-                                fontWeight: 800,
-                                borderRadius: 999,
-                                bgcolor:
-                                  dataset.status === 'healthy'
-                                    ? 'rgba(35, 116, 70, 0.14)'
-                                    : dataset.status === 'stale'
-                                      ? 'rgba(180, 104, 50, 0.16)'
-                                      : 'rgba(181, 54, 45, 0.16)',
-                                color:
-                                  dataset.status === 'healthy'
-                                    ? '#1f6a5a'
-                                    : dataset.status === 'stale'
-                                      ? '#8c4b1f'
-                                      : '#b5362d',
-                              }}
-                            />
+                            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                              {pipelineJob ? (
+                                <Chip
+                                  label={`Collector ${formatSchedulerStatus(pipelineJob)}`}
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 800,
+                                    borderRadius: 999,
+                                    bgcolor: getSchedulerPalette(pipelineJob.status).chipBackground,
+                                    color: getSchedulerPalette(pipelineJob.status).chipColor,
+                                  }}
+                                />
+                              ) : null}
+                              {pipelineDataset ? (
+                                <Chip
+                                  label={`Stream ${pipelineDataset.status.toUpperCase()}`}
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 800,
+                                    borderRadius: 999,
+                                    bgcolor: getDatasetPalette(pipelineDataset.status).chipBackground,
+                                    color: getDatasetPalette(pipelineDataset.status).chipColor,
+                                  }}
+                                />
+                              ) : null}
+                            </Stack>
                           </Stack>
 
-                          <DataField label="Last updated" value={formatDateTime(dataset.updatedAt)} mono />
-                          <DataField
-                            label="Age"
-                            value={
-                              dataset.ageMinutes === null
-                                ? 'Missing'
-                                : `${dataset.ageMinutes.toLocaleString()} minutes`
-                            }
-                          />
-                          <DataField label="Path" value={dataset.path} />
+                          <Box
+                            sx={{
+                              display: 'grid',
+                              gap: 1.25,
+                              gridTemplateColumns: {
+                                xs: '1fr',
+                                md: 'repeat(4, minmax(0, 1fr))',
+                              },
+                            }}
+                          >
+                            {[
+                              {
+                                label: 'Collector',
+                                value: 'Hourly listing attributes (API)',
+                                helper: pipelineJob?.schedule ?? 'Every hour',
+                              },
+                              {
+                                label: 'Canonical stream',
+                                value: 'Listings-Changes-History.csv',
+                                helper: formatDateTime(pipelineDataset?.updatedAt ?? null),
+                              },
+                              {
+                                label: 'Product surface',
+                                value: 'Change Feed',
+                                helper: 'Tracking → Changes tab',
+                              },
+                              {
+                                label: 'Delivery',
+                                value: 'Alert email',
+                                helper: 'Sent from the same event stream',
+                              },
+                            ].map((step) => (
+                              <Box
+                                key={step.label}
+                                sx={{
+                                  p: 1.6,
+                                  borderRadius: 3,
+                                  border: '1px solid rgba(15, 23, 42, 0.08)',
+                                  bgcolor: 'rgba(255,255,255,0.82)',
+                                }}
+                              >
+                                <Typography variant="caption" color="text.secondary">
+                                  {step.label}
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 800, mt: 0.4 }}>
+                                  {step.value}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {step.helper}
+                                </Typography>
+                              </Box>
+                            ))}
+                          </Box>
                         </Stack>
                       </CardContent>
-                    </Card>
-                  ))}
-                </Box>
+                    </Paper>
+
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gap: 1.5,
+                        gridTemplateColumns: {
+                          xs: '1fr',
+                          md: 'repeat(4, minmax(0, 1fr))',
+                        },
+                      }}
+                    >
+                      {[
+                        {
+                          label: 'Source outputs',
+                          value: datasetSummary.total,
+                          accent: '#0b273f',
+                          helper: `${datasetSummary.manual} manual source${datasetSummary.manual === 1 ? '' : 's'}`,
+                        },
+                        {
+                          label: 'Healthy outputs',
+                          value: datasetSummary.healthy,
+                          accent: '#1f6a5a',
+                          helper: `${datasetSummary.attention} need attention`,
+                        },
+                        {
+                          label: 'Automated jobs',
+                          value: schedulerSummary.total,
+                          accent: '#0b273f',
+                          helper: `${schedulerSummary.failed + schedulerSummary.missing} with issues`,
+                        },
+                        {
+                          label: 'Healthy or running',
+                          value: schedulerSummary.healthy,
+                          accent: '#1f6a5a',
+                          helper: `${schedulerSummary.failed} failed · ${schedulerSummary.missing} missing`,
+                        },
+                      ].map((item) => (
+                        <Paper
+                          key={item.label}
+                          variant="outlined"
+                          sx={{
+                            px: 2,
+                            py: 1.75,
+                            borderRadius: 3,
+                            borderColor: 'rgba(15, 23, 42, 0.08)',
+                          }}
+                        >
+                          <Typography variant="caption" color="text.secondary">
+                            {item.label}
+                          </Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 800, color: item.accent }}>
+                            {item.value}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {item.helper}
+                          </Typography>
+                        </Paper>
+                      ))}
+                    </Box>
+
+                    <Box>
+                      <Typography
+                        variant="overline"
+                        sx={{ color: 'text.secondary', letterSpacing: '0.08em', display: 'block', mb: 1 }}
+                      >
+                        Source Outputs
+                      </Typography>
+                      <Stack spacing={2}>
+                        {(['API', 'BROWSER', 'MANUAL'] as const).map((sourceType) => {
+                          const datasets = datasetsBySourceType[sourceType]
+                          if (datasets.length === 0) return null
+
+                          const sourcePalette = getSourceTypePalette(sourceType)
+                          return (
+                            <Paper
+                              key={sourceType}
+                              variant="outlined"
+                              sx={{
+                                borderRadius: 4,
+                                borderColor: 'rgba(15, 23, 42, 0.08)',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  px: 2.2,
+                                  py: 1.6,
+                                  borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
+                                  bgcolor: alpha(sourcePalette.color, 0.04),
+                                }}
+                              >
+                                <Stack
+                                  direction={{ xs: 'column', md: 'row' }}
+                                  justifyContent="space-between"
+                                  spacing={1}
+                                >
+                                  <Box>
+                                    <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                                      {sourcePalette.label}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                      {sourcePalette.helper}
+                                    </Typography>
+                                  </Box>
+                                  <Chip
+                                    label={`${datasets.length} source${datasets.length === 1 ? '' : 's'}`}
+                                    size="small"
+                                    sx={{
+                                      fontWeight: 700,
+                                      borderRadius: 999,
+                                      alignSelf: 'flex-start',
+                                      bgcolor: sourcePalette.background,
+                                      color: sourcePalette.color,
+                                      border: `1px solid ${sourcePalette.border}`,
+                                    }}
+                                  />
+                                </Stack>
+                              </Box>
+                              <CardContent sx={{ p: 2.2 }}>
+                                <Box
+                                  sx={{
+                                    display: 'grid',
+                                    gap: 1.5,
+                                    gridTemplateColumns: {
+                                      xs: '1fr',
+                                      xl: 'repeat(2, minmax(0, 1fr))',
+                                    },
+                                  }}
+                                >
+                                  {datasets.map((dataset) => {
+                                    const palette = getDatasetPalette(dataset.status)
+                                    return (
+                                      <Box
+                                        key={dataset.id}
+                                        sx={{
+                                          p: 1.75,
+                                          borderRadius: 3,
+                                          border: '1px solid rgba(15, 23, 42, 0.08)',
+                                          background: palette.background,
+                                        }}
+                                      >
+                                        <Stack spacing={1.2}>
+                                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                                            <Box>
+                                              <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                                                {dataset.label}
+                                              </Typography>
+                                              <Typography variant="caption" color="text.secondary">
+                                                {dataset.purpose}
+                                              </Typography>
+                                            </Box>
+                                            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap justifyContent="flex-end">
+                                              <Chip
+                                                label={dataset.cadence.toUpperCase()}
+                                                size="small"
+                                                sx={{
+                                                  fontWeight: 700,
+                                                  borderRadius: 999,
+                                                  bgcolor: sourcePalette.background,
+                                                  color: sourcePalette.color,
+                                                  border: `1px solid ${sourcePalette.border}`,
+                                                }}
+                                              />
+                                              <Chip
+                                                label={dataset.status.toUpperCase()}
+                                                size="small"
+                                                sx={{
+                                                  fontWeight: 800,
+                                                  borderRadius: 999,
+                                                  bgcolor: palette.chipBackground,
+                                                  color: palette.chipColor,
+                                                }}
+                                              />
+                                            </Stack>
+                                          </Stack>
+
+                                          <DataField label="Last updated" value={formatDateTime(dataset.updatedAt)} mono />
+                                          <DataField label="Age" value={formatAgeLabel(dataset.ageMinutes)} />
+                                          <DataField
+                                            label="Producer"
+                                            value={dataset.producedBy ?? 'Manual update'}
+                                          />
+                                          <DataField
+                                            label="Used by"
+                                            value={dataset.consumers.join(' · ')}
+                                          />
+
+                                          <Box
+                                            sx={{
+                                              p: 1.2,
+                                              borderRadius: 2.5,
+                                              bgcolor: 'rgba(255,255,255,0.72)',
+                                              border: '1px solid rgba(15, 23, 42, 0.06)',
+                                            }}
+                                          >
+                                            <Typography variant="caption" color="text.secondary">
+                                              Path
+                                            </Typography>
+                                            <Typography
+                                              variant="body2"
+                                              sx={{
+                                                mt: 0.4,
+                                                fontFamily: 'var(--font-mono)',
+                                                fontSize: '0.76rem',
+                                                wordBreak: 'break-word',
+                                              }}
+                                            >
+                                              {dataset.path}
+                                            </Typography>
+                                          </Box>
+                                        </Stack>
+                                      </Box>
+                                    )
+                                  })}
+                                </Box>
+                              </CardContent>
+                            </Paper>
+                          )
+                        })}
+                      </Stack>
+                    </Box>
+
+                    <Box>
+                      <Typography
+                        variant="overline"
+                        sx={{ color: 'text.secondary', letterSpacing: '0.08em', display: 'block', mb: 1 }}
+                      >
+                        Automation Health
+                      </Typography>
+                      <Stack spacing={2}>
+                        {(['API', 'BROWSER'] as const).map((sourceType) => {
+                          const jobs = jobsBySourceType[sourceType]
+                          if (jobs.length === 0) return null
+
+                          const sourcePalette = getSourceTypePalette(sourceType)
+                          return (
+                            <Paper
+                              key={sourceType}
+                              variant="outlined"
+                              sx={{ borderRadius: 4, borderColor: 'rgba(15, 23, 42, 0.08)' }}
+                            >
+                              <Box
+                                sx={{
+                                  px: 2.2,
+                                  py: 1.6,
+                                  borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
+                                  bgcolor: alpha(sourcePalette.color, 0.04),
+                                }}
+                              >
+                                <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                                  {sourcePalette.label} collectors
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {sourceType === 'API'
+                                    ? 'LaunchAgents that write API-backed outputs and tracking snapshots.'
+                                    : 'LaunchAgents that drive browser-based monitoring captures.'}
+                                </Typography>
+                              </Box>
+                              <CardContent sx={{ p: 2.2 }}>
+                                <Stack spacing={1.5}>
+                                  {jobs.map((job) => {
+                                    const palette = getSchedulerPalette(job.status)
+                                    return (
+                                      <Box
+                                        key={job.id}
+                                        sx={{
+                                          p: 1.75,
+                                          borderRadius: 3,
+                                          border: '1px solid rgba(15, 23, 42, 0.08)',
+                                          background: palette.background,
+                                        }}
+                                      >
+                                        <Stack spacing={1.2}>
+                                          <Stack direction="row" justifyContent="space-between" spacing={1}>
+                                            <Box>
+                                              <Typography variant="body1" sx={{ fontWeight: 800 }}>
+                                                {job.label}
+                                              </Typography>
+                                              <Typography variant="caption" color="text.secondary">
+                                                {job.schedule}
+                                              </Typography>
+                                            </Box>
+                                            <Chip
+                                              label={formatSchedulerStatus(job)}
+                                              size="small"
+                                              sx={{
+                                                fontWeight: 800,
+                                                borderRadius: 999,
+                                                bgcolor: palette.chipBackground,
+                                                color: palette.chipColor,
+                                              }}
+                                            />
+                                          </Stack>
+
+                                          <DataField label="Outputs" value={job.outputs.join(' · ')} />
+                                          <DataField label="LaunchAgent" value={job.launchdLabel} mono />
+                                          <DataField
+                                            label="Target"
+                                            value={job.target ?? 'Missing'}
+                                            mono={job.target !== null}
+                                          />
+                                          <DataField
+                                            label="Logs"
+                                            value={`${job.stdoutPath ?? 'Missing stdout'} · ${job.stderrPath ?? 'Missing stderr'}`}
+                                            mono
+                                          />
+                                        </Stack>
+                                      </Box>
+                                    )
+                                  })}
+                                </Stack>
+                              </CardContent>
+                            </Paper>
+                          )
+                        })}
+                      </Stack>
+                    </Box>
+                  </>
+                ) : null}
 
                 {!health && !healthError ? <LinearProgress /> : null}
               </Stack>

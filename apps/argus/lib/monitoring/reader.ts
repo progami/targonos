@@ -1,7 +1,9 @@
 import 'server-only'
 
+import { execFile } from 'child_process'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { promisify } from 'util'
 import prisma from '@/lib/db'
 import { parseCsvRows } from './csv'
 import { formatMonitoringLabel } from './labels'
@@ -13,22 +15,313 @@ import type {
   MonitoringHealthReport,
   MonitoringOverview,
   MonitoringOwner,
+  MonitoringSchedulerJob,
   MonitoringSeverity,
   MonitoringSnapshotRecord,
   MonitoringStateRecord,
+  MonitoringSourceType,
   MonitoringWindow,
 } from './types'
+
+const execFileAsync = promisify(execFile)
+const HOME_DIR = process.env.HOME
+
+if (!HOME_DIR) {
+  throw new Error('Missing HOME environment variable.')
+}
 
 const MONITORING_BASE =
   '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
 
+const DAILY_BASE = path.join(MONITORING_BASE, 'Daily')
+const WEEKLY_BASE = path.join(MONITORING_BASE, 'Weekly')
 const LISTING_ATTRIBUTES_BASE = path.join(MONITORING_BASE, 'Hourly/Listing Attributes (API)')
 const LATEST_STATE_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'latest_state.json')
 const CHANGE_HISTORY_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'Listings-Changes-History.csv')
 const SNAPSHOT_HISTORY_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'Listings-Snapshot-History.csv')
+const DAILY_ACCOUNT_HEALTH_PATH = path.join(DAILY_BASE, 'Account Health Dashboard (API)', 'account-health.csv')
+const DAILY_VISUALS_PATH = path.join(DAILY_BASE, 'Visuals (Browser)')
+const DAILY_VOC_PATH = path.join(DAILY_BASE, 'Voice of the Customer (Manual)')
+const WEEKLY_BRAND_ANALYTICS_PATH = path.join(WEEKLY_BASE, 'Brand Analytics (API)')
+const WEEKLY_BUSINESS_REPORTS_PATH = path.join(WEEKLY_BASE, 'Business Reports (API)')
+const WEEKLY_DATADIVE_PATH = path.join(WEEKLY_BASE, 'Datadive (API)')
+const WEEKLY_SELLERBOARD_PATH = path.join(WEEKLY_BASE, 'Sellerboard (API)')
+const WEEKLY_CATEGORY_INSIGHTS_PATH = path.join(WEEKLY_BASE, 'Category Insights (Browser)')
+const WEEKLY_POE_PATH = path.join(WEEKLY_BASE, 'Product Opportunity Explorer (Browser)')
+const WEEKLY_SPONSORED_PRODUCTS_PATH = path.join(
+  WEEKLY_BASE,
+  'Ad Console/SP - Sponsored Products (API)',
+)
+const WEEKLY_BRAND_METRICS_PATH = path.join(WEEKLY_BASE, 'Ad Console/Brand Metrics (Browser)')
+const WEEKLY_SCALEINSIGHTS_PATH = path.join(
+  WEEKLY_BASE,
+  'ScaleInsights/KeywordRanking (Browser)',
+)
 
 const HOUR_IN_MINUTES = 60
 const DAY_IN_MINUTES = 24 * HOUR_IN_MINUTES
+
+const ARGUS_SCHEDULER_SPECS = [
+  {
+    id: 'tracking-fetch',
+    label: 'Tracking fetch',
+    cadence: 'hourly',
+    sourceType: 'API',
+    schedule: 'Every hour',
+    launchdLabel: 'com.targon.argus.tracking-fetch',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.argus.tracking-fetch.plist'),
+    outputs: ['Argus tracking snapshots (DB)'],
+  },
+  {
+    id: 'hourly-listing-attributes-api',
+    label: 'Hourly listing attributes',
+    cadence: 'hourly',
+    sourceType: 'API',
+    schedule: 'Every hour',
+    launchdLabel: 'com.targon.hourly-listing-attributes-api',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.hourly-listing-attributes-api.plist'),
+    outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
+  },
+  {
+    id: 'daily-account-health',
+    label: 'Daily account health',
+    cadence: 'daily',
+    sourceType: 'API',
+    schedule: 'Daily at 3:00 AM',
+    launchdLabel: 'com.targon.daily-account-health',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-account-health.plist'),
+    outputs: ['Account Health Dashboard (API)'],
+  },
+  {
+    id: 'weekly-api-sources',
+    label: 'Weekly API sources',
+    cadence: 'weekly',
+    sourceType: 'API',
+    schedule: 'Monday at 4:00 AM',
+    launchdLabel: 'com.targon.weekly-api-sources',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-api-sources.plist'),
+    outputs: [
+      'Brand Analytics (API)',
+      'Business Reports (API)',
+      'Datadive (API)',
+      'Sellerboard (API)',
+      'SP - Sponsored Products (API)',
+    ],
+  },
+  {
+    id: 'daily-visuals',
+    label: 'Daily visuals',
+    cadence: 'daily',
+    sourceType: 'BROWSER',
+    schedule: 'Daily at 3:30 AM',
+    launchdLabel: 'com.targon.daily-visuals',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-visuals.plist'),
+    outputs: ['Visuals (Browser)'],
+  },
+  {
+    id: 'weekly-browser-sources',
+    label: 'Weekly browser sources',
+    cadence: 'weekly',
+    sourceType: 'BROWSER',
+    schedule: 'Monday at 3:00 AM',
+    launchdLabel: 'com.targon.weekly-browser-sources',
+    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-browser-sources.plist'),
+    outputs: [
+      'Category Insights (Browser)',
+      'Product Opportunity Explorer (Browser)',
+      'KeywordRanking (Browser)',
+      'Brand Metrics (Browser)',
+    ],
+  },
+] as const
+
+interface DatasetHealthSpec {
+  id: string
+  label: string
+  cadence: MonitoringHealthDataset['cadence']
+  sourceType: MonitoringSourceType
+  path: string
+  purpose: string
+  producedBy: string | null
+  consumers: string[]
+  getUpdatedAt: () => Promise<string | null>
+}
+
+const DATASET_SPECS: DatasetHealthSpec[] = [
+  {
+    id: 'hourly-state',
+    label: 'Hourly latest state',
+    cadence: 'hourly',
+    sourceType: 'API',
+    path: LATEST_STATE_PATH,
+    purpose: 'Latest listing baseline used to compute the next hourly diff run.',
+    producedBy: 'Hourly listing attributes',
+    consumers: ['Change detection'],
+    getUpdatedAt: async () => statIso(LATEST_STATE_PATH),
+  },
+  {
+    id: 'hourly-snapshots',
+    label: 'Snapshot history',
+    cadence: 'hourly',
+    sourceType: 'API',
+    path: SNAPSHOT_HISTORY_PATH,
+    purpose: 'Historical snapshot archive behind per-ASIN timelines and comparisons.',
+    producedBy: 'Hourly listing attributes',
+    consumers: ['ASIN detail timelines', 'Baseline reconstruction'],
+    getUpdatedAt: async () => statIso(SNAPSHOT_HISTORY_PATH),
+  },
+  {
+    id: 'hourly-changes',
+    label: 'Change Feed -> Email',
+    cadence: 'hourly',
+    sourceType: 'API',
+    path: CHANGE_HISTORY_PATH,
+    purpose: 'Canonical event stream consumed by the Change Feed and alert email digest.',
+    producedBy: 'Hourly listing attributes',
+    consumers: ['Change Feed', 'Alert email'],
+    getUpdatedAt: async () => statIso(CHANGE_HISTORY_PATH),
+  },
+  {
+    id: 'daily-account-health',
+    label: 'Account Health Dashboard (API)',
+    cadence: 'daily',
+    sourceType: 'API',
+    path: DAILY_ACCOUNT_HEALTH_PATH,
+    purpose: 'Daily account health report export.',
+    producedBy: 'Daily account health',
+    consumers: ['Source Health'],
+    getUpdatedAt: async () => statIso(DAILY_ACCOUNT_HEALTH_PATH),
+  },
+  {
+    id: 'daily-visuals',
+    label: 'Visuals (Browser)',
+    cadence: 'daily',
+    sourceType: 'BROWSER',
+    path: DAILY_VISUALS_PATH,
+    purpose: 'Daily browser screenshots for monitored ASINs.',
+    producedBy: 'Daily visuals',
+    consumers: ['Daily monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(DAILY_VISUALS_PATH, 4),
+  },
+  {
+    id: 'daily-voc',
+    label: 'Voice of the Customer (Manual)',
+    cadence: 'daily',
+    sourceType: 'MANUAL',
+    path: DAILY_VOC_PATH,
+    purpose: 'Manual VOC files that support daily review.',
+    producedBy: null,
+    consumers: ['Daily monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(DAILY_VOC_PATH, 2),
+  },
+  {
+    id: 'weekly-brand-analytics',
+    label: 'Brand Analytics (API)',
+    cadence: 'weekly',
+    sourceType: 'API',
+    path: WEEKLY_BRAND_ANALYTICS_PATH,
+    purpose: 'Weekly Amazon Brand Analytics exports.',
+    producedBy: 'Weekly API sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BRAND_ANALYTICS_PATH, 3),
+  },
+  {
+    id: 'weekly-business-reports',
+    label: 'Business Reports (API)',
+    cadence: 'weekly',
+    sourceType: 'API',
+    path: WEEKLY_BUSINESS_REPORTS_PATH,
+    purpose: 'Weekly Amazon business reports exports.',
+    producedBy: 'Weekly API sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BUSINESS_REPORTS_PATH, 3),
+  },
+  {
+    id: 'weekly-datadive',
+    label: 'Datadive (API)',
+    cadence: 'weekly',
+    sourceType: 'API',
+    path: WEEKLY_DATADIVE_PATH,
+    purpose: 'Weekly Datadive keyword, competitor, and rank radar exports.',
+    producedBy: 'Weekly API sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_DATADIVE_PATH, 3),
+  },
+  {
+    id: 'weekly-sellerboard',
+    label: 'Sellerboard (API)',
+    cadence: 'weekly',
+    sourceType: 'API',
+    path: WEEKLY_SELLERBOARD_PATH,
+    purpose: 'Weekly Sellerboard dashboard and order exports.',
+    producedBy: 'Weekly API sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SELLERBOARD_PATH, 3),
+  },
+  {
+    id: 'weekly-sponsored-products',
+    label: 'SP - Sponsored Products (API)',
+    cadence: 'weekly',
+    sourceType: 'API',
+    path: WEEKLY_SPONSORED_PRODUCTS_PATH,
+    purpose: 'Weekly Sponsored Products console exports and manifest.',
+    producedBy: 'Weekly API sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SPONSORED_PRODUCTS_PATH, 3),
+  },
+  {
+    id: 'weekly-category-insights',
+    label: 'Category Insights (Browser)',
+    cadence: 'weekly',
+    sourceType: 'BROWSER',
+    path: WEEKLY_CATEGORY_INSIGHTS_PATH,
+    purpose: 'Weekly browser capture of category insights.',
+    producedBy: 'Weekly browser sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_CATEGORY_INSIGHTS_PATH, 2),
+  },
+  {
+    id: 'weekly-poe',
+    label: 'Product Opportunity Explorer (Browser)',
+    cadence: 'weekly',
+    sourceType: 'BROWSER',
+    path: WEEKLY_POE_PATH,
+    purpose: 'Weekly browser export from Product Opportunity Explorer.',
+    producedBy: 'Weekly browser sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_POE_PATH, 2),
+  },
+  {
+    id: 'weekly-scaleinsights',
+    label: 'KeywordRanking (Browser)',
+    cadence: 'weekly',
+    sourceType: 'BROWSER',
+    path: WEEKLY_SCALEINSIGHTS_PATH,
+    purpose: 'Weekly ScaleInsights keyword ranking workbook.',
+    producedBy: 'Weekly browser sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SCALEINSIGHTS_PATH, 3),
+  },
+  {
+    id: 'weekly-brand-metrics',
+    label: 'Brand Metrics (Browser)',
+    cadence: 'weekly',
+    sourceType: 'BROWSER',
+    path: WEEKLY_BRAND_METRICS_PATH,
+    purpose: 'Weekly browser capture of Brand Metrics.',
+    producedBy: 'Weekly browser sources',
+    consumers: ['Weekly monitoring review'],
+    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BRAND_METRICS_PATH, 3),
+  },
+]
+
+interface LaunchAgentPlist {
+  Label: string
+  ProgramArguments?: string[]
+  StandardOutPath?: string
+  StandardErrorPath?: string
+  WorkingDirectory?: string
+}
 
 const CATEGORY_FIELDS: Record<MonitoringCategory, Set<string>> = {
   status: new Set([
@@ -161,6 +454,12 @@ interface ChangeHistoryRow {
   changed: string
   changed_fields: string
   changed_field_count: string
+  event_label?: string
+  event_severity?: string
+  event_primary_category?: string
+  event_categories?: string
+  event_headline?: string
+  event_summary?: string
 }
 
 export interface MonitoringChangeFilters {
@@ -223,40 +522,15 @@ export async function getMonitoringAsinDetail(asin: string): Promise<MonitoringA
 }
 
 export async function getMonitoringHealth(): Promise<MonitoringHealthReport> {
-  const datasets: MonitoringHealthDataset[] = await Promise.all([
-    getDatasetHealth(
-      'hourly-state',
-      'Hourly latest state',
-      'hourly',
-      LATEST_STATE_PATH,
-      async () => statIso(LATEST_STATE_PATH),
-    ),
-    getDatasetHealth(
-      'hourly-changes',
-      'Hourly change history',
-      'hourly',
-      CHANGE_HISTORY_PATH,
-      async () => statIso(CHANGE_HISTORY_PATH),
-    ),
-    getDatasetHealth(
-      'daily-root',
-      'Daily monitoring bundle',
-      'daily',
-      path.join(MONITORING_BASE, 'Daily'),
-      async () => findLatestModifiedAt(path.join(MONITORING_BASE, 'Daily'), 3),
-    ),
-    getDatasetHealth(
-      'weekly-root',
-      'Weekly monitoring bundle',
-      'weekly',
-      path.join(MONITORING_BASE, 'Weekly'),
-      async () => findLatestModifiedAt(path.join(MONITORING_BASE, 'Weekly'), 4),
-    ),
+  const [datasets, jobs] = await Promise.all([
+    Promise.all(DATASET_SPECS.map((spec) => getDatasetHealth(spec))),
+    Promise.all(ARGUS_SCHEDULER_SPECS.map((spec) => getSchedulerHealth(spec))),
   ])
 
   return {
     checkedAt: new Date().toISOString(),
     datasets,
+    jobs,
   }
 }
 
@@ -379,6 +653,12 @@ async function readChangeHistory(): Promise<ChangeHistoryRow[]> {
     changed: row.changed,
     changed_fields: row.changed_fields,
     changed_field_count: row.changed_field_count,
+    event_label: row.event_label,
+    event_severity: row.event_severity,
+    event_primary_category: row.event_primary_category,
+    event_categories: row.event_categories,
+    event_headline: row.event_headline,
+    event_summary: row.event_summary,
   }))
 }
 
@@ -461,46 +741,54 @@ function normalizeChangeEvent(
 ): MonitoringChangeEvent {
   const asin = row.asin.trim().toUpperCase()
   const changedFields = parseChangedFields(row.changed_fields)
-  const categories = classifyCategories(changedFields)
   const currentSnapshot =
     snapshots.find((item) => item.capturedAt === row.snapshot_timestamp_utc) ?? null
   const baselineSnapshot =
     snapshots.find((item) => item.capturedAt === row.baseline_timestamp_utc) ?? null
-  const primaryCategory = pickPrimaryCategory({
-    categories,
-    currentSnapshot,
-    baselineSnapshot,
-  })
-  const severity = classifySeverity({
-    owner: normalizeOwner(row.owner_type),
-    categories,
-    changedFields,
-    currentSnapshot,
-    baselineSnapshot,
-  })
 
   const owner = normalizeOwner(row.owner_type)
-  const displayName = label ?? asin
-  const headline = buildHeadline({
-    asin: displayName,
-    owner,
-    primaryCategory,
-    currentSnapshot,
-    baselineSnapshot,
-    changedFields,
-  })
-  const summary = buildSummary({
-    primaryCategory,
-    changedFields,
-    currentSnapshot,
-    baselineSnapshot,
-    currentState,
-  })
+  const categories = parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
+  const primaryCategory =
+    parseStoredCategory(row.event_primary_category) ??
+    pickPrimaryCategory({
+      categories,
+      currentSnapshot,
+      baselineSnapshot,
+    })
+  const severity =
+    parseStoredSeverity(row.event_severity) ??
+    classifySeverity({
+      owner,
+      categories,
+      changedFields,
+      currentSnapshot,
+      baselineSnapshot,
+    })
+  const displayName = label ?? row.event_label ?? asin
+  const headline =
+    readString(row.event_headline) ??
+    buildHeadline({
+      asin: displayName,
+      owner,
+      primaryCategory,
+      currentSnapshot,
+      baselineSnapshot,
+      changedFields,
+    })
+  const summary =
+    readString(row.event_summary) ??
+    buildSummary({
+      primaryCategory,
+      changedFields,
+      currentSnapshot,
+      baselineSnapshot,
+      currentState,
+    })
 
   return {
     id: `${asin}-${row.snapshot_timestamp_utc}-${index}`,
     asin,
-    label,
+    label: label ?? row.event_label ?? null,
     owner,
     timestamp: row.snapshot_timestamp_utc,
     baselineTimestamp: readString(row.baseline_timestamp_utc),
@@ -781,6 +1069,27 @@ function parseChangedFields(input: string): string[] {
     .filter((field) => field !== '')
 }
 
+function parseStoredCategories(input: string | undefined): MonitoringCategory[] | null {
+  const categories = String(input ?? '')
+    .split('|')
+    .map((value) => value.trim())
+    .filter((value): value is MonitoringCategory => CATEGORY_PRIORITY.includes(value as MonitoringCategory))
+
+  return categories.length > 0 ? categories : null
+}
+
+function parseStoredCategory(input: string | undefined): MonitoringCategory | null {
+  const value = String(input ?? '').trim()
+  return CATEGORY_PRIORITY.includes(value as MonitoringCategory) ? (value as MonitoringCategory) : null
+}
+
+function parseStoredSeverity(input: string | undefined): MonitoringSeverity | null {
+  const value = String(input ?? '').trim()
+  return value === 'critical' || value === 'high' || value === 'medium' || value === 'low'
+    ? value
+    : null
+}
+
 function normalizeOwner(value: unknown): MonitoringOwner {
   const normalized = readString(value)?.toLowerCase()
   if (normalized === 'our') return 'OURS'
@@ -829,20 +1138,18 @@ function readImageUrls(raw: Record<string, unknown>): string[] {
     .filter((value) => value !== '')
 }
 
-async function getDatasetHealth(
-  id: string,
-  label: string,
-  cadence: 'hourly' | 'daily' | 'weekly',
-  targetPath: string,
-  getUpdatedAt: () => Promise<string | null>,
-): Promise<MonitoringHealthDataset> {
-  const updatedAt = await getUpdatedAt()
+async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHealthDataset> {
+  const updatedAt = await spec.getUpdatedAt()
   if (!updatedAt) {
     return {
-      id,
-      label,
-      cadence,
-      path: targetPath,
+      id: spec.id,
+      label: spec.label,
+      cadence: spec.cadence,
+      sourceType: spec.sourceType,
+      path: spec.path,
+      purpose: spec.purpose,
+      producedBy: spec.producedBy,
+      consumers: spec.consumers,
       updatedAt: null,
       ageMinutes: null,
       status: 'missing',
@@ -851,21 +1158,135 @@ async function getDatasetHealth(
 
   const ageMinutes = Math.max(0, Math.round((Date.now() - new Date(updatedAt).getTime()) / 60000))
   const threshold =
-    cadence === 'hourly'
+    spec.cadence === 'hourly'
       ? 3 * HOUR_IN_MINUTES
-      : cadence === 'daily'
+      : spec.cadence === 'daily'
         ? 36 * HOUR_IN_MINUTES
         : 10 * DAY_IN_MINUTES
 
   return {
-    id,
-    label,
-    cadence,
-    path: targetPath,
+    id: spec.id,
+    label: spec.label,
+    cadence: spec.cadence,
+    sourceType: spec.sourceType,
+    path: spec.path,
+    purpose: spec.purpose,
+    producedBy: spec.producedBy,
+    consumers: spec.consumers,
     updatedAt,
     ageMinutes,
     status: ageMinutes > threshold ? 'stale' : 'healthy',
   }
+}
+
+async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]): Promise<MonitoringSchedulerJob> {
+  const plist = await readLaunchAgentPlist(spec.plistPath)
+  const target = resolveLaunchAgentTarget(plist)
+  const stdoutPath = plist?.StandardOutPath ?? null
+  const stderrPath = plist?.StandardErrorPath ?? null
+
+  if (!plist) {
+    return {
+      id: spec.id,
+      label: spec.label,
+      cadence: spec.cadence,
+      sourceType: spec.sourceType,
+      schedule: spec.schedule,
+      launchdLabel: spec.launchdLabel,
+      plistPath: spec.plistPath,
+      target,
+      stdoutPath,
+      stderrPath,
+      outputs: [...spec.outputs],
+      lastExitStatus: null,
+      pid: null,
+      status: 'missing',
+    }
+  }
+
+  const launchdState = await readLaunchdState(spec.launchdLabel)
+  if (!launchdState) {
+    return {
+      id: spec.id,
+      label: spec.label,
+      cadence: spec.cadence,
+      sourceType: spec.sourceType,
+      schedule: spec.schedule,
+      launchdLabel: spec.launchdLabel,
+      plistPath: spec.plistPath,
+      target,
+      stdoutPath,
+      stderrPath,
+      outputs: [...spec.outputs],
+      lastExitStatus: null,
+      pid: null,
+      status: 'missing',
+    }
+  }
+
+  return {
+    id: spec.id,
+    label: spec.label,
+    cadence: spec.cadence,
+    sourceType: spec.sourceType,
+    schedule: spec.schedule,
+    launchdLabel: spec.launchdLabel,
+    plistPath: spec.plistPath,
+    target,
+    stdoutPath,
+    stderrPath,
+    outputs: [...spec.outputs],
+    lastExitStatus: launchdState.lastExitStatus,
+    pid: launchdState.pid,
+    status:
+      launchdState.pid !== null
+        ? 'running'
+        : launchdState.lastExitStatus === 0
+          ? 'healthy'
+          : 'failed',
+  }
+}
+
+async function readLaunchAgentPlist(plistPath: string): Promise<LaunchAgentPlist | null> {
+  try {
+    await fs.access(plistPath)
+  } catch (error) {
+    if (isMissing(error)) return null
+    throw error
+  }
+
+  const { stdout } = await execFileAsync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plistPath])
+  return JSON.parse(stdout) as LaunchAgentPlist
+}
+
+async function readLaunchdState(
+  launchdLabel: string,
+): Promise<{ lastExitStatus: number | null; pid: number | null } | null> {
+  try {
+    const { stdout } = await execFileAsync('/bin/launchctl', ['list', launchdLabel])
+    return {
+      lastExitStatus: readLaunchctlNumber(stdout, 'LastExitStatus'),
+      pid: readLaunchctlNumber(stdout, 'PID'),
+    }
+  } catch (error) {
+    if (isLaunchctlMissing(error)) return null
+    throw error
+  }
+}
+
+function resolveLaunchAgentTarget(plist: LaunchAgentPlist | null): string | null {
+  if (!plist?.ProgramArguments?.length) return null
+
+  const rawTarget = plist.ProgramArguments[1] ?? plist.ProgramArguments[0]
+  if (rawTarget.startsWith('/')) return rawTarget
+  if (!plist.WorkingDirectory) return rawTarget
+  return path.join(plist.WorkingDirectory, rawTarget)
+}
+
+function readLaunchctlNumber(output: string, key: string): number | null {
+  const match = output.match(new RegExp(`"${key}" = (-?\\d+);`))
+  if (!match) return null
+  return Number(match[1])
 }
 
 async function statIso(targetPath: string): Promise<string | null> {
@@ -920,5 +1341,14 @@ function isMissing(error: unknown): boolean {
     error !== null &&
     'code' in error &&
     error.code === 'ENOENT'
+  )
+}
+
+function isLaunchctlMissing(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 113
   )
 }
