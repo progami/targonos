@@ -141,6 +141,7 @@ interface DatasetHealthSpec {
   cadence: MonitoringHealthDataset['cadence']
   sourceType: MonitoringSourceType
   path: string
+  driveId: string | null
   purpose: string
   producedBy: string | null
   consumers: string[]
@@ -154,6 +155,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'hourly',
     sourceType: 'API',
     path: LATEST_STATE_PATH,
+    driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Latest listing baseline used to compute the next hourly diff run.',
     producedBy: 'Hourly listing attributes',
     consumers: ['Change detection'],
@@ -165,6 +167,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'hourly',
     sourceType: 'API',
     path: SNAPSHOT_HISTORY_PATH,
+    driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Historical snapshot archive behind per-ASIN timelines and comparisons.',
     producedBy: 'Hourly listing attributes',
     consumers: ['ASIN detail timelines', 'Baseline reconstruction'],
@@ -176,6 +179,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'hourly',
     sourceType: 'API',
     path: CHANGE_HISTORY_PATH,
+    driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Canonical event stream consumed by the Change Feed and alert email digest.',
     producedBy: 'Hourly listing attributes',
     consumers: ['Change Feed', 'Alert email'],
@@ -187,6 +191,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'daily',
     sourceType: 'API',
     path: DAILY_ACCOUNT_HEALTH_PATH,
+    driveId: '10BC2vI2OqAoYegD1icqU_VvYaiA9Imxc',
     purpose: 'Daily account health report export.',
     producedBy: 'Daily account health',
     consumers: ['Source Health'],
@@ -198,6 +203,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'daily',
     sourceType: 'BROWSER',
     path: DAILY_VISUALS_PATH,
+    driveId: '1z8u466gU3r1Q4_UPy3Dg_dzdI1Lj4ntN',
     purpose: 'Daily browser screenshots for monitored ASINs.',
     producedBy: 'Daily visuals',
     consumers: ['Daily monitoring review'],
@@ -209,6 +215,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'daily',
     sourceType: 'MANUAL',
     path: DAILY_VOC_PATH,
+    driveId: '1iHqtjKY01veKSWNj8zZF76UMcyrDdXZe',
     purpose: 'Manual VOC files that support daily review.',
     producedBy: null,
     consumers: ['Daily monitoring review'],
@@ -220,6 +227,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'API',
     path: WEEKLY_BRAND_ANALYTICS_PATH,
+    driveId: '1OQ1_pvWGLzdIKBfwZmRSWYDEVoP9dHUi',
     purpose: 'Weekly Amazon Brand Analytics exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
@@ -231,6 +239,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'API',
     path: WEEKLY_BUSINESS_REPORTS_PATH,
+    driveId: '1jVUnicQEiNqTW3rEl-8hr79BZ_YjVG2j',
     purpose: 'Weekly Amazon business reports exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
@@ -242,6 +251,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'API',
     path: WEEKLY_DATADIVE_PATH,
+    driveId: '1ZFiwse0eukOHJUPgokvHWRcWMri0klvY',
     purpose: 'Weekly Datadive keyword, competitor, and rank radar exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
@@ -253,6 +263,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'API',
     path: WEEKLY_SELLERBOARD_PATH,
+    driveId: '1lhg3lHwprusOZiOYV0oM5Ce5wqlBoH8w',
     purpose: 'Weekly Sellerboard dashboard and order exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
@@ -264,6 +275,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'API',
     path: WEEKLY_SPONSORED_PRODUCTS_PATH,
+    driveId: '1pXOzQwXPcTYvw-feJhZB4muO0PD0tl9S',
     purpose: 'Weekly Sponsored Products console exports and manifest.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
@@ -275,6 +287,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'BROWSER',
     path: WEEKLY_CATEGORY_INSIGHTS_PATH,
+    driveId: '14SWSVb9w7e9m_Pd0U8eyKQZAsSVmFctI',
     purpose: 'Weekly browser capture of category insights.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
@@ -286,6 +299,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'BROWSER',
     path: WEEKLY_POE_PATH,
+    driveId: '1EB67PbUwcxFHJHigwwtCsfj0pAVWOWqo',
     purpose: 'Weekly browser export from Product Opportunity Explorer.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
@@ -297,6 +311,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'BROWSER',
     path: WEEKLY_SCALEINSIGHTS_PATH,
+    driveId: '1TzCiN-ja4inCCK_s_-9wOgH0S0D5hq_Q',
     purpose: 'Weekly ScaleInsights keyword ranking workbook.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
@@ -308,6 +323,7 @@ const DATASET_SPECS: DatasetHealthSpec[] = [
     cadence: 'weekly',
     sourceType: 'BROWSER',
     path: WEEKLY_BRAND_METRICS_PATH,
+    driveId: '1B-ohB3dGZU8c4gswpwRoYt034J_T8aqA',
     purpose: 'Weekly browser capture of Brand Metrics.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
@@ -1139,6 +1155,7 @@ function readImageUrls(raw: Record<string, unknown>): string[] {
 }
 
 async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHealthDataset> {
+  const driveUrl = spec.driveId ? `https://drive.google.com/drive/folders/${spec.driveId}` : null
   const updatedAt = await spec.getUpdatedAt()
   if (!updatedAt) {
     return {
@@ -1147,6 +1164,7 @@ async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHeal
       cadence: spec.cadence,
       sourceType: spec.sourceType,
       path: spec.path,
+      driveUrl,
       purpose: spec.purpose,
       producedBy: spec.producedBy,
       consumers: spec.consumers,
@@ -1170,6 +1188,7 @@ async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHeal
     cadence: spec.cadence,
     sourceType: spec.sourceType,
     path: spec.path,
+    driveUrl,
     purpose: spec.purpose,
     producedBy: spec.producedBy,
     consumers: spec.consumers,

@@ -82,6 +82,7 @@ export interface MonitoringHealthDataset {
   cadence: 'hourly' | 'daily' | 'weekly'
   sourceType: MonitoringSourceType
   path: string
+  driveUrl: string | null
   purpose: string
   producedBy: string | null
   consumers: string[]
