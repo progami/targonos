@@ -177,40 +177,12 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
           {event.categories.includes('images') && (
             <CategorySection label={event.categories.length > 1 ? 'Images' : ''}>
               <ComparisonRow
-                label="Count"
+                label="Image count"
                 baseline={formatCount(event.baselineSnapshot?.imageCount ?? null)}
                 current={formatCount(event.currentSnapshot?.imageCount ?? null)}
                 numericBaseline={event.baselineSnapshot?.imageCount}
                 numericCurrent={event.currentSnapshot?.imageCount}
               />
-              {event.currentSnapshot?.imageUrls.length ? (
-                <Box
-                  sx={{
-                    display: 'grid',
-                    gap: 0.8,
-                    gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                    mt: 1,
-                  }}
-                >
-                  {event.currentSnapshot.imageUrls.slice(0, 6).map((url) => (
-                    <Box
-                      key={url}
-                      component="img"
-                      src={url}
-                      alt=""
-                      sx={{
-                        width: '100%',
-                        aspectRatio: '1 / 1',
-                        objectFit: 'contain',
-                        borderRadius: 1.5,
-                        bgcolor: '#f8fafc',
-                        border: '1px solid rgba(15, 23, 42, 0.06)',
-                        p: 0.6,
-                      }}
-                    />
-                  ))}
-                </Box>
-              ) : null}
             </CategorySection>
           )}
 
