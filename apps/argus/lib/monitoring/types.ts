@@ -13,6 +13,8 @@ export type MonitoringSeverity = 'critical' | 'high' | 'medium' | 'low'
 
 export type MonitoringWindow = '24h' | '7d' | '30d' | 'all'
 
+export type MonitoringSourceType = 'API' | 'BROWSER' | 'MANUAL'
+
 export interface MonitoringStateRecord {
   asin: string
   owner: MonitoringOwner
@@ -78,15 +80,37 @@ export interface MonitoringHealthDataset {
   id: string
   label: string
   cadence: 'hourly' | 'daily' | 'weekly'
+  sourceType: MonitoringSourceType
   path: string
+  purpose: string
+  producedBy: string | null
+  consumers: string[]
   updatedAt: string | null
   ageMinutes: number | null
   status: 'healthy' | 'stale' | 'missing'
 }
 
+export interface MonitoringSchedulerJob {
+  id: string
+  label: string
+  cadence: 'hourly' | 'daily' | 'weekly'
+  sourceType: Exclude<MonitoringSourceType, 'MANUAL'>
+  schedule: string
+  launchdLabel: string
+  plistPath: string
+  target: string | null
+  stdoutPath: string | null
+  stderrPath: string | null
+  outputs: string[]
+  lastExitStatus: number | null
+  pid: number | null
+  status: 'healthy' | 'running' | 'failed' | 'missing'
+}
+
 export interface MonitoringHealthReport {
   checkedAt: string
   datasets: MonitoringHealthDataset[]
+  jobs: MonitoringSchedulerJob[]
 }
 
 export interface MonitoringAsinDetail {

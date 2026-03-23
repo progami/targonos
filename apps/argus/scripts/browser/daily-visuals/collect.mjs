@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process'
 import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
 
 const DEST =
-  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Visuals'
+  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Visuals (Browser)'
 const LOG = '/tmp/daily-visuals.log'
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)

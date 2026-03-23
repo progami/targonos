@@ -8,8 +8,8 @@ const __dirname = path.dirname(__filename)
 export const REPO_ROOT = path.resolve(__dirname, '../../../../../../')
 export const MONITORING_BASE = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
 
-const BASE_WEEK_START = new Date(2025, 11, 28)
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000
+const BASE_WEEK_START_UTC = Date.UTC(2025, 11, 28)
 
 export function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
@@ -62,6 +62,40 @@ export function formatDate(date) {
   return `${year}-${month}-${day}`
 }
 
+function utcDayNumber(date) {
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MILLIS_PER_DAY)
+}
+
+function weekCodeForDate(date) {
+  const offsetDays = utcDayNumber(date) - Math.floor(BASE_WEEK_START_UTC / MILLIS_PER_DAY)
+  const weekNumber = Math.floor(offsetDays / 7) + 1
+  return `W${String(weekNumber).padStart(2, '0')}`
+}
+
+function parseIsoDate(value) {
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match) {
+    throw new Error(`Invalid ISO date: ${value}`)
+  }
+
+  const year = Number(match[1])
+  const monthIndex = Number(match[2]) - 1
+  const day = Number(match[3])
+  return new Date(year, monthIndex, day)
+}
+
+export function weekContextForEndDate(endDate) {
+  const weekEndDate = parseIsoDate(endDate)
+  const weekStartDate = new Date(weekEndDate)
+  weekStartDate.setDate(weekStartDate.getDate() - 6)
+
+  return {
+    weekCode: weekCodeForDate(weekStartDate),
+    weekStart: formatDate(weekStartDate),
+    weekEnd: formatDate(weekEndDate),
+  }
+}
+
 export function latestCompleteWeek() {
   const today = new Date()
   const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
@@ -74,12 +108,8 @@ export function latestCompleteWeek() {
   const weekStartDate = new Date(weekEndDate)
   weekStartDate.setDate(weekStartDate.getDate() - 6)
 
-  const offsetDays = Math.floor((weekStartDate.getTime() - BASE_WEEK_START.getTime()) / MILLIS_PER_DAY)
-  const weekNumber = Math.floor(offsetDays / 7) + 1
-  const weekCode = `W${String(weekNumber).padStart(2, '0')}`
-
   return {
-    weekCode,
+    weekCode: weekCodeForDate(weekStartDate),
     weekStart: formatDate(weekStartDate),
     weekEnd: formatDate(weekEndDate),
   }

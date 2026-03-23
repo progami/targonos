@@ -1,18 +1,18 @@
 #!/bin/bash
-# Daily Account Health Collector
+# Legacy Daily Account Health Collector
 # Navigates Chrome to Seller Central Account Health + VoC pages,
 # extracts metrics via AppleScript + JavaScript, appends to CSV.
 #
 # No Claude needed. Just AppleScript + screencapture.
 #
 # Usage: bash apps/argus/scripts/daily-account-health/collect.sh
-# Cron:  3 AM CT daily via launchd
+# Legacy fallback only. Not installed by default.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Account Health Dashboard"
-DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Voice of the Customer"
+DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Account Health Dashboard (API)"
+DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Voice of the Customer (Manual)"
 CSV="$DEST_AH/account-health.csv"
 LOG="/tmp/daily-account-health.log"
 TODAY=$(date '+%Y-%m-%d')

@@ -640,6 +640,419 @@ function sortDiffs(diffs) {
   })
 }
 
+const EVENT_CATEGORY_FIELDS = {
+  status: new Set([
+    'status',
+    'owner_type',
+    'seller_sku',
+    'belongs_to_requester',
+    'own_issue_count',
+    'own_issue_codes',
+  ]),
+  content: new Set([
+    'title',
+    'brand',
+    'manufacturer',
+    'model_number',
+    'product_type',
+    'item_classification',
+    'color',
+    'size',
+    'material',
+    'variation_theme',
+    'bullet_points',
+    'description',
+    'backend_terms',
+    'title_length',
+    'bullet_count',
+    'description_length',
+    'backend_terms_count',
+  ]),
+  images: new Set([
+    'image_count',
+    'image_urls',
+    'added_images',
+    'removed_images',
+    'image_order_changed',
+  ]),
+  price: new Set([
+    'landed_price',
+    'listing_price',
+    'shipping_price',
+    'price_currency',
+    'list_price',
+    'list_price_currency',
+    'buy_box_landed_price',
+    'buy_box_listing_price',
+    'buy_box_shipping_price',
+    'buy_box_price_currency',
+    'lowest_fba_landed_price',
+    'lowest_fba_listing_price',
+    'lowest_fba_shipping_price',
+    'lowest_mfn_landed_price',
+    'lowest_mfn_listing_price',
+    'lowest_mfn_shipping_price',
+    'lowest_offer_currency',
+    'own_offer_b2c_price',
+    'own_offer_b2c_currency',
+    'own_offer_b2b_price',
+    'own_offer_b2b_currency',
+  ]),
+  offers: new Set([
+    'offers_any',
+    'offers_new',
+    'total_offer_count',
+    'offers_fba',
+    'offers_mfn',
+    'featured_offer_count',
+    'prime_offer_count',
+    'fba_offer_count',
+    'unique_seller_count',
+    'buybox_eligible_offer_count',
+    'buybox_winner_seller_id',
+    'buybox_winner_is_fba',
+    'buybox_winner_is_prime',
+    'buybox_winner_is_featured',
+    'buybox_winner_feedback_count',
+    'buybox_winner_positive_feedback_pct',
+    'own_offer_types',
+    'own_offer_audiences',
+    'own_fulfillment_channels',
+    'own_fulfillment_channel_count',
+    'own_fulfillment_quantity_total',
+  ]),
+  rank: new Set([
+    'root_bsr_rank',
+    'root_bsr_category_id',
+    'sub_bsr_rank',
+    'sub_bsr_category_id',
+    'leaf_classification_id',
+    'leaf_classification_name',
+    'root_classification_id',
+    'root_classification_name',
+  ]),
+  catalog: new Set([
+    'upc',
+    'ean',
+    'isbn',
+    'parent_asins',
+    'child_asins',
+    'related_asins',
+    'item_dimensions',
+    'item_package_dimensions',
+    'item_weight',
+    'item_package_weight',
+    'created_date',
+    'last_updated_date',
+  ]),
+}
+
+const EVENT_CATEGORY_PRIORITY = [
+  'status',
+  'content',
+  'images',
+  'price',
+  'offers',
+  'rank',
+  'catalog',
+]
+
+function normalizeEventOwner(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (normalized === 'our') return 'OURS'
+  if (normalized === 'competitor') return 'COMPETITOR'
+  return 'UNKNOWN'
+}
+
+function readEventString(value) {
+  const text = String(value ?? '').trim()
+  return text || null
+}
+
+function readEventNumber(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null
+  }
+
+  const text = String(value ?? '').trim()
+  if (!text) return null
+
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function toEventSnapshot(row) {
+  if (!row || typeof row !== 'object') return null
+
+  return {
+    asin: String(row.asin ?? '').trim().toUpperCase(),
+    owner: normalizeEventOwner(row.owner_type),
+    title: readEventString(row.title),
+    brand: readEventString(row.brand),
+    size: readEventString(row.size),
+    status: readEventString(row.status),
+    imageCount: readEventNumber(row.image_count),
+    landedPrice: readEventNumber(row.landed_price),
+    priceCurrency: readEventString(row.price_currency),
+    totalOfferCount: readEventNumber(row.total_offer_count),
+    rootBsrRank: readEventNumber(row.root_bsr_rank),
+  }
+}
+
+function classifyEventCategories(changedFields) {
+  const categories = EVENT_CATEGORY_PRIORITY.filter((category) =>
+    changedFields.some((field) => EVENT_CATEGORY_FIELDS[category].has(field))
+  )
+
+  return categories.length > 0 ? categories : ['catalog']
+}
+
+function valuesDiffer(baseline, current) {
+  return baseline !== current
+}
+
+function pickEventPrimaryCategory({ categories, currentSnapshot, baselineSnapshot }) {
+  if (categories.includes('content')) return 'content'
+  if (
+    categories.includes('images') &&
+    valuesDiffer(baselineSnapshot?.imageCount, currentSnapshot?.imageCount)
+  ) {
+    return 'images'
+  }
+  if (
+    categories.includes('price') &&
+    valuesDiffer(baselineSnapshot?.landedPrice, currentSnapshot?.landedPrice)
+  ) {
+    return 'price'
+  }
+  if (
+    categories.includes('offers') &&
+    valuesDiffer(baselineSnapshot?.totalOfferCount, currentSnapshot?.totalOfferCount)
+  ) {
+    return 'offers'
+  }
+  if (
+    categories.includes('status') &&
+    valuesDiffer(baselineSnapshot?.status, currentSnapshot?.status)
+  ) {
+    return 'status'
+  }
+  if (
+    categories.includes('rank') &&
+    valuesDiffer(baselineSnapshot?.rootBsrRank, currentSnapshot?.rootBsrRank)
+  ) {
+    return 'rank'
+  }
+
+  return categories[0]
+}
+
+function classifyEventSeverity({
+  owner,
+  categories,
+  changedFields,
+  currentSnapshot,
+  baselineSnapshot,
+}) {
+  let score = 0
+
+  if (owner === 'OURS') score += 2
+  if (categories.includes('status')) score += 4
+  if (categories.includes('content')) score += 4
+  if (categories.includes('images')) score += 3
+  if (categories.includes('price')) score += 2
+  if (categories.includes('offers')) score += 2
+  if (categories.includes('rank')) score += 1
+  if (changedFields.length >= 4) score += 2
+
+  const currentRank = currentSnapshot?.rootBsrRank
+  const baselineRank = baselineSnapshot?.rootBsrRank
+  if (
+    owner === 'OURS' &&
+    currentRank !== null &&
+    baselineRank !== null &&
+    currentRank - baselineRank > 1000
+  ) {
+    score += 1
+  }
+
+  if (categories.length === 1 && categories[0] === 'rank' && owner !== 'OURS') {
+    score -= 1
+  }
+
+  if (owner !== 'OURS' && score >= 7) return 'high'
+  if (score >= 7) return 'critical'
+  if (score >= 5) return 'high'
+  if (score >= 3) return 'medium'
+  return 'low'
+}
+
+function formatEventValue(value) {
+  if (value === null || value === undefined || value === '') return 'n/a'
+  if (typeof value === 'number') return value.toLocaleString()
+  return String(value)
+}
+
+function formatEventCurrency(value, currency) {
+  if (value === null || value === undefined) return 'n/a'
+  if (!currency) return value.toFixed(2)
+
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 2,
+    }).format(value)
+  } catch {
+    return value.toFixed(2)
+  }
+}
+
+function formatEventComparison(label, fromValue, toValue) {
+  return `${label}: ${formatEventValue(fromValue)} -> ${formatEventValue(toValue)}`
+}
+
+function formatEventCurrencyComparison(label, fromValue, toValue, currency) {
+  return `${label}: ${formatEventCurrency(fromValue, currency)} -> ${formatEventCurrency(toValue, currency)}`
+}
+
+function buildEventHeadline({ label, primaryCategory, currentSnapshot, baselineSnapshot }) {
+  switch (primaryCategory) {
+    case 'status':
+      if (valuesDiffer(baselineSnapshot?.status, currentSnapshot?.status)) {
+        return `${label} availability changed`
+      }
+      return `${label} operational signal changed`
+    case 'content':
+      return `${label} content changed`
+    case 'images':
+      return `${label} gallery changed`
+    case 'price':
+      return `${label} pricing changed`
+    case 'offers':
+      return `${label} offer mix changed`
+    case 'rank': {
+      const current = currentSnapshot?.rootBsrRank
+      const baseline = baselineSnapshot?.rootBsrRank
+      if (current !== null && baseline !== null) {
+        if (current < baseline) return `${label} rank improved`
+        if (current > baseline) return `${label} rank worsened`
+      }
+      return `${label} rank moved`
+    }
+    case 'catalog':
+      return `${label} catalog data changed`
+  }
+}
+
+function buildEventSummary({
+  primaryCategory,
+  changedFields,
+  currentSnapshot,
+  baselineSnapshot,
+}) {
+  switch (primaryCategory) {
+    case 'status':
+      if (valuesDiffer(baselineSnapshot?.status, currentSnapshot?.status)) {
+        return formatEventComparison('Status', baselineSnapshot?.status, currentSnapshot?.status)
+      }
+      return `Fields changed: ${changedFields.slice(0, 4).join(', ')}`
+    case 'images':
+      return formatEventComparison('Image count', baselineSnapshot?.imageCount, currentSnapshot?.imageCount)
+    case 'price':
+      return formatEventCurrencyComparison(
+        'Landed price',
+        baselineSnapshot?.landedPrice,
+        currentSnapshot?.landedPrice,
+        currentSnapshot?.priceCurrency,
+      )
+    case 'offers':
+      return formatEventComparison(
+        'Offer count',
+        baselineSnapshot?.totalOfferCount,
+        currentSnapshot?.totalOfferCount,
+      )
+    case 'rank':
+      return formatEventComparison('Root BSR', baselineSnapshot?.rootBsrRank, currentSnapshot?.rootBsrRank)
+    case 'content':
+      return `Fields changed: ${changedFields.slice(0, 4).join(', ')}`
+    case 'catalog':
+      return `Catalog fields changed: ${changedFields.slice(0, 4).join(', ')}`
+  }
+}
+
+function buildCanonicalEvent(row, previousRow, changedFields, fieldChanges, snapshotTimestampUtc, baselineTimestampUtc) {
+  const label = formatListingLabel(row)
+  const owner = normalizeEventOwner(row.owner_type)
+  const currentSnapshot = toEventSnapshot(row)
+  const baselineSnapshot = toEventSnapshot(previousRow)
+  const categories = classifyEventCategories(changedFields)
+  const primaryCategory = pickEventPrimaryCategory({
+    categories,
+    currentSnapshot,
+    baselineSnapshot,
+  })
+  const severity = classifyEventSeverity({
+    owner,
+    categories,
+    changedFields,
+    currentSnapshot,
+    baselineSnapshot,
+  })
+
+  return {
+    snapshot_timestamp_utc: snapshotTimestampUtc,
+    baseline_timestamp_utc: baselineTimestampUtc,
+    asin: row.asin,
+    label,
+    owner_type: row.owner_type,
+    severity,
+    primary_category: primaryCategory,
+    categories,
+    headline: buildEventHeadline({
+      label,
+      primaryCategory,
+      currentSnapshot,
+      baselineSnapshot,
+    }),
+    summary: buildEventSummary({
+      primaryCategory,
+      changedFields,
+      currentSnapshot,
+      baselineSnapshot,
+    }),
+    changed_fields: [...changedFields],
+    field_changes: fieldChanges,
+  }
+}
+
+function severityRank(severity) {
+  switch (severity) {
+    case 'critical':
+      return 4
+    case 'high':
+      return 3
+    case 'medium':
+      return 2
+    case 'low':
+      return 1
+    default:
+      return 0
+  }
+}
+
+function compareCanonicalEvents(left, right) {
+  const severityDelta = severityRank(right.severity) - severityRank(left.severity)
+  if (severityDelta !== 0) return severityDelta
+  if (left.owner_type !== right.owner_type) return left.owner_type === 'our' ? -1 : 1
+  if (left.owner_type === 'our') {
+    const leftPriority = OUR_ASIN_PRIORITY.get(left.asin)
+    const rightPriority = OUR_ASIN_PRIORITY.get(right.asin)
+    return (leftPriority ?? 99) - (rightPriority ?? 99)
+  }
+  return left.asin.localeCompare(right.asin)
+}
+
 function loadPreviousRowsByAsin(previousState) {
   if (!previousState || typeof previousState !== 'object') {
     return {
@@ -961,7 +1374,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
     : []
 
   const diffs = []
-  const alerts = []
+  const events = []
   const nextState = {
     timestamp_utc: snapshotTimestampUtc,
     snapshot_file: SNAPSHOT_HISTORY_FILE_NAME,
@@ -1028,6 +1441,19 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       ...normalized,
     }
 
+    let event = null
+    if (hasBaseline && changedFields.length > 0) {
+      event = buildCanonicalEvent(
+        row,
+        previousRow,
+        changedFields,
+        fieldChanges,
+        snapshotTimestampUtc,
+        normalizeCompareValue(previousRow.snapshot_timestamp_utc || baselineTimestampUtc),
+      )
+      events.push(event)
+    }
+
     diffs.push({
       snapshot_timestamp_utc: snapshotTimestampUtc,
       asin: row.asin,
@@ -1038,39 +1464,25 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       changed: hasBaseline ? (changedFields.length ? 'yes' : 'no') : 'no_baseline',
       changed_fields: hasBaseline ? changedFields.join(',') : '',
       changed_field_count: hasBaseline ? String(changedFields.length) : '',
+      event_label: event?.label ?? '',
+      event_severity: event?.severity ?? '',
+      event_primary_category: event?.primary_category ?? '',
+      event_categories: event ? event.categories.join('|') : '',
+      event_headline: event?.headline ?? '',
+      event_summary: event?.summary ?? '',
       added_images: hasBaseline ? addedImages.join(' | ') : '',
       removed_images: hasBaseline ? removedImages.join(' | ') : '',
       image_order_changed: '',
       ...perAttributeChanges,
     })
-
-    if (hasBaseline && changedFields.length > 0) {
-      alerts.push({
-        snapshot_timestamp_utc: snapshotTimestampUtc,
-        baseline_timestamp_utc: normalizeCompareValue(baselineTimestampUtc),
-        asin: row.asin,
-        label: formatListingLabel(row),
-        owner_type: row.owner_type,
-        changed_fields: [...changedFields],
-        field_changes: fieldChanges,
-      })
-    }
   }
 
   sortDiffs(diffs)
-  alerts.sort((a, b) => {
-    if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
-    if (a.owner_type === 'our') {
-      const left = OUR_ASIN_PRIORITY.get(a.asin)
-      const right = OUR_ASIN_PRIORITY.get(b.asin)
-      return (left ?? 99) - (right ?? 99)
-    }
-    return a.asin.localeCompare(b.asin)
-  })
+  events.sort(compareCanonicalEvents)
 
   return {
     diffs,
-    alerts,
+    events,
     nextState,
     statePath,
   }
@@ -1091,7 +1503,7 @@ function humanizeField(field) {
   return field.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, timeLabel, appUrl }) {
+function buildAlertDigestHtml({ events, totalEvents, maxEvents, snapshotDate, timeLabel, appUrl }) {
   const F = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
   const M = "Menlo, Consolas, 'Courier New', monospace"
   const NAVY = '#002C51'
@@ -1100,8 +1512,8 @@ function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, ti
   const logoUrl = `${appUrl}/brand/targon-logo-white.png`
 
   let alertRows = ''
-  for (let i = 0; i < alerts.length; i++) {
-    const a = alerts[i]
+  for (let i = 0; i < events.length; i++) {
+    const a = events[i]
     const ownerLabel = String(a.owner_type).toUpperCase() === 'OUR' ? 'Ours' : 'Competitor'
     const ownerColor = ownerLabel === 'Ours' ? '#0d9488' : '#c2410c'
     const ownerBg = ownerLabel === 'Ours' ? '#f0fdfa' : '#fff7ed'
@@ -1140,11 +1552,12 @@ function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, ti
             <span style="display:inline-block; padding:2px 7px; font-family:${F}; font-size:10px; font-weight:700; color:${ownerColor}; background:${ownerBg}; border:1px solid ${ownerBorder};">${esc(ownerLabel)}</span>
           </td>
           <td>
-            <span style="font-family:${F}; font-size:14px; font-weight:700; color:#0f172a;">${esc(a.label)}</span>
+            <span style="font-family:${F}; font-size:14px; font-weight:700; color:#0f172a;">${esc(a.headline)}</span>
           </td>
         </tr>
       </table>
       <div style="font-family:${M}; font-size:10px; color:#94a3b8; margin-top:3px;">${esc(a.asin)}</div>
+      <div style="font-family:${F}; font-size:12px; color:#475569; margin-top:6px;">${esc(a.summary)}</div>
     </td>
   </tr>
   <tr>
@@ -1163,8 +1576,8 @@ function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, ti
 </td></tr>`
   }
 
-  const overflowRow = totalAlerts > maxAlerts
-    ? `<tr><td style="padding:12px 20px; font-family:${F}; font-size:12px; color:#94a3b8; text-align:center; border-bottom:1px solid ${BORDER};">...and ${totalAlerts - maxAlerts} more alert${totalAlerts - maxAlerts === 1 ? '' : 's'}</td></tr>`
+  const overflowRow = totalEvents > maxEvents
+    ? `<tr><td style="padding:12px 20px; font-family:${F}; font-size:12px; color:#94a3b8; text-align:center; border-bottom:1px solid ${BORDER};">...and ${totalEvents - maxEvents} more alert${totalEvents - maxEvents === 1 ? '' : 's'}</td></tr>`
     : ''
 
   return `<!DOCTYPE html>
@@ -1203,7 +1616,7 @@ function buildAlertDigestHtml({ alerts, totalAlerts, maxAlerts, snapshotDate, ti
 <tr>
 <td style="background:#ffffff; padding:20px 24px; border-left:1px solid ${BORDER}; border-right:1px solid ${BORDER}; border-bottom:1px solid ${BORDER};">
   <div style="font-family:${F}; font-size:16px; font-weight:700; color:#0f172a; margin:0 0 4px 0;">
-    ${esc(String(totalAlerts))} monitoring alert${totalAlerts === 1 ? '' : 's'}
+    ${esc(String(totalEvents))} monitoring alert${totalEvents === 1 ? '' : 's'}
   </div>
   <div style="font-family:${F}; font-size:12px; color:#64748b;">
     ${esc(snapshotDate)} ${esc(timeLabel)} CT
@@ -1287,7 +1700,7 @@ async function main() {
 
   const {
     diffs,
-    alerts,
+    events,
     nextState,
     statePath,
   } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal)
@@ -1299,28 +1712,30 @@ async function main() {
   appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
 
-  if (alerts.length > 0) {
+  if (events.length > 0) {
     const appUrl = requiredEnv('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
     const timeLabel = snapshotTimeLocal.length === 4
       ? `${snapshotTimeLocal.slice(0, 2)}:${snapshotTimeLocal.slice(2)}`
       : snapshotTimeLocal
 
-    const subject = `Argus: ${alerts.length} monitoring alert${alerts.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
+    const subject = `Argus: ${events.length} monitoring alert${events.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
     const lines = [
-      `Argus monitoring detected ${alerts.length} change${alerts.length === 1 ? '' : 's'}.`,
+      `Argus monitoring detected ${events.length} change${events.length === 1 ? '' : 's'}.`,
       `Snapshot UTC: ${snapshotTimestampUtc}`,
       '',
       `Open change feed: ${appUrl}/tracking?window=24h`,
       '',
     ]
 
-    const maxAlerts = 40
-    const visibleAlerts = alerts.slice(0, maxAlerts)
-    for (const alert of visibleAlerts) {
-      lines.push(`${String(alert.owner_type).toUpperCase()} ${alert.label} (${alert.asin})`)
-      lines.push(`Baseline UTC: ${alert.baseline_timestamp_utc}`)
-      lines.push(`Fields: ${alert.changed_fields.join(', ')}`)
-      for (const change of alert.field_changes) {
+    const maxEvents = 40
+    const visibleEvents = events.slice(0, maxEvents)
+    for (const event of visibleEvents) {
+      lines.push(`${String(event.owner_type).toUpperCase()} ${event.headline}`)
+      lines.push(`ASIN: ${event.asin}`)
+      lines.push(`Baseline UTC: ${event.baseline_timestamp_utc}`)
+      lines.push(`Summary: ${event.summary}`)
+      lines.push(`Fields: ${event.changed_fields.join(', ')}`)
+      for (const change of event.field_changes) {
         if (change.field === 'image_urls') {
           const added = Array.isArray(change.added) ? change.added : []
           const removed = Array.isArray(change.removed) ? change.removed : []
@@ -1332,20 +1747,19 @@ async function main() {
 
         lines.push(`- ${change.field}: ${change.from} -> ${change.to}`)
       }
-      lines.push(`Link: ${appUrl}/tracking/${alert.asin}`)
+      lines.push(`Link: ${appUrl}/tracking/${event.asin}`)
       lines.push('')
     }
 
-    if (alerts.length > maxAlerts) {
-      lines.push(`...and ${alerts.length - maxAlerts} more alert(s).`)
+    if (events.length > maxEvents) {
+      lines.push(`...and ${events.length - maxEvents} more alert(s).`)
       lines.push('')
     }
 
     const html = buildAlertDigestHtml({
-      alerts: visibleAlerts,
-      totalAlerts: alerts.length,
-      maxAlerts,
-      snapshotTimestampUtc,
+      events: visibleEvents,
+      totalEvents: events.length,
+      maxEvents,
       snapshotDate,
       timeLabel,
       appUrl,
