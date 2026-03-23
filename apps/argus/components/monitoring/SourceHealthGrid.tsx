@@ -1,17 +1,20 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Alert,
   alpha,
   Box,
   Chip,
   Collapse,
+  IconButton,
   LinearProgress,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import type {
   MonitoringHealthDataset,
   MonitoringHealthReport,
@@ -51,6 +54,8 @@ function formatAge(minutes: number | null): string {
   return `${(hours / 24).toFixed(1)}d ago`
 }
 
+const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
+
 /* ── Component ──────────────────────────────────────────── */
 
 interface SourceHealthGridProps {
@@ -60,6 +65,15 @@ interface SourceHealthGridProps {
 
 export default function SourceHealthGrid({ health, healthError }: SourceHealthGridProps) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null)
+
+  const openFolder = useCallback((filePath: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    fetch(`${basePath}/api/monitoring/open-folder`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath }),
+    })
+  }, [])
 
   const jobsWithStatus = useMemo(() => {
     if (!health) return []
@@ -201,6 +215,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                             <th>Last updated</th>
                             <th>Age</th>
                             <th>Purpose</th>
+                            <th></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -225,6 +240,13 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                               </td>
                               <td style={{ fontFamily: 'var(--font-mono)' }}>{formatAge(ds.ageMinutes)}</td>
                               <td style={{ color: '#6a93b3' }}>{ds.purpose}</td>
+                              <td>
+                                <Tooltip title="Open in Finder">
+                                  <IconButton size="small" onClick={(e) => openFolder(ds.path, e)} sx={{ opacity: 0.5, '&:hover': { opacity: 1 } }}>
+                                    <FolderOpenIcon sx={{ fontSize: 16 }} />
+                                  </IconButton>
+                                </Tooltip>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
