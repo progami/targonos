@@ -77,8 +77,12 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
         <Box
           sx={{
             display: 'grid',
-            gap: 1,
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+            gap: 1.5,
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              lg: 'repeat(3, 1fr)',
+            },
           }}
         >
           {sortedSources.map((source) => (
