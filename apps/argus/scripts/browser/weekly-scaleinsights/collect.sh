@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/../common.sh"
 
 load_monitoring_env
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking"
+DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking (Browser)"
 DL="$HOME/Downloads"
 LOG="/tmp/weekly-scaleinsights.log"
 TARGET_URL="https://portal.scaleinsights.com/KeywordRanking"

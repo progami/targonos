@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename)
 
 const REPORT_TYPE = 'GET_V2_SELLER_PERFORMANCE_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
-const OUTPUT_DIR = path.join(MONITORING_BASE, 'Daily', 'Account Health Dashboard')
+const OUTPUT_DIR = path.join(MONITORING_BASE, 'Daily', 'Account Health Dashboard (API)')
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'account-health.csv')
 const REPORT_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
