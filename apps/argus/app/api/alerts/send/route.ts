@@ -9,6 +9,19 @@ const APP_URL =
   process.env.NEXTAUTH_URL ||
   'https://os.targonglobal.com/argus'
 
+const FieldChangeSchema = z.union([
+  z.object({
+    field: z.literal('image_urls'),
+    added: z.array(z.string()),
+    removed: z.array(z.string()),
+  }),
+  z.object({
+    field: z.string(),
+    from: z.string(),
+    to: z.string(),
+  }),
+])
+
 const SendAlertSchema = z.object({
   to: z.array(z.string().email()).min(1),
   event: z.object({
@@ -23,6 +36,7 @@ const SendAlertSchema = z.object({
     primaryCategory: z.string(),
     changedFieldCount: z.number(),
     changedFields: z.array(z.string()),
+    fieldChanges: z.array(FieldChangeSchema).default([]),
     headline: z.string(),
     summary: z.string(),
     currentSnapshot: z.any().nullable(),

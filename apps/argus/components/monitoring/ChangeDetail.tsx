@@ -9,7 +9,7 @@ import {
   Typography,
 } from '@mui/material'
 import ArrowOutwardIcon from '@mui/icons-material/ArrowOutward'
-import type { MonitoringChangeEvent } from '@/lib/monitoring/types'
+import type { MonitoringChangeEvent, MonitoringFieldChange } from '@/lib/monitoring/types'
 import { formatMonitoringLabel, type MonitoringLabelSource } from '@/lib/monitoring/labels'
 import {
   CategorySection,
@@ -39,6 +39,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
   const label = formatMonitoringLabel(
     (event.currentSnapshot ?? event.baselineSnapshot ?? { asin: event.asin }) as MonitoringLabelSource,
   )
+  const hasStoredFieldChanges = event.fieldChanges.length > 0
 
   return (
     <Box sx={{ p: 3, overflow: 'auto', height: '100%' }}>
@@ -79,123 +80,132 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
 
         <Divider />
 
-        {/* What changed — grouped by category */}
-        <Stack spacing={0}>
-          {event.categories.includes('status') && (
-            <CategorySection label={event.categories.length > 1 ? 'Status' : ''}>
-              <ComparisonRow
-                label="Status"
-                baseline={event.baselineSnapshot?.status ?? null}
-                current={event.currentSnapshot?.status ?? null}
-              />
-            </CategorySection>
-          )}
+        {hasStoredFieldChanges ? (
+          <CategorySection label="Field Changes">
+            <Stack spacing={1.4}>
+              {event.fieldChanges.map((change, index) => (
+                <FieldChangeRow key={`${change.field}-${index}`} change={change} />
+              ))}
+            </Stack>
+          </CategorySection>
+        ) : (
+          <Stack spacing={0}>
+            {event.categories.includes('status') && (
+              <CategorySection label={event.categories.length > 1 ? 'Status' : ''}>
+                <ComparisonRow
+                  label="Status"
+                  baseline={event.baselineSnapshot?.status ?? null}
+                  current={event.currentSnapshot?.status ?? null}
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('price') && (
-            <CategorySection label={event.categories.length > 1 ? 'Price' : ''}>
-              <ComparisonRow
-                label="Landed"
-                baseline={formatMoney(event.baselineSnapshot?.landedPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
-                current={formatMoney(event.currentSnapshot?.landedPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
-                numericBaseline={event.baselineSnapshot?.landedPrice}
-                numericCurrent={event.currentSnapshot?.landedPrice}
-              />
-              <ComparisonRow
-                label="Listing"
-                baseline={formatMoney(event.baselineSnapshot?.listingPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
-                current={formatMoney(event.currentSnapshot?.listingPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
-                numericBaseline={event.baselineSnapshot?.listingPrice}
-                numericCurrent={event.currentSnapshot?.listingPrice}
-              />
-              <ComparisonRow
-                label="Shipping"
-                baseline={formatMoney(event.baselineSnapshot?.shippingPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
-                current={formatMoney(event.currentSnapshot?.shippingPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
-                numericBaseline={event.baselineSnapshot?.shippingPrice}
-                numericCurrent={event.currentSnapshot?.shippingPrice}
-              />
-            </CategorySection>
-          )}
+            {event.categories.includes('price') && (
+              <CategorySection label={event.categories.length > 1 ? 'Price' : ''}>
+                <ComparisonRow
+                  label="Landed"
+                  baseline={formatMoney(event.baselineSnapshot?.landedPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
+                  current={formatMoney(event.currentSnapshot?.landedPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
+                  numericBaseline={event.baselineSnapshot?.landedPrice}
+                  numericCurrent={event.currentSnapshot?.landedPrice}
+                />
+                <ComparisonRow
+                  label="Listing"
+                  baseline={formatMoney(event.baselineSnapshot?.listingPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
+                  current={formatMoney(event.currentSnapshot?.listingPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
+                  numericBaseline={event.baselineSnapshot?.listingPrice}
+                  numericCurrent={event.currentSnapshot?.listingPrice}
+                />
+                <ComparisonRow
+                  label="Shipping"
+                  baseline={formatMoney(event.baselineSnapshot?.shippingPrice ?? null, event.baselineSnapshot?.priceCurrency ?? null)}
+                  current={formatMoney(event.currentSnapshot?.shippingPrice ?? null, event.currentSnapshot?.priceCurrency ?? null)}
+                  numericBaseline={event.baselineSnapshot?.shippingPrice}
+                  numericCurrent={event.currentSnapshot?.shippingPrice}
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('rank') && (
-            <CategorySection label={event.categories.length > 1 ? 'Rank' : ''}>
-              <ComparisonRow
-                label="Root BSR"
-                baseline={formatCount(event.baselineSnapshot?.rootBsrRank ?? null)}
-                current={formatCount(event.currentSnapshot?.rootBsrRank ?? null)}
-                numericBaseline={event.baselineSnapshot?.rootBsrRank}
-                numericCurrent={event.currentSnapshot?.rootBsrRank}
-                lowerIsBetter
-              />
-              <ComparisonRow
-                label="Sub BSR"
-                baseline={formatCount(event.baselineSnapshot?.subBsrRank ?? null)}
-                current={formatCount(event.currentSnapshot?.subBsrRank ?? null)}
-                numericBaseline={event.baselineSnapshot?.subBsrRank}
-                numericCurrent={event.currentSnapshot?.subBsrRank}
-                lowerIsBetter
-              />
-            </CategorySection>
-          )}
+            {event.categories.includes('rank') && (
+              <CategorySection label={event.categories.length > 1 ? 'Rank' : ''}>
+                <ComparisonRow
+                  label="Root BSR"
+                  baseline={formatCount(event.baselineSnapshot?.rootBsrRank ?? null)}
+                  current={formatCount(event.currentSnapshot?.rootBsrRank ?? null)}
+                  numericBaseline={event.baselineSnapshot?.rootBsrRank}
+                  numericCurrent={event.currentSnapshot?.rootBsrRank}
+                  lowerIsBetter
+                />
+                <ComparisonRow
+                  label="Sub BSR"
+                  baseline={formatCount(event.baselineSnapshot?.subBsrRank ?? null)}
+                  current={formatCount(event.currentSnapshot?.subBsrRank ?? null)}
+                  numericBaseline={event.baselineSnapshot?.subBsrRank}
+                  numericCurrent={event.currentSnapshot?.subBsrRank}
+                  lowerIsBetter
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('offers') && (
-            <CategorySection label={event.categories.length > 1 ? 'Offers' : ''}>
-              <ComparisonRow
-                label="Total offers"
-                baseline={formatCount(event.baselineSnapshot?.totalOfferCount ?? null)}
-                current={formatCount(event.currentSnapshot?.totalOfferCount ?? null)}
-                numericBaseline={event.baselineSnapshot?.totalOfferCount}
-                numericCurrent={event.currentSnapshot?.totalOfferCount}
-              />
-            </CategorySection>
-          )}
+            {event.categories.includes('offers') && (
+              <CategorySection label={event.categories.length > 1 ? 'Offers' : ''}>
+                <ComparisonRow
+                  label="Total offers"
+                  baseline={formatCount(event.baselineSnapshot?.totalOfferCount ?? null)}
+                  current={formatCount(event.currentSnapshot?.totalOfferCount ?? null)}
+                  numericBaseline={event.baselineSnapshot?.totalOfferCount}
+                  numericCurrent={event.currentSnapshot?.totalOfferCount}
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('content') && (
-            <CategorySection label={event.categories.length > 1 ? 'Content' : ''}>
-              <ComparisonRow
-                label="Title"
-                baseline={event.baselineSnapshot?.title ?? null}
-                current={event.currentSnapshot?.title ?? null}
-              />
-              <ComparisonRow
-                label="Bullets"
-                baseline={formatCount(event.baselineSnapshot?.bulletCount ?? null)}
-                current={formatCount(event.currentSnapshot?.bulletCount ?? null)}
-                numericBaseline={event.baselineSnapshot?.bulletCount}
-                numericCurrent={event.currentSnapshot?.bulletCount}
-              />
-              <ComparisonRow
-                label="Description"
-                baseline={formatCount(event.baselineSnapshot?.descriptionLength ?? null)}
-                current={formatCount(event.currentSnapshot?.descriptionLength ?? null)}
-                numericBaseline={event.baselineSnapshot?.descriptionLength}
-                numericCurrent={event.currentSnapshot?.descriptionLength}
-              />
-            </CategorySection>
-          )}
+            {event.categories.includes('content') && (
+              <CategorySection label={event.categories.length > 1 ? 'Content' : ''}>
+                <ComparisonRow
+                  label="Title"
+                  baseline={event.baselineSnapshot?.title ?? null}
+                  current={event.currentSnapshot?.title ?? null}
+                />
+                <ComparisonRow
+                  label="Bullets"
+                  baseline={formatCount(event.baselineSnapshot?.bulletCount ?? null)}
+                  current={formatCount(event.currentSnapshot?.bulletCount ?? null)}
+                  numericBaseline={event.baselineSnapshot?.bulletCount}
+                  numericCurrent={event.currentSnapshot?.bulletCount}
+                />
+                <ComparisonRow
+                  label="Description"
+                  baseline={formatCount(event.baselineSnapshot?.descriptionLength ?? null)}
+                  current={formatCount(event.currentSnapshot?.descriptionLength ?? null)}
+                  numericBaseline={event.baselineSnapshot?.descriptionLength}
+                  numericCurrent={event.currentSnapshot?.descriptionLength}
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('images') && (
-            <CategorySection label={event.categories.length > 1 ? 'Images' : ''}>
-              <ComparisonRow
-                label="Image count"
-                baseline={formatCount(event.baselineSnapshot?.imageCount ?? null)}
-                current={formatCount(event.currentSnapshot?.imageCount ?? null)}
-                numericBaseline={event.baselineSnapshot?.imageCount}
-                numericCurrent={event.currentSnapshot?.imageCount}
-              />
-            </CategorySection>
-          )}
+            {event.categories.includes('images') && (
+              <CategorySection label={event.categories.length > 1 ? 'Images' : ''}>
+                <ComparisonRow
+                  label="Image count"
+                  baseline={formatCount(event.baselineSnapshot?.imageCount ?? null)}
+                  current={formatCount(event.currentSnapshot?.imageCount ?? null)}
+                  numericBaseline={event.baselineSnapshot?.imageCount}
+                  numericCurrent={event.currentSnapshot?.imageCount}
+                />
+              </CategorySection>
+            )}
 
-          {event.categories.includes('catalog') && (
-            <CategorySection label={event.categories.length > 1 ? 'Catalog' : ''}>
-              <ComparisonRow
-                label="Brand"
-                baseline={event.baselineSnapshot?.brand ?? null}
-                current={event.currentSnapshot?.brand ?? null}
-              />
-            </CategorySection>
-          )}
-        </Stack>
+            {event.categories.includes('catalog') && (
+              <CategorySection label={event.categories.length > 1 ? 'Catalog' : ''}>
+                <ComparisonRow
+                  label="Brand"
+                  baseline={event.baselineSnapshot?.brand ?? null}
+                  current={event.currentSnapshot?.brand ?? null}
+                />
+              </CategorySection>
+            )}
+          </Stack>
+        )}
 
         {/* Link to listing detail */}
         <Button
@@ -211,4 +221,53 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
       </Stack>
     </Box>
   )
+}
+
+function FieldChangeRow({ change }: { change: MonitoringFieldChange }) {
+  if (isImageFieldChange(change)) {
+    return (
+      <Box>
+        <ComparisonRow
+          label={humanizeField(change.field)}
+          baseline={`${change.removed.length} removed`}
+          current={`${change.added.length} added`}
+        />
+        {change.added.length > 0 ? (
+          <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', ml: '121px' }}>
+            Added: {change.added.join(' | ')}
+          </Typography>
+        ) : null}
+        {change.removed.length > 0 ? (
+          <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', ml: '121px', mt: 0.2 }}>
+            Removed: {change.removed.join(' | ')}
+          </Typography>
+        ) : null}
+      </Box>
+    )
+  }
+
+  return (
+    <ComparisonRow
+      label={humanizeField(change.field)}
+      baseline={displayFieldValue(change.from)}
+      current={displayFieldValue(change.to)}
+    />
+  )
+}
+
+function isImageFieldChange(
+  change: MonitoringFieldChange,
+): change is Extract<MonitoringFieldChange, { field: 'image_urls' }> {
+  return change.field === 'image_urls' && 'added' in change && 'removed' in change
+}
+
+function humanizeField(field: string): string {
+  return field
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+function displayFieldValue(value: string): string {
+  return value === '' ? 'n/a' : value
 }
