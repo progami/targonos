@@ -6,12 +6,14 @@ declare global {
 }
 
 function withSchemaOverride(connectionString: string): string {
-  const schema = process.env.HERMES_DB_SCHEMA;
-  if (typeof schema !== "string") return connectionString;
-  const trimmed = schema.trim();
-  if (trimmed.length === 0) return connectionString;
-
   const url = new URL(connectionString);
+  url.searchParams.set("application_name", "hermes");
+
+  const schema = process.env.HERMES_DB_SCHEMA;
+  if (typeof schema !== "string") return url.toString();
+  const trimmed = schema.trim();
+  if (trimmed.length === 0) return url.toString();
+
   const existingOptions = url.searchParams.get("options");
   if (typeof existingOptions !== "string" || existingOptions.trim().length === 0) {
     url.searchParams.set("options", `-c search_path=${trimmed}`);

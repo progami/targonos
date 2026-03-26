@@ -59,6 +59,12 @@ function withSchema(databaseUrl: string, schema: string): string {
   }
 }
 
+function withApplicationName(databaseUrl: string, applicationName: string): string {
+  const url = new URL(databaseUrl)
+  url.searchParams.set('application_name', applicationName)
+  return url.toString()
+}
+
 function withoutSchema(databaseUrl: string): string {
   try {
     const url = new URL(databaseUrl)
@@ -74,7 +80,9 @@ async function schemaHasTable(
   schema: string,
   table: string
 ): Promise<boolean> {
-  const client = new Client({ connectionString })
+  const client = new Client({
+    connectionString: withApplicationName(connectionString, 'talos-schema-checker'),
+  })
   try {
     await client.connect()
     const result = await client.query(
@@ -92,7 +100,9 @@ async function findBestSchemaForTenant(
   tenantCode: TenantCode,
   currentSchema: string
 ): Promise<string | null> {
-  const client = new Client({ connectionString })
+  const client = new Client({
+    connectionString: withApplicationName(connectionString, 'talos-schema-checker'),
+  })
   try {
     await client.connect()
     const result = await client.query<{ table_schema: string }>(
@@ -137,9 +147,10 @@ async function findBestSchemaForTenant(
 }
 
 async function resolveDatasourceUrl(databaseUrl: string, tenantCode: TenantCode): Promise<string> {
+  const taggedDatabaseUrl = withApplicationName(databaseUrl, `talos-${tenantCode.toLowerCase()}`)
   const schemaOverride = process.env.PRISMA_SCHEMA
   if (schemaOverride) {
-    return withSchema(databaseUrl, schemaOverride)
+    return withSchema(taggedDatabaseUrl, schemaOverride)
   }
 
   let currentSchema: string | null = null
@@ -150,27 +161,27 @@ async function resolveDatasourceUrl(databaseUrl: string, tenantCode: TenantCode)
   }
 
   if (!currentSchema) {
-    return databaseUrl
+    return taggedDatabaseUrl
   }
 
-  const baseConnectionString = withoutSchema(databaseUrl)
+  const baseConnectionString = withoutSchema(taggedDatabaseUrl)
 
   try {
     const hasRequiredTables = await schemaHasTable(baseConnectionString, currentSchema, 'skus')
-    if (hasRequiredTables) return databaseUrl
+    if (hasRequiredTables) return taggedDatabaseUrl
 
     const bestSchema = await findBestSchemaForTenant(baseConnectionString, tenantCode, currentSchema)
     if (bestSchema && bestSchema !== currentSchema) {
       console.warn(
         `[tenant] Schema "${currentSchema}" missing expected tables for ${tenantCode}; using "${bestSchema}" instead`
       )
-      return withSchema(databaseUrl, bestSchema)
+      return withSchema(taggedDatabaseUrl, bestSchema)
     }
   } catch {
     // Fall back to provided schema URL if we cannot introspect (e.g., network/permissions)
   }
 
-  return databaseUrl
+  return taggedDatabaseUrl
 }
 
 async function createTenantClient(tenantCode: TenantCode): Promise<PrismaClient> {

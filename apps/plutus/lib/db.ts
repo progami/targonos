@@ -5,6 +5,7 @@ type GlobalWithPrisma = typeof globalThis & {
 };
 
 const DEFAULT_SCHEMA = 'plutus';
+const APPLICATION_NAME = 'plutus';
 
 function resolveDatasourceUrl() {
   const raw = process.env.DATABASE_URL;
@@ -14,9 +15,9 @@ function resolveDatasourceUrl() {
     const parsed = new URL(raw);
     if (!parsed.searchParams.has('schema')) {
       parsed.searchParams.set('schema', DEFAULT_SCHEMA);
-      return parsed.toString();
     }
-    return raw;
+    parsed.searchParams.set('application_name', APPLICATION_NAME);
+    return parsed.toString();
   } catch {
     return raw;
   }
