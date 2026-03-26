@@ -838,9 +838,10 @@ function compareCurrentRecords(left: MonitoringStateRecord, right: MonitoringSta
 }
 
 function compareEvents(left: MonitoringChangeEvent, right: MonitoringChangeEvent): number {
-  const severityDelta = severityRank(right.severity) - severityRank(left.severity)
-  if (severityDelta !== 0) return severityDelta
-  return right.timestamp.localeCompare(left.timestamp)
+  const timestampDelta = right.timestamp.localeCompare(left.timestamp)
+  if (timestampDelta !== 0) return timestampDelta
+
+  return severityRank(right.severity) - severityRank(left.severity)
 }
 
 function severityRank(severity: MonitoringSeverity): number {
