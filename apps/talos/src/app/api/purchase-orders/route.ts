@@ -48,11 +48,8 @@ const LineItemSchema = z.object({
   currency: z
     .string()
     .trim()
-    .min(1, 'Currency is required')
-    .refine(
-      value => normalizePoCostCurrency(value) === PURCHASE_ORDER_BASE_CURRENCY,
-      `Purchase order currency must be ${PURCHASE_ORDER_BASE_CURRENCY}`
-    ),
+    .optional()
+    .default(PURCHASE_ORDER_BASE_CURRENCY),
   notes: z.string().optional(),
 })
 

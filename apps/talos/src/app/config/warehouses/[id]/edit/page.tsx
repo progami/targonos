@@ -32,7 +32,7 @@ const formatAddress = (address: {
   if (address.addressLine2.trim()) lines.push(address.addressLine2.trim())
 
   const cityValue = address.city.trim()
-  const stateValue = address.state.trim().toUpperCase()
+  const stateValue = address.state.trim()
   const postalValue = address.postalCode.trim()
 
   let cityStateZip = ''
@@ -75,11 +75,15 @@ const parseAddress = (address?: string) => {
 
   if (lines.length > 1) {
     const lastLine = lines[lines.length - 1]
-    const cityStateZipMatch = lastLine.match(/^([^,]+),\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/)
-    if (cityStateZipMatch) {
-      parsed.city = cityStateZipMatch[1].trim()
-      parsed.state = cityStateZipMatch[2].trim().toUpperCase()
-      parsed.postalCode = cityStateZipMatch[3].trim()
+    // US format: City, ST 12345 or City, ST 12345-6789
+    const usMatch = lastLine.match(/^([^,]+),\s*([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/)
+    // UK format: City, County POSTCODE (e.g. "Wellingborough, Northamptonshire NN8 4HN")
+    const ukMatch = lastLine.match(/^([^,]+),\s*(.+?)\s+([A-Za-z0-9][A-Za-z0-9 -]*)$/)
+    const match = usMatch || ukMatch
+    if (match) {
+      parsed.city = match[1].trim()
+      parsed.state = match[2].trim()
+      parsed.postalCode = match[3].trim()
       if (lines.length > 2) {
         parsed.addressLine2 = lines.slice(1, lines.length - 1).join(' ')
       }
@@ -93,6 +97,15 @@ const parseAddress = (address?: string) => {
 
 export default function EditWarehousePage({ params }: { params: Promise<{ id: string }> }) {
  const router = useRouter()
+ const statePattern = /^[A-Za-z][A-Za-z\s-]*$/
+ const postalCodePattern = /^[A-Za-z0-9][A-Za-z0-9\s-]*$/
+ const [isUK, setIsUK] = useState(false)
+ useEffect(() => {
+  fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
+   .then(r => r.json())
+   .then(data => setIsUK(data.current?.code === 'UK'))
+   .catch(() => {})
+ }, [])
  const [loading, setLoading] = useState(true)
  const [saving, setSaving] = useState(false)
  const [warehouse, setWarehouse] = useState<Warehouse | null>(null)
@@ -179,12 +192,23 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
  newErrors.city = 'City is required'
  }
 
- if (!/^[A-Za-z]{2}$/.test(formData.state.trim().toUpperCase())) {
- newErrors.state = 'State must be a 2-letter code'
+ const normalizedState = formData.state.trim()
+ const normalizedPostalCode = formData.postalCode.trim()
+
+ if (!normalizedState) {
+ newErrors.state = isUK ? 'County is required' : 'State is required'
+ } else if (!statePattern.test(normalizedState)) {
+ newErrors.state = isUK
+  ? 'County can only contain letters, spaces, and hyphens'
+  : 'State can only contain letters, spaces, and hyphens'
  }
 
- if (!/^\d{5}(?:-\d{4})?$/.test(formData.postalCode.trim())) {
- newErrors.postalCode = 'ZIP code must be 5 digits (optional +4)'
+ if (!normalizedPostalCode) {
+ newErrors.postalCode = isUK ? 'Postcode is required' : 'ZIP code is required'
+ } else if (!postalCodePattern.test(normalizedPostalCode)) {
+ newErrors.postalCode = isUK
+  ? 'Postcode can only contain letters, numbers, spaces, and hyphens'
+  : 'ZIP code can only contain letters, numbers, spaces, and hyphens'
  }
 
  if (formData.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
@@ -394,15 +418,15 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
 
  <div>
  <label className="block text-sm font-medium text-foreground mb-1">
- State *
+ {isUK ? 'County' : 'State'} *
  </label>
  <input
  type="text"
  value={formData.state}
- onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+ onChange={(e) => setFormData({ ...formData, state: e.target.value })}
  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${errors.state ? 'border-red-500' : ''}`}
- placeholder="e.g., NY"
- maxLength={2}
+ placeholder={isUK ? 'e.g., Northamptonshire' : 'e.g., NY'}
+ maxLength={50}
  />
  {errors.state && (
  <p className="text-red-500 text-sm mt-1">{errors.state}</p>
@@ -411,14 +435,14 @@ export default function EditWarehousePage({ params }: { params: Promise<{ id: st
 
  <div>
  <label className="block text-sm font-medium text-foreground mb-1">
- ZIP code *
+ {isUK ? 'Postcode' : 'ZIP code'} *
  </label>
  <input
  type="text"
  value={formData.postalCode}
  onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${errors.postalCode ? 'border-red-500' : ''}`}
- placeholder="e.g., 10001"
+ placeholder={isUK ? 'e.g., NN8 4HN' : 'e.g., 10001'}
  />
  {errors.postalCode && (
  <p className="text-red-500 text-sm mt-1">{errors.postalCode}</p>

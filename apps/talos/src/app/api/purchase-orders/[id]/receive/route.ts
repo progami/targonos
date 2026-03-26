@@ -43,7 +43,7 @@ const OptionalNumber = z.preprocess((value) => {
 
 const RequiredInboundReceiveType = z.preprocess(
   emptyToUndefined,
-  z.enum(['CONTAINER_20', 'CONTAINER_40', 'CONTAINER_40_HQ', 'CONTAINER_45_HQ', 'LCL'] as const, {
+  z.enum(['CONTAINER_20', 'CONTAINER_40', 'CONTAINER_40_HQ', 'CONTAINER_40_HQ_LARGE', 'CONTAINER_45_HQ', 'LCL'] as const, {
     required_error: 'Receive type is required',
     invalid_type_error: 'Receive type is required',
   })

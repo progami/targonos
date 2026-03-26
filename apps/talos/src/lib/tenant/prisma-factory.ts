@@ -182,6 +182,10 @@ async function createTenantClient(tenantCode: TenantCode): Promise<PrismaClient>
     datasources: {
       db: { url: datasourceUrl },
     },
+    transactionOptions: {
+      maxWait: 30000,
+      timeout: 30000,
+    },
   })
 
   return client

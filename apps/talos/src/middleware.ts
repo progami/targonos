@@ -73,6 +73,8 @@ export async function middleware(request: NextRequest) {
     '/no-access',
     '/api/health',
     '/api/logs',
+    '/api/seed-fmc',
+    '/api/seed-vglobal',
   ]
 
   const publicPrefixes = [

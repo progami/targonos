@@ -87,6 +87,7 @@ model Warehouse {
   kind               WarehouseKind @default(THIRD_PARTY) @map("kind")
   isActive           Boolean    @default(true) @map("is_active")
   rateListAttachment Json?      @map("rate_list_attachment")
+  billingConfig      Json?      @map("billing_config")
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
   costRates          CostRate[]

@@ -24,6 +24,7 @@ export type TacticalInboundReceiveType =
   | 'CONTAINER_20'
   | 'CONTAINER_40'
   | 'CONTAINER_40_HQ'
+  | 'CONTAINER_40_HQ_LARGE'
   | 'CONTAINER_45_HQ'
   | 'LCL'
 
@@ -149,10 +150,12 @@ function buildInboundComponents(params: {
     })
   }
 
+  // Optional per-warehouse inbound charges — only applied when the rate is seeded
+
   const includedSkus = 10
   const additionalSkuCount = Math.max(0, params.skuCount - includedSkus)
-  if (additionalSkuCount > 0) {
-    const skuRate = requireRate(params.ratesByCostName, 'Additional SKU Fee')
+  const skuRate = additionalSkuCount > 0 ? params.ratesByCostName.get('Additional SKU Fee') : undefined
+  if (skuRate && additionalSkuCount > 0) {
     components.push({
       costCategory: CostCategory.Inbound,
       costName: skuRate.costName,
@@ -160,14 +163,10 @@ function buildInboundComponents(params: {
     })
   }
 
-  // Cartons over 1200 (if configured).
   const cartonThreshold = 1200
   const overageCartons = Math.max(0, params.totalCartons - cartonThreshold)
-  if (overageCartons > 0) {
-    const overageRate = params.ratesByCostName.get('Cartons Over 1200')
-    if (!overageRate) {
-      throw new Error('Missing required rate: Cartons Over 1200')
-    }
+  const overageRate = overageCartons > 0 ? params.ratesByCostName.get('Cartons Over 1200') : undefined
+  if (overageRate && overageCartons > 0) {
     components.push({
       costCategory: CostCategory.Inbound,
       costName: overageRate.costName,
@@ -175,12 +174,31 @@ function buildInboundComponents(params: {
     })
   }
 
-  if (params.totalPallets > 0) {
-    const palletRate = requireRate(params.ratesByCostName, 'Pallet & Shrink Wrap Fee')
+  const palletWrapRate = params.totalPallets > 0 ? params.ratesByCostName.get('Pallet & Shrink Wrap Fee') : undefined
+  if (palletWrapRate && params.totalPallets > 0) {
     components.push({
       costCategory: CostCategory.Inbound,
-      costName: palletRate.costName,
-      totalCents: roundCents(palletRate.costValue * params.totalPallets),
+      costName: palletWrapRate.costName,
+      totalCents: roundCents(palletWrapRate.costValue * params.totalPallets),
+    })
+  }
+
+  // V Global-specific inbound charges
+  const labelRate = params.ratesByCostName.get('Label Printed')
+  if (labelRate && params.totalCartons > 0) {
+    components.push({
+      costCategory: CostCategory.Inbound,
+      costName: labelRate.costName,
+      totalCents: roundCents(labelRate.costValue * params.totalCartons),
+    })
+  }
+
+  const putawayRate = params.ratesByCostName.get('Pallets Putaway')
+  if (putawayRate && params.totalPallets > 0) {
+    components.push({
+      costCategory: CostCategory.Inbound,
+      costName: putawayRate.costName,
+      totalCents: roundCents(putawayRate.costValue * params.totalPallets),
     })
   }
 
@@ -254,6 +272,8 @@ function inboundContainerCostName(receiveType: TacticalInboundReceiveType): stri
       return "40' Container Handling"
     case 'CONTAINER_40_HQ':
       return "40' HQ Container Handling"
+    case 'CONTAINER_40_HQ_LARGE':
+      return "40' HQ Container Handling (1000+ Cartons)"
     case 'CONTAINER_45_HQ':
       return "45' HQ Container Handling"
     case 'LCL':

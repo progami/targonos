@@ -611,6 +611,9 @@ export const POST = withAuth(async (request, session) => {
       return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 })
     }
 
+    const whBillingConfig = warehouse.billingConfig as Record<string, unknown> | null
+    const maxPalletHeightMm = typeof whBillingConfig?.maxPalletHeightMm === 'number' ? whBillingConfig.maxPalletHeightMm : undefined
+
 	    // Verify all SKUs exist and check inventory for SHIP transactions
 	    for (const item of validatedItems) {
       const sku = await prisma.sku.findFirst({
@@ -767,6 +770,7 @@ export const POST = withAuth(async (request, session) => {
           providedStoragePallets: item.storagePalletsIn,
           providedShippingPallets: item.shippingPalletsOut,
           providedPallets: item.pallets,
+          maxPalletHeightMm,
         })
 
         if (txType === 'RECEIVE') {
