@@ -16,6 +16,12 @@ function talosDatabaseUrlForRegion(region: TalosRegion): string | null {
   return url && url.length > 0 ? url : null;
 }
 
+function withApplicationName(databaseUrl: string, applicationName: string): string {
+  const url = new URL(databaseUrl);
+  url.searchParams.set('application_name', applicationName);
+  return url.toString();
+}
+
 export function getTalosPrisma(region: TalosRegion): TalosPrismaClient | null {
   const url = talosDatabaseUrlForRegion(region);
   if (!url) return null;
@@ -32,7 +38,7 @@ export function getTalosPrisma(region: TalosRegion): TalosPrismaClient | null {
 
   const client = new TalosPrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
-    datasources: { db: { url } },
+    datasources: { db: { url: withApplicationName(url, `xplan-talos-${region.toLowerCase()}`) } },
   });
 
   globalForPrisma.__xplanTalosPrismaByRegion[region] = client;

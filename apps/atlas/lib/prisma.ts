@@ -2,9 +2,21 @@ import { PrismaClient } from '@targon/prisma-atlas'
 
 const MAX_BROADCAST_EMAIL_DISPATCHES = 2000
 
+function resolveDatasourceUrl(): string | undefined {
+  const databaseUrl = process.env.DATABASE_URL
+  if (typeof databaseUrl !== 'string') {
+    return undefined
+  }
+
+  const url = new URL(databaseUrl)
+  url.searchParams.set('application_name', 'atlas')
+  return url.toString()
+}
+
 function createPrismaClient() {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    datasourceUrl: resolveDatasourceUrl(),
   })
 
   return client.$extends({
