@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { Suspense, startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Alert,
@@ -35,6 +35,14 @@ const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 type OwnerFilter = 'ALL' | 'OURS' | 'COMPETITOR'
 
 export default function TrackingDashboard() {
+  return (
+    <Suspense fallback={<TrackingDashboardFallback />}>
+      <TrackingDashboardContent />
+    </Suspense>
+  )
+}
+
+function TrackingDashboardContent() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -432,6 +440,27 @@ export default function TrackingDashboard() {
           )}
         </Card>
       </Stack>
+    </Box>
+  )
+}
+
+function TrackingDashboardFallback() {
+  return (
+    <Box sx={{ maxWidth: 1520, mx: 'auto', pb: 4 }}>
+      <Card
+        sx={{
+          borderRadius: 4,
+          border: '1px solid rgba(15, 23, 42, 0.08)',
+          boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
+          backgroundColor: 'rgba(255, 255, 255, 0.92)',
+        }}
+      >
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="body2" color="text.secondary">
+            Loading monitoring feed...
+          </Typography>
+        </CardContent>
+      </Card>
     </Box>
   )
 }
