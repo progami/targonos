@@ -254,6 +254,8 @@ function inboundContainerCostName(receiveType: string): string {
       return "40' Container Handling"
     case 'CONTAINER_40_HQ':
       return "40' HQ Container Handling"
+    case 'CONTAINER_40_HQ_LARGE':
+      return "40' HQ Container Handling (1000+ Cartons)"
     case 'CONTAINER_45_HQ':
       return "45' HQ Container Handling"
     case 'LCL':

@@ -5,13 +5,14 @@ import { checkRateLimit, rateLimitConfigs } from '@/lib/security/rate-limiter'
 import { auditLog } from '@/lib/security/audit-logger'
 import { endOfWeek } from 'date-fns'
 import { z } from 'zod'
-import { ensureWeeklyStorageEntries, recalculateStorageCosts } from '@/services/storageCost.service'
+import { ensureWeeklyStorageEntries, recalculateStorageCosts, backfillWeeklyStorageEntries } from '@/services/storageCost.service'
 
 const weeklyCalculationSchema = z.object({
  weekEndingDate: z.string().datetime().optional(),
  warehouseId: z.string().uuid().optional(),
  warehouseCode: z.string().optional(),
  forceRecalculate: z.boolean().optional(),
+ backfill: z.boolean().optional(),
 })
 
 export const POST = withAuth(async (request, session) => {
@@ -65,13 +66,20 @@ export const POST = withAuth(async (request, session) => {
  }
 
  // Process weekly storage calculation
- let result
- if (data.forceRecalculate) {
+ let result: Record<string, unknown>
+ let calculationType: string
+ if (data.backfill) {
+ // Backfill all missing weeks from first receive to target date
+ result = await backfillWeeklyStorageEntries(weekEndingDate, warehouseCode)
+ calculationType = 'backfill'
+ } else if (data.forceRecalculate) {
  // Recalculate costs for existing entries
  result = await recalculateStorageCosts(weekEndingDate, warehouseCode)
+ calculationType = 'recalculation'
  } else {
  // Normal weekly calculation
  result = await ensureWeeklyStorageEntries(weekEndingDate)
+ calculationType = 'weekly_entries'
  }
  
  // Log the calculation attempt
@@ -92,11 +100,8 @@ export const POST = withAuth(async (request, session) => {
  return NextResponse.json({
  success: true,
  weekEndingDate: weekEndingDate.toISOString(),
- calculationType: data.forceRecalculate ? 'recalculation' : 'weekly_entries',
+ calculationType,
  ...result,
- message: data.forceRecalculate 
- ? `Recalculated ${result.recalculated} storage cost entries`
- : `Processed ${result.processed} storage entries, ${result.costCalculated} with costs calculated`
  })
  } catch (error: unknown) {
  // console.error('Weekly storage calculation error:', error)

@@ -198,6 +198,7 @@ const RECEIVE_TYPE_LABELS: Record<string, string> = {
   CONTAINER_20: "20'",
   CONTAINER_40: "40'",
   CONTAINER_40_HQ: "40' HQ",
+  CONTAINER_40_HQ_LARGE: "40' HQ (1000+)",
   CONTAINER_45_HQ: "45' HQ",
 }
 

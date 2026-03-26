@@ -245,39 +245,50 @@ async function reserveNextGlobalPurchaseOrderSequence(
 ): Promise<number> {
   const counterKey = `${GLOBAL_PO_SEQUENCE_COUNTER_PREFIX}:${skuGroup}`
 
-  return prisma.$transaction(async tx => {
-    await tx.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${counterKey}))`)
+  try {
+    return await prisma.$transaction(async tx => {
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${counterKey}))`)
 
-    const rows = await tx.$queryRaw<Array<{ nextValue: number | bigint | string }>>(Prisma.sql`
-      SELECT "next_value" AS "nextValue"
-      FROM "public"."global_reference_counters"
-      WHERE "counter_key" = ${counterKey}
-      FOR UPDATE
-    `)
-
-    const existing = rows[0]
-    if (existing) {
-      const reserved = parsePositiveInteger(existing.nextValue, 'next_value')
-      await tx.$executeRaw(Prisma.sql`
-        UPDATE "public"."global_reference_counters"
-        SET "next_value" = ${reserved + 1}, "updated_at" = NOW()
+      const rows = await tx.$queryRaw<Array<{ nextValue: number | bigint | string }>>(Prisma.sql`
+        SELECT "next_value" AS "nextValue"
+        FROM "global_reference_counters"
         WHERE "counter_key" = ${counterKey}
+        FOR UPDATE
       `)
-      return reserved
+
+      const existing = rows[0]
+      if (existing) {
+        const reserved = parsePositiveInteger(existing.nextValue, 'next_value')
+        await tx.$executeRaw(Prisma.sql`
+          UPDATE "global_reference_counters"
+          SET "next_value" = ${reserved + 1}, "updated_at" = NOW()
+          WHERE "counter_key" = ${counterKey}
+        `)
+        return reserved
+      }
+
+      const maxSequence = await findMaxPurchaseOrderSequenceAcrossTenants(skuGroup)
+      const nextSequence = maxSequence + 1
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "global_reference_counters" (
+          "counter_key",
+          "next_value",
+          "updated_at"
+        ) VALUES (${counterKey}, ${nextSequence + 1}, NOW())
+      `)
+
+      return nextSequence
+    })
+  } catch (error) {
+    // Fallback: if global_reference_counters table doesn't exist, derive from existing POs
+    const isTableMissing = error instanceof Error && error.message.includes('42P01')
+    if (isTableMissing) {
+      console.warn('[po-sequence] global_reference_counters table not found, falling back to scan-based sequence')
+      const maxSequence = await findMaxPurchaseOrderSequenceAcrossTenants(skuGroup)
+      return maxSequence + 1
     }
-
-    const maxSequence = await findMaxPurchaseOrderSequenceAcrossTenants(skuGroup)
-    const nextSequence = maxSequence + 1
-    await tx.$executeRaw(Prisma.sql`
-      INSERT INTO "public"."global_reference_counters" (
-        "counter_key",
-        "next_value",
-        "updated_at"
-      ) VALUES (${counterKey}, ${nextSequence + 1}, NOW())
-    `)
-
-    return nextSequence
-  })
+    throw error
+  }
 }
 
 export async function getNextPurchaseOrderSequence(

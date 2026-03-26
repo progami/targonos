@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Building, Save } from '@/lib/lucide-icons'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
@@ -8,6 +8,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
+import { withBasePath } from '@/lib/utils/base-path'
 
 const formatAddress = (address: {
   addressLine1: string
@@ -21,7 +22,7 @@ const formatAddress = (address: {
   if (address.addressLine2.trim()) lines.push(address.addressLine2.trim())
 
   const cityValue = address.city.trim()
-  const stateValue = address.state.trim().toUpperCase()
+  const stateValue = address.state.trim()
   const postalValue = address.postalCode.trim()
 
   let cityStateZip = ''
@@ -35,6 +36,15 @@ const formatAddress = (address: {
 
 export default function NewWarehousePage() {
   const router = useRouter()
+  const statePattern = /^[A-Za-z][A-Za-z\s-]*$/
+  const postalCodePattern = /^[A-Za-z0-9][A-Za-z0-9\s-]*$/
+  const [isUK, setIsUK] = useState(false)
+  useEffect(() => {
+    fetch(withBasePath('/api/tenant/current'), { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setIsUK(data.current?.code === 'UK'))
+      .catch(() => {})
+  }, [])
   const [loading, setLoading] = useState(false)
   const [formData, setFormData] = useState({
     code: '',
@@ -72,12 +82,23 @@ export default function NewWarehousePage() {
       newErrors.city = 'City is required'
     }
 
-    if (!/^[A-Za-z]{2}$/.test(formData.state.trim().toUpperCase())) {
-      newErrors.state = 'State must be a 2-letter code'
+    const normalizedState = formData.state.trim()
+    const normalizedPostalCode = formData.postalCode.trim()
+
+    if (!normalizedState) {
+      newErrors.state = isUK ? 'County is required' : 'State is required'
+    } else if (!statePattern.test(normalizedState)) {
+      newErrors.state = isUK
+        ? 'County can only contain letters, spaces, and hyphens'
+        : 'State can only contain letters, spaces, and hyphens'
     }
 
-    if (!/^\d{5}(?:-\d{4})?$/.test(formData.postalCode.trim())) {
-      newErrors.postalCode = 'ZIP code must be 5 digits (optional +4)'
+    if (!normalizedPostalCode) {
+      newErrors.postalCode = isUK ? 'Postcode is required' : 'ZIP code is required'
+    } else if (!postalCodePattern.test(normalizedPostalCode)) {
+      newErrors.postalCode = isUK
+        ? 'Postcode can only contain letters, numbers, spaces, and hyphens'
+        : 'ZIP code can only contain letters, numbers, spaces, and hyphens'
     }
 
     if (formData.contactEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.contactEmail)) {
@@ -250,26 +271,24 @@ export default function NewWarehousePage() {
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    State *
+                    {isUK ? 'County' : 'State'} *
                   </label>
                   <input
                     type="text"
                     value={formData.state}
-                    onChange={(e) =>
-                      setFormData({ ...formData, state: e.target.value.toUpperCase() })
-                    }
+                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
                       errors.state ? 'border-red-500' : ''
                     }`}
-                    placeholder="e.g., NY"
-                    maxLength={2}
+                    placeholder={isUK ? 'e.g., Northamptonshire' : 'e.g., NY'}
+                    maxLength={50}
                   />
                   {errors.state && <p className="text-red-500 text-sm mt-1">{errors.state}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-foreground mb-1">
-                    ZIP code *
+                    {isUK ? 'Postcode' : 'ZIP code'} *
                   </label>
                   <input
                     type="text"
@@ -278,7 +297,7 @@ export default function NewWarehousePage() {
                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
                       errors.postalCode ? 'border-red-500' : ''
                     }`}
-                    placeholder="e.g., 10001"
+                    placeholder={isUK ? 'e.g., NN8 4HN' : 'e.g., 10001'}
                   />
                   {errors.postalCode && (
                     <p className="text-red-500 text-sm mt-1">{errors.postalCode}</p>

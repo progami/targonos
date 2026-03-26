@@ -7475,6 +7475,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                   <option value="CONTAINER_20">20&apos; Container</option>
                                   <option value="CONTAINER_40">40&apos; Container</option>
                                   <option value="CONTAINER_40_HQ">40&apos; HQ Container</option>
+                                  <option value="CONTAINER_40_HQ_LARGE">40&apos; HQ Container (1000+ Cartons)</option>
                                   <option value="CONTAINER_45_HQ">45&apos; HQ Container</option>
                                 </select>
                                 {gateIssues?.['details.receiveType'] && (
