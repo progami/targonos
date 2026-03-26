@@ -10,17 +10,25 @@ function scopedStorageKey(key: string): string {
   return `${key}:${getHermesBasePath()}`;
 }
 
+function getBrowserLocalStorage(): Storage | null {
+  if (typeof window === "undefined") return null;
+  if (typeof window.localStorage?.getItem !== "function") return null;
+  if (typeof window.localStorage?.setItem !== "function") return null;
+  return window.localStorage;
+}
+
 function migrateLegacyLocalStorageKey(params: { legacy: string; next: string }): void {
-  if (typeof localStorage === "undefined") return;
+  const storage = getBrowserLocalStorage();
+  if (storage === null) return;
   if (params.legacy === params.next) return;
 
-  const hasNext = localStorage.getItem(params.next) !== null;
+  const hasNext = storage.getItem(params.next) !== null;
   if (hasNext) return;
 
-  const legacyValue = localStorage.getItem(params.legacy);
+  const legacyValue = storage.getItem(params.legacy);
   if (legacyValue === null) return;
 
-  localStorage.setItem(params.next, legacyValue);
+  storage.setItem(params.next, legacyValue);
 }
 
 type ConnectionsState = {

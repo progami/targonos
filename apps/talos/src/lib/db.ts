@@ -1,8 +1,19 @@
 import { Pool } from 'pg'
 
+function resolveDatabaseUrl(): string | undefined {
+ const databaseUrl = process.env.DATABASE_URL
+ if (typeof databaseUrl !== 'string') {
+ return undefined
+ }
+
+ const url = new URL(databaseUrl)
+ url.searchParams.set('application_name', 'talos-pg')
+ return url.toString()
+}
+
 // Create a connection pool
 export const pool = new Pool({
- connectionString: process.env.DATABASE_URL,
+ connectionString: resolveDatabaseUrl(),
  max: 20, // Maximum number of clients in the pool
  idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
  connectionTimeoutMillis: 2000, // How long to wait for a connection

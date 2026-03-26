@@ -12,9 +12,9 @@ function resolveDatasourceUrl() {
     const parsed = new URL(raw);
     if (!parsed.searchParams.has('schema')) {
       parsed.searchParams.set('schema', 'kairos');
-      return parsed.toString();
     }
-    return raw;
+    parsed.searchParams.set('application_name', 'kairos');
+    return parsed.toString();
   } catch {
     return raw;
   }

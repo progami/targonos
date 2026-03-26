@@ -1,6 +1,19 @@
 import { PrismaClient } from '@targon/prisma-talos';
 
-const prisma = new PrismaClient();
+function resolveDatasourceUrl(): string | undefined {
+ const databaseUrl = process.env.DATABASE_URL;
+ if (typeof databaseUrl !== 'string') {
+ return undefined;
+ }
+
+ const url = new URL(databaseUrl);
+ url.searchParams.set('application_name', 'talos-session-manager');
+ return url.toString();
+}
+
+const prisma = new PrismaClient({
+ datasourceUrl: resolveDatasourceUrl(),
+});
 
 interface SessionData {
  userId: string;
