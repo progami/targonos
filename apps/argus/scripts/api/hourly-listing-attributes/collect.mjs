@@ -1468,6 +1468,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       event_severity: event?.severity ?? '',
       event_primary_category: event?.primary_category ?? '',
       event_categories: event ? event.categories.join('|') : '',
+      event_field_changes: event ? JSON.stringify(event.field_changes) : '',
       event_headline: event?.headline ?? '',
       event_summary: event?.summary ?? '',
       added_images: hasBaseline ? addedImages.join(' | ') : '',
@@ -1503,7 +1504,7 @@ function humanizeField(field) {
   return field.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
 }
 
-function buildAlertDigestHtml({ events, totalEvents, maxEvents, snapshotDate, timeLabel, appUrl }) {
+function buildAlertDigestHtml({ events, totalEvents, maxEvents, snapshotDate, timeLabel, appUrl, feedUrl }) {
   const F = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif"
   const M = "Menlo, Consolas, 'Courier New', monospace"
   const NAVY = '#002C51'
@@ -1634,7 +1635,7 @@ ${overflowRow}
   <table role="presentation" cellpadding="0" cellspacing="0" border="0">
   <tr>
   <td bgcolor="${TEAL}" style="mso-padding-alt:0;">
-    <a href="${esc(appUrl)}/tracking?window=24h" target="_blank" style="display:inline-block; padding:11px 24px; font-family:${F}; font-size:13px; font-weight:700; color:${NAVY}; text-decoration:none;">
+    <a href="${esc(feedUrl)}" target="_blank" style="display:inline-block; padding:11px 24px; font-family:${F}; font-size:13px; font-weight:700; color:${NAVY}; text-decoration:none;">
       Open change feed &rarr;
     </a>
   </td>
@@ -1717,19 +1718,21 @@ async function main() {
     const timeLabel = snapshotTimeLocal.length === 4
       ? `${snapshotTimeLocal.slice(0, 2)}:${snapshotTimeLocal.slice(2)}`
       : snapshotTimeLocal
+    const feedUrl = `${appUrl}/tracking?window=all&snapshot=${encodeURIComponent(snapshotTimestampUtc)}`
 
     const subject = `Argus: ${events.length} monitoring alert${events.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
     const lines = [
       `Argus monitoring detected ${events.length} change${events.length === 1 ? '' : 's'}.`,
       `Snapshot UTC: ${snapshotTimestampUtc}`,
       '',
-      `Open change feed: ${appUrl}/tracking?window=24h`,
+      `Open change feed: ${feedUrl}`,
       '',
     ]
 
     const maxEvents = 40
     const visibleEvents = events.slice(0, maxEvents)
     for (const event of visibleEvents) {
+      const eventUrl = `${feedUrl}&query=${encodeURIComponent(event.asin)}`
       lines.push(`${String(event.owner_type).toUpperCase()} ${event.headline}`)
       lines.push(`ASIN: ${event.asin}`)
       lines.push(`Baseline UTC: ${event.baseline_timestamp_utc}`)
@@ -1747,7 +1750,7 @@ async function main() {
 
         lines.push(`- ${change.field}: ${change.from} -> ${change.to}`)
       }
-      lines.push(`Link: ${appUrl}/tracking/${event.asin}`)
+      lines.push(`Link: ${eventUrl}`)
       lines.push('')
     }
 
@@ -1763,6 +1766,7 @@ async function main() {
       snapshotDate,
       timeLabel,
       appUrl,
+      feedUrl,
     })
 
     await sendArgusAlertEmail({

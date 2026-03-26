@@ -4,18 +4,23 @@ import { FinancialLedgerCategory, Prisma } from '@targon/prisma-talos'
 
 export const dynamic = 'force-dynamic'
 
-function resolveDateRange(params: URLSearchParams): { start: Date; end: Date } {
+function resolveDateRange(params: URLSearchParams): { start: Date | null; end: Date | null } {
   const startDateStr = params.get('startDate')
   const endDateStr = params.get('endDate')
 
-  const startFallback = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-  const endFallback = new Date()
+  let start: Date | null = null
+  if (startDateStr && startDateStr.trim()) {
+    start = new Date(startDateStr)
+    if (Number.isNaN(start.getTime())) start = null
+    else start.setUTCHours(0, 0, 0, 0)
+  }
 
-  const start = startDateStr ? new Date(startDateStr) : startFallback
-  start.setUTCHours(0, 0, 0, 0)
-
-  const end = endDateStr ? new Date(endDateStr) : endFallback
-  end.setUTCHours(23, 59, 59, 999)
+  let end: Date | null = null
+  if (endDateStr && endDateStr.trim()) {
+    end = new Date(endDateStr)
+    if (Number.isNaN(end.getTime())) end = null
+    else end.setUTCHours(23, 59, 59, 999)
+  }
 
   return { start, end }
 }
@@ -43,8 +48,14 @@ export const GET = withAuth(async (request, _session) => {
   const limitParsed = typeof limitRaw === 'string' ? Number(limitRaw) : NaN
   const limit = Number.isFinite(limitParsed) && limitParsed > 0 ? Math.min(Math.floor(limitParsed), 2000) : 500
 
+  const dateFilter: Prisma.FinancialLedgerEntryWhereInput =
+    start && end ? { effectiveAt: { gte: start, lte: end } }
+    : start ? { effectiveAt: { gte: start } }
+    : end ? { effectiveAt: { lte: end } }
+    : {}
+
   const where: Prisma.FinancialLedgerEntryWhereInput = {
-    effectiveAt: { gte: start, lte: end },
+    ...dateFilter,
     ...(warehouseCode ? { warehouseCode } : {}),
     ...(category ? { category } : {}),
   }

@@ -11,6 +11,7 @@ import type {
   MonitoringAsinDetail,
   MonitoringCategory,
   MonitoringChangeEvent,
+  MonitoringFieldChange,
   MonitoringHealthDataset,
   MonitoringHealthReport,
   MonitoringOverview,
@@ -474,6 +475,7 @@ interface ChangeHistoryRow {
   event_severity?: string
   event_primary_category?: string
   event_categories?: string
+  event_field_changes?: string
   event_headline?: string
   event_summary?: string
 }
@@ -483,6 +485,7 @@ export interface MonitoringChangeFilters {
   owner?: MonitoringOwner | 'ALL'
   category?: MonitoringCategory | 'ALL'
   severity?: MonitoringSeverity | 'ALL'
+  snapshotTimestamp?: string
   query?: string
 }
 
@@ -558,9 +561,13 @@ function applyFilters(
   const owner = filters.owner ?? 'ALL'
   const category = filters.category ?? 'ALL'
   const severity = filters.severity ?? 'ALL'
+  const snapshotTimestamp = filters.snapshotTimestamp?.trim() ?? ''
   const query = filters.query ? filters.query.trim().toLowerCase() : ''
 
-  return filterByWindow(items, window).filter((item) => {
+  const scopedItems = snapshotTimestamp !== '' ? items : filterByWindow(items, window)
+
+  return scopedItems.filter((item) => {
+    if (snapshotTimestamp !== '' && item.timestamp !== snapshotTimestamp) return false
     if (owner !== 'ALL' && item.owner !== owner) return false
     if (category !== 'ALL' && !item.categories.includes(category)) return false
     if (severity !== 'ALL' && item.severity !== severity) return false
@@ -673,6 +680,7 @@ async function readChangeHistory(): Promise<ChangeHistoryRow[]> {
     event_severity: row.event_severity,
     event_primary_category: row.event_primary_category,
     event_categories: row.event_categories,
+    event_field_changes: row.event_field_changes,
     event_headline: row.event_headline,
     event_summary: row.event_summary,
   }))
@@ -764,6 +772,7 @@ function normalizeChangeEvent(
 
   const owner = normalizeOwner(row.owner_type)
   const categories = parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
+  const fieldChanges = parseStoredFieldChanges(row.event_field_changes) ?? []
   const primaryCategory =
     parseStoredCategory(row.event_primary_category) ??
     pickPrimaryCategory({
@@ -813,6 +822,7 @@ function normalizeChangeEvent(
     primaryCategory,
     changedFieldCount: Number(row.changed_field_count) || changedFields.length,
     changedFields,
+    fieldChanges,
     headline,
     summary,
     currentSnapshot,
@@ -1104,6 +1114,73 @@ function parseStoredSeverity(input: string | undefined): MonitoringSeverity | nu
   return value === 'critical' || value === 'high' || value === 'medium' || value === 'low'
     ? value
     : null
+}
+
+function parseStoredFieldChanges(input: string | undefined): MonitoringFieldChange[] | null {
+  const value = String(input ?? '').trim()
+  if (value === '') return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch (error) {
+    throw new Error(
+      `Failed to parse monitoring field changes JSON: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Monitoring field changes must deserialize to an array.')
+  }
+
+  return parsed.map((entry, index) => normalizeStoredFieldChange(entry, index))
+}
+
+function normalizeStoredFieldChange(entry: unknown, index: number): MonitoringFieldChange {
+  if (!entry || typeof entry !== 'object') {
+    throw new Error(`Monitoring field change ${index + 1} must be an object.`)
+  }
+
+  const field = readString((entry as { field?: unknown }).field)
+  if (!field) {
+    throw new Error(`Monitoring field change ${index + 1} is missing a field name.`)
+  }
+
+  if (field === 'image_urls') {
+    return {
+      field,
+      added: readStoredStringArray((entry as { added?: unknown }).added),
+      removed: readStoredStringArray((entry as { removed?: unknown }).removed),
+    }
+  }
+
+  return {
+    field,
+    from: readStoredFieldValue((entry as { from?: unknown }).from),
+    to: readStoredFieldValue((entry as { to?: unknown }).to),
+  }
+}
+
+function readStoredFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+
+  throw new Error(`Unsupported monitoring field change value: ${JSON.stringify(value)}`)
+}
+
+function readStoredStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Monitoring image field changes must include string arrays.')
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry !== 'string') {
+      throw new Error(`Monitoring image field change value ${index + 1} must be a string.`)
+    }
+
+    return entry
+  })
 }
 
 function normalizeOwner(value: unknown): MonitoringOwner {

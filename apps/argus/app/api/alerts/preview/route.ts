@@ -96,6 +96,7 @@ function buildSampleEvent(
     primaryCategory: category,
     changedFieldCount: changedFields.length,
     changedFields,
+    fieldChanges: buildSampleFieldChanges(category),
     headline: buildSampleHeadline(owner, category),
     summary: buildSampleSummary(category),
     baselineSnapshot: { ...baseSnapshot, capturedAt: baseline.toISOString() },
@@ -104,6 +105,38 @@ function buildSampleEvent(
       ...getCurrentValues(category),
       capturedAt: now.toISOString(),
     },
+  }
+}
+
+function buildSampleFieldChanges(
+  category: MonitoringChangeEvent['primaryCategory'],
+): MonitoringChangeEvent['fieldChanges'] {
+  switch (category) {
+    case 'price':
+      return [
+        { field: 'landed_price', from: '24.99', to: '26.99' },
+        { field: 'listing_price', from: '24.99', to: '26.99' },
+      ]
+    case 'rank':
+      return [{ field: 'root_bsr_rank', from: '1450', to: '980' }]
+    case 'content':
+      return [
+        {
+          field: 'title',
+          from: 'Premium Dust Sheets - Heavy Duty Cotton Twill 12ft x 9ft',
+          to: 'Premium Cotton Dust Sheets - Extra Heavy Duty 12ft x 9ft (Pack of 2)',
+        },
+        { field: 'bullet_count', from: '5', to: '6' },
+        { field: 'description_length', from: '820', to: '1050' },
+      ]
+    case 'status':
+      return [{ field: 'status', from: 'Active', to: 'Inactive' }]
+    case 'images':
+      return [{ field: 'image_urls', added: ['hero-2.jpg', 'detail-6.jpg'], removed: [] }]
+    case 'offers':
+      return [{ field: 'total_offer_count', from: '5', to: '8' }]
+    case 'catalog':
+      return [{ field: 'brand', from: 'Targon', to: 'Targon Pro' }]
   }
 }
 

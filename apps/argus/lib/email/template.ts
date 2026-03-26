@@ -2,6 +2,7 @@ import 'server-only'
 
 import type {
   MonitoringChangeEvent,
+  MonitoringFieldChange,
   MonitoringSnapshotRecord,
   MonitoringStateRecord,
 } from '@/lib/monitoring/types'
@@ -270,6 +271,9 @@ interface ChangeRow {
 }
 
 function extractChangeRows(event: MonitoringChangeEvent): ChangeRow[] {
+  const storedRows = extractStoredChangeRows(event.fieldChanges)
+  if (storedRows.length > 0) return storedRows
+
   const rows: ChangeRow[] = []
   const baseline = event.baselineSnapshot
   const current = event.currentSnapshot
@@ -301,6 +305,30 @@ function extractChangeRows(event: MonitoringChangeEvent): ChangeRow[] {
   }
 
   return rows
+}
+
+function extractStoredChangeRows(fieldChanges: MonitoringFieldChange[]): ChangeRow[] {
+  return fieldChanges.map((change) => {
+    if (isImageFieldChange(change)) {
+      return {
+        label: 'Images',
+        before: `${change.removed.length} removed`,
+        after: `${change.added.length} added`,
+      }
+    }
+
+    return {
+      label: humanize(change.field),
+      before: change.from === '' ? '\u2014' : change.from,
+      after: change.to === '' ? '\u2014' : change.to,
+    }
+  })
+}
+
+function isImageFieldChange(
+  change: MonitoringFieldChange,
+): change is Extract<MonitoringFieldChange, { field: 'image_urls' }> {
+  return change.field === 'image_urls' && 'added' in change && 'removed' in change
 }
 
 function getSnapshotValue(
