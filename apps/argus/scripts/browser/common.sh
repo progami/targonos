@@ -3,6 +3,7 @@
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
 SAFARI_HELPER="$COMMON_DIR/safari-helper.applescript"
+CHROME_HELPER="$COMMON_DIR/chrome-helper.applescript"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 

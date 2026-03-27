@@ -17,6 +17,22 @@ HOURLY_LISTINGS_API_PLIST="$LAUNCH_AGENTS_DIR/com.targon.hourly-listing-attribut
 DAILY_ACCOUNT_HEALTH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 WEEKLY_API_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-api-sources.plist"
 
+hourly_start_calendar_interval() {
+  echo "  <key>StartCalendarInterval</key>"
+  echo "  <array>"
+  for hour in $(seq 0 23); do
+    cat <<PLIST
+  <dict>
+    <key>Hour</key>
+    <integer>${hour}</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+PLIST
+  done
+  echo "  </array>"
+}
+
 # Make scripts executable
 chmod +x "$SCRIPT_DIR/hourly-listing-attributes/collect.sh"
 chmod +x "$SCRIPT_DIR/daily-account-health/collect.sh"
@@ -36,8 +52,9 @@ fi
 
 echo "Installing API launchd agents..."
 
-# 1. Hourly Listing Attributes (API) — every hour
-cat > "$HOURLY_LISTINGS_API_PLIST" <<PLIST
+# 1. Hourly Listing Attributes (API) — top of every hour
+{
+cat <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -49,8 +66,9 @@ cat > "$HOURLY_LISTINGS_API_PLIST" <<PLIST
     <string>/bin/bash</string>
     <string>${SCRIPT_DIR}/hourly-listing-attributes/collect.sh</string>
   </array>
-  <key>StartInterval</key>
-  <integer>3600</integer>
+PLIST
+hourly_start_calendar_interval
+cat <<PLIST
   <key>RunAtLoad</key>
   <false/>
   <key>StandardOutPath</key>
@@ -60,6 +78,7 @@ cat > "$HOURLY_LISTINGS_API_PLIST" <<PLIST
 </dict>
 </plist>
 PLIST
+} > "$HOURLY_LISTINGS_API_PLIST"
 
 # 2. Daily Account Health — 3:00 AM CT daily
 cat > "$DAILY_ACCOUNT_HEALTH_PLIST" <<PLIST
@@ -133,7 +152,7 @@ launchctl load "$WEEKLY_API_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Hourly Listings API: $HOURLY_LISTINGS_API_PLIST (every 1 hour)"
+echo "  Hourly Listings API: $HOURLY_LISTINGS_API_PLIST (top of every hour)"
 echo "  Daily Acct Health:   $DAILY_ACCOUNT_HEALTH_PLIST (daily 3:00 AM CT)"
 echo "  Weekly API Sources:  $WEEKLY_API_PLIST (Monday 4:00 AM CT)"
 echo ""
