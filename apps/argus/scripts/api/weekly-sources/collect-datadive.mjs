@@ -20,6 +20,53 @@ const DATADIVE_BASE = path.join(WEEKLY_ROOT, 'Datadive (API)')
 const KEYWORDS_DIR = path.join(DATADIVE_BASE, 'DD-Keywords - Datadive Keywords (API)')
 const COMPETITORS_DIR = path.join(DATADIVE_BASE, 'DD-Competitors - Datadive Competitors (API)')
 const RANK_RADAR_DIR = path.join(DATADIVE_BASE, 'Rank Radar - Datadive Rank Radar (API)')
+const KEYWORD_BASE_HEADERS = ['keyword', 'searchVolume', 'relevancy']
+const COMPETITOR_HEADERS = [
+  'imageUrl',
+  'brand',
+  'asin',
+  'rating',
+  'reviewCount',
+  'listingCreationDate',
+  'listingCreationDateEvaluation',
+  'price',
+  'sales',
+  'revenue',
+  'outlierKws',
+  'outlierSV',
+  'kwRankedOnP1',
+  'kwRankedOnP1Percent',
+  'kwRankedOnP1Evaluation',
+  'svRankedOnP1',
+  'svRankedOnP1Percent',
+  'svRankedOnP1Evaluation',
+  'advertisedKws',
+  'advertisedKwsPercent',
+  'advertisedKwsEvaluation',
+  'tosKwsAds',
+  'tosKwsAdsPercent',
+  'tosKwsAdsEvaluation',
+  'tosSvAds',
+  'tosSvAdsPercent',
+  'tosSvAdsEvaluation',
+  'fulfillment',
+  'numberOfActiveSellers',
+  'sellerCountry',
+  'listingRankingJuice.value',
+  'listingRankingJuice.contribution.title.rankingJuice',
+  'listingRankingJuice.contribution.title.weight',
+  'listingRankingJuice.contribution.title.listingRankingJuice',
+  'listingRankingJuice.contribution.bullets.rankingJuice',
+  'listingRankingJuice.contribution.bullets.weight',
+  'listingRankingJuice.contribution.bullets.listingRankingJuice',
+  'listingRankingJuice.contribution.description.rankingJuice',
+  'listingRankingJuice.contribution.description.weight',
+  'listingRankingJuice.contribution.description.listingRankingJuice',
+  'numberOfVariations',
+  'asinCatalog',
+  'category',
+  'categoryTree',
+]
 
 function parseArgs() {
   return {
@@ -38,13 +85,77 @@ async function datadiveJson(url, apiKey) {
   return JSON.parse(body)
 }
 
+function parseCsvLine(line) {
+  const values = []
+  let value = ''
+  let inQuotes = false
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[index + 1] === '"') {
+          value += '"'
+          index += 1
+        } else {
+          inQuotes = false
+        }
+      } else {
+        value += char
+      }
+      continue
+    }
+
+    if (char === '"') {
+      inQuotes = true
+      continue
+    }
+
+    if (char === ',') {
+      values.push(value)
+      value = ''
+      continue
+    }
+
+    value += char
+  }
+
+  values.push(value)
+  return values
+}
+
+function keywordAsinColumnsFromExistingFiles() {
+  const asinSet = new Set()
+  const files = fs
+    .readdirSync(KEYWORDS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.csv'))
+    .map((entry) => path.join(KEYWORDS_DIR, entry.name))
+
+  for (const file of files) {
+    const firstLine = fs.readFileSync(file, 'utf8').split(/\r?\n/, 1)[0]
+    if (!firstLine) continue
+
+    const header = parseCsvLine(firstLine).map((value) => value.replace(/^\uFEFF/, ''))
+    if (header[0] === 'keyword') {
+      for (const asin of header.slice(KEYWORD_BASE_HEADERS.length)) asinSet.add(asin)
+      continue
+    }
+
+    for (const asin of header.slice(6)) asinSet.add(asin)
+  }
+
+  return asinSet
+}
+
 function writeKeywordCsv(file, keywords) {
   const asinSet = new Set()
   for (const keyword of keywords) {
     for (const asin of Object.keys(keyword?.asinRanks || {})) asinSet.add(asin)
   }
+  for (const asin of keywordAsinColumnsFromExistingFiles()) asinSet.add(asin)
+
   const asinColumns = [...asinSet].sort()
-  const headers = ['keyword', 'searchVolume', 'relevancy', ...asinColumns]
+  const headers = [...KEYWORD_BASE_HEADERS, ...asinColumns]
   const rows = keywords.map((keyword) => {
     const row = {
       keyword: keyword?.keyword ?? '',
@@ -60,9 +171,8 @@ function writeKeywordCsv(file, keywords) {
 }
 
 function writeCompetitorsCsv(file, competitors) {
-  const { headers, rows } = flattenRows(competitors)
-  const safeHeaders = headers.length ? headers : ['asin']
-  writeCsv(file, safeHeaders, rows)
+  const { rows } = flattenRows(competitors)
+  writeCsv(file, COMPETITOR_HEADERS, rows)
 }
 
 function writeRankRadarCsv(file, week, rankRadarId, rows) {
