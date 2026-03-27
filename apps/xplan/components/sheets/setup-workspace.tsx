@@ -1,8 +1,8 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { StrategyGroupCard } from '@/components/sheets/strategy-group-card';
+import { StrategyTable } from '@/components/sheets/strategy-table';
 import { SetupDefaultsBand } from '@/components/sheets/setup-defaults-band';
 import { SetupProductTable } from '@/components/sheets/setup-product-table';
 
@@ -116,33 +116,6 @@ export function SetupWorkspace({
 
   const hasStrategy = Boolean(activeStrategyId);
 
-  const groups = useMemo<StrategyGroupView[]>(() => {
-    const map = new Map<string, StrategyGroupView>();
-
-    for (const strategy of strategies) {
-      const group = strategy.strategyGroup;
-      if (!group) continue;
-
-      const existing = map.get(group.id);
-      if (existing) {
-        existing.strategies.push(strategy);
-      } else {
-        map.set(group.id, {
-          id: group.id,
-          code: group.code,
-          name: group.name,
-          region: group.region,
-          strategies: [strategy],
-        });
-      }
-    }
-
-    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [strategies]);
-
-  const usGroups = groups.filter((g) => g.region === 'US');
-  const ukGroups = groups.filter((g) => g.region === 'UK');
-
   return (
     <div className="space-y-6">
       {/* Heading */}
@@ -176,48 +149,15 @@ export function SetupWorkspace({
         ))}
       </div>
 
-      {/* Content based on active tab */}
-      {activeTab === 'strategies' && (() => {
-        const maxGroups = Math.max(usGroups.length, ukGroups.length);
-        return (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
-            {/* Region headers */}
-            <div className="pt-1">
-              <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                🇺🇸 United States (US)
-              </h2>
-            </div>
-            <div className="pt-1">
-              <h2 className="text-xs font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                🇬🇧 United Kingdom (UK)
-              </h2>
-            </div>
-
-            {/* Paired group cards */}
-            {Array.from({ length: maxGroups }, (_, i) => (
-              <Fragment key={i}>
-                {usGroups[i] ? (
-                  <StrategyGroupCard
-                    group={usGroups[i]}
-                    activeStrategyId={activeStrategyId}
-                    viewer={viewer}
-                    keyParametersByStrategyId={keyParametersByStrategyId}
-                  />
-                ) : <div />}
-                {ukGroups[i] ? (
-                  <StrategyGroupCard
-                    group={ukGroups[i]}
-                    activeStrategyId={activeStrategyId}
-                    viewer={viewer}
-                    keyParametersByStrategyId={keyParametersByStrategyId}
-                  />
-                ) : <div />}
-              </Fragment>
-            ))}
-
-          </div>
-        );
-      })()}
+      {/* Strategies tab — flat table */}
+      {activeTab === 'strategies' && (
+        <StrategyTable
+          strategies={strategies}
+          activeStrategyId={activeStrategyId}
+          viewer={viewer}
+          keyParametersByStrategyId={keyParametersByStrategyId}
+        />
+      )}
 
       {activeTab === 'defaults' && hasStrategy && (
         <div className="space-y-6">
