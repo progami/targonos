@@ -6,9 +6,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/Brand Metrics (Browser)"
-DL="$HOME/Downloads"
-LOG="/tmp/weekly-brand-metrics.log"
+DEST="${ARGUS_BRAND_METRICS_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/Brand Metrics (Browser)}"
+DL="${ARGUS_BRAND_METRICS_DOWNLOAD_DIR:-$HOME/Downloads}"
+LOG="${ARGUS_BRAND_METRICS_LOG:-/tmp/weekly-brand-metrics.log}"
 TARGET_URL_BASE="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899"
 DOWNLOAD_PATTERN="$DL/Caelum_Star_*_Overview_*.csv"
 
@@ -26,11 +26,13 @@ fi
 
 mkdir -p "$DEST"
 
+TAB_ID=""
+
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
-run_js() { osascript "$CHROME_HELPER" run-js "$1"; }
-wait_tab() { osascript "$CHROME_HELPER" wait-tab >/dev/null; }
-open_window() { osascript "$CHROME_HELPER" open-window "$1" >/dev/null; }
-tab_url() { osascript "$CHROME_HELPER" get-url; }
+open_window() { TAB_ID="$(osascript "$CHROME_HELPER" open-window-tab "$1")"; }
+run_js() { osascript "$CHROME_HELPER" run-js-tab-id "$TAB_ID" "$1"; }
+wait_tab() { osascript "$CHROME_HELPER" wait-tab-id "$TAB_ID" >/dev/null; }
+tab_url() { osascript "$CHROME_HELPER" get-url-tab-id "$TAB_ID"; }
 
 json_field() {
   "$NODE_BIN" -e '

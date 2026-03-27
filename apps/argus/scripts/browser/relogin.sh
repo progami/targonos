@@ -1,5 +1,5 @@
 #!/bin/bash
-# Seller Central / Amazon relogin flow via Safari + Google Voice OTP.
+# Seller Central / Amazon relogin flow via Chrome + Google Voice OTP.
 
 set -euo pipefail
 
@@ -18,28 +18,30 @@ LOG="/tmp/sc-relogin.log"
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
 run_js() {
-  osascript "$SAFARI_HELPER" run-js "$1" "$2" "$3"
+  osascript "$CHROME_HELPER" run-js "$1"
 }
 
 wait_tab() {
-  osascript "$SAFARI_HELPER" wait-tab "$1" "$2" >/dev/null
-}
-
-focus_tab() {
-  osascript "$SAFARI_HELPER" focus-tab "$1" "$2" >/dev/null
+  osascript "$CHROME_HELPER" wait-tab >/dev/null
 }
 
 navigate_tab() {
-  osascript "$SAFARI_HELPER" navigate-tab "$1" "$2" "$3" >/dev/null
+  osascript "$CHROME_HELPER" navigate-tab "$1" >/dev/null
 }
 
 current_url() {
-  osascript "$SAFARI_HELPER" get-url "$1" "$2"
+  osascript "$CHROME_HELPER" get-url
+}
+
+ensure_seller_tab() {
+  osascript "$CHROME_HELPER" ensure-tab "$TARGET_URL" "sellercentral.amazon.com,amazon.com" >/dev/null
+}
+
+ensure_voice_tab() {
+  osascript "$CHROME_HELPER" ensure-tab "https://voice.google.com/u/0/messages" "voice.google.com,accounts.google.com" >/dev/null
 }
 
 inspect_seller_state() {
-  local window_id="$1"
-  local tab_index="$2"
   local js='(() => {
     const clean = (value) => (value || "").replace(/[|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
     const href = clean(location.href || "");
@@ -54,12 +56,10 @@ inspect_seller_state() {
     if (/enter the characters you see below|solve this puzzle/i.test(body)) return ["CAPTCHA", href, title].join("|");
     return ["UNKNOWN", href, title].join("|");
   })();'
-  run_js "$window_id" "$tab_index" "$js"
+  run_js "$js"
 }
 
 fill_seller_email() {
-  local window_id="$1"
-  local tab_index="$2"
   local email_literal
   email_literal=$(js_string_literal "$SC_EMAIL")
   local js="(() => {
@@ -76,7 +76,7 @@ fill_seller_email() {
     if (button) button.click();
     return 'EMAIL_SUBMITTED';
   })();"
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 fill_seller_password() {
@@ -85,8 +85,6 @@ fill_seller_password() {
     exit 1
   fi
 
-  local window_id="$1"
-  local tab_index="$2"
   local password_literal
   password_literal=$(js_string_literal "$SC_PASSWORD")
   local js="(() => {
@@ -108,12 +106,10 @@ fill_seller_password() {
     if (button) button.click();
     return 'PASSWORD_SUBMITTED';
   })();"
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 inspect_voice_state() {
-  local window_id="$1"
-  local tab_index="$2"
   local js='(() => {
     const clean = (value) => (value || "").replace(/[|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
     const href = clean(location.href || "");
@@ -127,12 +123,10 @@ inspect_voice_state() {
     }
     return ["UNKNOWN", href, title].join("|");
   })();'
-  run_js "$window_id" "$tab_index" "$js"
+  run_js "$js"
 }
 
 fill_google_email() {
-  local window_id="$1"
-  local tab_index="$2"
   local email_literal
   email_literal=$(js_string_literal "$GOOGLE_EMAIL")
   local js="(() => {
@@ -149,7 +143,7 @@ fill_google_email() {
     if (button) button.click();
     return 'GOOGLE_EMAIL_SUBMITTED';
   })();"
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 fill_google_password() {
@@ -158,8 +152,6 @@ fill_google_password() {
     exit 1
   fi
 
-  local window_id="$1"
-  local tab_index="$2"
   local password_literal
   password_literal=$(js_string_literal "$GOOGLE_PASSWORD")
   local js="(() => {
@@ -176,12 +168,10 @@ fill_google_password() {
     if (button) button.click();
     return 'GOOGLE_PASSWORD_SUBMITTED';
   })();"
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 extract_google_voice_code() {
-  local window_id="$1"
-  local tab_index="$2"
   local js='(() => {
     const text = document.body ? document.body.innerText : "";
     const patterns = [
@@ -197,12 +187,10 @@ extract_google_voice_code() {
     }
     return "";
   })();'
-  run_js "$window_id" "$tab_index" "$js"
+  run_js "$js"
 }
 
 click_likely_amazon_voice_thread() {
-  local window_id="$1"
-  local tab_index="$2"
   local js='(() => {
     const clean = (value) => (value || "").replace(/\s+/g, " ").trim();
     const candidates = Array.from(document.querySelectorAll("a,button,div,li,span")).filter((el) => /amazon|seller central|verification|security code/i.test(clean(el.innerText || "")));
@@ -211,46 +199,42 @@ click_likely_amazon_voice_thread() {
     target.click();
     return "THREAD_CLICKED";
   })();'
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 fetch_google_voice_code() {
-  local voice_info
-  voice_info=$(osascript "$SAFARI_HELPER" ensure-tab "https://voice.google.com/u/0/messages" "voice.google.com,accounts.google.com")
-  parse_tab_info "$voice_info"
-  local voice_window_id="$SAFARI_WINDOW_ID"
-  local voice_tab_index="$SAFARI_TAB_INDEX"
+  ensure_voice_tab
 
   for _ in $(seq 1 30); do
-    focus_tab "$voice_window_id" "$voice_tab_index"
-    wait_tab "$voice_window_id" "$voice_tab_index"
+    ensure_voice_tab
+    wait_tab
 
     local state
-    state=$(inspect_voice_state "$voice_window_id" "$voice_tab_index")
+    state=$(inspect_voice_state)
     IFS='|' read -r state_name _ _ <<<"$state"
 
     case "$state_name" in
       GOOGLE_EMAIL)
-        fill_google_email "$voice_window_id" "$voice_tab_index"
+        fill_google_email
         ;;
       GOOGLE_PASSWORD)
-        fill_google_password "$voice_window_id" "$voice_tab_index"
+        fill_google_password
         ;;
       VOICE)
         local code
-        code=$(extract_google_voice_code "$voice_window_id" "$voice_tab_index")
+        code=$(extract_google_voice_code)
         if [ -n "$code" ]; then
           printf '%s' "$code"
           return 0
         fi
-        click_likely_amazon_voice_thread "$voice_window_id" "$voice_tab_index"
+        click_likely_amazon_voice_thread
         sleep 1
-        code=$(extract_google_voice_code "$voice_window_id" "$voice_tab_index")
+        code=$(extract_google_voice_code)
         if [ -n "$code" ]; then
           printf '%s' "$code"
           return 0
         fi
-        run_js "$voice_window_id" "$voice_tab_index" "location.reload(); 'RELOADED';" >/dev/null
+        run_js "location.reload(); 'RELOADED';" >/dev/null
         ;;
     esac
 
@@ -261,9 +245,7 @@ fetch_google_voice_code() {
 }
 
 submit_seller_otp() {
-  local window_id="$1"
-  local tab_index="$2"
-  local otp="$3"
+  local otp="$1"
   local otp_literal
   otp_literal=$(js_string_literal "$otp")
   local js="(() => {
@@ -290,27 +272,24 @@ submit_seller_otp() {
     if (button) button.click();
     return 'OTP_SUBMITTED';
   })();"
-  run_js "$window_id" "$tab_index" "$js" >/dev/null
+  run_js "$js" >/dev/null
 }
 
 log "=== Relogin starting ==="
 
-tab_info=$(osascript "$SAFARI_HELPER" ensure-tab "$TARGET_URL" "sellercentral.amazon.com,amazon.com")
-parse_tab_info "$tab_info"
-window_id="$SAFARI_WINDOW_ID"
-tab_index="$SAFARI_TAB_INDEX"
+ensure_seller_tab
 
 for _ in $(seq 1 45); do
-  focus_tab "$window_id" "$tab_index"
-  wait_tab "$window_id" "$tab_index"
+  ensure_seller_tab
+  wait_tab
 
-  state=$(inspect_seller_state "$window_id" "$tab_index")
+  state=$(inspect_seller_state)
   IFS='|' read -r state_name state_url state_title <<<"$state"
 
   case "$state_name" in
     AUTHENTICATED)
       if [ "$state_url" != "$TARGET_URL" ]; then
-        navigate_tab "$window_id" "$tab_index" "$TARGET_URL"
+        navigate_tab "$TARGET_URL"
         sleep 2
         continue
       fi
@@ -320,11 +299,11 @@ for _ in $(seq 1 45); do
       ;;
     EMAIL)
       log "Submitting seller email"
-      fill_seller_email "$window_id" "$tab_index"
+      fill_seller_email
       ;;
     PASSWORD)
       log "Submitting seller password"
-      fill_seller_password "$window_id" "$tab_index"
+      fill_seller_password
       ;;
     OTP)
       log "Fetching Google Voice OTP"
@@ -332,8 +311,8 @@ for _ in $(seq 1 45); do
         log "FAILED: Google Voice OTP not found"
         exit 1
       fi
-      focus_tab "$window_id" "$tab_index"
-      submit_seller_otp "$window_id" "$tab_index" "$otp_code"
+      ensure_seller_tab
+      submit_seller_otp "$otp_code"
       ;;
     CAPTCHA)
       log "FAILED: CAPTCHA encountered"
