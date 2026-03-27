@@ -13,7 +13,9 @@ import {
   flattenRows,
   latestCompleteWeek,
   loadMonitoringEnv,
+  orderHeaders,
   requireEnv,
+  weekContextForRange,
   writeCsv,
 } from './lib/common.mjs'
 
@@ -36,13 +38,216 @@ const SQP_DIR = path.join(BA_BASE, 'SQP - Search Query Performance (API)')
 const TST_DIR = path.join(BA_BASE, 'TST - Top Search Terms (API)')
 const SALES_DIR = path.join(BR_BASE, 'Sales & Traffic (API)')
 
+const SCP_HEADERS = [
+  'startDate',
+  'endDate',
+  'asin',
+  'impressionData.impressionCount',
+  'impressionData.impressionMedianPrice.amount',
+  'impressionData.impressionMedianPrice.currencyCode',
+  'impressionData.sameDayShippingImpressionCount',
+  'impressionData.oneDayShippingImpressionCount',
+  'impressionData.twoDayShippingImpressionCount',
+  'clickData.clickCount',
+  'clickData.clickRate',
+  'clickData.clickedMedianPrice.amount',
+  'clickData.clickedMedianPrice.currencyCode',
+  'clickData.sameDayShippingClickCount',
+  'clickData.oneDayShippingClickCount',
+  'clickData.twoDayShippingClickCount',
+  'cartAddData.cartAddCount',
+  'cartAddData.cartAddedMedianPrice.amount',
+  'cartAddData.cartAddedMedianPrice.currencyCode',
+  'cartAddData.sameDayShippingCartAddCount',
+  'cartAddData.oneDayShippingCartAddCount',
+  'cartAddData.twoDayShippingCartAddCount',
+  'purchaseData.purchaseCount',
+  'purchaseData.searchTrafficSales.amount',
+  'purchaseData.searchTrafficSales.currencyCode',
+  'purchaseData.conversionRate',
+  'purchaseData.purchaseMedianPrice.amount',
+  'purchaseData.purchaseMedianPrice.currencyCode',
+  'purchaseData.sameDayShippingPurchaseCount',
+  'purchaseData.oneDayShippingPurchaseCount',
+  'purchaseData.twoDayShippingPurchaseCount',
+]
+
+const SQP_HEADERS = [
+  'startDate',
+  'endDate',
+  'asin',
+  'searchQueryData.searchQuery',
+  'searchQueryData.searchQueryScore',
+  'searchQueryData.searchQueryVolume',
+  'impressionData.totalQueryImpressionCount',
+  'impressionData.asinImpressionCount',
+  'impressionData.asinImpressionShare',
+  'clickData.totalClickCount',
+  'clickData.totalClickRate',
+  'clickData.asinClickCount',
+  'clickData.asinClickShare',
+  'clickData.totalMedianClickPrice.amount',
+  'clickData.totalMedianClickPrice.currencyCode',
+  'clickData.asinMedianClickPrice.amount',
+  'clickData.asinMedianClickPrice.currencyCode',
+  'clickData.totalSameDayShippingClickCount',
+  'clickData.totalOneDayShippingClickCount',
+  'clickData.totalTwoDayShippingClickCount',
+  'cartAddData.totalCartAddCount',
+  'cartAddData.totalCartAddRate',
+  'cartAddData.asinCartAddCount',
+  'cartAddData.asinCartAddShare',
+  'cartAddData.totalMedianCartAddPrice.amount',
+  'cartAddData.totalMedianCartAddPrice.currencyCode',
+  'cartAddData.asinMedianCartAddPrice.amount',
+  'cartAddData.asinMedianCartAddPrice.currencyCode',
+  'cartAddData.totalSameDayShippingCartAddCount',
+  'cartAddData.totalOneDayShippingCartAddCount',
+  'cartAddData.totalTwoDayShippingCartAddCount',
+  'purchaseData.totalPurchaseCount',
+  'purchaseData.totalPurchaseRate',
+  'purchaseData.asinPurchaseCount',
+  'purchaseData.asinPurchaseShare',
+  'purchaseData.totalMedianPurchasePrice.amount',
+  'purchaseData.totalMedianPurchasePrice.currencyCode',
+  'purchaseData.asinMedianPurchasePrice.amount',
+  'purchaseData.asinMedianPurchasePrice.currencyCode',
+  'purchaseData.totalSameDayShippingPurchaseCount',
+  'purchaseData.totalOneDayShippingPurchaseCount',
+  'purchaseData.totalTwoDayShippingPurchaseCount',
+]
+
+const SALES_BY_DATE_HEADERS = [
+  'date',
+  'salesByDate.orderedProductSales.amount',
+  'salesByDate.orderedProductSales.currencyCode',
+  'salesByDate.orderedProductSalesB2B.amount',
+  'salesByDate.orderedProductSalesB2B.currencyCode',
+  'salesByDate.unitsOrdered',
+  'salesByDate.unitsOrderedB2B',
+  'salesByDate.totalOrderItems',
+  'salesByDate.totalOrderItemsB2B',
+  'salesByDate.averageSalesPerOrderItem.amount',
+  'salesByDate.averageSalesPerOrderItem.currencyCode',
+  'salesByDate.averageSalesPerOrderItemB2B.amount',
+  'salesByDate.averageSalesPerOrderItemB2B.currencyCode',
+  'salesByDate.averageUnitsPerOrderItem',
+  'salesByDate.averageUnitsPerOrderItemB2B',
+  'salesByDate.averageSellingPrice.amount',
+  'salesByDate.averageSellingPrice.currencyCode',
+  'salesByDate.averageSellingPriceB2B.amount',
+  'salesByDate.averageSellingPriceB2B.currencyCode',
+  'salesByDate.unitsRefunded',
+  'salesByDate.refundRate',
+  'salesByDate.claimsGranted',
+  'salesByDate.claimsAmount.amount',
+  'salesByDate.claimsAmount.currencyCode',
+  'salesByDate.shippedProductSales.amount',
+  'salesByDate.shippedProductSales.currencyCode',
+  'salesByDate.unitsShipped',
+  'salesByDate.ordersShipped',
+  'trafficByDate.browserPageViews',
+  'trafficByDate.browserPageViewsB2B',
+  'trafficByDate.mobileAppPageViews',
+  'trafficByDate.mobileAppPageViewsB2B',
+  'trafficByDate.pageViews',
+  'trafficByDate.pageViewsB2B',
+  'trafficByDate.browserSessions',
+  'trafficByDate.browserSessionsB2B',
+  'trafficByDate.mobileAppSessions',
+  'trafficByDate.mobileAppSessionsB2B',
+  'trafficByDate.sessions',
+  'trafficByDate.sessionsB2B',
+  'trafficByDate.buyBoxPercentage',
+  'trafficByDate.buyBoxPercentageB2B',
+  'trafficByDate.orderItemSessionPercentage',
+  'trafficByDate.orderItemSessionPercentageB2B',
+  'trafficByDate.unitSessionPercentage',
+  'trafficByDate.unitSessionPercentageB2B',
+  'trafficByDate.averageOfferCount',
+  'trafficByDate.averageParentItems',
+  'trafficByDate.feedbackReceived',
+  'trafficByDate.negativeFeedbackReceived',
+  'trafficByDate.receivedNegativeFeedbackRate',
+]
+
+const SALES_BY_ASIN_HEADERS = [
+  'parentAsin',
+  'childAsin',
+  'salesByAsin.unitsOrdered',
+  'salesByAsin.unitsOrderedB2B',
+  'salesByAsin.orderedProductSales.amount',
+  'salesByAsin.orderedProductSales.currencyCode',
+  'salesByAsin.orderedProductSalesB2B.amount',
+  'salesByAsin.orderedProductSalesB2B.currencyCode',
+  'salesByAsin.totalOrderItems',
+  'salesByAsin.totalOrderItemsB2B',
+  'trafficByAsin.browserSessions',
+  'trafficByAsin.browserSessionsB2B',
+  'trafficByAsin.mobileAppSessions',
+  'trafficByAsin.mobileAppSessionsB2B',
+  'trafficByAsin.sessions',
+  'trafficByAsin.sessionsB2B',
+  'trafficByAsin.browserSessionPercentage',
+  'trafficByAsin.browserSessionPercentageB2B',
+  'trafficByAsin.mobileAppSessionPercentage',
+  'trafficByAsin.mobileAppSessionPercentageB2B',
+  'trafficByAsin.sessionPercentage',
+  'trafficByAsin.sessionPercentageB2B',
+  'trafficByAsin.browserPageViews',
+  'trafficByAsin.browserPageViewsB2B',
+  'trafficByAsin.mobileAppPageViews',
+  'trafficByAsin.mobileAppPageViewsB2B',
+  'trafficByAsin.pageViews',
+  'trafficByAsin.pageViewsB2B',
+  'trafficByAsin.browserPageViewsPercentage',
+  'trafficByAsin.browserPageViewsPercentageB2B',
+  'trafficByAsin.mobileAppPageViewsPercentage',
+  'trafficByAsin.mobileAppPageViewsPercentageB2B',
+  'trafficByAsin.pageViewsPercentage',
+  'trafficByAsin.pageViewsPercentageB2B',
+  'trafficByAsin.buyBoxPercentage',
+  'trafficByAsin.buyBoxPercentageB2B',
+  'trafficByAsin.unitSessionPercentage',
+  'trafficByAsin.unitSessionPercentageB2B',
+]
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function parseArgs() {
+  const argv = process.argv.slice(2)
+  let dryRun = false
+  let startDate = null
+  let endDate = null
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--dry-run') {
+      dryRun = true
+      continue
+    }
+    if (arg === '--start-date') {
+      startDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    if (arg === '--end-date') {
+      endDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new Error('Both --start-date and --end-date are required together.')
+  }
+
   return {
-    dryRun: process.argv.includes('--dry-run'),
+    dryRun,
+    week: startDate && endDate ? weekContextForRange(startDate, endDate) : latestCompleteWeek(),
   }
 }
 
@@ -210,9 +415,10 @@ async function downloadUrlToFile(url, file) {
   })
 }
 
-function rowsToCsv(file, rows) {
-  const { headers, rows: flatRows } = flattenRows(rows)
-  const safeHeaders = headers.length ? headers : ['value']
+function rowsToCsv(file, rows, canonicalHeaders) {
+  const { rows: flatRows } = flattenRows(rows)
+  const orderedHeaders = orderHeaders(canonicalHeaders, flatRows)
+  const safeHeaders = orderedHeaders.length ? orderedHeaders : ['value']
   writeCsv(file, safeHeaders, flatRows)
 }
 
@@ -235,8 +441,8 @@ function runTstFilter(rawPath, outputPath) {
 }
 
 async function main() {
-  const { dryRun } = parseArgs()
-  const { weekCode, weekStart, weekEnd } = latestCompleteWeek()
+  const { dryRun, week } = parseArgs()
+  const { weekCode, weekStart, weekEnd } = week
 
   const weekPrefix = `${weekCode}_${weekEnd}`
   const scopeLabel = `${weekCode} ${weekStart}..${weekEnd}`
@@ -296,7 +502,7 @@ async function main() {
     `${scopeLabel} SCP`,
   )
   const scpData = await downloadJsonReport(client, scpReportId)
-  rowsToCsv(path.join(SCP_DIR, `${weekPrefix}_SCP.csv`), scpData.parsed?.dataByAsin || [])
+  rowsToCsv(path.join(SCP_DIR, `${weekPrefix}_SCP.csv`), scpData.parsed?.dataByAsin || [], SCP_HEADERS)
 
   const sqpReportId = await createAndWaitReport(
     client,
@@ -308,7 +514,7 @@ async function main() {
     `${scopeLabel} SQP`,
   )
   const sqpData = await downloadJsonReport(client, sqpReportId)
-  rowsToCsv(path.join(SQP_DIR, `${weekPrefix}_SQP.csv`), sqpData.parsed?.dataByAsin || [])
+  rowsToCsv(path.join(SQP_DIR, `${weekPrefix}_SQP.csv`), sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
 
   const salesReportId = await createAndWaitReport(
     client,
@@ -320,8 +526,16 @@ async function main() {
     `${scopeLabel} SalesTraffic`,
   )
   const salesData = await downloadJsonReport(client, salesReportId)
-  rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`), salesData.parsed?.salesAndTrafficByDate || [])
-  rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`), salesData.parsed?.salesAndTrafficByAsin || [])
+  rowsToCsv(
+    path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`),
+    salesData.parsed?.salesAndTrafficByDate || [],
+    SALES_BY_DATE_HEADERS,
+  )
+  rowsToCsv(
+    path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`),
+    salesData.parsed?.salesAndTrafficByAsin || [],
+    SALES_BY_ASIN_HEADERS,
+  )
 
   const tstReportId = await resolveTstReportId(client, reportWindow, `${scopeLabel} TST`)
 

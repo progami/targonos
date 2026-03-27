@@ -7,7 +7,9 @@ import {
   ensureDir,
   latestCompleteWeek,
   loadMonitoringEnv,
+  orderHeaders,
   requireEnv,
+  weekContextForRange,
 } from './lib/common.mjs'
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
@@ -15,9 +17,89 @@ const SELLERBOARD_BASE = path.join(WEEKLY_ROOT, 'Sellerboard (API)')
 const DASHBOARD_DIR = path.join(SELLERBOARD_BASE, 'SB - Dashboard Report (API)')
 const ORDERS_DIR = path.join(SELLERBOARD_BASE, 'SB - Orders Report (API)')
 
+const DASHBOARD_CANONICAL_HEADERS = [
+  'Date',
+  'SalesOrganic',
+  'SalesPPC',
+  'SalesSponsoredProducts',
+  'SalesSponsoredDisplay',
+  'UnitsOrganic',
+  'UnitsPPC',
+  'UnitsSponsoredProducts',
+  'UnitsSponsoredDisplay',
+  'Orders',
+  'Refunds',
+  'PromoValue',
+  'SponsoredProducts',
+  'SponsoredDisplay',
+  'SponsoredBrands',
+  'SponsoredBrandsVideo',
+  'Google ads',
+  'Facebook ads',
+  'GiftWrap',
+  'Shipping',
+  'Refund Commission',
+  'Refund Principal',
+  'Refund RefundCommission',
+  'Refund RestockingDeductionPrincipal',
+  'Value of returned items',
+  'Commission',
+  'COMPENSATED_CLAWBACK',
+  'FBADisposalFee',
+  'FBAPerUnitFulfillmentFee',
+  'FBAStorageFee',
+  'MISSING_FROM_INBOUND',
+  'REVERSAL_REIMBURSEMENT',
+  'STARStorageFee',
+  'Subscription',
+  'AmazonUpstreamProcessingFee',
+  'AmazonUpstreamStorageTransportationFee',
+  'WAREHOUSE_DAMAGE',
+  'EstimatedPayout',
+  'ProductCost Sales',
+  'ProductCost Unsellable Refunds',
+  'ProductCost Non-Amazon',
+  'ProductCost MissingFromInbound',
+  'GrossProfit',
+  'NetProfit',
+  'Margin',
+  'Real ACOS',
+  'Sessions',
+  'Unit Session Percentage',
+]
+
 function parseArgs() {
+  const argv = process.argv.slice(2)
+  let dryRun = false
+  let startDate = null
+  let endDate = null
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--dry-run') {
+      dryRun = true
+      continue
+    }
+    if (arg === '--start-date') {
+      startDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    if (arg === '--end-date') {
+      endDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new Error('Both --start-date and --end-date are required together.')
+  }
+
   return {
-    dryRun: process.argv.includes('--dry-run'),
+    dryRun,
+    week: startDate && endDate ? weekContextForRange(startDate, endDate) : latestCompleteWeek(),
   }
 }
 
@@ -186,8 +268,7 @@ function writeFile(file, content) {
 }
 
 async function main() {
-  const { dryRun } = parseArgs()
-  const week = latestCompleteWeek()
+  const { dryRun, week } = parseArgs()
   const weekPrefix = `${week.weekCode}_${week.weekEnd}`
   const scopeLabel = `${week.weekCode} ${week.weekStart}..${week.weekEnd}`
 
@@ -222,7 +303,8 @@ async function main() {
   const dashboardRows = filterRowsToWeek(dashboardParsed.rows, 'Date', week.weekStart, week.weekEnd)
   const ordersRows = filterRowsToWeek(ordersParsed.rows, 'PurchaseDate(UTC)', week.weekStart, week.weekEnd)
 
-  const dashboardCsv = stringifyCsv(dashboardParsed.headers, dashboardRows)
+  const dashboardHeaders = orderHeaders(DASHBOARD_CANONICAL_HEADERS, dashboardRows)
+  const dashboardCsv = stringifyCsv(dashboardHeaders, dashboardRows)
   const ordersCsv = stringifyCsv(ordersParsed.headers, ordersRows)
 
   const dashboardFile = path.join(DASHBOARD_DIR, `${weekPrefix}_SB-Dashboard.csv`)

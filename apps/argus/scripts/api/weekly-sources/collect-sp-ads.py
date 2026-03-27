@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import csv
 import gzip
 import json
@@ -66,6 +67,21 @@ def latest_complete_week():
     days_back = 7 if weekday == 5 else (weekday - 5) % 7  # previous completed Saturday
     week_end = today - timedelta(days=days_back)
     week_start = week_end - timedelta(days=6)
+    week_number = ((week_start - base_start).days // 7) + 1
+    return {
+        'code': f'W{week_number:02d}',
+        'startDate': week_start.isoformat(),
+        'endDate': week_end.isoformat(),
+    }
+
+
+def week_context_for_range(start_date_text, end_date_text):
+    week_start = date.fromisoformat(start_date_text)
+    week_end = date.fromisoformat(end_date_text)
+    if (week_end - week_start).days != 6:
+        raise RuntimeError(f'Expected a 7-day weekly range, received {start_date_text}..{end_date_text}')
+
+    base_start = date(2025, 12, 28)
     week_number = ((week_start - base_start).days // 7) + 1
     return {
         'code': f'W{week_number:02d}',
@@ -237,6 +253,26 @@ def write_csv(path: Path, headers, rows):
     os.replace(temp, path)
 
 
+def has_row_value(value):
+    return value is not None and str(value) != ''
+
+
+def ordered_headers(canonical_headers, rows):
+    ordered = list(canonical_headers)
+    seen = set(canonical_headers)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for key, value in row.items():
+            if key in seen:
+                continue
+            if not has_row_value(value):
+                continue
+            seen.add(key)
+            ordered.append(key)
+    return ordered
+
+
 def report_configs():
     return {
         'search_term': [
@@ -247,6 +283,10 @@ def report_configs():
                 'timeUnit': 'DAILY',
                 'format': 'GZIP_JSON',
             }, [
+                'date', 'campaignName', 'adGroupName', 'keyword', 'searchTerm', 'matchType',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+            ], [
                 'date', 'campaignName', 'adGroupName', 'keyword', 'searchTerm', 'matchType',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
                 'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
@@ -263,6 +303,10 @@ def report_configs():
                 'campaignName', 'adGroupName', 'advertisedAsin', 'advertisedSku',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
                 'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+            ], [
+                'campaignName', 'adGroupName', 'advertisedAsin', 'advertisedSku',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
             ]),
         ],
         'campaign': [
@@ -275,7 +319,11 @@ def report_configs():
             }, [
                 'date', 'campaignId', 'campaignName', 'campaignStatus',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
-                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
+            ], [
+                'date', 'campaignId', 'campaignName', 'campaignStatus',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
             ]),
         ],
         'targeting': [
@@ -287,6 +335,10 @@ def report_configs():
                 'timeUnit': 'SUMMARY',
                 'format': 'GZIP_JSON',
             }, [
+                'campaignName', 'adGroupName', 'targeting', 'keywordType', 'matchType',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+            ], [
                 'campaignName', 'adGroupName', 'targeting', 'keywordType', 'matchType',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
                 'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
@@ -302,6 +354,10 @@ def report_configs():
                 'campaignName', 'adGroupName', 'targeting', 'keywordType', 'matchType',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
                 'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+            ], [
+                'campaignName', 'adGroupName', 'targeting', 'keywordType', 'matchType',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
             ]),
         ],
         'placement': [
@@ -312,9 +368,13 @@ def report_configs():
                 'timeUnit': 'DAILY',
                 'format': 'GZIP_JSON',
             }, [
-                'date', 'campaignName', 'campaignPlacement',
+                'date', 'campaignName',
                 'impressions', 'clicks', 'cost', 'clickThroughRate',
-                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
+            ], [
+                'date', 'campaignName',
+                'impressions', 'clicks', 'cost', 'clickThroughRate',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
             ]),
         ],
         'purchased': [
@@ -326,8 +386,10 @@ def report_configs():
                 'format': 'GZIP_JSON',
             }, [
                 'date', 'campaignName', 'advertisedAsin', 'purchasedAsin',
-                'impressions', 'clicks', 'cost', 'clickThroughRate',
-                'sales7d', 'purchases7d', 'unitsSoldClicks7d', 'acosClicks7d', 'roasClicks7d',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
+            ], [
+                'date', 'campaignName', 'advertisedAsin', 'purchasedAsin',
+                'sales7d', 'purchases7d', 'unitsSoldClicks7d',
             ]),
         ],
     }
@@ -338,8 +400,8 @@ def run_week(base_url, headers, week):
     configs = report_configs()
 
     for key, entries in configs.items():
-        for suffix, cfg_base, initial_cols in entries:
-            created = create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base, initial_cols)
+        for suffix, cfg_base, request_columns, output_columns in entries:
+            created = create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base, request_columns)
             print(
                 f'[{week["code"]}] create {key}/{suffix} reportId={created["reportId"]} '
                 f'reused={created["reused"]} attempts={created["attempts"]} finalCols={len(created["columns"])}',
@@ -349,6 +411,7 @@ def run_week(base_url, headers, week):
                 'key': key,
                 'suffix': suffix,
                 'columns': created['columns'],
+                'outputColumns': output_columns,
                 'reportId': created['reportId'],
                 'reused': created['reused'],
                 'attempts': created['attempts'],
@@ -385,29 +448,18 @@ def run_week(base_url, headers, week):
     outputs = {}
     for key, entries in completed.items():
         rows = []
-        requested_headers = []
-        seen_requested = set()
+        output_headers = []
+        seen_output = set()
 
         for entry in entries:
-            for column in entry['columns']:
-                if column in seen_requested:
+            for column in entry['outputColumns']:
+                if column in seen_output:
                     continue
-                seen_requested.add(column)
-                requested_headers.append(column)
+                seen_output.add(column)
+                output_headers.append(column)
             rows.extend(download_rows(entry['statusObj']['url']))
 
-        extra_headers = []
-        seen_headers = set(requested_headers)
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            for header in row.keys():
-                if header in seen_headers:
-                    continue
-                seen_headers.add(header)
-                extra_headers.append(header)
-
-        final_headers = requested_headers + extra_headers
+        final_headers = ordered_headers(output_headers, rows)
         if not final_headers:
             final_headers = ['value']
         file_name = f"{week['code']}_{week['endDate']}_{CODE_SUFFIX[key]}.csv"
@@ -436,6 +488,7 @@ def run_week(base_url, headers, week):
                     'updatedAt': entry['statusObj'].get('updatedAt'),
                     'reused': entry['reused'],
                     'attempts': entry['attempts'],
+                    'outputColumns': entry['outputColumns'],
                     'finalColumns': entry['columns'],
                 }
                 for entry in entries
@@ -452,8 +505,17 @@ def run_week(base_url, headers, week):
 
 
 def main():
-    dry_run = '--dry-run' in os.sys.argv
-    week = latest_complete_week()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--start-date')
+    parser.add_argument('--end-date')
+    args = parser.parse_args()
+
+    if bool(args.start_date) != bool(args.end_date):
+        raise RuntimeError('Both --start-date and --end-date are required together.')
+
+    week = week_context_for_range(args.start_date, args.end_date) if args.start_date else latest_complete_week()
+    dry_run = args.dry_run
 
     if dry_run:
         print(f'[SP-Ads][dry-run] week={week["code"]} {week["startDate"]}..{week["endDate"]}')
