@@ -17,8 +17,38 @@ LOG="/tmp/weekly-api-sources.log"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 DRY_FLAG=""
-if [ "${1:-}" = "--dry-run" ]; then
-  DRY_FLAG="--dry-run"
+START_DATE=""
+END_DATE=""
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dry-run)
+      DRY_FLAG="--dry-run"
+      ;;
+    --start-date)
+      START_DATE="${2:-}"
+      shift
+      ;;
+    --end-date)
+      END_DATE="${2:-}"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [ -n "$START_DATE" ] && [ -z "$END_DATE" ] || [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
+  echo "Both --start-date and --end-date are required together." >&2
+  exit 1
+fi
+
+DATE_FLAGS=""
+if [ -n "$START_DATE" ]; then
+  DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
 fi
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
@@ -55,11 +85,11 @@ run_optional_step() {
   fi
 }
 
-run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG"
-run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG"
+run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG $DATE_FLAGS"
+run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG $DATE_FLAGS"
 run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
 run_optional_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $DRY_FLAG"
-run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG"
+run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG $DATE_FLAGS"
 run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $DRY_FLAG"
 
 log "=== Weekly API Sources run done (failures=$FAILED) ==="
