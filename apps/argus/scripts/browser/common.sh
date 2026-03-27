@@ -2,7 +2,6 @@
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
-SAFARI_HELPER="$COMMON_DIR/safari-helper.applescript"
 CHROME_HELPER="$COMMON_DIR/chrome-helper.applescript"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -113,12 +112,6 @@ import sys
 
 print(json.dumps(sys.argv[1]))
 PY
-}
-
-parse_tab_info() {
-  local input="$1"
-  IFS='|' read -r SAFARI_WINDOW_ID SAFARI_TAB_INDEX SAFARI_TAB_URL <<<"$input"
-  export SAFARI_WINDOW_ID SAFARI_TAB_INDEX SAFARI_TAB_URL
 }
 
 is_amazon_login_url() {

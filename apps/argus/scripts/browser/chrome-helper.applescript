@@ -6,9 +6,15 @@ on run argv
     if actionName is "ensure-tab" then
         if (count of argv) is less than 3 then error "ensure-tab requires target URL and host list."
         return my ensureTab(item 2 of argv as text, item 3 of argv as text)
+    else if actionName is "ensure-tab-id" then
+        if (count of argv) is less than 3 then error "ensure-tab-id requires target URL and host list."
+        return my ensureTabId(item 2 of argv as text, item 3 of argv as text)
     else if actionName is "open-window" then
         if (count of argv) is less than 2 then error "open-window requires target URL."
         return my openWindow(item 2 of argv as text)
+    else if actionName is "open-window-tab" then
+        if (count of argv) is less than 2 then error "open-window-tab requires target URL."
+        return my openWindowTab(item 2 of argv as text)
     else if actionName is "open-tab" then
         if (count of argv) is less than 2 then error "open-tab requires target URL."
         return my openTab(item 2 of argv as text)
@@ -16,13 +22,26 @@ on run argv
         if (count of argv) is less than 2 then error "navigate-tab requires target URL."
         my navigateActiveTab(item 2 of argv as text)
         return "OK"
+    else if actionName is "navigate-tab-id" then
+        if (count of argv) is less than 3 then error "navigate-tab-id requires tab id and target URL."
+        my navigateTabById(item 2 of argv as text, item 3 of argv as text)
+        return "OK"
     else if actionName is "wait-tab" then
         return my waitForDocument()
+    else if actionName is "wait-tab-id" then
+        if (count of argv) is less than 2 then error "wait-tab-id requires tab id."
+        return my waitForDocumentById(item 2 of argv as text)
     else if actionName is "run-js" then
         if (count of argv) is less than 2 then error "run-js requires JS code."
         return my runJavaScript(item 2 of argv as text)
+    else if actionName is "run-js-tab-id" then
+        if (count of argv) is less than 3 then error "run-js-tab-id requires tab id and JS code."
+        return my runJavaScriptById(item 2 of argv as text, item 3 of argv as text)
     else if actionName is "get-url" then
         return my getActiveTabUrl()
+    else if actionName is "get-url-tab-id" then
+        if (count of argv) is less than 2 then error "get-url-tab-id requires tab id."
+        return my getTabUrlById(item 2 of argv as text)
     else
         error "Unknown action: " & actionName
     end if
@@ -71,6 +90,34 @@ on ensureTab(targetURL, hostListText)
     return my openTab(targetURL)
 end ensureTab
 
+on ensureTabId(targetURL, hostListText)
+    set hostList to my parseHosts(hostListText)
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        repeat with windowIndex from 1 to (count of windows)
+            set currentWindow to window windowIndex
+            repeat with tabIndex from 1 to (count of tabs of currentWindow)
+                set currentTab to tab tabIndex of currentWindow
+                set tabURL to ""
+                try
+                    set tabURL to URL of currentTab as text
+                end try
+
+                if my matchesAnyHost(tabURL, hostList) then
+                    activate
+                    set active tab index of currentWindow to tabIndex
+                    set index of currentWindow to 1
+                    delay 0.2
+                    return (id of currentTab) as text
+                end if
+            end repeat
+        end repeat
+    end tell
+
+    return my openTabId(targetURL)
+end ensureTabId
+
 on openTab(targetURL)
     my ensureChromeRunning()
 
@@ -85,6 +132,19 @@ on openTab(targetURL)
     return targetURL
 end openTab
 
+on openTabId(targetURL)
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        activate
+        tell front window
+            make new tab with properties {URL:targetURL}
+            set active tab index to (count of tabs)
+            return (id of active tab) as text
+        end tell
+    end tell
+end openTabId
+
 on openWindow(targetURL)
     my ensureChromeRunning()
 
@@ -98,6 +158,19 @@ on openWindow(targetURL)
     end tell
 end openWindow
 
+on openWindowTab(targetURL)
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        activate
+        make new window
+        delay 0.3
+        set URL of active tab of front window to targetURL
+        delay 0.2
+        return (id of active tab of front window) as text
+    end tell
+end openWindowTab
+
 on navigateActiveTab(targetURL)
     my ensureChromeRunning()
 
@@ -105,6 +178,26 @@ on navigateActiveTab(targetURL)
         set URL of active tab of front window to targetURL
     end tell
 end navigateActiveTab
+
+on navigateTabById(targetTabIdText, targetURL)
+    set targetTabId to targetTabIdText as integer
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        repeat with windowIndex from 1 to (count of windows)
+            set currentWindow to window windowIndex
+            repeat with tabIndex from 1 to (count of tabs of currentWindow)
+                set currentTab to tab tabIndex of currentWindow
+                if (id of currentTab as integer) is targetTabId then
+                    set URL of currentTab to targetURL
+                    return
+                end if
+            end repeat
+        end repeat
+    end tell
+
+    error "Tab not found: " & targetTabIdText
+end navigateTabById
 
 on waitForDocument()
     repeat 240 times
@@ -120,6 +213,20 @@ on waitForDocument()
     return "timeout"
 end waitForDocument
 
+on waitForDocumentById(targetTabIdText)
+    repeat 240 times
+        try
+            set readyState to my runJavaScriptById(targetTabIdText, "document.readyState")
+            if readyState is "complete" or readyState is "interactive" then
+                return readyState
+            end if
+        end try
+        delay 0.25
+    end repeat
+
+    return "timeout"
+end waitForDocumentById
+
 on runJavaScript(jsCode)
     my ensureChromeRunning()
 
@@ -130,6 +237,30 @@ on runJavaScript(jsCode)
     if resultValue is missing value then return ""
     return resultValue as text
 end runJavaScript
+
+on runJavaScriptById(targetTabIdText, jsCode)
+    set targetTabId to targetTabIdText as integer
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        repeat with windowIndex from 1 to (count of windows)
+            set currentWindow to window windowIndex
+            repeat with tabIndex from 1 to (count of tabs of currentWindow)
+                set currentTab to tab tabIndex of currentWindow
+                if (id of currentTab as integer) is targetTabId then
+                    set active tab index of currentWindow to tabIndex
+                    set index of currentWindow to 1
+                    delay 0.05
+                    set resultValue to execute currentTab javascript jsCode
+                    if resultValue is missing value then return ""
+                    return resultValue as text
+                end if
+            end repeat
+        end repeat
+    end tell
+
+    error "Tab not found: " & targetTabIdText
+end runJavaScriptById
 
 on getActiveTabUrl()
     my ensureChromeRunning()
@@ -142,6 +273,25 @@ on getActiveTabUrl()
         end try
     end tell
 end getActiveTabUrl
+
+on getTabUrlById(targetTabIdText)
+    set targetTabId to targetTabIdText as integer
+    my ensureChromeRunning()
+
+    tell application "Google Chrome"
+        repeat with windowIndex from 1 to (count of windows)
+            set currentWindow to window windowIndex
+            repeat with tabIndex from 1 to (count of tabs of currentWindow)
+                set currentTab to tab tabIndex of currentWindow
+                if (id of currentTab as integer) is targetTabId then
+                    return URL of currentTab as text
+                end if
+            end repeat
+        end repeat
+    end tell
+
+    error "Tab not found: " & targetTabIdText
+end getTabUrlById
 
 on parseHosts(hostListText)
     if hostListText is "" then return {}
