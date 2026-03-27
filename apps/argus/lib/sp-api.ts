@@ -37,9 +37,20 @@ type CatalogItemResponse = {
   asin?: string
   summaries?: Array<{
     marketplaceId?: string
+    brand?: string
     brandName?: string
     itemName?: string
     mainImage?: { link?: string; width?: number; height?: number }
+  }>
+  images?: Array<{
+    marketplaceId?: string
+    images?: Array<{
+      link?: string
+      url?: string
+      variant?: string
+      width?: number
+      height?: number
+    }>
   }>
   salesRanks?: Array<{
     marketplaceId?: string
@@ -159,6 +170,17 @@ function parseCatalogSalesRanks(salesRanks: CatalogItemResponse['salesRanks']): 
   return { bsrRoot, bsrRootCategory, bsrSub, bsrSubCategory }
 }
 
+function pickCatalogImageUrl(images: CatalogItemResponse['images'], fallback: string | undefined): string | null {
+  for (const group of images ?? []) {
+    for (const image of group.images ?? []) {
+      const value = image.link ?? image.url ?? null
+      if (value) return value
+    }
+  }
+
+  return fallback ?? null
+}
+
 // ─── Public API ─────────────────────────────────────────────────
 
 /**
@@ -243,7 +265,7 @@ export async function getCatalogItemWithRanks(asin: string): Promise<CatalogResu
     path: { asin },
     query: {
       marketplaceIds: [MARKETPLACE_ID],
-      includedData: 'summaries,salesRanks',
+      includedData: ['summaries', 'salesRanks', 'images'],
     },
   })
 
@@ -253,8 +275,8 @@ export async function getCatalogItemWithRanks(asin: string): Promise<CatalogResu
   return {
     asin,
     title: summary?.itemName ?? null,
-    brand: summary?.brandName ?? null,
-    imageUrl: summary?.mainImage?.link ?? null,
+    brand: summary?.brand ?? summary?.brandName ?? null,
+    imageUrl: pickCatalogImageUrl(response.images, summary?.mainImage?.link),
     ...bsr,
     rawCatalog: response,
   }

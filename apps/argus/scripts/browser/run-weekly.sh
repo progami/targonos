@@ -3,7 +3,7 @@
 # Calls each weekly collection script in sequence.
 # Runs Monday 3 AM CT via launchd.
 #
-# Uses AppleScript to drive Safari directly.
+# Uses Safari for Seller Central + ScaleInsights and Chrome for Brand Metrics export.
 
 set -euo pipefail
 
@@ -16,6 +16,7 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 log "=== Weekly Master Run Starting ==="
 
 open -a Safari
+open -a "Google Chrome"
 sleep 2
 
 FAILED=0
