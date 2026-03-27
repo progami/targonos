@@ -198,38 +198,6 @@ apply_last_available_week() {
   })();'
 }
 
-apply_requested_week() {
-  local requested_start_json
-  requested_start_json="$(js_string_literal "$REQUESTED_START_DATE")"
-
-  run_js "(() => {
-    const iso = ${requested_start_json};
-    const [yearRaw, monthRaw, dayRaw] = iso.split('-').map(Number);
-    if (!yearRaw || !monthRaw || !dayRaw) return 'INVALID_REQUESTED_START_DATE';
-    const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    const day = new Date(Date.UTC(yearRaw, monthRaw - 1, dayRaw));
-    const label = [weekdays[day.getUTCDay()], months[monthRaw - 1], String(dayRaw), String(yearRaw)].join(' ');
-    const weekButton = Array.from(document.querySelectorAll('button')).find((el) => {
-      const text = [
-        el.getAttribute('aria-label'),
-        el.innerText,
-        el.textContent,
-        el.title,
-      ].filter(Boolean).join(' ');
-      return text.includes(label);
-    });
-    if (!weekButton) return 'NO_WEEK_BUTTON:' + label;
-    weekButton.click();
-    const save = Array.from(document.querySelectorAll('button')).find((el) =>
-      String(el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim() === 'Save'
-    );
-    if (!save) return 'NO_SAVE_BUTTON';
-    save.click();
-    return 'REQUESTED_WEEK_SAVED';
-  })();"
-}
-
 click_export() {
   run_js '(() => {
     const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -406,23 +374,17 @@ if [ "$(json_field "$initial_state" loginRequired)" = "true" ]; then
   exit 1
 fi
 
-if [ "$(open_date_picker)" != "DATE_PICKER_OPENED" ]; then
-  log "FAILED: Brand Metrics date picker button not found"
-  exit 1
-fi
-
 if [ "$REQUEST_MODE" = "explicit-week" ]; then
-  selection_status="$(apply_requested_week)"
-  if [ "$selection_status" != "REQUESTED_WEEK_SAVED" ]; then
-    log "FAILED: Brand Metrics requested week selection failed ($selection_status)"
-    exit 1
-  fi
   expected_period="$(expected_current_period "$REQUESTED_START_DATE" "$REQUESTED_END_DATE")"
   if ! settled_state="$(wait_for_page_state "$expected_period")"; then
     log "FAILED: Brand Metrics did not settle on requested current period ($expected_period)"
     exit 1
   fi
 else
+  if [ "$(open_date_picker)" != "DATE_PICKER_OPENED" ]; then
+    log "FAILED: Brand Metrics date picker button not found"
+    exit 1
+  fi
   selection_status="$(apply_last_available_week)"
   if [ "$selection_status" != "LAST_AVAILABLE_WEEK_SAVED" ]; then
     log "FAILED: Brand Metrics last available week selection failed ($selection_status)"
