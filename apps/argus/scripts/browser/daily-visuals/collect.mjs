@@ -14,8 +14,6 @@ const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
 const CAPTURE_CHILD_TIMEOUT_MS = 210_000
 const MAX_CAPTURE_ATTEMPTS = 2
-const PART_WIDTH = 1400
-const PART_HEIGHT = 4300
 
 function log(message) {
   fs.appendFileSync(LOG, `${timestamp()} — ${message}\n`)
@@ -86,56 +84,31 @@ function resolveAsins() {
   }
 }
 
-function identifySize(filePath) {
-  const dims = runFile('magick', ['identify', '-format', '%w %h', filePath]).trim()
-  const [widthRaw, heightRaw] = dims.split(/\s+/)
-  const width = Number(widthRaw)
-  const height = Number(heightRaw)
-  if (!width || !height) {
-    throw new Error(`Failed to parse screenshot dimensions: ${dims}`)
-  }
-  return { width, height }
-}
-
-function cropScreenshot(sourcePath, destBaseDir, width) {
+function clearTodayParts(destBaseDir) {
   for (let index = 1; index <= 4; index += 1) {
-    const top = (index - 1) * PART_HEIGHT
-    const partDir = path.join(destBaseDir, `part${index}`)
-    fs.mkdirSync(partDir, { recursive: true })
-    runFile('magick', [
-      sourcePath,
-      '-background',
-      'white',
-      '-crop',
-      `${Math.min(width, PART_WIDTH)}x${PART_HEIGHT}+0+${top}`,
-      '+repage',
-      '-gravity',
-      'northwest',
-      '-extent',
-      `${PART_WIDTH}x${PART_HEIGHT}`,
-      path.join(partDir, `${TODAY}.png`),
-    ])
+    fs.rmSync(path.join(destBaseDir, `part${index}`, `${TODAY}.png`), { force: true })
   }
 }
 
 function captureListing(asin, brand) {
   const destBaseDir = path.join(DEST, brand, asin)
-  const tmpPng = path.join(os.tmpdir(), `${asin}.png`)
   for (let attempt = 1; attempt <= MAX_CAPTURE_ATTEMPTS; attempt += 1) {
     try {
       log(`Capturing ${brand} (${asin}) [attempt ${attempt}/${MAX_CAPTURE_ATTEMPTS}]`)
-      runFile(NODE_BIN, [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output', tmpPng], {
-        timeout: CAPTURE_CHILD_TIMEOUT_MS,
-        killSignal: 'SIGKILL',
-      })
-
-      const { width } = identifySize(tmpPng)
-      cropScreenshot(tmpPng, destBaseDir, width)
+      clearTodayParts(destBaseDir)
+      runFile(
+        NODE_BIN,
+        [path.join(SCRIPT_DIR, 'capture.mjs'), '--asin', asin, '--output-dir', destBaseDir, '--date', TODAY],
+        {
+          timeout: CAPTURE_CHILD_TIMEOUT_MS,
+          killSignal: 'SIGKILL',
+        },
+      )
       log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
       return true
     } catch (error) {
       appendErrorOutput(error)
-      fs.rmSync(tmpPng, { force: true })
+      clearTodayParts(destBaseDir)
 
       if (attempt === MAX_CAPTURE_ATTEMPTS) {
         log(`WARNING: Daily visuals failed for ${brand} (${asin})`)
@@ -174,7 +147,6 @@ function readLogTail(maxLines) {
 
 async function main() {
   ensureBinary('node')
-  ensureBinary('magick')
   log(`Starting daily visuals capture: ${TODAY}`)
 
   const rows = resolveAsins()
