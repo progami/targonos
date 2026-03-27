@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install launchd plists for browser-automated Argus collectors:
-#   1. Weekly browser sources collection in Safari (Monday 3 AM CT)
+#   1. Weekly browser sources collection (Safari + Chrome) (Monday 3 AM CT)
 #   2. Daily Visuals screenshot collector (3:30 AM CT daily)
 #
 # Usage: bash apps/argus/scripts/browser/install.sh
@@ -131,14 +131,14 @@ launchctl load "$DAILY_VISUALS_PLIST"
 
 echo ""
 echo "Installed and loaded:"
-echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT, Safari)"
+echo "  Weekly browser:    $WEEKLY_PLIST (Monday 3:00 AM CT, Safari + Chrome)"
 echo "  Daily Visuals:     $DAILY_VISUALS_PLIST (daily 3:30 AM CT)"
 echo ""
 echo "Weekly master runner calls:"
 echo "  1. weekly-category-insights (text extraction)"
 echo "  2. weekly-poe (CSV download)"
 echo "  3. weekly-scaleinsights (XLSX export)"
-echo "  4. weekly-brand-metrics (text capture)"
+echo "  4. weekly-brand-metrics (Chrome CSV export)"
 echo ""
 echo "To check status:"
 echo "  launchctl list | grep targon"
