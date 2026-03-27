@@ -70,14 +70,6 @@ type LeadTimeOverrideId = {
   stageTemplateId: string;
 };
 
-type StrategyGroupView = {
-  id: string;
-  code: string;
-  name: string;
-  region: 'US' | 'UK';
-  strategies: Strategy[];
-};
-
 type SetupWorkspaceProps = {
   strategies: Strategy[];
   activeStrategyId: string | null;
