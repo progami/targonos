@@ -72,7 +72,7 @@ function weekCodeForDate(date) {
   return `W${String(weekNumber).padStart(2, '0')}`
 }
 
-function parseIsoDate(value) {
+export function parseIsoDate(value) {
   const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})$/)
   if (!match) {
     throw new Error(`Invalid ISO date: ${value}`)
@@ -88,6 +88,23 @@ export function weekContextForEndDate(endDate) {
   const weekEndDate = parseIsoDate(endDate)
   const weekStartDate = new Date(weekEndDate)
   weekStartDate.setDate(weekStartDate.getDate() - 6)
+
+  return {
+    weekCode: weekCodeForDate(weekStartDate),
+    weekStart: formatDate(weekStartDate),
+    weekEnd: formatDate(weekEndDate),
+  }
+}
+
+export function weekContextForRange(startDate, endDate) {
+  const weekStartDate = parseIsoDate(startDate)
+  const weekEndDate = parseIsoDate(endDate)
+
+  const startDay = utcDayNumber(weekStartDate)
+  const endDay = utcDayNumber(weekEndDate)
+  if (endDay - startDay !== 6) {
+    throw new Error(`Expected a 7-day weekly range, received ${startDate}..${endDate}`)
+  }
 
   return {
     weekCode: weekCodeForDate(weekStartDate),
@@ -181,4 +198,24 @@ export function flattenRows(rows) {
   }
 
   return { headers, rows: flattened }
+}
+
+function hasRowValue(value) {
+  return value !== null && value !== undefined && String(value) !== ''
+}
+
+export function orderHeaders(canonicalHeaders, rows) {
+  const ordered = [...canonicalHeaders]
+  const seen = new Set(canonicalHeaders)
+
+  for (const row of rows) {
+    for (const [key, value] of Object.entries(row ?? {})) {
+      if (seen.has(key)) continue
+      if (!hasRowValue(value)) continue
+      seen.add(key)
+      ordered.push(key)
+    }
+  }
+
+  return ordered
 }
