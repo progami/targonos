@@ -839,18 +839,9 @@ export function OpsPlanningWorkspace({
         BATCH_NUMERIC_PRECISION.storagePerMonth,
       ),
       // Carton dimensions for CBM
-      cartonSide1Cm: formatNumericInput(
-        batch.cartonSide1Cm,
-        BATCH_NUMERIC_PRECISION.cartonSide1Cm,
-      ),
-      cartonSide2Cm: formatNumericInput(
-        batch.cartonSide2Cm,
-        BATCH_NUMERIC_PRECISION.cartonSide2Cm,
-      ),
-      cartonSide3Cm: formatNumericInput(
-        batch.cartonSide3Cm,
-        BATCH_NUMERIC_PRECISION.cartonSide3Cm,
-      ),
+      cartonSide1Cm: formatNumericInput(batch.cartonSide1Cm, BATCH_NUMERIC_PRECISION.cartonSide1Cm),
+      cartonSide2Cm: formatNumericInput(batch.cartonSide2Cm, BATCH_NUMERIC_PRECISION.cartonSide2Cm),
+      cartonSide3Cm: formatNumericInput(batch.cartonSide3Cm, BATCH_NUMERIC_PRECISION.cartonSide3Cm),
       cartonWeightKg: formatNumericInput(
         batch.cartonWeightKg,
         BATCH_NUMERIC_PRECISION.cartonWeightKg,
@@ -930,7 +921,7 @@ export function OpsPlanningWorkspace({
   const closeImportOrder = useOpsPlanningStore((s) => s.closeImportOrder);
 
   const [newOrderCode, setNewOrderCode] = useState('');
-  const [talosReference, setTalosReference] = useState('');
+  const [talosSelectedReferences, setTalosSelectedReferences] = useState<string[]>([]);
   const [talosOrderCode, setTalosOrderCode] = useState('');
   const [talosOrdersQuery, setTalosOrdersQuery] = useState('');
   const [talosOrders, setTalosOrders] = useState<TalosPurchaseOrderListItem[]>([]);
@@ -942,6 +933,34 @@ export function OpsPlanningWorkspace({
   const [isRemovingPayment, setIsRemovingPayment] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [isPending, startTransition] = useTransition();
+
+  const talosSelectedReferenceSet = useMemo(
+    () => new Set(talosSelectedReferences),
+    [talosSelectedReferences],
+  );
+  const talosSelectedCount = talosSelectedReferences.length;
+  const areAllTalosOrdersSelected = useMemo(
+    () =>
+      talosOrders.length > 0 &&
+      talosOrders.every((order) => talosSelectedReferenceSet.has(order.id)),
+    [talosOrders, talosSelectedReferenceSet],
+  );
+
+  const toggleTalosOrderSelection = useCallback((orderId: string) => {
+    setTalosSelectedReferences((current) =>
+      current.includes(orderId) ? current.filter((id) => id !== orderId) : [...current, orderId],
+    );
+    setTalosOrderCode('');
+    setTalosImportError(null);
+  }, []);
+
+  const toggleAllTalosOrdersSelection = useCallback(() => {
+    setTalosSelectedReferences(
+      areAllTalosOrdersSelected ? [] : talosOrders.map((order) => order.id),
+    );
+    setTalosOrderCode('');
+    setTalosImportError(null);
+  }, [areAllTalosOrdersSelected, talosOrders]);
 
   useEffect(() => {
     if (!isImportOrderOpen) return;
@@ -977,11 +996,13 @@ export function OpsPlanningWorkspace({
               ? (json.orders as TalosPurchaseOrderListItem[])
               : [];
             setTalosOrders(orders);
+            setTalosSelectedReferences((current) =>
+              current.filter((reference) => orders.some((order) => order.id === reference)),
+            );
           })
           .catch((fetchError) => {
             if (fetchError instanceof DOMException && fetchError.name === 'AbortError') return;
-            const message =
-              fetchError instanceof Error ? fetchError.message : String(fetchError);
+            const message = fetchError instanceof Error ? fetchError.message : String(fetchError);
             setTalosImportError(message);
             setTalosOrders([]);
           })
@@ -1783,14 +1804,11 @@ export function OpsPlanningWorkspace({
 
       startTransition(async () => {
         try {
-          const response = await fetch(
-            withAppBasePath('/api/v1/xplan/purchase-orders/duplicate'),
-            {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: orderId }),
-            },
-          );
+          const response = await fetch(withAppBasePath('/api/v1/xplan/purchase-orders/duplicate'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: orderId }),
+          });
 
           if (!response.ok) {
             let message = 'Failed to duplicate purchase order';
@@ -1872,14 +1890,20 @@ export function OpsPlanningWorkspace({
         toast.error(error instanceof Error ? error.message : 'Unable to create purchase order');
       }
     });
-  }, [strategyId, newOrderCode, productOptions, router, setActiveOrderId, closeCreateOrder, startTransition]);
+  }, [
+    strategyId,
+    newOrderCode,
+    productOptions,
+    router,
+    setActiveOrderId,
+    closeCreateOrder,
+    startTransition,
+  ]);
 
   const handleImportFromTalos = useCallback(() => {
-    const reference = talosReference.trim();
-
-    if (!reference) {
-      setTalosImportError('Select a Talos purchase order to import');
-      toast.error('Select a Talos purchase order to import');
+    if (talosSelectedCount === 0) {
+      setTalosImportError('Select at least one Talos purchase order to import');
+      toast.error('Select at least one Talos purchase order to import');
       return;
     }
     if (isTalosImporting) return;
@@ -1892,8 +1916,11 @@ export function OpsPlanningWorkspace({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         strategyId,
-        reference,
-        orderCode: talosOrderCode.trim().length ? talosOrderCode.trim() : undefined,
+        references: talosSelectedReferences,
+        orderCode:
+          talosSelectedCount === 1 && talosOrderCode.trim().length
+            ? talosOrderCode.trim()
+            : undefined,
       }),
     })
       .then(async (response) => {
@@ -1906,17 +1933,46 @@ export function OpsPlanningWorkspace({
           throw new Error(message);
         }
 
-        const createdId = result?.order?.id as string | undefined;
+        const createdOrders = Array.isArray(result?.createdOrders)
+          ? (result.createdOrders as Array<{ id: string; orderCode: string; quantity: number }>)
+          : result?.order?.id
+            ? ([result.order] as Array<{ id: string; orderCode: string; quantity: number }>)
+            : [];
+        const failed = Array.isArray(result?.failed)
+          ? (result.failed as Array<{ reference: string; orderCode: string | null; error: string }>)
+          : [];
+        const createdId = createdOrders[0]?.id as string | undefined;
+        if (!createdId) {
+          throw new Error('Unable to import purchase orders');
+        }
         if (createdId) {
           setActiveOrderId(createdId);
         }
 
         closeImportOrder();
-        setTalosReference('');
+        setTalosSelectedReferences([]);
         setTalosOrderCode('');
         setTalosOrdersQuery('');
         setTalosOrders([]);
-        toast.success('Purchase order imported');
+
+        if (createdOrders.length === 1 && failed.length === 0) {
+          toast.success('Purchase order imported');
+        } else {
+          toast.success(
+            `Imported ${createdOrders.length} purchase order${createdOrders.length === 1 ? '' : 's'}`,
+          );
+          if (failed.length > 0) {
+            const preview = failed
+              .slice(0, 3)
+              .map((item) => item.orderCode ?? item.reference)
+              .join(', ');
+            toast.error(
+              failed.length === 1
+                ? `${failed[0].orderCode ?? failed[0].reference}: ${failed[0].error}`
+                : `${failed.length} imports failed: ${preview}${failed.length > 3 ? ', …' : ''}`,
+            );
+          }
+        }
         startTransition(() => router.refresh());
       })
       .catch((error) => {
@@ -1931,16 +1987,16 @@ export function OpsPlanningWorkspace({
     setActiveOrderId,
     closeImportOrder,
     startTransition,
-	    strategyId,
-	    talosOrderCode,
-	    talosReference,
-	  ]);
+    strategyId,
+    talosOrderCode,
+    talosSelectedCount,
+    talosSelectedReferences,
+  ]);
 
   const selectedTalosOrder = useMemo(() => {
-    const selectedId = talosReference.trim();
-    if (!selectedId) return null;
-    return talosOrders.find((order) => order.id === selectedId) ?? null;
-  }, [talosOrders, talosReference]);
+    if (talosSelectedReferences.length !== 1) return null;
+    return talosOrders.find((order) => order.id === talosSelectedReferences[0]) ?? null;
+  }, [talosOrders, talosSelectedReferences]);
 
   const selectedTalosDefaultOrderCode = useMemo(() => {
     if (!selectedTalosOrder) return '';
@@ -1970,242 +2026,251 @@ export function OpsPlanningWorkspace({
             disableDelete={isPending}
           />
 
-	          <AlertDialog
-	            open={isImportOrderOpen}
-	            onOpenChange={(nextOpen) => {
-	              if (isTalosImporting) return;
-	              if (nextOpen) openImportOrder();
-	              else closeImportOrder();
-	              if (!nextOpen) {
-	                setTalosImportError(null);
-	                setTalosReference('');
-	                setTalosOrderCode('');
-	                setTalosOrdersQuery('');
-	                setTalosOrders([]);
-	              }
-	            }}
-	          >
-	            <AlertDialogContent className="max-w-3xl overflow-hidden border-0 bg-white p-0 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:bg-[#0a1f33] dark:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.5),0_0_40px_rgba(0,194,185,0.08)]">
-	              <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-cyan-400 to-teal-400 dark:from-[#00c2b9] dark:via-[#00d5cb] dark:to-[#00e5d4]" />
+          <AlertDialog
+            open={isImportOrderOpen}
+            onOpenChange={(nextOpen) => {
+              if (isTalosImporting) return;
+              if (nextOpen) openImportOrder();
+              else closeImportOrder();
+              if (!nextOpen) {
+                setTalosImportError(null);
+                setTalosSelectedReferences([]);
+                setTalosOrderCode('');
+                setTalosOrdersQuery('');
+                setTalosOrders([]);
+              }
+            }}
+          >
+            <AlertDialogContent className="max-w-3xl overflow-hidden border-0 bg-white p-0 shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)] dark:bg-[#0a1f33] dark:shadow-[0_25px_60px_-12px_rgba(0,0,0,0.5),0_0_40px_rgba(0,194,185,0.08)]">
+              <div className="h-1 w-full bg-gradient-to-r from-cyan-500 via-cyan-400 to-teal-400 dark:from-[#00c2b9] dark:via-[#00d5cb] dark:to-[#00e5d4]" />
 
-	              <div className="px-6 pb-6 pt-5">
-	                <AlertDialogHeader className="space-y-4">
-	                  <div className="flex items-start justify-between gap-4">
-	                    <div>
-	                      <AlertDialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-	                        Import purchase order from Talos
-	                      </AlertDialogTitle>
-	                      <AlertDialogDescription className="mt-1">
-	                        Select a Talos PO to create a new row and copy line items into the Batch table.
-	                      </AlertDialogDescription>
-	                    </div>
+              <div className="px-6 pb-6 pt-5">
+                <AlertDialogHeader className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <AlertDialogTitle className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
+                        Import purchase order from Talos
+                      </AlertDialogTitle>
+                      <AlertDialogDescription className="mt-1">
+                        Select one or more Talos POs to create new rows and copy line items into the
+                        Batch table.
+                      </AlertDialogDescription>
+                    </div>
 
-	                    <div className="flex items-center gap-2">
-	                      <button
-	                        type="button"
-	                        onClick={() => setTalosOrdersRefreshKey((prev) => prev + 1)}
-	                        disabled={isTalosImporting || isTalosOrdersLoading}
-	                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
-	                      >
-	                        <RefreshCw
-	                          className={isTalosOrdersLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
-	                        />
-	                        Refresh
-	                      </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTalosOrdersRefreshKey((prev) => prev + 1)}
+                        disabled={isTalosImporting || isTalosOrdersLoading}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
+                      >
+                        <RefreshCw
+                          className={isTalosOrdersLoading ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+                        />
+                        Refresh
+                      </button>
 
-	                      <button
-	                        type="button"
-	                        onClick={() => {
-	                          setTalosReference('');
-	                          setTalosOrderCode('');
-	                        }}
-	                        disabled={isTalosImporting || talosReference.trim().length === 0}
-	                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
-	                      >
-	                        Clear
-	                      </button>
-	                    </div>
-	                  </div>
+                      <button
+                        type="button"
+                        onClick={toggleAllTalosOrdersSelection}
+                        disabled={
+                          isTalosImporting || isTalosOrdersLoading || talosOrders.length === 0
+                        }
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
+                      >
+                        {areAllTalosOrdersSelected ? 'Clear shown' : 'Select all shown'}
+                      </button>
 
-	                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-	                    <div className="relative w-full sm:max-w-md">
-	                      <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-	                      <Input
-	                        value={talosOrdersQuery}
-	                        onChange={(event) => setTalosOrdersQuery(event.target.value)}
-	                        placeholder="Search PO number, supplier, or factory…"
-	                        className="h-9 pl-9"
-	                        disabled={isTalosOrdersLoading || isTalosImporting}
-	                      />
-	                    </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTalosSelectedReferences([]);
+                          setTalosOrderCode('');
+                        }}
+                        disabled={isTalosImporting || talosSelectedCount === 0}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:opacity-60 dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
 
-	                    <div className="flex items-center justify-between gap-2 sm:justify-end">
-	                      <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
-	                        Selected
-	                      </span>
-	                      <span className="text-sm font-semibold text-slate-900 dark:text-white">
-	                        {talosReference.trim().length ? '1' : '0'}
-	                      </span>
-	                    </div>
-	                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="relative w-full sm:max-w-md">
+                      <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                      <Input
+                        value={talosOrdersQuery}
+                        onChange={(event) => setTalosOrdersQuery(event.target.value)}
+                        placeholder="Search PO number, supplier, or factory…"
+                        className="h-9 pl-9"
+                        disabled={isTalosOrdersLoading || isTalosImporting}
+                      />
+                    </div>
 
-	                  {talosImportError ? (
-	                    <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
-	                      {talosImportError}
+                    <div className="flex items-center justify-between gap-2 sm:justify-end">
+                      <span className="text-xs font-semibold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                        Selected
+                      </span>
+                      <span className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {talosSelectedCount.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+
+                  {talosImportError ? (
+                    <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                      {talosImportError}
                     </div>
                   ) : null}
                 </AlertDialogHeader>
 
-	                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#1a3a54] dark:bg-[#061828]">
-	                  <div className="max-h-[340px] overflow-auto">
-	                    {isTalosOrdersLoading ? (
-	                      <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-300">
-	                        <Loader2 className="h-4 w-4 animate-spin" />
-	                        Loading purchase orders…
-	                      </div>
-	                    ) : talosOrders.length === 0 ? (
-	                      <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
-	                        No matches.
-	                      </div>
-	                    ) : (
-	                      <ul className="divide-y divide-slate-200 dark:divide-[#1a3a54]">
-	                        {talosOrders.map((order) => {
-	                          const isSelected = order.id === talosReference;
-	                          const poNumber =
-	                            typeof order.poNumber === 'string' ? order.poNumber.trim() : '';
-	                          const orderNumber = order.orderNumber.trim();
-	                          const displayCode = poNumber.length ? poNumber : orderNumber;
-	                          const showOrderNumber =
-	                            poNumber.length && poNumber !== orderNumber ? orderNumber : '';
-	                          const factoryName =
-	                            typeof order.factoryName === 'string'
-	                              ? order.factoryName.trim()
-	                              : '';
-	                          const counterpartyName =
-	                            typeof order.counterpartyName === 'string'
-	                              ? order.counterpartyName.trim()
-	                              : '';
-	                          const partnerName = factoryName.length ? factoryName : counterpartyName;
-	                          const statusLabel = order.status.replace(/_/g, ' ');
-	                          const expectedLabel = formatDateDisplay(order.expectedDate);
-	                          return (
-	                            <li key={order.id}>
-	                              <button
-	                                type="button"
-	                                disabled={isTalosImporting}
-	                                onClick={() => {
-	                                  if (isSelected) {
-	                                    setTalosReference('');
-	                                    return;
-	                                  }
-	                                  setTalosReference(order.id);
-	                                  setTalosOrderCode('');
-	                                  setTalosImportError(null);
-	                                }}
-	                                className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
-	                                  isSelected
-	                                    ? 'bg-cyan-50/60 dark:bg-[#00c2b9]/10'
-	                                    : 'hover:bg-cyan-50/60 dark:hover:bg-[#00c2b9]/10'
-	                                }`}
-	                              >
-	                                <span
-	                                  className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${
-	                                    isSelected
-	                                      ? 'border-cyan-600 bg-cyan-600 text-white dark:border-[#00c2b9] dark:bg-[#00c2b9] dark:text-[#002430]'
-	                                      : 'border-slate-300 bg-white dark:border-[#2a4a64] dark:bg-[#0a2438]'
-	                                  }`}
-	                                  aria-hidden="true"
-	                                >
-	                                  {isSelected ? <CheckSquare className="h-4 w-4" /> : null}
-	                                </span>
-	                                <div className="min-w-0 flex-1">
-	                                  <div className="flex flex-wrap items-center gap-2">
-	                                    <span className="font-semibold text-slate-900 dark:text-white">
-	                                      {displayCode}
-	                                    </span>
-	                                    {showOrderNumber ? (
-	                                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-	                                        {showOrderNumber}
-	                                      </span>
-	                                    ) : null}
-	                                    <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-2xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-300">
-	                                      {statusLabel}
-	                                    </span>
-	                                    <span className="text-xs text-slate-500 dark:text-slate-400">
-	                                      {order.lineCount} line
-	                                      {order.lineCount === 1 ? '' : 's'}
-	                                    </span>
-	                                  </div>
-	                                  {partnerName ? (
-	                                    <div className="mt-0.5 min-w-0 truncate text-sm text-slate-600 dark:text-slate-300">
-	                                      {partnerName}
-	                                    </div>
-	                                  ) : null}
-	                                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
-	                                    {expectedLabel ? (
-	                                      <span>Expected {expectedLabel}</span>
-	                                    ) : null}
-	                                    {order.warehouseName ? (
-	                                      <span>{order.warehouseName}</span>
-	                                    ) : null}
-	                                    {order.containerCount ? (
-	                                      <span>
-	                                        {order.containerCount} container
-	                                        {order.containerCount === 1 ? '' : 's'}
-	                                      </span>
-	                                    ) : null}
-	                                  </div>
-	                                </div>
-	                              </button>
-	                            </li>
-	                          );
-	                        })}
-	                      </ul>
-	                    )}
-	                  </div>
-	                </div>
+                <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-[#1a3a54] dark:bg-[#061828]">
+                  <div className="max-h-[340px] overflow-auto">
+                    {isTalosOrdersLoading ? (
+                      <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-300">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading purchase orders…
+                      </div>
+                    ) : talosOrders.length === 0 ? (
+                      <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
+                        No matches.
+                      </div>
+                    ) : (
+                      <ul className="divide-y divide-slate-200 dark:divide-[#1a3a54]">
+                        {talosOrders.map((order) => {
+                          const isSelected = talosSelectedReferenceSet.has(order.id);
+                          const poNumber =
+                            typeof order.poNumber === 'string' ? order.poNumber.trim() : '';
+                          const orderNumber = order.orderNumber.trim();
+                          const displayCode = poNumber.length ? poNumber : orderNumber;
+                          const showOrderNumber =
+                            poNumber.length && poNumber !== orderNumber ? orderNumber : '';
+                          const factoryName =
+                            typeof order.factoryName === 'string' ? order.factoryName.trim() : '';
+                          const counterpartyName =
+                            typeof order.counterpartyName === 'string'
+                              ? order.counterpartyName.trim()
+                              : '';
+                          const partnerName = factoryName.length ? factoryName : counterpartyName;
+                          const statusLabel = order.status.replace(/_/g, ' ');
+                          const expectedLabel = formatDateDisplay(order.expectedDate);
+                          return (
+                            <li key={order.id}>
+                              <button
+                                type="button"
+                                disabled={isTalosImporting}
+                                onClick={() => toggleTalosOrderSelection(order.id)}
+                                className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
+                                  isSelected
+                                    ? 'bg-cyan-50/60 dark:bg-[#00c2b9]/10'
+                                    : 'hover:bg-cyan-50/60 dark:hover:bg-[#00c2b9]/10'
+                                }`}
+                              >
+                                <span
+                                  className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded border ${
+                                    isSelected
+                                      ? 'border-cyan-600 bg-cyan-600 text-white dark:border-[#00c2b9] dark:bg-[#00c2b9] dark:text-[#002430]'
+                                      : 'border-slate-300 bg-white dark:border-[#2a4a64] dark:bg-[#0a2438]'
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  {isSelected ? <CheckSquare className="h-4 w-4" /> : null}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-semibold text-slate-900 dark:text-white">
+                                      {displayCode}
+                                    </span>
+                                    {showOrderNumber ? (
+                                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                                        {showOrderNumber}
+                                      </span>
+                                    ) : null}
+                                    <span className="rounded-full bg-slate-200/70 px-2 py-0.5 text-2xs font-semibold text-slate-700 dark:bg-white/10 dark:text-slate-300">
+                                      {statusLabel}
+                                    </span>
+                                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                                      {order.lineCount} line
+                                      {order.lineCount === 1 ? '' : 's'}
+                                    </span>
+                                  </div>
+                                  {partnerName ? (
+                                    <div className="mt-0.5 min-w-0 truncate text-sm text-slate-600 dark:text-slate-300">
+                                      {partnerName}
+                                    </div>
+                                  ) : null}
+                                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                    {expectedLabel ? <span>Expected {expectedLabel}</span> : null}
+                                    {order.warehouseName ? (
+                                      <span>{order.warehouseName}</span>
+                                    ) : null}
+                                    {order.containerCount ? (
+                                      <span>
+                                        {order.containerCount} container
+                                        {order.containerCount === 1 ? '' : 's'}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
 
-	                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-	                  <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
-	                    Order code (optional)
-	                    <Input
-	                      value={talosOrderCode}
-	                      onChange={(event) => setTalosOrderCode(event.target.value)}
-	                      placeholder={
-	                        selectedTalosDefaultOrderCode.length
-	                          ? `Default: ${selectedTalosDefaultOrderCode}`
-	                          : 'Select a Talos PO first'
-	                      }
-	                      disabled={isTalosImporting || talosReference.trim().length === 0}
-	                      className="h-10 rounded-lg bg-white dark:bg-[#0a2438]"
-	                    />
-	                  </label>
-	                  <div className="flex items-end justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 dark:border-[#1a3a54] dark:bg-white/5 dark:text-slate-300">
-	                    <span>Showing latest {TALOS_PO_RESULTS_LIMIT.toLocaleString()}.</span>
-	                  </div>
-	                </div>
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Order code (optional)
+                    <Input
+                      value={talosOrderCode}
+                      onChange={(event) => setTalosOrderCode(event.target.value)}
+                      placeholder={
+                        selectedTalosDefaultOrderCode.length
+                          ? `Default: ${selectedTalosDefaultOrderCode}`
+                          : talosSelectedCount > 1
+                            ? 'Bulk import uses each Talos PO code'
+                            : 'Select a Talos PO first'
+                      }
+                      disabled={isTalosImporting || talosSelectedCount !== 1}
+                      className="h-10 rounded-lg bg-white dark:bg-[#0a2438]"
+                    />
+                  </label>
+                  <div className="flex items-end justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 dark:border-[#1a3a54] dark:bg-white/5 dark:text-slate-300">
+                    <span>
+                      Showing latest {TALOS_PO_RESULTS_LIMIT.toLocaleString()}. Select all shown to
+                      bulk import this list.
+                    </span>
+                  </div>
+                </div>
 
-	                <AlertDialogFooter className="mt-6 flex gap-3 sm:gap-3">
-	                  <AlertDialogCancel
-	                    disabled={isTalosImporting}
-	                    className="flex-1 border-slate-300 bg-white font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
+                <AlertDialogFooter className="mt-6 flex gap-3 sm:gap-3">
+                  <AlertDialogCancel
+                    disabled={isTalosImporting}
+                    className="flex-1 border-slate-300 bg-white font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow dark:border-[#2a4a64] dark:bg-[#0a2438] dark:text-slate-300 dark:hover:bg-[#0f2d45]"
                   >
                     Cancel
                   </AlertDialogCancel>
-	                  <AlertDialogAction
-	                    onClick={(event) => {
-	                      event.preventDefault();
-	                      handleImportFromTalos();
-	                    }}
-	                    disabled={isTalosImporting || talosReference.trim().length === 0}
-	                    className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl hover:shadow-cyan-500/30 disabled:opacity-70 dark:from-[#00c2b9] dark:to-[#00a89d] dark:text-[#002430] dark:shadow-[#00c2b9]/25 dark:hover:from-[#00d5cb] dark:hover:to-[#00c2b9]"
-	                  >
-	                    {isTalosImporting ? 'Importing…' : 'Import selected'}
-	                  </AlertDialogAction>
-	                </AlertDialogFooter>
-	              </div>
-	            </AlertDialogContent>
-	          </AlertDialog>
+                  <AlertDialogAction
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handleImportFromTalos();
+                    }}
+                    disabled={isTalosImporting || talosSelectedCount === 0}
+                    className="flex-1 bg-gradient-to-r from-cyan-500 to-cyan-600 font-medium text-white shadow-lg shadow-cyan-500/25 transition-all hover:from-cyan-600 hover:to-cyan-700 hover:shadow-xl hover:shadow-cyan-500/30 disabled:opacity-70 dark:from-[#00c2b9] dark:to-[#00a89d] dark:text-[#002430] dark:shadow-[#00c2b9]/25 dark:hover:from-[#00d5cb] dark:hover:to-[#00c2b9]"
+                  >
+                    {isTalosImporting
+                      ? 'Importing…'
+                      : talosSelectedCount > 1
+                        ? `Import ${talosSelectedCount} selected`
+                        : 'Import selected'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </div>
+            </AlertDialogContent>
+          </AlertDialog>
 
           {isCreateOrderOpen ? (
             <section className="space-y-4 rounded-xl border border-dashed bg-muted/50 p-4">
