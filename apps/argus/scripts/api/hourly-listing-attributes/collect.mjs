@@ -9,6 +9,7 @@ import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '../../../../../')
+const ARGUS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/argus/package.json')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 
 const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)'
@@ -17,6 +18,13 @@ const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
 const OUR_ASINS = ['B09HXC3NL8', 'B0CR1GSBQ9', 'B0FLKJ7WWM', 'B0FP66CWQ6']
 const COMPETITOR_SEED_ASINS = ['B0DQDWV1SV', 'B0CWS3848Y']
+const MAIN_BSR_EMAIL_ASINS = ['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y']
+const BSR_CHANGE_FIELDS = new Set([
+  'root_bsr_rank',
+  'root_bsr_category_id',
+  'sub_bsr_rank',
+  'sub_bsr_category_id',
+])
 const OUR_ASIN_PRIORITY = new Map([
   ['B09HXC3NL8', 0],
   ['B0CR1GSBQ9', 1],
@@ -60,7 +68,67 @@ function requiredEnv(name) {
   return value.trim()
 }
 
-function formatListingLabel(row) {
+function parseAsinList(value) {
+  if (!value || typeof value !== 'string') return []
+
+  return value
+    .split(/[\s,|]+/)
+    .map((asin) => asin.trim().toUpperCase())
+    .filter(Boolean)
+}
+
+function getCompetitorMainAsins() {
+  const configuredAsins = parseAsinList(process.env.ARGUS_COMPETITOR_MAIN_ASINS || '')
+  return new Set(configuredAsins.length > 0 ? configuredAsins : COMPETITOR_SEED_ASINS)
+}
+
+function getMainBsrEmailAsins() {
+  const configuredAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS || '')
+  return new Set(configuredAsins.length > 0 ? configuredAsins : MAIN_BSR_EMAIL_ASINS)
+}
+
+function resolveArgusDatasourceUrl() {
+  const databaseUrl = process.env.DATABASE_URL
+  if (typeof databaseUrl !== 'string') return undefined
+
+  const url = new URL(databaseUrl)
+  url.searchParams.set('application_name', 'argus-hourly-listing-attributes')
+  return url.toString()
+}
+
+async function loadTrackedAsinLabels() {
+  try {
+    const requireFromArgus = createRequire(ARGUS_PACKAGE_JSON)
+    const { PrismaClient } = requireFromArgus('@targon/prisma-argus')
+    const datasourceUrl = resolveArgusDatasourceUrl()
+    const prisma = new PrismaClient({
+      log: ['error'],
+      ...(datasourceUrl ? { datasourceUrl } : {}),
+    })
+
+    try {
+      const trackedAsins = await prisma.trackedAsin.findMany({
+        select: { asin: true, label: true },
+      })
+
+      return new Map(
+        trackedAsins
+          .filter((item) => item?.asin && item?.label)
+          .map((item) => [item.asin.trim().toUpperCase(), item.label.trim()])
+      )
+    } finally {
+      await prisma.$disconnect().catch(() => {})
+    }
+  } catch (error) {
+    console.warn(`Unable to load tracked ASIN labels: ${error?.message || String(error)}`)
+    return new Map()
+  }
+}
+
+function formatListingLabel(row, labelOverride = null) {
+  const trackedLabel = labelOverride ? String(labelOverride).trim() : ''
+  if (trackedLabel) return trackedLabel
+
   const brand = row?.brand ? String(row.brand).trim() : ''
   const size = row?.size ? String(row.size).trim() : ''
   const title = row?.title ? String(row.title).trim() : ''
@@ -981,8 +1049,16 @@ function buildEventSummary({
   }
 }
 
-function buildCanonicalEvent(row, previousRow, changedFields, fieldChanges, snapshotTimestampUtc, baselineTimestampUtc) {
-  const label = formatListingLabel(row)
+function buildCanonicalEvent(
+  row,
+  previousRow,
+  changedFields,
+  fieldChanges,
+  snapshotTimestampUtc,
+  baselineTimestampUtc,
+  labelOverride = null,
+) {
+  const label = formatListingLabel(row, labelOverride)
   const owner = normalizeEventOwner(row.owner_type)
   const currentSnapshot = toEventSnapshot(row)
   const baselineSnapshot = toEventSnapshot(previousRow)
@@ -1024,6 +1100,20 @@ function buildCanonicalEvent(row, previousRow, changedFields, fieldChanges, snap
     changed_fields: [...changedFields],
     field_changes: fieldChanges,
   }
+}
+
+function eventHasBsrChange(event) {
+  const changedFields = Array.isArray(event?.changed_fields) ? event.changed_fields : []
+  return changedFields.some((field) => BSR_CHANGE_FIELDS.has(field))
+}
+
+function shouldEmailEvent(event, mainBsrEmailAsins) {
+  const asin = String(event?.asin ?? '').trim().toUpperCase()
+  return mainBsrEmailAsins.has(asin) && eventHasBsrChange(event)
+}
+
+function selectEmailEvents(events, mainBsrEmailAsins) {
+  return events.filter((event) => shouldEmailEvent(event, mainBsrEmailAsins))
 }
 
 function severityRank(severity) {
@@ -1353,7 +1443,7 @@ async function collectRows(sp, marketplaceId, sellerId) {
   }
 }
 
-function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal) {
+function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal, trackedLabelsByAsin = new Map()) {
   const statePath = path.join(MONITORING_HOURLY_LISTINGS_DIR, 'latest_state.json')
   const previousState = fs.existsSync(statePath)
     ? JSON.parse(fs.readFileSync(statePath, 'utf8'))
@@ -1443,6 +1533,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
 
     let event = null
     if (hasBaseline && changedFields.length > 0) {
+      const trackedLabel = trackedLabelsByAsin.get(String(row.asin ?? '').trim().toUpperCase()) ?? null
       event = buildCanonicalEvent(
         row,
         previousRow,
@@ -1450,6 +1541,7 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
         fieldChanges,
         snapshotTimestampUtc,
         normalizeCompareValue(previousRow.snapshot_timestamp_utc || baselineTimestampUtc),
+        trackedLabel,
       )
       events.push(event)
     }
@@ -1667,6 +1759,10 @@ async function main() {
   loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 
+  const competitorMainAsins = getCompetitorMainAsins()
+  const mainBsrEmailAsins = getMainBsrEmailAsins()
+  const trackedLabelsByAsin = await loadTrackedAsinLabels()
+
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')
   const refreshToken = requiredEnv('AMAZON_REFRESH_TOKEN_US')
@@ -1704,7 +1800,7 @@ async function main() {
     events,
     nextState,
     statePath,
-  } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal)
+  } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal, trackedLabelsByAsin)
 
   const snapshotHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, SNAPSHOT_HISTORY_FILE_NAME)
   const changesHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, CHANGES_HISTORY_FILE_NAME)
@@ -1713,16 +1809,18 @@ async function main() {
   appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
 
-  if (events.length > 0) {
+  const emailEvents = selectEmailEvents(events, mainBsrEmailAsins)
+
+  if (emailEvents.length > 0) {
     const appUrl = requiredEnv('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
     const timeLabel = snapshotTimeLocal.length === 4
       ? `${snapshotTimeLocal.slice(0, 2)}:${snapshotTimeLocal.slice(2)}`
       : snapshotTimeLocal
     const feedUrl = `${appUrl}/tracking?window=all&snapshot=${encodeURIComponent(snapshotTimestampUtc)}`
 
-    const subject = `Argus: ${events.length} monitoring alert${events.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
+    const subject = `Argus: ${emailEvents.length} monitoring alert${emailEvents.length === 1 ? '' : 's'} (${snapshotDate} ${timeLabel} CT)`
     const lines = [
-      `Argus monitoring detected ${events.length} change${events.length === 1 ? '' : 's'}.`,
+      `Argus monitoring detected ${emailEvents.length} change${emailEvents.length === 1 ? '' : 's'}.`,
       `Snapshot UTC: ${snapshotTimestampUtc}`,
       '',
       `Open change feed: ${feedUrl}`,
@@ -1730,7 +1828,7 @@ async function main() {
     ]
 
     const maxEvents = 40
-    const visibleEvents = events.slice(0, maxEvents)
+    const visibleEvents = emailEvents.slice(0, maxEvents)
     for (const event of visibleEvents) {
       const eventUrl = `${feedUrl}&query=${encodeURIComponent(event.asin)}`
       lines.push(`${String(event.owner_type).toUpperCase()} ${event.headline}`)
@@ -1754,14 +1852,14 @@ async function main() {
       lines.push('')
     }
 
-    if (events.length > maxEvents) {
-      lines.push(`...and ${events.length - maxEvents} more alert(s).`)
+    if (emailEvents.length > maxEvents) {
+      lines.push(`...and ${emailEvents.length - maxEvents} more alert(s).`)
       lines.push('')
     }
 
     const html = buildAlertDigestHtml({
       events: visibleEvents,
-      totalEvents: events.length,
+      totalEvents: emailEvents.length,
       maxEvents,
       snapshotDate,
       timeLabel,
@@ -1778,6 +1876,9 @@ async function main() {
 
   console.log('Hourly listing attributes collection complete')
   console.log(`competitor_variations=${competitorAsinCount}`)
+  console.log(`email_alerts=${emailEvents.length}`)
+  console.log(`competitor_main_asins=${[...competitorMainAsins].join('|')}`)
+  console.log(`main_bsr_email_asins=${[...mainBsrEmailAsins].join('|')}`)
   console.log(`asin_rows=${rows.length}`)
   console.log(`snapshot_history_file=${snapshotHistoryFile}`)
   console.log(`changes_history_file=${changesHistoryFile}`)
