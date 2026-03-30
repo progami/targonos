@@ -120,6 +120,8 @@ export interface MonitoringSchedulerJob {
   outputs: string[]
   lastExitStatus: number | null
   pid: number | null
+  latestRunStatus: 'ok' | 'failed' | null
+  latestRunAt: string | null
   status: 'healthy' | 'running' | 'failed' | 'missing'
 }
 
