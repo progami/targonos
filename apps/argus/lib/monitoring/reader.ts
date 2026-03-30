@@ -1293,6 +1293,7 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
   const stdoutPath = plist?.StandardOutPath ?? null
   const stderrPath = plist?.StandardErrorPath ?? null
   const latestRun = await readLatestRunLogEntry(spec.runLogPath)
+  const lastLaunchAt = await readLatestTimestamp(stdoutPath, stderrPath)
 
   if (!plist) {
     return {
@@ -1340,7 +1341,11 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
   const status =
     launchdState.pid !== null
       ? 'running'
-      : latestRun?.status === 'ok'
+      : latestRun?.status === 'ok' && launchdState.lastExitStatus !== 0
+        ? isIsoAfter(latestRun.timestamp, lastLaunchAt)
+          ? 'healthy'
+          : 'failed'
+        : latestRun?.status === 'ok'
         ? 'healthy'
         : latestRun?.status === 'failed'
           ? 'failed'
@@ -1442,6 +1447,36 @@ async function readLatestRunLogEntry(runLogPath: string | null | undefined): Pro
     if (isMissing(error)) return null
     throw error
   }
+}
+
+async function readLatestTimestamp(...paths: Array<string | null | undefined>): Promise<string | null> {
+  let latest: Date | null = null
+
+  for (const candidate of paths) {
+    if (!candidate) continue
+
+    try {
+      const stats = await fs.stat(candidate)
+      if (!latest || stats.mtime > latest) {
+        latest = stats.mtime
+      }
+    } catch (error) {
+      if (isMissing(error)) continue
+      throw error
+    }
+  }
+
+  return latest ? latest.toISOString() : null
+}
+
+function isIsoAfter(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right) return false
+
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return false
+
+  return leftTime > rightTime
 }
 
 async function statIso(targetPath: string): Promise<string | null> {
