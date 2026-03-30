@@ -18,7 +18,7 @@ const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
 const OUR_ASINS = ['B09HXC3NL8', 'B0CR1GSBQ9', 'B0FLKJ7WWM', 'B0FP66CWQ6']
 const COMPETITOR_SEED_ASINS = ['B0DQDWV1SV', 'B0CWS3848Y']
-const MAIN_BSR_EMAIL_ASINS = ['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y']
+const HERO_BSR_ASINS = ['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y']
 const BSR_CHANGE_FIELDS = new Set([
   'root_bsr_rank',
   'root_bsr_category_id',
@@ -82,9 +82,18 @@ function getCompetitorMainAsins() {
   return new Set(configuredAsins.length > 0 ? configuredAsins : COMPETITOR_SEED_ASINS)
 }
 
-function getMainBsrEmailAsins() {
-  const configuredAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS || '')
-  return new Set(configuredAsins.length > 0 ? configuredAsins : MAIN_BSR_EMAIL_ASINS)
+function getHeroBsrAsins() {
+  const configuredHeroAsins = parseAsinList(process.env.ARGUS_HERO_BSR_ASINS ?? '')
+  if (configuredHeroAsins.length > 0) {
+    return new Set(configuredHeroAsins)
+  }
+
+  const configuredLegacyAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS ?? '')
+  if (configuredLegacyAsins.length > 0) {
+    return new Set(configuredLegacyAsins)
+  }
+
+  return new Set(HERO_BSR_ASINS)
 }
 
 function resolveArgusDatasourceUrl() {
@@ -1114,13 +1123,27 @@ function eventHasBsrChange(event) {
   return changedFields.some((field) => BSR_CHANGE_FIELDS.has(field))
 }
 
-function shouldEmailEvent(event, mainBsrEmailAsins) {
-  const asin = String(event?.asin ?? '').trim().toUpperCase()
-  return mainBsrEmailAsins.has(asin) && eventHasBsrChange(event)
+function filterVisibleBsrChanges(asin, changedFields, fieldChanges, heroBsrAsins) {
+  const normalizedAsin = String(asin ?? '').trim().toUpperCase()
+  if (heroBsrAsins.has(normalizedAsin)) {
+    return {
+      changedFields: [...changedFields],
+      fieldChanges: [...fieldChanges],
+    }
+  }
+
+  return {
+    changedFields: changedFields.filter((field) => !BSR_CHANGE_FIELDS.has(field)),
+    fieldChanges: fieldChanges.filter((change) => !BSR_CHANGE_FIELDS.has(change.field)),
+  }
 }
 
-function selectEmailEvents(events, mainBsrEmailAsins) {
-  return events.filter((event) => shouldEmailEvent(event, mainBsrEmailAsins))
+function shouldEmailEvent(event) {
+  return eventHasBsrChange(event)
+}
+
+function selectEmailEvents(events) {
+  return events.filter((event) => shouldEmailEvent(event))
 }
 
 function severityRank(severity) {
@@ -1450,7 +1473,14 @@ async function collectRows(sp, marketplaceId, sellerId) {
   }
 }
 
-function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal, trackedLabelsByAsin = new Map()) {
+function buildDiffRows(
+  rows,
+  snapshotTimestampUtc,
+  snapshotDate,
+  snapshotTimeLocal,
+  trackedLabelsByAsin = new Map(),
+  heroBsrAsins = new Set(),
+) {
   const statePath = path.join(MONITORING_HOURLY_LISTINGS_DIR, 'latest_state.json')
   const previousState = fs.existsSync(statePath)
     ? JSON.parse(fs.readFileSync(statePath, 'utf8'))
@@ -1481,6 +1511,8 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
   for (const row of rows) {
     const previousRow = previousRowsByAsin.get(row.asin)
     const hasBaseline = Boolean(previousRow)
+    const normalizedAsin = String(row.asin ?? '').trim().toUpperCase()
+    const shouldSurfaceBsrChanges = heroBsrAsins.has(normalizedAsin)
 
     const currentImages = String(row.image_urls || '')
       .split(' | ')
@@ -1512,7 +1544,10 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
         ? Boolean(addedImages.length || removedImages.length)
         : normalizeCompareValue(previousRow[field]) !== normalizeCompareValue(row[field])
 
-      perAttributeChanges[`${field}_changed`] = fieldChanged ? 'yes' : 'no'
+      const isSuppressedBsrField = !shouldSurfaceBsrChanges && BSR_CHANGE_FIELDS.has(field)
+      perAttributeChanges[`${field}_changed`] = fieldChanged
+        ? (isSuppressedBsrField ? 'suppressed' : 'yes')
+        : 'no'
       if (fieldChanged) {
         changedFields.push(field)
         if (field === 'image_urls') {
@@ -1538,14 +1573,19 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       ...normalized,
     }
 
+    const {
+      changedFields: visibleChangedFields,
+      fieldChanges: visibleFieldChanges,
+    } = filterVisibleBsrChanges(row.asin, changedFields, fieldChanges, heroBsrAsins)
+
     let event = null
-    if (hasBaseline && changedFields.length > 0) {
-      const trackedLabel = trackedLabelsByAsin.get(String(row.asin ?? '').trim().toUpperCase()) ?? null
+    if (hasBaseline && visibleChangedFields.length > 0) {
+      const trackedLabel = trackedLabelsByAsin.get(normalizedAsin) ?? null
       event = buildCanonicalEvent(
         row,
         previousRow,
-        changedFields,
-        fieldChanges,
+        visibleChangedFields,
+        visibleFieldChanges,
         snapshotTimestampUtc,
         normalizeCompareValue(previousRow.snapshot_timestamp_utc || baselineTimestampUtc),
         trackedLabel,
@@ -1560,9 +1600,9 @@ function buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLoc
       baseline_timestamp_utc: hasBaseline
         ? normalizeCompareValue(previousRow.snapshot_timestamp_utc || baselineTimestampUtc)
         : '',
-      changed: hasBaseline ? (changedFields.length ? 'yes' : 'no') : 'no_baseline',
-      changed_fields: hasBaseline ? changedFields.join(',') : '',
-      changed_field_count: hasBaseline ? String(changedFields.length) : '',
+      changed: hasBaseline ? (visibleChangedFields.length ? 'yes' : 'no') : 'no_baseline',
+      changed_fields: hasBaseline ? visibleChangedFields.join(',') : '',
+      changed_field_count: hasBaseline ? String(visibleChangedFields.length) : '',
       event_label: event?.label ?? '',
       event_severity: event?.severity ?? '',
       event_primary_category: event?.primary_category ?? '',
@@ -1767,7 +1807,7 @@ async function main() {
   loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 
   const competitorMainAsins = getCompetitorMainAsins()
-  const mainBsrEmailAsins = getMainBsrEmailAsins()
+  const heroBsrAsins = getHeroBsrAsins()
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')
@@ -1808,7 +1848,14 @@ async function main() {
     events,
     nextState,
     statePath,
-  } = buildDiffRows(rows, snapshotTimestampUtc, snapshotDate, snapshotTimeLocal, trackedLabelsByAsin)
+  } = buildDiffRows(
+    rows,
+    snapshotTimestampUtc,
+    snapshotDate,
+    snapshotTimeLocal,
+    trackedLabelsByAsin,
+    heroBsrAsins,
+  )
 
   const snapshotHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, SNAPSHOT_HISTORY_FILE_NAME)
   const changesHistoryFile = path.join(MONITORING_HOURLY_LISTINGS_DIR, CHANGES_HISTORY_FILE_NAME)
@@ -1817,7 +1864,7 @@ async function main() {
   appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
 
-  const emailEvents = selectEmailEvents(events, mainBsrEmailAsins)
+  const emailEvents = selectEmailEvents(events)
 
   if (emailEvents.length > 0) {
     const appUrl = requiredEnv('NEXT_PUBLIC_APP_URL').replace(/\/$/, '')
@@ -1886,7 +1933,7 @@ async function main() {
   console.log(`competitor_variations=${competitorAsinCount}`)
   console.log(`email_alerts=${emailEvents.length}`)
   console.log(`competitor_main_asins=${[...competitorMainAsins].join('|')}`)
-  console.log(`main_bsr_email_asins=${[...mainBsrEmailAsins].join('|')}`)
+  console.log(`main_bsr_email_asins=${[...heroBsrAsins].join('|')}`)
   console.log(`asin_rows=${rows.length}`)
   console.log(`snapshot_history_file=${snapshotHistoryFile}`)
   console.log(`changes_history_file=${changesHistoryFile}`)
