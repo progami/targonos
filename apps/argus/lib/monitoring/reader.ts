@@ -468,6 +468,14 @@ const CATEGORY_PRIORITY: MonitoringCategory[] = [
   'catalog',
 ]
 
+const HERO_BSR_ASINS = getHeroBsrAsins()
+const HERO_BSR_CHANGE_FIELDS = new Set([
+  'root_bsr_rank',
+  'root_bsr_category_id',
+  'sub_bsr_rank',
+  'sub_bsr_category_id',
+])
+
 interface LatestStateFile {
   timestamp_utc: string
   snapshot_file: string
@@ -652,6 +660,7 @@ async function loadMonitoringModel() {
         index,
       ),
     )
+    .filter((item): item is MonitoringChangeEvent => item !== null)
     .sort(compareEvents)
 
   return {
@@ -773,53 +782,95 @@ function normalizeChangeEvent(
   currentState: MonitoringStateRecord | null,
   label: string | null,
   index: number,
-): MonitoringChangeEvent {
+): MonitoringChangeEvent | null {
   const asin = row.asin.trim().toUpperCase()
-  const changedFields = parseChangedFields(row.changed_fields)
+  const rawChangedFields = parseChangedFields(row.changed_fields)
   const currentSnapshot =
     snapshots.find((item) => item.capturedAt === row.snapshot_timestamp_utc) ?? null
   const baselineSnapshot =
     snapshots.find((item) => item.capturedAt === row.baseline_timestamp_utc) ?? null
 
   const owner = normalizeOwner(row.owner_type)
-  const categories = parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
-  const fieldChanges = parseStoredFieldChanges(row.event_field_changes) ?? []
+  const rawFieldChanges = parseStoredFieldChanges(row.event_field_changes) ?? []
+  const {
+    changedFields,
+    fieldChanges,
+    didFilterBsrChanges,
+  } = filterVisibleBsrChanges(asin, rawChangedFields, rawFieldChanges)
+  if (changedFields.length === 0) {
+    return null
+  }
+
+  const categories = didFilterBsrChanges
+    ? classifyCategories(changedFields)
+    : parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
   const primaryCategory =
-    parseStoredCategory(row.event_primary_category) ??
-    pickPrimaryCategory({
-      categories,
-      currentSnapshot,
-      baselineSnapshot,
-    })
+    didFilterBsrChanges
+      ? pickPrimaryCategory({
+          categories,
+          currentSnapshot,
+          baselineSnapshot,
+        })
+      : parseStoredCategory(row.event_primary_category) ??
+        pickPrimaryCategory({
+          categories,
+          currentSnapshot,
+          baselineSnapshot,
+        })
   const severity =
-    parseStoredSeverity(row.event_severity) ??
-    classifySeverity({
-      owner,
-      categories,
-      changedFields,
-      currentSnapshot,
-      baselineSnapshot,
-    })
+    didFilterBsrChanges
+      ? classifySeverity({
+          owner,
+          categories,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+        })
+      : parseStoredSeverity(row.event_severity) ??
+        classifySeverity({
+          owner,
+          categories,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+        })
   const displayName = label ?? row.event_label ?? asin
   const headline =
-    readString(row.event_headline) ??
-    buildHeadline({
-      asin: displayName,
-      owner,
-      primaryCategory,
-      currentSnapshot,
-      baselineSnapshot,
-      changedFields,
-    })
+    didFilterBsrChanges
+      ? buildHeadline({
+          asin: displayName,
+          owner,
+          primaryCategory,
+          currentSnapshot,
+          baselineSnapshot,
+          changedFields,
+        })
+      : readString(row.event_headline) ??
+        buildHeadline({
+          asin: displayName,
+          owner,
+          primaryCategory,
+          currentSnapshot,
+          baselineSnapshot,
+          changedFields,
+        })
   const summary =
-    readString(row.event_summary) ??
-    buildSummary({
-      primaryCategory,
-      changedFields,
-      currentSnapshot,
-      baselineSnapshot,
-      currentState,
-    })
+    didFilterBsrChanges
+      ? buildSummary({
+          primaryCategory,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+          currentState,
+        })
+      : readString(row.event_summary) ??
+        buildSummary({
+          primaryCategory,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+          currentState,
+        })
 
   return {
     id: `${asin}-${row.snapshot_timestamp_utc}-${index}`,
@@ -831,7 +882,7 @@ function normalizeChangeEvent(
     severity,
     categories,
     primaryCategory,
-    changedFieldCount: Number(row.changed_field_count) || changedFields.length,
+    changedFieldCount: changedFields.length,
     changedFields,
     fieldChanges,
     headline,
@@ -1100,6 +1151,33 @@ function valuesDiffer(
   return baseline !== current
 }
 
+function filterVisibleBsrChanges(
+  asin: string,
+  changedFields: string[],
+  fieldChanges: MonitoringFieldChange[],
+): {
+  changedFields: string[]
+  fieldChanges: MonitoringFieldChange[]
+  didFilterBsrChanges: boolean
+} {
+  if (HERO_BSR_ASINS.has(asin)) {
+    return {
+      changedFields: [...changedFields],
+      fieldChanges: [...fieldChanges],
+      didFilterBsrChanges: false,
+    }
+  }
+
+  const filteredChangedFields = changedFields.filter((field) => !HERO_BSR_CHANGE_FIELDS.has(field))
+  const filteredFieldChanges = fieldChanges.filter((change) => !HERO_BSR_CHANGE_FIELDS.has(change.field))
+
+  return {
+    changedFields: filteredChangedFields,
+    fieldChanges: filteredFieldChanges,
+    didFilterBsrChanges: filteredChangedFields.length !== changedFields.length,
+  }
+}
+
 function parseChangedFields(input: string): string[] {
   return input
     .split(',')
@@ -1193,6 +1271,29 @@ function readStoredStringArray(value: unknown): string[] {
 
     return entry
   })
+}
+
+function getHeroBsrAsins(): Set<string> {
+  const configuredHeroAsins = parseAsinList(process.env.ARGUS_HERO_BSR_ASINS)
+  if (configuredHeroAsins.length > 0) {
+    return new Set(configuredHeroAsins)
+  }
+
+  const configuredLegacyAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS)
+  if (configuredLegacyAsins.length > 0) {
+    return new Set(configuredLegacyAsins)
+  }
+
+  return new Set(['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y'])
+}
+
+function parseAsinList(value: string | undefined): string[] {
+  if (typeof value !== 'string') return []
+
+  return value
+    .split(/[\s,|]+/)
+    .map((asin) => asin.trim().toUpperCase())
+    .filter((asin) => asin !== '')
 }
 
 function normalizeOwner(value: unknown): MonitoringOwner {
