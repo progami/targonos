@@ -96,7 +96,13 @@ function resolveArgusDatasourceUrl() {
   return url.toString()
 }
 
-async function loadTrackedAsinLabels() {
+function resolveTrackedAsinMarketplace(marketplaceId) {
+  if (marketplaceId === 'ATVPDKIKX0DER') return 'US'
+  if (marketplaceId === 'A1F83G8C2ARO7P') return 'UK'
+  throw new Error(`Unsupported tracked ASIN marketplace: ${marketplaceId}`)
+}
+
+async function loadTrackedAsinLabels(marketplace) {
   try {
     const requireFromArgus = createRequire(ARGUS_PACKAGE_JSON)
     const { PrismaClient } = requireFromArgus('@targon/prisma-argus')
@@ -108,6 +114,7 @@ async function loadTrackedAsinLabels() {
 
     try {
       const trackedAsins = await prisma.trackedAsin.findMany({
+        where: { marketplace },
         select: { asin: true, label: true },
       })
 
@@ -1761,7 +1768,6 @@ async function main() {
 
   const competitorMainAsins = getCompetitorMainAsins()
   const mainBsrEmailAsins = getMainBsrEmailAsins()
-  const trackedLabelsByAsin = await loadTrackedAsinLabels()
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')
@@ -1769,6 +1775,8 @@ async function main() {
   const region = requiredEnv('AMAZON_SP_API_REGION_US')
   const marketplaceId = requiredEnv('AMAZON_MARKETPLACE_ID_US')
   const sellerId = requiredEnv('AMAZON_SELLER_ID_US')
+  const trackedAsinMarketplace = resolveTrackedAsinMarketplace(marketplaceId)
+  const trackedLabelsByAsin = await loadTrackedAsinLabels(trackedAsinMarketplace)
 
   const requireFromTalos = createRequire(TALOS_PACKAGE_JSON)
   const SellingPartnerAPI = requireFromTalos('amazon-sp-api')
