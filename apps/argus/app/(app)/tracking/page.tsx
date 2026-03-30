@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { Suspense, startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Alert,
+  Badge,
   Box,
   Button,
   Card,
@@ -34,12 +36,13 @@ const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
 type OwnerFilter = 'ALL' | 'OURS' | 'COMPETITOR'
 
+const TrackingDashboardLazy = dynamic(
+  () => Promise.resolve(TrackingDashboardContent),
+  { ssr: false, loading: TrackingDashboardFallback },
+)
+
 export default function TrackingDashboard() {
-  return (
-    <Suspense fallback={<TrackingDashboardFallback />}>
-      <TrackingDashboardContent />
-    </Suspense>
-  )
+  return <TrackingDashboardLazy />
 }
 
 function TrackingDashboardContent() {
@@ -70,6 +73,14 @@ function TrackingDashboardContent() {
   )
   const deferredQuery = useDeferredValue(query)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('argus:read-events')
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
 
   useEffect(() => {
     const nextWindow = readWindowParam(searchParams.get('window'))
@@ -234,6 +245,21 @@ function TrackingDashboardContent() {
       Math.round((Date.now() - new Date(overview.snapshotTimestamp).getTime()) / 60000),
     )
   }, [overview])
+
+  function handleSelectEvent(id: string) {
+    setSelectedEventId(id)
+    setReadIds((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      try { localStorage.setItem('argus:read-events', JSON.stringify([...next])) } catch {}
+      return next
+    })
+  }
+
+  const unreadCount = useMemo(
+    () => changes.filter((c) => !readIds.has(c.id)).length,
+    [changes, readIds],
+  )
 
   async function handleRefresh() {
     setRefreshing(true)
@@ -408,18 +434,44 @@ function TrackingDashboardContent() {
               value={activeTab}
               onChange={(_event, nextValue: 'changes' | 'sources') => setActiveTab(nextValue)}
             >
-              <Tab label="Changes" value="changes" />
+              <Tab
+                label={
+                  <Badge
+                    badgeContent={unreadCount}
+                    color="error"
+                    max={99}
+                    sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', height: 18, minWidth: 18 } }}
+                  >
+                    <Box component="span" sx={{ pr: unreadCount > 0 ? 1.5 : 0 }}>Changes</Box>
+                  </Badge>
+                }
+                value="changes"
+              />
               <Tab label="Sources" value="sources" />
             </Tabs>
           </Box>
 
           {activeTab === 'changes' ? (
-            <Box sx={{ display: 'flex', height: 'calc(100vh - 280px)', minHeight: 400 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 400 }}>
+              {/* Detail panel — top, fixed height */}
+              <Box
+                sx={{
+                  height: 280,
+                  minHeight: 280,
+                  overflow: 'auto',
+                  borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
+                }}
+              >
+                <ChangeDetail event={selectedEvent} />
+              </Box>
+
+              {/* Feed strip — below, full width */}
               <FeedRail
                 changes={changes}
                 loading={loading}
                 selectedEventId={selectedEventId}
-                onSelectEvent={setSelectedEventId}
+                onSelectEvent={handleSelectEvent}
+                readIds={readIds}
                 windowValue={windowValue}
                 onWindowChange={setWindowValue}
                 owner={owner}
@@ -431,9 +483,6 @@ function TrackingDashboardContent() {
                 query={query}
                 onQueryChange={setQuery}
               />
-              <Box sx={{ flex: 1, overflow: 'hidden' }}>
-                <ChangeDetail event={selectedEvent} />
-              </Box>
             </Box>
           ) : (
             <SourceHealthGrid health={health} healthError={healthError} />
