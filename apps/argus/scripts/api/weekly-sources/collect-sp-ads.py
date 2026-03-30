@@ -273,6 +273,48 @@ def ordered_headers(canonical_headers, rows):
     return ordered
 
 
+def read_json_file(path: Path):
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def output_path_for_week(week, key):
+    file_name = f"{week['code']}_{week['endDate']}_{CODE_SUFFIX[key]}.csv"
+    return DEST_ROOT / SUBDIR[key] / file_name
+
+
+def manifest_entry_for(reports, key, suffix):
+    for entry in reports.get(key, []):
+        if entry.get('suffix') == suffix:
+            return entry
+    return None
+
+
+def can_reuse_key_output(existing_manifest, week, key, entries):
+    if not existing_manifest:
+        return False
+
+    manifest_reports = existing_manifest.get('reports') or {}
+    manifest_outputs = existing_manifest.get('outputs') or {}
+    output_meta = manifest_outputs.get(key)
+    if not output_meta:
+        return False
+
+    output_path = output_path_for_week(week, key)
+    if not output_path.exists():
+        return False
+
+    for suffix, _cfg_base, _request_columns, _output_columns in entries:
+        entry = manifest_entry_for(manifest_reports, key, suffix)
+        if not entry:
+            return False
+        if str(entry.get('status') or '').upper() != 'COMPLETED':
+            return False
+
+    return True
+
+
 def report_configs():
     return {
         'search_term': [
@@ -398,8 +440,18 @@ def report_configs():
 def run_week(base_url, headers, week):
     tasks = []
     configs = report_configs()
+    manifest_path = MANIFEST_ROOT / f"{week['code']}_{week['endDate']}_SP-Manifest.json"
+    existing_manifest = read_json_file(manifest_path)
+    outputs = {}
+    skipped_keys = set()
 
     for key, entries in configs.items():
+        if can_reuse_key_output(existing_manifest, week, key, entries):
+            outputs[key] = dict((existing_manifest.get('outputs') or {}).get(key) or {})
+            print(f'[{week["code"]}] reuse existing {key} output file={output_path_for_week(week, key)}', flush=True)
+            skipped_keys.add(key)
+            continue
+
         for suffix, cfg_base, request_columns, output_columns in entries:
             created = create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base, request_columns)
             print(
@@ -417,6 +469,10 @@ def run_week(base_url, headers, week):
                 'attempts': created['attempts'],
                 'statusObj': None,
             })
+
+    if not tasks:
+        print(f'[{week["code"]}] manifest {manifest_path} already current', flush=True)
+        return
 
     deadline = time.time() + MAX_WAIT_SECONDS
     pending = len(tasks)
@@ -445,7 +501,6 @@ def run_week(base_url, headers, week):
     for task in tasks:
         completed.setdefault(task['key'], []).append(task)
 
-    outputs = {}
     for key, entries in completed.items():
         rows = []
         output_headers = []
@@ -479,7 +534,13 @@ def run_week(base_url, headers, week):
         'pollIntervalSec': POLL_INTERVAL_SEC,
         'maxWaitSec': MAX_WAIT_SECONDS,
         'reports': {
-            key: [
+            **{
+                key: (existing_manifest.get('reports') or {}).get(key, [])
+                for key in skipped_keys
+                if existing_manifest and (existing_manifest.get('reports') or {}).get(key)
+            },
+            **{
+                key: [
                 {
                     'suffix': entry['suffix'],
                     'reportId': entry['reportId'],
@@ -494,11 +555,11 @@ def run_week(base_url, headers, week):
                 for entry in entries
             ]
             for key, entries in completed.items()
+            },
         },
         'outputs': outputs,
     }
 
-    manifest_path = MANIFEST_ROOT / f"{week['code']}_{week['endDate']}_SP-Manifest.json"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(f'[{week["code"]}] manifest {manifest_path}', flush=True)

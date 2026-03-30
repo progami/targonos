@@ -317,40 +317,77 @@ async function findReusableReport(client, { reportType, marketplaceId, dataStart
   )
 }
 
-async function resolveTstReportId(client, reportWindow, label) {
-  const completedReport = await findReusableReport(client, {
-    reportType: TST_REPORT_TYPE,
+function matchesReusableReport(report, { reportType, marketplaceId, dataStartTime, dataEndTime }) {
+  return (
+    report?.reportType === reportType &&
+    report?.marketplaceIds?.includes(marketplaceId) &&
+    sameInstant(report?.dataStartTime, dataStartTime) &&
+    sameInstant(report?.dataEndTime, dataEndTime)
+  )
+}
+
+async function loadManifestReport(client, manifestReportId, criteria) {
+  if (!manifestReportId) return null
+
+  try {
+    const report = await client.callAPI({
+      operation: 'getReport',
+      endpoint: 'reports',
+      path: { reportId: manifestReportId },
+    })
+
+    if (!matchesReusableReport(report, criteria)) {
+      return null
+    }
+
+    return report
+  } catch {
+    return null
+  }
+}
+
+async function resolveReportId(client, { reportType, reportWindow, label, reportOptions = null, manifestReportId = '' }) {
+  const criteria = {
+    reportType,
     marketplaceId: reportWindow.marketplaceIds[0],
     dataStartTime: reportWindow.dataStartTime,
     dataEndTime: reportWindow.dataEndTime,
-    statuses: DONE_REPORT_STATUSES,
-  })
+  }
+
+  const manifestReport = await loadManifestReport(client, manifestReportId, criteria)
+  const manifestStatus = manifestReport?.processingStatus
+  if (DONE_REPORT_STATUSES.has(manifestStatus)) {
+    console.log(`[SP-API] ${label} reusing manifest DONE reportId=${manifestReport.reportId}`)
+    return manifestReport.reportId
+  }
+
+  if (ACTIVE_REPORT_STATUSES.has(manifestStatus)) {
+    console.log(`[SP-API] ${label} reusing manifest active reportId=${manifestReport.reportId}`)
+    return waitForReport(client, manifestReport.reportId, label)
+  }
+
+  const completedReport = await findReusableReport(client, { ...criteria, statuses: DONE_REPORT_STATUSES })
   if (completedReport?.reportId) {
     console.log(`[SP-API] ${label} reusing DONE reportId=${completedReport.reportId}`)
     return completedReport.reportId
   }
 
-  const activeReport = await findReusableReport(client, {
-    reportType: TST_REPORT_TYPE,
-    marketplaceId: reportWindow.marketplaceIds[0],
-    dataStartTime: reportWindow.dataStartTime,
-    dataEndTime: reportWindow.dataEndTime,
-    statuses: ACTIVE_REPORT_STATUSES,
-  })
+  const activeReport = await findReusableReport(client, { ...criteria, statuses: ACTIVE_REPORT_STATUSES })
   if (activeReport?.reportId) {
     console.log(`[SP-API] ${label} reusing active reportId=${activeReport.reportId}`)
     return waitForReport(client, activeReport.reportId, label)
   }
 
-  return createAndWaitReport(
-    client,
-    {
-      reportType: TST_REPORT_TYPE,
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK' },
-    },
-    label,
-  )
+  const body = {
+    reportType,
+    ...reportWindow,
+  }
+
+  if (reportOptions) {
+    body.reportOptions = reportOptions
+  }
+
+  return createAndWaitReport(client, body, label)
 }
 
 async function downloadJsonReport(client, reportId) {
@@ -452,13 +489,21 @@ async function main() {
   ensureDir(TST_DIR)
   ensureDir(SALES_DIR)
 
+  const scpPath = path.join(SCP_DIR, `${weekPrefix}_SCP.csv`)
+  const sqpPath = path.join(SQP_DIR, `${weekPrefix}_SQP.csv`)
+  const salesByDatePath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`)
+  const salesByAsinPath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`)
+  const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
+  const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
+  const existingManifest = readJsonFile(manifestPath)
+
   if (dryRun) {
     console.log(`[SP-API][dry-run] scope=${scopeLabel}`)
-    console.log(`[SP-API][dry-run] ${path.join(SCP_DIR, `${weekPrefix}_SCP.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SQP_DIR, `${weekPrefix}_SQP.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(TST_DIR, `${weekPrefix}_TST.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`)}`)
+    console.log(`[SP-API][dry-run] ${scpPath}`)
+    console.log(`[SP-API][dry-run] ${sqpPath}`)
+    console.log(`[SP-API][dry-run] ${filteredTstPath}`)
+    console.log(`[SP-API][dry-run] ${salesByDatePath}`)
+    console.log(`[SP-API][dry-run] ${salesByAsinPath}`)
     return
   }
 
@@ -492,56 +537,63 @@ async function main() {
     marketplaceIds: [marketplaceId],
   }
 
-  const scpReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK' },
-    },
-    `${scopeLabel} SCP`,
-  )
-  const scpData = await downloadJsonReport(client, scpReportId)
-  rowsToCsv(path.join(SCP_DIR, `${weekPrefix}_SCP.csv`), scpData.parsed?.dataByAsin || [], SCP_HEADERS)
+  const scpReportId = await resolveReportId(client, {
+    reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SCP`,
+    reportOptions: { reportPeriod: 'WEEK' },
+    manifestReportId: existingManifest?.reports?.scpReportId,
+  })
+  const canReuseScpOutput = existingManifest?.reports?.scpReportId === scpReportId && fs.existsSync(scpPath)
+  if (canReuseScpOutput) {
+    console.log(`[SP-API] ${scopeLabel} SCP output already current for reportId=${scpReportId}`)
+  } else {
+    const scpData = await downloadJsonReport(client, scpReportId)
+    rowsToCsv(scpPath, scpData.parsed?.dataByAsin || [], SCP_HEADERS)
+  }
 
-  const sqpReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
-    },
-    `${scopeLabel} SQP`,
-  )
-  const sqpData = await downloadJsonReport(client, sqpReportId)
-  rowsToCsv(path.join(SQP_DIR, `${weekPrefix}_SQP.csv`), sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
+  const sqpReportId = await resolveReportId(client, {
+    reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SQP`,
+    reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
+    manifestReportId: existingManifest?.reports?.sqpReportId,
+  })
+  const canReuseSqpOutput = existingManifest?.reports?.sqpReportId === sqpReportId && fs.existsSync(sqpPath)
+  if (canReuseSqpOutput) {
+    console.log(`[SP-API] ${scopeLabel} SQP output already current for reportId=${sqpReportId}`)
+  } else {
+    const sqpData = await downloadJsonReport(client, sqpReportId)
+    rowsToCsv(sqpPath, sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
+  }
 
-  const salesReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
-      ...reportWindow,
-      reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
-    },
-    `${scopeLabel} SalesTraffic`,
-  )
-  const salesData = await downloadJsonReport(client, salesReportId)
-  rowsToCsv(
-    path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`),
-    salesData.parsed?.salesAndTrafficByDate || [],
-    SALES_BY_DATE_HEADERS,
-  )
-  rowsToCsv(
-    path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`),
-    salesData.parsed?.salesAndTrafficByAsin || [],
-    SALES_BY_ASIN_HEADERS,
-  )
+  const salesReportId = await resolveReportId(client, {
+    reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SalesTraffic`,
+    reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
+    manifestReportId: existingManifest?.reports?.salesReportId,
+  })
+  const canReuseSalesOutput =
+    existingManifest?.reports?.salesReportId === salesReportId &&
+    fs.existsSync(salesByDatePath) &&
+    fs.existsSync(salesByAsinPath)
+  if (canReuseSalesOutput) {
+    console.log(`[SP-API] ${scopeLabel} SalesTraffic output already current for reportId=${salesReportId}`)
+  } else {
+    const salesData = await downloadJsonReport(client, salesReportId)
+    rowsToCsv(salesByDatePath, salesData.parsed?.salesAndTrafficByDate || [], SALES_BY_DATE_HEADERS)
+    rowsToCsv(salesByAsinPath, salesData.parsed?.salesAndTrafficByAsin || [], SALES_BY_ASIN_HEADERS)
+  }
 
-  const tstReportId = await resolveTstReportId(client, reportWindow, `${scopeLabel} TST`)
+  const tstReportId = await resolveReportId(client, {
+    reportType: TST_REPORT_TYPE,
+    reportWindow,
+    label: `${scopeLabel} TST`,
+    reportOptions: { reportPeriod: 'WEEK' },
+    manifestReportId: existingManifest?.reports?.tstReportId,
+  })
 
-  const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
-  const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
-  const existingManifest = readJsonFile(manifestPath)
   const canReuseFilteredTst =
     existingManifest?.reports?.tstReportId === tstReportId &&
     existingManifest?.filterKeyword === TST_FILTER_KEYWORD &&
