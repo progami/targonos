@@ -296,7 +296,34 @@ function sameInstant(left, right) {
   return leftTime === rightTime
 }
 
-async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, statuses }) {
+function normalizeReportOptions(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeReportOptions(entry))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = normalizeReportOptions(value[key])
+        return result
+      }, {})
+  }
+
+  return value ?? null
+}
+
+function sameReportOptions(left, right) {
+  return JSON.stringify(normalizeReportOptions(left)) === JSON.stringify(normalizeReportOptions(right))
+}
+
+function canBlindlyReuseReport(report, reportOptions) {
+  if (!reportOptions) return true
+  if (!report?.reportOptions) return false
+  return sameReportOptions(report.reportOptions, reportOptions)
+}
+
+async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, reportOptions = null, statuses }) {
   const response = await client.callAPI({
     operation: 'getReports',
     endpoint: 'reports',
@@ -312,6 +339,7 @@ async function findReusableReport(client, { reportType, marketplaceId, dataStart
       .filter((report) => report?.marketplaceIds?.includes(marketplaceId))
       .filter((report) => sameInstant(report?.dataStartTime, dataStartTime))
       .filter((report) => sameInstant(report?.dataEndTime, dataEndTime))
+      .filter((report) => canBlindlyReuseReport(report, reportOptions))
       .filter((report) => statuses.has(report?.processingStatus))
       .sort((left, right) => String(right?.createdTime ?? '').localeCompare(String(left?.createdTime ?? '')))[0] ?? null
   )
@@ -352,6 +380,7 @@ async function resolveReportId(client, { reportType, reportWindow, label, report
     marketplaceId: reportWindow.marketplaceIds[0],
     dataStartTime: reportWindow.dataStartTime,
     dataEndTime: reportWindow.dataEndTime,
+    reportOptions,
   }
 
   const manifestReport = await loadManifestReport(client, manifestReportId, criteria)
