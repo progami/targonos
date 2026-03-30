@@ -264,8 +264,14 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                     >
                       <MetaItem label="LaunchAgent" value={job.launchdLabel} mono />
                       <MetaItem label="Status" value={job.status === 'running' ? `Running (PID ${job.pid})` : job.status} />
+                      {job.latestRunStatus && job.latestRunAt ? (
+                        <MetaItem
+                          label="Latest run"
+                          value={`${job.latestRunStatus} · ${formatDateTime(job.latestRunAt)}`}
+                        />
+                      ) : null}
                       {job.lastExitStatus !== null ? (
-                        <MetaItem label="Last exit" value={String(job.lastExitStatus)} mono />
+                        <MetaItem label="Launchd exit" value={String(job.lastExitStatus)} mono />
                       ) : null}
                     </Stack>
                   </Box>

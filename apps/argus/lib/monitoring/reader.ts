@@ -71,6 +71,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.argus.tracking-fetch',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.argus.tracking-fetch.plist'),
+    runLogPath: null,
     outputs: ['Argus tracking snapshots (DB)'],
   },
   {
@@ -81,6 +82,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.hourly-listing-attributes-api',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.hourly-listing-attributes-api.plist'),
+    runLogPath: null,
     outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
   },
   {
@@ -91,6 +93,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:00 AM',
     launchdLabel: 'com.targon.daily-account-health',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-account-health.plist'),
+    runLogPath: null,
     outputs: ['Account Health Dashboard (API)'],
   },
   {
@@ -101,6 +104,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Monday at 4:00 AM',
     launchdLabel: 'com.targon.weekly-api-sources',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-api-sources.plist'),
+    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-api-sources/run-log.jsonl'),
     outputs: [
       'Brand Analytics (API)',
       'Business Reports (API)',
@@ -117,6 +121,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:30 AM',
     launchdLabel: 'com.targon.daily-visuals',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-visuals.plist'),
+    runLogPath: null,
     outputs: ['Visuals (Browser)'],
   },
   {
@@ -127,6 +132,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Monday at 3:00 AM',
     launchdLabel: 'com.targon.weekly-browser-sources',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-browser-sources.plist'),
+    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-browser-sources/run-log.jsonl'),
     outputs: [
       'Category Insights (Browser)',
       'Product Opportunity Explorer (Browser)',
@@ -338,6 +344,11 @@ interface LaunchAgentPlist {
   StandardOutPath?: string
   StandardErrorPath?: string
   WorkingDirectory?: string
+}
+
+interface MonitoringRunLogEntry {
+  timestamp: string
+  status: 'ok' | 'failed'
 }
 
 const CATEGORY_FIELDS: Record<MonitoringCategory, Set<string>> = {
@@ -1281,6 +1292,8 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
   const target = resolveLaunchAgentTarget(plist)
   const stdoutPath = plist?.StandardOutPath ?? null
   const stderrPath = plist?.StandardErrorPath ?? null
+  const latestRun = await readLatestRunLogEntry(spec.runLogPath)
+  const lastLaunchAt = await readLatestTimestamp(stdoutPath, stderrPath)
 
   if (!plist) {
     return {
@@ -1297,6 +1310,8 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
       outputs: [...spec.outputs],
       lastExitStatus: null,
       pid: null,
+      latestRunStatus: latestRun?.status ?? null,
+      latestRunAt: latestRun?.timestamp ?? null,
       status: 'missing',
     }
   }
@@ -1317,9 +1332,26 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
       outputs: [...spec.outputs],
       lastExitStatus: null,
       pid: null,
+      latestRunStatus: latestRun?.status ?? null,
+      latestRunAt: latestRun?.timestamp ?? null,
       status: 'missing',
     }
   }
+
+  const status =
+    launchdState.pid !== null
+      ? 'running'
+      : latestRun?.status === 'ok' && launchdState.lastExitStatus !== 0
+        ? isIsoAfter(latestRun.timestamp, lastLaunchAt)
+          ? 'healthy'
+          : 'failed'
+        : latestRun?.status === 'ok'
+        ? 'healthy'
+        : latestRun?.status === 'failed'
+          ? 'failed'
+          : launchdState.lastExitStatus === 0
+            ? 'healthy'
+            : 'failed'
 
   return {
     id: spec.id,
@@ -1335,12 +1367,9 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
     outputs: [...spec.outputs],
     lastExitStatus: launchdState.lastExitStatus,
     pid: launchdState.pid,
-    status:
-      launchdState.pid !== null
-        ? 'running'
-        : launchdState.lastExitStatus === 0
-          ? 'healthy'
-          : 'failed',
+    latestRunStatus: latestRun?.status ?? null,
+    latestRunAt: latestRun?.timestamp ?? null,
+    status,
   }
 }
 
@@ -1384,6 +1413,70 @@ function readLaunchctlNumber(output: string, key: string): number | null {
   const match = output.match(new RegExp(`"${key}" = (-?\\d+);`))
   if (!match) return null
   return Number(match[1])
+}
+
+async function readLatestRunLogEntry(runLogPath: string | null | undefined): Promise<MonitoringRunLogEntry | null> {
+  if (!runLogPath) return null
+
+  try {
+    const content = await fs.readFile(runLogPath, 'utf8')
+    const lines = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+      .reverse()
+
+    for (const line of lines) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(line)
+      } catch {
+        continue
+      }
+
+      const timestamp = readString((parsed as { timestamp?: unknown }).timestamp)
+      const status = readString((parsed as { status?: unknown }).status)
+      if (!timestamp) continue
+      if (status !== 'ok' && status !== 'failed') continue
+
+      return { timestamp, status }
+    }
+
+    return null
+  } catch (error) {
+    if (isMissing(error)) return null
+    throw error
+  }
+}
+
+async function readLatestTimestamp(...paths: Array<string | null | undefined>): Promise<string | null> {
+  let latest: Date | null = null
+
+  for (const candidate of paths) {
+    if (!candidate) continue
+
+    try {
+      const stats = await fs.stat(candidate)
+      if (!latest || stats.mtime > latest) {
+        latest = stats.mtime
+      }
+    } catch (error) {
+      if (isMissing(error)) continue
+      throw error
+    }
+  }
+
+  return latest ? latest.toISOString() : null
+}
+
+function isIsoAfter(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right) return false
+
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return false
+
+  return leftTime > rightTime
 }
 
 async function statIso(targetPath: string): Promise<string | null> {
