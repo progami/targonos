@@ -304,6 +304,8 @@ download_export() {
   local baseline_info=""
   local baseline_path=""
   local baseline_mtime="0"
+  local baseline_ctime="0"
+  local baseline_size="0"
   local downloaded_file=""
   local export_status=""
   local payload=""
@@ -315,10 +317,12 @@ download_export() {
   for attempt in $(seq 1 3); do
     baseline_info="$(latest_matching_file "$DOWNLOAD_PATTERN")"
     if [ -n "$baseline_info" ]; then
-      IFS='|' read -r baseline_path baseline_mtime <<<"$baseline_info"
+      IFS='|' read -r baseline_path baseline_mtime baseline_ctime baseline_size <<<"$baseline_info"
     else
       baseline_path=""
       baseline_mtime="0"
+      baseline_ctime="0"
+      baseline_size="0"
     fi
 
     export_status="$(click_export)"
@@ -327,7 +331,13 @@ download_export() {
       return 1
     fi
 
-    if ! downloaded_file="$(wait_for_new_matching_file "$DOWNLOAD_PATTERN" "$baseline_path" "$baseline_mtime" 120)"; then
+    if ! downloaded_file="$(wait_for_new_matching_file "$DOWNLOAD_PATTERN" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" 120)"; then
+      latest_after_timeout="$(latest_matching_file "$DOWNLOAD_PATTERN")"
+      if [ -n "$latest_after_timeout" ]; then
+        log "Latest Brand Metrics match after timeout: $latest_after_timeout"
+      else
+        log "Latest Brand Metrics match after timeout: none"
+      fi
       log "FAILED: Brand Metrics export did not create a CSV download"
       return 1
     fi

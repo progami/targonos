@@ -96,15 +96,25 @@ download_pattern="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_
 baseline_info="$(latest_matching_file "$download_pattern")"
 baseline_path=""
 baseline_mtime="0"
+baseline_ctime="0"
+baseline_size="0"
 
 if [ -n "$baseline_info" ]; then
-  IFS='|' read -r baseline_path baseline_mtime <<<"$baseline_info"
+  IFS='|' read -r baseline_path baseline_mtime baseline_ctime baseline_size <<<"$baseline_info"
 fi
+
+log "Watching ScaleInsights download pattern: $download_pattern"
 
 open_window "$download_url"
 sleep 2
 
-if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baseline_path" "$baseline_mtime" 120)"; then
+if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" 120)"; then
+  latest_after_timeout="$(latest_matching_file "$download_pattern")"
+  if [ -n "$latest_after_timeout" ]; then
+    log "Latest ScaleInsights match after timeout: $latest_after_timeout"
+  else
+    log "Latest ScaleInsights match after timeout: none"
+  fi
   log "FAILED: ScaleInsights download did not create an XLSX for $download_url"
   exit 1
 fi
