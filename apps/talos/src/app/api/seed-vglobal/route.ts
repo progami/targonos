@@ -140,6 +140,11 @@ export async function POST() {
       // Inbound - Optional charges (seeded for reference)
       { costName: 'Pallets Supplied', costValue: 7.75, costCategory: 'Inbound' as const, unitOfMeasure: 'per_pallet' },
       { costName: 'Pallet Wrapping', costValue: 1.85, costCategory: 'Inbound' as const, unitOfMeasure: 'per_pallet' },
+      // Outbound - V Global forwarding charges
+      { costName: 'Carton Picking', costValue: 0.95, costCategory: 'Outbound' as const, unitOfMeasure: 'per_carton' },
+      { costName: 'Label Printed on Pallets', costValue: 0.45, costCategory: 'Outbound' as const, unitOfMeasure: 'per_label' },
+      { costName: 'Label Printed on Boxes', costValue: 0.45, costCategory: 'Outbound' as const, unitOfMeasure: 'per_carton' },
+      { costName: 'Pallets Outbound', costValue: 7.75, costCategory: 'Outbound' as const, unitOfMeasure: 'per_pallet' },
       // Storage
       { costName: 'Warehouse Storage', costValue: 2.60, costCategory: 'Storage' as const, unitOfMeasure: 'per_pallet_week' },
     ]
