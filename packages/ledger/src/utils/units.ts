@@ -8,7 +8,7 @@ export function calculateUnits(
   skuUnitsPerCarton?: number | null
 ): number {
   const unitsPerCarton = transactionUnitsPerCarton ?? skuUnitsPerCarton ?? 1
-  return Math.max(0, cartons * unitsPerCarton)
+  return cartons * unitsPerCarton
 }
 
 export function calculatePallets(cartons: number, cartonsPerPallet?: number | null): number {

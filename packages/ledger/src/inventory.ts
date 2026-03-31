@@ -29,7 +29,8 @@ export function aggregateInventoryTransactions(
   const balances = new Map<string, BalanceAccumulator>()
 
   for (const transaction of transactions) {
-    const key = [transaction.warehouseCode, transaction.skuCode, transaction.lotRef].join('::')
+    const sourceId = transaction.fulfillmentOrderId ?? transaction.purchaseOrderId ?? '_none_'
+    const key = [transaction.warehouseCode, transaction.skuCode, transaction.lotRef, sourceId].join('::')
     let current = balances.get(key)
 
     if (!current) {
@@ -128,13 +129,13 @@ export function aggregateInventoryTransactions(
   let balanceArray: InventoryBalanceSnapshot[] = Array.from(balances.values()).map((balance) => {
     const effectiveCartonsPerPallet = resolveCartonsPerPallet(balance)
 
-    const currentPallets = balance.currentCartons > 0
-      ? calculatePallets(balance.currentCartons, effectiveCartonsPerPallet)
-      : 0
+    const absCartons = Math.abs(balance.currentCartons)
+    const absPallets = absCartons > 0 ? calculatePallets(absCartons, effectiveCartonsPerPallet) : 0
+    const currentPallets = balance.currentCartons < 0 ? -absPallets : absPallets
 
     return {
       ...balance,
-      currentUnits: Math.max(0, balance.currentUnits),
+      currentUnits: balance.currentUnits,
       currentPallets,
       storageCartonsPerPallet: balance.storageCartonsPerPallet ?? effectiveCartonsPerPallet,
       shippingCartonsPerPallet: balance.shippingCartonsPerPallet ?? effectiveCartonsPerPallet,
@@ -143,7 +144,7 @@ export function aggregateInventoryTransactions(
   })
 
   if (!options.includeZeroStock) {
-    balanceArray = balanceArray.filter(balance => balance.currentCartons > 0)
+    balanceArray = balanceArray.filter(balance => balance.currentCartons !== 0)
   }
 
   if (options.sort !== false) {
