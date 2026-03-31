@@ -469,12 +469,21 @@ export async function transitionFulfillmentOrderStage(
     throw new ValidationError('Shipping method is required to ship a fulfillment order')
   }
 
-  const hasBillOfLading = Boolean(
-    order.documents?.some(document => document.stage === 'SHIPPING' && document.documentType === 'bill_of_lading')
-  )
+  const requiredDocuments: Array<{ stage: string; id: string; label: string }> = [
+    { stage: 'PACKING', id: 'carton_label', label: 'Carton Label' },
+    { stage: 'PACKING', id: 'pallete_label', label: 'Pallete Label' },
+    { stage: 'SHIPPING', id: 'cmr', label: 'CMR' },
+    { stage: 'SHIPPING', id: 'carrier_labels', label: 'Carrier Labels' },
+    { stage: 'SHIPPING', id: 'amazon_freight_invoice', label: 'Amazon Freight Invoice' },
+  ]
 
-  if (!hasBillOfLading) {
-    throw new ValidationError('Bill of Lading (BOL) document is required before shipping')
+  for (const req of requiredDocuments) {
+    const hasDoc = order.documents?.some(
+      doc => doc.stage === req.stage && doc.documentType === req.id
+    )
+    if (!hasDoc) {
+      throw new ValidationError(`${req.label} document is required before shipping`)
+    }
   }
 
   const warehouse = await prisma.warehouse.findFirst({
@@ -541,7 +550,6 @@ export async function transitionFulfillmentOrderStage(
         throw new ValidationError(`Invalid cartons quantity for SKU ${line.skuCode}`)
       }
 
-      const unitsPerCarton = sku.unitsPerCarton
       const shippingCartonsPerPallet = config?.shippingCartonsPerPallet ?? null
 
       if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
@@ -557,8 +565,13 @@ export async function transitionFulfillmentOrderStage(
           lotRef: line.lotRef,
           transactionDate: { lte: shippedAt },
         },
-        select: { cartonsIn: true, cartonsOut: true },
+        select: { cartonsIn: true, cartonsOut: true, unitsPerCarton: true },
       })
+
+      // Use unitsPerCarton from the inbound transaction for this lot (most accurate),
+      // falling back to the SKU master value
+      const inboundUnitsPerCarton = transactions.find(t => t.cartonsIn > 0)?.unitsPerCarton
+      const unitsPerCarton = inboundUnitsPerCarton ?? sku.unitsPerCarton
 
       const currentCartons = transactions.reduce(
         (sum, txn) => sum + Number(txn.cartonsIn || 0) - Number(txn.cartonsOut || 0),

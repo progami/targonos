@@ -2517,6 +2517,21 @@ export async function transitionPurchaseOrderStage(
           include: { lines: true },
         })
 
+        // When warehouse changes on an in-place update, cascade to inventory transactions
+        if (
+          isInPlaceUpdate &&
+          warehouseCodeFromStageData !== undefined &&
+          warehouseCodeFromStageData !== order.warehouseCode
+        ) {
+          await tx.inventoryTransaction.updateMany({
+            where: { purchaseOrderId: orderId },
+            data: {
+              warehouseCode: nextOrder.warehouseCode!,
+              warehouseName: nextOrder.warehouseName!,
+            },
+          })
+        }
+
         if (filteredStageData.proformaInvoiceNumber !== undefined) {
           const piNumber = filteredStageData.proformaInvoiceNumber?.trim()
           if (piNumber) {
@@ -2626,6 +2641,48 @@ export async function transitionPurchaseOrderStage(
       })
     )
   )
+
+  // When warehouse changed on in-place update, recalculate storage ledger for affected transactions
+  if (
+    isInPlaceUpdate &&
+    warehouseCodeFromStageData !== undefined &&
+    warehouseCodeFromStageData !== order.warehouseCode
+  ) {
+    const affectedTransactions = await prisma.inventoryTransaction.findMany({
+      where: { purchaseOrderId: orderId },
+      select: {
+        warehouseCode: true,
+        warehouseName: true,
+        skuCode: true,
+        skuDescription: true,
+        lotRef: true,
+        transactionDate: true,
+      },
+    })
+
+    if (affectedTransactions.length > 0) {
+      const oldWarehouseInputs = affectedTransactions.map(t => ({
+        warehouseCode: order.warehouseCode!,
+        warehouseName: order.warehouseName!,
+        skuCode: t.skuCode,
+        skuDescription: t.skuDescription,
+        lotRef: t.lotRef,
+        transactionDate: t.transactionDate,
+      }))
+
+      await recalculateStorageLedgerForTransactions([
+        ...oldWarehouseInputs,
+        ...affectedTransactions.map(t => ({
+          warehouseCode: t.warehouseCode,
+          warehouseName: t.warehouseName,
+          skuCode: t.skuCode,
+          skuDescription: t.skuDescription,
+          lotRef: t.lotRef,
+          transactionDate: t.transactionDate,
+        })),
+      ])
+    }
+  }
 
   return updatedOrder
 }
