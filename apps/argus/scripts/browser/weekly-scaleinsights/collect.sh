@@ -1,5 +1,5 @@
 #!/bin/bash
-# Weekly ScaleInsights Keyword Ranking export via Safari.
+# Weekly ScaleInsights Keyword Ranking export via Chrome.
 
 set -euo pipefail
 
@@ -8,10 +8,11 @@ source "$SCRIPT_DIR/../common.sh"
 
 load_monitoring_env
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking (Browser)"
-DL="$HOME/Downloads"
-LOG="/tmp/weekly-scaleinsights.log"
+DEST="${ARGUS_SCALEINSIGHTS_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/ScaleInsights/KeywordRanking (Browser)}"
+DL="${ARGUS_SCALEINSIGHTS_DOWNLOAD_DIR:-$HOME/Downloads}"
+LOG="${ARGUS_SCALEINSIGHTS_LOG:-/tmp/weekly-scaleinsights.log}"
 TARGET_URL="https://portal.scaleinsights.com/KeywordRanking"
+COUNTRY_CODE="US"
 
 if [ "$#" -eq 2 ]; then
   START_DATE="$1"
@@ -23,19 +24,18 @@ fi
 
 mkdir -p "$DEST"
 
+TAB_ID=""
+
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
-run_js() { osascript "$SAFARI_HELPER" run-js "$1" "$2" "$3"; }
-wait_tab() { osascript "$SAFARI_HELPER" wait-tab "$1" "$2" >/dev/null; }
-navigate_tab() { osascript "$SAFARI_HELPER" navigate-tab "$1" "$2" "$3" >/dev/null; }
-tab_url() { osascript "$SAFARI_HELPER" get-url "$1" "$2"; }
+open_window() { TAB_ID="$(osascript "$CHROME_HELPER" open-window-tab "$1")"; }
+run_js() { osascript "$CHROME_HELPER" run-js-tab-id "$TAB_ID" "$1"; }
+wait_tab() { osascript "$CHROME_HELPER" wait-tab-id "$TAB_ID" >/dev/null; }
+tab_url() { osascript "$CHROME_HELPER" get-url-tab-id "$TAB_ID"; }
 
 log "Starting weekly ScaleInsights: $PREFIX"
 
-tab_info=$(osascript "$SAFARI_HELPER" ensure-tab "$TARGET_URL" "portal.scaleinsights.com")
-parse_tab_info "$tab_info"
-
-navigate_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$TARGET_URL"
-wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
+open_window "$TARGET_URL"
+wait_tab
 
 login_state_js='(() => {
   const href = location.href || "";
@@ -47,7 +47,7 @@ login_state_js='(() => {
 
 login_state=""
 for _ in $(seq 1 15); do
-  login_state=$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$login_state_js")
+  login_state=$(run_js "$login_state_js")
   if [ -n "$login_state" ]; then
     break
   fi
@@ -81,75 +81,45 @@ if [ "$login_state" = "LOGIN_REQUIRED" ]; then
     submit.click();
     return 'LOGIN_SUBMITTED';
   })();"
-  if [ "$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$login_js")" != "LOGIN_SUBMITTED" ]; then
+  if [ "$(run_js "$login_js")" != "LOGIN_SUBMITTED" ]; then
     log "FAILED: ScaleInsights login submit not found"
     exit 1
   fi
   sleep 15
-  wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
+  wait_tab
 fi
 
-range_js="(() => {
-  if (!window.jQuery) return 'NO_JQUERY';
-  const picker = jQuery('#reportrange').data('daterangepicker');
-  if (!picker) return 'NO_DATE_PICKER';
-  picker.setStartDate('${START_DATE}');
-  picker.setEndDate('${END_DATE}');
-  picker.clickApply();
-  return 'DATE_RANGE_SET';
-})();"
+download_url="${TARGET_URL}?countrycode=${COUNTRY_CODE}&from=${START_DATE}&to=${END_DATE}&handler=Excel"
+compact_start="${START_DATE//-/}"
+compact_end="${END_DATE//-/}"
+download_pattern="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_end}*.xlsx"
+baseline_info="$(latest_matching_file "$download_pattern")"
+baseline_path=""
+baseline_mtime="0"
+baseline_ctime="0"
+baseline_size="0"
 
-range_status=""
-for _ in $(seq 1 15); do
-  range_status=$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$range_js")
-  if [ "$range_status" = "DATE_RANGE_SET" ]; then
-    break
+if [ -n "$baseline_info" ]; then
+  IFS='|' read -r baseline_path baseline_mtime baseline_ctime baseline_size <<<"$baseline_info"
+fi
+
+log "Watching ScaleInsights download pattern: $download_pattern"
+
+open_window "$download_url"
+sleep 2
+
+if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" 120)"; then
+  latest_after_timeout="$(latest_matching_file "$download_pattern")"
+  if [ -n "$latest_after_timeout" ]; then
+    log "Latest ScaleInsights match after timeout: $latest_after_timeout"
+  else
+    log "Latest ScaleInsights match after timeout: none"
   fi
-  sleep 2
-done
-
-if [ "$range_status" != "DATE_RANGE_SET" ]; then
-  current_url=$(tab_url "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX")
-  log "FAILED: ScaleInsights date picker not found ($current_url)"
-  log "FAILED: ScaleInsights date picker not found"
+  log "FAILED: ScaleInsights download did not create an XLSX for $download_url"
   exit 1
 fi
 
-sleep 15
-
-download_payload_js='(() => {
-  const link = Array.from(document.querySelectorAll("a,button")).find((el) => (el.innerText || el.textContent || "").trim() === "Download");
-  if (!link) return JSON.stringify({ status: "NO_DOWNLOAD_BUTTON" });
-  const request = new XMLHttpRequest();
-  request.open("GET", link.href, false);
-  request.overrideMimeType("text/plain; charset=x-user-defined");
-  request.send();
-  return JSON.stringify({
-    status: request.status && request.status !== 200 ? `FETCH_FAILED_${request.status}` : "OK",
-    content: request.responseText || ""
-  });
-})();'
-
-download_payload=$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$download_payload_js")
-download_status=$("$NODE_BIN" -e 'const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.status || "");' "$download_payload")
-if [ "$download_status" != "OK" ]; then
-  log "FAILED: ScaleInsights download fetch returned $download_status"
-  exit 1
-fi
-
-$NODE_BIN -e '
-const fs = require("node:fs");
-const path = require("node:path");
-const payload = JSON.parse(process.argv[1]);
-const target = process.argv[2];
-const content = payload.content || "";
-const buffer = Buffer.allocUnsafe(content.length);
-for (let index = 0; index < content.length; index += 1) {
-  buffer[index] = content.charCodeAt(index) & 0xff;
-}
-fs.mkdirSync(path.dirname(target), { recursive: true });
-fs.writeFileSync(target, buffer);
-' "$download_payload" "$DEST/${PREFIX}_SI-KeywordRanking.xlsx"
+copy_file_with_node "$downloaded_file" "$DEST/${PREFIX}_SI-KeywordRanking.xlsx"
 
 log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx"
 log "Done"

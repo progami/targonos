@@ -7,8 +7,10 @@ import { execFileSync } from 'node:child_process'
 import { chromium } from 'playwright'
 
 const CAPTURE_TIMEOUT_MS = 180_000
-const AUTOSCROLL_MAX_MS = 25_000
 const CLOSE_TIMEOUT_MS = 5_000
+const PART_COUNT = 4
+const PART_WIDTH = 1400
+const PART_HEIGHT = 4300
 
 function argValue(flag) {
   const index = process.argv.indexOf(flag)
@@ -21,26 +23,37 @@ function requiredArg(name, value) {
   return value
 }
 
-async function autoScroll(page) {
-  await page.evaluate(async (maxDurationMs) => {
-    await new Promise((resolve) => {
-      const start = Date.now()
-      const distance = Math.max(600, Math.floor(window.innerHeight * 0.9))
-      let lastScrollTop = window.scrollY
-      const timer = window.setInterval(() => {
-        window.scrollBy(0, distance)
-        const scrollTop = window.scrollY
-        const reachedBottom = scrollTop + window.innerHeight >= document.body.scrollHeight - 2
-        const stalled = scrollTop === lastScrollTop
-        lastScrollTop = scrollTop
+function buildOutputPath(outputDir, date, partIndex) {
+  return path.join(outputDir, `part${partIndex}`, `${date}.png`)
+}
 
-        if (reachedBottom || stalled || Date.now() - start >= maxDurationMs) {
-          window.clearInterval(timer)
-          resolve(undefined)
-        }
-      }, 250)
+function ensureOutputDirs(outputDir) {
+  for (let partIndex = 1; partIndex <= PART_COUNT; partIndex += 1) {
+    fs.mkdirSync(path.join(outputDir, `part${partIndex}`), { recursive: true })
+  }
+}
+
+async function waitForNextPaint(page) {
+  await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      }),
+  )
+}
+
+async function captureParts(page, outputDir, date) {
+  for (let partIndex = 1; partIndex <= PART_COUNT; partIndex += 1) {
+    const scrollTop = (partIndex - 1) * PART_HEIGHT
+    await page.evaluate((top) => {
+      window.scrollTo(0, top)
+    }, scrollTop)
+    await waitForNextPaint(page)
+    await page.screenshot({
+      path: buildOutputPath(outputDir, date, partIndex),
+      timeout: 30_000,
     })
-  }, AUTOSCROLL_MAX_MS)
+  }
 }
 
 function killChromeForUserDataDir(userDataDir) {
@@ -78,10 +91,10 @@ async function closeContextWithTimeout(context) {
 
 async function main() {
   const asin = requiredArg('--asin', argValue('--asin'))
-  const outputPath = requiredArg('--output', argValue('--output'))
+  const outputDir = requiredArg('--output-dir', argValue('--output-dir'))
+  const date = requiredArg('--date', argValue('--date'))
 
-  const outputDir = path.dirname(outputPath)
-  fs.mkdirSync(outputDir, { recursive: true })
+  ensureOutputDirs(outputDir)
 
   const url = `https://www.amazon.com/dp/${encodeURIComponent(asin)}`
 
@@ -103,7 +116,8 @@ async function main() {
         const context = await chromium.launchPersistentContext(userDataDir, {
           headless: true,
           channel: 'chrome',
-          viewport: { width: 1400, height: 900 },
+          viewport: { width: PART_WIDTH, height: PART_HEIGHT },
+          deviceScaleFactor: 1,
           userAgent:
             'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
           locale: 'en-US',
@@ -121,18 +135,19 @@ async function main() {
 
           stage = 'goto'
           await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90_000 })
-          stage = 'productTitle'
-          await page.waitForSelector('#productTitle', { timeout: 60_000 })
+          stage = 'stabilize-layout'
+          await page.addStyleTag({
+            content: `
+              html { scroll-behavior: auto !important; }
+              *, *::before, *::after {
+                animation: none !important;
+                transition: none !important;
+              }
+            `,
+          })
 
-          stage = 'settle-before-scroll'
-          await page.waitForTimeout(1500)
-          stage = 'autoscroll'
-          await autoScroll(page)
-          stage = 'settle-before-screenshot'
-          await page.waitForTimeout(1500)
-
-          stage = 'screenshot'
-          await page.screenshot({ path: outputPath, fullPage: true, timeout: 30_000 })
+          stage = 'capture-parts'
+          await captureParts(page, outputDir, date)
           captureCompleted = true
         } catch (error) {
           captureError = error

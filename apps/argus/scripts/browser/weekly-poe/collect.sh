@@ -1,41 +1,38 @@
 #!/bin/bash
-# Weekly Product Opportunity Explorer CSV download via Safari.
+# Weekly Product Opportunity Explorer CSV download via Chrome.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
 
-DEST="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Product Opportunity Explorer (Browser)"
-LOG="/tmp/weekly-poe.log"
+DEST="${ARGUS_POE_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Product Opportunity Explorer (Browser)}"
+LOG="${ARGUS_POE_LOG:-/tmp/weekly-poe.log}"
 TARGET_URL="https://sellercentral.amazon.com/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326/product"
 
 IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 
 mkdir -p "$DEST"
 
+TAB_ID=""
+
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
-run_js() { osascript "$SAFARI_HELPER" run-js "$1" "$2" "$3"; }
-wait_tab() { osascript "$SAFARI_HELPER" wait-tab "$1" "$2" >/dev/null; }
-navigate_tab() { osascript "$SAFARI_HELPER" navigate-tab "$1" "$2" "$3" >/dev/null; }
-tab_url() { osascript "$SAFARI_HELPER" get-url "$1" "$2"; }
+open_window() { TAB_ID="$(osascript "$CHROME_HELPER" open-window-tab "$1")"; }
+run_js() { osascript "$CHROME_HELPER" run-js-tab-id "$TAB_ID" "$1"; }
+wait_tab() { osascript "$CHROME_HELPER" wait-tab-id "$TAB_ID" >/dev/null; }
+tab_url() { osascript "$CHROME_HELPER" get-url-tab-id "$TAB_ID"; }
 
 log "Starting weekly POE: $PREFIX"
 
-tab_info=$(osascript "$SAFARI_HELPER" ensure-tab "$TARGET_URL" "sellercentral.amazon.com,amazon.com")
-parse_tab_info "$tab_info"
+open_window "$TARGET_URL"
+wait_tab
 
-navigate_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$TARGET_URL"
-wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
-
-current_url=$(tab_url "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX")
+current_url=$(tab_url)
 if is_amazon_login_url "$current_url"; then
   log "Seller Central session expired — attempting relogin"
   bash "$SCRIPT_DIR/../relogin.sh" "$TARGET_URL"
-  tab_info=$(osascript "$SAFARI_HELPER" ensure-tab "$TARGET_URL" "sellercentral.amazon.com,amazon.com")
-  parse_tab_info "$tab_info"
-  navigate_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$TARGET_URL"
-  wait_tab "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX"
+  open_window "$TARGET_URL"
+  wait_tab
 fi
 
 download_js='(() => {
@@ -52,7 +49,7 @@ download_js='(() => {
 
 download_payload=""
 for _ in $(seq 1 10); do
-  download_payload=$(run_js "$SAFARI_WINDOW_ID" "$SAFARI_TAB_INDEX" "$download_js")
+  download_payload=$(run_js "$download_js")
   download_status=$("$NODE_BIN" -e 'const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.status || "");' "$download_payload")
   if [ "$download_status" = "OK" ]; then
     break

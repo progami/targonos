@@ -2,7 +2,7 @@
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
-SAFARI_HELPER="$COMMON_DIR/safari-helper.applescript"
+CHROME_HELPER="$COMMON_DIR/chrome-helper.applescript"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -114,12 +114,6 @@ print(json.dumps(sys.argv[1]))
 PY
 }
 
-parse_tab_info() {
-  local input="$1"
-  IFS='|' read -r SAFARI_WINDOW_ID SAFARI_TAB_INDEX SAFARI_TAB_URL <<<"$input"
-  export SAFARI_WINDOW_ID SAFARI_TAB_INDEX SAFARI_TAB_URL
-}
-
 is_amazon_login_url() {
   local url="${1:-}"
   [[ "$url" == *"amazon.com/ap/"* || "$url" == *"signin"* ]]
@@ -163,15 +157,30 @@ from pathlib import Path
 import sys
 
 pattern = sys.argv[1]
+
+if pattern.startswith("~/"):
+    base = Path.home()
+    glob_pattern = pattern.replace(str(Path.home()) + "/", "").replace("~/", "")
+elif pattern.startswith("/"):
+    base = Path("/")
+    glob_pattern = pattern.lstrip("/")
+else:
+    base = Path.cwd()
+    glob_pattern = pattern
+
 matches = sorted(
-    Path.home().glob(pattern.replace(str(Path.home()) + "/", "").replace("~/", "")) if pattern.startswith("~/") else Path("/").glob(pattern.lstrip("/")),
-    key=lambda path: path.stat().st_mtime,
+    (
+        path for path in base.glob(glob_pattern)
+        if not path.name.endswith(".download") and not path.name.endswith(".crdownload")
+    ),
+    key=lambda path: max(path.stat().st_ctime, path.stat().st_mtime),
     reverse=True,
 )
 if not matches:
     raise SystemExit(0)
 latest = matches[0]
-print(f"{latest}|{latest.stat().st_mtime}")
+stat = latest.stat()
+print(f"{latest}|{stat.st_mtime}|{stat.st_ctime}|{stat.st_size}")
 PY
 }
 
@@ -179,9 +188,11 @@ wait_for_new_matching_file() {
   local pattern="$1"
   local baseline_path="${2:-}"
   local baseline_mtime="${3:-0}"
-  local timeout_seconds="${4:-90}"
+  local baseline_ctime="${4:-0}"
+  local baseline_size="${5:-0}"
+  local timeout_seconds="${6:-90}"
 
-  "$PYTHON_BIN" - "$pattern" "$baseline_path" "$baseline_mtime" "$timeout_seconds" <<'PY'
+  "$PYTHON_BIN" - "$pattern" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" "$timeout_seconds" <<'PY'
 from pathlib import Path
 import sys
 import time
@@ -189,7 +200,9 @@ import time
 pattern = sys.argv[1]
 baseline_path = sys.argv[2]
 baseline_mtime = float(sys.argv[3])
-timeout_seconds = float(sys.argv[4])
+baseline_ctime = float(sys.argv[4])
+baseline_size = int(float(sys.argv[5]))
+timeout_seconds = float(sys.argv[6])
 
 if pattern.startswith("~/"):
     base = Path.home()
@@ -204,14 +217,25 @@ else:
 deadline = time.time() + timeout_seconds
 while time.time() <= deadline:
     matches = sorted(
-        (path for path in base.glob(glob_pattern) if not path.name.endswith(".download")),
-        key=lambda path: path.stat().st_mtime,
+        (
+            path for path in base.glob(glob_pattern)
+            if not path.name.endswith(".download") and not path.name.endswith(".crdownload")
+        ),
+        key=lambda path: max(path.stat().st_ctime, path.stat().st_mtime),
         reverse=True,
     )
     if matches:
         latest = matches[0]
-        latest_mtime = latest.stat().st_mtime
-        if str(latest) != baseline_path or latest_mtime > baseline_mtime:
+        stat = latest.stat()
+        latest_mtime = stat.st_mtime
+        latest_ctime = stat.st_ctime
+        latest_size = stat.st_size
+        if (
+            str(latest) != baseline_path
+            or latest_mtime > baseline_mtime
+            or latest_ctime > baseline_ctime
+            or latest_size != baseline_size
+        ):
             print(str(latest))
             raise SystemExit(0)
     time.sleep(2)

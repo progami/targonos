@@ -13,7 +13,9 @@ import {
   flattenRows,
   latestCompleteWeek,
   loadMonitoringEnv,
+  orderHeaders,
   requireEnv,
+  weekContextForRange,
   writeCsv,
 } from './lib/common.mjs'
 
@@ -36,13 +38,216 @@ const SQP_DIR = path.join(BA_BASE, 'SQP - Search Query Performance (API)')
 const TST_DIR = path.join(BA_BASE, 'TST - Top Search Terms (API)')
 const SALES_DIR = path.join(BR_BASE, 'Sales & Traffic (API)')
 
+const SCP_HEADERS = [
+  'startDate',
+  'endDate',
+  'asin',
+  'impressionData.impressionCount',
+  'impressionData.impressionMedianPrice.amount',
+  'impressionData.impressionMedianPrice.currencyCode',
+  'impressionData.sameDayShippingImpressionCount',
+  'impressionData.oneDayShippingImpressionCount',
+  'impressionData.twoDayShippingImpressionCount',
+  'clickData.clickCount',
+  'clickData.clickRate',
+  'clickData.clickedMedianPrice.amount',
+  'clickData.clickedMedianPrice.currencyCode',
+  'clickData.sameDayShippingClickCount',
+  'clickData.oneDayShippingClickCount',
+  'clickData.twoDayShippingClickCount',
+  'cartAddData.cartAddCount',
+  'cartAddData.cartAddedMedianPrice.amount',
+  'cartAddData.cartAddedMedianPrice.currencyCode',
+  'cartAddData.sameDayShippingCartAddCount',
+  'cartAddData.oneDayShippingCartAddCount',
+  'cartAddData.twoDayShippingCartAddCount',
+  'purchaseData.purchaseCount',
+  'purchaseData.searchTrafficSales.amount',
+  'purchaseData.searchTrafficSales.currencyCode',
+  'purchaseData.conversionRate',
+  'purchaseData.purchaseMedianPrice.amount',
+  'purchaseData.purchaseMedianPrice.currencyCode',
+  'purchaseData.sameDayShippingPurchaseCount',
+  'purchaseData.oneDayShippingPurchaseCount',
+  'purchaseData.twoDayShippingPurchaseCount',
+]
+
+const SQP_HEADERS = [
+  'startDate',
+  'endDate',
+  'asin',
+  'searchQueryData.searchQuery',
+  'searchQueryData.searchQueryScore',
+  'searchQueryData.searchQueryVolume',
+  'impressionData.totalQueryImpressionCount',
+  'impressionData.asinImpressionCount',
+  'impressionData.asinImpressionShare',
+  'clickData.totalClickCount',
+  'clickData.totalClickRate',
+  'clickData.asinClickCount',
+  'clickData.asinClickShare',
+  'clickData.totalMedianClickPrice.amount',
+  'clickData.totalMedianClickPrice.currencyCode',
+  'clickData.asinMedianClickPrice.amount',
+  'clickData.asinMedianClickPrice.currencyCode',
+  'clickData.totalSameDayShippingClickCount',
+  'clickData.totalOneDayShippingClickCount',
+  'clickData.totalTwoDayShippingClickCount',
+  'cartAddData.totalCartAddCount',
+  'cartAddData.totalCartAddRate',
+  'cartAddData.asinCartAddCount',
+  'cartAddData.asinCartAddShare',
+  'cartAddData.totalMedianCartAddPrice.amount',
+  'cartAddData.totalMedianCartAddPrice.currencyCode',
+  'cartAddData.asinMedianCartAddPrice.amount',
+  'cartAddData.asinMedianCartAddPrice.currencyCode',
+  'cartAddData.totalSameDayShippingCartAddCount',
+  'cartAddData.totalOneDayShippingCartAddCount',
+  'cartAddData.totalTwoDayShippingCartAddCount',
+  'purchaseData.totalPurchaseCount',
+  'purchaseData.totalPurchaseRate',
+  'purchaseData.asinPurchaseCount',
+  'purchaseData.asinPurchaseShare',
+  'purchaseData.totalMedianPurchasePrice.amount',
+  'purchaseData.totalMedianPurchasePrice.currencyCode',
+  'purchaseData.asinMedianPurchasePrice.amount',
+  'purchaseData.asinMedianPurchasePrice.currencyCode',
+  'purchaseData.totalSameDayShippingPurchaseCount',
+  'purchaseData.totalOneDayShippingPurchaseCount',
+  'purchaseData.totalTwoDayShippingPurchaseCount',
+]
+
+const SALES_BY_DATE_HEADERS = [
+  'date',
+  'salesByDate.orderedProductSales.amount',
+  'salesByDate.orderedProductSales.currencyCode',
+  'salesByDate.orderedProductSalesB2B.amount',
+  'salesByDate.orderedProductSalesB2B.currencyCode',
+  'salesByDate.unitsOrdered',
+  'salesByDate.unitsOrderedB2B',
+  'salesByDate.totalOrderItems',
+  'salesByDate.totalOrderItemsB2B',
+  'salesByDate.averageSalesPerOrderItem.amount',
+  'salesByDate.averageSalesPerOrderItem.currencyCode',
+  'salesByDate.averageSalesPerOrderItemB2B.amount',
+  'salesByDate.averageSalesPerOrderItemB2B.currencyCode',
+  'salesByDate.averageUnitsPerOrderItem',
+  'salesByDate.averageUnitsPerOrderItemB2B',
+  'salesByDate.averageSellingPrice.amount',
+  'salesByDate.averageSellingPrice.currencyCode',
+  'salesByDate.averageSellingPriceB2B.amount',
+  'salesByDate.averageSellingPriceB2B.currencyCode',
+  'salesByDate.unitsRefunded',
+  'salesByDate.refundRate',
+  'salesByDate.claimsGranted',
+  'salesByDate.claimsAmount.amount',
+  'salesByDate.claimsAmount.currencyCode',
+  'salesByDate.shippedProductSales.amount',
+  'salesByDate.shippedProductSales.currencyCode',
+  'salesByDate.unitsShipped',
+  'salesByDate.ordersShipped',
+  'trafficByDate.browserPageViews',
+  'trafficByDate.browserPageViewsB2B',
+  'trafficByDate.mobileAppPageViews',
+  'trafficByDate.mobileAppPageViewsB2B',
+  'trafficByDate.pageViews',
+  'trafficByDate.pageViewsB2B',
+  'trafficByDate.browserSessions',
+  'trafficByDate.browserSessionsB2B',
+  'trafficByDate.mobileAppSessions',
+  'trafficByDate.mobileAppSessionsB2B',
+  'trafficByDate.sessions',
+  'trafficByDate.sessionsB2B',
+  'trafficByDate.buyBoxPercentage',
+  'trafficByDate.buyBoxPercentageB2B',
+  'trafficByDate.orderItemSessionPercentage',
+  'trafficByDate.orderItemSessionPercentageB2B',
+  'trafficByDate.unitSessionPercentage',
+  'trafficByDate.unitSessionPercentageB2B',
+  'trafficByDate.averageOfferCount',
+  'trafficByDate.averageParentItems',
+  'trafficByDate.feedbackReceived',
+  'trafficByDate.negativeFeedbackReceived',
+  'trafficByDate.receivedNegativeFeedbackRate',
+]
+
+const SALES_BY_ASIN_HEADERS = [
+  'parentAsin',
+  'childAsin',
+  'salesByAsin.unitsOrdered',
+  'salesByAsin.unitsOrderedB2B',
+  'salesByAsin.orderedProductSales.amount',
+  'salesByAsin.orderedProductSales.currencyCode',
+  'salesByAsin.orderedProductSalesB2B.amount',
+  'salesByAsin.orderedProductSalesB2B.currencyCode',
+  'salesByAsin.totalOrderItems',
+  'salesByAsin.totalOrderItemsB2B',
+  'trafficByAsin.browserSessions',
+  'trafficByAsin.browserSessionsB2B',
+  'trafficByAsin.mobileAppSessions',
+  'trafficByAsin.mobileAppSessionsB2B',
+  'trafficByAsin.sessions',
+  'trafficByAsin.sessionsB2B',
+  'trafficByAsin.browserSessionPercentage',
+  'trafficByAsin.browserSessionPercentageB2B',
+  'trafficByAsin.mobileAppSessionPercentage',
+  'trafficByAsin.mobileAppSessionPercentageB2B',
+  'trafficByAsin.sessionPercentage',
+  'trafficByAsin.sessionPercentageB2B',
+  'trafficByAsin.browserPageViews',
+  'trafficByAsin.browserPageViewsB2B',
+  'trafficByAsin.mobileAppPageViews',
+  'trafficByAsin.mobileAppPageViewsB2B',
+  'trafficByAsin.pageViews',
+  'trafficByAsin.pageViewsB2B',
+  'trafficByAsin.browserPageViewsPercentage',
+  'trafficByAsin.browserPageViewsPercentageB2B',
+  'trafficByAsin.mobileAppPageViewsPercentage',
+  'trafficByAsin.mobileAppPageViewsPercentageB2B',
+  'trafficByAsin.pageViewsPercentage',
+  'trafficByAsin.pageViewsPercentageB2B',
+  'trafficByAsin.buyBoxPercentage',
+  'trafficByAsin.buyBoxPercentageB2B',
+  'trafficByAsin.unitSessionPercentage',
+  'trafficByAsin.unitSessionPercentageB2B',
+]
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function parseArgs() {
+  const argv = process.argv.slice(2)
+  let dryRun = false
+  let startDate = null
+  let endDate = null
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--dry-run') {
+      dryRun = true
+      continue
+    }
+    if (arg === '--start-date') {
+      startDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    if (arg === '--end-date') {
+      endDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new Error('Both --start-date and --end-date are required together.')
+  }
+
   return {
-    dryRun: process.argv.includes('--dry-run'),
+    dryRun,
+    week: startDate && endDate ? weekContextForRange(startDate, endDate) : latestCompleteWeek(),
   }
 }
 
@@ -91,7 +296,34 @@ function sameInstant(left, right) {
   return leftTime === rightTime
 }
 
-async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, statuses }) {
+function normalizeReportOptions(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeReportOptions(entry))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.keys(value)
+      .sort()
+      .reduce((result, key) => {
+        result[key] = normalizeReportOptions(value[key])
+        return result
+      }, {})
+  }
+
+  return value ?? null
+}
+
+function sameReportOptions(left, right) {
+  return JSON.stringify(normalizeReportOptions(left)) === JSON.stringify(normalizeReportOptions(right))
+}
+
+function canBlindlyReuseReport(report, reportOptions) {
+  if (!reportOptions) return true
+  if (!report?.reportOptions) return false
+  return sameReportOptions(report.reportOptions, reportOptions)
+}
+
+async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, reportOptions = null, statuses }) {
   const response = await client.callAPI({
     operation: 'getReports',
     endpoint: 'reports',
@@ -107,45 +339,84 @@ async function findReusableReport(client, { reportType, marketplaceId, dataStart
       .filter((report) => report?.marketplaceIds?.includes(marketplaceId))
       .filter((report) => sameInstant(report?.dataStartTime, dataStartTime))
       .filter((report) => sameInstant(report?.dataEndTime, dataEndTime))
+      .filter((report) => canBlindlyReuseReport(report, reportOptions))
       .filter((report) => statuses.has(report?.processingStatus))
       .sort((left, right) => String(right?.createdTime ?? '').localeCompare(String(left?.createdTime ?? '')))[0] ?? null
   )
 }
 
-async function resolveTstReportId(client, reportWindow, label) {
-  const completedReport = await findReusableReport(client, {
-    reportType: TST_REPORT_TYPE,
+function matchesReusableReport(report, { reportType, marketplaceId, dataStartTime, dataEndTime }) {
+  return (
+    report?.reportType === reportType &&
+    report?.marketplaceIds?.includes(marketplaceId) &&
+    sameInstant(report?.dataStartTime, dataStartTime) &&
+    sameInstant(report?.dataEndTime, dataEndTime)
+  )
+}
+
+async function loadManifestReport(client, manifestReportId, criteria) {
+  if (!manifestReportId) return null
+
+  try {
+    const report = await client.callAPI({
+      operation: 'getReport',
+      endpoint: 'reports',
+      path: { reportId: manifestReportId },
+    })
+
+    if (!matchesReusableReport(report, criteria)) {
+      return null
+    }
+
+    return report
+  } catch {
+    return null
+  }
+}
+
+async function resolveReportId(client, { reportType, reportWindow, label, reportOptions = null, manifestReportId = '' }) {
+  const criteria = {
+    reportType,
     marketplaceId: reportWindow.marketplaceIds[0],
     dataStartTime: reportWindow.dataStartTime,
     dataEndTime: reportWindow.dataEndTime,
-    statuses: DONE_REPORT_STATUSES,
-  })
+    reportOptions,
+  }
+
+  const manifestReport = await loadManifestReport(client, manifestReportId, criteria)
+  const manifestStatus = manifestReport?.processingStatus
+  if (DONE_REPORT_STATUSES.has(manifestStatus)) {
+    console.log(`[SP-API] ${label} reusing manifest DONE reportId=${manifestReport.reportId}`)
+    return manifestReport.reportId
+  }
+
+  if (ACTIVE_REPORT_STATUSES.has(manifestStatus)) {
+    console.log(`[SP-API] ${label} reusing manifest active reportId=${manifestReport.reportId}`)
+    return waitForReport(client, manifestReport.reportId, label)
+  }
+
+  const completedReport = await findReusableReport(client, { ...criteria, statuses: DONE_REPORT_STATUSES })
   if (completedReport?.reportId) {
     console.log(`[SP-API] ${label} reusing DONE reportId=${completedReport.reportId}`)
     return completedReport.reportId
   }
 
-  const activeReport = await findReusableReport(client, {
-    reportType: TST_REPORT_TYPE,
-    marketplaceId: reportWindow.marketplaceIds[0],
-    dataStartTime: reportWindow.dataStartTime,
-    dataEndTime: reportWindow.dataEndTime,
-    statuses: ACTIVE_REPORT_STATUSES,
-  })
+  const activeReport = await findReusableReport(client, { ...criteria, statuses: ACTIVE_REPORT_STATUSES })
   if (activeReport?.reportId) {
     console.log(`[SP-API] ${label} reusing active reportId=${activeReport.reportId}`)
     return waitForReport(client, activeReport.reportId, label)
   }
 
-  return createAndWaitReport(
-    client,
-    {
-      reportType: TST_REPORT_TYPE,
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK' },
-    },
-    label,
-  )
+  const body = {
+    reportType,
+    ...reportWindow,
+  }
+
+  if (reportOptions) {
+    body.reportOptions = reportOptions
+  }
+
+  return createAndWaitReport(client, body, label)
 }
 
 async function downloadJsonReport(client, reportId) {
@@ -210,9 +481,10 @@ async function downloadUrlToFile(url, file) {
   })
 }
 
-function rowsToCsv(file, rows) {
-  const { headers, rows: flatRows } = flattenRows(rows)
-  const safeHeaders = headers.length ? headers : ['value']
+function rowsToCsv(file, rows, canonicalHeaders) {
+  const { rows: flatRows } = flattenRows(rows)
+  const orderedHeaders = orderHeaders(canonicalHeaders, flatRows)
+  const safeHeaders = orderedHeaders.length ? orderedHeaders : ['value']
   writeCsv(file, safeHeaders, flatRows)
 }
 
@@ -235,8 +507,8 @@ function runTstFilter(rawPath, outputPath) {
 }
 
 async function main() {
-  const { dryRun } = parseArgs()
-  const { weekCode, weekStart, weekEnd } = latestCompleteWeek()
+  const { dryRun, week } = parseArgs()
+  const { weekCode, weekStart, weekEnd } = week
 
   const weekPrefix = `${weekCode}_${weekEnd}`
   const scopeLabel = `${weekCode} ${weekStart}..${weekEnd}`
@@ -246,13 +518,21 @@ async function main() {
   ensureDir(TST_DIR)
   ensureDir(SALES_DIR)
 
+  const scpPath = path.join(SCP_DIR, `${weekPrefix}_SCP.csv`)
+  const sqpPath = path.join(SQP_DIR, `${weekPrefix}_SQP.csv`)
+  const salesByDatePath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`)
+  const salesByAsinPath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`)
+  const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
+  const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
+  const existingManifest = readJsonFile(manifestPath)
+
   if (dryRun) {
     console.log(`[SP-API][dry-run] scope=${scopeLabel}`)
-    console.log(`[SP-API][dry-run] ${path.join(SCP_DIR, `${weekPrefix}_SCP.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SQP_DIR, `${weekPrefix}_SQP.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(TST_DIR, `${weekPrefix}_TST.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`)}`)
-    console.log(`[SP-API][dry-run] ${path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`)}`)
+    console.log(`[SP-API][dry-run] ${scpPath}`)
+    console.log(`[SP-API][dry-run] ${sqpPath}`)
+    console.log(`[SP-API][dry-run] ${filteredTstPath}`)
+    console.log(`[SP-API][dry-run] ${salesByDatePath}`)
+    console.log(`[SP-API][dry-run] ${salesByAsinPath}`)
     return
   }
 
@@ -286,48 +566,63 @@ async function main() {
     marketplaceIds: [marketplaceId],
   }
 
-  const scpReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK' },
-    },
-    `${scopeLabel} SCP`,
-  )
-  const scpData = await downloadJsonReport(client, scpReportId)
-  rowsToCsv(path.join(SCP_DIR, `${weekPrefix}_SCP.csv`), scpData.parsed?.dataByAsin || [])
+  const scpReportId = await resolveReportId(client, {
+    reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SCP`,
+    reportOptions: { reportPeriod: 'WEEK' },
+    manifestReportId: existingManifest?.reports?.scpReportId,
+  })
+  const canReuseScpOutput = existingManifest?.reports?.scpReportId === scpReportId && fs.existsSync(scpPath)
+  if (canReuseScpOutput) {
+    console.log(`[SP-API] ${scopeLabel} SCP output already current for reportId=${scpReportId}`)
+  } else {
+    const scpData = await downloadJsonReport(client, scpReportId)
+    rowsToCsv(scpPath, scpData.parsed?.dataByAsin || [], SCP_HEADERS)
+  }
 
-  const sqpReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
-      ...reportWindow,
-      reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
-    },
-    `${scopeLabel} SQP`,
-  )
-  const sqpData = await downloadJsonReport(client, sqpReportId)
-  rowsToCsv(path.join(SQP_DIR, `${weekPrefix}_SQP.csv`), sqpData.parsed?.dataByAsin || [])
+  const sqpReportId = await resolveReportId(client, {
+    reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SQP`,
+    reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
+    manifestReportId: existingManifest?.reports?.sqpReportId,
+  })
+  const canReuseSqpOutput = existingManifest?.reports?.sqpReportId === sqpReportId && fs.existsSync(sqpPath)
+  if (canReuseSqpOutput) {
+    console.log(`[SP-API] ${scopeLabel} SQP output already current for reportId=${sqpReportId}`)
+  } else {
+    const sqpData = await downloadJsonReport(client, sqpReportId)
+    rowsToCsv(sqpPath, sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
+  }
 
-  const salesReportId = await createAndWaitReport(
-    client,
-    {
-      reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
-      ...reportWindow,
-      reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
-    },
-    `${scopeLabel} SalesTraffic`,
-  )
-  const salesData = await downloadJsonReport(client, salesReportId)
-  rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`), salesData.parsed?.salesAndTrafficByDate || [])
-  rowsToCsv(path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`), salesData.parsed?.salesAndTrafficByAsin || [])
+  const salesReportId = await resolveReportId(client, {
+    reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
+    reportWindow,
+    label: `${scopeLabel} SalesTraffic`,
+    reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
+    manifestReportId: existingManifest?.reports?.salesReportId,
+  })
+  const canReuseSalesOutput =
+    existingManifest?.reports?.salesReportId === salesReportId &&
+    fs.existsSync(salesByDatePath) &&
+    fs.existsSync(salesByAsinPath)
+  if (canReuseSalesOutput) {
+    console.log(`[SP-API] ${scopeLabel} SalesTraffic output already current for reportId=${salesReportId}`)
+  } else {
+    const salesData = await downloadJsonReport(client, salesReportId)
+    rowsToCsv(salesByDatePath, salesData.parsed?.salesAndTrafficByDate || [], SALES_BY_DATE_HEADERS)
+    rowsToCsv(salesByAsinPath, salesData.parsed?.salesAndTrafficByAsin || [], SALES_BY_ASIN_HEADERS)
+  }
 
-  const tstReportId = await resolveTstReportId(client, reportWindow, `${scopeLabel} TST`)
+  const tstReportId = await resolveReportId(client, {
+    reportType: TST_REPORT_TYPE,
+    reportWindow,
+    label: `${scopeLabel} TST`,
+    reportOptions: { reportPeriod: 'WEEK' },
+    manifestReportId: existingManifest?.reports?.tstReportId,
+  })
 
-  const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
-  const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
-  const existingManifest = readJsonFile(manifestPath)
   const canReuseFilteredTst =
     existingManifest?.reports?.tstReportId === tstReportId &&
     existingManifest?.filterKeyword === TST_FILTER_KEYWORD &&

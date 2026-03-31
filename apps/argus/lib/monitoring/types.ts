@@ -43,6 +43,20 @@ export interface MonitoringSnapshotRecord extends MonitoringStateRecord {
   capturedAt: string
 }
 
+export interface MonitoringValueFieldChange {
+  field: string
+  from: string
+  to: string
+}
+
+export interface MonitoringImageFieldChange {
+  field: 'image_urls'
+  added: string[]
+  removed: string[]
+}
+
+export type MonitoringFieldChange = MonitoringValueFieldChange | MonitoringImageFieldChange
+
 export interface MonitoringChangeEvent {
   id: string
   asin: string
@@ -55,6 +69,7 @@ export interface MonitoringChangeEvent {
   primaryCategory: MonitoringCategory
   changedFieldCount: number
   changedFields: string[]
+  fieldChanges: MonitoringFieldChange[]
   headline: string
   summary: string
   currentSnapshot: MonitoringSnapshotRecord | null
@@ -105,6 +120,8 @@ export interface MonitoringSchedulerJob {
   outputs: string[]
   lastExitStatus: number | null
   pid: number | null
+  latestRunStatus: 'ok' | 'failed' | null
+  latestRunAt: string | null
   status: 'healthy' | 'running' | 'failed' | 'missing'
 }
 

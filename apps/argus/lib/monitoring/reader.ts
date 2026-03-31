@@ -11,6 +11,7 @@ import type {
   MonitoringAsinDetail,
   MonitoringCategory,
   MonitoringChangeEvent,
+  MonitoringFieldChange,
   MonitoringHealthDataset,
   MonitoringHealthReport,
   MonitoringOverview,
@@ -70,6 +71,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.argus.tracking-fetch',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.argus.tracking-fetch.plist'),
+    runLogPath: null,
     outputs: ['Argus tracking snapshots (DB)'],
   },
   {
@@ -80,6 +82,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.hourly-listing-attributes-api',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.hourly-listing-attributes-api.plist'),
+    runLogPath: null,
     outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
   },
   {
@@ -90,6 +93,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:00 AM',
     launchdLabel: 'com.targon.daily-account-health',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-account-health.plist'),
+    runLogPath: null,
     outputs: ['Account Health Dashboard (API)'],
   },
   {
@@ -100,6 +104,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Monday at 4:00 AM',
     launchdLabel: 'com.targon.weekly-api-sources',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-api-sources.plist'),
+    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-api-sources/run-log.jsonl'),
     outputs: [
       'Brand Analytics (API)',
       'Business Reports (API)',
@@ -116,6 +121,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:30 AM',
     launchdLabel: 'com.targon.daily-visuals',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-visuals.plist'),
+    runLogPath: null,
     outputs: ['Visuals (Browser)'],
   },
   {
@@ -126,6 +132,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Monday at 3:00 AM',
     launchdLabel: 'com.targon.weekly-browser-sources',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-browser-sources.plist'),
+    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-browser-sources/run-log.jsonl'),
     outputs: [
       'Category Insights (Browser)',
       'Product Opportunity Explorer (Browser)',
@@ -339,6 +346,11 @@ interface LaunchAgentPlist {
   WorkingDirectory?: string
 }
 
+interface MonitoringRunLogEntry {
+  timestamp: string
+  status: 'ok' | 'failed'
+}
+
 const CATEGORY_FIELDS: Record<MonitoringCategory, Set<string>> = {
   status: new Set([
     'status',
@@ -456,6 +468,14 @@ const CATEGORY_PRIORITY: MonitoringCategory[] = [
   'catalog',
 ]
 
+const HERO_BSR_ASINS = getHeroBsrAsins()
+const HERO_BSR_CHANGE_FIELDS = new Set([
+  'root_bsr_rank',
+  'root_bsr_category_id',
+  'sub_bsr_rank',
+  'sub_bsr_category_id',
+])
+
 interface LatestStateFile {
   timestamp_utc: string
   snapshot_file: string
@@ -474,6 +494,7 @@ interface ChangeHistoryRow {
   event_severity?: string
   event_primary_category?: string
   event_categories?: string
+  event_field_changes?: string
   event_headline?: string
   event_summary?: string
 }
@@ -483,6 +504,7 @@ export interface MonitoringChangeFilters {
   owner?: MonitoringOwner | 'ALL'
   category?: MonitoringCategory | 'ALL'
   severity?: MonitoringSeverity | 'ALL'
+  snapshotTimestamp?: string
   query?: string
 }
 
@@ -558,9 +580,13 @@ function applyFilters(
   const owner = filters.owner ?? 'ALL'
   const category = filters.category ?? 'ALL'
   const severity = filters.severity ?? 'ALL'
+  const snapshotTimestamp = filters.snapshotTimestamp?.trim() ?? ''
   const query = filters.query ? filters.query.trim().toLowerCase() : ''
 
-  return filterByWindow(items, window).filter((item) => {
+  const scopedItems = snapshotTimestamp !== '' ? items : filterByWindow(items, window)
+
+  return scopedItems.filter((item) => {
+    if (snapshotTimestamp !== '' && item.timestamp !== snapshotTimestamp) return false
     if (owner !== 'ALL' && item.owner !== owner) return false
     if (category !== 'ALL' && !item.categories.includes(category)) return false
     if (severity !== 'ALL' && item.severity !== severity) return false
@@ -634,6 +660,7 @@ async function loadMonitoringModel() {
         index,
       ),
     )
+    .filter((item): item is MonitoringChangeEvent => item !== null)
     .sort(compareEvents)
 
   return {
@@ -673,6 +700,7 @@ async function readChangeHistory(): Promise<ChangeHistoryRow[]> {
     event_severity: row.event_severity,
     event_primary_category: row.event_primary_category,
     event_categories: row.event_categories,
+    event_field_changes: row.event_field_changes,
     event_headline: row.event_headline,
     event_summary: row.event_summary,
   }))
@@ -754,52 +782,95 @@ function normalizeChangeEvent(
   currentState: MonitoringStateRecord | null,
   label: string | null,
   index: number,
-): MonitoringChangeEvent {
+): MonitoringChangeEvent | null {
   const asin = row.asin.trim().toUpperCase()
-  const changedFields = parseChangedFields(row.changed_fields)
+  const rawChangedFields = parseChangedFields(row.changed_fields)
   const currentSnapshot =
     snapshots.find((item) => item.capturedAt === row.snapshot_timestamp_utc) ?? null
   const baselineSnapshot =
     snapshots.find((item) => item.capturedAt === row.baseline_timestamp_utc) ?? null
 
   const owner = normalizeOwner(row.owner_type)
-  const categories = parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
+  const rawFieldChanges = parseStoredFieldChanges(row.event_field_changes) ?? []
+  const {
+    changedFields,
+    fieldChanges,
+    didFilterBsrChanges,
+  } = filterVisibleBsrChanges(asin, rawChangedFields, rawFieldChanges)
+  if (changedFields.length === 0) {
+    return null
+  }
+
+  const categories = didFilterBsrChanges
+    ? classifyCategories(changedFields)
+    : parseStoredCategories(row.event_categories) ?? classifyCategories(changedFields)
   const primaryCategory =
-    parseStoredCategory(row.event_primary_category) ??
-    pickPrimaryCategory({
-      categories,
-      currentSnapshot,
-      baselineSnapshot,
-    })
+    didFilterBsrChanges
+      ? pickPrimaryCategory({
+          categories,
+          currentSnapshot,
+          baselineSnapshot,
+        })
+      : parseStoredCategory(row.event_primary_category) ??
+        pickPrimaryCategory({
+          categories,
+          currentSnapshot,
+          baselineSnapshot,
+        })
   const severity =
-    parseStoredSeverity(row.event_severity) ??
-    classifySeverity({
-      owner,
-      categories,
-      changedFields,
-      currentSnapshot,
-      baselineSnapshot,
-    })
+    didFilterBsrChanges
+      ? classifySeverity({
+          owner,
+          categories,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+        })
+      : parseStoredSeverity(row.event_severity) ??
+        classifySeverity({
+          owner,
+          categories,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+        })
   const displayName = label ?? row.event_label ?? asin
   const headline =
-    readString(row.event_headline) ??
-    buildHeadline({
-      asin: displayName,
-      owner,
-      primaryCategory,
-      currentSnapshot,
-      baselineSnapshot,
-      changedFields,
-    })
+    didFilterBsrChanges
+      ? buildHeadline({
+          asin: displayName,
+          owner,
+          primaryCategory,
+          currentSnapshot,
+          baselineSnapshot,
+          changedFields,
+        })
+      : readString(row.event_headline) ??
+        buildHeadline({
+          asin: displayName,
+          owner,
+          primaryCategory,
+          currentSnapshot,
+          baselineSnapshot,
+          changedFields,
+        })
   const summary =
-    readString(row.event_summary) ??
-    buildSummary({
-      primaryCategory,
-      changedFields,
-      currentSnapshot,
-      baselineSnapshot,
-      currentState,
-    })
+    didFilterBsrChanges
+      ? buildSummary({
+          primaryCategory,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+          currentState,
+        })
+      : readString(row.event_summary) ??
+        buildSummary({
+          primaryCategory,
+          changedFields,
+          currentSnapshot,
+          baselineSnapshot,
+          currentState,
+        })
 
   return {
     id: `${asin}-${row.snapshot_timestamp_utc}-${index}`,
@@ -811,8 +882,9 @@ function normalizeChangeEvent(
     severity,
     categories,
     primaryCategory,
-    changedFieldCount: Number(row.changed_field_count) || changedFields.length,
+    changedFieldCount: changedFields.length,
     changedFields,
+    fieldChanges,
     headline,
     summary,
     currentSnapshot,
@@ -828,9 +900,10 @@ function compareCurrentRecords(left: MonitoringStateRecord, right: MonitoringSta
 }
 
 function compareEvents(left: MonitoringChangeEvent, right: MonitoringChangeEvent): number {
-  const severityDelta = severityRank(right.severity) - severityRank(left.severity)
-  if (severityDelta !== 0) return severityDelta
-  return right.timestamp.localeCompare(left.timestamp)
+  const timestampDelta = right.timestamp.localeCompare(left.timestamp)
+  if (timestampDelta !== 0) return timestampDelta
+
+  return severityRank(right.severity) - severityRank(left.severity)
 }
 
 function severityRank(severity: MonitoringSeverity): number {
@@ -1078,6 +1151,33 @@ function valuesDiffer(
   return baseline !== current
 }
 
+function filterVisibleBsrChanges(
+  asin: string,
+  changedFields: string[],
+  fieldChanges: MonitoringFieldChange[],
+): {
+  changedFields: string[]
+  fieldChanges: MonitoringFieldChange[]
+  didFilterBsrChanges: boolean
+} {
+  if (HERO_BSR_ASINS.has(asin)) {
+    return {
+      changedFields: [...changedFields],
+      fieldChanges: [...fieldChanges],
+      didFilterBsrChanges: false,
+    }
+  }
+
+  const filteredChangedFields = changedFields.filter((field) => !HERO_BSR_CHANGE_FIELDS.has(field))
+  const filteredFieldChanges = fieldChanges.filter((change) => !HERO_BSR_CHANGE_FIELDS.has(change.field))
+
+  return {
+    changedFields: filteredChangedFields,
+    fieldChanges: filteredFieldChanges,
+    didFilterBsrChanges: filteredChangedFields.length !== changedFields.length,
+  }
+}
+
 function parseChangedFields(input: string): string[] {
   return input
     .split(',')
@@ -1104,6 +1204,96 @@ function parseStoredSeverity(input: string | undefined): MonitoringSeverity | nu
   return value === 'critical' || value === 'high' || value === 'medium' || value === 'low'
     ? value
     : null
+}
+
+function parseStoredFieldChanges(input: string | undefined): MonitoringFieldChange[] | null {
+  const value = String(input ?? '').trim()
+  if (value === '') return null
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(value)
+  } catch (error) {
+    throw new Error(
+      `Failed to parse monitoring field changes JSON: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error('Monitoring field changes must deserialize to an array.')
+  }
+
+  return parsed.map((entry, index) => normalizeStoredFieldChange(entry, index))
+}
+
+function normalizeStoredFieldChange(entry: unknown, index: number): MonitoringFieldChange {
+  if (!entry || typeof entry !== 'object') {
+    throw new Error(`Monitoring field change ${index + 1} must be an object.`)
+  }
+
+  const field = readString((entry as { field?: unknown }).field)
+  if (!field) {
+    throw new Error(`Monitoring field change ${index + 1} is missing a field name.`)
+  }
+
+  if (field === 'image_urls') {
+    return {
+      field,
+      added: readStoredStringArray((entry as { added?: unknown }).added),
+      removed: readStoredStringArray((entry as { removed?: unknown }).removed),
+    }
+  }
+
+  return {
+    field,
+    from: readStoredFieldValue((entry as { from?: unknown }).from),
+    to: readStoredFieldValue((entry as { to?: unknown }).to),
+  }
+}
+
+function readStoredFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+
+  throw new Error(`Unsupported monitoring field change value: ${JSON.stringify(value)}`)
+}
+
+function readStoredStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Monitoring image field changes must include string arrays.')
+  }
+
+  return value.map((entry, index) => {
+    if (typeof entry !== 'string') {
+      throw new Error(`Monitoring image field change value ${index + 1} must be a string.`)
+    }
+
+    return entry
+  })
+}
+
+function getHeroBsrAsins(): Set<string> {
+  const configuredHeroAsins = parseAsinList(process.env.ARGUS_HERO_BSR_ASINS)
+  if (configuredHeroAsins.length > 0) {
+    return new Set(configuredHeroAsins)
+  }
+
+  const configuredLegacyAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS)
+  if (configuredLegacyAsins.length > 0) {
+    return new Set(configuredLegacyAsins)
+  }
+
+  return new Set(['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y'])
+}
+
+function parseAsinList(value: string | undefined): string[] {
+  if (typeof value !== 'string') return []
+
+  return value
+    .split(/[\s,|]+/)
+    .map((asin) => asin.trim().toUpperCase())
+    .filter((asin) => asin !== '')
 }
 
 function normalizeOwner(value: unknown): MonitoringOwner {
@@ -1203,6 +1393,8 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
   const target = resolveLaunchAgentTarget(plist)
   const stdoutPath = plist?.StandardOutPath ?? null
   const stderrPath = plist?.StandardErrorPath ?? null
+  const latestRun = await readLatestRunLogEntry(spec.runLogPath)
+  const lastLaunchAt = await readLatestTimestamp(stdoutPath, stderrPath)
 
   if (!plist) {
     return {
@@ -1219,6 +1411,8 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
       outputs: [...spec.outputs],
       lastExitStatus: null,
       pid: null,
+      latestRunStatus: latestRun?.status ?? null,
+      latestRunAt: latestRun?.timestamp ?? null,
       status: 'missing',
     }
   }
@@ -1239,9 +1433,26 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
       outputs: [...spec.outputs],
       lastExitStatus: null,
       pid: null,
+      latestRunStatus: latestRun?.status ?? null,
+      latestRunAt: latestRun?.timestamp ?? null,
       status: 'missing',
     }
   }
+
+  const status =
+    launchdState.pid !== null
+      ? 'running'
+      : latestRun?.status === 'ok' && launchdState.lastExitStatus !== 0
+        ? isIsoAfter(latestRun.timestamp, lastLaunchAt)
+          ? 'healthy'
+          : 'failed'
+        : latestRun?.status === 'ok'
+        ? 'healthy'
+        : latestRun?.status === 'failed'
+          ? 'failed'
+          : launchdState.lastExitStatus === 0
+            ? 'healthy'
+            : 'failed'
 
   return {
     id: spec.id,
@@ -1257,12 +1468,9 @@ async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]):
     outputs: [...spec.outputs],
     lastExitStatus: launchdState.lastExitStatus,
     pid: launchdState.pid,
-    status:
-      launchdState.pid !== null
-        ? 'running'
-        : launchdState.lastExitStatus === 0
-          ? 'healthy'
-          : 'failed',
+    latestRunStatus: latestRun?.status ?? null,
+    latestRunAt: latestRun?.timestamp ?? null,
+    status,
   }
 }
 
@@ -1306,6 +1514,70 @@ function readLaunchctlNumber(output: string, key: string): number | null {
   const match = output.match(new RegExp(`"${key}" = (-?\\d+);`))
   if (!match) return null
   return Number(match[1])
+}
+
+async function readLatestRunLogEntry(runLogPath: string | null | undefined): Promise<MonitoringRunLogEntry | null> {
+  if (!runLogPath) return null
+
+  try {
+    const content = await fs.readFile(runLogPath, 'utf8')
+    const lines = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '')
+      .reverse()
+
+    for (const line of lines) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(line)
+      } catch {
+        continue
+      }
+
+      const timestamp = readString((parsed as { timestamp?: unknown }).timestamp)
+      const status = readString((parsed as { status?: unknown }).status)
+      if (!timestamp) continue
+      if (status !== 'ok' && status !== 'failed') continue
+
+      return { timestamp, status }
+    }
+
+    return null
+  } catch (error) {
+    if (isMissing(error)) return null
+    throw error
+  }
+}
+
+async function readLatestTimestamp(...paths: Array<string | null | undefined>): Promise<string | null> {
+  let latest: Date | null = null
+
+  for (const candidate of paths) {
+    if (!candidate) continue
+
+    try {
+      const stats = await fs.stat(candidate)
+      if (!latest || stats.mtime > latest) {
+        latest = stats.mtime
+      }
+    } catch (error) {
+      if (isMissing(error)) continue
+      throw error
+    }
+  }
+
+  return latest ? latest.toISOString() : null
+}
+
+function isIsoAfter(left: string | null | undefined, right: string | null | undefined): boolean {
+  if (!left || !right) return false
+
+  const leftTime = new Date(left).getTime()
+  const rightTime = new Date(right).getTime()
+  if (Number.isNaN(leftTime) || Number.isNaN(rightTime)) return false
+
+  return leftTime > rightTime
 }
 
 async function statIso(targetPath: string): Promise<string | null> {

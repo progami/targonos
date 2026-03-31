@@ -2,6 +2,7 @@ import 'server-only'
 
 import type {
   MonitoringChangeEvent,
+  MonitoringFieldChange,
   MonitoringSnapshotRecord,
   MonitoringStateRecord,
 } from '@/lib/monitoring/types'
@@ -164,24 +165,38 @@ export function buildAlertEmailHtml(
     ${safeSummary}
   </div>
 
-  <!-- Product + Timestamps -->
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER}; background:#f8fafc; margin:0 0 24px 0;">
+  <!-- Product -->
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER}; background:#f8fafc; margin:0 0 16px 0;">
   <tr>
-  <td style="padding:14px 16px; border-bottom:1px solid ${BORDER};" colspan="2">
+  <td style="padding:14px 16px;">
     <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 4px 0;">Product</div>
     <div style="font-family:${FONT}; font-size:14px; font-weight:700; color:${TEXT_PRIMARY}; line-height:1.3;">${safeProductName}</div>
     <div style="font-family:${MONO}; font-size:11px; color:${TEXT_TERTIARY}; margin-top:3px;">${safeAsin}</div>
   </td>
   </tr>
+  </table>
+
+  <!-- Timestamps — Before → After -->
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER}; background:${CARD}; margin:0 0 24px 0;">
   <tr>
-  <td style="padding:12px 16px;${comparedTo ? ` border-right:1px solid ${BORDER};` : ''}" width="50%">
-    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 3px 0;">Detected</div>
-    <div style="font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_PRIMARY};">${esc(detectedAt)}</div>
+  ${comparedTo ? `
+  <td style="padding:14px 16px; border-right:1px solid ${BORDER}; background:#f8fafc;" width="45%">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:700; color:${TEXT_TERTIARY}; letter-spacing:0.08em; text-transform:uppercase; margin:0 0 4px 0;">Before</div>
+    <div style="font-family:${MONO}; font-size:14px; font-weight:700; color:${TEXT_SECONDARY};">${esc(comparedTo)}</div>
   </td>
-  ${comparedTo ? `<td style="padding:12px 16px;" width="50%">
-    <div style="font-family:${FONT}; font-size:10px; font-weight:600; color:${TEXT_TERTIARY}; letter-spacing:0.06em; text-transform:uppercase; margin:0 0 3px 0;">Baseline</div>
-    <div style="font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_PRIMARY};">${esc(comparedTo)}</div>
-  </td>` : ''}
+  <td style="padding:14px 8px; background:#f8fafc;" width="10%" align="center">
+    <span style="font-size:16px; color:${TEAL}; font-weight:700;">&rarr;</span>
+  </td>
+  <td style="padding:14px 16px; background:#f8fafc;" width="45%">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:700; color:${TEAL}; letter-spacing:0.08em; text-transform:uppercase; margin:0 0 4px 0;">After</div>
+    <div style="font-family:${MONO}; font-size:14px; font-weight:700; color:${TEXT_PRIMARY};">${esc(detectedAt)}</div>
+  </td>
+  ` : `
+  <td style="padding:14px 16px; background:#f8fafc;">
+    <div style="font-family:${FONT}; font-size:10px; font-weight:700; color:${TEAL}; letter-spacing:0.08em; text-transform:uppercase; margin:0 0 4px 0;">Detected</div>
+    <div style="font-family:${MONO}; font-size:14px; font-weight:700; color:${TEXT_PRIMARY};">${esc(detectedAt)}</div>
+  </td>
+  `}
   </tr>
   </table>
 
@@ -234,9 +249,10 @@ function buildChangesTable(event: MonitoringChangeEvent): string {
 
   let html = `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse; border:1px solid ${BORDER};">
 <tr>
-<td style="${thStyle} border-right:1px solid ${BORDER};">Field</td>
-<td style="${thStyle} border-right:1px solid ${BORDER};" align="right">Before</td>
-<td style="${thStyle}" align="right">After</td>
+<td style="${thStyle} border-right:1px solid ${BORDER};" width="30%">Field</td>
+<td style="${thStyle} border-right:1px solid ${BORDER};" width="30%" align="right">Before</td>
+<td style="${thStyle} width:40px; text-align:center;" width="40">&nbsp;</td>
+<td style="${thStyle}" width="30%" align="right">After</td>
 </tr>`
 
   for (let i = 0; i < rows.length; i++) {
@@ -250,10 +266,13 @@ function buildChangesTable(event: MonitoringChangeEvent): string {
 <td style="padding:10px 14px; font-family:${FONT}; font-size:13px; font-weight:600; color:${TEXT_SECONDARY}; ${bb} background:${bg}; border-right:1px solid ${BORDER};">
   ${esc(row.label)}
 </td>
-<td style="padding:10px 14px; font-family:${MONO}; font-size:12px; color:${TEXT_TERTIARY}; ${bb} background:${bg}; border-right:1px solid ${BORDER};" align="right">
+<td style="padding:10px 14px; font-family:${MONO}; font-size:13px; color:${TEXT_TERTIARY}; text-decoration:line-through; ${bb} background:${bg}; border-right:1px solid ${BORDER};" align="right">
   ${esc(row.before)}
 </td>
-<td style="padding:10px 14px; font-family:${MONO}; font-size:12px; font-weight:700; color:${TEXT_PRIMARY}; ${bb} background:${bg};" align="right">
+<td style="padding:4px 0; font-family:${FONT}; font-size:14px; color:${TEAL}; font-weight:700; text-align:center; ${bb} background:${bg}; border-right:1px solid ${BORDER};">
+  &rarr;
+</td>
+<td style="padding:10px 14px; font-family:${MONO}; font-size:14px; font-weight:800; color:${TEXT_PRIMARY}; ${bb} background:${bg};" align="right">
   ${esc(row.after)}
 </td>
 </tr>`
@@ -270,6 +289,9 @@ interface ChangeRow {
 }
 
 function extractChangeRows(event: MonitoringChangeEvent): ChangeRow[] {
+  const storedRows = extractStoredChangeRows(event.fieldChanges)
+  if (storedRows.length > 0) return storedRows
+
   const rows: ChangeRow[] = []
   const baseline = event.baselineSnapshot
   const current = event.currentSnapshot
@@ -301,6 +323,30 @@ function extractChangeRows(event: MonitoringChangeEvent): ChangeRow[] {
   }
 
   return rows
+}
+
+function extractStoredChangeRows(fieldChanges: MonitoringFieldChange[]): ChangeRow[] {
+  return fieldChanges.map((change) => {
+    if (isImageFieldChange(change)) {
+      return {
+        label: 'Images',
+        before: `${change.removed.length} removed`,
+        after: `${change.added.length} added`,
+      }
+    }
+
+    return {
+      label: humanize(change.field),
+      before: change.from === '' ? '\u2014' : change.from,
+      after: change.to === '' ? '\u2014' : change.to,
+    }
+  })
+}
+
+function isImageFieldChange(
+  change: MonitoringFieldChange,
+): change is Extract<MonitoringFieldChange, { field: 'image_urls' }> {
+  return change.field === 'image_urls' && 'added' in change && 'removed' in change
 }
 
 function getSnapshotValue(

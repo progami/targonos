@@ -6,12 +6,21 @@
 // @ts-ignore — path import to generated client
 import { PrismaClient } from '../node_modules/.prisma/client-auth/index.js';
 let prismaInstance = globalThis.__portalAuthPrisma ?? null;
-export function getPortalAuthPrisma() {
-    if (!process.env.PORTAL_DB_URL) {
+function resolvePortalDbUrl() {
+    const databaseUrl = process.env.PORTAL_DB_URL;
+    if (!databaseUrl) {
         throw new Error('PORTAL_DB_URL is not configured');
     }
+    const url = new URL(databaseUrl);
+    url.searchParams.set('application_name', 'auth');
+    return url.toString();
+}
+export function getPortalAuthPrisma() {
     if (!prismaInstance) {
         prismaInstance = new PrismaClient({
+            datasources: {
+                db: { url: resolvePortalDbUrl() },
+            },
             transactionOptions: { timeout: 30000, maxWait: 30000 },
         });
         if (process.env.NODE_ENV !== 'production') {

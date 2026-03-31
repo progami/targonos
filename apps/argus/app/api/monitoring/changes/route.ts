@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
       owner: readOwner(searchParams.get('owner')),
       category: readCategory(searchParams.get('category')),
       severity: readSeverity(searchParams.get('severity')),
+      snapshotTimestamp: readSnapshotTimestamp(searchParams.get('snapshot')),
       query: searchParams.get('query') ?? undefined,
     })
 
@@ -72,4 +73,14 @@ function readSeverity(value: string | null): MonitoringSeverity | 'ALL' | undefi
     return value
   }
   throw new Error(`Unsupported monitoring severity "${value}".`)
+}
+
+function readSnapshotTimestamp(value: string | null): string | undefined {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    throw new Error('Unsupported monitoring snapshot filter "".')
+  }
+
+  return trimmed
 }

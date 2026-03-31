@@ -6,7 +6,7 @@ import styles from '../caelumStarLanding.module.css';
 const navLinks = [
   { label: 'Packs', href: '/packs' },
   { label: 'Where to buy', href: '/where-to-buy' },
-  { label: 'Gallery', href: '/gallery' },
+  { label: 'Gallery', href: '/gallery', usOnly: true },
   { label: 'Support', href: '/support' },
   { label: 'About', href: '/about' }
 ];
@@ -28,7 +28,7 @@ export function CaelumStarHeader({ hideNav = false, hideBuyNow = false, region }
 
           {!hideNav && region && (
             <nav aria-label="Main navigation" className={styles.headerNav}>
-              {navLinks.map((link) => (
+              {navLinks.filter((link) => !link.usOnly || region === 'us').map((link) => (
                 <Link key={link.label} href={`/cs/${region}${link.href}`} className={styles.headerNavLink}>
                   {link.label}
                 </Link>
