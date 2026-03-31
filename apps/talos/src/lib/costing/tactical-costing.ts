@@ -216,6 +216,58 @@ function buildOutboundComponents(params: {
     throw new Error('Missing shipMode for outbound costing')
   }
 
+  // V Global-specific outbound charges (applied when V Global rates are seeded)
+  const cartonPickingRate = params.ratesByCostName.get('Carton Picking')
+  if (cartonPickingRate) {
+    const components: CostComponent[] = []
+
+    if (params.totalCartons > 0) {
+      components.push({
+        costCategory: CostCategory.Outbound,
+        costName: cartonPickingRate.costName,
+        totalCents: roundCents(cartonPickingRate.costValue * params.totalCartons),
+      })
+    }
+
+    const labelOnPalletsRate = params.ratesByCostName.get('Label Printed on Pallets')
+    if (labelOnPalletsRate && params.totalPallets > 0) {
+      components.push({
+        costCategory: CostCategory.Outbound,
+        costName: labelOnPalletsRate.costName,
+        totalCents: roundCents(labelOnPalletsRate.costValue * params.totalPallets * 2),
+      })
+    }
+
+    const labelOnBoxesRate = params.ratesByCostName.get('Label Printed on Boxes')
+    if (labelOnBoxesRate && params.totalCartons > 0) {
+      components.push({
+        costCategory: CostCategory.Outbound,
+        costName: labelOnBoxesRate.costName,
+        totalCents: roundCents(labelOnBoxesRate.costValue * params.totalCartons),
+      })
+    }
+
+    const palletsOutboundRate = params.ratesByCostName.get('Pallets Outbound')
+    if (palletsOutboundRate && params.totalPallets > 0) {
+      components.push({
+        costCategory: CostCategory.Outbound,
+        costName: palletsOutboundRate.costName,
+        totalCents: roundCents(palletsOutboundRate.costValue * params.totalPallets),
+      })
+    }
+
+    const palletWrappingRate = params.ratesByCostName.get('Pallet Wrapping')
+    if (palletWrappingRate && params.totalPallets > 0) {
+      components.push({
+        costCategory: CostCategory.Outbound,
+        costName: palletWrappingRate.costName,
+        totalCents: roundCents(palletWrappingRate.costValue * params.totalPallets),
+      })
+    }
+
+    return components
+  }
+
   if (shipMode === 'CARTONS') {
     const handlingRate = requireRate(params.ratesByCostName, 'Replenishment Handling')
     const minimumRate = requireRate(params.ratesByCostName, 'Replenishment Minimum')
