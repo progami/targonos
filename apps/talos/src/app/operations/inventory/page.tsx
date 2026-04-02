@@ -171,8 +171,8 @@ function InventoryPage() {
   )
 
   const metrics = useMemo(() => {
-    const totalCartons = balances.reduce((sum, balance) => sum + balance.currentCartons, 0)
-    const totalPallets = balances.reduce((sum, balance) => sum + balance.currentPallets, 0)
+    const totalCartons = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentCartons), 0)
+    const totalPallets = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentPallets), 0)
     const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
     const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
     const lotsWithInventoryFallback = balances.filter(balance => balance.currentCartons > 0).length
@@ -208,29 +208,6 @@ function InventoryPage() {
       <PageHeaderSection title="Inventory Ledger" description="Operations" icon={BookOpen} />
       <PageContent className="flex-1 overflow-hidden px-4 py-6 sm:px-6 lg:px-8 flex flex-col">
         <div className="flex flex-col gap-6 flex-1 min-h-0">
-          <StatsCardGrid cols={3}>
-            <StatsCard
-              title="Total Cartons"
-              value={metrics.totalCartons}
-              subtitle={`${metrics.uniqueWarehouses} ${metrics.uniqueWarehouses === 1 ? 'warehouse' : 'warehouses'}`}
-              icon={Package}
-              variant="info"
-            />
-            <StatsCard
-              title="Total Pallets"
-              value={metrics.totalPallets}
-              subtitle="Calculated from cartons"
-              icon={Building}
-              variant="default"
-            />
-            <StatsCard
-              title="Active SKUs"
-              value={metrics.summary.totalSkuCount}
-              subtitle="Reporting inventory"
-              icon={Search}
-              variant="default"
-            />
-          </StatsCardGrid>
 
           <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden flex-1">
             {/* Scrollable table area */}
@@ -510,7 +487,65 @@ function InventoryPage() {
                       </button>
                     </th>
                     <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                      Type
+                      <div className="flex items-center justify-between gap-1">
+                        <span>Type</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter type"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['movement'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-48 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Type filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['movement'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              {([
+                                { value: 'positive' as const, label: 'Inbound' },
+                                { value: 'negative' as const, label: 'Outbound' },
+                              ]).map(option => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 text-sm text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.movement.includes(option.value)}
+                                    onChange={() =>
+                                      updateColumnFilter(
+                                        'movement',
+                                        columnFilters.movement.includes(option.value)
+                                          ? columnFilters.movement.filter(v => v !== option.value)
+                                          : [...columnFilters.movement, option.value]
+                                      )
+                                    }
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  <span className="flex-1 text-sm">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </th>
                     <th className="w-40 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
                       <div className="flex items-center justify-between gap-1">
@@ -713,9 +748,13 @@ function InventoryPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/80 text-xs uppercase tracking-wide text-muted-foreground">
-                    <td colSpan={6} className="px-2 py-2 font-semibold text-left">
+                    <td colSpan={2} className="px-2 py-2 font-semibold text-left">
                       Totals
                     </td>
+                    <td className="px-2 py-2 font-medium whitespace-nowrap">
+                      {metrics.summary.totalSkuCount} SKUs
+                    </td>
+                    <td colSpan={3} />
                     <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">
                       {tableTotals.cartons.toLocaleString()}
                     </td>

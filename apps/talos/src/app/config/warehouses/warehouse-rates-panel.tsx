@@ -93,6 +93,30 @@ const RATE_TEMPLATES = {
       unitOfMeasure: 'per_pallet',
       defaultValue: 13.75,
     },
+    {
+      costName: 'Label Printed',
+      costCategory: 'Inbound',
+      unitOfMeasure: 'per_carton',
+      defaultValue: 0.45,
+    },
+    {
+      costName: 'Pallets Putaway',
+      costCategory: 'Inbound',
+      unitOfMeasure: 'per_pallet',
+      defaultValue: 2.10,
+    },
+    {
+      costName: 'Pallets Supplied',
+      costCategory: 'Inbound',
+      unitOfMeasure: 'per_pallet',
+      defaultValue: 7.75,
+    },
+    {
+      costName: 'Pallet Wrapping',
+      costCategory: 'Inbound',
+      unitOfMeasure: 'per_pallet',
+      defaultValue: 1.85,
+    },
   ],
   storage: [
     {
@@ -138,6 +162,30 @@ const RATE_TEMPLATES = {
       costCategory: 'Outbound',
       unitOfMeasure: 'flat',
       defaultValue: 0,
+    },
+    {
+      costName: 'Carton Picking',
+      costCategory: 'Outbound',
+      unitOfMeasure: 'per_carton',
+      defaultValue: 0.95,
+    },
+    {
+      costName: 'Label Printed on Pallets',
+      costCategory: 'Outbound',
+      unitOfMeasure: 'per_label',
+      defaultValue: 0.45,
+    },
+    {
+      costName: 'Label Printed on Boxes',
+      costCategory: 'Outbound',
+      unitOfMeasure: 'per_carton',
+      defaultValue: 0.45,
+    },
+    {
+      costName: 'Pallets Outbound',
+      costCategory: 'Outbound',
+      unitOfMeasure: 'per_pallet',
+      defaultValue: 7.75,
     },
   ],
   forwarding: [

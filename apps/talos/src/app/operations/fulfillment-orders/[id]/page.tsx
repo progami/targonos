@@ -123,12 +123,16 @@ const DOCUMENT_REQUIREMENTS: Record<
   FulfillmentOrderDocumentStage,
   Array<{ id: string; label: string }>
 > = {
-  PACKING: [],
-  SHIPPING: [
-    { id: 'bill_of_lading', label: 'Bill of Lading (BOL)' },
-    { id: 'invoice', label: 'Invoice' },
+  PACKING: [
+    { id: 'carton_label', label: 'Carton Label' },
+    { id: 'pallete_label', label: 'Pallete Label' },
   ],
-  DELIVERY: [{ id: 'proof_of_delivery', label: 'Proof of Delivery (POD)' }],
+  SHIPPING: [
+    { id: 'cmr', label: 'CMR' },
+    { id: 'carrier_labels', label: 'Carrier Labels' },
+    { id: 'amazon_freight_invoice', label: 'Amazon Freight Invoice' },
+  ],
+  DELIVERY: [],
 }
 
 const DOCUMENT_STAGE_META: Record<
@@ -422,7 +426,21 @@ export default function FulfillmentOrderDetailPage() {
   const isAmazonFBA = order?.destinationType === 'AMAZON_FBA'
   const canEdit = order?.status === 'DRAFT'
 
-  const hasBillOfLading = Boolean(documentsByKey.get('SHIPPING::bill_of_lading'))
+  const missingDocuments = useMemo(() => {
+    const missing: Array<{ stage: FulfillmentOrderDocumentStage; id: string; label: string }> = []
+    for (const [stage, docs] of Object.entries(DOCUMENT_REQUIREMENTS) as Array<
+      [FulfillmentOrderDocumentStage, Array<{ id: string; label: string }>]
+    >) {
+      for (const doc of docs) {
+        if (!documentsByKey.get(`${stage}::${doc.id}`)) {
+          missing.push({ stage, ...doc })
+        }
+      }
+    }
+    return missing
+  }, [documentsByKey])
+
+  const allDocumentsUploaded = missingDocuments.length === 0
 
   const tabIssueCounts = useMemo(() => {
     const issues: Record<FulfillmentOrderDetailTab, number> = {
@@ -448,9 +466,7 @@ export default function FulfillmentOrderDetailPage() {
       issues.lines += 1
     }
 
-    if (!hasBillOfLading) {
-      issues.documents += 1
-    }
+    issues.documents += missingDocuments.length
 
     if (canEdit) {
       if (!shipForm.shippingCarrier.trim()) {
@@ -459,7 +475,7 @@ export default function FulfillmentOrderDetailPage() {
       if (!shipForm.shippingMethod.trim()) {
         issues.shipping += 1
       }
-      if (!hasBillOfLading) {
+      if (!allDocumentsUploaded) {
         issues.shipping += 1
       }
       if (isAmazonFBA && !order.amazonShipmentId?.trim()) {
@@ -471,7 +487,7 @@ export default function FulfillmentOrderDetailPage() {
     }
 
     return issues
-  }, [canEdit, hasBillOfLading, isAmazonFBA, order, shipForm.shippingCarrier, shipForm.shippingMethod])
+  }, [canEdit, allDocumentsUploaded, missingDocuments.length, isAmazonFBA, order, shipForm.shippingCarrier, shipForm.shippingMethod])
 
   const handleDetailsSave = async () => {
     if (!order) return
@@ -580,9 +596,10 @@ export default function FulfillmentOrderDetailPage() {
         return
       }
 
-      if (!hasBillOfLading) {
+      if (!allDocumentsUploaded) {
         setActiveTab('documents')
-        toast.error('Upload the Bill of Lading (BOL) before shipping')
+        const first = missingDocuments[0]
+        toast.error(`Upload required document: ${first.label}`)
         return
       }
 
@@ -1805,15 +1822,13 @@ export default function FulfillmentOrderDetailPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-sm font-semibold">Documents</h3>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Upload BOL, POD, and invoice files
-                  </p>
                 </div>
                 {documentsLoading && (
                   <span className="text-xs text-muted-foreground">Loading…</span>
                 )}
               </div>
               <div className="space-y-6">
+                {renderDocumentStage('PACKING', 'Packing Documents')}
                 {renderDocumentStage('SHIPPING', 'Shipping Documents')}
                 {renderDocumentStage('DELIVERY', 'Delivery Documents')}
                 {inlinePreviewDocument && inlineStageMeta && (

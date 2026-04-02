@@ -346,9 +346,7 @@ export default function NewFulfillmentOrderPage() {
   const handleSubmit = async () => {
     try {
       if (isAmazonFBA && !amazonShipment.shipmentId.trim()) {
-        setActiveTab('amazon')
-        toast.error('Select an Amazon shipment')
-        return
+        // Amazon shipment is optional — skip validation when not provided
       }
 
       if (!formData.warehouseCode.trim()) {

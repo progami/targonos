@@ -1,25 +1,42 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* Brand font overrides — outside @layer so they beat utility classes */
-html body.font-sans {
-  font-family: var(--font-sans), system-ui, sans-serif;
+html,
+body {
+  margin: 0;
+  min-height: 100%;
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading), system-ui, sans-serif;
+body {
+  font-family: var(--font-sans), Inter, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.font-secondary {
-  font-family: var(--font-secondary), system-ui, sans-serif;
+a {
+  color: inherit;
 }
 
-.font-mono {
-  font-family: var(--font-mono), Monaco, Consolas, monospace;
+* {
+  box-sizing: border-box;
 }
 
-/* ==========================================================================
-   Amazon PDP Replica Styles
-   Styles for the Amazon product detail page replica will be added here.
-   ========================================================================== */
+.argus-version-badge {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 1300;
+  border: 1px solid rgba(0, 44, 81, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 6px 12px;
+  color: #455b6e;
+  font-size: 12px;
+  text-decoration: none;
+  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 28px -20px rgba(0, 44, 81, 0.5);
+}
+
+.dark .argus-version-badge {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(7, 18, 27, 0.8);
+  color: #b8cada;
+}
