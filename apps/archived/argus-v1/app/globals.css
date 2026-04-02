@@ -1,0 +1,25 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Brand font overrides — outside @layer so they beat utility classes */
+html body.font-sans {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading), system-ui, sans-serif;
+}
+
+.font-secondary {
+  font-family: var(--font-secondary), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), Monaco, Consolas, monospace;
+}
+
+/* ==========================================================================
+   Amazon PDP Replica Styles
+   Styles for the Amazon product detail page replica will be added here.
+   ========================================================================== */

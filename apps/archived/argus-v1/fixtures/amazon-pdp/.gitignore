@@ -1,0 +1,3 @@
+# Raw source HTML (3MB) — only needed to regenerate replica.html
+# Run `node scripts/process-fixture.mjs` if you need to regenerate
+listingpage.html

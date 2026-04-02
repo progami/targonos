@@ -4,8 +4,6 @@ const config: Config = {
   darkMode: ["class"],
   content: [
     "./src/**/*.{ts,tsx}",
-    // If you later use shared UI from the monorepo, add it here:
-    // "../../packages/ui/src/**/*.{ts,tsx}",
   ],
   theme: {
     container: {

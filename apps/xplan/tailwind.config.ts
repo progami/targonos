@@ -6,7 +6,6 @@ const config: Config = {
     "./app/**/*.{ts,tsx,mdx}",
     "./components/**/*.{ts,tsx,mdx}",
     "./lib/**/*.{ts,tsx}",
-    "../../packages/ui/src/**/*.{ts,tsx,mdx}",
   ],
   theme: {
   	extend: {
@@ -260,4 +259,3 @@ const config: Config = {
 };
 
 export default config;
-

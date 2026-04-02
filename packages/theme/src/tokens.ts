@@ -1,0 +1,123 @@
+export const brandColors = {
+  primary: '#002C51',
+  secondary: '#00C2B9',
+  white: '#FFFFFF',
+  black: '#04111C',
+  navy: {
+    50: '#F1F5F8',
+    100: '#DAE6EF',
+    200: '#B9CBDB',
+    300: '#91AAC1',
+    400: '#6888A7',
+    500: '#456A8A',
+    600: '#2E4F6E',
+    700: '#1D3B57',
+    800: '#0F2D44',
+    900: '#002C51',
+    950: '#01192F',
+  },
+  teal: {
+    50: '#E8FCFB',
+    100: '#CBF8F5',
+    200: '#97F0EA',
+    300: '#5CE4DD',
+    400: '#20D4CC',
+    500: '#00C2B9',
+    600: '#04A49D',
+    700: '#0B847E',
+    800: '#106864',
+    900: '#125452',
+    950: '#073433',
+  },
+  gray: {
+    50: '#F7F9FB',
+    100: '#EFF3F6',
+    200: '#DDE5EB',
+    300: '#C5D1DA',
+    400: '#A5B5C1',
+    500: '#8396A6',
+    600: '#65798B',
+    700: '#4F6172',
+    800: '#384655',
+    900: '#212D39',
+    950: '#101820',
+  },
+} as const;
+
+export type BrandColorToken = keyof typeof brandColors;
+
+export const surfaceColors = {
+  light: {
+    canvas: '#F4F7FA',
+    subtle: '#ECF2F7',
+    paper: '#FFFFFF',
+    raised: '#FAFCFD',
+    border: 'rgba(0, 44, 81, 0.12)',
+    borderStrong: 'rgba(0, 44, 81, 0.18)',
+  },
+  dark: {
+    canvas: '#08131D',
+    subtle: '#0E1C29',
+    paper: '#122230',
+    raised: '#172938',
+    border: 'rgba(255, 255, 255, 0.10)',
+    borderStrong: 'rgba(255, 255, 255, 0.16)',
+  },
+} as const;
+
+export const brandFontFamilies = {
+  heading: 'var(--font-sans), Inter, system-ui, sans-serif',
+  primary: 'var(--font-sans), Inter, system-ui, sans-serif',
+  secondary: 'var(--font-sans), Inter, system-ui, sans-serif',
+  mono: 'var(--font-mono), "JetBrains Mono", Monaco, Consolas, monospace',
+} as const;
+
+export type BrandFontToken = keyof typeof brandFontFamilies;
+
+export const brandRadii = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 24,
+} as const;
+
+export type BrandRadiusToken = keyof typeof brandRadii;
+
+export const semanticColors = {
+  success: {
+    50: '#ECFDF3',
+    100: '#D1FADF',
+    200: '#A6F4C5',
+    300: '#6CE9A6',
+    400: '#32D583',
+    500: '#12B76A',
+    600: '#039855',
+    700: '#027A48',
+    800: '#05603A',
+    900: '#054F31',
+  },
+  warning: {
+    50: '#FFFAEB',
+    100: '#FEF0C7',
+    200: '#FEDF89',
+    300: '#FEC84B',
+    400: '#FDB022',
+    500: '#F79009',
+    600: '#DC6803',
+    700: '#B54708',
+    800: '#93370D',
+    900: '#7A2E0E',
+  },
+  danger: {
+    50: '#FEF3F2',
+    100: '#FEE4E2',
+    200: '#FECDCA',
+    300: '#FDA29B',
+    400: '#F97066',
+    500: '#F04438',
+    600: '#D92D20',
+    700: '#B42318',
+    800: '#912018',
+    900: '#7A271A',
+  },
+} as const;
