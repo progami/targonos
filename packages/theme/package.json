@@ -10,6 +10,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.js"
     },
+    "./mui-theme": {
+      "types": "./dist/mui-theme.d.ts",
+      "import": "./dist/mui-theme.js",
+      "require": "./dist/mui-theme.js"
+    },
     "./tailwind-preset": {
       "types": "./dist/tailwind-preset.d.ts",
       "import": "./dist/tailwind-preset.js",
@@ -25,7 +30,11 @@
     "dev": "tsc -w -p tsconfig.build.json",
     "type-check": "tsc --noEmit -p tsconfig.build.json"
   },
+  "peerDependencies": {
+    "@mui/material": "^7.3.8"
+  },
   "devDependencies": {
+    "@mui/material": "^7.3.8",
     "tailwindcss": "^3.4.0",
     "typescript": "5.9.3"
   }

@@ -67,7 +67,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
             ))}
             <Button
               component={Link}
-              href={`/tracking/${event.asin}`}
+              href={`/monitoring/${event.asin}`}
               variant="contained"
               size="small"
               startIcon={<ArrowOutwardIcon sx={{ fontSize: 14 }} />}

@@ -4,129 +4,45 @@ import { useRef, useEffect, useState } from 'react'
 import type { RefObject } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  Box,
-  Button as MuiButton,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Stack,
-  TextField,
-  Typography,
-} from '@mui/material'
-import {
   formatAmazonPdpReplicaContractError,
   getReplicaSlotElement,
   validateAmazonPdpReplicaContract,
   type AmazonPdpReplicaContractError,
 } from './amazon-pdp-replica'
-
-function normalizeBasePath(value: string): string {
-  const raw = value.trim()
-  if (raw.length === 0) return ''
-
-  const prefixed = raw.startsWith('/') ? raw : `/${raw}`
-  const withoutTrailingSlash = prefixed.endsWith('/') ? prefixed.slice(0, -1) : prefixed
-  const segments = withoutTrailingSlash.split('/').filter(Boolean)
-
-  const halfLen = Math.floor(segments.length / 2)
-  const hasDuplicatedSegments =
-    segments.length > 0 &&
-    segments.length % 2 === 0 &&
-    segments.slice(0, halfLen).join('/') === segments.slice(halfLen).join('/')
-
-  const normalized = hasDuplicatedSegments
-    ? `/${segments.slice(0, halfLen).join('/')}`
-    : withoutTrailingSlash
-
-  return normalized === '/' ? '' : normalized
-}
-
-const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
-const CLOUDFLARE_MAX_UPLOAD_BYTES = 100_000_000
-const SNAPSHOT_ZIP_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
-
-function formatBytes(bytes: number): string {
-  const mb = bytes / 1_000_000
-  if (mb >= 1) return `${mb.toFixed(1)}MB`
-  const kb = bytes / 1_000
-  return `${kb.toFixed(1)}KB`
-}
-
-function getUploadSizeError(files: File[], maxBytes: number): string | null {
-  const oversized = files.find((file) => file.size > maxBytes) ?? null
-  if (oversized) {
-    return `“${oversized.name}” is ${formatBytes(oversized.size)}. Max upload size is 100MB per request.`
-  }
-
-  let total = 0
-  for (const file of files) {
-    total += file.size
-  }
-
-  if (total > maxBytes) {
-    return `Selected files total ${formatBytes(total)}. Max upload size is 100MB per request. Upload fewer files at once.`
-  }
-
-  return null
-}
-
-function formatUsdFromCents(cents: number): string {
-  const whole = Math.floor(cents / 100)
-  const fraction = String(Math.abs(cents % 100)).padStart(2, '0')
-  return `${whole}.${fraction}`
-}
-
-function parseUsdToCents(value: string): number | null {
-  const raw = value.trim()
-  if (raw.length === 0) return null
-
-  const cleaned = raw.replaceAll('$', '').replaceAll(',', '')
-  const match = /^(\d+)(?:\.(\d{0,2}))?$/.exec(cleaned)
-  if (!match) return null
-
-  const dollars = Number(match[1])
-  if (!Number.isFinite(dollars)) return null
-
-  const fractionRaw = match[2] ?? ''
-  const fraction = fractionRaw.padEnd(2, '0')
-  const cents = dollars * 100 + Number(fraction)
-  return Number.isFinite(cents) ? cents : null
-}
-
-function isInitialIframeDocument(iframe: HTMLIFrameElement, doc: Document): boolean {
-  return iframe.contentWindow?.location.href === 'about:blank' || doc.URL === 'about:blank'
-}
-
-interface ListingSummary {
-  id: string
-  asin: string
-  label: string
-}
-
-interface ListingActivePointers {
-  activeTitleId: string | null
-  activeBulletsId: string | null
-  activeGalleryId: string | null
-  activeEbcId: string | null
-  activeVideoId: string | null
-}
-
-interface ListingPriceState {
-  priceCents: number | null
-  pricePerUnitCents: number | null
-  pricePerUnitUnit: string | null
-}
-
-interface ListingDetailProps {
-  listingId: string
-  listing?: ListingSummary
-}
-
-function looksLikeAsin(value: string): boolean {
-  return /^[a-z0-9]{10}$/iu.test(value)
-}
+import { ListingDetailDialogs, ListingDetailHeader } from './listing-detail-dialogs'
+import {
+  CLOUDFLARE_MAX_UPLOAD_BYTES,
+  SNAPSHOT_ZIP_MAX_UPLOAD_BYTES,
+  basePath,
+  formatBytes,
+  formatUsdFromCents,
+  getUploadSizeError,
+  isInitialIframeDocument,
+  parseUsdToCents,
+  type ArgusReplicaDocument,
+  type BulletsRevision,
+  type BulletsDraft,
+  type EbcModuleDraft,
+  type EbcModuleEditorTarget,
+  type EbcRevision,
+  type EbcSection,
+  type GalleryRevision,
+  type ListingDetailCallbacks,
+  type ListingDetailProps,
+  type ListingPriceState,
+  type VideoRevision,
+  looksLikeAsin,
+  resolveImageSrc,
+} from './listing-detail-shared'
+import {
+  composeEbcRevision,
+  downloadEbcZip,
+  downloadGalleryRevisionZip,
+  ebcModulePointerKey,
+  getEbcModuleHistory,
+  updateEbcModuleControls,
+} from './listing-detail-versioning'
+import { useListingDetailData } from './use-listing-detail-data'
 
 export function ListingDetail({
   listingId,
@@ -138,33 +54,35 @@ export function ListingDetail({
   const iframeDocRef = useRef<Document | null>(null)
   const [iframeEpoch, setIframeEpoch] = useState(0)
   const [replicaContractError, setReplicaContractError] = useState<AmazonPdpReplicaContractError | null>(null)
-
-  const [listing, setListing] = useState<ListingSummary | null>(listingProp ?? null)
-
-  const [refreshKey, setRefreshKey] = useState(0)
-
-  const [titleRevisions, setTitleRevisions] = useState<TitleRevision[]>([])
-  const [titleIndex, setTitleIndex] = useState(0)
-
-  const [bulletsRevisions, setBulletsRevisions] = useState<BulletsRevision[]>([])
-  const [galleryRevisions, setGalleryRevisions] = useState<GalleryRevision[]>([])
-  const [videoRevisions, setVideoRevisions] = useState<VideoRevision[]>([])
-  const [ebcRevisions, setEbcRevisions] = useState<EbcRevision[]>([])
-  const [ebcModulePointers, setEbcModulePointers] = useState<Record<string, string>>({})
-
-  const [activePointers, setActivePointers] = useState<ListingActivePointers | null>(null)
-  const [price, setPrice] = useState<ListingPriceState | null>(null)
-
-  const [bulletsIndex, setBulletsIndex] = useState(0)
-  const [galleryIndex, setGalleryIndex] = useState(0)
-  const [videoIndex, setVideoIndex] = useState(0)
-  const [ebcIndex, setEbcIndex] = useState(0)
+  const {
+    listing,
+    activePointers,
+    price,
+    titleRevisions,
+    titleIndex,
+    setTitleIndex,
+    bulletsRevisions,
+    bulletsIndex,
+    setBulletsIndex,
+    galleryRevisions,
+    galleryIndex,
+    setGalleryIndex,
+    videoRevisions,
+    videoIndex,
+    setVideoIndex,
+    ebcRevisions,
+    ebcIndex,
+    setEbcIndex,
+    ebcModulePointers,
+    setEbcModulePointers,
+    refreshListingData,
+  } = useListingDetailData({ listingId, listing: listingProp })
 
   const [titleEditorOpen, setTitleEditorOpen] = useState(false)
   const [titleDraft, setTitleDraft] = useState('')
 
   const [bulletsEditorOpen, setBulletsEditorOpen] = useState(false)
-  const [bulletsDraft, setBulletsDraft] = useState({
+  const [bulletsDraft, setBulletsDraft] = useState<BulletsDraft>({
     bullet1: '',
     bullet2: '',
     bullet3: '',
@@ -187,16 +105,19 @@ export function ListingDetail({
   const [videoPosterFile, setVideoPosterFile] = useState<File | null>(null)
 
   const [ebcModuleEditorOpen, setEbcModuleEditorOpen] = useState(false)
-  const [ebcModuleEditorTarget, setEbcModuleEditorTarget] = useState<{ sectionType: string; modulePosition: number } | null>(null)
-  const [ebcModuleDraft, setEbcModuleDraft] = useState({ headline: '', bodyText: '' })
+  const [ebcModuleEditorTarget, setEbcModuleEditorTarget] = useState<EbcModuleEditorTarget | null>(null)
+  const [ebcModuleDraft, setEbcModuleDraft] = useState<EbcModuleDraft>({ headline: '', bodyText: '' })
   const [ebcModuleFiles, setEbcModuleFiles] = useState<File[]>([])
 
   const [snapshotIngestOpen, setSnapshotIngestOpen] = useState(false)
   const [snapshotIngestFile, setSnapshotIngestFile] = useState<File | null>(null)
   const [snapshotIngestBusy, setSnapshotIngestBusy] = useState(false)
   const [snapshotIngestError, setSnapshotIngestError] = useState<string | null>(null)
+  const [resetDialogOpen, setResetDialogOpen] = useState(false)
+  const [resetBusy, setResetBusy] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
 
-  const callbacksRef = useRef({
+  const callbacksRef = useRef<ListingDetailCallbacks>({
     titlePrev: () => {},
     titleNext: () => {},
     titleEdit: () => {},
@@ -234,68 +155,12 @@ export function ListingDetail({
   })
 
   useEffect(() => {
-    const normalized = String(listingId).trim()
-    const abortController = new AbortController()
-
-    if (listingProp && (listingProp.id === normalized || listingProp.asin === normalized)) {
-      setListing(listingProp)
-      return () => abortController.abort()
-    }
-
     const doc = iframeDocRef.current
-    if (doc) {
-      const storedDoc = doc as ArgusReplicaDocument
-      storedDoc.__argusMainMediaIndex = 0
-    }
+    if (!doc) return
 
-    setListing(null)
-    setActivePointers(null)
-    setPrice(null)
-    setTitleRevisions([])
-    setBulletsRevisions([])
-    setGalleryRevisions([])
-    setVideoRevisions([])
-    setEbcRevisions([])
-    setEbcModulePointers({})
-    setTitleIndex(0)
-    setBulletsIndex(0)
-    setGalleryIndex(0)
-    setVideoIndex(0)
-    setEbcIndex(0)
-
-    void (async () => {
-      if (normalized.length === 0) return
-
-      if (looksLikeAsin(normalized)) {
-        const res = await fetch(`${basePath}/api/listings/ensure`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ asin: normalized }),
-          signal: abortController.signal,
-        })
-
-        if (!res.ok) {
-          window.alert(await res.text())
-          return
-        }
-
-        const data = await res.json() as { id: string; asin: string; label: string }
-        setListing({ id: data.id, asin: data.asin, label: data.label })
-        return
-      }
-
-      const res = await fetch(`${basePath}/api/listings/${normalized}`, { signal: abortController.signal })
-      if (!res.ok) {
-        window.alert(await res.text())
-        return
-      }
-
-      const data = await res.json() as { id: string; asin: string; label: string }
-      setListing({ id: data.id, asin: data.asin, label: data.label })
-    })()
-
-    return () => abortController.abort()
-  }, [listingId, listingProp])
+    const storedDoc = doc as ArgusReplicaDocument
+    storedDoc.__argusMainMediaIndex = 0
+  }, [listingId])
 
   useEffect(() => {
     callbacksRef.current.titlePrev = () => {
@@ -345,7 +210,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -396,7 +261,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -429,7 +294,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -473,7 +338,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -518,7 +383,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -750,7 +615,7 @@ export function ListingDetail({
           window.alert(await res.text())
           return
         }
-        setRefreshKey((current) => current + 1)
+        refreshListingData()
       })()
     }
 
@@ -788,62 +653,16 @@ export function ListingDetail({
     galleryRevisions,
     videoIndex,
     ebcModulePointers,
+    refreshListingData,
+    setBulletsIndex,
+    setEbcIndex,
+    setEbcModulePointers,
+    setGalleryIndex,
+    setTitleIndex,
+    setVideoIndex,
     videoRevisions,
     ebcRevisions,
   ])
-
-  useEffect(() => {
-    if (!listing) return
-
-    const listingDbId = listing.id
-    const abortController = new AbortController()
-
-    async function loadRevisions() {
-      const [meta, titles, bullets, gallery, video, ebc, pointers, priceData] = await Promise.all([
-        fetch(`${basePath}/api/listings/${listingDbId}`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<ListingActivePointers>,
-        fetch(`${basePath}/api/listings/${listingDbId}/title`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<TitleRevision[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/bullets`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<BulletsRevision[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/gallery`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<GalleryApiRevision[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/video`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<VideoApiRevision[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/ebc`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<EbcApiRevision[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/ebc/pointers`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<EbcModulePointerApi[]>,
-        fetch(`${basePath}/api/listings/${listingDbId}/price`, { signal: abortController.signal })
-          .then((res) => res.json()) as Promise<ListingPriceState>,
-      ])
-
-      setActivePointers(meta)
-      setPrice(priceData)
-      setTitleRevisions(titles)
-      setBulletsRevisions(bullets)
-      setGalleryRevisions(gallery.map(toGalleryRevision))
-      setVideoRevisions(video.map(toVideoRevision))
-      setEbcRevisions(ebc.map(toEbcRevision))
-      const liveEbcId = meta.activeEbcId
-      setEbcModulePointers(pointers.reduce<Record<string, string>>((acc, pointer) => {
-        if (liveEbcId && pointer.ebcRevisionId === liveEbcId) {
-          return acc
-        }
-        acc[ebcModulePointerKey(pointer.sectionType, pointer.modulePosition)] = pointer.ebcRevisionId
-        return acc
-      }, {}))
-
-      setTitleIndex(0)
-      setBulletsIndex(0)
-      setGalleryIndex(0)
-      setVideoIndex(0)
-      setEbcIndex(0)
-    }
-
-    loadRevisions()
-    return () => abortController.abort()
-  }, [listing, refreshKey])
 
   useEffect(() => {
     const iframe = iframeRef.current
@@ -973,6 +792,271 @@ export function ListingDetail({
     }
   }, [galleryRevisions, galleryIndex, ebcRevisions, ebcIndex, ebcModulePointers, activePointers])
 
+  async function handleSnapshotIngestSubmit() {
+    if (!listing || !snapshotIngestFile) return
+
+    if (snapshotIngestFile.size > SNAPSHOT_ZIP_MAX_UPLOAD_BYTES) {
+      setSnapshotIngestError(
+        `“${snapshotIngestFile.name}” is ${formatBytes(snapshotIngestFile.size)}. Max zip size is ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}.`,
+      )
+      return
+    }
+
+    setSnapshotIngestBusy(true)
+    setSnapshotIngestError(null)
+
+    try {
+      const formData = new FormData()
+      formData.append('snapshot', snapshotIngestFile)
+
+      const response = await fetch(`${basePath}/api/listings/${listing.id}/ingest`, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const text = await response.text()
+      if (!response.ok) {
+        try {
+          const parsed = JSON.parse(text) as { error?: unknown }
+          if (typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
+            setSnapshotIngestError(parsed.error)
+            return
+          }
+        } catch {
+          // keep raw text when JSON parsing fails
+        }
+
+        setSnapshotIngestError(text.trim().length > 0 ? text : 'Snapshot ingest failed.')
+        return
+      }
+
+      try {
+        const parsed = JSON.parse(text) as { changes?: unknown }
+        if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
+          window.alert(`Ingested snapshot:\n${parsed.changes.join('\n')}`)
+        } else {
+          window.alert('Ingested snapshot (no content changes detected).')
+        }
+      } catch {
+        window.alert('Ingested snapshot.')
+      }
+
+      setSnapshotIngestOpen(false)
+      setSnapshotIngestFile(null)
+      refreshListingData()
+    } finally {
+      setSnapshotIngestBusy(false)
+    }
+  }
+
+  async function handleTitleSubmit() {
+    if (!listing) return
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: titleDraft }),
+    })
+    if (!response.ok) {
+      window.alert(await response.text())
+      return
+    }
+
+    setTitleEditorOpen(false)
+    refreshListingData()
+  }
+
+  async function handleBulletsSubmit() {
+    if (!listing) return
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        bullet1: bulletsDraft.bullet1,
+        bullet2: bulletsDraft.bullet2,
+        bullet3: bulletsDraft.bullet3,
+        bullet4: bulletsDraft.bullet4,
+        bullet5: bulletsDraft.bullet5,
+      }),
+    })
+    if (!response.ok) {
+      window.alert(await response.text())
+      return
+    }
+
+    setBulletsEditorOpen(false)
+    refreshListingData()
+  }
+
+  async function handlePriceSubmit() {
+    if (!listing) return
+
+    const nextPriceCents = parseUsdToCents(priceDraft.price)
+    if (nextPriceCents === null) {
+      window.alert('Enter a valid price (e.g. 8.99).')
+      return
+    }
+
+    const nextPerUnitCents = parseUsdToCents(priceDraft.perUnitPrice)
+    const nextPerUnitUnit = priceDraft.perUnitUnit.trim()
+    if (nextPerUnitCents !== null && nextPerUnitUnit.length === 0) {
+      window.alert('Unit is required when unit price is set (e.g. count).')
+      return
+    }
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/price`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        priceCents: nextPriceCents,
+        pricePerUnitCents: nextPerUnitCents,
+        pricePerUnitUnit: nextPerUnitCents !== null ? nextPerUnitUnit : null,
+      }),
+    })
+    if (!response.ok) {
+      window.alert(await response.text())
+      return
+    }
+
+    setPriceEditorOpen(false)
+    refreshListingData()
+  }
+
+  async function handleGallerySubmit() {
+    if (!listing) return
+
+    if (galleryFiles.length > 6) {
+      window.alert('Gallery supports up to 6 images. Upload video separately.')
+      return
+    }
+
+    const sizeError = getUploadSizeError(galleryFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+    if (sizeError) {
+      window.alert(sizeError)
+      return
+    }
+
+    const form = new FormData()
+    for (const file of galleryFiles) {
+      form.append('files', file)
+    }
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) {
+      if (response.status === 413) {
+        window.alert('Upload too large. Max upload size is 100MB per request.')
+        return
+      }
+      window.alert(await response.text())
+      return
+    }
+
+    setGalleryUploaderOpen(false)
+    refreshListingData()
+  }
+
+  async function handleVideoSubmit() {
+    if (!listing || !videoFile) return
+
+    const selectedFiles = videoPosterFile ? [videoFile, videoPosterFile] : [videoFile]
+    const sizeError = getUploadSizeError(selectedFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+    if (sizeError) {
+      window.alert(sizeError)
+      return
+    }
+
+    const form = new FormData()
+    form.append('file', videoFile)
+    if (videoPosterFile) form.append('poster', videoPosterFile)
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) {
+      if (response.status === 413) {
+        window.alert('Upload too large. Max upload size is 100MB per request.')
+        return
+      }
+      window.alert(await response.text())
+      return
+    }
+
+    setVideoUploaderOpen(false)
+    refreshListingData()
+  }
+
+  async function handleEbcModuleSubmit() {
+    if (!listing || !ebcModuleEditorTarget) return
+
+    const sizeError = getUploadSizeError(ebcModuleFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
+    if (sizeError) {
+      window.alert(sizeError)
+      return
+    }
+
+    const form = new FormData()
+    form.append('sectionType', ebcModuleEditorTarget.sectionType)
+    form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
+    form.append('headline', ebcModuleDraft.headline)
+    form.append('bodyText', ebcModuleDraft.bodyText)
+    for (const file of ebcModuleFiles) {
+      form.append('files', file)
+    }
+
+    const response = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
+      method: 'POST',
+      body: form,
+    })
+    if (!response.ok) {
+      if (response.status === 413) {
+        window.alert('Upload too large. Max upload size is 100MB per request.')
+        return
+      }
+      window.alert(await response.text())
+      return
+    }
+
+    setEbcModuleEditorOpen(false)
+    refreshListingData()
+  }
+
+  async function handleResetSubmit() {
+    if (!listing) return
+
+    setResetBusy(true)
+    setResetError(null)
+
+    try {
+      const response = await fetch(`${basePath}/api/listings/${listing.id}/reset`, {
+        method: 'POST',
+      })
+      const text = await response.text()
+      if (!response.ok) {
+        setResetError(text.trim().length > 0 ? text : 'Reset failed.')
+        return
+      }
+
+      setResetDialogOpen(false)
+      setSnapshotIngestOpen(false)
+      setSnapshotIngestFile(null)
+      setSnapshotIngestError(null)
+      setTitleEditorOpen(false)
+      setBulletsEditorOpen(false)
+      setPriceEditorOpen(false)
+      setGalleryUploaderOpen(false)
+      setVideoUploaderOpen(false)
+      setEbcModuleEditorOpen(false)
+      refreshListingData()
+    } finally {
+      setResetBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-white">
       {replicaContractError && (
@@ -980,58 +1064,18 @@ export function ListingDetail({
           Replica template mismatch: {formatAmazonPdpReplicaContractError(replicaContractError)}
         </div>
       )}
-      {listing ? (
-        <Box
-          sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 30,
-            px: 2.5,
-            py: 1.25,
-            bgcolor: 'rgba(255, 255, 255, 0.92)',
-            borderBottom: '1px solid rgba(15, 23, 42, 0.12)',
-            backdropFilter: 'blur(10px)',
-          }}
-        >
-          <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-            <Stack spacing={0.2} sx={{ minWidth: 0 }}>
-              <Typography
-                variant="subtitle2"
-                sx={{ fontWeight: 800, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}
-              >
-                {listing.asin}
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: 'text.secondary',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: { xs: 240, sm: 520, md: 760 },
-                }}
-              >
-                {listing.label}
-              </Typography>
-            </Stack>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <MuiButton
-                type="button"
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  setSnapshotIngestError(null)
-                  setSnapshotIngestFile(null)
-                  setSnapshotIngestOpen(true)
-                }}
-              >
-                Ingest snapshot zip
-              </MuiButton>
-            </Stack>
-          </Stack>
-        </Box>
-      ) : null}
+      <ListingDetailHeader
+        listing={listing}
+        onOpenSnapshotIngest={() => {
+          setSnapshotIngestError(null)
+          setSnapshotIngestFile(null)
+          setSnapshotIngestOpen(true)
+        }}
+        onOpenReset={() => {
+          setResetError(null)
+          setResetDialogOpen(true)
+        }}
+      />
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
@@ -1040,1227 +1084,67 @@ export function ListingDetail({
         title={listing ? listing.label : listingId}
         sandbox="allow-same-origin allow-scripts"
       />
-      {snapshotIngestOpen && listing && (
-        <Dialog
-          open={snapshotIngestOpen}
-          onClose={() => {
-            if (snapshotIngestBusy) return
-            setSnapshotIngestOpen(false)
-          }}
-          fullWidth
-          maxWidth="sm"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  Ingest snapshot zip
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Chrome → Save Page As → Webpage, Complete. Zip the HTML + the assets folder.
-                </Typography>
-              </Box>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={1.5}>
-              <Stack spacing={1}>
-                <MuiButton component="label" variant="outlined" sx={{ alignSelf: 'flex-start', fontWeight: 600 }}>
-                  Choose zip
-                  <input
-                    hidden
-                    type="file"
-                    accept=".zip,application/zip"
-                    onChange={(event) => {
-                      setSnapshotIngestError(null)
-                      const file = event.target.files?.[0] ?? null
-                      setSnapshotIngestFile(file)
-                    }}
-                  />
-                </MuiButton>
-                <Typography
-                  variant="caption"
-                  sx={{ fontFamily: 'var(--font-mono)', color: snapshotIngestFile ? 'text.primary' : 'text.secondary' }}
-                >
-                  {snapshotIngestFile
-                    ? `${snapshotIngestFile.name} (${formatBytes(snapshotIngestFile.size)})`
-                    : `Max zip size: ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}`}
-                </Typography>
-              </Stack>
-
-              {snapshotIngestError ? (
-                <Typography variant="caption" color="error">
-                  {snapshotIngestError}
-                </Typography>
-              ) : null}
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton
-              type="button"
-              variant="text"
-              color="inherit"
-              disabled={snapshotIngestBusy}
-              onClick={() => setSnapshotIngestOpen(false)}
-            >
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={!snapshotIngestFile || snapshotIngestBusy}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                const file = snapshotIngestFile
-                if (!file) return
-                if (file.size > SNAPSHOT_ZIP_MAX_UPLOAD_BYTES) {
-                  setSnapshotIngestError(
-                    `“${file.name}” is ${formatBytes(file.size)}. Max zip size is ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}.`,
-                  )
-                  return
-                }
-
-                setSnapshotIngestBusy(true)
-                setSnapshotIngestError(null)
-
-                try {
-                  const formData = new FormData()
-                  formData.append('snapshot', file)
-
-                  const res = await fetch(`${basePath}/api/listings/${listing.id}/ingest`, {
-                    method: 'POST',
-                    body: formData,
-                  })
-
-                  const text = await res.text()
-                  if (!res.ok) {
-                    let message = text
-                    try {
-                      const parsed = JSON.parse(text) as { error?: unknown }
-                      if (typeof parsed?.error === 'string' && parsed.error.trim().length > 0) {
-                        message = parsed.error
-                      }
-                    } catch {
-                      // no-op
-                    }
-                    if (message && message.trim().length > 0) {
-                      setSnapshotIngestError(message)
-                    } else {
-                      setSnapshotIngestError('Snapshot ingest failed.')
-                    }
-                    return
-                  }
-
-                  try {
-                    const parsed = JSON.parse(text) as { changes?: unknown }
-                    if (Array.isArray(parsed?.changes) && parsed.changes.length > 0) {
-                      window.alert(`Ingested snapshot:\\n${parsed.changes.join('\\n')}`)
-                    } else {
-                      window.alert('Ingested snapshot (no content changes detected).')
-                    }
-                  } catch {
-                    window.alert('Ingested snapshot.')
-                  }
-
-                  setSnapshotIngestOpen(false)
-                  setSnapshotIngestFile(null)
-                  setRefreshKey((current) => current + 1)
-                } finally {
-                  setSnapshotIngestBusy(false)
-                }
-              }}
-            >
-              {snapshotIngestBusy ? 'Ingesting...' : 'Ingest'}
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {titleEditorOpen && listing && (
-        <Dialog
-          open={titleEditorOpen}
-          onClose={() => setTitleEditorOpen(false)}
-          fullWidth
-          maxWidth="md"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  New title version
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Write a concise, keyword-rich title for better search rank.
-                </Typography>
-              </Box>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <TextField
-              value={titleDraft}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              multiline
-              minRows={4}
-              maxRows={8}
-              fullWidth
-              placeholder="Enter a new title..."
-              sx={{
-                '& .MuiInputBase-root': {
-                  alignItems: 'flex-start',
-                  fontSize: 14,
-                  lineHeight: 1.45,
-                  borderRadius: 2,
-                },
-              }}
-            />
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setTitleEditorOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={titleDraft.trim().length === 0}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/title`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ title: titleDraft }),
-                })
-                if (!res.ok) {
-                  window.alert(await res.text())
-                  return
-                }
-                setTitleEditorOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Save new version
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {bulletsEditorOpen && listing && (
-        <Dialog
-          open={bulletsEditorOpen}
-          onClose={() => setBulletsEditorOpen(false)}
-          fullWidth
-          maxWidth="md"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  New bullets version
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Improve readability and keep each point conversion-focused.
-                </Typography>
-              </Box>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={2}>
-              {([
-                ['bullet1', 'Bullet 1'],
-                ['bullet2', 'Bullet 2'],
-                ['bullet3', 'Bullet 3'],
-                ['bullet4', 'Bullet 4'],
-                ['bullet5', 'Bullet 5'],
-              ] as const).map(([key, label]) => {
-                const charCount = bulletsDraft[key].trim().length
-
-                return (
-                  <Box key={key}>
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                        {label}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {charCount} chars
-                      </Typography>
-                    </Stack>
-                    <TextField
-                      value={bulletsDraft[key]}
-                      onChange={(e) => setBulletsDraft((current) => ({ ...current, [key]: e.target.value }))}
-                      multiline
-                      minRows={3}
-                      maxRows={7}
-                      fullWidth
-                      placeholder="Enter bullet text..."
-                      variant="outlined"
-                      sx={{
-                        '& .MuiInputBase-root': {
-                          alignItems: 'flex-start',
-                          fontSize: 14,
-                          lineHeight: 1.45,
-                          borderRadius: 2,
-                          backgroundColor: 'background.paper',
-                        },
-                      }}
-                    />
-                  </Box>
-                )
-              })}
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setBulletsEditorOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/bullets`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    bullet1: bulletsDraft.bullet1,
-                    bullet2: bulletsDraft.bullet2,
-                    bullet3: bulletsDraft.bullet3,
-                    bullet4: bulletsDraft.bullet4,
-                    bullet5: bulletsDraft.bullet5,
-                  }),
-                })
-                if (!res.ok) {
-                  window.alert(await res.text())
-                  return
-                }
-                setBulletsEditorOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Save new version
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {priceEditorOpen && listing && (
-        <Dialog
-          open={priceEditorOpen}
-          onClose={() => setPriceEditorOpen(false)}
-          fullWidth
-          maxWidth="sm"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                Edit price
-              </Typography>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={2}>
-              <TextField
-                label="Price (USD)"
-                value={priceDraft.price}
-                onChange={(e) => setPriceDraft((current) => ({ ...current, price: e.target.value }))}
-                placeholder="8.99"
-              />
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                <TextField
-                  label="Unit price (optional)"
-                  value={priceDraft.perUnitPrice}
-                  onChange={(e) => setPriceDraft((current) => ({ ...current, perUnitPrice: e.target.value }))}
-                  placeholder="1.50"
-                  fullWidth
-                />
-                <TextField
-                  label="Unit (optional)"
-                  value={priceDraft.perUnitUnit}
-                  onChange={(e) => setPriceDraft((current) => ({ ...current, perUnitUnit: e.target.value }))}
-                  placeholder="count"
-                  fullWidth
-                />
-              </Stack>
-              <Typography variant="caption" color="text.secondary">
-                Unit price renders like <strong>($1.50 / count)</strong>.
-              </Typography>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setPriceEditorOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={priceDraft.price.trim().length === 0}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                const nextPriceCents = parseUsdToCents(priceDraft.price)
-                if (nextPriceCents === null) {
-                  window.alert('Enter a valid price (e.g. 8.99).')
-                  return
-                }
-
-                const nextPerUnitCents = parseUsdToCents(priceDraft.perUnitPrice)
-                const nextPerUnitUnit = priceDraft.perUnitUnit.trim()
-                if (nextPerUnitCents !== null && nextPerUnitUnit.length === 0) {
-                  window.alert('Unit is required when unit price is set (e.g. count).')
-                  return
-                }
-
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/price`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    priceCents: nextPriceCents,
-                    pricePerUnitCents: nextPerUnitCents,
-                    pricePerUnitUnit: nextPerUnitCents !== null ? nextPerUnitUnit : null,
-                  }),
-                })
-                if (!res.ok) {
-                  window.alert(await res.text())
-                  return
-                }
-                setPriceEditorOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Save
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {galleryUploaderOpen && listing && (
-        <Dialog
-          open={galleryUploaderOpen}
-          onClose={() => setGalleryUploaderOpen(false)}
-          fullWidth
-          maxWidth="sm"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                New gallery version
-              </Typography>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={1.5}>
-              <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
-                Select images
-                <input
-                  hidden
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => {
-                    const list = e.target.files ? Array.from(e.target.files) : []
-                    setGalleryFiles(list)
-                  }}
-                />
-              </MuiButton>
-              <Typography variant="caption" color="text.secondary">
-                {galleryFiles.length > 0 ? `${galleryFiles.length} file(s) selected` : 'Select up to 6 JPG/PNG/WebP/AVIF files.'}
-              </Typography>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setGalleryUploaderOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={galleryFiles.length === 0}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                if (galleryFiles.length > 6) {
-                  window.alert('Gallery supports up to 6 images. Upload video separately.')
-                  return
-                }
-
-                const sizeError = getUploadSizeError(galleryFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
-                if (sizeError) {
-                  window.alert(sizeError)
-                  return
-                }
-
-                const form = new FormData()
-                for (const file of galleryFiles) {
-                  form.append('files', file)
-                }
-
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/gallery`, {
-                  method: 'POST',
-                  body: form,
-                })
-                if (!res.ok) {
-                  if (res.status === 413) {
-                    window.alert('Upload too large. Max upload size is 100MB per request.')
-                    return
-                  }
-                  window.alert(await res.text())
-                  return
-                }
-                setGalleryUploaderOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Upload new version
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {videoUploaderOpen && listing && (
-        <Dialog
-          open={videoUploaderOpen}
-          onClose={() => setVideoUploaderOpen(false)}
-          fullWidth
-          maxWidth="sm"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                New video version
-              </Typography>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Video file
-                </Typography>
-                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
-                  Select video
-                  <input
-                    hidden
-                    type="file"
-                    accept="video/mp4,video/webm"
-                    onChange={(e) => {
-                      const file = e.target.files ? e.target.files[0] : null
-                      setVideoFile(file)
-                    }}
-                  />
-                </MuiButton>
-                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
-                  {videoFile ? videoFile.name : 'Accepted formats: MP4, WebM'}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Poster image (optional)
-                </Typography>
-                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
-                  Select poster
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const file = e.target.files ? e.target.files[0] : null
-                      setVideoPosterFile(file)
-                    }}
-                  />
-                </MuiButton>
-                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
-                  {videoPosterFile ? videoPosterFile.name : 'Optional image shown before playback'}
-                </Typography>
-              </Box>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setVideoUploaderOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={!videoFile}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                if (!videoFile) return
-
-                const selectedFiles = videoPosterFile ? [videoFile, videoPosterFile] : [videoFile]
-                const sizeError = getUploadSizeError(selectedFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
-                if (sizeError) {
-                  window.alert(sizeError)
-                  return
-                }
-
-                const form = new FormData()
-                form.append('file', videoFile)
-                if (videoPosterFile) form.append('poster', videoPosterFile)
-
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/video`, {
-                  method: 'POST',
-                  body: form,
-                })
-                if (!res.ok) {
-                  if (res.status === 413) {
-                    window.alert('Upload too large. Max upload size is 100MB per request.')
-                    return
-                  }
-                  window.alert(await res.text())
-                  return
-                }
-                setVideoUploaderOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Upload new version
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
-      {ebcModuleEditorOpen && listing && ebcModuleEditorTarget && (
-        <Dialog
-          open={ebcModuleEditorOpen}
-          onClose={() => setEbcModuleEditorOpen(false)}
-          fullWidth
-          maxWidth="md"
-          slotProps={{
-            paper: {
-              sx: {
-                borderRadius: 3,
-                border: '1px solid',
-                borderColor: 'divider',
-                boxShadow: '0 24px 80px rgba(15, 23, 42, 0.28)',
-              },
-            },
-            backdrop: {
-              sx: {
-                backdropFilter: 'blur(2px)',
-                backgroundColor: 'rgba(15, 23, 42, 0.45)',
-              },
-            },
-          }}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  New A+ module version
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {ebcModuleEditorTarget.sectionType} • Module {ebcModuleEditorTarget.modulePosition + 1}
-                </Typography>
-              </Box>
-              <Chip
-                label={`ASIN ${listing.asin}`}
-                size="small"
-                color="primary"
-                variant="outlined"
-                sx={{ fontWeight: 600 }}
-              />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
-                  Headline
-                </Typography>
-                <TextField
-                  value={ebcModuleDraft.headline}
-                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, headline: e.target.value }))}
-                  multiline
-                  minRows={2}
-                  maxRows={4}
-                  fullWidth
-                  placeholder="Enter headline..."
-                />
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
-                  Body
-                </Typography>
-                <TextField
-                  value={ebcModuleDraft.bodyText}
-                  onChange={(e) => setEbcModuleDraft((current) => ({ ...current, bodyText: e.target.value }))}
-                  multiline
-                  minRows={5}
-                  maxRows={10}
-                  fullWidth
-                  placeholder="Enter body text..."
-                />
-              </Box>
-              <Box>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                  Images (optional)
-                </Typography>
-                <MuiButton variant="outlined" component="label" sx={{ alignSelf: 'flex-start' }}>
-                  Select images
-                  <input
-                    hidden
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => {
-                      const list = e.target.files ? Array.from(e.target.files) : []
-                      setEbcModuleFiles(list)
-                    }}
-                  />
-                </MuiButton>
-                <Typography variant="caption" display="block" color="text.secondary" sx={{ mt: 0.75 }}>
-                  {ebcModuleFiles.length > 0 ? `${ebcModuleFiles.length} file(s) selected` : 'Leave empty to keep current images.'}
-                </Typography>
-              </Box>
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" onClick={() => setEbcModuleEditorOpen(false)}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={async () => {
-                const sizeError = getUploadSizeError(ebcModuleFiles, CLOUDFLARE_MAX_UPLOAD_BYTES)
-                if (sizeError) {
-                  window.alert(sizeError)
-                  return
-                }
-
-                const form = new FormData()
-                form.append('sectionType', ebcModuleEditorTarget.sectionType)
-                form.append('modulePosition', String(ebcModuleEditorTarget.modulePosition))
-                form.append('headline', ebcModuleDraft.headline)
-                form.append('bodyText', ebcModuleDraft.bodyText)
-                for (const file of ebcModuleFiles) {
-                  form.append('files', file)
-                }
-
-                const res = await fetch(`${basePath}/api/listings/${listing.id}/ebc/module`, {
-                  method: 'POST',
-                  body: form,
-                })
-                if (!res.ok) {
-                  if (res.status === 413) {
-                    window.alert('Upload too large. Max upload size is 100MB per request.')
-                    return
-                  }
-                  window.alert(await res.text())
-                  return
-                }
-                setEbcModuleEditorOpen(false)
-                setRefreshKey((current) => current + 1)
-              }}
-            >
-              Save new version
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      )}
+      <ListingDetailDialogs
+        listing={listing}
+        snapshotIngestOpen={snapshotIngestOpen}
+        snapshotIngestBusy={snapshotIngestBusy}
+        snapshotIngestError={snapshotIngestError}
+        snapshotIngestFile={snapshotIngestFile}
+        onSnapshotIngestClose={() => setSnapshotIngestOpen(false)}
+        onSnapshotIngestFileChange={(file) => {
+          setSnapshotIngestError(null)
+          setSnapshotIngestFile(file)
+        }}
+        onSnapshotIngestSubmit={handleSnapshotIngestSubmit}
+        titleEditorOpen={titleEditorOpen}
+        titleDraft={titleDraft}
+        onTitleEditorClose={() => setTitleEditorOpen(false)}
+        onTitleDraftChange={setTitleDraft}
+        onTitleSubmit={handleTitleSubmit}
+        bulletsEditorOpen={bulletsEditorOpen}
+        bulletsDraft={bulletsDraft}
+        onBulletsEditorClose={() => setBulletsEditorOpen(false)}
+        onBulletsDraftChange={(key, value) => {
+          setBulletsDraft((current) => ({ ...current, [key]: value }))
+        }}
+        onBulletsSubmit={handleBulletsSubmit}
+        priceEditorOpen={priceEditorOpen}
+        priceDraft={priceDraft}
+        onPriceEditorClose={() => setPriceEditorOpen(false)}
+        onPriceDraftChange={(key, value) => {
+          setPriceDraft((current) => ({ ...current, [key]: value }))
+        }}
+        onPriceSubmit={handlePriceSubmit}
+        galleryUploaderOpen={galleryUploaderOpen}
+        galleryFiles={galleryFiles}
+        onGalleryUploaderClose={() => setGalleryUploaderOpen(false)}
+        onGalleryFilesChange={setGalleryFiles}
+        onGallerySubmit={handleGallerySubmit}
+        videoUploaderOpen={videoUploaderOpen}
+        videoFile={videoFile}
+        videoPosterFile={videoPosterFile}
+        onVideoUploaderClose={() => setVideoUploaderOpen(false)}
+        onVideoFileChange={setVideoFile}
+        onVideoPosterFileChange={setVideoPosterFile}
+        onVideoSubmit={handleVideoSubmit}
+        ebcModuleEditorOpen={ebcModuleEditorOpen}
+        ebcModuleEditorTarget={ebcModuleEditorTarget}
+        ebcModuleDraft={ebcModuleDraft}
+        ebcModuleFiles={ebcModuleFiles}
+        onEbcModuleEditorClose={() => setEbcModuleEditorOpen(false)}
+        onEbcModuleDraftChange={(key, value) => {
+          setEbcModuleDraft((current) => ({ ...current, [key]: value }))
+        }}
+        onEbcModuleFilesChange={setEbcModuleFiles}
+        onEbcModuleSubmit={handleEbcModuleSubmit}
+        resetDialogOpen={resetDialogOpen}
+        resetBusy={resetBusy}
+        resetError={resetError}
+        onResetDialogClose={() => setResetDialogOpen(false)}
+        onResetSubmit={handleResetSubmit}
+      />
     </div>
   )
-}
-
-interface TitleRevision {
-  id: string
-  seq: number
-  createdAt: string
-  title: string
-  note: string | null
-  origin: string
-}
-
-interface BulletsRevision {
-  id: string
-  seq: number
-  createdAt: string
-  bullet1: string | null
-  bullet2: string | null
-  bullet3: string | null
-  bullet4: string | null
-  bullet5: string | null
-}
-
-interface GalleryApiRevision {
-  id: string
-  seq: number
-  createdAt: string
-  slots: {
-    position: number
-    media: { filePath: string; sourceUrl: string | null }
-  }[]
-}
-
-interface GalleryRevision {
-  id: string
-  seq: number
-  createdAt: string
-  images: GalleryImage[]
-}
-
-interface GalleryImage {
-  position: number
-  src: string
-  hiRes: string | null
-  isVideo: boolean
-}
-
-interface VideoApiRevision {
-  id: string
-  seq: number
-  createdAt: string
-  media: { filePath: string; sourceUrl: string | null }
-  posterMedia: { filePath: string; sourceUrl: string | null } | null
-}
-
-interface VideoRevision {
-  id: string
-  seq: number
-  createdAt: string
-  src: string
-  posterSrc: string | null
-}
-
-interface EbcModulePointerApi {
-  sectionType: string
-  modulePosition: number
-  ebcRevisionId: string
-}
-
-interface EbcApiRevision {
-  id: string
-  seq: number
-  createdAt: string
-  sections: {
-    position: number
-    sectionType: string
-    heading: string | null
-    modules: {
-      position: number
-      moduleType: string
-      headline: string | null
-      bodyText: string | null
-      images: {
-        position: number
-        altText: string | null
-        media: { filePath: string; sourceUrl: string | null }
-      }[]
-    }[]
-  }[]
-}
-
-interface EbcRevision {
-  id: string
-  seq: number
-  createdAt: string
-  sections: EbcSection[]
-}
-
-interface EbcSection {
-  sectionType: string
-  heading: string | null
-  modules: EbcModule[]
-}
-
-interface EbcModule {
-  moduleType: string
-  headline: string | null
-  bodyText: string | null
-  images: { src: string; alt: string | null }[]
-}
-
-function toGalleryRevision(rev: GalleryApiRevision): GalleryRevision {
-  const images = rev.slots
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .map((slot) => ({
-      position: slot.position,
-      src: slot.media.filePath,
-      hiRes: slot.media.filePath,
-      isVideo: false,
-    }))
-
-  return {
-    id: rev.id,
-    seq: rev.seq,
-    createdAt: rev.createdAt,
-    images,
-  }
-}
-
-function toVideoRevision(rev: VideoApiRevision): VideoRevision {
-  const src = rev.media.filePath
-  const posterSrc = rev.posterMedia ? rev.posterMedia.filePath : null
-
-  return {
-    id: rev.id,
-    seq: rev.seq,
-    createdAt: rev.createdAt,
-    src,
-    posterSrc,
-  }
-}
-
-function toEbcRevision(rev: EbcApiRevision): EbcRevision {
-  return {
-    id: rev.id,
-    seq: rev.seq,
-    createdAt: rev.createdAt,
-    sections: rev.sections
-      .slice()
-      .sort((a, b) => a.position - b.position)
-      .map((section) => ({
-        sectionType: section.sectionType,
-        heading: section.heading,
-        modules: section.modules
-          .slice()
-          .sort((a, b) => a.position - b.position)
-          .map((mod) => ({
-            moduleType: mod.moduleType,
-            headline: mod.headline,
-            bodyText: mod.bodyText,
-            images: mod.images
-              .slice()
-              .sort((a, b) => a.position - b.position)
-              .map((img) => ({
-                src: img.media.filePath,
-                alt: img.altText,
-              })),
-          })),
-      })),
-  }
-}
-
-function resolveImageSrc(src: string): string {
-  if (src.startsWith('./listingpage_files/') || src.startsWith('listingpage_files/')) {
-    return `${basePath}/api/fixture/${src.replace('./', '')}`
-  }
-  if (src.startsWith('./6pk_files/') || src.startsWith('6pk_files/')) {
-    return `${basePath}/api/fixture/${src.replace('./', '')}`
-  }
-  if (src.startsWith('media/')) {
-    return `${basePath}/api/media/${src.replace('media/', '')}`
-  }
-  return src
-}
-
-function ebcModulePointerKey(sectionType: string, modulePosition: number): string {
-  return `${sectionType}:${modulePosition}`
-}
-
-function composeEbcRevision(
-  all: EbcRevision[],
-  pointers: Record<string, string>,
-  liveRevisionId: string | null,
-): EbcRevision | null {
-  if (all.length === 0) return null
-
-  const baseId = liveRevisionId ? liveRevisionId : all[0].id
-  const base = all.find((rev) => rev.id === baseId) ?? all[0]
-
-  const byId = new Map<string, EbcRevision>()
-  for (const rev of all) {
-    byId.set(rev.id, rev)
-  }
-
-  const sections: EbcSection[] = base.sections.map((section) => {
-    const modules: EbcModule[] = section.modules.map((_mod, modulePosition) => {
-      const key = ebcModulePointerKey(section.sectionType, modulePosition)
-      const selectedRevisionId = pointers[key]
-      const revisionId = selectedRevisionId ? selectedRevisionId : base.id
-      const srcRevision = byId.get(revisionId)
-      if (!srcRevision) return section.modules[modulePosition]
-
-      const srcSection = srcRevision.sections.find((s) => s.sectionType === section.sectionType) ?? null
-      const srcModule = srcSection ? srcSection.modules[modulePosition] ?? null : null
-      return srcModule ? srcModule : section.modules[modulePosition]
-    })
-
-    return {
-      sectionType: section.sectionType,
-      heading: section.heading,
-      modules,
-    }
-  })
-
-  return {
-    id: base.id,
-    seq: base.seq,
-    createdAt: base.createdAt,
-    sections,
-  }
-}
-
-function moduleSignature(mod: EbcModule): string {
-  return JSON.stringify({
-    moduleType: mod.moduleType,
-    headline: mod.headline,
-    bodyText: mod.bodyText,
-    images: mod.images.map((img) => img.src),
-  })
-}
-
-function getEbcModuleHistory(
-  all: EbcRevision[],
-  sectionType: string,
-  modulePosition: number,
-): { revisionId: string; seq: number; module: EbcModule }[] {
-  const history: { revisionId: string; seq: number; module: EbcModule }[] = []
-  let lastSig: string | null = null
-
-  for (const rev of all) {
-    const section = rev.sections.find((s) => s.sectionType === sectionType) ?? null
-    if (!section) continue
-    const mod = section.modules[modulePosition] ?? null
-    if (!mod) continue
-    const sig = moduleSignature(mod)
-    if (lastSig !== sig) {
-      history.push({ revisionId: rev.id, seq: rev.seq, module: mod })
-      lastSig = sig
-    }
-  }
-
-  return history
-}
-
-function updateEbcModuleControls(
-  doc: Document,
-  allRevisions: EbcRevision[],
-  pointers: Record<string, string>,
-  liveRevisionId: string | null,
-) {
-  const controls = Array.from(doc.querySelectorAll<HTMLElement>('.argus-vc-ebc-module-controls'))
-  for (const control of controls) {
-    const sectionType = control.dataset.sectionType
-    const modulePositionValue = control.dataset.modulePosition
-    if (!sectionType || !modulePositionValue) continue
-
-    const modulePosition = Number(modulePositionValue)
-    if (!Number.isFinite(modulePosition)) continue
-
-    const history = getEbcModuleHistory(allRevisions, sectionType, modulePosition)
-    if (history.length === 0) continue
-
-    const key = ebcModulePointerKey(sectionType, modulePosition)
-    const selectedRevisionId = pointers[key]
-    const activeId = selectedRevisionId ? selectedRevisionId : liveRevisionId
-    const effectiveId = activeId ? activeId : history[0].revisionId
-
-    const index = history.findIndex((item) => item.revisionId === effectiveId)
-    const safeIndex = index >= 0 ? index : 0
-
-    const label = control.querySelector<HTMLElement>('.argus-vc-label')
-    if (label) {
-      label.textContent = `Module v${history.length - safeIndex}`
-    }
-
-    const prev = control.querySelector<HTMLButtonElement>('button[data-dir="prev"]')
-    const next = control.querySelector<HTMLButtonElement>('button[data-dir="next"]')
-    const del = control.querySelector<HTMLButtonElement>('button[data-action="delete"]')
-
-    if (prev) prev.disabled = safeIndex >= history.length - 1
-    if (next) next.disabled = safeIndex <= 0
-    if (del) del.disabled = liveRevisionId !== null && effectiveId === liveRevisionId
-  }
-}
-
-function fileExt(path: string): string {
-  const match = path.match(/\.[a-z0-9]+(?=$|\?)/iu)
-  return match ? match[0] : ''
-}
-
-async function downloadFilesAsZip(
-  zipName: string,
-  files: { url: string; filename: string }[],
-) {
-  const { default: JSZip } = await import('jszip')
-  const zip = new JSZip()
-
-  for (const file of files) {
-    const res = await fetch(file.url)
-    if (!res.ok) {
-      throw new Error(`Failed to download ${file.url}`)
-    }
-    const data = await res.arrayBuffer()
-    zip.file(file.filename, data)
-  }
-
-  const blob = await zip.generateAsync({ type: 'blob' })
-  const href = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = href
-  a.download = zipName
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(href)
-}
-
-async function downloadGalleryRevisionZip(rev: GalleryRevision, versionNumber: number) {
-  const files = rev.images
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .slice(0, 6)
-    .map((img) => {
-      const downloadSrc = img.hiRes ? img.hiRes : img.src
-      const ext = fileExt(downloadSrc)
-      return {
-        url: resolveImageSrc(downloadSrc),
-        filename: `gallery_v${versionNumber}_${String(img.position).padStart(2, '0')}${ext}`,
-      }
-    })
-
-  await downloadFilesAsZip(`gallery_v${versionNumber}.zip`, files)
-}
-
-async function downloadEbcZip(zipName: string, filePrefix: string, rev: EbcRevision) {
-  const files: { url: string; filename: string }[] = []
-  for (let si = 0; si < rev.sections.length; si++) {
-    const section = rev.sections[si]
-    for (let mi = 0; mi < section.modules.length; mi++) {
-      const mod = section.modules[mi]
-      for (let ii = 0; ii < mod.images.length; ii++) {
-        const img = mod.images[ii]
-        const ext = fileExt(img.src)
-        files.push({
-          url: resolveImageSrc(img.src),
-          filename: `${filePrefix}_s${si + 1}_m${mi + 1}_i${ii + 1}${ext}`,
-        })
-      }
-    }
-  }
-
-  await downloadFilesAsZip(zipName, files)
 }
 
 function injectArgusVersionControls(
@@ -2975,11 +1859,6 @@ function applyBullets(doc: Document, rev: BulletsRevision | null) {
     if (!li.contains(span)) li.append(span)
     list.append(li)
   }
-}
-
-type ArgusReplicaDocument = Document & {
-  __argusMainMediaIndex?: number
-  __argusVideoBaseline?: string
 }
 
 function escapeSvgText(value: string): string {
