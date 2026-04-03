@@ -23,10 +23,25 @@ export default function ClusterTable({
   onSelectCluster: (clusterId: string) => void;
 }) {
   return (
-    <Card sx={{ overflow: 'hidden' }}>
-      <TableContainer sx={{ maxHeight: 720 }}>
+    <Card
+      sx={{
+        alignSelf: 'start',
+        height: 'fit-content',
+        overflow: 'hidden',
+        borderRadius: 4,
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(249, 252, 253, 0.96) 100%)',
+      }}
+    >
+      <TableContainer sx={{ maxHeight: { xs: 'none', xl: 640 } }}>
         <Table stickyHeader size="small">
-          <TableHead>
+          <TableHead
+            sx={{
+              '& .MuiTableCell-root': {
+                bgcolor: 'rgba(236, 242, 247, 0.98)',
+                borderBottom: '1px solid rgba(0, 44, 81, 0.1)',
+              },
+            }}
+          >
             <TableRow>
               <TableCell>Cluster</TableCell>
               <TableCell align="right">Query Vol</TableCell>
@@ -48,10 +63,18 @@ export default function ClusterTable({
                   onClick={() => {
                     onSelectCluster(cluster.id);
                   }}
-                  sx={{ cursor: 'pointer' }}
+                  sx={{
+                    cursor: 'pointer',
+                    '&:last-of-type .MuiTableCell-root': {
+                      borderBottom: 'none',
+                    },
+                    '& .MuiTableCell-root': {
+                      py: 1.15,
+                    },
+                  }}
                 >
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
                       {cluster.cluster}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">

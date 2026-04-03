@@ -36,14 +36,23 @@ export default function ClusterFocusPanel({
 
   return (
     <Stack spacing={2}>
-      <Card sx={{ p: 2.5 }}>
+      <Card
+        sx={{
+          p: 2.75,
+          borderRadius: 4,
+          background: 'linear-gradient(155deg, #002C51 0%, #0D3F66 54%, #EEF5F9 54.5%, #F8FBFD 100%)',
+          color: '#F8FAFC',
+        }}
+      >
         <Stack spacing={2}>
           <Stack spacing={0.5}>
-            <Typography variant="overline" color="text.secondary">
+            <Typography variant="overline" sx={{ color: 'rgba(248, 250, 252, 0.66)' }}>
               Selected Cluster
             </Typography>
-            <Typography variant="h4">{cluster.cluster}</Typography>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em', maxWidth: 360 }}>
+              {cluster.cluster}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
               {cluster.family}
             </Typography>
           </Stack>
@@ -55,7 +64,16 @@ export default function ClusterFocusPanel({
             flexWrap="wrap"
           >
             {cluster.top_terms.slice(0, 6).map((term) => (
-              <Chip key={term} label={term} variant="outlined" />
+              <Chip
+                key={term}
+                label={term}
+                variant="outlined"
+                sx={{
+                  color: '#F8FAFC',
+                  borderColor: 'rgba(248, 250, 252, 0.24)',
+                  bgcolor: 'rgba(248, 250, 252, 0.08)',
+                }}
+              />
             ))}
           </Stack>
         </Stack>
@@ -94,7 +112,7 @@ export default function ClusterFocusPanel({
         />
       </Stack>
 
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, borderRadius: 4 }}>
         <Stack spacing={2}>
           <Typography variant="h6">Observed funnel</Typography>
           <Stack
@@ -116,7 +134,7 @@ export default function ClusterFocusPanel({
         </Stack>
       </Card>
 
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, borderRadius: 4 }}>
         <Stack spacing={2}>
           <Typography variant="h6">Top SQP terms</Typography>
           <Divider />
@@ -143,7 +161,7 @@ export default function ClusterFocusPanel({
         </Stack>
       </Card>
 
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, borderRadius: 4 }}>
         <Stack spacing={2}>
           <Typography variant="h6">TST top clicked terms</Typography>
           <Divider />
