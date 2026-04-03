@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Box,
   Card,
   Stack,
   Typography,
@@ -13,7 +12,6 @@ import {
   Legend,
   Line,
   LineChart,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -21,6 +19,7 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
+import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame';
 import type { WprWeekBundle } from '@/lib/wpr/types';
 import { formatPercent } from '@/lib/wpr/format';
 
@@ -64,14 +63,13 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
 
   return (
     <Stack spacing={2.5}>
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, minWidth: 0 }}>
         <Stack spacing={1.5}>
           <Typography variant="h6">Demand versus share scatter</Typography>
           <Typography variant="body2" color="text.secondary">
             Bubble size tracks purchase share while the axes compare demand and click share.
           </Typography>
-          <Box sx={{ height: 360 }}>
-            <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartFrame height={360}>
               <ScatterChart margin={{ top: 20, right: 16, bottom: 8, left: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="query_volume" name="Query volume" />
@@ -89,8 +87,7 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                 />
                 <Scatter data={scatterRows} fill="#00C2B9" />
               </ScatterChart>
-            </ResponsiveContainer>
-          </Box>
+          </ResponsiveChartFrame>
         </Stack>
       </Card>
 
@@ -98,17 +95,17 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
         spacing={2.5}
         sx={{
           display: 'grid',
+          minWidth: 0,
           gridTemplateColumns: {
             xs: '1fr',
             xl: 'repeat(2, minmax(0, 1fr))',
           },
         }}
       >
-        <Card sx={{ p: 2.5 }}>
+        <Card sx={{ p: 2.5, minWidth: 0 }}>
           <Stack spacing={1.5}>
             <Typography variant="h6">Rank trend</Typography>
-            <Box sx={{ height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChartFrame height={320}>
                 <LineChart data={rankRows}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="weekLabel" />
@@ -125,16 +122,14 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                     />
                   ))}
                 </LineChart>
-              </ResponsiveContainer>
-            </Box>
+            </ResponsiveChartFrame>
           </Stack>
         </Card>
 
-        <Card sx={{ p: 2.5 }}>
+        <Card sx={{ p: 2.5, minWidth: 0 }}>
           <Stack spacing={1.5}>
             <Typography variant="h6">PPC spend</Typography>
-            <Box sx={{ height: 320 }}>
-              <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveChartFrame height={320}>
                 <BarChart data={ppcRows}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="cluster" hide />
@@ -143,17 +138,15 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                   <Bar dataKey="ppc_spend" fill="#002C51" name="PPC spend" />
                   <Bar dataKey="ppc_sales" fill="#00C2B9" name="PPC sales" />
                 </BarChart>
-              </ResponsiveContainer>
-            </Box>
+            </ResponsiveChartFrame>
           </Stack>
         </Card>
       </Stack>
 
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, minWidth: 0 }}>
         <Stack spacing={1.5}>
           <Typography variant="h6">Brand metrics window</Typography>
-          <Box sx={{ height: 320 }}>
-            <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartFrame height={320}>
               <LineChart data={brandRows}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="weekLabel" />
@@ -164,8 +157,7 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                 <Line type="monotone" dataKey="consideration" stroke="#00C2B9" strokeWidth={2} />
                 <Line type="monotone" dataKey="purchase" stroke="#F79009" strokeWidth={2} />
               </LineChart>
-            </ResponsiveContainer>
-          </Box>
+          </ResponsiveChartFrame>
         </Stack>
       </Card>
     </Stack>
