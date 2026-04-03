@@ -103,7 +103,8 @@ post_json_from_page() {
     xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
     xhr.send(${payload_literal});
     if (xhr.status !== 200) {
-      throw new Error('HTTP ' + xhr.status + ' from ' + ${path_literal} + ': ' + (xhr.responseText || '').slice(0, 500));
+      const responseText = xhr.responseText ?? '';
+      throw new Error('HTTP ' + xhr.status + ' from ' + ${path_literal} + ': ' + responseText.slice(0, 500));
     }
     return xhr.responseText;
   })();"
@@ -118,7 +119,11 @@ const expectedCategory = process.argv[2];
 const expectedProductType = process.argv[3];
 const expectedBrowseNode = process.argv[4];
 
-if (!Array.isArray(results) || results.length === 0) {
+if (!Array.isArray(results)) {
+  throw new Error("Category Insights search returned non-array results");
+}
+
+if (results.length === 0) {
   throw new Error("Category Insights search returned no results");
 }
 
@@ -136,7 +141,7 @@ process.stdout.write(JSON.stringify(match));
 ' "$1" "$TARGET_CATEGORY_ID" "$TARGET_PRODUCT_TYPE_ID" "$TARGET_BROWSE_NODE_ID"
 }
 
-build_report() {
+build_csv() {
   "$NODE_BIN" - "$CAPTURED_AT_UTC" "$TODAY" "$TARGET_URL" "$TARGET_SEARCH_TERM" "$TARGET_MARKETPLACE_LABEL" "$TARGET_MARKETPLACE_ID" "$1" "$2" "$3" <<'NODE'
 const [
   ,
@@ -156,10 +161,13 @@ const resolved = JSON.parse(resolvedRaw);
 const performance = JSON.parse(performanceRaw);
 const features = JSON.parse(featuresRaw);
 
-const demand = performance.demand || {};
-const competition = performance.competition || {};
-const featuresList = features.featuresList || [];
-const featuresName = features.featuresName || [];
+const demand = performance.demand ?? {};
+const competition = performance.competition ?? {};
+const featuresList = features.featuresList ?? [];
+const featuresName = features.featuresName ?? [];
+const weekCode = process.env.WEEK_CODE;
+const weekStart = process.env.WEEK_START;
+const weekEnd = process.env.WEEK_END;
 const periods = [
   ["l7d", "7d"],
   ["l30d", "30d"],
@@ -168,104 +176,12 @@ const periods = [
 ];
 
 function clean(value) {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
-
-function formatInteger(value) {
-  if (value == null) return "n/a";
-  return Number(value).toLocaleString("en-US", { maximumFractionDigits: 0 });
-}
-
-function formatDecimal(value, digits = 4) {
-  if (value == null) return "n/a";
-  return Number(value).toFixed(digits);
-}
-
-function formatMoneyString(value) {
-  return clean(value) || "n/a";
+  return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
 function metricValue(metric, periodKey) {
-  return metric?.[periodKey] || null;
-}
-
-function ratioLines(label, metric) {
-  const lines = [label];
-  for (const [periodKey, periodLabel] of periods) {
-    const value = metricValue(metric, periodKey);
-    if (!value) continue;
-    const pieces = [`  ${periodLabel}: ${formatDecimal(value.value)}`];
-    if (value.averageValue != null) {
-      pieces.push(`avg ${formatDecimal(value.averageValue)}`);
-    }
-    lines.push(pieces.join(" | "));
-  }
-  return lines;
-}
-
-function competitionLines() {
-  return [
-    `Sellers (12m): ${metricValue(competition.sellerCount, "l12m")?.range || "n/a"}`,
-    `New brands (12m): ${formatInteger(metricValue(competition.newBrandCount, "l12m")?.value)}`,
-    `ASINs (12m): ${formatInteger(metricValue(competition.asinCount, "l12m")?.value)}`,
-    `New ASINs (12m): ${formatInteger(metricValue(competition.newAsinCount, "l12m")?.value)}`,
-    `Offers per ASIN (12m): ${formatInteger(metricValue(competition.offersPerAsin, "l12m")?.value)}`,
-    `Average daily ad spend (12m): ${formatMoneyString(metricValue(competition.avgAdSpendPerClick, "l12m")?.stringValue)}`,
-    `Majority ad spend up to (12m): ${formatMoneyString(metricValue(competition.majorityAdSpendPerClick, "l12m")?.stringValue)}`,
-  ];
-}
-
-function renderSeries(title, metric, periodKey) {
-  const series = metricValue(metric, periodKey)?.graphDataPointsList || [];
-  const lines = [title];
-  for (const point of series) {
-    lines.push(`  ${point.label}: ${formatInteger(point.value)}`);
-  }
-  return lines;
-}
-
-function renderKeywords() {
-  const rows = metricValue(demand.mostPopularKeywords, "l12m")?.graphDataPointsList || [];
-  const lines = ["Most Popular Keywords (12m)"];
-  for (const row of rows) {
-    lines.push(`  ${formatInteger(row.value)}\t${clean(row.label)}`);
-  }
-  return lines;
-}
-
-function renderReturnReasons() {
-  const rows = metricValue(demand.returnReasons, "l12m")?.graphDataPointsList || [];
-  const lines = ["Return Reasons (12m)"];
-  for (const row of rows) {
-    const percent = `${Math.round(Number(row.value || 0) * 100)}%`;
-    lines.push(`  ${percent}\t${clean(row.label)}`);
-  }
-  return lines;
-}
-
-function renderStarRatings() {
-  const rows = metricValue(competition.starRatings, "l12m")?.graphDataPointsList || [];
-  const lines = ["Star Ratings (12m)"];
-  for (const row of rows) {
-    lines.push(`  ${clean(row.label)}\t${formatInteger(row.value)}`);
-  }
-  return lines;
-}
-
-function renderFeatures() {
-  const lines = ["Feature Breakdown (12m)"];
-  for (let index = 0; index < featuresName.length; index += 1) {
-    const name = clean(featuresName[index]);
-    const entries = featuresList[index] || [];
-    const maxScore = entries.reduce((best, entry) => Math.max(best, Number(entry.score || 0)), 0);
-    lines.push(name);
-    for (const entry of entries) {
-      const score = Number(entry.score || 0);
-      const relative = maxScore > 0 ? Math.round((score / maxScore) * 10000) / 100 : 0;
-      lines.push(`  ${clean(entry.label)}\t${relative}%`);
-    }
-  }
-  return lines;
+  const value = metric?.[periodKey];
+  return value ?? null;
 }
 
 const browseNodeLabel = clean(resolved.browseNodeLabel);
@@ -273,59 +189,145 @@ const categoryLabel = clean(resolved.categoryLabel);
 const productTypeLabel = clean(resolved.productTypeLabel);
 const searchPath = clean(resolved.searchResponseString);
 
-const lines = [
-  `Category Insights — ${browseNodeLabel}`,
-  `Captured: ${capturedDate}`,
-  `Captured At (UTC): ${capturedAtUtc}`,
-  `Source: ${sourceUrl}`,
-  `Capture Mode: Seller Central API snapshot via Chrome-authenticated session`,
-  `Search Term: ${searchTerm}`,
-  `Marketplace: ${marketplaceLabel} (${marketplaceId})`,
-  `Category: ${categoryLabel}`,
-  `Product Type: ${productTypeLabel} (${resolved.productTypeId})`,
-  `Browse Node: ${browseNodeLabel} (${resolved.browseNodeId})`,
-  `Resolved Path: ${searchPath}`,
-  `Time Period: 12 months default view with 7d/30d/90d/12m summary`,
-  `ASIN View: All ASINs`,
-  "",
-  "================================================================================",
-  "SUMMARY",
-  "================================================================================",
-  ...ratioLines("Search to Purchase Ratio", demand.searchToPurchaseRatio),
-  "",
-  ...ratioLines("Return Ratio", demand.returnRatio),
-  "",
-  ...competitionLines(),
-  "",
-  "================================================================================",
-  "KEYWORDS & RETURNS",
-  "================================================================================",
-  ...renderKeywords(),
-  "",
-  ...renderReturnReasons(),
-  "",
-  ...renderStarRatings(),
-  "",
-  "================================================================================",
-  "CHARTS (12M)",
-  "================================================================================",
-  ...renderSeries("Units Sold (12m monthly)", demand.unitSold, "mly"),
-  "",
-  ...renderSeries("Net Sales (12m monthly)", demand.netShippedGMS, "mly"),
-  "",
-  ...renderSeries("Search Volume (12m monthly)", demand.searchVolume, "mly"),
-  "",
-  ...renderSeries("Click Count (12m monthly)", demand.clickCount, "mly"),
-  "",
-  ...renderSeries("Glance Views (12m monthly)", demand.glanceViews, "mly"),
-  "",
-  "================================================================================",
-  "FEATURES",
-  "================================================================================",
-  ...renderFeatures(),
+function csvEscape(value) {
+  if (value == null) return "";
+  const text = String(value);
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+const headers = [
+  "week_code",
+  "week_start",
+  "week_end",
+  "captured_date",
+  "captured_at_utc",
+  "source",
+  "marketplace",
+  "marketplace_id",
+  "search_term",
+  "category",
+  "product_type",
+  "product_type_id",
+  "browse_node",
+  "browse_node_id",
+  "resolved_path",
+  "section",
+  "metric",
+  "period",
+  "position",
+  "label",
+  "value",
+  "average_value",
+  "range",
+  "display_value",
 ];
 
-process.stdout.write(lines.join("\n"));
+const baseRow = {
+  week_code: clean(weekCode),
+  week_start: clean(weekStart),
+  week_end: clean(weekEnd),
+  captured_date: clean(capturedDate),
+  captured_at_utc: clean(capturedAtUtc),
+  source: clean(sourceUrl),
+  marketplace: clean(marketplaceLabel),
+  marketplace_id: clean(marketplaceId),
+  search_term: clean(searchTerm),
+  category: categoryLabel,
+  product_type: productTypeLabel,
+  product_type_id: clean(resolved.productTypeId),
+  browse_node: browseNodeLabel,
+  browse_node_id: clean(resolved.browseNodeId),
+  resolved_path: searchPath,
+};
+
+const rows = [];
+
+function pushRow(section, metric, period, position, label, value, averageValue, range, displayValue) {
+  rows.push({
+    ...baseRow,
+    section,
+    metric,
+    period,
+    position,
+    label: clean(label),
+    value: value ?? "",
+    average_value: averageValue ?? "",
+    range: clean(range),
+    display_value: clean(displayValue),
+  });
+}
+
+function pushRatioRows(metricName, metric) {
+  for (const [periodKey, periodLabel] of periods) {
+    const value = metricValue(metric, periodKey);
+    if (!value) continue;
+    pushRow("summary", metricName, periodLabel, "", "", value.value, value.averageValue, value.range, value.stringValue);
+  }
+}
+
+function pushSeriesRows(metricName, metric) {
+  const series = metricValue(metric, "mly")?.graphDataPointsList ?? [];
+  for (let index = 0; index < series.length; index += 1) {
+    const point = series[index];
+    pushRow("chart", metricName, "12m_monthly", index + 1, point.label, point.value, "", "", point.stringValue);
+  }
+}
+
+function pushLabeledRows(section, metricName, rowsList, periodLabel, valueFormatter) {
+  for (let index = 0; index < rowsList.length; index += 1) {
+    const row = rowsList[index];
+    const rawValue = row?.value ?? "";
+    const displayValue = valueFormatter ? valueFormatter(rawValue) : "";
+    pushRow(section, metricName, periodLabel, index + 1, row?.label ?? "", rawValue, "", row?.range ?? "", displayValue);
+  }
+}
+
+function formatPercent(rawValue) {
+  if (rawValue == null) return "";
+  if (rawValue === "") return "";
+  return `${Math.round(Number(rawValue) * 100)}%`;
+}
+
+pushRatioRows("search_to_purchase_ratio", demand.searchToPurchaseRatio);
+pushRatioRows("return_ratio", demand.returnRatio);
+
+pushRow("summary", "seller_count", "12m", "", "", "", "", metricValue(competition.sellerCount, "l12m")?.range, "");
+pushRow("summary", "new_brand_count", "12m", "", "", metricValue(competition.newBrandCount, "l12m")?.value, "", "", metricValue(competition.newBrandCount, "l12m")?.stringValue);
+pushRow("summary", "asin_count", "12m", "", "", metricValue(competition.asinCount, "l12m")?.value, "", "", metricValue(competition.asinCount, "l12m")?.stringValue);
+pushRow("summary", "new_asin_count", "12m", "", "", metricValue(competition.newAsinCount, "l12m")?.value, "", "", metricValue(competition.newAsinCount, "l12m")?.stringValue);
+pushRow("summary", "offers_per_asin", "12m", "", "", metricValue(competition.offersPerAsin, "l12m")?.value, "", "", metricValue(competition.offersPerAsin, "l12m")?.stringValue);
+pushRow("summary", "avg_ad_spend_per_click", "12m", "", "", metricValue(competition.avgAdSpendPerClick, "l12m")?.value, "", "", metricValue(competition.avgAdSpendPerClick, "l12m")?.stringValue);
+pushRow("summary", "majority_ad_spend_per_click", "12m", "", "", metricValue(competition.majorityAdSpendPerClick, "l12m")?.value, "", "", metricValue(competition.majorityAdSpendPerClick, "l12m")?.stringValue);
+
+pushLabeledRows("keywords", "most_popular_keywords", metricValue(demand.mostPopularKeywords, "l12m")?.graphDataPointsList ?? [], "12m", "");
+pushLabeledRows("returns", "return_reasons", metricValue(demand.returnReasons, "l12m")?.graphDataPointsList ?? [], "12m", formatPercent);
+pushLabeledRows("ratings", "star_ratings", metricValue(competition.starRatings, "l12m")?.graphDataPointsList ?? [], "12m", "");
+
+pushSeriesRows("units_sold", demand.unitSold);
+pushSeriesRows("net_sales", demand.netShippedGMS);
+pushSeriesRows("search_volume", demand.searchVolume);
+pushSeriesRows("click_count", demand.clickCount);
+pushSeriesRows("glance_views", demand.glanceViews);
+
+for (let featureIndex = 0; featureIndex < featuresName.length; featureIndex += 1) {
+  const featureName = clean(featuresName[featureIndex]);
+  const entries = featuresList[featureIndex] ?? [];
+  const maxScore = entries.reduce((best, entry) => Math.max(best, Number(entry.score ?? 0)), 0);
+  for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+    const entry = entries[entryIndex];
+    const score = Number(entry.score ?? 0);
+    const relative = maxScore > 0 ? Math.round((score / maxScore) * 10000) / 100 : 0;
+    pushRow("features", featureName, "12m", entryIndex + 1, entry.label, relative, "", "", `${relative}%`);
+  }
+}
+
+const output = [headers.join(",")];
+for (const row of rows) {
+  output.push(headers.map((header) => csvEscape(row[header] ?? "")).join(","));
+}
+
+process.stdout.write(`${output.join("\n")}\n`);
 NODE
 }
 
@@ -352,17 +354,17 @@ FEATURES_PAYLOAD="$(build_features_payload "$TARGET_CATEGORY_ID" "$TARGET_PRODUC
 PERFORMANCE_RESPONSE="$(post_json_from_page "/next/v2/getPerformanceDashboard" "$PERFORMANCE_PAYLOAD")"
 FEATURES_RESPONSE="$(post_json_from_page "/next/v2/getFeaturesDashboard" "$FEATURES_PAYLOAD")"
 
-OUTFILE="$DEST/${PREFIX}_CategoryInsights.txt"
-REPORT="$(build_report "$RESOLVED_RESULT" "$PERFORMANCE_RESPONSE" "$FEATURES_RESPONSE")"
+OUTFILE="$DEST/${PREFIX}_CategoryInsights.csv"
+CSV_OUTPUT="$(WEEK_CODE="$WEEK_NUM" WEEK_START="$START_DATE" WEEK_END="$END_DATE" build_csv "$RESOLVED_RESULT" "$PERFORMANCE_RESPONSE" "$FEATURES_RESPONSE")"
 
-if [ -z "${REPORT// }" ]; then
-  log "FAILED: Category Insights report is empty"
+if [ -z "${CSV_OUTPUT// }" ]; then
+  log "FAILED: Category Insights CSV is empty"
   exit 1
 fi
 
-printf '%s\n' "$REPORT" | write_stdin_to_file_with_node "$OUTFILE"
+printf '%s' "$CSV_OUTPUT" | write_stdin_to_file_with_node "$OUTFILE"
 
-log "Saved: ${PREFIX}_CategoryInsights.txt"
+log "Saved: ${PREFIX}_CategoryInsights.csv"
 log "Resolved path: $TARGET_CATEGORY_ID > $TARGET_PRODUCT_TYPE_LABEL > $TARGET_SEARCH_TERM"
 log "Done"
 tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

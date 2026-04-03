@@ -13,8 +13,8 @@ import urllib.request
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
-ENV_PATH = REPO_ROOT / '.env.local'
+ARGUS_APP_ROOT = Path(__file__).resolve().parents[3]
+ENV_PATH = ARGUS_APP_ROOT / '.env.local'
 
 DEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)')
 MANIFEST_ROOT = DEST_ROOT
