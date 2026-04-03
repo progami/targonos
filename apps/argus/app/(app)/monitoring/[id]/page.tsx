@@ -21,11 +21,11 @@ import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
+import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import type {
   MonitoringAsinDetail,
   MonitoringChangeEvent,
@@ -241,6 +241,7 @@ export default function TrackingDetailPage() {
               sx={{
                 display: 'grid',
                 gap: 2,
+                minWidth: 0,
                 gridTemplateColumns: {
                   xs: '1fr',
                   xl: 'minmax(0, 1.35fr) minmax(340px, 0.9fr)',
@@ -250,6 +251,7 @@ export default function TrackingDetailPage() {
               <Stack spacing={2}>
                 <Card
                   sx={{
+                    minWidth: 0,
                     borderRadius: 4,
                     border: '1px solid rgba(15, 23, 42, 0.08)',
                     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
@@ -261,7 +263,7 @@ export default function TrackingDetailPage() {
                         Price trajectory
                       </Typography>
                       {filteredSnapshots.filter((item) => item.landedPrice !== null).length > 1 ? (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveChartFrame height={280}>
                           <LineChart
                             data={filteredSnapshots
                               .filter((item) => item.landedPrice !== null)
@@ -282,7 +284,7 @@ export default function TrackingDetailPage() {
                               dot={false}
                             />
                           </LineChart>
-                        </ResponsiveContainer>
+                        </ResponsiveChartFrame>
                       ) : (
                         <Typography variant="body2" color="text.secondary">
                           Insufficient price data
@@ -294,6 +296,7 @@ export default function TrackingDetailPage() {
 
                 <Card
                   sx={{
+                    minWidth: 0,
                     borderRadius: 4,
                     border: '1px solid rgba(15, 23, 42, 0.08)',
                     boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
@@ -305,7 +308,7 @@ export default function TrackingDetailPage() {
                         Rank trajectory
                       </Typography>
                       {filteredSnapshots.filter((item) => item.rootBsrRank !== null).length > 1 ? (
-                        <ResponsiveContainer width="100%" height={280}>
+                        <ResponsiveChartFrame height={280}>
                           <LineChart
                             data={filteredSnapshots
                               .filter((item) => item.rootBsrRank !== null)
@@ -326,7 +329,7 @@ export default function TrackingDetailPage() {
                               dot={false}
                             />
                           </LineChart>
-                        </ResponsiveContainer>
+                        </ResponsiveChartFrame>
                       ) : (
                         <Typography variant="body2" color="text.secondary">
                           Insufficient rank data

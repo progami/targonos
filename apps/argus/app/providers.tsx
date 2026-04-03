@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -10,7 +10,13 @@ import { argusDarkTheme, argusLightTheme } from '@targon/theme';
 
 function MuiThemeSync({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
-  const theme = resolvedTheme === 'dark' ? argusDarkTheme : argusLightTheme;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const theme = mounted && resolvedTheme === 'dark' ? argusDarkTheme : argusLightTheme;
 
   return (
     <MuiThemeProvider theme={theme}>
