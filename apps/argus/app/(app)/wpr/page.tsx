@@ -85,6 +85,7 @@ export default function WprRootPage() {
             xs: '1fr',
             xl: 'minmax(0, 1.15fr) minmax(360px, 0.85fr)',
           },
+          alignItems: 'start',
         }}
       >
         <ClusterTable
