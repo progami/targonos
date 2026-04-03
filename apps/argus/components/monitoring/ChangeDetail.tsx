@@ -58,8 +58,8 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
                 variant="outlined"
                 sx={{
                   borderRadius: 999,
-                  borderColor: 'rgba(15, 23, 42, 0.12)',
-                  color: '#1a3d56',
+                  borderColor: 'rgba(255, 255, 255, 0.12)',
+                  color: 'text.primary',
                   fontSize: '0.7rem',
                   height: 22,
                 }}
@@ -93,8 +93,8 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
             px: 2,
             py: 1,
             borderRadius: 2,
-            bgcolor: 'rgba(11, 39, 63, 0.04)',
-            border: '1px solid rgba(15, 23, 42, 0.06)',
+            bgcolor: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
           }}
         >
           {event.baselineTimestamp ? (
@@ -106,7 +106,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
                     fontWeight: 700,
                     letterSpacing: '0.08em',
                     textTransform: 'uppercase',
-                    color: '#6a93b3',
+                    color: 'text.secondary',
                   }}
                 >
                   Before
@@ -116,7 +116,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    color: '#1a3d56',
+                    color: 'text.primary',
                   }}
                 >
                   {formatDateTime(event.baselineTimestamp)}
@@ -140,7 +140,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
                     fontFamily: 'var(--font-mono)',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    color: '#0b273f',
+                    color: 'text.primary',
                   }}
                 >
                   {formatDateTime(event.timestamp)}
@@ -165,7 +165,7 @@ export default function ChangeDetail({ event }: ChangeDetailProps) {
                   fontFamily: 'var(--font-mono)',
                   fontSize: '0.82rem',
                   fontWeight: 700,
-                  color: '#0b273f',
+                  color: 'text.primary',
                 }}
               >
                 {formatDateTime(event.timestamp)}
@@ -333,7 +333,7 @@ function ProminentComparison(props: {
   }
 
   const currentColor =
-    sentiment === 'positive' ? '#007a6d' : sentiment === 'negative' ? '#b5362d' : '#0b273f'
+    sentiment === 'positive' ? '#22c55e' : sentiment === 'negative' ? '#ef4444' : 'inherit'
 
   return (
     <Box
@@ -349,13 +349,13 @@ function ProminentComparison(props: {
         sx={{
           fontSize: '0.78rem',
           fontWeight: 600,
-          color: '#6a93b3',
+          color: 'text.secondary',
         }}
       >
         {label}
       </Typography>
       {unchanged ? (
-        <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: '#6a93b3' }}>
+        <Typography sx={{ fontWeight: 700, fontSize: '0.88rem', color: 'text.secondary' }}>
           {currentDisplay}
         </Typography>
       ) : (
@@ -365,7 +365,7 @@ function ProminentComparison(props: {
               fontFamily: 'var(--font-mono)',
               fontWeight: 600,
               fontSize: '0.88rem',
-              color: '#6a93b3',
+              color: 'text.secondary',
               textDecoration: 'line-through',
             }}
           >

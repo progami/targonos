@@ -12,11 +12,9 @@ import type {
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
 
-/* ── Brand tokens ─────────────────────────────────────────────── */
-const NAVY = '#0b273f'
+/* ── Brand tokens (dark-mode friendly) ────────────────────────── */
 const TEAL = '#00C2B9'
-const NAVY_LIGHT = '#1a3d56'
-const NAVY_MUTED = '#6a93b3'
+const TEXT_MUTED = 'rgba(255,255,255,0.5)'
 
 export function OwnerChip({ owner }: { owner: MonitoringOwner }) {
   const label =
@@ -34,9 +32,9 @@ export function OwnerChip({ owner }: { owner: MonitoringOwner }) {
             ? alpha(TEAL, 0.14)
             : owner === 'COMPETITOR'
               ? alpha('#b46832', 0.16)
-              : alpha(NAVY_MUTED, 0.18),
+              : alpha('#94a3b8', 0.18),
         color:
-          owner === 'OURS' ? '#007a6d' : owner === 'COMPETITOR' ? '#7b4215' : NAVY_LIGHT,
+          owner === 'OURS' ? '#00C2B9' : owner === 'COMPETITOR' ? '#d4a574' : 'rgba(255,255,255,0.7)',
       }}
     />
   )
@@ -68,9 +66,9 @@ export function CategoryChip({ category }: { category: MonitoringCategory }) {
       variant="outlined"
       sx={{
         borderRadius: 999,
-        borderColor: alpha(NAVY, 0.12),
-        color: NAVY_LIGHT,
-        bgcolor: alpha('#ffffff', 0.72),
+        borderColor: 'rgba(255, 255, 255, 0.12)',
+        color: 'rgba(255,255,255,0.7)',
+        bgcolor: 'rgba(255, 255, 255, 0.05)',
       }}
     />
   )
@@ -88,8 +86,8 @@ export function MetricCard(props: {
         px: 2,
         py: 1.5,
         borderRadius: 2.5,
-        border: `1px solid ${alpha(NAVY, 0.07)}`,
-        bgcolor: 'rgba(255, 255, 255, 0.72)',
+        border: '1px solid rgba(255, 255, 255, 0.07)',
+        bgcolor: 'rgba(255, 255, 255, 0.04)',
       }}
     >
       <Typography
@@ -103,7 +101,7 @@ export function MetricCard(props: {
         sx={{
           fontWeight: 800,
           lineHeight: 1.15,
-          color: props.accent ?? NAVY,
+          color: props.accent ?? 'rgba(255,255,255,0.9)',
           mt: 0.2,
         }}
       >
@@ -175,7 +173,7 @@ export function ComparisonRow(props: {
   }
 
   const sentimentColor =
-    sentiment === 'positive' ? '#007a6d' : sentiment === 'negative' ? '#b5362d' : NAVY_MUTED
+    sentiment === 'positive' ? '#22c55e' : sentiment === 'negative' ? '#ef4444' : TEXT_MUTED
   const arrow = direction === 'up' ? '↑' : direction === 'down' ? '↓' : null
 
   return (
@@ -195,14 +193,14 @@ export function ComparisonRow(props: {
         {label}
       </Typography>
       {unchanged ? (
-        <Typography variant="body2" sx={{ fontWeight: 600, color: NAVY_MUTED }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, color: TEXT_MUTED }}>
           {currentDisplay}
         </Typography>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.6, flexWrap: 'wrap' }}>
           <Typography
             variant="body2"
-            sx={{ color: NAVY_MUTED, fontWeight: 500, textDecoration: 'line-through', fontSize: '0.8rem' }}
+            sx={{ color: TEXT_MUTED, fontWeight: 500, textDecoration: 'line-through', fontSize: '0.8rem' }}
           >
             {baselineDisplay}
           </Typography>
@@ -214,13 +212,13 @@ export function ComparisonRow(props: {
               {arrow}
             </Typography>
           ) : (
-            <Typography component="span" sx={{ color: NAVY_MUTED, fontSize: '0.7rem' }}>
+            <Typography component="span" sx={{ color: TEXT_MUTED, fontSize: '0.7rem' }}>
               →
             </Typography>
           )}
           <Typography
             variant="body2"
-            sx={{ fontWeight: 700, color: arrow ? sentimentColor : NAVY }}
+            sx={{ fontWeight: 700, color: arrow ? sentimentColor : 'rgba(255,255,255,0.9)' }}
           >
             {currentDisplay}
           </Typography>
@@ -239,7 +237,7 @@ export function CategorySection(props: { label: string; children: React.ReactNod
           fontWeight: 800,
           letterSpacing: '0.08em',
           textTransform: 'uppercase',
-          color: NAVY_MUTED,
+          color: TEXT_MUTED,
           fontSize: '0.62rem',
           display: 'block',
           mb: 0.8,
@@ -312,9 +310,9 @@ function getSeverityPalette(severity: MonitoringSeverity) {
     case 'high':
       return { main: '#cc6b1e' }
     case 'medium':
-      return { main: '#7f5f00' }
+      return { main: '#eab308' }
     case 'low':
-      return { main: NAVY_LIGHT }
+      return { main: '#94a3b8' }
   }
 }
 
