@@ -48,72 +48,27 @@ export default async function ListingsPage() {
   return (
     <Box
       sx={{
-        maxWidth: 1480,
         mx: 'auto',
         display: 'grid',
         gap: 3,
-        gridTemplateColumns: {
-          xs: '1fr',
-          xl: 'minmax(280px, 340px) minmax(0, 1fr)',
-        },
+        gridTemplateColumns: '1fr',
         alignItems: 'start',
       }}
     >
-      <Stack spacing={2.5}>
-        <Card
-          sx={{
-            p: 2.75,
-            borderRadius: 4,
-            background: 'linear-gradient(160deg, #002C51 0%, #0B3D64 58%, #0B7F7A 100%)',
-            color: '#F8FAFC',
-          }}
-        >
-          <Typography variant="overline" sx={{ color: 'rgba(248, 250, 252, 0.66)' }}>
-            Replica index
-          </Typography>
-          <Typography variant="h4" sx={{ mt: 0.8, fontWeight: 800, letterSpacing: '-0.05em' }}>
-            Listings
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1.1, color: 'rgba(248, 250, 252, 0.76)', lineHeight: 1.7 }}>
-            Jump into PDP revision work, inspect snapshot history, and see which listings are actually carrying change load.
-          </Typography>
-        </Card>
-
-        <Card sx={{ p: 2.25, borderRadius: 4 }}>
-          <Stack spacing={1.5}>
-            <Box>
-              <Typography variant="overline" color="text.secondary">
-                Coverage
-              </Typography>
-              <Typography variant="h4" sx={{ mt: 0.7, fontWeight: 800, letterSpacing: '-0.05em' }}>
-                {listings.length}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                tracked PDPs
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em' }}>
-                {totalSnapshots}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                snapshots stored
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em' }}>
-                {totalRevisions}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.4 }}>
-                revision artifacts
-              </Typography>
-            </Box>
-          </Stack>
-        </Card>
+      <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary">
+          <strong>{listings.length}</strong> tracked PDPs
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          <strong>{totalSnapshots}</strong> snapshots
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          <strong>{totalRevisions}</strong> revisions
+        </Typography>
       </Stack>
 
       {listings.length > 0 ? (
-        <Stack spacing={1.5}>
+        <Stack spacing={1}>
           {listings.map(
             (listing: {
               id: string
@@ -136,9 +91,8 @@ export default async function ListingsPage() {
               >
                 <Card
                   sx={{
-                    p: { xs: 2, md: 2.4 },
-                    borderRadius: 4,
-                    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(247, 250, 252, 0.96) 100%)',
+                    p: { xs: 1.5, md: 1.75 },
+                    borderRadius: 2,
                     transition: 'transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease',
                     '&:hover': {
                       transform: 'translateY(-1px)',
@@ -150,9 +104,9 @@ export default async function ListingsPage() {
                   <Stack direction="row" spacing={2} alignItems="center">
                     <Box
                       sx={{
-                        width: 56,
-                        height: 56,
-                        bgcolor: 'rgba(0, 44, 81, 0.05)',
+                        width: 40,
+                        height: 40,
+                        bgcolor: 'action.hover',
                         borderRadius: 2.5,
                         display: 'flex',
                         alignItems: 'center',

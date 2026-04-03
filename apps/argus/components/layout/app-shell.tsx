@@ -24,7 +24,7 @@ import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import ThemeToggle from './theme-toggle';
 
-const DRAWER_WIDTH = 320;
+const DRAWER_WIDTH = 220;
 
 type NavItem = {
   href: string;
@@ -129,24 +129,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }}
     >
       <Stack spacing={1.75}>
-        <Box
-          sx={{
-            borderRadius: 4.5,
-            px: 2,
-            py: 2.25,
-            color: 'primary.contrastText',
-            background: 'linear-gradient(160deg, #002C51 0%, #0B4068 62%, #0D6F73 100%)',
-            boxShadow: '0 24px 48px -28px rgba(0, 44, 81, 0.55)',
-          }}
-        >
-          <Typography variant="overline" sx={{ color: 'rgba(255, 255, 255, 0.64)' }}>
-            TargonOS Suite
-          </Typography>
-          <Typography variant="h5" sx={{ mt: 0.6, fontWeight: 800, letterSpacing: '-0.04em' }}>
+        <Box sx={{ px: 1, py: 0.5 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700, letterSpacing: '-0.03em' }}>
             Argus
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 0.9, maxWidth: 220, color: 'rgba(255, 255, 255, 0.76)' }}>
-            WPR, monitoring, and listing workflows in one workspace.
           </Typography>
         </Box>
 
@@ -165,11 +150,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   setMobileOpen(false);
                 }}
                 selected={isActive}
+                aria-current={isActive ? 'page' : undefined}
                 sx={{
-                  mb: 0.75,
-                  px: 1.25,
-                  py: 1,
-                  borderRadius: 3.5,
+                  mb: 0.5,
+                  px: 1,
+                  py: 0.75,
+                  borderRadius: 2,
                   alignItems: 'flex-start',
                   border: '1px solid',
                   borderColor: isActive ? alpha(theme.palette.primary.main, 0.18) : 'transparent',
@@ -193,15 +179,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <ListItemText
                   primary={item.label}
                   primaryTypographyProps={{ fontWeight: 700, fontSize: '0.96rem', letterSpacing: '-0.02em' }}
-                  secondary={item.description}
-                  secondaryTypographyProps={{
-                    sx: {
-                      color: isActive ? 'text.primary' : 'text.secondary',
-                      fontSize: '0.74rem',
-                      lineHeight: 1.45,
-                      mt: 0.35,
-                    },
-                  }}
                 />
               </ListItemButton>
             );
@@ -292,7 +269,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             top: 0,
             zIndex: 10,
             px: { xs: 2, md: 4.5 },
-            py: { xs: 9, md: 3.25 },
+            py: { xs: 9, md: 2 },
             borderBottom: '1px solid',
             borderColor: 'divider',
             bgcolor: alpha(theme.palette.background.default, 0.9),
@@ -307,20 +284,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Typography
                 variant="h4"
                 sx={{
-                  mt: 0.8,
-                  fontSize: { xs: '1.9rem', md: '2.35rem' },
-                  fontWeight: 800,
+                  mt: 0.3,
+                  fontSize: { xs: '1.4rem', md: '1.6rem' },
+                  fontWeight: 700,
                   letterSpacing: '-0.05em',
                 }}
               >
                 {sectionCopy.title}
-              </Typography>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                sx={{ mt: 0.9, maxWidth: 680, fontSize: '0.94rem', lineHeight: 1.6 }}
-              >
-                {sectionCopy.subtitle}
               </Typography>
             </Box>
             <Box sx={{ display: { xs: 'none', md: 'block' } }}>

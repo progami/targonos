@@ -50,7 +50,7 @@ const SEVERITY_OPTIONS: Array<{ value: MonitoringSeverity | 'ALL'; label: string
 const SEVERITY_COLORS: Record<MonitoringSeverity, string> = {
   critical: '#b5362d',
   high: '#cc6b1e',
-  medium: '#7f5f00',
+  medium: '#eab308',
   low: '#94a3b8',
 }
 
@@ -114,8 +114,8 @@ export default function FeedRail({
         sx={{
           px: 2,
           py: 1.5,
-          borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
-          bgcolor: 'rgba(248, 250, 252, 0.5)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          bgcolor: 'rgba(255,255,255,0.03)',
         }}
       >
         <Stack
@@ -250,18 +250,18 @@ export default function FeedRail({
                     ? 'rgba(24, 88, 78, 0.08)'
                     : unread
                       ? 'rgba(0, 194, 185, 0.06)'
-                      : 'rgba(15, 23, 42, 0.02)',
+                      : 'rgba(255, 255, 255, 0.02)',
                   border: selected
                     ? '1px solid rgba(0, 194, 185, 0.25)'
                     : unread
                       ? '1px solid rgba(0, 194, 185, 0.15)'
-                      : '1px solid rgba(15, 23, 42, 0.06)',
+                      : '1px solid rgba(255, 255, 255, 0.06)',
                   borderLeftWidth: '3px',
                   borderLeftColor: SEVERITY_COLORS[item.severity],
                   '&:hover': {
                     bgcolor: selected
                       ? 'rgba(24, 88, 78, 0.08)'
-                      : 'rgba(15, 23, 42, 0.05)',
+                      : 'rgba(255, 255, 255, 0.05)',
                   },
                   transition: 'background-color 0.12s, border-color 0.12s',
                 }}
@@ -276,7 +276,7 @@ export default function FeedRail({
                       fontSize: '0.6rem',
                       fontWeight: 700,
                       letterSpacing: '0.03em',
-                      bgcolor: 'rgba(15, 23, 42, 0.06)',
+                      bgcolor: 'rgba(255, 255, 255, 0.06)',
                       color: 'text.secondary',
                     }}
                   />
@@ -321,7 +321,7 @@ export default function FeedRail({
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
-                    color: unread ? '#0b273f' : 'text.primary',
+                    color: 'text.primary',
                   }}
                 >
                   {item.headline}

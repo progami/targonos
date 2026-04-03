@@ -38,9 +38,9 @@ export default function ClusterFocusPanel({
     <Stack spacing={2}>
       <Card
         sx={{
-          p: 2.75,
+          p: 2,
           borderRadius: 4,
-          background: 'linear-gradient(155deg, #002C51 0%, #0D3F66 54%, #EEF5F9 54.5%, #F8FBFD 100%)',
+          background: 'linear-gradient(160deg, #002C51 0%, #0B4068 100%)',
           color: '#F8FAFC',
         }}
       >
@@ -49,7 +49,7 @@ export default function ClusterFocusPanel({
             <Typography variant="overline" sx={{ color: 'rgba(248, 250, 252, 0.66)' }}>
               Selected Cluster
             </Typography>
-            <Typography variant="h4" sx={{ fontWeight: 800, letterSpacing: '-0.05em', maxWidth: 360 }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, letterSpacing: '-0.05em' }}>
               {cluster.cluster}
             </Typography>
             <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.76)' }}>
@@ -63,7 +63,7 @@ export default function ClusterFocusPanel({
             useFlexGap
             flexWrap="wrap"
           >
-            {cluster.top_terms.slice(0, 6).map((term) => (
+            {cluster.top_terms.slice(0, 4).map((term) => (
               <Chip
                 key={term}
                 label={term}
