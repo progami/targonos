@@ -10,6 +10,54 @@ REPO_ROOT="${TARGONOS_REPO_DIR:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel
 
 BASE_URL="${SELLERBOARD_SYNC_BASE_URL:-http://localhost:3008/xplan/api/v1/xplan/sellerboard}"
 ENV_FILE="${SELLERBOARD_SYNC_ENV_FILE:-${REPO_ROOT}/apps/xplan/.env.local}"
+RUN_LOG_WRITER="${REPO_ROOT}/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
+RUN_LOG_PATH="${SELLERBOARD_SYNC_LOG_PATH:-${HOME}/.pm2/logs/sellerboard-us-sync-cron.log}"
+NODE_BIN="$(command -v node)"
+RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
+RUN_STARTED_AT_ISO="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+RUN_STATUS="failed"
+RUN_SUMMARY="Sellerboard sync failed."
+RUN_ERROR_MESSAGE="Sellerboard sync failed."
+
+write_run_log() {
+  local finished_at_ms finished_at_iso duration_ms
+  local -a run_log_args
+  finished_at_ms="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
+  finished_at_iso="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  duration_ms=$((finished_at_ms - RUN_STARTED_AT_MS))
+
+  run_log_args=(
+    --job-id "sellerboard-sync"
+    --status "$RUN_STATUS"
+    --summary "$RUN_SUMMARY"
+    --duration-ms "$duration_ms"
+    --timestamp "$finished_at_iso"
+    --started-at "$RUN_STARTED_AT_ISO"
+    --finished-at "$finished_at_iso"
+    --host "$(hostname)"
+    --log-path "$RUN_LOG_PATH"
+  )
+
+  if [[ -n "$RUN_ERROR_MESSAGE" ]]; then
+    run_log_args+=(--error-message "$RUN_ERROR_MESSAGE")
+  fi
+
+  "$NODE_BIN" "$RUN_LOG_WRITER" "${run_log_args[@]}"
+}
+
+finalize() {
+  local exit_code="$1"
+
+  if [[ "$exit_code" -eq 0 ]]; then
+    RUN_STATUS="ok"
+    RUN_SUMMARY="Sellerboard sync completed successfully for US and UK actual sales and dashboards."
+    RUN_ERROR_MESSAGE=""
+  fi
+
+  write_run_log
+}
+
+trap 'exit_code=$?; finalize "$exit_code"; exit "$exit_code"' EXIT
 
 PSQL_BIN="${PSQL_BIN:-}"
 if [[ -z "${PSQL_BIN}" ]]; then
@@ -115,6 +163,8 @@ request() {
   status="$(/usr/bin/curl -sS -X POST "$url" -H "Authorization: Bearer ${SELLERBOARD_SYNC_TOKEN}" -o "$tmp" -w "%{http_code}")"
 
   if [[ "$status" != "200" ]]; then
+    RUN_SUMMARY="Sellerboard sync failed for ${label}."
+    RUN_ERROR_MESSAGE="Sellerboard sync failed for ${label} (HTTP ${status})."
     log "FAILED ${label} (HTTP ${status})"
     cat "$tmp"
     rm -f "$tmp"
