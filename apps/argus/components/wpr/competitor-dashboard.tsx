@@ -4,9 +4,7 @@ import { useMemo } from 'react';
 import { Box, Typography } from '@mui/material';
 import type { WprCluster, WprWeekBundle } from '@/lib/wpr/types';
 import {
-  formatCompactNumber,
   formatCount,
-  formatDecimal,
   formatPercent,
 } from '@/lib/wpr/format';
 import { panelSx, panelHeadSx, panelTitleSx, panelBadgeSx } from '@/lib/wpr/panel-tokens';
