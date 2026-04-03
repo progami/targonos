@@ -19,6 +19,40 @@ is_truthy() {
   esac
 }
 
+resolve_script_repo_dir() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  cd "$script_dir/.." >/dev/null
+  pwd
+}
+
+resolve_named_repo_dir() {
+  local repo_name="$1"
+  local configured_dir="$2"
+
+  if [[ -n "$configured_dir" ]]; then
+    printf '%s' "$configured_dir"
+    return 0
+  fi
+
+  local script_repo_dir
+  script_repo_dir="$(resolve_script_repo_dir)"
+
+  if [[ "$(basename "$script_repo_dir")" == "$repo_name" ]]; then
+    printf '%s' "$script_repo_dir"
+    return 0
+  fi
+
+  local sibling_repo_dir
+  sibling_repo_dir="$(dirname "$script_repo_dir")/${repo_name}"
+  if [[ -d "$sibling_repo_dir" ]]; then
+    printf '%s' "$sibling_repo_dir"
+    return 0
+  fi
+
+  return 1
+}
+
 compute_changed_files() {
   changed_files_available="false"
   changed_files=()
@@ -188,23 +222,31 @@ release_deploy_lock() {
   fi
 }
 
+if ! TARGONOS_DEV_DIR="$(resolve_named_repo_dir "targonos-dev" "${TARGONOS_DEV_DIR:-${TARGON_DEV_DIR:-}}")"; then
+  echo "Missing repo directory for targonos-dev." >&2
+  echo "Set TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR)." >&2
+  exit 1
+fi
+
+if ! TARGONOS_MAIN_DIR="$(resolve_named_repo_dir "targonos-main" "${TARGONOS_MAIN_DIR:-${TARGON_MAIN_DIR:-}}")"; then
+  echo "Missing repo directory for targonos-main." >&2
+  echo "Set TARGONOS_MAIN_DIR (or legacy TARGON_MAIN_DIR)." >&2
+  exit 1
+fi
+
+export TARGONOS_DEV_DIR TARGONOS_MAIN_DIR
+
 # Determine directories based on environment
 if [[ "$environment" == "dev" ]]; then
-  REPO_DIR="${TARGONOS_DEV_DIR:-${TARGON_DEV_DIR:-}}"
+  REPO_DIR="$TARGONOS_DEV_DIR"
   PM2_PREFIX="dev"
   BRANCH="dev"
 elif [[ "$environment" == "main" ]]; then
-  REPO_DIR="${TARGONOS_MAIN_DIR:-${TARGON_MAIN_DIR:-}}"
+  REPO_DIR="$TARGONOS_MAIN_DIR"
   PM2_PREFIX="main"
   BRANCH="main"
 else
   echo "Unknown environment: $environment" >&2
-  exit 1
-fi
-
-if [[ -z "$REPO_DIR" ]]; then
-  echo "Missing repo directory for environment \"$environment\"." >&2
-  echo "Set TARGONOS_DEV_DIR/TARGONOS_MAIN_DIR (or legacy TARGON_DEV_DIR/TARGON_MAIN_DIR)." >&2
   exit 1
 fi
 
@@ -311,6 +353,176 @@ fi
 log() { printf '\033[36m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 warn() { printf '\033[33m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 error() { printf '\033[31m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*" >&2; }
+
+resolve_origin_repository_slug() {
+  local remote_url
+  remote_url="$(git -C "$REPO_DIR" remote get-url origin)"
+
+  case "$remote_url" in
+    git@github.com:*)
+      remote_url="${remote_url#git@github.com:}"
+      remote_url="${remote_url%.git}"
+      printf '%s' "$remote_url"
+      return 0
+      ;;
+    https://github.com/*)
+      remote_url="${remote_url#https://github.com/}"
+      remote_url="${remote_url%.git}"
+      printf '%s' "$remote_url"
+      return 0
+      ;;
+    ssh://git@github.com/*)
+      remote_url="${remote_url#ssh://git@github.com/}"
+      remote_url="${remote_url%.git}"
+      printf '%s' "$remote_url"
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+build_metadata_version=""
+build_metadata_version_url=""
+build_metadata_commit_sha=""
+build_metadata_build_time=""
+
+compute_build_metadata() {
+  build_metadata_build_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+  local head_sha
+  head_sha="$(git -C "$REPO_DIR" rev-parse HEAD)"
+  build_metadata_commit_sha="$(git -C "$REPO_DIR" rev-parse --short=8 HEAD)"
+
+  local repository_slug
+  if ! repository_slug="$(resolve_origin_repository_slug)"; then
+    error "Unsupported origin remote URL; cannot derive repository slug"
+    exit 1
+  fi
+
+  local remote_semver_tags
+  remote_semver_tags="$(
+    git -C "$REPO_DIR" ls-remote --tags origin | awk '
+      {
+        sha=$1
+        ref=$2
+        sub("^refs/tags/","",ref)
+        peeled=0
+        if (ref ~ /\^\{\}$/) { peeled=1; sub(/\^\{\}$/,"",ref) }
+        tag=ref
+
+        if (tag ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) {
+          if (peeled) { sha_by_tag[tag]=sha; peeled_by_tag[tag]=1 }
+          else if (!(tag in peeled_by_tag)) { sha_by_tag[tag]=sha }
+        }
+      }
+      END { for (tag in sha_by_tag) print tag "\t" sha_by_tag[tag] }
+    ' | tr -d '\r'
+  )"
+
+  local exact_tag
+  exact_tag="$(printf '%s\n' "$remote_semver_tags" | awk -v sha="$head_sha" '$2==sha {print $1}' | LC_ALL=C sort -V | tail -n 1)"
+
+  local base_tag_line
+  base_tag_line="$(printf '%s\n' "$remote_semver_tags" | LC_ALL=C sort -V -k1,1 | tail -n 1)"
+
+  local base_tag=""
+  local base_sha=""
+  if [[ -n "$base_tag_line" ]]; then
+    base_tag="${base_tag_line%%$'\t'*}"
+    base_sha="${base_tag_line#*$'\t'}"
+  fi
+
+  local version=""
+  local tag=""
+
+  if [[ -n "$exact_tag" ]]; then
+    version="${exact_tag#v}"
+    tag="$exact_tag"
+  else
+    local range=""
+    local base_version=""
+
+    if [[ -n "$base_tag" ]]; then
+      base_version="${base_tag#v}"
+      if [[ -z "$base_sha" ]]; then
+        warn "Could not resolve base tag \"$base_tag\" to a commit SHA; using full history for version bump detection"
+        range="HEAD"
+      elif git -C "$REPO_DIR" merge-base --is-ancestor "$base_sha" HEAD; then
+        range="${base_sha}..HEAD"
+      else
+        local merge_base
+        merge_base="$(git -C "$REPO_DIR" merge-base "$base_sha" HEAD)"
+        range="${merge_base}..HEAD"
+      fi
+    else
+      range="HEAD"
+      base_version="0.0.0"
+    fi
+
+    base_version="$(printf '%s' "$base_version" | tr -d '\r\n\t ')"
+    if ! [[ "$base_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      error "Expected base version to be strict semver, got \"$base_version\" from base tag \"$base_tag\""
+      exit 1
+    fi
+
+    local bump="patch"
+    local commit_messages
+    commit_messages="$(git -C "$REPO_DIR" log "$range" --pretty=%s%n%b)"
+
+    if grep -qE 'BREAKING CHANGE|^[a-zA-Z]+(\(.+\))?!:' <<< "$commit_messages"; then
+      bump="major"
+    elif grep -qE '^feat(\(.+\))?:' <<< "$commit_messages"; then
+      bump="minor"
+    elif grep -qE '^fix(\(.+\))?:' <<< "$commit_messages"; then
+      bump="patch"
+    fi
+
+    local major
+    local minor
+    local patch
+    IFS='.' read -r major minor patch <<< "$base_version"
+
+    case "$bump" in
+      major)
+        major=$((major + 1))
+        minor=0
+        patch=0
+        ;;
+      minor)
+        minor=$((minor + 1))
+        patch=0
+        ;;
+      patch)
+        patch=$((patch + 1))
+        ;;
+    esac
+
+    version="${major}.${minor}.${patch}"
+    tag="v${version}"
+  fi
+
+  build_metadata_version="$version"
+
+  if [[ "$environment" == "main" && -n "$exact_tag" ]]; then
+    build_metadata_version_url="https://github.com/${repository_slug}/releases/tag/${tag}"
+    return 0
+  fi
+
+  build_metadata_version_url="https://github.com/${repository_slug}/commit/${head_sha}"
+}
+
+apply_build_metadata_env() {
+  compute_build_metadata
+
+  export NEXT_PUBLIC_VERSION="$build_metadata_version"
+  export NEXT_PUBLIC_RELEASE_URL="$build_metadata_version_url"
+  export NEXT_PUBLIC_COMMIT_SHA="$build_metadata_commit_sha"
+  export BUILD_TIME="$build_metadata_build_time"
+  export NEXT_PUBLIC_BUILD_TIME="$build_metadata_build_time"
+
+  log "Build metadata: version=${NEXT_PUBLIC_VERSION} commit=${NEXT_PUBLIC_COMMIT_SHA} url=${NEXT_PUBLIC_RELEASE_URL}"
+}
 
 run_pm2_sanitized() {
   CI= \
@@ -849,6 +1061,8 @@ if ! ensure_app_env_loaded; then
   error "No env file found for $app_key ($environment); cannot build"
   exit 1
 fi
+
+apply_build_metadata_env
 
 if [[ "$app_key" == "argus" ]]; then
   run_argus_prebuild_checks
