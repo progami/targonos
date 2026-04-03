@@ -34,8 +34,8 @@ const STATUS_COLORS: Record<UnifiedSourceStatus, string> = {
 }
 
 const SOURCE_TYPE_STYLES: Record<MonitoringSchedulerJob['sourceType'], { bg: string; color: string }> = {
-  API: { bg: 'rgba(0, 44, 81, 0.08)', color: '#0b273f' },
-  BROWSER: { bg: 'rgba(0, 194, 185, 0.12)', color: '#007a6d' },
+  API: { bg: 'rgba(100, 160, 220, 0.15)', color: '#8FC7FF' },
+  BROWSER: { bg: 'rgba(0, 194, 185, 0.15)', color: '#00C2B9' },
 }
 
 const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
@@ -75,8 +75,8 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
     <Box
       sx={{
         borderRadius: 2,
-        border: '1px solid rgba(15, 23, 42, 0.08)',
-        bgcolor: 'rgba(255, 255, 255, 0.78)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        bgcolor: 'rgba(255, 255, 255, 0.03)',
         overflow: 'hidden',
         gridColumn: expanded ? '1 / -1' : undefined,
         transition: 'grid-column 0.15s',
@@ -92,7 +92,7 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          '&:hover': { bgcolor: 'rgba(15, 23, 42, 0.02)' },
+          '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
         }}
       >
         <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
@@ -150,7 +150,7 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
 
       {/* Expanded run history */}
       <Collapse in={expanded}>
-        <Box sx={{ px: 1.5, pb: 1.5, borderTop: '1px solid rgba(15, 23, 42, 0.06)' }}>
+        <Box sx={{ px: 1.5, pb: 1.5, borderTop: '1px solid rgba(255, 255, 255, 0.06)' }}>
           <Typography
             variant="caption"
             sx={{ display: 'block', mt: 1, mb: 0.5, fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.62rem' }}
@@ -172,7 +172,7 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
                     gap: 1,
                     alignItems: 'center',
                     py: 0.5,
-                    borderBottom: i < runs.length - 1 ? '1px solid rgba(15, 23, 42, 0.04)' : 'none',
+                    borderBottom: i < runs.length - 1 ? '1px solid rgba(255, 255, 255, 0.04)' : 'none',
                   }}
                 >
                   <Box

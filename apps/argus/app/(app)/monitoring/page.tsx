@@ -311,80 +311,6 @@ function TrackingDashboardContent() {
   return (
     <Box sx={{ maxWidth: 1520, mx: 'auto', pb: 4 }}>
       <Stack spacing={3}>
-        {/* Hero header */}
-        <Card
-          sx={{
-            overflow: 'hidden',
-            borderRadius: 4,
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            boxShadow: '0 12px 32px rgba(15, 23, 42, 0.08)',
-            background:
-              'linear-gradient(135deg, #0b273f 0%, #1a3d56 60%, #00C2B9 100%)',
-            color: '#f8fafc',
-          }}
-        >
-          <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-            <Stack
-              direction={{ xs: 'column', md: 'row' }}
-              justifyContent="space-between"
-              alignItems={{ md: 'center' }}
-              spacing={2}
-            >
-              <Stack spacing={0.3}>
-                <Typography
-                  variant="overline"
-                  sx={{ color: 'rgba(248, 250, 252, 0.6)', letterSpacing: '0.1em', fontSize: '0.65rem' }}
-                >
-                  Argus · US Marketplace
-                </Typography>
-                <Typography variant="h5" sx={{ fontWeight: 800, letterSpacing: '-0.03em' }}>
-                  Monitoring
-                </Typography>
-                {overview ? (
-                  <Typography variant="body2" sx={{ color: 'rgba(248, 250, 252, 0.7)', fontFamily: 'var(--font-mono)', fontWeight: 500 }}>
-                    {formatDateTime(overview.snapshotTimestamp)}
-                  </Typography>
-                ) : null}
-              </Stack>
-
-              <Stack direction="row" spacing={1} alignItems="center">
-                <Button
-                  variant="contained"
-                  size="small"
-                  startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
-                  onClick={handleRefresh}
-                  disabled={refreshing}
-                  sx={{
-                    bgcolor: '#F5F5F5',
-                    color: '#0b273f',
-                    '&:hover': { bgcolor: '#dae4ec' },
-                  }}
-                >
-                  {refreshing ? 'Refreshing...' : 'Refresh'}
-                </Button>
-                {selectedEvent ? (
-                  <Button
-                    component={Link}
-                    href={`/monitoring/${selectedEvent.asin}`}
-                    variant="outlined"
-                    size="small"
-                    startIcon={<ArrowOutwardIcon sx={{ fontSize: 14 }} />}
-                    sx={{
-                      borderColor: 'rgba(248, 250, 252, 0.28)',
-                      color: '#f8fafc',
-                    }}
-                    title={selectedEvent.asin}
-                  >
-                    {formatMonitoringLabel(
-                      selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
-                    )}
-                  </Button>
-                ) : null}
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-
         {snapshotAgeMinutes !== null && snapshotAgeMinutes > 180 ? (
           <Alert
             severity="warning"
@@ -423,13 +349,11 @@ function TrackingDashboardContent() {
         <Card
           sx={{
             borderRadius: 4,
-            border: '1px solid rgba(15, 23, 42, 0.08)',
-            boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-            backgroundColor: 'rgba(255, 255, 255, 0.92)',
             overflow: 'hidden',
+            bgcolor: 'background.paper',
           }}
         >
-          <Box sx={{ px: 2, pt: 1.5 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2, pt: 1.5 }}>
             <Tabs
               value={activeTab}
               onChange={(_event, nextValue: 'changes' | 'sources') => setActiveTab(nextValue)}
@@ -449,23 +373,37 @@ function TrackingDashboardContent() {
               />
               <Tab label="Sources" value="sources" />
             </Tabs>
-          </Box>
+
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshIcon sx={{ fontSize: 16 }} />}
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </Button>
+              {selectedEvent ? (
+                <Button
+                  component={Link}
+                  href={`/monitoring/${selectedEvent.asin}`}
+                  variant="outlined"
+                  size="small"
+                  startIcon={<ArrowOutwardIcon sx={{ fontSize: 14 }} />}
+                  title={selectedEvent.asin}
+                >
+                  {formatMonitoringLabel(
+                    selectedEvent.currentSnapshot ?? selectedEvent.baselineSnapshot ?? { asin: selectedEvent.asin },
+                  )}
+                </Button>
+              ) : null}
+            </Stack>
+          </Stack>
 
           {activeTab === 'changes' ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 400 }}>
-              {/* Detail panel — top, fixed height */}
-              <Box
-                sx={{
-                  height: 280,
-                  minHeight: 280,
-                  overflow: 'auto',
-                  borderBottom: '1px solid rgba(15, 23, 42, 0.08)',
-                }}
-              >
-                <ChangeDetail event={selectedEvent} />
-              </Box>
-
-              {/* Feed strip — below, full width */}
+              {/* Feed strip — filters and event cards */}
               <FeedRail
                 changes={changes}
                 loading={loading}
@@ -483,6 +421,19 @@ function TrackingDashboardContent() {
                 query={query}
                 onQueryChange={setQuery}
               />
+
+              {/* Detail panel — below the feed */}
+              <Box
+                sx={{
+                  flex: 1,
+                  minHeight: 200,
+                  overflow: 'auto',
+                  borderTop: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <ChangeDetail event={selectedEvent} />
+              </Box>
             </Box>
           ) : (
             <SourceHealthGrid health={health} healthError={healthError} />
@@ -499,9 +450,6 @@ function TrackingDashboardFallback() {
       <Card
         sx={{
           borderRadius: 4,
-          border: '1px solid rgba(15, 23, 42, 0.08)',
-          boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-          backgroundColor: 'rgba(255, 255, 255, 0.92)',
         }}
       >
         <CardContent sx={{ p: 3 }}>

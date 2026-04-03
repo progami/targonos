@@ -1,12 +1,7 @@
 'use client';
 
-import {
-  Box,
-  Card,
-  Chip,
-  Stack,
-  Typography,
-} from '@mui/material';
+import { useMemo } from 'react';
+import { Box, Typography } from '@mui/material';
 import {
   Bar,
   BarChart,
@@ -30,37 +25,29 @@ import {
   formatMoney,
   formatPercent,
 } from '@/lib/wpr/format';
+import { panelSx, panelHeadSx, panelTitleSx, panelBadgeSx } from '@/lib/wpr/panel-tokens';
 
-const LINE_COLORS = ['#0E3A60', '#00A89F', '#C9772E', '#6B7C8F'];
+const LINE_COLORS = ['#00C2B9', '#f5a623', '#8fc7ff', '#a78bfa'];
 
 function getClusterMap(bundle: WprWeekBundle) {
   return new Map(bundle.clusters.map((cluster) => [cluster.id, cluster]));
 }
 
-function chartCardSx() {
-  return {
-    p: 2.5,
-    minWidth: 0,
-    borderRadius: 4,
-    background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 251, 253, 0.96) 100%)',
-  } as const;
-}
-
 export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) {
-  const clusterMap = getClusterMap(bundle);
-  const scatterRows = bundle.scatterClusterIds
+  const clusterMap = useMemo(() => getClusterMap(bundle), [bundle]);
+  const scatterRows = useMemo(() => bundle.scatterClusterIds
     .map((clusterId) => clusterMap.get(clusterId))
-    .filter((cluster): cluster is NonNullable<typeof cluster> => cluster !== undefined);
-  const lineClusters = bundle.lineClusterIds
-    .map((clusterId) => clusterMap.get(clusterId))
-    .filter((cluster): cluster is NonNullable<typeof cluster> => cluster !== undefined)
-    .slice(0, 4);
-  const ppcRows = bundle.ppcClusterIds
+    .filter((cluster): cluster is NonNullable<typeof cluster> => cluster !== undefined), [bundle, clusterMap]);
+  const lineClusters = useMemo(() => bundle.lineClusterIds
     .map((clusterId) => clusterMap.get(clusterId))
     .filter((cluster): cluster is NonNullable<typeof cluster> => cluster !== undefined)
-    .slice(0, 8);
+    .slice(0, 4), [bundle, clusterMap]);
+  const ppcRows = useMemo(() => bundle.ppcClusterIds
+    .map((clusterId) => clusterMap.get(clusterId))
+    .filter((cluster): cluster is NonNullable<typeof cluster> => cluster !== undefined)
+    .slice(0, 8), [bundle, clusterMap]);
 
-  const rankRows = bundle.weeks.map((week) => {
+  const rankRows = useMemo(() => bundle.weeks.map((week) => {
     const row: Record<string, string | number | null> = {
       weekLabel: week,
     };
@@ -71,14 +58,14 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
     }
 
     return row;
-  });
+  }), [bundle, lineClusters]);
 
-  const brandRows = bundle.weeks.map((week) => ({
+  const brandRows = useMemo(() => bundle.weeks.map((week) => ({
     weekLabel: week,
     awareness: bundle.brandMetrics[week]?.awareness ?? 0,
     consideration: bundle.brandMetrics[week]?.consideration ?? 0,
     purchase: bundle.brandMetrics[week]?.purchase ?? 0,
-  }));
+  })), [bundle]);
 
   const scatterTooltipFormatter = (value: number, key: string) => {
     if (key === 'click_share' || key === 'purchase_share') {
@@ -117,120 +104,129 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
   };
 
   return (
-    <Stack spacing={2.5}>
-      <Card sx={{ ...chartCardSx(), p: 2.75 }}>
-        <Stack spacing={1.5}>
-          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.5}>
-            <Box>
-              <Typography variant="h6">Demand versus share scatter</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Bubble size tracks purchase share while the axes compare demand and click share.
-              </Typography>
-            </Box>
-            <Chip label={`${scatterRows.length} focus clusters`} variant="outlined" sx={{ alignSelf: 'flex-start' }} />
-          </Stack>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gap: 2,
+      }}
+    >
+      {/* BRAND METRICS — full width */}
+      <Box sx={{ ...panelSx, gridColumn: '1 / -1' }}>
+        <Box sx={panelHeadSx}>
+          <Typography sx={panelTitleSx}>Brand Metrics</Typography>
+          <Typography sx={panelBadgeSx}>Awareness / Consideration / PI</Typography>
+        </Box>
+        <Box sx={{ p: 1.5 }}>
+          <Box role="img" aria-label="Brand metrics trend over weeks showing awareness, consideration, and purchase intent">
+            <ResponsiveChartFrame height={280}>
+              <LineChart data={brandRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
+                <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={brandTooltipFormatter} />
+                <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
+                <Line type="monotone" dataKey="awareness" stroke="#0E3A60" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#0E3A60' }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="consideration" stroke="#00C2B9" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#00C2B9' }} activeDot={{ r: 3.5 }} />
+                <Line type="monotone" dataKey="purchase" stroke="#F79009" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#F79009' }} activeDot={{ r: 3.5 }} />
+              </LineChart>
+            </ResponsiveChartFrame>
+          </Box>
+        </Box>
+      </Box>
 
-          <ResponsiveChartFrame height={360}>
-            <ScatterChart margin={{ top: 20, right: 24, bottom: 8, left: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 44, 81, 0.1)" />
-              <XAxis
-                dataKey="query_volume"
-                name="Query volume"
-                tickFormatter={(value) => formatCompactNumber(value)}
-                tick={{ fontSize: 11 }}
-              />
-              <YAxis
-                dataKey="click_share"
-                name="Click share"
-                tickFormatter={(value) => formatPercent(value)}
-                tick={{ fontSize: 11 }}
-              />
-              <ZAxis dataKey="purchase_share" range={[80, 340]} name="Purchase share" />
-              <Tooltip cursor={{ strokeDasharray: '3 3' }} formatter={scatterTooltipFormatter} />
-              <Scatter data={scatterRows} fill="#00C2B9" stroke="#0E3A60" strokeOpacity={0.18} />
-            </ScatterChart>
-          </ResponsiveChartFrame>
-        </Stack>
-      </Card>
+      {/* DEMAND VS RANK — left column */}
+      <Box sx={panelSx}>
+        <Box sx={panelHeadSx}>
+          <Typography sx={panelTitleSx}>Demand vs Rank</Typography>
+          <Typography sx={panelBadgeSx}>{scatterRows.length} clusters</Typography>
+        </Box>
+        <Box sx={{ p: 1.5 }}>
+          <Box role="img" aria-label="Demand versus rank scatter plot comparing query volume to click share across clusters">
+            <ResponsiveChartFrame height={320}>
+              <ScatterChart margin={{ top: 12, right: 16, bottom: 4, left: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis
+                  dataKey="query_volume"
+                  name="Query volume"
+                  tickFormatter={(value) => formatCompactNumber(value)}
+                  tick={{ fontSize: 10 }}
+                />
+                <YAxis
+                  dataKey="click_share"
+                  name="Click share"
+                  tickFormatter={(value) => formatPercent(value)}
+                  tick={{ fontSize: 10 }}
+                />
+                <ZAxis dataKey="purchase_share" range={[80, 340]} name="Purchase share" />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} formatter={scatterTooltipFormatter} />
+                <Scatter data={scatterRows} fill="#00C2B9" stroke="#0E3A60" strokeOpacity={0.18} />
+              </ScatterChart>
+            </ResponsiveChartFrame>
+          </Box>
+        </Box>
+      </Box>
 
-      <Stack
-        spacing={2.5}
-        sx={{
-          display: 'grid',
-          minWidth: 0,
-          gridTemplateColumns: {
-            xs: '1fr',
-            xl: 'repeat(2, minmax(0, 1fr))',
-          },
-        }}
-      >
-        <Card sx={chartCardSx()}>
-          <Stack spacing={1.5}>
-            <Typography variant="h6">Rank trend</Typography>
+      {/* ORGANIC RANK — right column */}
+      <Box sx={panelSx}>
+        <Box sx={panelHeadSx}>
+          <Typography sx={panelTitleSx}>Organic Rank</Typography>
+          <Typography sx={panelBadgeSx}>{lineClusters.length} tracked</Typography>
+        </Box>
+        <Box sx={{ p: 1.5 }}>
+          <Box role="img" aria-label="Organic rank trend over weeks for tracked clusters">
             <ResponsiveChartFrame height={320}>
               <LineChart data={rankRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 44, 81, 0.1)" />
-                <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
-                <YAxis reversed tickFormatter={(value) => formatDecimal(value)} tick={{ fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
+                <YAxis reversed tickFormatter={(value) => formatDecimal(value)} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={rankTooltipFormatter} />
-                <Legend wrapperStyle={{ paddingTop: 8 }} />
+                <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
                 {lineClusters.map((cluster, index) => (
                   <Line
                     key={cluster.id}
                     type="monotone"
                     dataKey={cluster.cluster}
                     stroke={LINE_COLORS[index % LINE_COLORS.length]}
-                    strokeWidth={2.5}
-                    dot={{ r: 2.25, strokeWidth: 0, fill: LINE_COLORS[index % LINE_COLORS.length] }}
-                    activeDot={{ r: 4.5 }}
+                    strokeWidth={2}
+                    dot={{ r: 1.75, strokeWidth: 0, fill: LINE_COLORS[index % LINE_COLORS.length] }}
+                    activeDot={{ r: 3.5 }}
                   />
                 ))}
               </LineChart>
             </ResponsiveChartFrame>
-          </Stack>
-        </Card>
+          </Box>
+        </Box>
+      </Box>
 
-        <Card sx={chartCardSx()}>
-          <Stack spacing={1.5}>
-            <Typography variant="h6">PPC spend</Typography>
-            <ResponsiveChartFrame height={320}>
+      {/* PAID SUPPORT — full width */}
+      <Box sx={{ ...panelSx, gridColumn: '1 / -1' }}>
+        <Box sx={panelHeadSx}>
+          <Typography sx={panelTitleSx}>Paid Support</Typography>
+          <Typography sx={panelBadgeSx}>Sponsored Products</Typography>
+        </Box>
+        <Box sx={{ p: 1.5 }}>
+          <Box role="img" aria-label="Paid support horizontal bar chart comparing PPC spend and PPC sales by cluster">
+            <ResponsiveChartFrame height={300}>
               <BarChart data={ppcRows} layout="vertical" margin={{ top: 8, right: 16, left: 24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 44, 81, 0.1)" horizontal={false} />
-                <XAxis type="number" tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                <XAxis type="number" tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
                 <YAxis
                   type="category"
                   dataKey="cluster"
                   width={112}
-                  tick={{ fontSize: 11 }}
+                  tick={{ fontSize: 10 }}
                   tickFormatter={(value: string) => value.length > 18 ? `${value.slice(0, 18)}...` : value}
                 />
                 <Tooltip formatter={ppcTooltipFormatter} />
-                <Legend wrapperStyle={{ paddingTop: 8 }} />
+                <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
                 <Bar dataKey="ppc_spend" fill="#0E3A60" radius={[0, 6, 6, 0]} name="PPC spend" />
                 <Bar dataKey="ppc_sales" fill="#00C2B9" radius={[0, 6, 6, 0]} name="PPC sales" />
               </BarChart>
             </ResponsiveChartFrame>
-          </Stack>
-        </Card>
-      </Stack>
-
-      <Card sx={chartCardSx()}>
-        <Stack spacing={1.5}>
-          <Typography variant="h6">Brand metrics window</Typography>
-          <ResponsiveChartFrame height={320}>
-            <LineChart data={brandRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0, 44, 81, 0.1)" />
-              <XAxis dataKey="weekLabel" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={brandTooltipFormatter} />
-              <Legend wrapperStyle={{ paddingTop: 8 }} />
-              <Line type="monotone" dataKey="awareness" stroke="#0E3A60" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4.5 }} />
-              <Line type="monotone" dataKey="consideration" stroke="#00C2B9" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4.5 }} />
-              <Line type="monotone" dataKey="purchase" stroke="#F79009" strokeWidth={2.5} dot={{ r: 2.5 }} activeDot={{ r: 4.5 }} />
-            </LineChart>
-          </ResponsiveChartFrame>
-        </Stack>
-      </Card>
-    </Stack>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
   );
 }

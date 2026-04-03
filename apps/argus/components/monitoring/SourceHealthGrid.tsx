@@ -34,9 +34,9 @@ const STATUS_DOT: Record<UnifiedStatus, string> = {
 }
 
 const SOURCE_TYPE_STYLES: Record<MonitoringSourceType, { bg: string; color: string }> = {
-  API: { bg: 'rgba(0, 44, 81, 0.08)', color: '#0b273f' },
-  BROWSER: { bg: 'rgba(0, 194, 185, 0.12)', color: '#007a6d' },
-  MANUAL: { bg: 'rgba(180, 104, 50, 0.12)', color: '#7b4215' },
+  API: { bg: 'rgba(100, 160, 220, 0.15)', color: '#8FC7FF' },
+  BROWSER: { bg: 'rgba(0, 194, 185, 0.15)', color: '#00C2B9' },
+  MANUAL: { bg: 'rgba(210, 150, 90, 0.15)', color: '#d4a574' },
 }
 
 function deriveJobStatus(job: MonitoringSchedulerJob, datasets: MonitoringHealthDataset[]): UnifiedStatus {
@@ -109,7 +109,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
       <Stack spacing={3}>
         {/* Summary counters */}
         <Stack direction="row" spacing={3}>
-          <Counter label="Sources" value={counts.total} color="#0b273f" />
+          <Counter label="Sources" value={counts.total} color="rgba(255,255,255,0.85)" />
           <Counter label="Healthy" value={counts.healthy} color="#22c55e" />
           <Counter label="Stale" value={counts.stale} color="#f59e0b" />
           <Counter label="Failed" value={counts.failed} color="#ef4444" />
@@ -125,8 +125,8 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                 key={job.id}
                 sx={{
                   borderRadius: 2.5,
-                  border: '1px solid rgba(15, 23, 42, 0.08)',
-                  bgcolor: 'rgba(255,255,255,0.78)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  bgcolor: 'rgba(255,255,255,0.03)',
                   overflow: 'hidden',
                 }}
               >
@@ -141,7 +141,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                     gridTemplateColumns: '8px 1fr auto',
                     gap: 1.5,
                     alignItems: 'center',
-                    '&:hover': { bgcolor: 'rgba(15, 23, 42, 0.02)' },
+                    '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
                   }}
                 >
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: STATUS_DOT[status] }} />
@@ -184,7 +184,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
 
                 {/* Expanded: dataset details */}
                 <Collapse in={expanded}>
-                  <Box sx={{ borderTop: '1px solid rgba(15, 23, 42, 0.06)', px: 2, py: 1.5 }}>
+                  <Box sx={{ borderTop: '1px solid rgba(255, 255, 255, 0.06)', px: 2, py: 1.5 }}>
                     {datasets.length > 0 ? (
                       <Box
                         component="table"
@@ -194,7 +194,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                           '& td, & th': { py: 0.6, px: 1, fontSize: '0.75rem', textAlign: 'left' },
                           '& th': { color: 'text.secondary', fontWeight: 600, fontSize: '0.65rem', textTransform: 'uppercase', letterSpacing: '0.04em' },
                           '& td': { color: 'text.primary' },
-                          '& tr:not(:last-child) td': { borderBottom: '1px solid rgba(15, 23, 42, 0.04)' },
+                          '& tr:not(:last-child) td': { borderBottom: '1px solid rgba(255, 255, 255, 0.04)' },
                         }}
                       >
                         <thead>
@@ -228,7 +228,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                                 {formatDateTime(ds.updatedAt)}
                               </td>
                               <td style={{ fontFamily: 'var(--font-mono)' }}>{formatAge(ds.ageMinutes)}</td>
-                              <td style={{ color: '#6a93b3' }}>{ds.purpose}</td>
+                              <td style={{ color: 'rgba(255,255,255,0.5)' }}>{ds.purpose}</td>
                               <td>
                                 {ds.driveUrl ? (
                                   <Tooltip title="Open in Google Drive">
@@ -260,7 +260,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                     <Stack
                       direction="row"
                       spacing={3}
-                      sx={{ mt: 1.5, pt: 1, borderTop: '1px solid rgba(15, 23, 42, 0.04)' }}
+                      sx={{ mt: 1.5, pt: 1, borderTop: '1px solid rgba(255, 255, 255, 0.04)' }}
                     >
                       <MetaItem label="LaunchAgent" value={job.launchdLabel} mono />
                       <MetaItem label="Status" value={job.status === 'running' ? `Running (PID ${job.pid})` : job.status} />
@@ -285,8 +285,8 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
             <Box
               sx={{
                 borderRadius: 2.5,
-                border: '1px solid rgba(15, 23, 42, 0.08)',
-                bgcolor: 'rgba(255,255,255,0.78)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                bgcolor: 'rgba(255,255,255,0.03)',
                 px: 2,
                 py: 1.5,
               }}
@@ -303,7 +303,7 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                     gap: 1.5,
                     alignItems: 'center',
                     py: 0.6,
-                    '&:not(:last-child)': { borderBottom: '1px solid rgba(15, 23, 42, 0.04)' },
+                    '&:not(:last-child)': { borderBottom: '1px solid rgba(255, 255, 255, 0.04)' },
                   }}
                 >
                   <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: STATUS_DOT[ds.status === 'healthy' ? 'healthy' : 'stale'] }} />
