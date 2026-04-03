@@ -10,6 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+LAUNCHD_DOMAIN="gui/$(id -u)"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
 WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/com.targon.weekly-browser-sources.plist"
@@ -24,7 +25,7 @@ cleanup_legacy_daily_account_health_agent() {
 
   PROGRAM_PATH=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:1' "$LEGACY_DAILY_AH_PLIST" 2>/dev/null || printf '')
   if [ "$PROGRAM_PATH" = "$BROWSER_DAILY_AH_SCRIPT" ]; then
-    launchctl unload "$LEGACY_DAILY_AH_PLIST" 2>/dev/null || true
+    launchctl bootout "$LAUNCHD_DOMAIN" "$LEGACY_DAILY_AH_PLIST" 2>/dev/null || true
     rm -f "$LEGACY_DAILY_AH_PLIST"
   fi
 }
@@ -41,9 +42,9 @@ chmod +x "$SCRIPT_DIR/daily-visuals/collect.sh"
 
 if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling browser launchd agents..."
-  launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
-  launchctl unload "$DAILY_VISUALS_PLIST" 2>/dev/null || true
-  launchctl unload "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$WEEKLY_PLIST" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$DAILY_VISUALS_PLIST" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
   rm -f "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" "$WEEKLY_PLIST" "$DAILY_VISUALS_PLIST"
   cleanup_legacy_daily_account_health_agent
   echo "Done. All browser agents removed."
@@ -115,19 +116,19 @@ cat > "$DAILY_VISUALS_PLIST" <<PLIST
 PLIST
 
 # Load the agents
-launchctl unload "$WEEKLY_PLIST" 2>/dev/null || true
-launchctl unload "$DAILY_VISUALS_PLIST" 2>/dev/null || true
-launchctl unload "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$WEEKLY_PLIST" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$DAILY_VISUALS_PLIST" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist" 2>/dev/null || true
 # Unload old agents that may still be registered
-launchctl unload "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist" 2>/dev/null || true
-launchctl unload "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist" 2>/dev/null || true
 rm -f "$LAUNCH_AGENTS_DIR/com.targon.sc-keepalive.plist"
 rm -f "$HOME/Library/LaunchAgents/com.targon.weekly-manual-sources.plist"
 rm -f "$HOME/Library/LaunchAgents/com.targon.hourly-visuals.plist"
 cleanup_legacy_daily_account_health_agent
 
-launchctl load "$WEEKLY_PLIST"
-launchctl load "$DAILY_VISUALS_PLIST"
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$WEEKLY_PLIST"
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$DAILY_VISUALS_PLIST"
 
 echo ""
 echo "Installed and loaded:"

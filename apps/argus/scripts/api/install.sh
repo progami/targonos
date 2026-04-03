@@ -11,6 +11,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
+LAUNCHD_DOMAIN="gui/$(id -u)"
 mkdir -p "$LAUNCH_AGENTS_DIR"
 
 HOURLY_LISTINGS_API_PLIST="$LAUNCH_AGENTS_DIR/com.targon.hourly-listing-attributes-api.plist"
@@ -42,9 +43,9 @@ chmod +x "$SCRIPT_DIR/weekly-sources/collect-sp-ads.py"
 
 if [ "${1:-}" = "--uninstall" ]; then
   echo "Uninstalling API launchd agents..."
-  launchctl unload "$HOURLY_LISTINGS_API_PLIST" 2>/dev/null || true
-  launchctl unload "$DAILY_ACCOUNT_HEALTH_PLIST" 2>/dev/null || true
-  launchctl unload "$WEEKLY_API_PLIST" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$HOURLY_LISTINGS_API_PLIST" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$DAILY_ACCOUNT_HEALTH_PLIST" 2>/dev/null || true
+  launchctl bootout "$LAUNCHD_DOMAIN" "$WEEKLY_API_PLIST" 2>/dev/null || true
   rm -f "$HOURLY_LISTINGS_API_PLIST" "$DAILY_ACCOUNT_HEALTH_PLIST" "$WEEKLY_API_PLIST"
   echo "Done. All API agents removed."
   exit 0
@@ -143,12 +144,12 @@ cat > "$WEEKLY_API_PLIST" <<PLIST
 PLIST
 
 # Load the agents
-launchctl unload "$HOURLY_LISTINGS_API_PLIST" 2>/dev/null || true
-launchctl unload "$DAILY_ACCOUNT_HEALTH_PLIST" 2>/dev/null || true
-launchctl unload "$WEEKLY_API_PLIST" 2>/dev/null || true
-launchctl load "$HOURLY_LISTINGS_API_PLIST"
-launchctl load "$DAILY_ACCOUNT_HEALTH_PLIST"
-launchctl load "$WEEKLY_API_PLIST"
+launchctl bootout "$LAUNCHD_DOMAIN" "$HOURLY_LISTINGS_API_PLIST" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$DAILY_ACCOUNT_HEALTH_PLIST" 2>/dev/null || true
+launchctl bootout "$LAUNCHD_DOMAIN" "$WEEKLY_API_PLIST" 2>/dev/null || true
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$HOURLY_LISTINGS_API_PLIST"
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$DAILY_ACCOUNT_HEALTH_PLIST"
+launchctl bootstrap "$LAUNCHD_DOMAIN" "$WEEKLY_API_PLIST"
 
 echo ""
 echo "Installed and loaded:"

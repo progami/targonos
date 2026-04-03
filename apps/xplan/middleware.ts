@@ -53,7 +53,14 @@ export async function middleware(request: NextRequest) {
     ? pathname.slice(appBasePath.length) || '/'
     : pathname
 
+  const isTokenAuthedCronRoute =
+    normalizedPath === '/api/v1/xplan/sellerboard/us-actual-sales' ||
+    normalizedPath === '/api/v1/xplan/sellerboard/us-dashboard' ||
+    normalizedPath === '/api/v1/xplan/sellerboard/uk-actual-sales' ||
+    normalizedPath === '/api/v1/xplan/sellerboard/uk-dashboard'
+
   const isPublic =
+    isTokenAuthedCronRoute ||
     normalizedPath === '/no-access' ||
     normalizedPath === '/api/health' ||
     normalizedPath.startsWith('/api/auth/') ||
