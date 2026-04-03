@@ -12,8 +12,10 @@ const LOG = '/tmp/daily-visuals.log'
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const NODE_BIN = process.execPath
+const RUN_LOG_WRITER = path.join(SCRIPT_DIR, '../../lib/write-monitoring-run-log.mjs')
 const CAPTURE_CHILD_TIMEOUT_MS = 210_000
 const MAX_CAPTURE_ATTEMPTS = 2
+const RUN_STARTED_AT = new Date()
 
 function log(message) {
   fs.appendFileSync(LOG, `${timestamp()} — ${message}\n`)
@@ -145,6 +147,36 @@ function readLogTail(maxLines) {
   return lines.slice(-maxLines).join('\n')
 }
 
+function writeRunLog({ status, summary, finishedAt, errorMessage }) {
+  const args = [
+    RUN_LOG_WRITER,
+    '--job-id',
+    'daily-visuals',
+    '--status',
+    status,
+    '--summary',
+    summary,
+    '--duration-ms',
+    String(finishedAt.getTime() - RUN_STARTED_AT.getTime()),
+    '--timestamp',
+    finishedAt.toISOString(),
+    '--started-at',
+    RUN_STARTED_AT.toISOString(),
+    '--finished-at',
+    finishedAt.toISOString(),
+    '--host',
+    os.hostname(),
+    '--log-path',
+    LOG,
+  ]
+
+  if (errorMessage) {
+    args.push('--error-message', errorMessage)
+  }
+
+  execFileSync(NODE_BIN, args, { stdio: 'inherit' })
+}
+
 async function main() {
   ensureBinary('node')
   log(`Starting daily visuals capture: ${TODAY}`)
@@ -163,6 +195,13 @@ async function main() {
   trimLog()
 
   if (failed > 0) {
+    writeRunLog({
+      status: 'failed',
+      summary: `Daily visuals finished with ${failed} failure(s).`,
+      finishedAt: new Date(),
+      errorMessage: `${failed} daily visuals capture(s) failed.`,
+    })
+
     const subject = `Argus: Daily visuals failed (${failed})`
     const logTail = readLogTail(200)
     const text = [
@@ -179,13 +218,27 @@ async function main() {
 
     await sendArgusAlertEmail({ subject, text })
     process.exitCode = 1
+    return
   }
+
+  writeRunLog({
+    status: 'ok',
+    summary: 'Daily visuals completed successfully.',
+    finishedAt: new Date(),
+  })
 }
 
 main().catch(async (error) => {
   appendErrorOutput(error)
   log('ABORT: daily visuals script failed')
   trimLog()
+
+  writeRunLog({
+    status: 'failed',
+    summary: 'Daily visuals capture aborted.',
+    finishedAt: new Date(),
+    errorMessage: formatError(error),
+  })
 
   const subject = `Argus: Daily visuals aborted`
   const logTail = readLogTail(200)

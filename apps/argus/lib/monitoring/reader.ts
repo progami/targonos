@@ -71,7 +71,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.argus.tracking-fetch',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.argus.tracking-fetch.plist'),
-    runLogPath: null,
+    runLogPath: path.join(MONITORING_BASE, 'Logs/tracking-fetch/run-log.jsonl'),
     outputs: ['Argus tracking snapshots (DB)'],
   },
   {
@@ -82,7 +82,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Every hour',
     launchdLabel: 'com.targon.hourly-listing-attributes-api',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.hourly-listing-attributes-api.plist'),
-    runLogPath: null,
+    runLogPath: path.join(MONITORING_BASE, 'Logs/hourly-listing-attributes-api/run-log.jsonl'),
     outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
   },
   {
@@ -93,7 +93,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:00 AM',
     launchdLabel: 'com.targon.daily-account-health',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-account-health.plist'),
-    runLogPath: null,
+    runLogPath: path.join(MONITORING_BASE, 'Logs/daily-account-health/run-log.jsonl'),
     outputs: ['Account Health Dashboard (API)'],
   },
   {
@@ -121,7 +121,7 @@ const ARGUS_SCHEDULER_SPECS = [
     schedule: 'Daily at 3:30 AM',
     launchdLabel: 'com.targon.daily-visuals',
     plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-visuals.plist'),
-    runLogPath: null,
+    runLogPath: path.join(MONITORING_BASE, 'Logs/daily-visuals/run-log.jsonl'),
     outputs: ['Visuals (Browser)'],
   },
   {
