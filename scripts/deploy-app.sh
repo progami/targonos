@@ -387,6 +387,58 @@ build_metadata_version_url=""
 build_metadata_commit_sha=""
 build_metadata_build_time=""
 
+build_metadata_env_is_provided() {
+  if declare -p NEXT_PUBLIC_VERSION >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if declare -p NEXT_PUBLIC_RELEASE_URL >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if declare -p NEXT_PUBLIC_COMMIT_SHA >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if declare -p BUILD_TIME >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+apply_precomputed_build_metadata_env() {
+  local required_keys=(
+    NEXT_PUBLIC_VERSION
+    NEXT_PUBLIC_RELEASE_URL
+    NEXT_PUBLIC_COMMIT_SHA
+    BUILD_TIME
+  )
+  local key
+
+  for key in "${required_keys[@]}"; do
+    if ! declare -p "$key" >/dev/null 2>&1; then
+      error "$key is required when CI-provided build metadata is used"
+      exit 1
+    fi
+
+    local value="${!key-}"
+    if [[ -z "${value//[[:space:]]/}" ]]; then
+      error "$key must not be empty when CI-provided build metadata is used"
+      exit 1
+    fi
+  done
+
+  build_metadata_version="$NEXT_PUBLIC_VERSION"
+  build_metadata_version_url="$NEXT_PUBLIC_RELEASE_URL"
+  build_metadata_commit_sha="$NEXT_PUBLIC_COMMIT_SHA"
+  build_metadata_build_time="$BUILD_TIME"
+
+  export NEXT_PUBLIC_BUILD_TIME="$BUILD_TIME"
+
+  log "Build metadata: version=${NEXT_PUBLIC_VERSION} commit=${NEXT_PUBLIC_COMMIT_SHA} url=${NEXT_PUBLIC_RELEASE_URL}"
+}
+
 compute_build_metadata() {
   build_metadata_build_time="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -397,6 +449,11 @@ compute_build_metadata() {
   local repository_slug
   if ! repository_slug="$(resolve_origin_repository_slug)"; then
     error "Unsupported origin remote URL; cannot derive repository slug"
+    exit 1
+  fi
+
+  if ! git -C "$REPO_DIR" fetch origin --tags --force >/dev/null 2>&1; then
+    error "Failed to refresh remote tags before computing build metadata"
     exit 1
   fi
 
@@ -448,9 +505,16 @@ compute_build_metadata() {
       if [[ -z "$base_sha" ]]; then
         warn "Could not resolve base tag \"$base_tag\" to a commit SHA; using full history for version bump detection"
         range="HEAD"
-      elif git -C "$REPO_DIR" merge-base --is-ancestor "$base_sha" HEAD; then
-        range="${base_sha}..HEAD"
       else
+        if ! base_sha="$(git -C "$REPO_DIR" rev-parse "${base_tag}^{commit}")"; then
+          error "Base tag \"$base_tag\" does not resolve to a local commit after fetching tags"
+          exit 1
+        fi
+      fi
+
+      if [[ "$range" == "" ]] && git -C "$REPO_DIR" merge-base --is-ancestor "$base_sha" HEAD; then
+        range="${base_sha}..HEAD"
+      elif [[ "$range" == "" ]]; then
         local merge_base
         merge_base="$(git -C "$REPO_DIR" merge-base "$base_sha" HEAD)"
         range="${merge_base}..HEAD"
@@ -513,6 +577,11 @@ compute_build_metadata() {
 }
 
 apply_build_metadata_env() {
+  if build_metadata_env_is_provided; then
+    apply_precomputed_build_metadata_env
+    return 0
+  fi
+
   compute_build_metadata
 
   export NEXT_PUBLIC_VERSION="$build_metadata_version"
