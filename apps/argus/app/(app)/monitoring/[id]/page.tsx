@@ -102,6 +102,23 @@ export default function TrackingDetailPage() {
 
   const current = detail?.current ?? null
   const owner = current?.owner ?? 'UNKNOWN'
+  const priceCurrency = current?.priceCurrency ?? null
+
+  const priceTooltipFormatter = (value: number | string) => {
+    if (typeof value !== 'number') {
+      return String(value)
+    }
+
+    return formatMoney(value, priceCurrency)
+  }
+
+  const rankTooltipFormatter = (value: number | string) => {
+    if (typeof value !== 'number') {
+      return String(value)
+    }
+
+    return formatCount(value)
+  }
 
   if (loading) {
     return (
@@ -274,8 +291,8 @@ export default function TrackingDetailPage() {
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.1)" />
                             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                            <YAxis tick={{ fontSize: 11 }} />
-                            <Tooltip />
+                            <YAxis tick={{ fontSize: 11 }} tickFormatter={(value) => formatMoney(value, priceCurrency)} />
+                            <Tooltip formatter={priceTooltipFormatter} />
                             <Line
                               type="monotone"
                               dataKey="value"
@@ -319,8 +336,8 @@ export default function TrackingDetailPage() {
                           >
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(15, 23, 42, 0.1)" />
                             <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                            <YAxis reversed tick={{ fontSize: 11 }} />
-                            <Tooltip />
+                            <YAxis reversed tick={{ fontSize: 11 }} tickFormatter={(value) => formatCount(value)} />
+                            <Tooltip formatter={rankTooltipFormatter} />
                             <Line
                               type="monotone"
                               dataKey="value"

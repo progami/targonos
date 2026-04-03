@@ -21,7 +21,13 @@ import {
 } from 'recharts';
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame';
 import type { WprWeekBundle } from '@/lib/wpr/types';
-import { formatPercent } from '@/lib/wpr/format';
+import {
+  formatCompactNumber,
+  formatCount,
+  formatDecimal,
+  formatMoney,
+  formatPercent,
+} from '@/lib/wpr/format';
 
 function getClusterMap(bundle: WprWeekBundle) {
   return new Map(bundle.clusters.map((cluster) => [cluster.id, cluster]));
@@ -61,6 +67,42 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
     purchase: bundle.brandMetrics[week]?.purchase ?? 0,
   }));
 
+  const scatterTooltipFormatter = (value: number, key: string) => {
+    if (key === 'click_share' || key === 'purchase_share') {
+      return formatPercent(value);
+    }
+
+    return formatCount(value);
+  };
+
+  const rankTooltipFormatter = (value: number | string) => {
+    if (typeof value !== 'number') {
+      return String(value);
+    }
+
+    return formatDecimal(value);
+  };
+
+  const ppcTooltipFormatter = (value: number | string, key: string) => {
+    if (typeof value !== 'number') {
+      return String(value);
+    }
+
+    if (key === 'ppc_spend' || key === 'ppc_sales') {
+      return formatMoney(value);
+    }
+
+    return formatCount(value);
+  };
+
+  const brandTooltipFormatter = (value: number | string) => {
+    if (typeof value !== 'number') {
+      return String(value);
+    }
+
+    return formatCount(value);
+  };
+
   return (
     <Stack spacing={2.5}>
       <Card sx={{ p: 2.5, minWidth: 0 }}>
@@ -77,13 +119,7 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                 <ZAxis dataKey="purchase_share" range={[60, 340]} name="Purchase share" />
                 <Tooltip
                   cursor={{ strokeDasharray: '3 3' }}
-                  formatter={(value: number, key) => {
-                    if (key === 'click_share' || key === 'purchase_share') {
-                      return formatPercent(value);
-                    }
-
-                    return value.toLocaleString('en-US');
-                  }}
+                  formatter={scatterTooltipFormatter}
                 />
                 <Scatter data={scatterRows} fill="#00C2B9" />
               </ScatterChart>
@@ -109,8 +145,8 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                 <LineChart data={rankRows}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="weekLabel" />
-                  <YAxis reversed />
-                  <Tooltip />
+                  <YAxis reversed tickFormatter={(value) => formatDecimal(value)} />
+                  <Tooltip formatter={rankTooltipFormatter} />
                   <Legend />
                   {lineClusters.map((cluster) => (
                     <Line
@@ -133,8 +169,8 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
                 <BarChart data={ppcRows}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="cluster" hide />
-                  <YAxis />
-                  <Tooltip />
+                  <YAxis tickFormatter={(value) => formatCompactNumber(value)} />
+                  <Tooltip formatter={ppcTooltipFormatter} />
                   <Bar dataKey="ppc_spend" fill="#002C51" name="PPC spend" />
                   <Bar dataKey="ppc_sales" fill="#00C2B9" name="PPC sales" />
                 </BarChart>
@@ -150,8 +186,8 @@ export default function CompareDashboard({ bundle }: { bundle: WprWeekBundle }) 
               <LineChart data={brandRows}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="weekLabel" />
-                <YAxis />
-                <Tooltip />
+                <YAxis tickFormatter={(value) => formatCompactNumber(value)} />
+                <Tooltip formatter={brandTooltipFormatter} />
                 <Legend />
                 <Line type="monotone" dataKey="awareness" stroke="#002C51" strokeWidth={2} />
                 <Line type="monotone" dataKey="consideration" stroke="#00C2B9" strokeWidth={2} />
