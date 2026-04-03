@@ -43,58 +43,6 @@ process.stdout.write(value == null ? "" : String(value));
 ' "$1" "$2"
 }
 
-legacy_txt_range() {
-  "$PYTHON_BIN" - "$1" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="ignore")
-match = re.search(r"startDate=(\d{4}-\d{2}-\d{2}).*?endDate=(\d{4}-\d{2}-\d{2})", text)
-if not match:
-    raise SystemExit(0)
-
-print(f"{match.group(1)}|{match.group(2)}")
-PY
-}
-
-cleanup_legacy_txt_outputs() {
-  local file=""
-  local declared_prefix=""
-  local range_info=""
-  local actual_start=""
-  local actual_end=""
-  local actual_prefix=""
-  local actual_csv=""
-
-  shopt -s nullglob
-  for file in "$DEST"/W*_BrandMetrics.txt; do
-    declared_prefix="$(basename "$file" .txt)"
-    declared_prefix="${declared_prefix%_BrandMetrics}"
-    range_info="$(legacy_txt_range "$file")"
-
-    if [ -z "$range_info" ]; then
-      continue
-    fi
-
-    IFS='|' read -r actual_start actual_end <<<"$range_info"
-    IFS='|' read -r _ _ _ actual_prefix <<<"$(week_context_for_end_date "$actual_end")"
-    actual_csv="$DEST/${actual_prefix}_BrandMetrics.csv"
-
-    if [ "$declared_prefix" != "$actual_prefix" ]; then
-      log "Removing stale legacy Brand Metrics artifact: $(basename "$file") (actual ${actual_start}..${actual_end} -> ${actual_prefix})"
-      rm -f "$file"
-      continue
-    fi
-
-    if [ -f "$actual_csv" ]; then
-      log "Removing superseded legacy Brand Metrics artifact: $(basename "$file")"
-      rm -f "$file"
-    fi
-  done
-  shopt -u nullglob
-}
-
 page_state() {
   run_js '(() => {
     const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -427,8 +375,6 @@ ACTUAL_CATEGORY="$(json_field "$csv_payload" category)"
 IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(week_context_for_end_date "$ACTUAL_END_DATE")"
 TARGET_FILE="$DEST/${PREFIX}_BrandMetrics.csv"
 copy_file_with_node "$downloaded_file" "$TARGET_FILE"
-rm -f "$DEST/${PREFIX}_BrandMetrics.txt"
-cleanup_legacy_txt_outputs
 
 log "Saved: ${PREFIX}_BrandMetrics.csv"
 log "CSV details: brand=${ACTUAL_BRAND:-unknown} category=${ACTUAL_CATEGORY:-unknown} range=${ACTUAL_START_DATE}..${ACTUAL_END_DATE}"
