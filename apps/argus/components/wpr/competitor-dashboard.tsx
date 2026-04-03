@@ -21,13 +21,35 @@ import {
 } from 'recharts';
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame';
 import type { WprWeekBundle } from '@/lib/wpr/types';
-import { formatDecimal, formatMoney, formatPercent } from '@/lib/wpr/format';
+import {
+  formatCompactNumber,
+  formatCount,
+  formatDecimal,
+  formatMoney,
+  formatPercent,
+} from '@/lib/wpr/format';
 
 export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle }) {
   const rankedClusters = [...bundle.clusters].sort((left, right) => {
     return right.tstCompare.recent_4w.observed.competitor_purchase_share -
       left.tstCompare.recent_4w.observed.competitor_purchase_share;
   });
+
+  const competitorTooltipFormatter = (value: number | string, key: string) => {
+    if (typeof value !== 'number') {
+      return String(value);
+    }
+
+    if (key === 'price') {
+      return formatMoney(value);
+    }
+
+    if (key === 'listing_juice') {
+      return formatCompactNumber(value);
+    }
+
+    return formatCount(value);
+  };
 
   return (
     <Stack spacing={2.5}>
@@ -41,9 +63,9 @@ export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle 
               <LineChart data={bundle.competitorWeekly}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week_label" />
-                <YAxis yAxisId="left" />
+                <YAxis yAxisId="left" tickFormatter={(value) => formatCompactNumber(value)} />
                 <YAxis yAxisId="right" orientation="right" />
-                <Tooltip />
+                <Tooltip formatter={competitorTooltipFormatter} />
                 <Line yAxisId="left" type="monotone" dataKey="sales" stroke="#002C51" strokeWidth={2} />
                 <Line yAxisId="right" type="monotone" dataKey="price" stroke="#00C2B9" strokeWidth={2} />
                 <Line yAxisId="right" type="monotone" dataKey="listing_juice" stroke="#F79009" strokeWidth={2} />
