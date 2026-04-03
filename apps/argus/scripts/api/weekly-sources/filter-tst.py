@@ -15,6 +15,21 @@ def open_maybe_gzip(path: Path):
     return path.open('rt', encoding='utf-8', errors='ignore')
 
 
+def normalize_search_term(value) -> str:
+    if value is None:
+        return ''
+    text = str(value).strip()
+    if text == '':
+        return ''
+    return ' '.join(text.split()).casefold()
+
+
+def normalize_asin(value) -> str:
+    if value is None:
+        return ''
+    return str(value).strip().upper()
+
+
 def flatten(value, prefix='', out=None):
     if out is None:
         out = {}
@@ -113,15 +128,41 @@ def iter_tst_items(stream):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Filter TST report by keyword and write CSV.')
+    parser = argparse.ArgumentParser(description='Filter TST report by target ASIN overlap and write CSV.')
     parser.add_argument('--input', required=True, help='Path to raw JSON or JSON.GZ report')
     parser.add_argument('--output', required=True, help='Path to filtered CSV output')
-    parser.add_argument('--keyword', required=True, help='Case-insensitive substring filter for searchTerm')
+    parser.add_argument(
+        '--target-asin',
+        action='append',
+        dest='target_asins',
+        required=True,
+        help='Clicked ASIN that makes a search term eligible for inclusion. Repeat for multiple ASINs.',
+    )
     args = parser.parse_args()
 
     input_path = Path(args.input)
     output_path = Path(args.output)
-    keyword = args.keyword.strip().lower()
+    target_asins = set()
+    for raw_asin in args.target_asins:
+        asin = normalize_asin(raw_asin)
+        if asin == '':
+            continue
+        target_asins.add(asin)
+
+    if not target_asins:
+        raise RuntimeError('At least one non-empty --target-asin is required')
+
+    matching_terms = set()
+
+    with open_maybe_gzip(input_path) as stream:
+        for item in iter_tst_items(stream):
+            clicked_asin = normalize_asin(item.get('clickedAsin'))
+            if clicked_asin not in target_asins:
+                continue
+            search_term = normalize_search_term(item.get('searchTerm'))
+            if search_term == '':
+                continue
+            matching_terms.add(search_term)
 
     rows = []
     headers = []
@@ -129,10 +170,9 @@ def main():
 
     with open_maybe_gzip(input_path) as stream:
         for item in iter_tst_items(stream):
-            search_term = str(item.get('searchTerm', '')).lower()
-            if keyword not in search_term:
+            search_term = normalize_search_term(item.get('searchTerm'))
+            if search_term not in matching_terms:
                 continue
-
             flat = flatten(item)
             rows.append(flat)
 
@@ -152,7 +192,11 @@ def main():
         for row in rows:
             writer.writerow({key: row.get(key, '') for key in headers})
 
-    print(f'filtered_rows={len(rows)} keyword={args.keyword} output={output_path}')
+    joined_asins = ','.join(sorted(target_asins))
+    print(
+        f'filtered_rows={len(rows)} matching_terms={len(matching_terms)} '
+        f'target_asins={joined_asins} output={output_path}'
+    )
 
 
 if __name__ == '__main__':
