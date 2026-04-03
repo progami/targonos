@@ -23,13 +23,15 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const HERO_ASIN = 'B09HXC3NL8'
-const TST_FILTER_KEYWORD = 'drop cloth'
+const COMPETITOR_ASIN = 'B0DQDWV1SV'
+const TST_TARGET_ASINS = [HERO_ASIN, COMPETITOR_ASIN]
 const TST_REPORT_TYPE = 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
 const DONE_REPORT_STATUSES = new Set(['DONE'])
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
+const SPAPI_MANIFEST_DIR = path.join(MONITORING_BASE, 'Logs', 'weekly-api-sources', 'metadata')
 const BA_BASE = path.join(WEEKLY_ROOT, 'Brand Analytics (API)')
 const BR_BASE = path.join(WEEKLY_ROOT, 'Business Reports (API)')
 
@@ -494,11 +496,29 @@ function readJsonFile(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'))
 }
 
+function sameStringArray(left, right) {
+  if (!Array.isArray(left)) return false
+  if (!Array.isArray(right)) return false
+  if (left.length !== right.length) return false
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function runTstFilter(rawPath, outputPath) {
   const filterScript = path.join(__dirname, 'filter-tst.py')
+  const args = [filterScript, '--input', rawPath, '--output', outputPath]
+  for (const asin of TST_TARGET_ASINS) {
+    args.push('--target-asin', asin)
+  }
   const result = spawnSync(
     'python3',
-    [filterScript, '--input', rawPath, '--output', outputPath, '--keyword', TST_FILTER_KEYWORD],
+    args,
     { stdio: 'inherit' },
   )
   if (result.status !== 0) {
@@ -517,13 +537,14 @@ async function main() {
   ensureDir(SQP_DIR)
   ensureDir(TST_DIR)
   ensureDir(SALES_DIR)
+  ensureDir(SPAPI_MANIFEST_DIR)
 
   const scpPath = path.join(SCP_DIR, `${weekPrefix}_SCP.csv`)
   const sqpPath = path.join(SQP_DIR, `${weekPrefix}_SQP.csv`)
   const salesByDatePath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByDate.csv`)
   const salesByAsinPath = path.join(SALES_DIR, `${weekPrefix}_SalesTraffic-ByAsin.csv`)
   const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
-  const manifestPath = path.join(BA_BASE, `${weekPrefix}_SPAPI-Manifest.json`)
+  const manifestPath = path.join(SPAPI_MANIFEST_DIR, `${weekPrefix}_SPAPI-Manifest.json`)
   const existingManifest = readJsonFile(manifestPath)
 
   if (dryRun) {
@@ -625,7 +646,8 @@ async function main() {
 
   const canReuseFilteredTst =
     existingManifest?.reports?.tstReportId === tstReportId &&
-    existingManifest?.filterKeyword === TST_FILTER_KEYWORD &&
+    existingManifest?.filterMode === 'clickedAsinAny' &&
+    sameStringArray(existingManifest?.targetAsins, TST_TARGET_ASINS) &&
     fs.existsSync(filteredTstPath)
 
   if (canReuseFilteredTst) {
@@ -648,7 +670,9 @@ async function main() {
         weekStart,
         weekEnd,
         heroAsin: HERO_ASIN,
-        filterKeyword: TST_FILTER_KEYWORD,
+        competitorAsin: COMPETITOR_ASIN,
+        filterMode: 'clickedAsinAny',
+        targetAsins: TST_TARGET_ASINS,
         reports: {
           scpReportId,
           sqpReportId,
