@@ -6,7 +6,6 @@ import {
   FormControl,
   InputLabel,
   LinearProgress,
-  MenuItem,
   Select,
   Stack,
   TextField,
@@ -126,58 +125,77 @@ export default function FeedRail({
           sx={{ flexWrap: 'wrap', gap: 1 }}
         >
           <FormControl size="small" sx={{ minWidth: 100 }}>
-            <InputLabel>Window</InputLabel>
+            <InputLabel id="monitoring-window-label" htmlFor="monitoring-window">Window</InputLabel>
             <Select
+              native
+              id="monitoring-window"
+              labelId="monitoring-window-label"
               value={windowValue}
               label="Window"
+              inputProps={{ name: 'window' }}
               onChange={(e) => onWindowChange(e.target.value as typeof windowValue)}
             >
               {WINDOWS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </Select>
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Owner</InputLabel>
+            <InputLabel id="monitoring-owner-label" htmlFor="monitoring-owner">Owner</InputLabel>
             <Select
+              native
+              id="monitoring-owner"
+              labelId="monitoring-owner-label"
               value={owner}
               label="Owner"
+              inputProps={{ name: 'owner' }}
               onChange={(e) => onOwnerChange(e.target.value as OwnerFilter)}
             >
-              <MenuItem value="ALL">All owners</MenuItem>
-              <MenuItem value="OURS">Ours</MenuItem>
-              <MenuItem value="COMPETITOR">Competitors</MenuItem>
+              <option value="ALL">All owners</option>
+              <option value="OURS">Ours</option>
+              <option value="COMPETITOR">Competitors</option>
             </Select>
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Category</InputLabel>
+            <InputLabel id="monitoring-category-label" htmlFor="monitoring-category">Category</InputLabel>
             <Select
+              native
+              id="monitoring-category"
+              labelId="monitoring-category-label"
               value={category}
               label="Category"
+              inputProps={{ name: 'category' }}
               onChange={(e) => onCategoryChange(e.target.value as MonitoringCategory | 'ALL')}
             >
               {CATEGORY_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </Select>
           </FormControl>
 
           <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Severity</InputLabel>
+            <InputLabel id="monitoring-severity-label" htmlFor="monitoring-severity">Severity</InputLabel>
             <Select
+              native
+              id="monitoring-severity"
+              labelId="monitoring-severity-label"
               value={severity}
               label="Severity"
+              inputProps={{ name: 'severity' }}
               onChange={(e) => onSeverityChange(e.target.value as MonitoringSeverity | 'ALL')}
             >
               {SEVERITY_OPTIONS.map((opt) => (
-                <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </Select>
           </FormControl>
 
           <TextField
+            id="monitoring-query"
+            label="Search"
+            name="query"
             size="small"
             placeholder="Search..."
             value={query}

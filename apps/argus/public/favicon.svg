@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="xplan-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#002C51" />
+      <stop offset="1" stop-color="#001f3a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="url(#xplan-bg)" />
+  <rect x="1" y="1" width="62" height="62" rx="14" fill="none" stroke="#00C2B9" stroke-opacity="0.2" />
+
+  <!-- xplan: Bold X mark -->
+  <g fill="none" stroke="#00C2B9" stroke-width="7" stroke-linecap="round">
+    <path d="M19 19L45 45" />
+    <path d="M45 19L19 45" />
+  </g>
+</svg>

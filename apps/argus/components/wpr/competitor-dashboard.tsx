@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  Box,
   Card,
   Divider,
   Stack,
@@ -16,11 +15,11 @@ import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
+import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame';
 import type { WprWeekBundle } from '@/lib/wpr/types';
 import { formatDecimal, formatMoney, formatPercent } from '@/lib/wpr/format';
 
@@ -32,14 +31,13 @@ export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle 
 
   return (
     <Stack spacing={2.5}>
-      <Card sx={{ p: 2.5 }}>
+      <Card sx={{ p: 2.5, minWidth: 0 }}>
         <Stack spacing={1.5}>
           <Typography variant="h6">Competitor weekly trend</Typography>
           <Typography variant="body2" color="text.secondary">
             Tracks the benchmark listing across price, sales, and page-one visibility estimates.
           </Typography>
-          <Box sx={{ height: 320 }}>
-            <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveChartFrame height={320}>
               <LineChart data={bundle.competitorWeekly}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week_label" />
@@ -50,8 +48,7 @@ export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle 
                 <Line yAxisId="right" type="monotone" dataKey="price" stroke="#00C2B9" strokeWidth={2} />
                 <Line yAxisId="right" type="monotone" dataKey="listing_juice" stroke="#F79009" strokeWidth={2} />
               </LineChart>
-            </ResponsiveContainer>
-          </Box>
+          </ResponsiveChartFrame>
         </Stack>
       </Card>
 
@@ -101,6 +98,7 @@ export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle 
         spacing={2.5}
         sx={{
           display: 'grid',
+          minWidth: 0,
           gridTemplateColumns: {
             xs: '1fr',
             xl: 'repeat(2, minmax(0, 1fr))',
@@ -108,7 +106,7 @@ export default function CompetitorDashboard({ bundle }: { bundle: WprWeekBundle 
         }}
       >
         {rankedClusters.slice(0, 4).map((cluster) => (
-          <Card key={cluster.id} sx={{ p: 2.5 }}>
+          <Card key={cluster.id} sx={{ p: 2.5, minWidth: 0 }}>
             <Stack spacing={1.5}>
               <Typography variant="h6">{cluster.cluster}</Typography>
               <Typography variant="body2" color="text.secondary">

@@ -526,6 +526,55 @@ ensure_app_env_loaded() {
   return 1
 }
 
+require_non_empty_env_var() {
+  local key="$1"
+  local value="${!key:-}"
+
+  if [[ -z "${value//[[:space:]]/}" ]]; then
+    error "$key is required for argus deployments"
+    exit 1
+  fi
+}
+
+normalize_argus_media_backend() {
+  local raw="${ARGUS_MEDIA_BACKEND:-}"
+
+  if [[ -z "${raw//[[:space:]]/}" ]]; then
+    printf 'local'
+    return 0
+  fi
+
+  local normalized
+  normalized="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+
+  case "$normalized" in
+    local | s3)
+      printf '%s' "$normalized"
+      return 0
+      ;;
+  esac
+
+  error "Unsupported ARGUS_MEDIA_BACKEND value: $raw"
+  exit 1
+}
+
+run_argus_prebuild_checks() {
+  require_non_empty_env_var "WPR_DATA_DIR"
+
+  local media_backend
+  media_backend="$(normalize_argus_media_backend)"
+
+  if [[ "$media_backend" == "s3" ]]; then
+    log "Step 5b: Skipping Argus local media repair (backend: s3)"
+    return 0
+  fi
+
+  log "Step 5b: Repairing Argus local media store"
+  cd "$app_dir"
+  pnpm exec tsx scripts/repair-local-media.ts
+  log "Argus local media store verified"
+}
+
 log "=========================================="
 log "Starting deployment of $app_key to $environment"
 log "Repository: $REPO_DIR"
@@ -799,6 +848,10 @@ cd "$REPO_DIR"
 if ! ensure_app_env_loaded; then
   error "No env file found for $app_key ($environment); cannot build"
   exit 1
+fi
+
+if [[ "$app_key" == "argus" ]]; then
+  run_argus_prebuild_checks
 fi
 
 set +e
