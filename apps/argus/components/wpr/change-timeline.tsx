@@ -1,5 +1,15 @@
 import { Box, Typography } from '@mui/material';
 import type { WprChangeLogEntry, WeekLabel } from '@/lib/wpr/types';
+import {
+  panelSx,
+  panelHeadSx,
+  panelTitleSx,
+  panelBadgeSx,
+  panelBgDarker,
+  textMuted,
+  textSecondary,
+  teal,
+} from '@/lib/wpr/panel-tokens';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'LISTING ATTRIBUTES': 'rgba(0, 194, 185, 0.7)',
@@ -14,6 +24,72 @@ function getCategoryColor(category: string): string {
   return CATEGORY_COLORS[category.toUpperCase()] ?? 'rgba(255,255,255,0.6)';
 }
 
+const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatDate(raw: string): string {
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return raw;
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+function formatDay(raw: string): string {
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return '';
+  return DAYS[d.getUTCDay()];
+}
+
+const cellSx = {
+  px: 1.5,
+  py: 1,
+  fontSize: '0.8125rem',
+  lineHeight: 1.4,
+  whiteSpace: 'nowrap' as const,
+  borderBottom: '1px solid rgba(255,255,255,0.04)',
+  verticalAlign: 'top' as const,
+};
+
+const headerCellSx = {
+  ...cellSx,
+  py: 0.75,
+  fontSize: '0.6875rem',
+  fontWeight: 700,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.1em',
+  color: textMuted,
+  borderBottom: '1px solid rgba(255,255,255,0.08)',
+  position: 'sticky' as const,
+  top: 0,
+  bgcolor: panelBgDarker,
+  zIndex: 2,
+};
+
+const tagSx = {
+  display: 'inline-block' as const,
+  px: '7px',
+  py: '3px',
+  borderRadius: '4px',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase' as const,
+  whiteSpace: 'nowrap' as const,
+};
+
+const chipSx = {
+  display: 'inline-block' as const,
+  px: '6px',
+  py: '2px',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '3px',
+  fontSize: '0.75rem',
+  fontFamily: 'monospace',
+  fontWeight: 500,
+  color: 'rgba(255,255,255,0.5)',
+  letterSpacing: '0.02em',
+  whiteSpace: 'nowrap' as const,
+};
+
 export default function ChangeTimeline({
   entriesByWeek,
 }: {
@@ -24,291 +100,207 @@ export default function ChangeTimeline({
   const latestWeek = weeks[0];
 
   return (
-    <Box
-      sx={{
-        bgcolor: 'rgba(0, 20, 35, 0.85)',
-        border: '1px solid rgba(255,255,255,0.07)',
-        borderRadius: '12px',
-        p: 1.75,
-      }}
-    >
+    <Box sx={panelSx}>
       {/* Panel header */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mb: 2,
-        }}
-      >
-        <Typography
-          sx={{
-            fontSize: '0.5625rem',
-            fontWeight: 700,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'rgba(255,255,255,0.6)',
-          }}
-        >
-          CHANGE LOG
-        </Typography>
-        <Typography
-          sx={{
-            fontSize: '0.5625rem',
-            fontWeight: 500,
-            letterSpacing: '0.06em',
-            color: 'rgba(255,255,255,0.6)',
-          }}
-        >
-          {totalChanges} TRACKED CHANGE{totalChanges !== 1 ? 'S' : ''} &middot; THROUGH {latestWeek}
+      <Box sx={panelHeadSx}>
+        <Typography sx={panelTitleSx}>Change Log</Typography>
+        <Typography sx={panelBadgeSx}>
+          {totalChanges} tracked change{totalChanges !== 1 ? 's' : ''} &middot; through{' '}
+          {latestWeek}
         </Typography>
       </Box>
 
-      {/* Timeline entries */}
-      <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-        {weeks.map((week) =>
-          entriesByWeek[week].map((entry, entryIdx) => {
-            const isLastInWeek = entryIdx === entriesByWeek[week].length - 1;
-            const isLastWeek = week === weeks[weeks.length - 1];
-            const showLine = !(isLastInWeek && isLastWeek);
+      {/* Table */}
+      <Box sx={{ overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '5%' }}>
+                Week
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '11%' }}>
+                Date
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '9%' }}>
+                Day
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '10%' }}>
+                Category
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '8%' }}>
+                Source
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '28%' }}>
+                Change
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '15%' }}>
+                ASINs
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '14%' }}>
+                Fields
+              </Box>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.map((week, weekIdx) => {
+              const entries = entriesByWeek[week];
+              const showWeekSeparator = weekIdx > 0;
 
-            return (
-              <Box
-                key={entry.id}
-                sx={{ display: 'flex', gap: 1.75, minHeight: '60px' }}
-              >
-                {/* Timeline rail */}
+              return entries.map((entry, entryIdx) => (
                 <Box
+                  component="tr"
+                  key={entry.id}
                   sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    width: '14px',
-                    flexShrink: 0,
-                    pt: '4px',
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
+                    transition: 'background-color 0.1s',
+                    ...(showWeekSeparator &&
+                      entryIdx === 0 && {
+                        '& > td, & > th': {
+                          borderTop: '1px solid rgba(255,255,255,0.08)',
+                        },
+                      }),
                   }}
                 >
-                  {/* Dot */}
-                  <Box
-                    sx={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      bgcolor: 'rgba(0, 194, 185, 0.7)',
-                      border: '2px solid rgba(0, 194, 185, 0.3)',
-                      flexShrink: 0,
-                    }}
-                  />
-                  {/* Vertical line */}
-                  {showLine && (
+                  {/* Week */}
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
                     <Box
-                      sx={{
-                        flex: 1,
-                        width: '1px',
-                        bgcolor: 'rgba(255,255,255,0.07)',
-                        mt: '4px',
-                      }}
-                    />
-                  )}
-                </Box>
-
-                {/* Entry content */}
-                <Box
-                  sx={{
-                    flex: 1,
-                    pb: showLine ? '14px' : '0',
-                  }}
-                >
-                  {/* Meta row: week badge + date + category + source */}
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 0.75,
-                      flexWrap: 'wrap',
-                      mb: 0.625,
-                    }}
-                  >
-                    {/* Week badge */}
-                    <Box
+                      component="span"
                       sx={{
                         px: '6px',
                         py: '2px',
                         bgcolor: 'rgba(0, 194, 185, 0.15)',
                         border: '1px solid rgba(0, 194, 185, 0.25)',
                         borderRadius: '4px',
-                        fontSize: '0.5625rem',
+                        fontSize: '0.75rem',
                         fontWeight: 700,
                         letterSpacing: '0.08em',
-                        color: 'rgba(0, 194, 185, 0.9)',
+                        color: teal,
                       }}
                     >
                       {entry.week_label}
                     </Box>
+                  </Box>
 
-                    {/* Date */}
-                    <Typography
-                      sx={{
-                        fontSize: '0.5625rem',
-                        color: 'rgba(255,255,255,0.6)',
-                        letterSpacing: '0.04em',
-                      }}
-                    >
-                      {entry.date_label}
-                    </Typography>
+                  {/* Date */}
+                  <Box
+                    component="td"
+                    sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}
+                  >
+                    {formatDate(entry.timestamp ?? entry.date_label)}
+                  </Box>
 
-                    {/* Category tag */}
+                  {/* Day */}
+                  <Box
+                    component="td"
+                    sx={{ ...cellSx, textAlign: 'left', color: textMuted }}
+                  >
+                    {formatDay(entry.timestamp ?? entry.date_label)}
+                  </Box>
+
+                  {/* Category */}
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
                     <Box
+                      component="span"
                       sx={{
-                        px: '6px',
-                        py: '2px',
+                        ...tagSx,
                         bgcolor: `${getCategoryColor(entry.category)}15`,
                         border: `1px solid ${getCategoryColor(entry.category)}40`,
-                        borderRadius: '4px',
-                        fontSize: '0.5625rem',
-                        fontWeight: 600,
-                        letterSpacing: '0.06em',
                         color: getCategoryColor(entry.category),
-                        textTransform: 'uppercase',
                       }}
                     >
                       {entry.category}
                     </Box>
+                  </Box>
 
-                    {/* Source tag */}
+                  {/* Source */}
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
                     <Box
+                      component="span"
                       sx={{
-                        px: '6px',
-                        py: '2px',
+                        ...tagSx,
                         border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: '4px',
-                        fontSize: '0.5625rem',
+                        color: textMuted,
                         fontWeight: 500,
-                        letterSpacing: '0.04em',
-                        color: 'rgba(255,255,255,0.6)',
-                        textTransform: 'uppercase',
                       }}
                     >
                       {entry.source}
                     </Box>
                   </Box>
 
-                  {/* Title */}
-                  <Typography
-                    sx={{
-                      fontSize: '0.8125rem',
-                      fontWeight: 700,
-                      color: 'rgba(255,255,255,0.85)',
-                      lineHeight: 1.35,
-                      mb: entry.summary ? '4px' : '0',
-                    }}
+                  {/* Change (title + summary) */}
+                  <Box
+                    component="td"
+                    sx={{ ...cellSx, textAlign: 'left', whiteSpace: 'normal' }}
                   >
-                    {entry.title}
-                  </Typography>
-
-                  {/* Summary */}
-                  {entry.summary && (
                     <Typography
                       sx={{
-                        fontSize: '0.6875rem',
-                        color: 'rgba(255,255,255,0.6)',
-                        lineHeight: 1.5,
-                        mb: 0.75,
+                        fontSize: '0.8125rem',
+                        fontWeight: 700,
+                        color: 'rgba(255,255,255,0.85)',
+                        lineHeight: 1.4,
                       }}
                     >
-                      {entry.summary}
+                      {entry.title}
                     </Typography>
-                  )}
+                    {entry.summary && (
+                      <Typography
+                        sx={{
+                          fontSize: '0.75rem',
+                          color: textMuted,
+                          lineHeight: 1.5,
+                          mt: '2px',
+                        }}
+                      >
+                        {entry.summary}
+                      </Typography>
+                    )}
+                  </Box>
 
                   {/* ASINs */}
-                  {(entry.asins?.length ?? 0) > 0 && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        flexWrap: 'wrap',
-                        mb: (entry.field_labels?.length ?? 0) > 0 ? 0.625 : 0,
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          fontSize: '0.5625rem',
-                          fontWeight: 600,
-                          letterSpacing: '0.08em',
-                          color: 'rgba(255,255,255,0.6)',
-                          textTransform: 'uppercase',
-                          mr: 0.25,
-                        }}
-                      >
-                        ASINs
-                      </Typography>
-                      {(entry.asins ?? []).map((asin) => (
-                        <Box
-                          key={asin}
-                          sx={{
-                            px: '5px',
-                            py: '1px',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '3px',
-                            fontSize: '0.625rem',
-                            fontFamily: 'monospace',
-                            fontWeight: 500,
-                            color: 'rgba(255,255,255,0.5)',
-                            letterSpacing: '0.02em',
-                          }}
-                        >
-                          {asin}
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
+                  <Box
+                    component="td"
+                    sx={{
+                      ...cellSx,
+                      textAlign: 'left',
+                      whiteSpace: 'normal',
+                    }}
+                  >
+                    {(entry.asins?.length ?? 0) > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {(entry.asins ?? []).map((asin) => (
+                          <Box key={asin} component="span" sx={chipSx}>
+                            {asin}
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
 
-                  {/* Field labels */}
-                  {(entry.field_labels?.length ?? 0) > 0 && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          fontSize: '0.5625rem',
-                          fontWeight: 600,
-                          letterSpacing: '0.08em',
-                          color: 'rgba(255,255,255,0.6)',
-                          textTransform: 'uppercase',
-                          mr: 0.25,
-                        }}
-                      >
-                        Fields
-                      </Typography>
-                      {(entry.field_labels ?? []).map((field) => (
-                        <Box
-                          key={field}
-                          sx={{
-                            px: '5px',
-                            py: '1px',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '3px',
-                            fontSize: '0.625rem',
-                            fontWeight: 500,
-                            color: 'rgba(255,255,255,0.5)',
-                          }}
-                        >
-                          {field}
-                        </Box>
-                      ))}
-                    </Box>
-                  )}
+                  {/* Fields */}
+                  <Box
+                    component="td"
+                    sx={{
+                      ...cellSx,
+                      textAlign: 'left',
+                      whiteSpace: 'normal',
+                    }}
+                  >
+                    {(entry.field_labels?.length ?? 0) > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {(entry.field_labels ?? []).map((field) => (
+                          <Box key={field} component="span" sx={chipSx}>
+                            {field}
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
                 </Box>
-              </Box>
-            );
-          }),
-        )}
+              ));
+            })}
+          </tbody>
+        </table>
       </Box>
     </Box>
   );
