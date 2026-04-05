@@ -37,6 +37,7 @@ export default function WprLayout({ children }: { children: React.ReactNode }) {
   const selectedWeek = useWprStore((state) => state.selectedWeek);
   const setSelectedWeek = useWprStore((state) => state.setSelectedWeek);
   const activeTab = resolveTabValue(pathname);
+  const showWeekSelector = activeTab !== '/wpr/changelog' && activeTab !== '/wpr/sources';
 
   useEffect(() => {
     if (data === undefined) return;
@@ -98,32 +99,34 @@ export default function WprLayout({ children }: { children: React.ReactNode }) {
           })}
         </Stack>
 
-        <Stack direction="row" spacing={1} alignItems="center">
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}
-          >
-            Week
-          </Typography>
-          <Select
-            size="small"
-            value={selectedWeek ?? ''}
-            displayEmpty
-            onChange={(event) => setSelectedWeek(event.target.value)}
-            sx={{
-              minWidth: 120,
-              fontSize: '0.75rem',
-              '& .MuiSelect-select': { py: 0.5, px: 1.5 },
-            }}
-          >
-            {data?.weeks.map((week) => (
-              <MenuItem key={week} value={week} sx={{ fontSize: '0.75rem' }}>
-                {week}
-              </MenuItem>
-            ))}
-          </Select>
-        </Stack>
+        {showWeekSelector && (
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontSize: '0.65rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}
+            >
+              Week
+            </Typography>
+            <Select
+              size="small"
+              value={selectedWeek ?? ''}
+              displayEmpty
+              onChange={(event) => setSelectedWeek(event.target.value)}
+              sx={{
+                minWidth: 120,
+                fontSize: '0.75rem',
+                '& .MuiSelect-select': { py: 0.5, px: 1.5 },
+              }}
+            >
+              {data?.weeks.map((week) => (
+                <MenuItem key={week} value={week} sx={{ fontSize: '0.75rem' }}>
+                  {week}
+                </MenuItem>
+              ))}
+            </Select>
+          </Stack>
+        )}
       </Stack>
 
       {error instanceof Error ? <Alert severity="error" sx={{ m: 1 }}>{error.message}</Alert> : null}
