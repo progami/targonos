@@ -18,14 +18,24 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
   const query = listQuerySchema.parse(Object.fromEntries(request.nextUrl.searchParams))
   const search = query.search ? sanitizeSearchQuery(query.search) : null
 
-  const where: Prisma.SkuWhereInput = { isActive: true }
+  const whereClauses: Prisma.SkuWhereInput[] = [
+    { asin: { not: null } },
+    { asin: { not: '' } },
+  ]
   if (search) {
     const escapedSearch = escapeRegex(search)
-    where.OR = [
-      { skuCode: { contains: escapedSearch, mode: 'insensitive' } },
-      { description: { contains: escapedSearch, mode: 'insensitive' } },
-      { asin: { contains: escapedSearch, mode: 'insensitive' } },
-    ]
+    whereClauses.push({
+      OR: [
+        { skuCode: { contains: escapedSearch, mode: 'insensitive' } },
+        { description: { contains: escapedSearch, mode: 'insensitive' } },
+        { asin: { contains: escapedSearch, mode: 'insensitive' } },
+      ],
+    })
+  }
+
+  const where: Prisma.SkuWhereInput = {
+    isActive: true,
+    AND: whereClauses,
   }
 
   const skus = await prisma.sku.findMany({
