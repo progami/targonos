@@ -27,10 +27,10 @@ mkdir -p "$DEST"
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
-open_window() { TAB_ID="$(osascript "$CHROME_HELPER" open-window-tab "$1")"; }
-run_js() { osascript "$CHROME_HELPER" run-js-tab-id "$TAB_ID" "$1"; }
-wait_tab() { osascript "$CHROME_HELPER" wait-tab-id "$TAB_ID" >/dev/null; }
-tab_url() { osascript "$CHROME_HELPER" get-url-tab-id "$TAB_ID"; }
+open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
+run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
+wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
+tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
 
 log "Starting weekly ScaleInsights: $PREFIX"
 
@@ -55,8 +55,8 @@ for _ in $(seq 1 15); do
 done
 
 if [ "$login_state" = "LOGIN_REQUIRED" ]; then
-  SCALEINSIGHTS_EMAIL=$(require_env SCALEINSIGHTS_EMAIL)
-  SCALEINSIGHTS_PASSWORD=$(require_env SCALEINSIGHTS_PASSWORD)
+  SCALEINSIGHTS_EMAIL="$(bitwarden_login_username "portal.scaleinsights.com" "jarrar@targonglobal.com")"
+  SCALEINSIGHTS_PASSWORD="$(bitwarden_login_password "portal.scaleinsights.com" "jarrar@targonglobal.com")"
   email_literal=$(js_string_literal "$SCALEINSIGHTS_EMAIL")
   password_literal=$(js_string_literal "$SCALEINSIGHTS_PASSWORD")
   login_js="(() => {

@@ -11,11 +11,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/../common.sh"
 DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Account Health Dashboard (API)"
 DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Voice of the Customer (Manual)"
 CSV="$DEST_AH/account-health.csv"
 LOG="/tmp/daily-account-health.log"
 TODAY=$(date '+%Y-%m-%d')
+TARGET_URL="https://sellercentral.amazon.com/performance/dashboard"
+VOC_URL="https://sellercentral.amazon.com/voice-of-the-customer/ref=xx_voc_dnav_xx"
+TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 log "Starting daily collection"
@@ -26,6 +30,26 @@ if ! NODE_BIN="$(command -v node)"; then
 fi
 ALERT_EMAIL_SCRIPT="$SCRIPT_DIR/../../lib/send-alert-email.mjs"
 
+ensure_seller_tab() {
+  TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "sellercentral.amazon.com,amazon.com")"
+}
+
+run_js() {
+  run_chrome_helper run-js-tab-id "$TAB_ID" "$1"
+}
+
+wait_tab() {
+  run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null
+}
+
+navigate_tab() {
+  run_chrome_helper navigate-tab-id "$TAB_ID" "$1" >/dev/null
+}
+
+tab_url() {
+  run_chrome_helper get-url-tab-id "$TAB_ID"
+}
+
 send_alert_email() {
   local subject="$1"
   local text="$2"
@@ -33,58 +57,21 @@ send_alert_email() {
   "$NODE_BIN" "$ALERT_EMAIL_SCRIPT" --subject "$subject" --text "$text" >> "$LOG" 2>&1
 }
 
-# Check Chrome is running
-if ! pgrep -x "Google Chrome" > /dev/null 2>&1; then
-  log "ABORT: Chrome not running"
-  osascript -e 'display notification "Account Health: Chrome not running" with title "Daily Monitor"' 2>/dev/null
-  LOG_TAIL="$(tail -200 "$LOG")"
-  send_alert_email "Argus: Account Health failed (Chrome not running)" "$(printf "Daily account health collection aborted: Chrome not running.\nDate: %s\nHost: %s\nLog: %s\n\nLast log lines:\n%s\n" "$TODAY" "$(hostname)" "$LOG" "$LOG_TAIL")"
-  exit 1
-fi
-
-# --- Find SC tab and navigate to Account Health Dashboard ---
-osascript -e '
-tell application "Google Chrome"
-  set w to first window
-  repeat with i from 1 to (count of tabs of w)
-    if URL of tab i of w contains "sellercentral.amazon.com" then
-      set active tab index of w to i
-      set URL of tab i of w to "https://sellercentral.amazon.com/performance/dashboard"
-      return
-    end if
-  end repeat
-  tell active tab of w
-    set URL to "https://sellercentral.amazon.com/performance/dashboard"
-  end tell
-end tell
-'
+ensure_chrome_browser
+ensure_seller_tab
+navigate_tab "$TARGET_URL"
+wait_tab
 sleep 20
 
 # Check for auth redirect
-PAGE_URL=$(osascript -e '
-tell application "Google Chrome"
-  return URL of active tab of first window
-end tell
-')
+PAGE_URL="$(tab_url)"
 if [[ "$PAGE_URL" != *"sellercentral.amazon.com"* ]] || [[ "$PAGE_URL" == *"signin"* ]]; then
   log "SC session expired — attempting relogin"
-  if bash "$SCRIPT_DIR/../relogin.sh"; then
+  if bash "$SCRIPT_DIR/../relogin.sh" "$TARGET_URL"; then
     log "Relogin successful — retrying navigation"
-    osascript -e '
-    tell application "Google Chrome"
-      set w to first window
-      repeat with i from 1 to (count of tabs of w)
-        if URL of tab i of w contains "sellercentral.amazon.com" then
-          set active tab index of w to i
-          set URL of tab i of w to "https://sellercentral.amazon.com/performance/dashboard"
-          return
-        end if
-      end repeat
-      tell active tab of w
-        set URL to "https://sellercentral.amazon.com/performance/dashboard"
-      end tell
-    end tell
-    '
+    ensure_seller_tab
+    navigate_tab "$TARGET_URL"
+    wait_tab
     sleep 20
   else
     log "ABORT: Relogin failed"
@@ -96,10 +83,7 @@ if [[ "$PAGE_URL" != *"sellercentral.amazon.com"* ]] || [[ "$PAGE_URL" == *"sign
 fi
 
 # --- Extract Dashboard Metrics ---
-DASHBOARD_JSON=$(osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    return execute javascript "
+DASHBOARD_JSON="$(run_js '
       const t = document.body.innerText;
       JSON.stringify({
         health_rating: t.match(/selling policies\\.\\s*Learn more\\.\\s*(\\d+)/)?.[1] || \"\",
@@ -115,28 +99,17 @@ tell application "Google Chrome"
         violations_total: t.match(/View all \\((\\d+)\\)/)?.[1] || \"0\",
         total_orders_60d: t.match(/(\\d[\\d,]*) of ([\\d,]+) orders/)?.[0] || \"\"
       });
-    "
-  end tell
-end tell
-' 2>/dev/null)
+')"
 
 log "Dashboard extracted"
 
 # --- Navigate to VoC ---
-osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    set URL to "https://sellercentral.amazon.com/voice-of-the-customer/ref=xx_voc_dnav_xx"
-  end tell
-end tell
-'
+navigate_tab "$VOC_URL"
+wait_tab
 sleep 20
 
 # --- Extract VoC Metrics ---
-VOC_JSON=$(osascript -e '
-tell application "Google Chrome"
-  tell active tab of first window
-    return execute javascript "
+VOC_JSON="$(run_js '
       const t = document.body.innerText;
       const cx = t.match(/CX Health breakdown of your listings\\s+How is CX Health calculated\\?\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)/);
       const listings = [];
@@ -154,10 +127,7 @@ tell application "Google Chrome"
         cx_excellent: cx?.[5] || \"0\",
         listings: listings
       });
-    "
-  end tell
-end tell
-' 2>/dev/null)
+')"
 
 log "VoC extracted"
 
