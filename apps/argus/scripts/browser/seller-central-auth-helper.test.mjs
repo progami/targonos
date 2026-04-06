@@ -58,6 +58,16 @@ There is no Amazon verification content in this message.
   )
 })
 
+test('extractAmazonEmailVerificationCode ignores non-Amazon verification messages', () => {
+  assert.equal(
+    extractAmazonEmailVerificationCode(`
+Your verification code is: 624909
+Use it to finish signing in to Example Service.
+`),
+    '',
+  )
+})
+
 test('findLatestAmazonEmailVerificationCode picks the newest matching message', () => {
   const code = findLatestAmazonEmailVerificationCode([
     {

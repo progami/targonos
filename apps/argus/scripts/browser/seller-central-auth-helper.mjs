@@ -40,7 +40,7 @@ function collectNestedStrings(value, parts) {
 
 export function extractAmazonEmailVerificationCode(messageText) {
   const text = String(messageText || '')
-  if (!/amazon\.com|account data access attempt|verification code/i.test(text)) {
+  if (!/amazon\.com|account data access attempt/i.test(text)) {
     return ''
   }
 
