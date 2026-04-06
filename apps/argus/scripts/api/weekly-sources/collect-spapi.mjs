@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import https from 'node:https'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import {
   REPO_ROOT,
@@ -29,6 +29,7 @@ const TST_REPORT_TYPE = 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
 const DONE_REPORT_STATUSES = new Set(['DONE'])
+const REPORT_WAIT_TIMEOUT_MS = 120 * 60 * 1000
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
 const SPAPI_MANIFEST_DIR = path.join(MONITORING_BASE, 'Logs', 'weekly-api-sources', 'metadata')
@@ -253,7 +254,31 @@ function parseArgs() {
   }
 }
 
-async function createAndWaitReport(client, body, label) {
+export function createManifestState(existingManifest, { weekCode, weekStart, weekEnd }) {
+  return {
+    generatedAt: new Date().toISOString(),
+    weekCode,
+    weekStart,
+    weekEnd,
+    heroAsin: HERO_ASIN,
+    competitorAsin: COMPETITOR_ASIN,
+    filterMode: 'clickedAsinAny',
+    targetAsins: [...TST_TARGET_ASINS],
+    reports: { ...(existingManifest?.reports ?? {}) },
+  }
+}
+
+export function writeManifest(file, manifestState) {
+  manifestState.generatedAt = new Date().toISOString()
+  fs.writeFileSync(file, JSON.stringify(manifestState, null, 2))
+}
+
+export function persistManifestReportId(file, manifestState, reportKey, reportId) {
+  manifestState.reports[reportKey] = reportId
+  writeManifest(file, manifestState)
+}
+
+async function createAndWaitReport(client, body, label, onReportCreated = null) {
   const created = await client.callAPI({
     operation: 'createReport',
     endpoint: 'reports',
@@ -261,12 +286,15 @@ async function createAndWaitReport(client, body, label) {
   })
   const reportId = created?.reportId
   if (!reportId) throw new Error(`${label}: missing reportId`)
+  if (onReportCreated) {
+    onReportCreated(reportId)
+  }
 
   return waitForReport(client, reportId, label)
 }
 
 async function waitForReport(client, reportId, label) {
-  const deadline = Date.now() + 45 * 60 * 1000
+  const deadline = Date.now() + REPORT_WAIT_TIMEOUT_MS
   while (true) {
     const report = await client.callAPI({
       operation: 'getReport',
@@ -331,7 +359,7 @@ async function findReusableReport(client, { reportType, marketplaceId, dataStart
     endpoint: 'reports',
     query: {
       reportTypes: [reportType],
-      pageSize: 20,
+      pageSize: 100,
     },
   })
 
@@ -376,7 +404,7 @@ async function loadManifestReport(client, manifestReportId, criteria) {
   }
 }
 
-async function resolveReportId(client, { reportType, reportWindow, label, reportOptions = null, manifestReportId = '' }) {
+async function resolveReportId(client, { reportType, reportWindow, label, reportOptions = null, manifestReportId = '', onReportCreated = null }) {
   const criteria = {
     reportType,
     marketplaceId: reportWindow.marketplaceIds[0],
@@ -418,7 +446,7 @@ async function resolveReportId(client, { reportType, reportWindow, label, report
     body.reportOptions = reportOptions
   }
 
-  return createAndWaitReport(client, body, label)
+  return createAndWaitReport(client, body, label, onReportCreated)
 }
 
 async function downloadJsonReport(client, reportId) {
@@ -546,6 +574,7 @@ async function main() {
   const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
   const manifestPath = path.join(SPAPI_MANIFEST_DIR, `${weekPrefix}_SPAPI-Manifest.json`)
   const existingManifest = readJsonFile(manifestPath)
+  const manifestState = createManifestState(existingManifest, { weekCode, weekStart, weekEnd })
 
   if (dryRun) {
     console.log(`[SP-API][dry-run] scope=${scopeLabel}`)
@@ -586,6 +615,7 @@ async function main() {
     dataEndTime: `${weekEnd}T23:59:59Z`,
     marketplaceIds: [marketplaceId],
   }
+  const rememberReportId = (reportKey) => (reportId) => persistManifestReportId(manifestPath, manifestState, reportKey, reportId)
 
   const scpReportId = await resolveReportId(client, {
     reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
@@ -593,7 +623,9 @@ async function main() {
     label: `${scopeLabel} SCP`,
     reportOptions: { reportPeriod: 'WEEK' },
     manifestReportId: existingManifest?.reports?.scpReportId,
+    onReportCreated: rememberReportId('scpReportId'),
   })
+  rememberReportId('scpReportId')(scpReportId)
   const canReuseScpOutput = existingManifest?.reports?.scpReportId === scpReportId && fs.existsSync(scpPath)
   if (canReuseScpOutput) {
     console.log(`[SP-API] ${scopeLabel} SCP output already current for reportId=${scpReportId}`)
@@ -608,7 +640,9 @@ async function main() {
     label: `${scopeLabel} SQP`,
     reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
     manifestReportId: existingManifest?.reports?.sqpReportId,
+    onReportCreated: rememberReportId('sqpReportId'),
   })
+  rememberReportId('sqpReportId')(sqpReportId)
   const canReuseSqpOutput = existingManifest?.reports?.sqpReportId === sqpReportId && fs.existsSync(sqpPath)
   if (canReuseSqpOutput) {
     console.log(`[SP-API] ${scopeLabel} SQP output already current for reportId=${sqpReportId}`)
@@ -623,7 +657,9 @@ async function main() {
     label: `${scopeLabel} SalesTraffic`,
     reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
     manifestReportId: existingManifest?.reports?.salesReportId,
+    onReportCreated: rememberReportId('salesReportId'),
   })
+  rememberReportId('salesReportId')(salesReportId)
   const canReuseSalesOutput =
     existingManifest?.reports?.salesReportId === salesReportId &&
     fs.existsSync(salesByDatePath) &&
@@ -642,7 +678,9 @@ async function main() {
     label: `${scopeLabel} TST`,
     reportOptions: { reportPeriod: 'WEEK' },
     manifestReportId: existingManifest?.reports?.tstReportId,
+    onReportCreated: rememberReportId('tstReportId'),
   })
+  rememberReportId('tstReportId')(tstReportId)
 
   const canReuseFilteredTst =
     existingManifest?.reports?.tstReportId === tstReportId &&
@@ -661,34 +699,14 @@ async function main() {
     fs.rmSync(rawTstPath, { force: true })
   }
 
-  fs.writeFileSync(
-    manifestPath,
-    JSON.stringify(
-      {
-        generatedAt: new Date().toISOString(),
-        weekCode,
-        weekStart,
-        weekEnd,
-        heroAsin: HERO_ASIN,
-        competitorAsin: COMPETITOR_ASIN,
-        filterMode: 'clickedAsinAny',
-        targetAsins: TST_TARGET_ASINS,
-        reports: {
-          scpReportId,
-          sqpReportId,
-          salesReportId,
-          tstReportId,
-        },
-      },
-      null,
-      2,
-    ),
-  )
+  writeManifest(manifestPath, manifestState)
 
   console.log(`[SP-API] Completed ${scopeLabel}`)
 }
 
-main().catch((error) => {
-  console.error(error?.stack || error?.message || String(error))
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error?.stack || error?.message || String(error))
+    process.exit(1)
+  })
+}

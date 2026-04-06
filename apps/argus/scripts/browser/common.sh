@@ -2,7 +2,7 @@
 
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
-CHROME_HELPER="$COMMON_DIR/chrome-helper.applescript"
+CHROME_HELPER="$COMMON_DIR/chrome-devtools-helper.mjs"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -10,6 +10,83 @@ if ! NODE_BIN="$(command -v node)"; then
   echo "Node.js not found in PATH=$PATH" >&2
   exit 1
 fi
+
+run_chrome_helper() {
+  "$NODE_BIN" "$CHROME_HELPER" "$@"
+}
+
+ensure_chrome_browser() {
+  run_chrome_helper ensure-browser >/dev/null
+}
+
+bitwarden_session() {
+  if [ -n "${BW_SESSION:-}" ]; then
+    printf '%s' "$BW_SESSION"
+    return 0
+  fi
+
+  local password
+  local session
+
+  password="$(security find-generic-password -a "$USER" -s bitwarden-master-password -w)"
+  session="$(BW_PASSWORD="$password" bw unlock --passwordenv BW_PASSWORD --raw)"
+  export BW_SESSION="$session"
+  security add-generic-password -U -a "$USER" -s bitwarden-cli-session -w "$session" >/dev/null
+  printf '%s' "$session"
+}
+
+bitwarden_login_field() {
+  local item_name="$1"
+  local login_username="$2"
+  local field_name="$3"
+  local payload
+  local session
+
+  session="$(bitwarden_session)"
+  payload="$(BW_SESSION="$session" bw list items --search "$item_name")"
+
+  ITEM_NAME="$item_name" LOGIN_USERNAME="$login_username" FIELD_NAME="$field_name" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import sys
+
+items = json.loads(os.environ["PAYLOAD"])
+item_name = os.environ["ITEM_NAME"]
+login_username = os.environ["LOGIN_USERNAME"]
+field_name = os.environ["FIELD_NAME"]
+
+for item in items:
+    if item.get("name") != item_name:
+        continue
+
+    login = item.get("login") or {}
+    if login.get("username") != login_username:
+        continue
+
+    if field_name == "username":
+        value = login.get("username")
+    elif field_name == "password":
+        value = login.get("password")
+    else:
+        raise SystemExit(1)
+
+    if not value:
+        raise SystemExit(1)
+
+    print(value)
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
+bitwarden_login_username() {
+  bitwarden_login_field "$1" "$2" "username"
+}
+
+bitwarden_login_password() {
+  bitwarden_login_field "$1" "$2" "password"
+}
 
 load_env_file() {
   local file="$1"
