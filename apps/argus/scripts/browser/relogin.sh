@@ -187,15 +187,15 @@ select_seller_account() {
   marketplace_literal=$(js_string_literal "$SELLER_CENTRAL_MARKETPLACE_LABEL")
   local js="(() => {
     const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
-    const buttons = Array.from(document.querySelectorAll('button,input,a'));
-    const findByLabel = (label) => buttons.find((element) => clean(element.innerText || element.textContent || element.value || '') === label);
+    const buttons = () => Array.from(document.querySelectorAll('button,input,a'));
+    const findByLabel = (label) => buttons().find((element) => clean(element.innerText || element.textContent || element.value || '') === label);
     const accountButton = findByLabel(${account_literal});
     if (!accountButton) return 'NO_ACCOUNT_BUTTON';
     accountButton.click();
     const marketplaceButton = findByLabel(${marketplace_literal});
     if (!marketplaceButton) return 'NO_MARKETPLACE_BUTTON';
     marketplaceButton.click();
-    const submitButton = buttons.find((element) => /select account/i.test(clean(element.innerText || element.textContent || element.value || '')));
+    const submitButton = buttons().find((element) => /select account/i.test(clean(element.innerText || element.textContent || element.value || '')));
     if (!submitButton) return 'NO_SELECT_ACCOUNT_BUTTON';
     submitButton.click();
     return 'ACCOUNT_SELECTED';
