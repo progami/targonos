@@ -11,6 +11,7 @@ DL="${ARGUS_BRAND_METRICS_DOWNLOAD_DIR:-$HOME/Downloads}"
 LOG="${ARGUS_BRAND_METRICS_LOG:-/tmp/weekly-brand-metrics.log}"
 TARGET_URL_BASE="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899"
 DOWNLOAD_PATTERN="$DL/Caelum_Star_*_Overview_*.csv"
+REFERENCE_DATE="$(date '+%Y-%m-%d')"
 
 if [ "$#" -eq 2 ]; then
   REQUEST_MODE="explicit-week"
@@ -33,6 +34,8 @@ open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+brand_metrics_source_limit_note() { "$NODE_BIN" "$SCRIPT_DIR/../brand-metrics-availability.mjs" source-limit-note; }
+brand_metrics_availability_lag_detail() { "$NODE_BIN" "$SCRIPT_DIR/../brand-metrics-availability.mjs" lag-detail "$1" "$2"; }
 
 json_field() {
   "$NODE_BIN" -e '
@@ -317,6 +320,9 @@ download_export() {
 }
 
 log "Starting weekly Brand Metrics (${REQUEST_MODE})"
+if [ "$REQUEST_MODE" = "last-available-week" ]; then
+  log "NOTE: $(brand_metrics_source_limit_note)"
+fi
 
 open_window "$TARGET_URL"
 sleep 8
@@ -378,5 +384,8 @@ copy_file_with_node "$downloaded_file" "$TARGET_FILE"
 
 log "Saved: ${PREFIX}_BrandMetrics.csv"
 log "CSV details: brand=${ACTUAL_BRAND:-unknown} category=${ACTUAL_CATEGORY:-unknown} range=${ACTUAL_START_DATE}..${ACTUAL_END_DATE}"
+if [ "$REQUEST_MODE" = "last-available-week" ]; then
+  log "NOTE: $(brand_metrics_availability_lag_detail "$ACTUAL_END_DATE" "$REFERENCE_DATE")"
+fi
 log "Done"
 tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

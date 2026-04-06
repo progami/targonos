@@ -3,6 +3,7 @@
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
 CHROME_HELPER="$COMMON_DIR/chrome-devtools-helper.mjs"
+TOTP_HELPER="$COMMON_DIR/totp-helper.mjs"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
@@ -43,6 +44,7 @@ bitwarden_login_field() {
   local session
 
   session="$(bitwarden_session)"
+  export BW_SESSION="$session"
   payload="$(BW_SESSION="$session" bw list items --search "$item_name")"
 
   ITEM_NAME="$item_name" LOGIN_USERNAME="$login_username" FIELD_NAME="$field_name" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
@@ -80,12 +82,71 @@ raise SystemExit(1)
 PY
 }
 
+bitwarden_login_item_id() {
+  local item_name="$1"
+  local login_username="$2"
+  local payload
+  local session
+
+  session="$(bitwarden_session)"
+  export BW_SESSION="$session"
+  payload="$(BW_SESSION="$session" bw list items --search "$item_name")"
+
+  ITEM_NAME="$item_name" LOGIN_USERNAME="$login_username" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import sys
+
+items = json.loads(os.environ["PAYLOAD"])
+item_name = os.environ["ITEM_NAME"]
+login_username = os.environ["LOGIN_USERNAME"]
+
+for item in items:
+    if item.get("name") != item_name:
+        continue
+
+    login = item.get("login") or {}
+    if login.get("username") != login_username:
+        continue
+
+    item_id = item.get("id")
+    if not item_id:
+        raise SystemExit(1)
+
+    print(item_id)
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 bitwarden_login_username() {
   bitwarden_login_field "$1" "$2" "username"
 }
 
 bitwarden_login_password() {
   bitwarden_login_field "$1" "$2" "password"
+}
+
+bitwarden_login_totp() {
+  local item_name="$1"
+  local login_username="$2"
+  local item_id
+  local item_json
+  local session
+  local totp_value
+
+  session="$(bitwarden_session)"
+  export BW_SESSION="$session"
+  item_id="$(bitwarden_login_item_id "$item_name" "$login_username")"
+  item_json="$(BW_SESSION="$session" bw get item "$item_id")"
+  totp_value="$(printf '%s' "$item_json" | jq -r '.login.totp // ""')"
+
+  if [ -z "$totp_value" ]; then
+    return 1
+  fi
+
+  "$NODE_BIN" "$TOTP_HELPER" generate "$totp_value"
 }
 
 load_env_file() {
