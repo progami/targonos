@@ -26,10 +26,10 @@ mkdir -p "$DEST"
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
-open_window() { TAB_ID="$(osascript "$CHROME_HELPER" open-window-tab "$1")"; }
-run_js() { osascript "$CHROME_HELPER" run-js-tab-id "$TAB_ID" "$1"; }
-wait_tab() { osascript "$CHROME_HELPER" wait-tab-id "$TAB_ID" >/dev/null; }
-tab_url() { osascript "$CHROME_HELPER" get-url-tab-id "$TAB_ID"; }
+open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
+run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
+wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
+tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
 
 json_stringify() {
   "$NODE_BIN" -e '

@@ -6,39 +6,65 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-load_monitoring_env
-
 TARGET_URL="${1:-https://sellercentral.amazon.com/home}"
-SC_EMAIL="${SELLER_CENTRAL_EMAIL:-jarrar@targonglobal.com}"
-SC_PASSWORD="${SELLER_CENTRAL_PASSWORD:-}"
-GOOGLE_EMAIL="${GOOGLE_EMAIL:-$SC_EMAIL}"
-GOOGLE_PASSWORD="${GOOGLE_PASSWORD:-}"
+SC_EMAIL="$(bitwarden_login_username "sellercentral.amazon.com" "jarrar@targonglobal.com")"
+SC_PASSWORD="$(bitwarden_login_password "sellercentral.amazon.com" "jarrar@targonglobal.com")"
+GOOGLE_EMAIL="$(bitwarden_login_username "accounts.google.com" "jarraramjad@gmail.com")"
+GOOGLE_PASSWORD="$(bitwarden_login_password "accounts.google.com" "jarraramjad@gmail.com")"
 LOG="/tmp/sc-relogin.log"
+SELLER_TAB_ID=""
+VOICE_TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
-run_js() {
-  osascript "$CHROME_HELPER" run-js "$1"
+run_js_for_tab() {
+  local tab_id="$1"
+  local js_code="$2"
+  run_chrome_helper run-js-tab-id "$tab_id" "$js_code"
 }
 
-wait_tab() {
-  osascript "$CHROME_HELPER" wait-tab >/dev/null
+wait_for_tab() {
+  local tab_id="$1"
+  run_chrome_helper wait-tab-id "$tab_id" >/dev/null
 }
 
-navigate_tab() {
-  osascript "$CHROME_HELPER" navigate-tab "$1" >/dev/null
+navigate_tab_by_id() {
+  local tab_id="$1"
+  local target_url="$2"
+  run_chrome_helper navigate-tab-id "$tab_id" "$target_url" >/dev/null
 }
 
-current_url() {
-  osascript "$CHROME_HELPER" get-url
+tab_url_for_id() {
+  local tab_id="$1"
+  run_chrome_helper get-url-tab-id "$tab_id"
 }
 
 ensure_seller_tab() {
-  osascript "$CHROME_HELPER" ensure-tab "$TARGET_URL" "sellercentral.amazon.com,amazon.com" >/dev/null
+  SELLER_TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "sellercentral.amazon.com,amazon.com")"
 }
 
 ensure_voice_tab() {
-  osascript "$CHROME_HELPER" ensure-tab "https://voice.google.com/u/0/messages" "voice.google.com,accounts.google.com" >/dev/null
+  VOICE_TAB_ID="$(run_chrome_helper ensure-tab-id "https://voice.google.com/u/0/messages" "voice.google.com,accounts.google.com")"
+}
+
+run_js() {
+  run_js_for_tab "$SELLER_TAB_ID" "$1"
+}
+
+wait_tab() {
+  wait_for_tab "$SELLER_TAB_ID"
+}
+
+navigate_tab() {
+  navigate_tab_by_id "$SELLER_TAB_ID" "$1"
+}
+
+current_url() {
+  tab_url_for_id "$SELLER_TAB_ID"
+}
+
+run_voice_js() {
+  run_js_for_tab "$VOICE_TAB_ID" "$1"
 }
 
 inspect_seller_state() {
@@ -123,7 +149,7 @@ inspect_voice_state() {
     }
     return ["UNKNOWN", href, title].join("|");
   })();'
-  run_js "$js"
+  run_voice_js "$js"
 }
 
 fill_google_email() {
@@ -143,7 +169,7 @@ fill_google_email() {
     if (button) button.click();
     return 'GOOGLE_EMAIL_SUBMITTED';
   })();"
-  run_js "$js" >/dev/null
+  run_voice_js "$js" >/dev/null
 }
 
 fill_google_password() {
@@ -168,7 +194,7 @@ fill_google_password() {
     if (button) button.click();
     return 'GOOGLE_PASSWORD_SUBMITTED';
   })();"
-  run_js "$js" >/dev/null
+  run_voice_js "$js" >/dev/null
 }
 
 extract_google_voice_code() {
@@ -187,7 +213,7 @@ extract_google_voice_code() {
     }
     return "";
   })();'
-  run_js "$js"
+  run_voice_js "$js"
 }
 
 click_likely_amazon_voice_thread() {
@@ -199,7 +225,7 @@ click_likely_amazon_voice_thread() {
     target.click();
     return "THREAD_CLICKED";
   })();'
-  run_js "$js" >/dev/null
+  run_voice_js "$js" >/dev/null
 }
 
 fetch_google_voice_code() {
@@ -207,7 +233,7 @@ fetch_google_voice_code() {
 
   for _ in $(seq 1 30); do
     ensure_voice_tab
-    wait_tab
+    wait_for_tab "$VOICE_TAB_ID"
 
     local state
     state=$(inspect_voice_state)
@@ -234,7 +260,7 @@ fetch_google_voice_code() {
           printf '%s' "$code"
           return 0
         fi
-        run_js "location.reload(); 'RELOADED';" >/dev/null
+        run_voice_js "location.reload(); 'RELOADED';" >/dev/null
         ;;
     esac
 

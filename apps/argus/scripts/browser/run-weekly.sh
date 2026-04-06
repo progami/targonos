@@ -43,7 +43,7 @@ append_detail_log_tail() {
 
 log "=== Weekly Master Run Starting ==="
 
-open -a "Google Chrome"
+ensure_chrome_browser
 sleep 2
 
 FAILED=0
