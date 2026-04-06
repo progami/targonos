@@ -1,5 +1,5 @@
 #!/bin/bash
-# Seller Central / Amazon relogin flow via Chrome + Google Chat + Bitwarden TOTP.
+# Seller Central / Amazon relogin flow via Chrome + Bitwarden TOTP.
 
 set -euo pipefail
 
@@ -10,9 +10,6 @@ TARGET_URL="${1:-https://sellercentral.amazon.com/home}"
 SELLER_CENTRAL_LOGIN_USERNAME="shoaibgondal@targonglobal.com"
 SELLER_CENTRAL_ACCOUNT_LABEL="Targon LLC"
 SELLER_CENTRAL_MARKETPLACE_LABEL="United States"
-SELLER_CENTRAL_CHAT_SUBJECT="shoaibgondal@targonglobal.com"
-SELLER_CENTRAL_CHAT_SPACE_ID="spaces/AAQASWEpYjs"
-SELLER_CENTRAL_CHAT_HELPER="$SCRIPT_DIR/seller-central-auth-helper.mjs"
 SC_EMAIL="$(bitwarden_login_username "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
 SC_PASSWORD="$(bitwarden_login_password "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
 LOG="/tmp/sc-relogin.log"
@@ -68,9 +65,9 @@ inspect_seller_state() {
 
     if (href.includes("/account-switcher")) return ["ACCOUNT_SWITCHER", href, title].join("|");
     if (/enroll a 2-step verification authenticator/i.test(body)) return ["AUTH_APP_ENROLLMENT", href, title].join("|");
-    if (/enter verification code|sent the code to your email/i.test(body) && hasInput) return ["EMAIL_OTP", href, title].join("|");
     if (/choose where to receive the code|enter otp from authenticator app/i.test(body)) return ["AUTH_APP_METHOD", href, title].join("|");
-    if (/for added security, please enter the one time password|enter code:/i.test(body) && hasInput) return ["AUTH_APP_OTP", href, title].join("|");
+    if (/sent the code to your email/i.test(body) && hasInput) return ["EMAIL_OTP_UNSUPPORTED", href, title].join("|");
+    if (/for added security, please enter the one time password|enter code:|enter verification code/i.test(body) && hasInput) return ["AUTH_APP_OTP", href, title].join("|");
     if (!href.includes("signin") && !href.includes("/ap/") && !/sign in|enter the characters you see below|solve this puzzle/i.test(body)) {
       return ["AUTHENTICATED", href, title].join("|");
     }
@@ -130,10 +127,6 @@ fill_seller_password() {
     return 'PASSWORD_SUBMITTED';
   })();"
   run_js "$js"
-}
-
-fetch_chat_verification_code() {
-  "$NODE_BIN" "$SELLER_CENTRAL_CHAT_HELPER" latest-chat-code "$SELLER_CENTRAL_CHAT_SUBJECT" "$SELLER_CENTRAL_CHAT_SPACE_ID"
 }
 
 request_authenticator_otp() {
@@ -235,20 +228,14 @@ for _ in $(seq 1 60); do
       password_status="$(fill_seller_password)"
       log "Password step: $password_status"
       ;;
-    EMAIL_OTP)
-      log "Fetching Seller Central email verification code from Google Chat"
-      if ! otp_code="$(fetch_chat_verification_code)"; then
-        log "FAILED: Seller Central email verification code not found in Google Chat"
-        exit 1
-      fi
-      ensure_seller_tab
-      otp_status="$(submit_seller_otp "$otp_code")"
-      log "Email OTP step: $otp_status"
-      ;;
     AUTH_APP_METHOD)
       log "Requesting authenticator OTP prompt"
       request_status="$(request_authenticator_otp)"
       log "Authenticator method step: $request_status"
+      ;;
+    EMAIL_OTP_UNSUPPORTED)
+      log "FAILED: Seller Central presented an email OTP challenge; Bitwarden TOTP is the only supported MFA path"
+      exit 1
       ;;
     AUTH_APP_OTP)
       log "Submitting authenticator OTP"
