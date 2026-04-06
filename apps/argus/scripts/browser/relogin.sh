@@ -1,5 +1,5 @@
 #!/bin/bash
-# Seller Central / Amazon relogin flow via Chrome + Google Voice OTP.
+# Seller Central / Amazon relogin flow via Chrome + Google Chat + Bitwarden TOTP.
 
 set -euo pipefail
 
@@ -7,13 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 TARGET_URL="${1:-https://sellercentral.amazon.com/home}"
-SC_EMAIL="$(bitwarden_login_username "sellercentral.amazon.com" "jarrar@targonglobal.com")"
-SC_PASSWORD="$(bitwarden_login_password "sellercentral.amazon.com" "jarrar@targonglobal.com")"
-GOOGLE_EMAIL="$(bitwarden_login_username "accounts.google.com" "jarraramjad@gmail.com")"
-GOOGLE_PASSWORD="$(bitwarden_login_password "accounts.google.com" "jarraramjad@gmail.com")"
+SELLER_CENTRAL_LOGIN_USERNAME="shoaibgondal@targonglobal.com"
+SELLER_CENTRAL_ACCOUNT_LABEL="Targon LLC"
+SELLER_CENTRAL_MARKETPLACE_LABEL="United States"
+SELLER_CENTRAL_CHAT_SUBJECT="shoaibgondal@targonglobal.com"
+SELLER_CENTRAL_CHAT_SPACE_ID="spaces/AAQASWEpYjs"
+SELLER_CENTRAL_CHAT_HELPER="$SCRIPT_DIR/seller-central-auth-helper.mjs"
+SC_EMAIL="$(bitwarden_login_username "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
+SC_PASSWORD="$(bitwarden_login_password "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
 LOG="/tmp/sc-relogin.log"
 SELLER_TAB_ID=""
-VOICE_TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
@@ -43,10 +46,6 @@ ensure_seller_tab() {
   SELLER_TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "sellercentral.amazon.com,amazon.com")"
 }
 
-ensure_voice_tab() {
-  VOICE_TAB_ID="$(run_chrome_helper ensure-tab-id "https://voice.google.com/u/0/messages" "voice.google.com,accounts.google.com")"
-}
-
 run_js() {
   run_js_for_tab "$SELLER_TAB_ID" "$1"
 }
@@ -59,24 +58,22 @@ navigate_tab() {
   navigate_tab_by_id "$SELLER_TAB_ID" "$1"
 }
 
-current_url() {
-  tab_url_for_id "$SELLER_TAB_ID"
-}
-
-run_voice_js() {
-  run_js_for_tab "$VOICE_TAB_ID" "$1"
-}
-
 inspect_seller_state() {
   local js='(() => {
     const clean = (value) => (value || "").replace(/[|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
     const href = clean(location.href || "");
     const title = clean(document.title || "");
     const body = document.body ? clean(document.body.innerText || "") : "";
+    const hasInput = Array.from(document.querySelectorAll("input")).length > 0;
+
+    if (href.includes("/account-switcher")) return ["ACCOUNT_SWITCHER", href, title].join("|");
+    if (/enroll a 2-step verification authenticator/i.test(body)) return ["AUTH_APP_ENROLLMENT", href, title].join("|");
+    if (/enter verification code|sent the code to your email/i.test(body) && hasInput) return ["EMAIL_OTP", href, title].join("|");
+    if (/choose where to receive the code|enter otp from authenticator app/i.test(body)) return ["AUTH_APP_METHOD", href, title].join("|");
+    if (/for added security, please enter the one time password|enter code:/i.test(body) && hasInput) return ["AUTH_APP_OTP", href, title].join("|");
     if (!href.includes("signin") && !href.includes("/ap/") && !/sign in|enter the characters you see below|solve this puzzle/i.test(body)) {
       return ["AUTHENTICATED", href, title].join("|");
     }
-    if (document.getElementById("auth-mfa-otpcode")) return ["OTP", href, title].join("|");
     if (document.getElementById("ap_password")) return ["PASSWORD", href, title].join("|");
     if (document.getElementById("ap_email")) return ["EMAIL", href, title].join("|");
     if (/enter the characters you see below|solve this puzzle/i.test(body)) return ["CAPTCHA", href, title].join("|");
@@ -98,11 +95,11 @@ fill_seller_email() {
     input.value = value;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.dispatchEvent(new Event('change', { bubbles: true }));
-    const button = document.getElementById('continue') || Array.from(document.querySelectorAll('input,button')).find((el) => /continue|next/i.test((el.value || el.innerText || '').trim()));
+    const button = document.getElementById('continue') || Array.from(document.querySelectorAll('input,button')).find((element) => /continue|next/i.test((element.value || element.innerText || '').trim()));
     if (button) button.click();
     return 'EMAIL_SUBMITTED';
   })();"
-  run_js "$js" >/dev/null
+  run_js "$js"
 }
 
 fill_seller_password() {
@@ -128,146 +125,28 @@ fill_seller_password() {
       remember.checked = true;
       remember.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    const button = document.getElementById('signInSubmit') || Array.from(document.querySelectorAll('input,button')).find((el) => /sign in|login|continue/i.test((el.value || el.innerText || '').trim()));
+    const button = document.getElementById('signInSubmit') || Array.from(document.querySelectorAll('input,button')).find((element) => /sign in|login|continue/i.test((element.value || element.innerText || '').trim()));
     if (button) button.click();
     return 'PASSWORD_SUBMITTED';
   })();"
-  run_js "$js" >/dev/null
+  run_js "$js"
 }
 
-inspect_voice_state() {
-  local js='(() => {
-    const clean = (value) => (value || "").replace(/[|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
-    const href = clean(location.href || "");
-    const title = clean(document.title || "");
-    const passwordInput = document.querySelector("input[type=password]");
-    const emailInput = document.querySelector("input[type=email], input[autocomplete=username], input[name*=identifier i], input[name*=email i]");
-    if (location.host.includes("voice.google.com")) return ["VOICE", href, title].join("|");
-    if (location.host.includes("accounts.google.com")) {
-      if (passwordInput) return ["GOOGLE_PASSWORD", href, title].join("|");
-      if (emailInput) return ["GOOGLE_EMAIL", href, title].join("|");
-    }
-    return ["UNKNOWN", href, title].join("|");
-  })();'
-  run_voice_js "$js"
+fetch_chat_verification_code() {
+  "$NODE_BIN" "$SELLER_CENTRAL_CHAT_HELPER" latest-chat-code "$SELLER_CENTRAL_CHAT_SUBJECT" "$SELLER_CENTRAL_CHAT_SPACE_ID"
 }
 
-fill_google_email() {
-  local email_literal
-  email_literal=$(js_string_literal "$GOOGLE_EMAIL")
-  local js="(() => {
-    const value = ${email_literal};
-    const input = document.querySelector('input[type=email], input[autocomplete=username], input[name*=identifier i], input[name*=email i]');
-    if (!input) return 'NO_GOOGLE_EMAIL_INPUT';
-    input.focus();
-    input.value = '';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.value = value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    const button = Array.from(document.querySelectorAll('button, div[role=button]')).find((el) => /next|continue/i.test((el.innerText || '').trim()));
-    if (button) button.click();
-    return 'GOOGLE_EMAIL_SUBMITTED';
-  })();"
-  run_voice_js "$js" >/dev/null
-}
-
-fill_google_password() {
-  if [ -z "$GOOGLE_PASSWORD" ]; then
-    log "FAILED: GOOGLE_PASSWORD missing"
-    exit 1
-  fi
-
-  local password_literal
-  password_literal=$(js_string_literal "$GOOGLE_PASSWORD")
-  local js="(() => {
-    const value = ${password_literal};
-    const input = document.querySelector('input[type=password]');
-    if (!input) return 'NO_GOOGLE_PASSWORD_INPUT';
-    input.focus();
-    input.value = '';
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.value = value;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
-    const button = Array.from(document.querySelectorAll('button, div[role=button]')).find((el) => /next|continue/i.test((el.innerText || '').trim()));
-    if (button) button.click();
-    return 'GOOGLE_PASSWORD_SUBMITTED';
-  })();"
-  run_voice_js "$js" >/dev/null
-}
-
-extract_google_voice_code() {
-  local js='(() => {
-    const text = document.body ? document.body.innerText : "";
-    const patterns = [
-      /amazon[\s\S]{0,120}?(\d{6})/i,
-      /seller central[\s\S]{0,120}?(\d{6})/i,
-      /verification code[\s\S]{0,80}?(\d{6})/i,
-      /security code[\s\S]{0,80}?(\d{6})/i,
-      /\b(\d{6})\b/
-    ];
-    for (const pattern of patterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) return match[1];
-    }
-    return "";
-  })();'
-  run_voice_js "$js"
-}
-
-click_likely_amazon_voice_thread() {
+request_authenticator_otp() {
   local js='(() => {
     const clean = (value) => (value || "").replace(/\s+/g, " ").trim();
-    const candidates = Array.from(document.querySelectorAll("a,button,div,li,span")).filter((el) => /amazon|seller central|verification|security code/i.test(clean(el.innerText || "")));
-    const target = candidates.find((el) => el.offsetParent !== null);
-    if (!target) return "NO_THREAD";
-    target.click();
-    return "THREAD_CLICKED";
+    const button = Array.from(document.querySelectorAll("button,input,a")).find((element) =>
+      /send otp/i.test(clean(element.innerText || element.textContent || element.value || ""))
+    );
+    if (!button) return "NO_SEND_OTP_BUTTON";
+    button.click();
+    return "OTP_REQUESTED";
   })();'
-  run_voice_js "$js" >/dev/null
-}
-
-fetch_google_voice_code() {
-  ensure_voice_tab
-
-  for _ in $(seq 1 30); do
-    ensure_voice_tab
-    wait_for_tab "$VOICE_TAB_ID"
-
-    local state
-    state=$(inspect_voice_state)
-    IFS='|' read -r state_name _ _ <<<"$state"
-
-    case "$state_name" in
-      GOOGLE_EMAIL)
-        fill_google_email
-        ;;
-      GOOGLE_PASSWORD)
-        fill_google_password
-        ;;
-      VOICE)
-        local code
-        code=$(extract_google_voice_code)
-        if [ -n "$code" ]; then
-          printf '%s' "$code"
-          return 0
-        fi
-        click_likely_amazon_voice_thread
-        sleep 1
-        code=$(extract_google_voice_code)
-        if [ -n "$code" ]; then
-          printf '%s' "$code"
-          return 0
-        fi
-        run_voice_js "location.reload(); 'RELOADED';" >/dev/null
-        ;;
-    esac
-
-    sleep 2
-  done
-
-  return 1
+  run_js "$js"
 }
 
 submit_seller_otp() {
@@ -276,9 +155,9 @@ submit_seller_otp() {
   otp_literal=$(js_string_literal "$otp")
   local js="(() => {
     const value = ${otp_literal};
-    const inputs = Array.from(document.querySelectorAll('input')).filter((el) => {
-      const meta = ((el.type || '') + ' ' + (el.name || '') + ' ' + (el.id || '') + ' ' + (el.autocomplete || '') + ' ' + (el.getAttribute('aria-label') || '')).toLowerCase();
-      return /code|otp|verification|one-time/.test(meta) || el.type === 'tel' || el.type === 'number' || (el.maxLength === 1 && el.type === 'text');
+    const inputs = Array.from(document.querySelectorAll('input')).filter((element) => {
+      const meta = ((element.type || '') + ' ' + (element.name || '') + ' ' + (element.id || '') + ' ' + (element.autocomplete || '') + ' ' + (element.getAttribute('aria-label') || '')).toLowerCase();
+      return /code|otp|verification|one-time/.test(meta) || element.type === 'tel' || element.type === 'number' || (element.maxLength === 1 && element.type === 'text');
     });
     if (inputs.length === 0) return 'NO_OTP_INPUT';
     const setValue = (input, nextValue) => {
@@ -287,25 +166,48 @@ submit_seller_otp() {
       input.dispatchEvent(new Event('input', { bubbles: true }));
       input.dispatchEvent(new Event('change', { bubbles: true }));
     };
-    if (inputs.length > 1 && inputs.every((el) => el.maxLength === 1 || el.type === 'tel' || el.type === 'number')) {
+    if (inputs.length > 1 && inputs.every((element) => element.maxLength === 1 || element.type === 'tel' || element.type === 'number')) {
       value.split('').forEach((char, index) => {
         if (inputs[index]) setValue(inputs[index], char);
       });
     } else {
       setValue(inputs[0], value);
     }
-    const button = document.getElementById('auth-signin-button') || Array.from(document.querySelectorAll('button,input,a')).find((el) => /verify|continue|submit/i.test((el.value || el.innerText || '').trim()));
+    const button = document.getElementById('auth-signin-button') || Array.from(document.querySelectorAll('button,input,a')).find((element) => /verify|continue|submit|sign in/i.test((element.value || element.innerText || '').trim()));
     if (button) button.click();
     return 'OTP_SUBMITTED';
   })();"
-  run_js "$js" >/dev/null
+  run_js "$js"
+}
+
+select_seller_account() {
+  local account_literal
+  local marketplace_literal
+  account_literal=$(js_string_literal "$SELLER_CENTRAL_ACCOUNT_LABEL")
+  marketplace_literal=$(js_string_literal "$SELLER_CENTRAL_MARKETPLACE_LABEL")
+  local js="(() => {
+    const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const buttons = Array.from(document.querySelectorAll('button,input,a'));
+    const findByLabel = (label) => buttons.find((element) => clean(element.innerText || element.textContent || element.value || '') === label);
+    const accountButton = findByLabel(${account_literal});
+    if (!accountButton) return 'NO_ACCOUNT_BUTTON';
+    accountButton.click();
+    const marketplaceButton = findByLabel(${marketplace_literal});
+    if (!marketplaceButton) return 'NO_MARKETPLACE_BUTTON';
+    marketplaceButton.click();
+    const submitButton = buttons.find((element) => /select account/i.test(clean(element.innerText || element.textContent || element.value || '')));
+    if (!submitButton) return 'NO_SELECT_ACCOUNT_BUTTON';
+    submitButton.click();
+    return 'ACCOUNT_SELECTED';
+  })();"
+  run_js "$js"
 }
 
 log "=== Relogin starting ==="
 
 ensure_seller_tab
 
-for _ in $(seq 1 45); do
+for _ in $(seq 1 60); do
   ensure_seller_tab
   wait_tab
 
@@ -325,20 +227,46 @@ for _ in $(seq 1 45); do
       ;;
     EMAIL)
       log "Submitting seller email"
-      fill_seller_email
+      fill_status="$(fill_seller_email)"
+      log "Email step: $fill_status"
       ;;
     PASSWORD)
       log "Submitting seller password"
-      fill_seller_password
+      password_status="$(fill_seller_password)"
+      log "Password step: $password_status"
       ;;
-    OTP)
-      log "Fetching Google Voice OTP"
-      if ! otp_code="$(fetch_google_voice_code)"; then
-        log "FAILED: Google Voice OTP not found"
+    EMAIL_OTP)
+      log "Fetching Seller Central email verification code from Google Chat"
+      if ! otp_code="$(fetch_chat_verification_code)"; then
+        log "FAILED: Seller Central email verification code not found in Google Chat"
         exit 1
       fi
       ensure_seller_tab
-      submit_seller_otp "$otp_code"
+      otp_status="$(submit_seller_otp "$otp_code")"
+      log "Email OTP step: $otp_status"
+      ;;
+    AUTH_APP_METHOD)
+      log "Requesting authenticator OTP prompt"
+      request_status="$(request_authenticator_otp)"
+      log "Authenticator method step: $request_status"
+      ;;
+    AUTH_APP_OTP)
+      log "Submitting authenticator OTP"
+      if ! otp_code="$(bitwarden_login_totp "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"; then
+        log "FAILED: Seller Central Bitwarden TOTP unavailable"
+        exit 1
+      fi
+      otp_status="$(submit_seller_otp "$otp_code")"
+      log "Authenticator OTP step: $otp_status"
+      ;;
+    ACCOUNT_SWITCHER)
+      log "Selecting Seller Central account"
+      selection_status="$(select_seller_account)"
+      log "Account switcher step: $selection_status"
+      ;;
+    AUTH_APP_ENROLLMENT)
+      log "FAILED: Seller Central requires authenticator enrollment in the Chrome profile"
+      exit 1
       ;;
     CAPTCHA)
       log "FAILED: CAPTCHA encountered"

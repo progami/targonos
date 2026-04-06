@@ -14,6 +14,7 @@ LOG="/tmp/weekly-browser-sources.log"
 RUN_LOG_WRITER="$REPO_ROOT/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
 RUN_STARTED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+BRAND_METRICS_SOURCE_LIMIT_NOTE="$("$NODE_BIN" "$SCRIPT_DIR/brand-metrics-availability.mjs" source-limit-note)"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 join_steps() {
@@ -69,6 +70,7 @@ run_script() {
 run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh" "/tmp/weekly-category-insights.log"
 run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "/tmp/weekly-poe.log"
 run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "/tmp/weekly-scaleinsights.log"
+log "Brand Metrics note: $BRAND_METRICS_SOURCE_LIMIT_NOTE"
 run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "/tmp/weekly-brand-metrics.log"
 
 log "=== Weekly Master Run Done ($FAILED failures) ==="
@@ -77,7 +79,7 @@ RUN_FINISHED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')
 RUN_FINISHED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 DURATION_MS=$((RUN_FINISHED_AT_MS - RUN_STARTED_AT_MS))
 RUN_STATUS="ok"
-RUN_SUMMARY="All 4 weekly browser collectors completed."
+RUN_SUMMARY="All 4 weekly browser collectors completed. $BRAND_METRICS_SOURCE_LIMIT_NOTE"
 RUN_ERROR_MESSAGE=""
 FAILED_STEPS_CSV=""
 
