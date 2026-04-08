@@ -53,11 +53,11 @@ export type Product = {
   amazonAltLabel?: string;
 
   /**
-   * Display price (copied from Amazon at time of update). Prices can change.
+   * Website list price. Intentionally maintained above Amazon marketplace price.
    */
   price?: string;
 
-  /** Original/typical price before discount */
+  /** Optional compare-at price for website merchandising */
   typicalPrice?: string;
 
   /** Discount percentage e.g. “-11%” */
@@ -83,8 +83,8 @@ export type Product = {
 };
 
 // Direct Amazon links provided by the brand (kept verbatim).
-// NOTE: Some Amazon regions hide prices unless signed in.
-// We show the latest price we *can* verify and otherwise say “See Amazon”.
+// Website list prices are intentionally set above Amazon marketplace pricing.
+// Amazon pricing can change independently by region and delivery context.
 
 // Verified ASIN mapping: 1PK=B0FLKJ7WWM, 3PK=B0CR1GSBQ9, 6PK=B09HXC3NL8, 12PK=B0FP66CWQ6
 
@@ -113,10 +113,8 @@ export const products: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    price: '$9.99',
-    typicalPrice: '$10.99',
-    discount: '-9%',
-    unitPrice: '$1.67 / count',
+    price: '$12.99',
+    unitPrice: '$2.17 / count',
     tagline: 'Multi coverage for standard projects.',
     description: 'Extra large plastic drop cloths for decorating, painting, and quick protection.',
     longDescription: [
@@ -158,10 +156,7 @@ export const products: Product[] = [
     packLabel: '1 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '108 sq ft',
-    price: '$7.99',
-    typicalPrice: '$8.99',
-    discount: '-11%',
-    priceBadge: 'Lowest price in 30 days',
+    price: '$9.99',
     tagline: 'Spot coverage for quick jobs.',
     description: 'One extra large drop cloth with strong durability for quick jobs.',
     longDescription: [
@@ -197,10 +192,8 @@ export const products: Product[] = [
     packLabel: '3 PK',
     thicknessLabel: 'Standard',
     coverageLabel: '324 sq ft',
-    price: '$13.99',
-    typicalPrice: '$17.99',
-    discount: '-22%',
-    unitPrice: '$4.66 / count',
+    price: '$17.99',
+    unitPrice: '$6.00 / count',
     tagline: 'Room coverage for single-room work.',
     description: 'Extra large drop cloths with strong durability for decorating.',
     longDescription: [
@@ -237,10 +230,8 @@ export const products: Product[] = [
     packLabel: '12 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1296 sq ft',
-    price: '$13.99',
-    typicalPrice: '$14.99',
-    discount: '-7%',
-    unitPrice: '$1.17 / count',
+    price: '$17.99',
+    unitPrice: '$1.50 / count',
     tagline: 'Pro coverage for multi-room renovations.',
     description: 'More drop cloths for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
@@ -325,7 +316,7 @@ export const productsUK: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Strong',
     coverageLabel: '648 sq ft',
-    price: '£11.95',
+    price: '£13.99',
     tagline: 'Multi coverage with strong durability.',
     description: 'Extra large plastic dust sheets with strong durability for decorating and painting.',
     longDescription: [
@@ -469,7 +460,7 @@ export const productsUK: Product[] = [
     packLabel: '10 PK',
     thicknessLabel: 'Light',
     coverageLabel: '1080 sq ft',
-    price: '£11.89',
+    price: '£13.99',
     tagline: 'Pro coverage for multi-room renovations.',
     description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
     longDescription: [
