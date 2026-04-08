@@ -1332,7 +1332,7 @@ export function CustomPurchasePaymentsGrid({
       isWeekLabel && 'text-center',
       column.editable
         ? 'cursor-text bg-accent/50 font-medium'
-        : 'bg-muted/50 text-muted-foreground',
+        : 'bg-muted/50 text-foreground/70',
       isSelected && 'bg-accent',
       (isEditing || isCurrent) && 'ring-2 ring-inset ring-cyan-600 dark:ring-cyan-400',
       colIndex === COLUMNS.length - 1 && 'border-r-0',
@@ -1435,7 +1435,7 @@ export function CustomPurchasePaymentsGrid({
           )}
         >
           {showPlaceholder ? (
-            <span className="text-xs italic text-muted-foreground">Click to select</span>
+            <span className="text-xs text-muted-foreground">—</span>
           ) : (
             <span
               className={cn(
@@ -1462,9 +1462,9 @@ export function CustomPurchasePaymentsGrid({
   };
 
   return (
-    <section className="space-y-3">
-      <header className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <h2 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
+    <section className="space-y-4">
+      <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300/80">
           Payments
         </h2>
         <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-200/80">
@@ -1502,7 +1502,7 @@ export function CustomPurchasePaymentsGrid({
         </div>
       </header>
 
-      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
+      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/15">
         <textarea
           ref={clipboardRef}
           tabIndex={-1}

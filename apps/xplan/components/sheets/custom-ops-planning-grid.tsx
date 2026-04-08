@@ -662,7 +662,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
             ? isDropdownCell
               ? 'cursor-pointer bg-accent/50 font-medium'
               : 'cursor-text bg-accent/50 font-medium'
-            : 'bg-muted/50 text-muted-foreground',
+            : 'bg-muted/50 text-foreground/70',
           isSelected && 'bg-accent',
           (isEditing || isCurrentCell) && 'ring-2 ring-inset ring-cyan-600 dark:ring-cyan-400',
           colIndex === COLUMNS.length - 1 && 'border-r-0',
@@ -783,7 +783,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
               className={cn('flex h-8 min-w-0 items-center px-3', isNumericCell && 'justify-end')}
             >
               {showPlaceholder ? (
-                <span className="text-xs text-muted-foreground/50">—</span>
+                <span className="text-xs text-muted-foreground">—</span>
               ) : (
                 <span className={cn('block min-w-0 truncate', isNumericCell && 'tabular-nums')}>
                   {formattedValue}
@@ -2247,10 +2247,10 @@ export function CustomOpsPlanningGrid({
   };
 
   return (
-    <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <section className="space-y-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h2 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
+          <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300/80">
             PO Table
           </h2>
         </div>
@@ -2300,7 +2300,7 @@ export function CustomOpsPlanningGrid({
         )}
       </div>
 
-      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
+      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/15">
         <textarea
           ref={clipboardRef}
           tabIndex={-1}
