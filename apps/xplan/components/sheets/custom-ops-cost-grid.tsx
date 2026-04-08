@@ -1835,6 +1835,7 @@ export function CustomOpsCostGrid({
                 {columns.map((column) => (
                   <TableHead
                     key={column.key}
+                    style={{ minWidth: column.width }}
                     className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.key === 'tariffRate' || column.key === 'tariffCost' ? (

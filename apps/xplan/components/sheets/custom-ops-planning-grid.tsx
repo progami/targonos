@@ -783,9 +783,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
               className={cn('flex h-8 min-w-0 items-center px-3', isNumericCell && 'justify-end')}
             >
               {showPlaceholder ? (
-                <span className="px-3 text-xs italic text-muted-foreground">
-                  Click to select date
-                </span>
+                <span className="text-xs text-muted-foreground/50">—</span>
               ) : (
                 <span className={cn('block min-w-0 truncate', isNumericCell && 'tabular-nums')}>
                   {formattedValue}
@@ -2225,7 +2223,7 @@ export function CustomOpsPlanningGrid({
     return (
       <TableHead
         key={column.key}
-        style={{}}
+        style={{ minWidth: column.width }}
         className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
       >
         {isStageColumn ? (
