@@ -1,7 +1,28 @@
 const path = require('path');
+const fs = require('fs');
 const DEV_DIR = process.env.TARGONOS_DEV_DIR ?? process.env.TARGON_DEV_DIR;
 const MAIN_DIR = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR;
 const HOME_DIR = process.env.HOME;
+
+function loadEnvFile(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    const env = {};
+    for (const line of content.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eqIdx = trimmed.indexOf('=');
+      if (eqIdx === -1) continue;
+      const key = trimmed.slice(0, eqIdx).replace(/^export\s+/, '').trim();
+      let value = trimmed.slice(eqIdx + 1).trim();
+      if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
+        value = value.slice(1, -1);
+      }
+      env[key] = value;
+    }
+    return env;
+  } catch { return {}; }
+}
 
 if (!DEV_DIR) {
   throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
@@ -131,6 +152,7 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: {
+        ...loadEnvFile(path.join(DEV_DIR, 'apps/plutus/.env.local')),
         NODE_ENV: 'production',
         PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '0',
         PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
@@ -147,6 +169,7 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: {
+        ...loadEnvFile(path.join(DEV_DIR, 'apps/plutus/.env.local')),
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '0',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
@@ -176,7 +199,7 @@ module.exports = {
       args: 'src/server/jobs/orders-sync-hourly.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      env: { ...loadEnvFile(path.join(DEV_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -188,7 +211,7 @@ module.exports = {
       args: 'src/server/jobs/request-review-dispatcher.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production' },
+      env: { ...loadEnvFile(path.join(DEV_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production' },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -322,6 +345,7 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: {
+        ...loadEnvFile(path.join(MAIN_DIR, 'apps/plutus/.env.local')),
         NODE_ENV: 'production',
         PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1',
         PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
@@ -338,6 +362,7 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: {
+        ...loadEnvFile(path.join(MAIN_DIR, 'apps/plutus/.env.local')),
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '1',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
@@ -367,7 +392,7 @@ module.exports = {
       args: 'src/server/jobs/orders-sync-hourly.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      env: { ...loadEnvFile(path.join(MAIN_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -379,7 +404,7 @@ module.exports = {
       args: 'src/server/jobs/request-review-dispatcher.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production' },
+      env: { ...loadEnvFile(path.join(MAIN_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production' },
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
