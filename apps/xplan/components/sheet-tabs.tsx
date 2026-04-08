@@ -114,7 +114,10 @@ export function SheetTabs({
             transition: 'background-color 0.15s',
             '&.Mui-selected': {
               color: 'secondary.main',
-              bgcolor: 'rgba(0,194,185,0.08)',
+              bgcolor: 'rgba(0,194,185,0.12)',
+              '.dark &': {
+                bgcolor: 'rgba(0,194,185,0.18)',
+              },
             },
           },
         }}
