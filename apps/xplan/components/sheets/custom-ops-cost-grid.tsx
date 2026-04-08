@@ -264,7 +264,7 @@ const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   {
     key: 'referralRate',
     header: 'Referral %',
-    width: 110,
+    width: 130,
     type: 'percent',
     editable: true,
     precision: 2,
@@ -1586,7 +1586,7 @@ export function CustomOpsCostGrid({
           : 'cursor-text bg-accent/50 font-medium'
         : column.computed
           ? 'bg-muted/30'
-          : 'bg-muted/50 text-muted-foreground',
+          : 'bg-muted/50 text-foreground/70',
       isSelected && 'bg-accent',
       (isEditing || isCurrent) && 'ring-2 ring-inset ring-cyan-600 dark:ring-cyan-400',
       colIndex === columns.length - 1 && 'border-r-0',
@@ -1733,10 +1733,10 @@ export function CustomOpsCostGrid({
   };
 
   return (
-    <section className="space-y-3">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <section className="space-y-4">
+      <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-xs font-bold uppercase tracking-[0.28em] text-cyan-700 dark:text-cyan-300/80">
+          <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300/80">
             Batch Table
           </h2>
         </div>
@@ -1808,7 +1808,7 @@ export function CustomOpsCostGrid({
         </div>
       </header>
 
-      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/10">
+      <div className="relative overflow-hidden rounded-xl border bg-card shadow-sm dark:border-white/15">
         <textarea
           ref={clipboardRef}
           tabIndex={-1}
