@@ -1741,7 +1741,7 @@ export function CustomOpsCostGrid({
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-800 shadow-sm dark:border-emerald-300/35 dark:bg-emerald-300/10 dark:text-emerald-100">
+          <div className="inline-flex rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-800 shadow-sm dark:border-emerald-300/40 dark:bg-emerald-300/15 dark:text-emerald-100">
             <button
               type="button"
               onClick={() => setProfitMode('unit')}
@@ -1749,7 +1749,7 @@ export function CustomOpsCostGrid({
                 'rounded-md px-2 py-1 transition',
                 profitDisplayMode === 'unit'
                   ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100/80 dark:hover:text-emerald-100',
+                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
               )}
               aria-pressed={profitDisplayMode === 'unit'}
               title="Show profit per unit"
@@ -1763,7 +1763,7 @@ export function CustomOpsCostGrid({
                 'rounded-md px-2 py-1 transition',
                 profitDisplayMode === 'total'
                   ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100/80 dark:hover:text-emerald-100',
+                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
               )}
               aria-pressed={profitDisplayMode === 'total'}
               title="Show total profit for the batch"
@@ -1777,7 +1777,7 @@ export function CustomOpsCostGrid({
                 'rounded-md px-2 py-1 transition',
                 profitDisplayMode === 'percent'
                   ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100/80 dark:hover:text-emerald-100',
+                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
               )}
               aria-pressed={profitDisplayMode === 'percent'}
               title="Show profit margins (%)"
@@ -1790,7 +1790,7 @@ export function CustomOpsCostGrid({
               type="button"
               onClick={onAddBatch}
               disabled={Boolean(disableAdd)}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 enabled:hover:border-cyan-500 enabled:hover:bg-cyan-50 enabled:hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-slate-200 dark:focus:ring-cyan-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-cyan-300/50 dark:enabled:hover:bg-white/10"
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-900 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-1 enabled:hover:border-cyan-500 enabled:hover:bg-cyan-50 enabled:hover:text-cyan-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:bg-white/10 dark:text-slate-100 dark:focus:ring-cyan-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-cyan-300/50 dark:enabled:hover:bg-white/10"
             >
               Add batch
             </button>
@@ -1800,7 +1800,7 @@ export function CustomOpsCostGrid({
               type="button"
               onClick={onDeleteBatch}
               disabled={Boolean(disableDelete) || !activeBatchId}
-              className="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-rose-700 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-1 enabled:hover:border-rose-500 enabled:hover:bg-rose-100 enabled:hover:text-rose-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-500/60 dark:bg-rose-500/10 dark:text-rose-300 dark:focus:ring-rose-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-rose-500/80 dark:enabled:hover:bg-rose-500/20"
+              className="rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-rose-700 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-rose-400 focus:ring-offset-1 enabled:hover:border-rose-500 enabled:hover:bg-rose-100 enabled:hover:text-rose-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-rose-400/50 dark:bg-rose-500/15 dark:text-rose-200 dark:focus:ring-rose-400/60 dark:focus:ring-offset-slate-900 dark:enabled:hover:border-rose-500/80 dark:enabled:hover:bg-rose-500/20"
             >
               Remove batch
             </button>
