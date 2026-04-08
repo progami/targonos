@@ -42,7 +42,6 @@ export function ActiveStrategyIndicator({ strategyName, className }: ActiveStrat
         size="small"
         className={className}
         sx={{
-          maxWidth: 320,
           height: 26,
           borderRadius: '9999px',
           fontWeight: 600,
@@ -57,8 +56,6 @@ export function ActiveStrategyIndicator({ strategyName, className }: ActiveStrat
             color: '#d1fae5',
           },
           '& .MuiChip-label': {
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           },
         }}
