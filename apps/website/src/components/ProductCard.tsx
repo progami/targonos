@@ -4,6 +4,19 @@ import type { Product } from '@/content/products';
 import { Button } from '@/components/Button';
 import { cn } from '@/lib/utils';
 
+function splitPrice(price: string) {
+  const match = price.match(/^([^0-9]+)(\d+)(?:\.(\d{2}))?$/);
+  if (!match) {
+    throw new Error(`Invalid price format: ${price}`);
+  }
+
+  return {
+    symbol: match[1],
+    whole: match[2],
+    fraction: match[3] ?? '00'
+  };
+}
+
 function DurabilityBars({ level }: { level: string }) {
   const filled = level === 'Strong' ? 3 : level === 'Standard' ? 2 : 1;
   return (
@@ -19,6 +32,8 @@ function DurabilityBars({ level }: { level: string }) {
 }
 
 export function ProductCard({ product }: { product: Product }) {
+  const priceParts = product.price ? splitPrice(product.price) : null;
+
   return (
     <div
       className={cn(
@@ -60,11 +75,13 @@ export function ProductCard({ product }: { product: Product }) {
             {product.discount && (
               <span className="text-lg font-semibold text-red-400">{product.discount}</span>
             )}
-            <span className="text-2xl font-bold text-white">
-              <sup className="text-sm font-semibold">$</sup>
-              {product.price?.replace('$', '').split('.')[0]}
-              <sup className="text-sm font-semibold">{product.price?.split('.')[1]}</sup>
-            </span>
+            {priceParts ? (
+              <span className="text-2xl font-bold text-white">
+                <sup className="text-sm font-semibold">{priceParts.symbol}</sup>
+                {priceParts.whole}
+                <sup className="text-sm font-semibold">{priceParts.fraction}</sup>
+              </span>
+            ) : null}
             {product.unitPrice && (
               <span className="text-xs text-white/40">({product.unitPrice})</span>
             )}
