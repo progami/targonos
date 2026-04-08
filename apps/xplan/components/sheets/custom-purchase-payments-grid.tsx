@@ -1521,7 +1521,7 @@ export function CustomPurchasePaymentsGrid({
           onKeyDown={handleTableKeyDown}
           onCopy={handleCopy}
           onPaste={handlePaste}
-          className="max-h-[400px] overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="max-h-[400px] select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <Table className="border-collapse">
             <TableHeader>
@@ -1529,7 +1529,7 @@ export function CustomPurchasePaymentsGrid({
                 {COLUMNS.map((column) => (
                   <TableHead
                     key={column.key}
-                    style={{}}
+                    style={{ minWidth: column.width }}
                     className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.type === 'schedule' ? (
