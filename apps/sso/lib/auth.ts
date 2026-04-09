@@ -1,8 +1,14 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
+import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
 import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
-import { getOrCreatePortalUserByEmail, getUserAuthz, getUserByEmail } from '@targon/auth/server'
+import {
+  authenticateWithPortalDirectory,
+  getOrCreatePortalUserByEmail,
+  getUserAuthz,
+  getUserByEmail,
+} from '@targon/auth/server'
 
 const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
@@ -141,17 +147,43 @@ if (!hasGoogleOAuth && !allowDevAuthBypass) {
   throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured for Targon auth.')
 }
 
-const providers: NextAuthConfig['providers'] = hasGoogleOAuth
-  ? [
-      Google({
-        clientId: googleClientId || '',
-        clientSecret: googleClientSecret || '',
-        authorization: {
-          params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' },
-        },
-      }),
-    ]
-  : []
+const providers: NextAuthConfig['providers'] = [
+  ...(allowDevAuthBypass
+    ? [
+        Credentials({
+          name: 'Development credentials',
+          credentials: {
+            emailOrUsername: { label: 'Email or username', type: 'text' },
+            password: { label: 'Password', type: 'password' },
+          },
+          async authorize(credentials) {
+            const portalUser = await authenticateWithPortalDirectory(credentials)
+            if (!portalUser) {
+              return null
+            }
+
+            return {
+              id: portalUser.id,
+              email: portalUser.email,
+              name: portalUser.fullName || portalUser.email,
+              portalUser,
+            }
+          },
+        }),
+      ]
+    : []),
+  ...(hasGoogleOAuth
+    ? [
+        Google({
+          clientId: googleClientId || '',
+          clientSecret: googleClientSecret || '',
+          authorization: {
+            params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' },
+          },
+        }),
+      ]
+    : []),
+]
 
 const ENTITLEMENTS_REFRESH_INTERVAL_MS = 60_000
 
@@ -167,6 +199,10 @@ const baseAuthOptions: NextAuthConfig = {
   providers,
   callbacks: {
     async signIn({ user, account, profile }) {
+      if (account?.provider === 'credentials') {
+        return Boolean((user as any)?.portalUser)
+      }
+
       if (account?.provider === 'google') {
         const email = (profile?.email || user?.email || '').toLowerCase()
         const emailVerified = typeof (profile as any)?.email_verified === 'boolean'
@@ -273,14 +309,15 @@ const baseAuthOptions: NextAuthConfig = {
       ;(session as any).entitlements_ver = (token as any).entitlements_ver
       return session
     },
-	    async redirect({ url, baseUrl }) {
-	      const allowValue = String(process.env.ALLOW_CALLBACK_REDIRECT || '').toLowerCase()
-	      const allowCallbackExplicit = ['1', 'true', 'yes', 'on'].includes(allowValue)
-	      const allowCallbackDefault = process.env.NODE_ENV !== 'production' && allowValue === ''
-	      const allowCallback = allowCallbackExplicit || allowCallbackDefault
+    async redirect({ url, baseUrl }) {
+      const allowValue = String(process.env.ALLOW_CALLBACK_REDIRECT ?? '').trim().toLowerCase()
+      const allowCallbackExplicit = ['1', 'true', 'yes', 'on'].includes(allowValue)
+      const allowCallbackDefault = allowValue === ''
+      const allowCallback = allowCallbackExplicit || allowCallbackDefault
       if (!allowCallback) {
         return baseUrl
       }
+
       try {
         const target = new URL(url, baseUrl)
         const base = new URL(baseUrl)
@@ -305,17 +342,18 @@ const baseAuthOptions: NextAuthConfig = {
           }
           return baseUrl
         }
-	
-	        const cookieDomain = resolvedCookieDomain.replace(/^\./, '').toLowerCase()
-	        const targetHostname = target.hostname.toLowerCase()
-	        const isAllowedHost = cookieDomain.length > 0
-	          && (targetHostname === cookieDomain || targetHostname.endsWith(`.${cookieDomain}`))
-	        if (isAllowedHost) {
-	          const relay = new URL('/auth/relay', base)
-	          relay.searchParams.set('to', target.toString())
-	          return relay.toString()
-	        }
-	      } catch {}
+        const cookieDomain = resolvedCookieDomain.replace(/^\./, '').toLowerCase()
+        const targetHostname = target.hostname.toLowerCase()
+        const isAllowedHost =
+          cookieDomain.length > 0 &&
+          (targetHostname === cookieDomain || targetHostname.endsWith(`.${cookieDomain}`))
+        if (isAllowedHost) {
+          const relay = new URL('/auth/relay', base)
+          relay.searchParams.set('to', target.toString())
+          return relay.toString()
+        }
+      } catch {}
+
       return baseUrl
     },
   },
