@@ -24,6 +24,39 @@ function loadEnvFile(filePath) {
   } catch { return {}; }
 }
 
+function envFilenamesFor(environment) {
+  if (environment === 'dev') {
+    return ['.env', '.env.dev.ci', '.env.dev', '.env.local'];
+  }
+
+  return ['.env', '.env.production', '.env.local'];
+}
+
+function loadAppEnv(appDir, environment) {
+  const env = {};
+
+  for (const filename of envFilenamesFor(environment)) {
+    Object.assign(env, loadEnvFile(path.join(appDir, filename)));
+  }
+
+  return env;
+}
+
+function createNextAppEnv(rootDir, appName, environment, runtimeEnv) {
+  return {
+    ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
+    ...runtimeEnv,
+  };
+}
+
+function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
+  return {
+    ...loadAppEnv(path.join(rootDir, 'apps/sso'), environment),
+    ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
+    ...runtimeEnv,
+  };
+}
+
 if (!DEV_DIR) {
   throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
 }
@@ -52,7 +85,7 @@ module.exports = {
       args: 'start -p 3100',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3100 },
+      env: createNextAppEnv(DEV_DIR, 'sso', 'dev', { NODE_ENV: 'production', PORT: 3100 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -74,7 +107,7 @@ module.exports = {
       args: 'start -p 3105',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3105 },
+      env: createNextAppEnv(DEV_DIR, 'website', 'dev', { NODE_ENV: 'production', PORT: 3105 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -86,7 +119,7 @@ module.exports = {
       args: 'start -p 3106',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3106 },
+      env: createNextAppEnv(DEV_DIR, 'atlas', 'dev', { NODE_ENV: 'production', PORT: 3106 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -98,7 +131,7 @@ module.exports = {
       args: 'start -p 3108',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3108 },
+      env: createNextAppEnvWithPortal(DEV_DIR, 'xplan', 'dev', { NODE_ENV: 'production', PORT: 3108 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -111,7 +144,11 @@ module.exports = {
       args: 'start -p 3110',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3110, KAIROS_ML_URL: 'http://127.0.0.1:3111' },
+      env: createNextAppEnv(DEV_DIR, 'kairos', 'dev', {
+        NODE_ENV: 'production',
+        PORT: 3110,
+        KAIROS_ML_URL: 'http://127.0.0.1:3111'
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -135,11 +172,11 @@ module.exports = {
       args: 'start -p 3112',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: {
+      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
         NODE_ENV: 'production',
         PORT: 3112,
         PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
-      },
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -187,7 +224,12 @@ module.exports = {
       args: 'start -p 3114',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3114, BASE_PATH: '/hermes', NEXT_PUBLIC_BASE_PATH: '/hermes' },
+      env: createNextAppEnv(DEV_DIR, 'hermes', 'dev', {
+        NODE_ENV: 'production',
+        PORT: 3114,
+        BASE_PATH: '/hermes',
+        NEXT_PUBLIC_BASE_PATH: '/hermes'
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -223,13 +265,13 @@ module.exports = {
       args: 'start -p 3116',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: {
+      env: createNextAppEnv(DEV_DIR, 'argus', 'dev', {
         NODE_ENV: 'production',
         PORT: 3116,
         BASE_PATH: '/argus',
         NEXT_PUBLIC_BASE_PATH: '/argus',
         NEXT_PUBLIC_APP_URL: 'https://dev-os.targonglobal.com/argus'
-      },
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -245,7 +287,7 @@ module.exports = {
       args: 'start -p 3000',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3000 },
+      env: createNextAppEnv(MAIN_DIR, 'sso', 'production', { NODE_ENV: 'production', PORT: 3000 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -267,7 +309,7 @@ module.exports = {
       args: 'start -p 3005',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3005 },
+      env: createNextAppEnv(MAIN_DIR, 'website', 'production', { NODE_ENV: 'production', PORT: 3005 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -279,7 +321,7 @@ module.exports = {
       args: 'start -p 3006',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3006 },
+      env: createNextAppEnv(MAIN_DIR, 'atlas', 'production', { NODE_ENV: 'production', PORT: 3006 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -291,7 +333,7 @@ module.exports = {
       args: 'start -p 3008',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3008 },
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'xplan', 'production', { NODE_ENV: 'production', PORT: 3008 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -304,7 +346,11 @@ module.exports = {
       args: 'start -p 3010',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3010, KAIROS_ML_URL: 'http://127.0.0.1:3011' },
+      env: createNextAppEnv(MAIN_DIR, 'kairos', 'production', {
+        NODE_ENV: 'production',
+        PORT: 3010,
+        KAIROS_ML_URL: 'http://127.0.0.1:3011'
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -328,11 +374,11 @@ module.exports = {
       args: 'start -p 3012',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: {
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
         NODE_ENV: 'production',
         PORT: 3012,
         PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
-      },
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -380,7 +426,12 @@ module.exports = {
       args: 'start -p 3014',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3014, BASE_PATH: '/hermes', NEXT_PUBLIC_BASE_PATH: '/hermes' },
+      env: createNextAppEnv(MAIN_DIR, 'hermes', 'production', {
+        NODE_ENV: 'production',
+        PORT: 3014,
+        BASE_PATH: '/hermes',
+        NEXT_PUBLIC_BASE_PATH: '/hermes'
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -416,13 +467,13 @@ module.exports = {
       args: 'start -p 3016',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: {
+      env: createNextAppEnv(MAIN_DIR, 'argus', 'production', {
         NODE_ENV: 'production',
         PORT: 3016,
         BASE_PATH: '/argus',
         NEXT_PUBLIC_BASE_PATH: '/argus',
         NEXT_PUBLIC_APP_URL: 'https://os.targonglobal.com/argus'
-      },
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
