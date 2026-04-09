@@ -7,7 +7,6 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import ArrowOutwardIcon from '@mui/icons-material/ArrowOutward';
 import {
   readCaseReportBundle,
@@ -16,6 +15,14 @@ import {
   type CaseReportRow,
   type CaseReportSection,
 } from '@/lib/cases/reader';
+import {
+  getCaseAccentTextColor,
+  getCaseActiveDateBackgroundColor,
+  getCaseActiveDateBorderColor,
+  getCaseDividerColor,
+  getCaseDividerStrongColor,
+  getCaseTone,
+} from '@/lib/cases/theme';
 
 export const dynamic = 'force-dynamic';
 
@@ -30,38 +37,6 @@ const MARKET_LINKS = [
   { slug: 'us', label: 'USA - Dust Sheets' },
   { slug: 'uk', label: 'UK - Dust Sheets' },
 ] as const;
-
-function categoryTone(category: string) {
-  if (category === 'Action due') {
-    return {
-      color: '#9f1d12',
-      tint: 'rgba(191, 36, 27, 0.12)',
-      line: 'rgba(191, 36, 27, 0.35)',
-    };
-  }
-
-  if (category === 'Forum watch') {
-    return {
-      color: '#8f5d00',
-      tint: 'rgba(191, 125, 0, 0.12)',
-      line: 'rgba(191, 125, 0, 0.3)',
-    };
-  }
-
-  if (category === 'New case') {
-    return {
-      color: '#005f73',
-      tint: 'rgba(0, 118, 133, 0.12)',
-      line: 'rgba(0, 118, 133, 0.28)',
-    };
-  }
-
-  return {
-    color: '#0b5c58',
-    tint: 'rgba(0, 194, 185, 0.12)',
-    line: 'rgba(0, 194, 185, 0.26)',
-  };
-}
 
 function summarizeRows(sections: CaseReportSection[]) {
   const rows = sections.flatMap((section) => section.rows);
@@ -105,21 +80,21 @@ function DetailBlock({
 }) {
   return (
     <Box
-      sx={{
+      sx={(theme) => ({
         minWidth: 0,
         borderLeft: '1px solid',
-        borderColor: accent ? 'rgba(0, 194, 185, 0.34)' : 'divider',
+        borderColor: accent ? getCaseTone('Watching', theme.palette.mode).line : 'divider',
         pl: 1.5,
-      }}
+      })}
     >
       <Typography
         variant="overline"
-        sx={{
+        sx={(theme) => ({
           display: 'block',
-          color: accent ? '#0b5c58' : 'text.secondary',
+          color: accent ? getCaseAccentTextColor(theme.palette.mode) : 'text.secondary',
           fontSize: '0.66rem',
           letterSpacing: '0.14em',
-        }}
+        })}
       >
         {label}
       </Typography>
@@ -179,19 +154,24 @@ function CaseRow({
   row: CaseReportRow;
   index: number;
 }) {
-  const tone = categoryTone(row.category);
-
   return (
     <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: '210px minmax(0, 1fr)' },
-        gap: { xs: 2, md: 3 },
-        py: 2.75,
-        borderTop: '1px solid',
-        borderColor: alpha('#002c51', 0.08),
-        animation: 'caseBriefRise 560ms cubic-bezier(0.18, 0.8, 0.22, 1) both',
-        animationDelay: `${140 + index * 48}ms`,
+      sx={(theme) => {
+        const tone = getCaseTone(row.category, theme.palette.mode);
+        return {
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '210px minmax(0, 1fr)' },
+          gap: { xs: 2, md: 3 },
+          py: 2.75,
+          borderTop: '1px solid',
+          borderColor: getCaseDividerColor(theme.palette.mode),
+          animation: 'caseBriefRise 560ms cubic-bezier(0.18, 0.8, 0.22, 1) both',
+          animationDelay: `${140 + index * 48}ms`,
+          '& .case-row-category': {
+            bgcolor: tone.tint,
+            color: tone.color,
+          },
+        };
       }}
     >
       <Stack
@@ -201,14 +181,13 @@ function CaseRow({
         }}
       >
         <Box
+          className="case-row-category"
           sx={{
             display: 'inline-flex',
             alignSelf: 'flex-start',
             px: 1.3,
             py: 0.6,
             borderRadius: 999,
-            bgcolor: tone.tint,
-            color: tone.color,
             fontSize: '0.76rem',
             fontWeight: 700,
             letterSpacing: '0.02em',
@@ -260,17 +239,17 @@ function CaseSection({
   return (
     <Box sx={{ mb: 4.5 }}>
       <Box
-        sx={{
+        sx={(theme) => ({
           position: 'sticky',
           top: { xs: 74, md: 92 },
           zIndex: 2,
           py: 1.1,
           borderTop: '1px solid',
           borderBottom: '1px solid',
-          borderColor: alpha('#002c51', 0.12),
+          borderColor: getCaseDividerStrongColor(theme.palette.mode),
           bgcolor: 'background.paper',
           backdropFilter: 'blur(18px)',
-        }}
+        })}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography
@@ -311,23 +290,24 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
       />
 
       <Box
-        sx={{
+        sx={(theme) => ({
           position: 'relative',
           overflow: 'hidden',
           borderBottom: '1px solid',
-          borderColor: alpha('#002c51', 0.12),
+          borderColor: getCaseDividerStrongColor(theme.palette.mode),
           pb: 4,
           mb: 4,
-        }}
+        })}
       >
         <Box
-          sx={{
+          sx={(theme) => ({
             position: 'absolute',
             inset: 0,
             pointerEvents: 'none',
-            background:
-              'radial-gradient(circle at top right, rgba(0, 194, 185, 0.16), transparent 28%), linear-gradient(180deg, rgba(0, 44, 81, 0.05), rgba(0, 44, 81, 0))',
-          }}
+            background: theme.palette.mode === 'dark'
+              ? 'radial-gradient(circle at top right, rgba(0, 194, 185, 0.16), transparent 28%), linear-gradient(180deg, rgba(0, 194, 185, 0.04), rgba(0, 194, 185, 0))'
+              : 'radial-gradient(circle at top right, rgba(0, 194, 185, 0.16), transparent 28%), linear-gradient(180deg, rgba(0, 44, 81, 0.05), rgba(0, 44, 81, 0))',
+          })}
         />
 
         <Stack spacing={3} sx={{ position: 'relative' }}>
@@ -389,21 +369,21 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
                   >
                     <Box
                       sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      px: 1.5,
-                      py: 1.15,
-                      borderRadius: 999,
-                      textDecoration: 'none',
-                      border: '1px solid',
-                      borderColor: active ? 'rgba(0, 194, 185, 0.34)' : 'divider',
-                      bgcolor: active ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
-                      color: active ? 'text.primary' : 'text.secondary',
-                      transition: 'background-color 160ms ease, border-color 160ms ease',
-                      '&:hover': {
-                        bgcolor: active ? 'rgba(0, 194, 185, 0.12)' : 'action.hover',
-                      },
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        px: 1.5,
+                        py: 1.15,
+                        borderRadius: 999,
+                        textDecoration: 'none',
+                        border: '1px solid',
+                        borderColor: active ? 'rgba(0, 194, 185, 0.34)' : 'divider',
+                        bgcolor: active ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
+                        color: active ? 'text.primary' : 'text.secondary',
+                        transition: 'background-color 160ms ease, border-color 160ms ease',
+                        '&:hover': {
+                          bgcolor: active ? 'rgba(0, 194, 185, 0.12)' : 'action.hover',
+                        },
                       }}
                     >
                       <Typography sx={{ fontWeight: 600 }}>{market.label}</Typography>
@@ -450,17 +430,17 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
                   style={{ textDecoration: 'none' }}
                 >
                   <Box
-                    sx={{
-                    px: 1.25,
-                    py: 0.72,
-                    borderRadius: 999,
-                    border: '1px solid',
-                    borderColor: active ? 'rgba(0, 44, 81, 0.26)' : 'divider',
-                    bgcolor: active ? 'rgba(0, 44, 81, 0.06)' : 'background.paper',
-                    textDecoration: 'none',
-                    color: active ? 'text.primary' : 'text.secondary',
-                    fontSize: '0.84rem',
-                    }}
+                    sx={(theme) => ({
+                      px: 1.25,
+                      py: 0.72,
+                      borderRadius: 999,
+                      border: '1px solid',
+                      borderColor: active ? getCaseActiveDateBorderColor(theme.palette.mode) : 'divider',
+                      bgcolor: active ? getCaseActiveDateBackgroundColor(theme.palette.mode) : 'background.paper',
+                      textDecoration: 'none',
+                      color: active ? 'text.primary' : 'text.secondary',
+                      fontSize: '0.84rem',
+                    })}
                   >
                     {reportDate}
                   </Box>
@@ -510,11 +490,11 @@ function Metric({
 }) {
   return (
     <Box
-      sx={{
+      sx={(theme) => ({
         pt: 1.1,
         borderTop: '1px solid',
-        borderColor: accent ? 'rgba(0, 194, 185, 0.34)' : alpha('#002c51', 0.12),
-      }}
+        borderColor: accent ? getCaseTone('Watching', theme.palette.mode).line : getCaseDividerStrongColor(theme.palette.mode),
+      })}
     >
       <Typography
         variant="overline"
@@ -528,14 +508,14 @@ function Metric({
         {label}
       </Typography>
       <Typography
-        sx={{
+        sx={(theme) => ({
           mt: 0.55,
           fontSize: detail ? '0.95rem' : { xs: '1.55rem', md: '1.85rem' },
           lineHeight: 1.06,
           letterSpacing: detail ? '-0.02em' : '-0.06em',
           fontWeight: detail ? 600 : 700,
-          color: accent ? '#0b5c58' : 'text.primary',
-        }}
+          color: accent ? getCaseAccentTextColor(theme.palette.mode) : 'text.primary',
+        })}
       >
         {value}
       </Typography>

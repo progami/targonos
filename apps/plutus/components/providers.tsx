@@ -5,10 +5,11 @@ import { ThemeProvider as NextThemeProvider, useTheme } from 'next-themes';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { SnackbarProvider } from 'notistack';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { lightTheme, darkTheme } from '@/lib/mui-theme';
 import { NavigationHistoryProvider } from '@/lib/navigation-history';
+import { resolveMuiThemeMode } from '@/lib/theme-mode';
 
 type ProvidersProps = {
   children?: ReactNode;
@@ -16,7 +17,14 @@ type ProvidersProps = {
 
 function MuiThemeSync({ children }: { children: ReactNode }) {
   const { resolvedTheme } = useTheme();
-  const muiTheme = resolvedTheme === 'dark' ? darkTheme : lightTheme;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const themeMode = resolveMuiThemeMode(mounted, resolvedTheme);
+  const muiTheme = themeMode === 'dark' ? darkTheme : lightTheme;
 
   return (
     <ThemeProvider theme={muiTheme}>

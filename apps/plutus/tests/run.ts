@@ -85,6 +85,7 @@ import {
   buildLegacySettlementPagePath,
   remapLegacySettlementPath,
 } from '../lib/plutus/legacy-settlement-routes';
+import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
@@ -104,6 +105,13 @@ test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('US'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('UK'), 'amazon.co.uk');
   assert.equal(normalizeAuditMarketToMarketplaceId('unknown'), null);
+});
+
+test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
+  assert.equal(resolveMuiThemeMode(false, 'dark'), 'light');
+  assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
+  assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
+  assert.equal(resolveMuiThemeMode(true, undefined), 'light');
 });
 
 test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
