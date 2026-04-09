@@ -14,11 +14,14 @@ type MarketLatestPageProps = {
 
 export default async function MarketLatestCaseReportPage({ params }: MarketLatestPageProps) {
   const { market } = await params;
+  let reportDate: string;
 
   try {
     const bundle = await readCaseReportBundle(market as CaseReportMarketSlug);
-    redirect(`/cases/${market}/${bundle.reportDate}`);
+    reportDate = bundle.reportDate;
   } catch {
     notFound();
   }
+
+  redirect(`/cases/${market}/${reportDate}`);
 }

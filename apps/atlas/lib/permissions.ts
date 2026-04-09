@@ -215,19 +215,22 @@ export async function canManageEmployee(
 // Get all employees that a user can manage
 export async function getManageableEmployees(currentUserId: string) {
   const actor = await getUserPermissionInfo(currentUserId)
+  const manageableEmployeeSelect = {
+    id: true,
+    employeeId: true,
+    firstName: true,
+    lastName: true,
+    email: true,
+    avatar: true,
+    department: true,
+    position: true,
+  } as const
 
   // HR/Admin can manage all employees except self
   if (actor?.isHROrAbove) {
     return prisma.employee.findMany({
       where: { id: { not: currentUserId }, status: 'ACTIVE' },
-      select: {
-        id: true,
-        employeeId: true,
-        firstName: true,
-        lastName: true,
-        department: true,
-        position: true,
-      },
+      select: manageableEmployeeSelect,
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     })
   }
@@ -235,14 +238,7 @@ export async function getManageableEmployees(currentUserId: string) {
   // Get direct reports
   const directReports = await prisma.employee.findMany({
     where: { reportsToId: currentUserId, status: 'ACTIVE' },
-    select: {
-      id: true,
-      employeeId: true,
-      firstName: true,
-      lastName: true,
-      department: true,
-      position: true,
-    },
+    select: manageableEmployeeSelect,
   })
 
   const allReports = new Map<string, typeof directReports[0]>()
@@ -256,14 +252,7 @@ export async function getManageableEmployees(currentUserId: string) {
     const managerId = queue.shift()!
     const indirectReports = await prisma.employee.findMany({
       where: { reportsToId: managerId, status: 'ACTIVE' },
-      select: {
-        id: true,
-        employeeId: true,
-        firstName: true,
-        lastName: true,
-        department: true,
-        position: true,
-      },
+      select: manageableEmployeeSelect,
     })
     for (const report of indirectReports) {
       if (!allReports.has(report.id)) {
@@ -286,14 +275,7 @@ export async function getManageableEmployees(currentUserId: string) {
         id: { not: currentUserId },
         status: 'ACTIVE',
       },
-      select: {
-        id: true,
-        employeeId: true,
-        firstName: true,
-        lastName: true,
-        department: true,
-        position: true,
-      },
+      select: manageableEmployeeSelect,
     })
     for (const emp of deptEmployees) {
       allReports.set(emp.id, emp)
