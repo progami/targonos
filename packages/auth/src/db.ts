@@ -1,12 +1,16 @@
-// Use the Prisma client generated for the portal auth schema
-// Explicitly reference the index.js to avoid ESM directory import issues in Node 20
-// The generated client is produced by this package via `prisma generate --schema prisma/schema.prisma`
-// and emitted to ../node_modules/.prisma/client-auth
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — path import to generated client
-import { PrismaClient } from '../node_modules/.prisma/client-auth/index.js'
+import { createRequire } from 'node:module'
 
-let prismaInstance: PrismaClient | null = (globalThis as typeof globalThis & { __portalAuthPrisma?: PrismaClient | null }).__portalAuthPrisma ?? null
+// Use the Prisma client generated for the portal auth schema.
+// Load it at runtime so Next does not try to statically resolve the generated path.
+const require = createRequire(import.meta.url)
+const PrismaClient: typeof import('../node_modules/.prisma/client-auth/index.js').PrismaClient =
+  require('../node_modules/.prisma/client-auth/index.js').PrismaClient
+
+type PortalAuthPrismaClient = InstanceType<typeof PrismaClient>
+
+let prismaInstance: PortalAuthPrismaClient | null = (globalThis as typeof globalThis & {
+  __portalAuthPrisma?: PortalAuthPrismaClient | null
+}).__portalAuthPrisma ?? null
 
 function resolvePortalDbUrl(): string {
   const databaseUrl = process.env.PORTAL_DB_URL
@@ -19,7 +23,7 @@ function resolvePortalDbUrl(): string {
   return url.toString()
 }
 
-export function getPortalAuthPrisma(): PrismaClient {
+export function getPortalAuthPrisma(): PortalAuthPrismaClient {
   if (!prismaInstance) {
     prismaInstance = new PrismaClient({
       datasources: {
@@ -28,7 +32,9 @@ export function getPortalAuthPrisma(): PrismaClient {
       transactionOptions: { timeout: 30000, maxWait: 30000 },
     })
     if (process.env.NODE_ENV !== 'production') {
-      ;(globalThis as typeof globalThis & { __portalAuthPrisma?: PrismaClient | null }).__portalAuthPrisma = prismaInstance
+      ;(globalThis as typeof globalThis & {
+        __portalAuthPrisma?: PortalAuthPrismaClient | null
+      }).__portalAuthPrisma = prismaInstance
     }
   }
 
@@ -37,5 +43,5 @@ export function getPortalAuthPrisma(): PrismaClient {
 
 declare global {
   // eslint-disable-next-line no-var -- reuse prisma in dev hot reload
-  var __portalAuthPrisma: PrismaClient | null | undefined
+  var __portalAuthPrisma: PortalAuthPrismaClient | null | undefined
 }

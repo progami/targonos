@@ -1,10 +1,8 @@
-// Use the Prisma client generated for the portal auth schema
-// Explicitly reference the index.js to avoid ESM directory import issues in Node 20
-// The generated client is produced by this package via `prisma generate --schema prisma/schema.prisma`
-// and emitted to ../node_modules/.prisma/client-auth
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore — path import to generated client
-import { PrismaClient } from '../node_modules/.prisma/client-auth/index.js';
+import { createRequire } from 'node:module';
+// Use the Prisma client generated for the portal auth schema.
+// Load it at runtime so Next does not try to statically resolve the generated path.
+const require = createRequire(import.meta.url);
+const PrismaClient = require('../node_modules/.prisma/client-auth/index.js').PrismaClient;
 let prismaInstance = globalThis.__portalAuthPrisma ?? null;
 function resolvePortalDbUrl() {
     const databaseUrl = process.env.PORTAL_DB_URL;

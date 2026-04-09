@@ -1,5 +1,7 @@
-import { PrismaClient } from '../node_modules/.prisma/client-auth/index.js';
-export declare function getPortalAuthPrisma(): PrismaClient;
+declare const PrismaClient: typeof import('../node_modules/.prisma/client-auth/index.js').PrismaClient;
+type PortalAuthPrismaClient = InstanceType<typeof PrismaClient>;
+export declare function getPortalAuthPrisma(): PortalAuthPrismaClient;
 declare global {
-    var __portalAuthPrisma: PrismaClient | null | undefined;
+    var __portalAuthPrisma: PortalAuthPrismaClient | null | undefined;
 }
+export {};
