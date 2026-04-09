@@ -22,6 +22,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import InsightsIcon from '@mui/icons-material/Insights';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
+import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import ThemeToggle from './theme-toggle';
 
 const DRAWER_WIDTH = 220;
@@ -55,6 +56,13 @@ const NAV_ITEMS: NavItem[] = [
     description: 'Replica editing and revision control',
     icon: <Inventory2Icon />,
     matchPrefixes: ['/listings'],
+  },
+  {
+    href: '/cases/us',
+    label: 'Cases',
+    description: 'Daily Seller Central support briefs',
+    icon: <SupportAgentIcon />,
+    matchPrefixes: ['/cases'],
   },
 ];
 
@@ -95,6 +103,14 @@ function resolveSectionCopy(pathname: string) {
       eyebrow: 'Argus / Monitoring',
       title: 'Monitoring operations',
       subtitle: 'Track listing change events, source health, and ASIN-level timelines.',
+    };
+  }
+
+  if (pathname.startsWith('/cases')) {
+    return {
+      eyebrow: 'Argus / Cases',
+      title: 'Seller support briefs',
+      subtitle: 'Read the daily US and UK case reports rendered from the shared-drive markdown source.',
     };
   }
 
