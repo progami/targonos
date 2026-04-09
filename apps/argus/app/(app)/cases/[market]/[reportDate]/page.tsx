@@ -268,7 +268,7 @@ function CaseSection({
           borderTop: '1px solid',
           borderBottom: '1px solid',
           borderColor: alpha('#002c51', 0.12),
-          bgcolor: (theme) => alpha(theme.palette.background.default, 0.9),
+          bgcolor: 'background.paper',
           backdropFilter: 'blur(18px)',
         }}
       >
@@ -382,11 +382,13 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
               {MARKET_LINKS.map((market) => {
                 const active = market.slug === bundle.marketSlug;
                 return (
-                  <Box
+                  <Link
                     key={market.slug}
-                    component={Link}
                     href={`/cases/${market.slug}`}
-                    sx={{
+                    style={{ textDecoration: 'none' }}
+                  >
+                    <Box
+                      sx={{
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
@@ -402,11 +404,12 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
                       '&:hover': {
                         bgcolor: active ? 'rgba(0, 194, 185, 0.12)' : 'action.hover',
                       },
-                    }}
-                  >
-                    <Typography sx={{ fontWeight: 600 }}>{market.label}</Typography>
-                    <ArrowOutwardIcon sx={{ fontSize: 18 }} />
-                  </Box>
+                      }}
+                    >
+                      <Typography sx={{ fontWeight: 600 }}>{market.label}</Typography>
+                      <ArrowOutwardIcon sx={{ fontSize: 18 }} />
+                    </Box>
+                  </Link>
                 );
               })}
             </Stack>
@@ -441,11 +444,13 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
             {bundle.availableReportDates.slice(0, 10).map((reportDate) => {
               const active = reportDate === bundle.reportDate;
               return (
-                <Box
+                <Link
                   key={reportDate}
-                  component={Link}
                   href={`/cases/${bundle.marketSlug}/${reportDate}`}
-                  sx={{
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Box
+                    sx={{
                     px: 1.25,
                     py: 0.72,
                     borderRadius: 999,
@@ -455,10 +460,11 @@ function ReportPage({ bundle }: { bundle: CaseReportBundle }) {
                     textDecoration: 'none',
                     color: active ? 'text.primary' : 'text.secondary',
                     fontSize: '0.84rem',
-                  }}
-                >
-                  {reportDate}
-                </Box>
+                    }}
+                  >
+                    {reportDate}
+                  </Box>
+                </Link>
               );
             })}
           </Box>
