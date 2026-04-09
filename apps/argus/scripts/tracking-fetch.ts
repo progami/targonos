@@ -12,6 +12,7 @@ import path from 'node:path'
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://os.targonglobal.com/argus'
 const LOG_PATH = '/tmp/argus-tracking-fetch.log'
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
+const REPO_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const RUN_LOG_WRITER = path.join(SCRIPT_DIR, 'lib/write-monitoring-run-log.mjs')
 
 function loadEnvFile(file: string) {
@@ -99,7 +100,7 @@ async function main() {
   let errorMessage: string | undefined
   let pendingError: unknown = null
 
-  loadEnvFile(path.join(process.cwd(), '.env.local'))
+  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
 
   try {
     const token = process.env.ARGUS_TRACKING_FETCH_TOKEN?.trim()
