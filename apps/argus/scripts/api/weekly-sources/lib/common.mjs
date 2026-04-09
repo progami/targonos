@@ -41,9 +41,11 @@ export function loadEnvFile(file) {
 }
 
 export function loadMonitoringEnv() {
+  // Argus carries the concrete monitoring secrets; Talos now carries Bitwarden refs.
+  // Load Argus first so the shared loader does not lock in unresolved bw:// placeholders.
+  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, '.env.local'))
 }
 
