@@ -71,11 +71,10 @@ Files
 
 Edit the root `dev.local.apps.json` or export env vars to point apps to your running local ports.
 
-## Optional: callback redirect behavior
+## Callback redirect behavior
 
-- By default, after sign-in the user lands on the portal tile page (centralized UX).
-- To allow honoring `callbackUrl` to jump directly into an app after login, set:
-  - `ALLOW_CALLBACK_REDIRECT=true` in the portal environment.
-  - In development, only localhost/127.0.0.1 targets are allowed; in production, only subdomains of `COOKIE_DOMAIN` are allowed.
-  - The redirect is relayed via a same-origin page (`/auth/relay`) to ensure cookies are fully committed before the cross-origin navigation.
+- After sign-in, the portal honors `callbackUrl` by default so app-initiated logins return to the app that asked for auth.
+- Set `ALLOW_CALLBACK_REDIRECT=false` if you want to force the portal tile page after sign-in.
+- In development, only localhost/127.0.0.1 targets are allowed; in production, only subdomains of `COOKIE_DOMAIN` are allowed.
+- The redirect is relayed via a same-origin page (`/auth/relay`) to ensure cookies are fully committed before the cross-origin navigation.
 - `app/page.tsx` – App launcher
