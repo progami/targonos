@@ -11,6 +11,7 @@ import { useSession } from '@/hooks/usePortalSession'
 	} from '@/lib/lucide-icons'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
+import { AmazonWorkspaceSwitcher } from '@/components/amazon/amazon-workspace-switcher'
 import { toast } from 'react-hot-toast'
 import Link from 'next/link'
 import { 
@@ -319,6 +320,7 @@ try {
  title="Shipment Planning"
  description="Marketplace"
  icon={Truck}
+ metadata={<AmazonWorkspaceSwitcher currentHref="/market/shipment-planning" />}
  actions={
  <div className="flex items-center gap-2">
  <button
