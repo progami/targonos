@@ -2,7 +2,6 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
   Calculator,
-  LayoutGrid,
   Truck,
 } from '@/lib/lucide-icons'
 
@@ -18,14 +17,6 @@ export type AmazonWorkspaceTool = {
 }
 
 export const AMAZON_WORKSPACE_TOOLS: AmazonWorkspaceTool[] = [
-  {
-    name: 'Workspace',
-    href: '/amazon',
-    description: 'Amazon workspace entry point for live cost, fee, and planning tools.',
-    note: 'Workspace',
-    icon: LayoutGrid,
-    matchMode: 'exact',
-  },
   {
     name: 'FBA Fee Discrepancies',
     href: '/amazon/fba-fee-discrepancies',
