@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
+import { AmazonWorkspaceSwitcher } from '@/components/amazon/amazon-workspace-switcher'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -450,8 +451,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         title="FBA Fee Discrepancies"
         description="Amazon"
         icon={DollarSign}
-        backHref="/config/products"
-        backLabel="Products"
+        backHref="/amazon"
+        backLabel="Amazon Workspace"
+        metadata={<AmazonWorkspaceSwitcher currentHref="/amazon/fba-fee-discrepancies" />}
       />
 
       <PageContent className="space-y-6">

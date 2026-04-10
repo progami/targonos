@@ -19,6 +19,7 @@ import {
 
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
+import { AmazonWorkspaceSwitcher } from '@/components/amazon/amazon-workspace-switcher'
 import { DollarSign, Loader2 } from '@/lib/lucide-icons'
 
 const ALLOWED_ROLES = ['admin', 'staff'] as const
@@ -173,8 +174,9 @@ export default function FbaFeeTablesPage() {
             title="FBA Fee Tables"
             description="Amazon UK Rate Card 2026"
             icon={DollarSign}
-            backHref="/config/products"
-            backLabel="Products"
+            backHref="/amazon"
+            backLabel="Amazon Workspace"
+            metadata={<AmazonWorkspaceSwitcher currentHref="/amazon/fba-fee-tables" />}
           />
 
           <PageContent className="space-y-8">
@@ -438,8 +440,9 @@ export default function FbaFeeTablesPage() {
           title="FBA Fee Tables"
           description="Amazon US Rate Card 2026 (after Jan 15, 2026)"
           icon={DollarSign}
-          backHref="/config/products"
-          backLabel="Products"
+          backHref="/amazon"
+          backLabel="Amazon Workspace"
+          metadata={<AmazonWorkspaceSwitcher currentHref="/amazon/fba-fee-tables" />}
         />
 
         <PageContent className="space-y-8">

@@ -5,18 +5,9 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useSession } from '@/hooks/usePortalSession'
 import {
-  Home,
-  Package,
-  FileText,
-  Truck,
   LogOut,
   Menu,
   X,
-  BarChart3,
-  DollarSign,
-  Building,
-  BookOpen,
-  Users,
   ChevronRight,
 } from '@/lib/lucide-icons'
 import { useState, useEffect, useCallback } from 'react'
@@ -25,6 +16,11 @@ import { portalUrl } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { TenantIndicator } from '@/components/tenant/TenantIndicator'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import {
+  buildMainNavigation,
+  isNavigationItemActive,
+  type NavSection,
+} from '@/lib/navigation/main-nav'
 
 const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
@@ -48,47 +44,6 @@ function TargonWordmark({ className }: { className?: string }) {
     </div>
   )
 }
-
-interface NavSection {
-  title: string
-  items: Array<{
-    name: string
-    href: string
-    icon: React.ComponentType<{ className?: string }>
-  }>
-}
-
-const baseNavigation: NavSection[] = [
-  {
-    title: '',
-    items: [
-      { name: 'Dashboard', href: '/dashboard', icon: Home },
-    ]
-  },
-  {
-    title: 'Amazon',
-    items: [
-      { name: 'FBA Fee Discrepancies', href: '/amazon/fba-fee-discrepancies', icon: DollarSign },
-    ]
-  },
-  {
-    title: 'Operations',
-    items: [
-      { name: 'Purchase Orders', href: '/operations/purchase-orders', icon: FileText },
-      { name: 'Fulfillment Orders', href: '/operations/fulfillment-orders', icon: Truck },
-      { name: 'Inventory Ledger', href: '/operations/inventory', icon: BookOpen },
-      { name: 'Financial Ledger', href: '/operations/financial-ledger', icon: BarChart3 },
-    ]
-  },
-  {
-    title: 'Configuration',
-    items: [
-      { name: 'Products', href: '/config/products', icon: Package },
-      { name: 'Suppliers', href: '/config/suppliers', icon: Users },
-      { name: 'Warehouses', href: '/config/warehouses', icon: Building },
-    ]
-  },
-]
 
 // LocalStorage key for persisting collapsed sections
 const COLLAPSED_SECTIONS_KEY = 'talos-nav-collapsed-sections'
@@ -127,19 +82,19 @@ export function MainNav() {
 
   if (!session) return null
 
-  // Use base navigation for all users
-  const userNavigation = baseNavigation
+  const userNavigation: NavSection[] = buildMainNavigation({
+    role: session.user.role,
+    email: session.user.email,
+  })
 
   // Get current page name for mobile header
-  const matchesPath = (href: string) => {
-    const [targetPath] = href.split('?')
-    return pathname.startsWith(targetPath)
-  }
+  const matchesPath = (href: string, matchMode: 'prefix' | 'exact') =>
+    isNavigationItemActive(pathname, { href, matchMode })
 
   const getCurrentPageName = () => {
     for (const section of userNavigation) {
       for (const item of section.items) {
-        if (matchesPath(item.href)) {
+        if (matchesPath(item.href, item.matchMode)) {
           return item.name
         }
       }
@@ -184,7 +139,9 @@ export function MainNav() {
                 <ul role="list" className="-mx-2 space-y-3">
                   {userNavigation.map((section, sectionIdx) => {
                     const isCollapsed = section.title ? collapsedSections[section.title] : false
-                    const hasActiveItem = section.items.some(item => matchesPath(item.href))
+                    const hasActiveItem = section.items.some((item) =>
+                      matchesPath(item.href, item.matchMode)
+                    )
 
                     return (
                       <li key={sectionIdx}>
@@ -220,7 +177,7 @@ export function MainNav() {
                                 scroll={false}
                                 prefetch={false}
                                 className={cn(
-                                  matchesPath(item.href)
+                                  matchesPath(item.href, item.matchMode)
                                     ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-900 dark:text-cyan-300'
                                     : 'text-slate-700 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-slate-800',
                                   'group flex gap-x-3 rounded-lg py-2 px-3 text-sm leading-5 font-medium transition-all duration-200'
@@ -228,7 +185,7 @@ export function MainNav() {
                               >
                                 <item.icon
                                   className={cn(
-                                    matchesPath(item.href)
+                                    matchesPath(item.href, item.matchMode)
                                       ? 'text-cyan-600 dark:text-cyan-400'
                                       : 'text-slate-400 dark:text-slate-500 group-hover:text-cyan-600 dark:group-hover:text-cyan-400',
                                     'h-5 w-5 shrink-0'
@@ -354,7 +311,7 @@ export function MainNav() {
                                     scroll={false}
                                     prefetch={false}
                                     className={cn(
-                                      matchesPath(item.href)
+                                      matchesPath(item.href, item.matchMode)
                                         ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-900 dark:text-cyan-300'
                                         : 'text-slate-700 dark:text-slate-300 hover:text-cyan-700 dark:hover:text-cyan-400 hover:bg-slate-50 dark:hover:bg-slate-800',
                                       'group flex gap-x-3 rounded-lg py-2 px-3 text-sm leading-5 font-medium transition-all duration-200'
@@ -363,7 +320,7 @@ export function MainNav() {
                                   >
                                     <item.icon
                                       className={cn(
-                                        matchesPath(item.href)
+                                        matchesPath(item.href, item.matchMode)
                                           ? 'text-cyan-600 dark:text-cyan-400'
                                           : 'text-slate-400 dark:text-slate-500 group-hover:text-cyan-600 dark:group-hover:text-cyan-400',
                                         'h-5 w-5 shrink-0'

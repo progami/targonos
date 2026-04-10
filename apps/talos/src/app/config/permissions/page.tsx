@@ -10,12 +10,7 @@ import { Shield } from '@/lib/lucide-icons'
 import PermissionsPanel from './permissions-panel'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
-
-const SUPER_ADMIN_EMAILS = ['jarrar@targonglobal.com']
-
-function isSuperAdmin(email: string): boolean {
-  return SUPER_ADMIN_EMAILS.includes(email?.toLowerCase() ?? '')
-}
+import { isSuperAdminEmail } from '@/lib/auth/super-admin'
 
 export default function PermissionsPage() {
   const router = useRouter()
@@ -29,7 +24,7 @@ export default function PermissionsPage() {
       return
     }
 
-    if (!isSuperAdmin(session.user.email)) {
+    if (!isSuperAdminEmail(session.user.email)) {
       toast.error('Only super admins can access this page')
       router.push('/dashboard')
     }
@@ -48,7 +43,7 @@ export default function PermissionsPage() {
     )
   }
 
-  if (!session || !isSuperAdmin(session.user.email)) {
+  if (!session || !isSuperAdminEmail(session.user.email)) {
     return null
   }
 
