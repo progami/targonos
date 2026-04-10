@@ -1,30 +1,13 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Permission, UserPermission, User, UserRole } from '@targon/prisma-talos'
 import { NotFoundError, ValidationError } from '@/lib/api'
+import { hasRoleBaselinePermission } from '@/lib/permissions/baseline'
 
 // Super admin emails - these users have all permissions automatically
 const SUPER_ADMIN_EMAILS = ['jarrar@targonglobal.com']
 
-// Baseline permissions by role (in addition to explicit user grants)
-const STAFF_BASELINE_PERMISSIONS = new Set<string>([
-  'po.create',
-  'po.edit',
-  'po.cancel',
-  'fo.create',
-  'fo.edit',
-  'fo.stage',
-])
-
 function roleHasBaselinePermission(role: UserRole, permissionCode: string): boolean {
-  if (role === UserRole.admin) {
-    return permissionCode.startsWith('po.') || permissionCode.startsWith('fo.')
-  }
-
-  if (role === UserRole.staff) {
-    return STAFF_BASELINE_PERMISSIONS.has(permissionCode)
-  }
-
-  return false
+  return hasRoleBaselinePermission(role, permissionCode)
 }
 
 /**
