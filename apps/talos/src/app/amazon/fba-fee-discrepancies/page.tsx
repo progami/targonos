@@ -451,8 +451,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         title="FBA Fee Discrepancies"
         description="Amazon"
         icon={DollarSign}
-        backHref="/amazon"
-        backLabel="Amazon Workspace"
+        backHref="/dashboard"
+        backLabel="Dashboard"
         metadata={<AmazonWorkspaceSwitcher currentHref="/amazon/fba-fee-discrepancies" />}
       />
 
