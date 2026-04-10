@@ -6,7 +6,6 @@ import { useSession } from '@/hooks/usePortalSession'
 import { toast } from 'react-hot-toast'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { Shield } from '@/lib/lucide-icons'
 import PermissionsPanel from './permissions-panel'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
@@ -50,11 +49,7 @@ export default function PermissionsPage() {
   return (
     <DashboardLayout>
       <PageContainer>
-        <PageHeaderSection
-          title="User Permissions"
-          description="Manage RBAC permissions"
-          icon={Shield}
-        />
+        <PageHeaderSection title="Permissions" />
         <PageContent>
           <PermissionsPanel />
         </PageContent>
