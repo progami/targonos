@@ -8,17 +8,13 @@ test('amazon workspace exposes the live tool surfaces in Talos', () => {
   assert.deepEqual(
     AMAZON_WORKSPACE_TOOLS.map((tool) => tool.href),
     [
-      '/amazon',
       '/amazon/fba-fee-discrepancies',
       '/amazon/fba-fee-tables',
       '/market/shipment-planning',
     ]
   )
 
-  assert.equal(
-    AMAZON_WORKSPACE_TOOLS.find((tool) => tool.href === '/amazon')?.matchMode,
-    'exact'
-  )
+  assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/amazon'), false)
 })
 
 test('main navigation surfaces live Talos pages and keeps super-admin routes gated', () => {
@@ -32,7 +28,6 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   assert.deepEqual(
     amazonSection.items.map((item) => item.href),
     [
-      '/amazon',
       '/amazon/fba-fee-discrepancies',
       '/amazon/fba-fee-tables',
       '/market/shipment-planning',
@@ -66,15 +61,7 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   )
 })
 
-test('navigation matching keeps the Amazon overview exact while child tools stay highlighted', () => {
-  assert.equal(
-    isNavigationItemActive('/amazon/fba-fee-tables', {
-      href: '/amazon',
-      matchMode: 'exact',
-    }),
-    false
-  )
-
+test('navigation matching keeps the live Amazon tools highlighted', () => {
   assert.equal(
     isNavigationItemActive('/amazon/fba-fee-tables', {
       href: '/amazon/fba-fee-tables',
