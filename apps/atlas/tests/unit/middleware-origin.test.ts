@@ -3,14 +3,19 @@ import assert from 'node:assert/strict'
 
 import { resolveAppOrigin } from '../../lib/request-origin'
 
-test('resolveAppOrigin uses NEXT_PUBLIC_APP_URL when available', () => {
+test('resolveAppOrigin prefers the loopback request origin over hosted env values', () => {
   const previous = process.env.NEXT_PUBLIC_APP_URL
-  process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3106/atlas'
+  process.env.NEXT_PUBLIC_APP_URL = 'https://atlas.targonglobal.com/atlas'
 
   try {
     const request = {
-      headers: new Headers(),
-      nextUrl: { protocol: 'https:' },
+      headers: new Headers({
+        host: 'localhost:3106',
+      }),
+      nextUrl: {
+        origin: 'http://localhost:3106',
+      },
+      url: 'http://localhost:3106/atlas/dashboard',
     } as any
 
     assert.equal(resolveAppOrigin(request), 'http://localhost:3106')
@@ -23,7 +28,7 @@ test('resolveAppOrigin uses NEXT_PUBLIC_APP_URL when available', () => {
   }
 })
 
-test('resolveAppOrigin throws when no env is configured', () => {
+test('resolveAppOrigin uses forwarded host and proto when env is not configured', () => {
   const prevPublic = process.env.NEXT_PUBLIC_APP_URL
   const prevBase = process.env.BASE_URL
   const prevNextAuth = process.env.NEXTAUTH_URL
@@ -44,7 +49,7 @@ test('resolveAppOrigin throws when no env is configured', () => {
       },
     } as any
 
-    assert.throws(() => resolveAppOrigin(request), /Unable to resolve application origin/)
+    assert.equal(resolveAppOrigin(request), 'https://example.com')
   } finally {
     if (prevPublic === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL
@@ -60,6 +65,31 @@ test('resolveAppOrigin throws when no env is configured', () => {
       delete process.env.NEXTAUTH_URL
     } else {
       process.env.NEXTAUTH_URL = prevNextAuth
+    }
+  }
+})
+
+test('resolveAppOrigin prefers configured app origins over forwarded request headers', () => {
+  const previous = process.env.NEXT_PUBLIC_APP_URL
+  process.env.NEXT_PUBLIC_APP_URL = 'https://atlas.targonglobal.com'
+
+  try {
+    const request = {
+      headers: new Headers({
+        'x-forwarded-host': 'evil.example',
+        'x-forwarded-proto': 'https',
+      }),
+      nextUrl: {
+        origin: 'https://internal.example',
+      },
+    } as any
+
+    assert.equal(resolveAppOrigin(request), 'https://atlas.targonglobal.com')
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previous
     }
   }
 })
