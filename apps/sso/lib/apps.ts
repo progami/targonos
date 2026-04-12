@@ -51,6 +51,35 @@ function joinBaseUrl(base: string, suffix: string): string {
   return `${normalizedBase}${normalizedSuffix}`
 }
 
+function buildHostOrigin(rawHost?: string): string | undefined {
+  if (!rawHost) return undefined
+  const trimmed = rawHost.trim()
+  if (!trimmed) return undefined
+  try {
+    return new URL(trimmed).origin
+  } catch {
+    try {
+      return new URL(`http://${trimmed}`).origin
+    } catch {
+      return undefined
+    }
+  }
+}
+
+function buildPortOrigin(rawHost: string | undefined, port: number): string {
+  const hostOrigin = buildHostOrigin(rawHost)
+  if (!hostOrigin) {
+    return `http://localhost:${port}`
+  }
+
+  const url = new URL(hostOrigin)
+  url.port = String(port)
+  url.pathname = '/'
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}
+
 type AppBase = {
   id: string
   name: string
@@ -114,14 +143,16 @@ const BASE_APPS: AppBase[] = [
     description: 'Forecasting workspace for marketplace signals and statistical models.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/kairos'),
     category: 'Product',
+    devPath: '/kairos',
     devUrl: 'http://localhost:3210',
   },
   {
     id: 'xplan',
     name: 'xPlan',
     description: 'Collaborative planning workspace for sales, operations, and finance.',
-    url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-strategies'),
+    url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-setup'),
     category: 'Product',
+    devPath: '/xplan',
     devUrl: 'http://localhost:3208',
   },
   {
@@ -324,17 +355,16 @@ export function resolveAppUrl(app: AppDef): string {
     const cfg = tryLoadRootDevConfig()
     if (cfg?.apps && app.id in cfg.apps) {
       const val = cfg.apps[app.id]
-      const host = cfg.host || 'localhost'
-      base = typeof val === 'number' ? `http://${host}:${val}` : typeof val === 'string' ? val : undefined
+      base = typeof val === 'number'
+        ? buildPortOrigin(cfg.host, val)
+        : typeof val === 'string'
+          ? val
+          : undefined
     }
   }
 
-  if (!base && (process.env.NODE_ENV as string | undefined) !== 'production' && app.devUrl) {
-    base = app.devUrl
-  }
-
   if (!base) {
-    base = app.url
+    throw new Error(`${app.name} local development URL is not configured. Add it to dev.local.apps.json or set DEV_APP_URL_${app.id.toUpperCase()}.`)
   }
 
   if (app.devPath) {
@@ -388,10 +418,10 @@ function resolveOverrideUrl(app: AppDef): string | undefined {
     return undefined
   }
 
-  const host = normalizeHost(portalOverrides.host || process.env.PORTAL_APPS_HOST)
+  const host = normalizeHost(portalOverrides.host ?? process.env.PORTAL_APPS_HOST)
 
   if (typeof entry === 'number') {
-    const base = host ? `${host.replace(/\/$/, '')}:${entry}` : `http://localhost:${entry}`
+    const base = buildPortOrigin(host, entry)
     if (app.devPath) {
       try {
         const url = new URL(base)

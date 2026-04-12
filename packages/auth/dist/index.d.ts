@@ -90,6 +90,7 @@ export interface PortalSessionProbeOptions {
 }
 export declare function resolvePortalAuthOrigin(options?: PortalUrlOptions): string;
 export declare function buildPortalUrl(path: string, options?: PortalUrlOptions): URL;
+export declare function resolveAppAuthOrigin(options?: PortalUrlOptions): string;
 /**
  * Determine whether a request already carries a valid portal NextAuth session.
  * - Tries to decode the session cookie locally using the shared secret.

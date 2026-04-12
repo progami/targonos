@@ -498,10 +498,67 @@ function normalizeOrigin(raw: string | undefined | null): string | undefined {
   return undefined;
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase().replace(/\.$/, '');
+  if (!normalized) return false;
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
+    return true;
+  }
+  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]') {
+    return true;
+  }
+  return /^\d+\.\d+\.\d+\.\d+$/.test(normalized);
+}
+
+function isLoopbackOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  try {
+    return isLoopbackHostname(new URL(origin).hostname);
+  } catch {
+    return false;
+  }
+}
+
 function originFromRequestLike(request: PortalUrlRequestLike | undefined): string | undefined {
   if (!request) return undefined;
   const url = request.url ? new URL(request.url) : null;
   return normalizeOrigin(url?.origin ?? undefined);
+}
+
+function normalizeProtocol(rawProtocol: string | undefined): string | undefined {
+  if (!rawProtocol) return undefined;
+  const trimmed = rawProtocol.trim();
+  if (!trimmed) return undefined;
+  return trimmed.endsWith(':') ? trimmed.slice(0, -1) : trimmed;
+}
+
+function originFromRequestHeaders(request: PortalUrlRequestLike | undefined): string | undefined {
+  if (!request) return undefined;
+
+  const forwardedHostRaw = request.headers.get('x-forwarded-host');
+  const hostRaw = forwardedHostRaw ?? request.headers.get('host');
+  if (!hostRaw) {
+    return undefined;
+  }
+
+  const host = hostRaw.split(',')[0]?.trim();
+  if (!host) {
+    return undefined;
+  }
+
+  const forwardedProtoRaw = request.headers.get('x-forwarded-proto');
+  const forwardedProto = forwardedProtoRaw ? normalizeProtocol(forwardedProtoRaw.split(',')[0]) : undefined;
+
+  let requestProtocol: string | undefined;
+  if (request.url) {
+    try {
+      requestProtocol = normalizeProtocol(new URL(request.url).protocol);
+    } catch {
+      requestProtocol = undefined;
+    }
+  }
+
+  return normalizeOrigin(`${forwardedProto ?? requestProtocol ?? 'https'}://${host}`);
 }
 
 function originFromGlobalScope(): string | undefined {
@@ -516,11 +573,34 @@ function originFromGlobalScope(): string | undefined {
 }
 
 export function resolvePortalAuthOrigin(options?: PortalUrlOptions): string {
+  const requestOrigin = originFromRequestLike(options?.request);
+  const requestIsLoopback = isLoopbackOrigin(requestOrigin);
   const envCandidates = [
     process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
     process.env.PORTAL_AUTH_URL,
     process.env.NEXTAUTH_URL,
   ];
+
+  if (requestIsLoopback) {
+    for (const candidate of envCandidates) {
+      const normalized = normalizeOrigin(candidate);
+      if (normalized && isLoopbackOrigin(normalized)) {
+        return normalized;
+      }
+    }
+
+    const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
+    if (fallbackOrigin && isLoopbackOrigin(fallbackOrigin)) {
+      return fallbackOrigin;
+    }
+
+    const globalOrigin = originFromGlobalScope();
+    if (globalOrigin && isLoopbackOrigin(globalOrigin)) {
+      return globalOrigin;
+    }
+
+    return DEFAULT_PORTAL_DEV;
+  }
 
   for (const candidate of envCandidates) {
     const normalized = normalizeOrigin(candidate);
@@ -529,7 +609,6 @@ export function resolvePortalAuthOrigin(options?: PortalUrlOptions): string {
     }
   }
 
-  const requestOrigin = originFromRequestLike(options?.request);
   if (requestOrigin) {
     return requestOrigin;
   }
@@ -555,6 +634,56 @@ export function resolvePortalAuthOrigin(options?: PortalUrlOptions): string {
 export function buildPortalUrl(path: string, options?: PortalUrlOptions): URL {
   const origin = resolvePortalAuthOrigin(options);
   return new URL(path, origin);
+}
+
+export function resolveAppAuthOrigin(options?: PortalUrlOptions): string {
+  const headerOrigin = originFromRequestHeaders(options?.request);
+  const requestOrigin = originFromRequestLike(options?.request);
+  const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
+
+  if (headerOrigin && isLoopbackOrigin(headerOrigin)) {
+    return headerOrigin;
+  }
+
+  if (!headerOrigin && requestOrigin && isLoopbackOrigin(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  if (fallbackOrigin && isLoopbackOrigin(fallbackOrigin)) {
+    return fallbackOrigin;
+  }
+
+  if (headerOrigin) {
+    return headerOrigin;
+  }
+
+  if (requestOrigin) {
+    return requestOrigin;
+  }
+
+  const envCandidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.BASE_URL,
+    process.env.NEXTAUTH_URL,
+  ];
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizeOrigin(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  if (fallbackOrigin) {
+    return fallbackOrigin;
+  }
+
+  const globalOrigin = originFromGlobalScope();
+  if (globalOrigin) {
+    return globalOrigin;
+  }
+
+  throw new Error('Application origin is not configured. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.');
 }
 
 /**
@@ -800,25 +929,11 @@ function normalizeAuthzApiResponse(value: unknown): PortalAuthz | null {
   return normalizePortalAuthz(value);
 }
 
-function isLoopbackHostname(rawHostname: string): boolean {
-  const hostname = rawHostname.trim().toLowerCase().replace(/\.$/, '');
-  if (!hostname) return false;
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '::1' ||
-    hostname === '[::1]' ||
-    hostname === '0.0.0.0' ||
-    hostname.endsWith('.localhost')
-  );
-}
-
 function isLocalhostOrigin(raw: string | undefined | null): boolean {
   const origin = normalizeOrigin(raw);
   if (!origin) return false;
   try {
-    const url = new URL(origin);
-    return isLoopbackHostname(url.hostname);
+    return isLoopbackOrigin(origin);
   } catch {
     return false;
   }

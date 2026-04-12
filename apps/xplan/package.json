@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3008",
+    "dev": "next dev -p 3208",
     "clean": "rm -rf .next out dist",
     "build": "prisma generate --schema ../talos/prisma/schema.prisma && prisma generate --schema prisma/schema.prisma && next build",
     "start": "next start",

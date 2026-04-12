@@ -3,10 +3,10 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js sso -- next dev -p 3000",
+    "dev": "node ../../scripts/run-dev-with-logs.js sso -- next dev -p 3200",
     "clean": "rm -rf .next out dist",
     "build": "next build",
-    "start": "next start -p 3000",
+    "start": "next start -p 3200",
     "type-check": "tsc --noEmit",
     "postinstall": "node ../../scripts/link-prisma-client-auth.js"
   },

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
 
 function normalizeBasePath(value?: string | null) {
   if (!value || value === '/') return ''
@@ -8,29 +8,8 @@ function normalizeBasePath(value?: string | null) {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
-function resolveAppOrigin(): string {
-  const candidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.BASE_URL,
-    process.env.NEXTAUTH_URL,
-  ]
-
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const trimmed = candidate.trim()
-    if (!trimmed) continue
-    try {
-      return new URL(trimmed).origin
-    } catch {
-      continue
-    }
-  }
-
-  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
-}
-
 function callbackUrlForRequest(request: NextRequest, appBasePath: string): string {
-  const origin = resolveAppOrigin()
+  const origin = resolveAppAuthOrigin({ request })
 
   const pathname = request.nextUrl.pathname.startsWith(appBasePath) || !appBasePath
     ? request.nextUrl.pathname
@@ -40,7 +19,7 @@ function callbackUrlForRequest(request: NextRequest, appBasePath: string): strin
 }
 
 export async function middleware(request: NextRequest) {
-  const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '/argus')
+  const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? process.env.BASE_PATH ?? '/argus')
   const pathname = request.nextUrl.pathname
 
   if (appBasePath && pathname.startsWith(`${appBasePath}${appBasePath}`)) {
