@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
 import { remapLegacySettlementPath } from '@/lib/plutus/legacy-settlement-routes'
 
 function normalizeBasePath(value?: string | null) {
@@ -9,29 +9,8 @@ function normalizeBasePath(value?: string | null) {
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
 }
 
-function resolveAppOrigin(): string {
-  const candidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.BASE_URL,
-    process.env.NEXTAUTH_URL,
-  ]
-
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const trimmed = candidate.trim()
-    if (!trimmed) continue
-    try {
-      return new URL(trimmed).origin
-    } catch {
-      continue
-    }
-  }
-
-  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
-}
-
 function callbackUrlForRequest(request: NextRequest, appBasePath: string): string {
-  const origin = resolveAppOrigin()
+  const origin = resolveAppAuthOrigin({ request })
 
   const pathname = request.nextUrl.pathname.startsWith(appBasePath) || !appBasePath
     ? request.nextUrl.pathname

@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node ../../scripts/run-dev-with-logs.js argus -- next dev -p 3216",
     "build": "next build",
-    "start": "next start",
+    "start": "next start -p 3216",
     "lint": "eslint app components lib middleware.ts",
     "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },

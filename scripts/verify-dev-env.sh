@@ -47,8 +47,8 @@ done
 
 require_contains "apps/sso/.env.dev" '^PORTAL_APPS_CONFIG=dev\.apps\.json$' \
   "PORTAL_APPS_CONFIG must point at dev.apps.json in"
-require_contains "apps/sso/.env.local" '^PORTAL_APPS_CONFIG=dev\.apps\.json$' \
-  "PORTAL_APPS_CONFIG must point at dev.apps.json in"
+require_contains "apps/sso/.env.local" '^PORTAL_APPS_CONFIG=dev\.local\.apps\.json$' \
+  "PORTAL_APPS_CONFIG must point at dev.local.apps.json in"
 
 if [[ $has_error -eq 1 ]]; then
   printf 'Dev environment configuration checks failed.\n' >&2

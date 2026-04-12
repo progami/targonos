@@ -1,9 +1,23 @@
-import { filterAppsForUser, resolveAppUrl, ALL_APPS } from '@/lib/apps'
+import { filterAppsForUser, resolveAppUrl, ALL_APPS, type AppDef } from '@/lib/apps'
 import { getSafeServerSession } from '@/lib/safe-session'
-import PortalClient from './PortalClient'
+import PortalClient, { type PortalAppCard } from './PortalClient'
 import LoginPage from './login/page'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
+
+function withLaunchUrl(app: AppDef): PortalAppCard {
+  try {
+    return {
+      ...app,
+      launchUrl: resolveAppUrl(app),
+    }
+  } catch (error) {
+    return {
+      ...app,
+      launchError: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
 
 export default async function PortalHome({ searchParams }: { searchParams: SearchParams }) {
   const session = await getSafeServerSession()
@@ -63,15 +77,9 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
   ))
 
   // Resolve URLs on the server side so the client never sees placeholder slugs or stale hosts
-  const appsWithUrls = apps.map(app => ({
-    ...app,
-    url: resolveAppUrl(app)
-  }))
+  const appsWithUrls = apps.map(withLaunchUrl)
 
-  const assignedAppsWithUrls = assignedApps.map((app) => ({
-    ...app,
-    url: resolveAppUrl(app),
-  }))
+  const assignedAppsWithUrls = assignedApps.map(withLaunchUrl)
 
   return (
     <PortalClient

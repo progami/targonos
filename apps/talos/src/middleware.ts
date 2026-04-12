@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { applyDevAuthDefaults, getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
+import { applyDevAuthDefaults, getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
 
 import { getBasePath, withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
@@ -12,35 +12,7 @@ applyDevAuthDefaults({
 })
 
 function resolveAppOrigin(request: NextRequest): string {
-  const candidates: Array<string | undefined> = []
-
-  const forwardedHostRaw = request.headers.get('x-forwarded-host')
-  const forwardedHost = forwardedHostRaw ? forwardedHostRaw.split(',')[0].trim() : ''
-  const forwardedProtoRaw = request.headers.get('x-forwarded-proto')
-  const forwardedProto = forwardedProtoRaw ? forwardedProtoRaw.split(',')[0].trim() : 'https'
-
-  if (forwardedHost) {
-    candidates.push(`${forwardedProto}://${forwardedHost}`)
-  }
-
-  candidates.push(request.nextUrl.origin)
-  candidates.push(request.url)
-  candidates.push(process.env.NEXT_PUBLIC_APP_URL)
-  candidates.push(process.env.BASE_URL)
-  candidates.push(process.env.NEXTAUTH_URL)
-
-  for (const candidate of candidates) {
-    if (!candidate) continue
-    const trimmed = candidate.trim()
-    if (!trimmed) continue
-    try {
-      return new URL(trimmed).origin
-    } catch {
-      continue
-    }
-  }
-
-  throw new Error('Unable to resolve application origin. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.')
+  return resolveAppAuthOrigin({ request })
 }
 
 export async function middleware(request: NextRequest) {

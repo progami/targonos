@@ -3,10 +3,10 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js talos -- next dev -p 3001",
+    "dev": "node ../../scripts/run-dev-with-logs.js talos -- next dev -p 3201",
     "dev:30001": "next dev -p 30001",
     "dev:turbo": "next dev --turbo",
-    "dev:port": "PORT=3001 next dev",
+    "dev:port": "PORT=3201 next dev",
     "dev:logged": "node server.js",
     "build": "pnpm db:generate && next build",
     "build:prod": "NODE_ENV=production npm run clean && npm run build && npm run post-build",
