@@ -10,6 +10,11 @@ import styles from './portal.module.css'
 
 type PortalRoleMap = Record<string, { departments?: string[]; depts?: string[] }>
 
+export type PortalAppCard = AppDef & {
+  launchError?: string
+  launchUrl?: string
+}
+
 const CATEGORY_ORDER = [
   'Ops',
   'Product',
@@ -26,8 +31,8 @@ const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
 
 type PortalClientProps = {
   session: Session
-  apps: AppDef[]
-  accessApps?: AppDef[]
+  apps: PortalAppCard[]
+  accessApps?: PortalAppCard[]
   roles?: PortalRoleMap
   isPlatformAdmin?: boolean
   accessError?: string
@@ -46,7 +51,7 @@ export default function PortalClient({ session, apps, accessApps, roles, isPlatf
     return trimmed && trimmed.length > 0 ? trimmed : OTHER_CATEGORY
   }
 
-  const appsByCategory = apps.reduce<Record<string, AppDef[]>>((acc, app) => {
+  const appsByCategory = apps.reduce<Record<string, PortalAppCard[]>>((acc, app) => {
     const assigned = roleMap[app.id]?.depts ?? roleMap[app.id]?.departments
     const primaryCategory = normalizeCategory(assigned?.[0] ?? (app as any).category)
     acc[primaryCategory] = acc[primaryCategory]
@@ -144,14 +149,14 @@ export default function PortalClient({ session, apps, accessApps, roles, isPlatf
                   </span>
                 </div>
                 <div className={styles.grid}>
-	                  {appsByCategory[category]?.map((app) => {
-	                    const isDevLifecycle = app.lifecycle === 'dev'
-	                    const isPublicEntry = app.entryPolicy === 'public'
-	                    const isEntitled = isPublicEntry || Boolean(isPlatformAdmin) || Boolean(roleMap[app.id])
-	                    const isDisabled = !isEntitled
-	                    const cardClassName = isDisabled
-	                      ? `${styles.card} ${styles.cardDisabled}`
-	                      : styles.card
+		                  {appsByCategory[category]?.map((app) => {
+		                    const isDevLifecycle = app.lifecycle === 'dev'
+		                    const isPublicEntry = app.entryPolicy === 'public'
+		                    const isEntitled = isPublicEntry || Boolean(isPlatformAdmin) || Boolean(roleMap[app.id])
+		                    const isDisabled = !isEntitled || !app.launchUrl
+		                    const cardClassName = isDisabled
+		                      ? `${styles.card} ${styles.cardDisabled}`
+		                      : styles.card
 	                    const iconBoxClassName = styles.iconBox
 
                     const linkProps = isDisabled
@@ -162,12 +167,12 @@ export default function PortalClient({ session, apps, accessApps, roles, isPlatf
                         }
 
                     return (
-                      <a
-                        key={app.id}
-                        href={isDisabled ? undefined : app.url}
-                        className={cardClassName}
-                        aria-disabled={isDisabled}
-                        tabIndex={isDisabled ? -1 : undefined}
+	                      <a
+	                        key={app.id}
+	                        href={isDisabled ? undefined : app.launchUrl}
+	                        className={cardClassName}
+	                        aria-disabled={isDisabled}
+	                        tabIndex={isDisabled ? -1 : undefined}
                         {...linkProps}
 	                      >
 	                        <div className={styles.iconWrap}>
@@ -179,19 +184,23 @@ export default function PortalClient({ session, apps, accessApps, roles, isPlatf
 	                            />
                           </svg>
                         </div>
-                        <div className={styles.badgesRow}>
-                          {!isEntitled && !isPublicEntry && <span className={styles.lockBadge}>No Access</span>}
-                          {isDevLifecycle && (
-                            <span className={styles.lifecycleBadge} title="In Development">
-                              DEV
+	                        <div className={styles.badgesRow}>
+	                          {!isEntitled && !isPublicEntry && <span className={styles.lockBadge}>No Access</span>}
+	                          {isEntitled && !app.launchUrl && <span className={styles.lockBadge}>Unavailable</span>}
+	                          {isDevLifecycle && (
+	                            <span className={styles.lifecycleBadge} title="In Development">
+	                              DEV
                             </span>
                           )}
-                        </div>
-                        <div className={styles.name}>{app.name}</div>
-                        <p className={styles.description}>{app.description}</p>
-                      </a>
-                    )
-                  })}
+	                        </div>
+	                        <div className={styles.name}>{app.name}</div>
+	                        <p className={styles.description}>{app.description}</p>
+	                        {isEntitled && app.launchError && (
+	                          <p className={styles.description}>{app.launchError}</p>
+	                        )}
+	                      </a>
+	                    )
+	                  })}
                 </div>
               </div>
             ))}

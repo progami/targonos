@@ -475,7 +475,7 @@ export interface PortalSessionProbeOptions {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_PORTAL_DEV = 'http://localhost:3000';
+const DEFAULT_PORTAL_DEV = 'http://localhost:3200';
 const missingSecretWarnings = new Set<string>();
 
 function normalizeOrigin(raw: string | undefined | null): string | undefined {
@@ -507,7 +507,17 @@ function isLoopbackHostname(hostname: string): boolean {
   if (normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]') {
     return true;
   }
-  return /^\d+\.\d+\.\d+\.\d+$/.test(normalized);
+
+  const octets = normalized.split('.');
+  if (octets.length !== 4) {
+    return false;
+  }
+
+  if (!octets.every((octet) => /^\d+$/.test(octet))) {
+    return false;
+  }
+
+  return octets[0] === '127';
 }
 
 function isLoopbackOrigin(origin: string | undefined): boolean {
@@ -640,17 +650,29 @@ export function resolveAppAuthOrigin(options?: PortalUrlOptions): string {
   const headerOrigin = originFromRequestHeaders(options?.request);
   const requestOrigin = originFromRequestLike(options?.request);
   const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
+  const envCandidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.BASE_URL,
+    process.env.NEXTAUTH_URL,
+  ];
 
   if (headerOrigin && isLoopbackOrigin(headerOrigin)) {
     return headerOrigin;
   }
 
-  if (!headerOrigin && requestOrigin && isLoopbackOrigin(requestOrigin)) {
+  if (requestOrigin && isLoopbackOrigin(requestOrigin)) {
     return requestOrigin;
   }
 
   if (fallbackOrigin && isLoopbackOrigin(fallbackOrigin)) {
     return fallbackOrigin;
+  }
+
+  for (const candidate of envCandidates) {
+    const normalized = normalizeOrigin(candidate);
+    if (normalized) {
+      return normalized;
+    }
   }
 
   if (headerOrigin) {
@@ -659,19 +681,6 @@ export function resolveAppAuthOrigin(options?: PortalUrlOptions): string {
 
   if (requestOrigin) {
     return requestOrigin;
-  }
-
-  const envCandidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.BASE_URL,
-    process.env.NEXTAUTH_URL,
-  ];
-
-  for (const candidate of envCandidates) {
-    const normalized = normalizeOrigin(candidate);
-    if (normalized) {
-      return normalized;
-    }
   }
 
   if (fallbackOrigin) {

@@ -68,3 +68,28 @@ test('resolveAppOrigin uses forwarded host and proto when env is not configured'
     }
   }
 })
+
+test('resolveAppOrigin prefers configured app origins over forwarded request headers', () => {
+  const previous = process.env.NEXT_PUBLIC_APP_URL
+  process.env.NEXT_PUBLIC_APP_URL = 'https://atlas.targonglobal.com'
+
+  try {
+    const request = {
+      headers: new Headers({
+        'x-forwarded-host': 'evil.example',
+        'x-forwarded-proto': 'https',
+      }),
+      nextUrl: {
+        origin: 'https://internal.example',
+      },
+    } as any
+
+    assert.equal(resolveAppOrigin(request), 'https://atlas.targonglobal.com')
+  } finally {
+    if (previous === undefined) {
+      delete process.env.NEXT_PUBLIC_APP_URL
+    } else {
+      process.env.NEXT_PUBLIC_APP_URL = previous
+    }
+  }
+})
