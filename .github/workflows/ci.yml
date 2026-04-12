@@ -39,6 +39,16 @@ jobs:
         run: |
           cp apps/sso/.env.dev.ci apps/sso/.env.dev
           cp apps/sso/.env.dev.ci apps/sso/.env.local
+          python - <<'PY'
+          from pathlib import Path
+          env_local = Path('apps/sso/.env.local')
+          env_local.write_text(
+              env_local.read_text().replace(
+                  'PORTAL_APPS_CONFIG=dev.apps.json',
+                  'PORTAL_APPS_CONFIG=dev.local.apps.json',
+              )
+          )
+          PY
           cp apps/talos/.env.dev.ci apps/talos/.env.dev
           cp apps/talos/.env.dev.ci apps/talos/.env.local
           cp apps/xplan/.env.dev.ci apps/xplan/.env.dev
