@@ -1,72 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { auth } from '@/lib/auth'
-import crypto from 'crypto'
-import bcrypt from 'bcryptjs'
 import {
   TenantCode,
-  TENANT_CODES,
   isValidTenantCode,
   TENANT_COOKIE_NAME,
   TENANT_COOKIE_MAX_AGE,
   getTenantConfig,
 } from '@/lib/tenant/constants'
-import { getTenantPrismaClient } from '@/lib/tenant/prisma-factory'
+import { isTenantAllowedForSession } from '@/lib/tenant/access'
 
 export const dynamic = 'force-dynamic'
 
-async function userExistsInOtherTenant(email: string, tenantCode: TenantCode): Promise<boolean> {
-  for (const otherTenantCode of TENANT_CODES) {
-    if (otherTenantCode === tenantCode) continue
-    const prisma = await getTenantPrismaClient(otherTenantCode)
-    const user = await prisma.user.findFirst({
-      where: { email },
-      select: { id: true },
-    })
-    if (user) {
-      return true
-    }
-  }
-
-  return false
-}
-
-/**
- * Ensure an active user exists in the specified tenant database.
- * - If the user record exists but is inactive, returns false.
- * - If the user record does not exist, provisions a default staff user (only if
- *   the email is not already provisioned in a different tenant).
- */
-async function ensureActiveUserInTenant(email: string, fullName: string, tenantCode: TenantCode): Promise<boolean> {
-  const prisma = await getTenantPrismaClient(tenantCode)
-
-  const existing = await prisma.user.findFirst({
-    where: { email },
-    select: { id: true, isActive: true },
-  })
-
-  if (existing) {
-    return existing.isActive
-  }
-
-  if (await userExistsInOtherTenant(email, tenantCode)) {
-    return false
-  }
-
-  await prisma.user.create({
-    data: {
-      email,
-      fullName,
-      passwordHash: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10),
-      role: 'staff',
-      region: tenantCode,
-      isActive: true,
-      isDemo: false,
+export function buildPortalActiveTenantRequest(request: Request, tenantCode: TenantCode): {
+  url: URL
+  init: RequestInit
+} {
+  return {
+    url: new URL('/api/v1/session/active-tenant', process.env.PORTAL_AUTH_URL),
+    init: {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        cookie: request.headers.get('cookie') ?? '',
+      },
+      body: JSON.stringify({ appId: 'talos', tenantCode }),
     },
-    select: { id: true },
-  })
-
-  return true
+  }
 }
 
 /**
@@ -94,37 +54,19 @@ export async function POST(request: NextRequest) {
 
     const tenantCode = tenant as TenantCode
 
-    // Validate user has access by checking if they exist in the target tenant's database
-    const userEmail = session.user?.email
-    if (!userEmail) {
-      return NextResponse.json(
-        { error: 'User email not found in session' },
-        { status: 400 }
-      )
-    }
-
-    const normalizedEmail = userEmail.trim().toLowerCase()
-    if (!normalizedEmail) {
-      return NextResponse.json(
-        { error: 'User email not found in session' },
-        { status: 400 }
-      )
-    }
-
-    const rawName = session.user?.name
-    const fullName = typeof rawName === 'string' && rawName.trim()
-      ? rawName.trim()
-      : normalizedEmail
-
-    const hasAccess = await ensureActiveUserInTenant(normalizedEmail, fullName, tenantCode)
-    if (!hasAccess) {
+    if (!isTenantAllowedForSession(session as never, tenantCode)) {
       return NextResponse.json(
         { error: `Access denied: Your account is not authorized for the ${tenantCode} region` },
         { status: 403 }
       )
     }
 
-    // Set tenant cookie
+    const portalRequest = buildPortalActiveTenantRequest(request, tenantCode)
+    const portalResponse = await fetch(portalRequest.url, portalRequest.init)
+    if (!portalResponse.ok) {
+      return NextResponse.json({ error: 'Failed to persist active tenant' }, { status: 502 })
+    }
+
     const cookieStore = await cookies()
     cookieStore.set(TENANT_COOKIE_NAME, tenantCode, {
       httpOnly: true,
@@ -136,7 +78,7 @@ export async function POST(request: NextRequest) {
 
     const config = getTenantConfig(tenantCode)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       tenant: {
         code: config.code,
@@ -144,6 +86,12 @@ export async function POST(request: NextRequest) {
         displayName: config.displayName,
       },
     })
+
+    for (const setCookieHeader of portalResponse.headers.getSetCookie()) {
+      response.headers.append('set-cookie', setCookieHeader)
+    }
+
+    return response
   } catch (error) {
     console.error('[tenant/select] Error:', error)
     return NextResponse.json(

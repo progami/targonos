@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import type { Session } from 'next-auth'
 import { auth } from '@/lib/auth'
 import {
   TENANT_COOKIE_NAME,
@@ -10,9 +11,49 @@ import {
   getAllTenants,
   TenantCode,
 } from '@/lib/tenant/constants'
-import { getAccessibleTenantCodesForEmail } from '@/lib/tenant/access'
+import { getPortalTenantMemberships } from '@/lib/tenant/access'
 
 export const dynamic = 'force-dynamic'
+
+export function resolveCurrentTenantSelection(
+  session: Session,
+  cookieTenantCode: TenantCode | null,
+): { available: TenantCode[]; current: TenantCode } {
+  const memberships = getPortalTenantMemberships(session as never)
+  const rawActiveTenant = (session as any)?.activeTenant
+
+  if (memberships.length === 0) {
+    return {
+      available: memberships,
+      current: DEFAULT_TENANT,
+    }
+  }
+
+  if (typeof rawActiveTenant === 'string') {
+    const normalizedActiveTenant = rawActiveTenant.trim().toUpperCase()
+    if (isValidTenantCode(normalizedActiveTenant)) {
+      const tenantCode = normalizedActiveTenant as TenantCode
+      if (memberships.includes(tenantCode)) {
+        return {
+          available: memberships,
+          current: tenantCode,
+        }
+      }
+    }
+  }
+
+  if (cookieTenantCode && memberships.includes(cookieTenantCode)) {
+    return {
+      available: memberships,
+      current: cookieTenantCode,
+    }
+  }
+
+  return {
+    available: memberships,
+    current: memberships[0],
+  }
+}
 
 /**
  * GET /api/tenant/current
@@ -29,39 +70,15 @@ export async function GET() {
     // Get tenant from cookie
     const cookieStore = await cookies()
     const tenantCookie = cookieStore.get(TENANT_COOKIE_NAME)?.value
-
-    // Get user's email from session to check which tenants they can access
-    const userEmail = session.user?.email
-    let accessibleCodes: TenantCode[] = []
-
-    if (userEmail) {
-      // Query all tenant databases to find where this user exists
-      accessibleCodes = await getAccessibleTenantCodesForEmail(userEmail)
-    }
-
     const cookieTenantCode = isValidTenantCode(tenantCookie) ? tenantCookie : null
-    const defaultTenant = DEFAULT_TENANT
-    const resolvedTenantCode = (() => {
-      if (accessibleCodes.length === 0) {
-        return cookieTenantCode ?? defaultTenant
-      }
-
-      if (cookieTenantCode && accessibleCodes.includes(cookieTenantCode)) {
-        return cookieTenantCode
-      }
-
-      if (accessibleCodes.includes(defaultTenant)) {
-        return defaultTenant
-      }
-
-      return accessibleCodes[0]
-    })()
+    const tenantSelection = resolveCurrentTenantSelection(session, cookieTenantCode)
+    const resolvedTenantCode = tenantSelection.current
 
     const current = getTenantConfig(resolvedTenantCode)
 
     // Map accessible tenants to response format
     const available = getAllTenants()
-      .filter((t) => accessibleCodes.includes(t.code))
+      .filter((t) => tenantSelection.available.includes(t.code))
       .map((t) => ({
         code: t.code,
         name: t.name,

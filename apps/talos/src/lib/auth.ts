@@ -20,6 +20,7 @@ type AuthzClaims = {
   roles?: unknown
   globalRoles?: unknown
   authzVersion?: unknown
+  activeTenant?: unknown
 }
 
 type SessionWithAuthz = Session & AuthzClaims
@@ -124,6 +125,11 @@ const baseAuthOptions: NextAuthConfig = {
       sessionWithAuthz.roles = tokenWithAuthz.roles
       sessionWithAuthz.globalRoles = tokenWithAuthz.globalRoles
       sessionWithAuthz.authzVersion = tokenWithAuthz.authzVersion
+      if (typeof tokenWithAuthz.activeTenant === 'string') {
+        sessionWithAuthz.activeTenant = tokenWithAuthz.activeTenant
+      } else {
+        sessionWithAuthz.activeTenant = null
+      }
 
       // Always hydrate a stable user id (portal-issued) so API routes don't crash
       // when a Talos user record doesn't exist yet in the tenant schema.
