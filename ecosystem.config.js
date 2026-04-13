@@ -51,6 +51,17 @@ function loadAppEnv(appDir, environment, options = {}) {
   return env;
 }
 
+function pickProcessEnv(keys) {
+  const env = {};
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value !== undefined && value !== '') {
+      env[key] = value;
+    }
+  }
+  return env;
+}
+
 function createNextAppEnv(rootDir, appName, environment, runtimeEnv) {
   return {
     ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
@@ -70,10 +81,76 @@ function getPortalHostedUrl(environment) {
   throw new Error(`Unsupported environment for hosted portal URL: ${environment}`);
 }
 
+function getHostedCookieDomain(environment) {
+  if (environment === 'dev') {
+    return '.dev-os.targonglobal.com';
+  }
+
+  if (environment === 'production') {
+    return '.os.targonglobal.com';
+  }
+
+  throw new Error(`Unsupported environment for hosted cookie domain: ${environment}`);
+}
+
+function getHostedBuildMetadataEnv() {
+  return pickProcessEnv([
+    'NEXT_PUBLIC_VERSION',
+    'NEXT_PUBLIC_RELEASE_URL',
+    'NEXT_PUBLIC_COMMIT_SHA',
+    'BUILD_TIME',
+    'NEXT_PUBLIC_BUILD_TIME',
+  ]);
+}
+
+function getHostedSharedSecret(env) {
+  const sharedSecret = env.PORTAL_AUTH_SECRET ?? env.NEXTAUTH_SECRET;
+  if (!sharedSecret) {
+    throw new Error('Hosted portal auth secret is required.');
+  }
+  return sharedSecret;
+}
+
+function omitHostedManagedAppEnv(appEnv) {
+  const managedKeys = [
+    'BASE_URL',
+    'BUILD_TIME',
+    'COOKIE_DOMAIN',
+    'NEXTAUTH_SECRET',
+    'NEXTAUTH_URL',
+    'NEXT_PUBLIC_APP_URL',
+    'NEXT_PUBLIC_BUILD_TIME',
+    'NEXT_PUBLIC_COMMIT_SHA',
+    'NEXT_PUBLIC_PORTAL_APPS_BASE_URL',
+    'NEXT_PUBLIC_PORTAL_AUTH_URL',
+    'NEXT_PUBLIC_RELEASE_URL',
+    'NEXT_PUBLIC_VERSION',
+    'PORTAL_APPS_BASE_URL',
+    'PORTAL_AUTH_SECRET',
+    'PORTAL_AUTH_URL',
+  ];
+  const sanitized = { ...appEnv };
+  for (const key of managedKeys) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
 function createPortalRuntimeEnv(rootDir, environment, runtimeEnv) {
   const portalBaseUrl = getPortalHostedUrl(environment);
+  const portalEnv = loadAppEnv(path.join(rootDir, 'apps/sso'), environment);
+  const sharedSecret = getHostedSharedSecret({
+    ...portalEnv,
+    ...pickProcessEnv(['PORTAL_AUTH_SECRET', 'NEXTAUTH_SECRET']),
+  });
+  const buildMetadataEnv = getHostedBuildMetadataEnv();
   return {
-    ...loadAppEnv(path.join(rootDir, 'apps/sso'), environment),
+    ...portalEnv,
+    ...runtimeEnv,
+    ...buildMetadataEnv,
+    PORTAL_AUTH_SECRET: sharedSecret,
+    NEXTAUTH_SECRET: sharedSecret,
+    COOKIE_DOMAIN: getHostedCookieDomain(environment),
     PORTAL_APPS_BASE_URL: portalBaseUrl,
     NEXT_PUBLIC_PORTAL_APPS_BASE_URL: portalBaseUrl,
     PORTAL_AUTH_URL: portalBaseUrl,
@@ -81,7 +158,6 @@ function createPortalRuntimeEnv(rootDir, environment, runtimeEnv) {
     NEXTAUTH_URL: portalBaseUrl,
     NEXT_PUBLIC_APP_URL: portalBaseUrl,
     BASE_URL: portalBaseUrl,
-    ...runtimeEnv,
   };
 }
 
@@ -139,18 +215,28 @@ function resolveHostedBasePath(appEnv, runtimeEnv) {
 
 function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   const portalEnv = createPortalRuntimeEnv(rootDir, environment, {});
-  const appEnv = loadAppEnv(path.join(rootDir, `apps/${appName}`), environment);
+  const appEnv = omitHostedManagedAppEnv(loadAppEnv(path.join(rootDir, `apps/${appName}`), environment));
   const portalBaseUrl = portalEnv.PORTAL_AUTH_URL;
   if (!portalBaseUrl) {
     throw new Error(`Missing PORTAL_AUTH_URL for ${appName} ${environment} runtime.`);
   }
+  if (!portalEnv.PORTAL_DB_URL) {
+    throw new Error(`Missing PORTAL_DB_URL for ${appName} ${environment} runtime.`);
+  }
 
   const basePath = resolveHostedBasePath(appEnv, runtimeEnv);
   const appUrl = buildHostedAppUrl(portalBaseUrl, basePath);
+  const buildMetadataEnv = getHostedBuildMetadataEnv();
+  const sharedSecret = getHostedSharedSecret(portalEnv);
 
   return {
-    ...portalEnv,
     ...appEnv,
+    ...runtimeEnv,
+    ...buildMetadataEnv,
+    PORTAL_AUTH_SECRET: sharedSecret,
+    NEXTAUTH_SECRET: sharedSecret,
+    PORTAL_DB_URL: portalEnv.PORTAL_DB_URL,
+    COOKIE_DOMAIN: portalEnv.COOKIE_DOMAIN,
     PORTAL_APPS_BASE_URL: portalBaseUrl,
     NEXT_PUBLIC_PORTAL_APPS_BASE_URL: portalBaseUrl,
     PORTAL_AUTH_URL: portalBaseUrl,
@@ -158,7 +244,6 @@ function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
     NEXTAUTH_URL: appUrl,
     NEXT_PUBLIC_APP_URL: appUrl,
     BASE_URL: appUrl,
-    ...runtimeEnv,
   };
 }
 
@@ -353,7 +438,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3114,
         BASE_PATH: '/hermes',
-        NEXT_PUBLIC_BASE_PATH: '/hermes'
+        NEXT_PUBLIC_BASE_PATH: '/hermes',
+        HERMES_AUTO_MIGRATE: '0',
       }),
       autorestart: true,
       watch: false,
@@ -386,8 +472,7 @@ module.exports = {
     {
       name: 'dev-argus',
       cwd: path.join(DEV_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3116',
+      script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
       env: createNextAppEnvWithPortal(DEV_DIR, 'argus', 'dev', {
@@ -574,7 +659,8 @@ module.exports = {
         NODE_ENV: 'production',
         PORT: 3014,
         BASE_PATH: '/hermes',
-        NEXT_PUBLIC_BASE_PATH: '/hermes'
+        NEXT_PUBLIC_BASE_PATH: '/hermes',
+        HERMES_AUTO_MIGRATE: '0',
       }),
       autorestart: true,
       watch: false,
@@ -607,8 +693,7 @@ module.exports = {
     {
       name: 'main-argus',
       cwd: path.join(MAIN_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3016',
+      script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
       env: createNextAppEnvWithPortal(MAIN_DIR, 'argus', 'production', {
@@ -623,3 +708,8 @@ module.exports = {
     },
   ]
 };
+
+module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
+module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
+module.exports.buildHostedAppUrl = buildHostedAppUrl;
+module.exports.getHostedCookieDomain = getHostedCookieDomain;
