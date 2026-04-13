@@ -280,6 +280,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/sso"
     pm2_name="${PM2_PREFIX}-targonos"
     prisma_cmd=""
+    migrate_cmd="pnpm --filter @targon/auth prisma:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   website)
@@ -971,6 +972,31 @@ console.log(url.toString())
 ' "$raw_url" "$database_name" "$schema_name"
 }
 
+prepare_portal_owner_migration_env() {
+  case "$app_key" in
+    sso|targon|targonos)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  local raw_portal_admin_url="${PORTAL_ADMIN_DATABASE_URL:-}"
+  if [[ -z "${raw_portal_admin_url//[[:space:]]/}" ]]; then
+    local owner_env_file="$REPO_DIR/apps/sso/.env.production"
+    if ! raw_portal_admin_url="$(read_env_value_from_file "$owner_env_file" "PORTAL_DB_URL")"; then
+      error "Unable to resolve portal owner PORTAL_DB_URL from $owner_env_file"
+      exit 1
+    fi
+  fi
+
+  if [[ "$environment" == "dev" ]]; then
+    export PORTAL_DB_URL="$(rewrite_database_url "$raw_portal_admin_url" "portal_db_dev" "auth_dev")"
+  else
+    export PORTAL_DB_URL="$(rewrite_database_url "$raw_portal_admin_url" "portal_db" "auth")"
+  fi
+}
+
 prepare_talos_owner_migration_env() {
   if [[ "$app_key" != "talos" ]]; then
     return 0
@@ -1212,8 +1238,23 @@ if [[ -n "$migrate_cmd" ]]; then
   pm2 stop "$pm2_name" 2>/dev/null || warn "$pm2_name was not running before migrations"
 
   log "Step 3b: Applying Prisma migrations"
-  if ensure_database_url; then
+  migration_env_ready="false"
+  case "$app_key" in
+    sso|targon|targonos)
+      if ensure_portal_db_url; then
+        migration_env_ready="true"
+      fi
+      ;;
+    *)
+      if ensure_database_url; then
+        migration_env_ready="true"
+      fi
+      ;;
+  esac
+
+  if [[ "$migration_env_ready" == "true" ]]; then
     cd "$REPO_DIR"
+    prepare_portal_owner_migration_env
     prepare_talos_owner_migration_env
     if [[ "$app_key" == "atlas" && "$environment" == "dev" ]]; then
       if eval "$migrate_cmd"; then
@@ -1232,7 +1273,14 @@ if [[ -n "$migrate_cmd" ]]; then
       log "Migrations applied"
     fi
   else
-    error "DATABASE_URL is not set and no env file found; cannot apply migrations"
+    case "$app_key" in
+      sso|targon|targonos)
+        error "PORTAL_DB_URL is not set and no env file found; cannot apply auth migrations"
+        ;;
+      *)
+        error "DATABASE_URL is not set and no env file found; cannot apply migrations"
+        ;;
+    esac
     exit 1
   fi
 else
