@@ -165,6 +165,8 @@ build_talos_changed_migrate_cmd() {
     commands+=("pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions")
   any_changed "apps/talos/scripts/migrations/add-supplier-default-columns.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:supplier-defaults")
+  any_changed "apps/talos/scripts/migrations/add-warehouse-billing-config.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:warehouse-billing-config")
   any_changed "apps/talos/scripts/migrations/add-warehouse-sku-storage-configs.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs")
   any_changed "apps/talos/scripts/migrations/add-purchase-order-document-table.ts" &&
@@ -204,6 +206,10 @@ install_mode=""
 changed_files_available="false"
 changed_files=()
 ZERO_SHA="0000000000000000000000000000000000000000"
+initial_next_public_version="${NEXT_PUBLIC_VERSION-}"
+initial_next_public_release_url="${NEXT_PUBLIC_RELEASE_URL-}"
+initial_next_public_commit_sha="${NEXT_PUBLIC_COMMIT_SHA-}"
+initial_build_time="${BUILD_TIME-}"
 
 # Prevent the host watchdog from restarting stopped PM2 processes mid-deploy.
 # The watchdog checks for any files under: <worktree>/tmp/deploy-locks/*
@@ -265,7 +271,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/talos"
     pm2_name="${PM2_PREFIX}-talos"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    talos_full_migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:po-base-currency"
+    talos_full_migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-billing-config && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:po-base-currency"
     migrate_cmd="$talos_full_migrate_cmd"
     build_cmd="pnpm --filter $workspace build"
     ;;
@@ -388,19 +394,19 @@ build_metadata_commit_sha=""
 build_metadata_build_time=""
 
 build_metadata_env_is_provided() {
-  if declare -p NEXT_PUBLIC_VERSION >/dev/null 2>&1; then
+  if [[ -n "$initial_next_public_version" ]]; then
     return 0
   fi
 
-  if declare -p NEXT_PUBLIC_RELEASE_URL >/dev/null 2>&1; then
+  if [[ -n "$initial_next_public_release_url" ]]; then
     return 0
   fi
 
-  if declare -p NEXT_PUBLIC_COMMIT_SHA >/dev/null 2>&1; then
+  if [[ -n "$initial_next_public_commit_sha" ]]; then
     return 0
   fi
 
-  if declare -p BUILD_TIME >/dev/null 2>&1; then
+  if [[ -n "$initial_build_time" ]]; then
     return 0
   fi
 
@@ -408,33 +414,36 @@ build_metadata_env_is_provided() {
 }
 
 apply_precomputed_build_metadata_env() {
-  local required_keys=(
-    NEXT_PUBLIC_VERSION
-    NEXT_PUBLIC_RELEASE_URL
-    NEXT_PUBLIC_COMMIT_SHA
-    BUILD_TIME
-  )
-  local key
+  if [[ -z "${initial_next_public_version//[[:space:]]/}" ]]; then
+    error "NEXT_PUBLIC_VERSION is required when CI-provided build metadata is used"
+    exit 1
+  fi
 
-  for key in "${required_keys[@]}"; do
-    if ! declare -p "$key" >/dev/null 2>&1; then
-      error "$key is required when CI-provided build metadata is used"
-      exit 1
-    fi
+  if [[ -z "${initial_next_public_release_url//[[:space:]]/}" ]]; then
+    error "NEXT_PUBLIC_RELEASE_URL is required when CI-provided build metadata is used"
+    exit 1
+  fi
 
-    local value="${!key-}"
-    if [[ -z "${value//[[:space:]]/}" ]]; then
-      error "$key must not be empty when CI-provided build metadata is used"
-      exit 1
-    fi
-  done
+  if [[ -z "${initial_next_public_commit_sha//[[:space:]]/}" ]]; then
+    error "NEXT_PUBLIC_COMMIT_SHA is required when CI-provided build metadata is used"
+    exit 1
+  fi
 
-  build_metadata_version="$NEXT_PUBLIC_VERSION"
-  build_metadata_version_url="$NEXT_PUBLIC_RELEASE_URL"
-  build_metadata_commit_sha="$NEXT_PUBLIC_COMMIT_SHA"
-  build_metadata_build_time="$BUILD_TIME"
+  if [[ -z "${initial_build_time//[[:space:]]/}" ]]; then
+    error "BUILD_TIME is required when CI-provided build metadata is used"
+    exit 1
+  fi
 
-  export NEXT_PUBLIC_BUILD_TIME="$BUILD_TIME"
+  build_metadata_version="$initial_next_public_version"
+  build_metadata_version_url="$initial_next_public_release_url"
+  build_metadata_commit_sha="$initial_next_public_commit_sha"
+  build_metadata_build_time="$initial_build_time"
+
+  export NEXT_PUBLIC_VERSION="$initial_next_public_version"
+  export NEXT_PUBLIC_RELEASE_URL="$initial_next_public_release_url"
+  export NEXT_PUBLIC_COMMIT_SHA="$initial_next_public_commit_sha"
+  export BUILD_TIME="$initial_build_time"
+  export NEXT_PUBLIC_BUILD_TIME="$initial_build_time"
 
   log "Build metadata: version=${NEXT_PUBLIC_VERSION} commit=${NEXT_PUBLIC_COMMIT_SHA} url=${NEXT_PUBLIC_RELEASE_URL}"
 }
@@ -707,6 +716,10 @@ load_env_file() {
       continue
     fi
 
+    if [[ "$key" == "TARGONOS_DEV_DIR" || "$key" == "TARGONOS_MAIN_DIR" || "$key" == "TARGON_DEV_DIR" || "$key" == "TARGON_MAIN_DIR" ]]; then
+      continue
+    fi
+
     if [[ "$value" == \"*\" && "$value" == *\" ]]; then
       value="${value#\"}"
       value="${value%\"}"
@@ -751,8 +764,12 @@ ensure_database_url() {
     return 0
   fi
 
-  # Match Next.js env precedence: .env.local overrides everything in production.
-  local candidates=("$app_dir/.env.local" "$app_dir/.env.production" "$app_dir/.env.dev" "$app_dir/.env")
+  local candidates=()
+  if [[ "$environment" == "dev" ]]; then
+    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
+  else
+    candidates=("$app_dir/.env.local" "$app_dir/.env.production" "$app_dir/.env")
+  fi
 
   for file in "${candidates[@]}"; do
     if load_env_file "$file" && [[ -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
@@ -774,7 +791,12 @@ ensure_portal_db_url() {
   fi
 
   local sso_dir="$REPO_DIR/apps/sso"
-  local candidates=("$sso_dir/.env.local" "$sso_dir/.env.production" "$sso_dir/.env.dev" "$sso_dir/.env")
+  local candidates=()
+  if [[ "$environment" == "dev" ]]; then
+    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
+  else
+    candidates=("$sso_dir/.env.local" "$sso_dir/.env.production" "$sso_dir/.env")
+  fi
   local file
 
   for file in "${candidates[@]}"; do
@@ -785,6 +807,196 @@ ensure_portal_db_url() {
   done
 
   return 1
+}
+
+hosted_portal_origin() {
+  case "$environment" in
+    dev)
+      printf 'https://dev-os.targonglobal.com'
+      return 0
+      ;;
+    main)
+      printf 'https://os.targonglobal.com'
+      return 0
+      ;;
+  esac
+
+  error "Unsupported hosted environment: $environment"
+  exit 1
+}
+
+hosted_cookie_domain() {
+  case "$environment" in
+    dev)
+      printf '.dev-os.targonglobal.com'
+      return 0
+      ;;
+    main)
+      printf '.os.targonglobal.com'
+      return 0
+      ;;
+  esac
+
+  error "Unsupported hosted environment for cookie domain: $environment"
+  exit 1
+}
+
+hosted_app_base_path() {
+  case "$app_key" in
+    talos) printf '/talos' ;;
+    atlas) printf '/atlas' ;;
+    xplan) printf '/xplan' ;;
+    kairos) printf '/kairos' ;;
+    plutus) printf '/plutus' ;;
+    hermes) printf '/hermes' ;;
+    argus) printf '/argus' ;;
+    sso|targon|targonos|website) printf '' ;;
+    *)
+      error "No hosted base path mapping for $app_key"
+      exit 1
+      ;;
+  esac
+}
+
+hosted_app_url() {
+  local portal_origin
+  portal_origin="$(hosted_portal_origin)"
+  local base_path
+  base_path="$(hosted_app_base_path)"
+
+  if [[ -z "$base_path" ]]; then
+    printf '%s' "$portal_origin"
+    return 0
+  fi
+
+  printf '%s%s' "$portal_origin" "$base_path"
+}
+
+resolve_portal_shared_secret() {
+  local sso_dir="$REPO_DIR/apps/sso"
+  local candidates=()
+
+  if [[ "$environment" == "dev" ]]; then
+    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
+  else
+    candidates=("$sso_dir/.env.local" "$sso_dir/.env.production" "$sso_dir/.env")
+  fi
+
+  local file
+  for file in "${candidates[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      continue
+    fi
+
+    local secret
+    secret="$(
+      unset PORTAL_AUTH_SECRET NEXTAUTH_SECRET
+      load_env_file "$file" >/dev/null
+      printf '%s' "${PORTAL_AUTH_SECRET:-${NEXTAUTH_SECRET:-}}"
+    )"
+
+    if [[ -n "${secret//[[:space:]]/}" ]]; then
+      printf '%s' "$secret"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+apply_hosted_env_overrides() {
+  local portal_origin
+  portal_origin="$(hosted_portal_origin)"
+  local cookie_domain
+  cookie_domain="$(hosted_cookie_domain)"
+
+  export COOKIE_DOMAIN="$cookie_domain"
+
+  if [[ "$app_key" == "website" ]]; then
+    return 0
+  fi
+
+  export PORTAL_AUTH_URL="$portal_origin"
+  export NEXT_PUBLIC_PORTAL_AUTH_URL="$portal_origin"
+  export PORTAL_APPS_BASE_URL="$portal_origin"
+  export NEXT_PUBLIC_PORTAL_APPS_BASE_URL="$portal_origin"
+
+  local app_url
+  app_url="$(hosted_app_url)"
+  export NEXTAUTH_URL="$app_url"
+  export NEXT_PUBLIC_APP_URL="$app_url"
+  export BASE_URL="$app_url"
+
+  local shared_secret
+  if ! shared_secret="$(resolve_portal_shared_secret)"; then
+    error "Unable to resolve hosted portal auth secret from SSO env files"
+    exit 1
+  fi
+
+  export PORTAL_AUTH_SECRET="$shared_secret"
+  export NEXTAUTH_SECRET="$shared_secret"
+}
+
+read_env_value_from_file() {
+  local file="$1"
+  local key="$2"
+  if [[ ! -f "$file" ]]; then
+    return 1
+  fi
+
+  local value
+  value="$(
+    unset DATABASE_URL DATABASE_URL_US DATABASE_URL_UK PORTAL_AUTH_SECRET NEXTAUTH_SECRET
+    load_env_file "$file" >/dev/null
+    printf '%s' "${!key:-}"
+  )"
+
+  if [[ -z "${value//[[:space:]]/}" ]]; then
+    return 1
+  fi
+
+  printf '%s' "$value"
+}
+
+rewrite_database_url() {
+  local raw_url="$1"
+  local database_name="$2"
+  local schema_name="$3"
+  node -e '
+const url = new URL(process.argv[1])
+url.pathname = `/${process.argv[2]}`
+url.searchParams.set("schema", process.argv[3])
+url.searchParams.delete("pgbouncer")
+console.log(url.toString())
+' "$raw_url" "$database_name" "$schema_name"
+}
+
+prepare_talos_owner_migration_env() {
+  if [[ "$app_key" != "talos" ]]; then
+    return 0
+  fi
+
+  local owner_env_file="$app_dir/.env.dev"
+  local raw_us_url
+  local raw_uk_url
+  if ! raw_us_url="$(read_env_value_from_file "$owner_env_file" "DATABASE_URL_US")"; then
+    error "Unable to resolve Talos owner DATABASE_URL_US from $owner_env_file"
+    exit 1
+  fi
+  if ! raw_uk_url="$(read_env_value_from_file "$owner_env_file" "DATABASE_URL_UK")"; then
+    error "Unable to resolve Talos owner DATABASE_URL_UK from $owner_env_file"
+    exit 1
+  fi
+
+  if [[ "$environment" == "dev" ]]; then
+    export DATABASE_URL_US="$(rewrite_database_url "$raw_us_url" "portal_db_dev" "dev_talos_us")"
+    export DATABASE_URL_UK="$(rewrite_database_url "$raw_uk_url" "portal_db_dev" "dev_talos_uk")"
+  else
+    export DATABASE_URL_US="$(rewrite_database_url "$raw_us_url" "portal_db" "main_talos_us")"
+    export DATABASE_URL_UK="$(rewrite_database_url "$raw_uk_url" "portal_db" "main_talos_uk")"
+  fi
+
+  export DATABASE_URL="$DATABASE_URL_US"
 }
 
 ensure_app_env_loaded() {
@@ -986,114 +1198,42 @@ fi
 
 # Step 3: Generate Prisma client if needed
 if [[ -n "$prisma_cmd" ]]; then
-  run_prisma_generate="true"
-  if [[ "$changed_files_available" == "true" ]]; then
-    run_prisma_generate="false"
-    case "$app_key" in
-      talos)
-        if any_changed "apps/talos/prisma/schema.prisma" && ! any_changed_under "packages/prisma-talos/generated/"; then
-          run_prisma_generate="true"
-        fi
-        ;;
-      xplan)
-        if any_changed "apps/xplan/prisma/schema.prisma" && ! any_changed_under "packages/prisma-xplan/generated/"; then
-          run_prisma_generate="true"
-        fi
-        ;;
-      kairos)
-        if any_changed "apps/kairos/prisma/schema.prisma" && ! any_changed_under "packages/prisma-kairos/generated/"; then
-          run_prisma_generate="true"
-        fi
-        ;;
-      atlas)
-        if any_changed "apps/atlas/prisma/schema.prisma" && ! any_changed_under "packages/prisma-atlas/generated/"; then
-          run_prisma_generate="true"
-        fi
-        ;;
-      argus)
-        run_prisma_generate="true"
-        ;;
-    esac
-  fi
-
-  if [[ "$run_prisma_generate" == "true" ]]; then
-    log "Step 3: Generating Prisma client"
-    cd "$REPO_DIR"
-    eval "$prisma_cmd" || warn "Prisma generate had warnings"
-    log "Prisma client generated"
-  else
-    log "Step 3: Skipping Prisma generation (no Prisma schema changes detected)"
-  fi
+  log "Step 3: Generating Prisma client"
+  cd "$REPO_DIR"
+  eval "$prisma_cmd" || warn "Prisma generate had warnings"
+  log "Prisma client generated"
 else
   log "Step 3: Skipping Prisma generation (not needed)"
 fi
 
 # Step 3b: Apply Prisma migrations if needed
 if [[ -n "$migrate_cmd" ]]; then
-  run_migrations="true"
-  if [[ "$changed_files_available" == "true" ]]; then
-    run_migrations="false"
-    case "$app_key" in
-      talos)
-        if talos_changed_migrate_cmd="$(build_talos_changed_migrate_cmd)"; then
-          run_migrations="true"
-          migrate_cmd="$talos_changed_migrate_cmd"
-        fi
-        ;;
-      plutus)
-        if any_changed "apps/plutus/prisma/schema.prisma"; then
-          run_migrations="true"
-        fi
-        ;;
-      xplan)
-        if any_changed "apps/xplan/prisma/schema.prisma" || any_changed_under "apps/xplan/prisma/migrations/"; then
-          run_migrations="true"
-        fi
-        ;;
-      kairos)
-        if any_changed "apps/kairos/prisma/schema.prisma" || any_changed_under "apps/kairos/prisma/migrations/"; then
-          run_migrations="true"
-        fi
-        ;;
-      atlas)
-        if any_changed "apps/atlas/prisma/schema.prisma" || any_changed_under "apps/atlas/prisma/migrations/"; then
-          run_migrations="true"
-        fi
-        ;;
-      argus)
-        if any_changed "apps/argus/prisma/schema.prisma" || any_changed_under "apps/argus/prisma/migrations/"; then
-          run_migrations="true"
-        fi
-        ;;
-    esac
-  fi
+  log "Step 3b: Stopping $pm2_name before migrations"
+  pm2 stop "$pm2_name" 2>/dev/null || warn "$pm2_name was not running before migrations"
 
-  if [[ "$run_migrations" == "true" ]]; then
-    log "Step 3b: Applying Prisma migrations"
-    if ensure_database_url; then
-      cd "$REPO_DIR"
-      if [[ "$app_key" == "atlas" && "$environment" == "dev" ]]; then
-        if eval "$migrate_cmd"; then
-          log "Migrations applied"
-        else
-          warn "Prisma migrate deploy failed for atlas dev; falling back to non-destructive db push"
-          if eval "cd $app_dir && pnpm exec prisma db push --schema prisma/schema.prisma --skip-generate"; then
-            log "Database schema synced"
-          else
-            error "Prisma db push failed for atlas dev; aborting deployment to avoid a broken app"
-            exit 1
-          fi
-        fi
-      else
-        eval "$migrate_cmd"
+  log "Step 3b: Applying Prisma migrations"
+  if ensure_database_url; then
+    cd "$REPO_DIR"
+    prepare_talos_owner_migration_env
+    if [[ "$app_key" == "atlas" && "$environment" == "dev" ]]; then
+      if eval "$migrate_cmd"; then
         log "Migrations applied"
+      else
+        warn "Prisma migrate deploy failed for atlas dev; falling back to non-destructive db push"
+        if eval "cd $app_dir && pnpm exec prisma db push --schema prisma/schema.prisma --skip-generate"; then
+          log "Database schema synced"
+        else
+          error "Prisma db push failed for atlas dev; aborting deployment to avoid a broken app"
+          exit 1
+        fi
       fi
     else
-      error "DATABASE_URL is not set and no env file found; cannot apply migrations"
-      exit 1
+      eval "$migrate_cmd"
+      log "Migrations applied"
     fi
   else
-    log "Step 3b: Skipping Prisma migrations (no migration changes detected)"
+    error "DATABASE_URL is not set and no env file found; cannot apply migrations"
+    exit 1
   fi
 else
   log "Step 3b: Skipping Prisma migrations (not needed)"
@@ -1132,6 +1272,7 @@ if ! ensure_app_env_loaded; then
 fi
 
 apply_build_metadata_env
+apply_hosted_env_overrides
 
 if [[ "$app_key" == "argus" ]]; then
   run_argus_prebuild_checks
