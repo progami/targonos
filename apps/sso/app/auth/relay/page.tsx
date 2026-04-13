@@ -3,7 +3,7 @@ import RelayClient from './RelayClient'
 
 export const dynamic = 'force-dynamic'
 
-type SearchParams = Record<string, string | string[] | undefined>
+type SearchParams = Promise<Record<string, string | string[] | undefined>>
 
 function getFirstString(value: string | string[] | undefined): string | undefined {
   if (typeof value === 'string') return value
@@ -25,8 +25,9 @@ function isHostWithinDomain(hostname: string, domain: string): boolean {
   return normalizedHost.endsWith(`.${domain}`)
 }
 
-export default function AuthRelay({ searchParams }: { searchParams?: SearchParams }) {
-  const toParam = getFirstString(searchParams?.to)
+export default async function AuthRelay({ searchParams }: { searchParams?: SearchParams }) {
+  const params = (await searchParams) ?? {}
+  const toParam = getFirstString(params.to)
   if (!toParam || toParam.trim().length === 0) {
     redirect('/')
   }
@@ -79,4 +80,3 @@ export default function AuthRelay({ searchParams }: { searchParams?: SearchParam
 
   return <RelayClient to={target.toString()} />
 }
-

@@ -1,0 +1,48 @@
+import { defineConfig } from '@playwright/test'
+
+const localPortalBaseUrl = 'http://127.0.0.1:3200'
+const localPortalAuthSecret = 'playwright-portal-auth-secret-000000000000'
+
+export default defineConfig({
+  testDir: './tests',
+  timeout: 60_000,
+  expect: { timeout: 15_000 },
+  fullyParallel: true,
+  reporter: [['list']],
+  use: {
+    headless: true,
+    viewport: { width: 1440, height: 900 },
+    trace: 'retain-on-failure',
+  },
+  webServer: [
+    {
+      command: 'pnpm exec next dev -p 3200 --hostname 127.0.0.1',
+      cwd: __dirname,
+      url: `${localPortalBaseUrl}/login`,
+      reuseExistingServer: !process.env.CI,
+      env: {
+        ...process.env,
+        NEXTAUTH_URL: localPortalBaseUrl,
+        PORTAL_AUTH_URL: localPortalBaseUrl,
+        NEXT_PUBLIC_PORTAL_AUTH_URL: localPortalBaseUrl,
+        NEXT_PUBLIC_APP_URL: localPortalBaseUrl,
+        COOKIE_DOMAIN: '127.0.0.1',
+        NEXTAUTH_SECRET: localPortalAuthSecret,
+        PORTAL_AUTH_SECRET: localPortalAuthSecret,
+        ALLOW_DEV_AUTH_DEFAULTS: 'true',
+        PORTAL_DB_URL: '',
+        GOOGLE_CLIENT_ID: '',
+        GOOGLE_CLIENT_SECRET: '',
+        DEMO_ADMIN_USERNAME: 'e2e-user',
+        DEMO_ADMIN_PASSWORD: 'e2e-pass',
+        DEMO_ADMIN_EMAIL: 'e2e@targonglobal.com',
+      },
+    },
+    {
+      command: 'node tests/fixtures/callback-target-server.mjs',
+      cwd: __dirname,
+      url: 'http://127.0.0.1:3201/operations/purchase-orders',
+      reuseExistingServer: !process.env.CI,
+    },
+  ],
+})
