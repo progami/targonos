@@ -22,12 +22,12 @@ test('authorized tenant codes come from portal claims for regular users', () => 
   assert.deepEqual(getAuthorizedTenantCodesForSession(session as never), ['UK'])
 })
 
-test('authorized tenant codes expand to all tenants for Talos super admins', () => {
+test('authorized tenant codes expand to all tenants for portal platform admins', () => {
   const session = {
-    user: { email: 'jarrar@targonglobal.com' },
+    user: { email: 'ops@targonglobal.com' },
     authz: {
       version: 1,
-      globalRoles: [],
+      globalRoles: ['platform_admin'],
       apps: {
         talos: { departments: ['Ops'], tenantMemberships: ['UK'] },
       },

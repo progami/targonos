@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { withAuthAndParams, ApiResponses } from '@/lib/api'
-import { revokePermission, isSuperAdmin } from '@/lib/services/permission-service'
+import { revokePermission } from '@/lib/services/permission-service'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 /**
  * DELETE /api/users/[id]/permissions/[code]
@@ -31,7 +32,7 @@ export const DELETE = withAuthAndParams(
     }
 
     // Only super admins can revoke permissions
-    if (!isSuperAdmin(session.user.email || '')) {
+    if (!isPortalPlatformAdmin(session)) {
       return ApiResponses.forbidden('Only super admins can revoke permissions')
     }
 

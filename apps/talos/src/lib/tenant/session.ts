@@ -1,7 +1,5 @@
 import type { Session } from 'next-auth'
 
-import { isSuperAdmin } from '@/lib/auth/super-admin'
-
 import { DEFAULT_TENANT, TENANT_CODES, isValidTenantCode, type TenantCode } from './constants'
 
 function normalizeTenantCode(value: unknown): TenantCode | null {
@@ -51,16 +49,59 @@ export function getPortalTenantMemberships(session: Session): TenantCode[] {
   return memberships
 }
 
-export function getAuthorizedTenantCodesForSession(session: Session): TenantCode[] {
-  const email = typeof session.user?.email === 'string'
-    ? session.user.email.trim().toLowerCase()
-    : ''
-
-  if (!email) {
+export function getPortalGlobalRoles(session: unknown): string[] {
+  if (!session || typeof session !== 'object') {
     return []
   }
 
-  if (isSuperAdmin(email)) {
+  const rawGlobalRoles = (() => {
+    const topLevelRoles = (session as { globalRoles?: unknown }).globalRoles
+    if (Array.isArray(topLevelRoles)) {
+      return topLevelRoles
+    }
+
+    const authzRoles = (session as { authz?: { globalRoles?: unknown } }).authz?.globalRoles
+    if (Array.isArray(authzRoles)) {
+      return authzRoles
+    }
+
+    return []
+  })()
+
+  if (!Array.isArray(rawGlobalRoles)) {
+    return []
+  }
+
+  const seen = new Set<string>()
+  const roles: string[] = []
+
+  for (const rawRole of rawGlobalRoles) {
+    if (typeof rawRole !== 'string') {
+      continue
+    }
+
+    const normalizedRole = rawRole.trim().toLowerCase()
+    if (!normalizedRole) {
+      continue
+    }
+
+    if (seen.has(normalizedRole)) {
+      continue
+    }
+
+    seen.add(normalizedRole)
+    roles.push(normalizedRole)
+  }
+
+  return roles
+}
+
+export function isPortalPlatformAdmin(session: unknown): boolean {
+  return getPortalGlobalRoles(session).includes('platform_admin')
+}
+
+export function getAuthorizedTenantCodesForSession(session: Session): TenantCode[] {
+  if (isPortalPlatformAdmin(session)) {
     return TENANT_CODES
   }
 

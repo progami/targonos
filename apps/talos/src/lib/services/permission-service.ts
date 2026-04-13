@@ -247,16 +247,6 @@ export async function grantPermission(
 ): Promise<UserPermission> {
   const prisma = await getTenantPrisma()
 
-  // Verify the granter is a super admin
-  const granter = await prisma.user.findUnique({
-    where: { id: grantedById },
-    select: { email: true },
-  })
-
-  if (!granter || !isSuperAdmin(granter.email)) {
-    throw new ValidationError('Only super admins can grant permissions')
-  }
-
   // Find the permission
   const permission = await prisma.permission.findUnique({
     where: { code: permissionCode },
@@ -305,16 +295,6 @@ export async function revokePermission(
   revokedById: string
 ): Promise<void> {
   const prisma = await getTenantPrisma()
-
-  // Verify the revoker is a super admin
-  const revoker = await prisma.user.findUnique({
-    where: { id: revokedById },
-    select: { email: true },
-  })
-
-  if (!revoker || !isSuperAdmin(revoker.email)) {
-    throw new ValidationError('Only super admins can revoke permissions')
-  }
 
   // Find the permission
   const permission = await prisma.permission.findUnique({

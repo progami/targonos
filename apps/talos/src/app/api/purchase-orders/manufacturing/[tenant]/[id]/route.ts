@@ -3,10 +3,9 @@ import { auth } from '@/lib/auth'
 import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { getS3Service } from '@/services/s3.service'
 import { serializePurchaseOrder } from '@/lib/services/po-stage-service'
-import { isSuperAdmin } from '@/lib/services/permission-service'
 import { getPrismaForTenant } from '@/lib/tenant/access'
 import { isValidTenantCode, type TenantCode } from '@/lib/tenant/constants'
-import { getAuthorizedTenantCodesForSession } from '@/lib/tenant/session'
+import { getAuthorizedTenantCodesForSession, isPortalPlatformAdmin } from '@/lib/tenant/session'
 import { getAssignedSkuCodesAcrossTenants } from '@/lib/services/po-product-assignment-service'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import { CostCategory, FinancialLedgerSourceType } from '@targon/prisma-talos'
@@ -54,7 +53,7 @@ export const GET = async (_request: Request, context: { params: Promise<RoutePar
     return ApiResponses.unauthorized('Session email is required')
   }
 
-  const superAdmin = isSuperAdmin(email)
+  const superAdmin = isPortalPlatformAdmin(session)
   const accessibleTenantCodes: TenantCode[] = getAuthorizedTenantCodesForSession(session as never)
 
   if (!accessibleTenantCodes.includes(tenantCode)) {

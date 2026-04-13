@@ -16,6 +16,7 @@ import { portalUrl } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { TenantIndicator } from '@/components/tenant/TenantIndicator'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 import {
   buildMainNavigation,
   isNavigationItemActive,
@@ -83,8 +84,7 @@ export function MainNav() {
   if (!session) return null
 
   const userNavigation: NavSection[] = buildMainNavigation({
-    role: session.user.role,
-    email: session.user.email,
+    isPlatformAdmin: isPortalPlatformAdmin(session),
   })
 
   // Get current page name for mobile header

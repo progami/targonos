@@ -11,7 +11,6 @@ import {
   Users,
 } from '@/lib/lucide-icons'
 import { AMAZON_WORKSPACE_TOOLS, type NavigationMatchMode } from '@/lib/amazon/workspace'
-import { isSuperAdminEmail } from '@/lib/auth/super-admin'
 
 export type NavItem = {
   name: string
@@ -26,8 +25,7 @@ export type NavSection = {
 }
 
 type NavigationContext = {
-  role: string
-  email: string
+  isPlatformAdmin: boolean
 }
 
 function createItem(
@@ -55,7 +53,7 @@ export function buildMainNavigation(context: NavigationContext): NavSection[] {
     createItem('Warehouses', '/config/warehouses', Building),
   ]
 
-  if (context.role === 'admin' && isSuperAdminEmail(context.email)) {
+  if (context.isPlatformAdmin) {
     configurationItems.push(createItem('Permissions', '/config/permissions', Shield))
   }
 
