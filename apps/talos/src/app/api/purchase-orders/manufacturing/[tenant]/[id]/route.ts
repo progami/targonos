@@ -4,8 +4,9 @@ import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { getS3Service } from '@/services/s3.service'
 import { serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import { isSuperAdmin } from '@/lib/services/permission-service'
-import { getAccessibleTenantCodesForEmail, getPrismaForTenant } from '@/lib/tenant/access'
-import { TENANT_CODES, isValidTenantCode, type TenantCode } from '@/lib/tenant/constants'
+import { getPrismaForTenant } from '@/lib/tenant/access'
+import { isValidTenantCode, type TenantCode } from '@/lib/tenant/constants'
+import { getAuthorizedTenantCodesForSession } from '@/lib/tenant/session'
 import { getAssignedSkuCodesAcrossTenants } from '@/lib/services/po-product-assignment-service'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
 import { CostCategory, FinancialLedgerSourceType } from '@targon/prisma-talos'
@@ -54,9 +55,7 @@ export const GET = async (_request: Request, context: { params: Promise<RoutePar
   }
 
   const superAdmin = isSuperAdmin(email)
-  const accessibleTenantCodes: TenantCode[] = superAdmin
-    ? TENANT_CODES
-    : await getAccessibleTenantCodesForEmail(email)
+  const accessibleTenantCodes: TenantCode[] = getAuthorizedTenantCodesForSession(session as never)
 
   if (!accessibleTenantCodes.includes(tenantCode)) {
     return ApiResponses.forbidden('Access denied for tenant')

@@ -4,8 +4,9 @@ import { auth } from '@/lib/auth'
 import { PURCHASE_ORDER_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { serializePurchaseOrder } from '@/lib/services/po-stage-service'
 import { isSuperAdmin } from '@/lib/services/permission-service'
-import { getAccessibleTenantCodesForEmail, getPrismaForTenant } from '@/lib/tenant/access'
-import { TENANT_CODES, type TenantCode } from '@/lib/tenant/constants'
+import { getPrismaForTenant } from '@/lib/tenant/access'
+import type { TenantCode } from '@/lib/tenant/constants'
+import { getAuthorizedTenantCodesForSession } from '@/lib/tenant/session'
 import { getAssignedSkuCodesAcrossTenants } from '@/lib/services/po-product-assignment-service'
 
 export const dynamic = 'force-dynamic'
@@ -28,9 +29,7 @@ export const GET = async (_request: NextRequest) => {
   }
 
   const superAdmin = isSuperAdmin(email)
-  const tenantCodes: TenantCode[] = superAdmin
-    ? TENANT_CODES
-    : await getAccessibleTenantCodesForEmail(email)
+  const tenantCodes: TenantCode[] = getAuthorizedTenantCodesForSession(session as never)
 
   const assignedSkuCodes = superAdmin
     ? []

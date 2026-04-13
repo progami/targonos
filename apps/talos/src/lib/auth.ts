@@ -3,7 +3,8 @@ import type { NextAuthConfig, Session } from 'next-auth'
 import type { JWT } from 'next-auth/jwt'
 import Credentials from 'next-auth/providers/credentials'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
-import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
+import { getCurrentTenantCode } from '@/lib/tenant/server'
+import { getPrismaForTenant } from '@/lib/tenant/access'
 import type { TenantCode } from '@/lib/tenant/constants'
 
 // In-memory cache for Talos user data to avoid DB queries on every request
@@ -144,7 +145,7 @@ const baseAuthOptions: NextAuthConfig = {
       // Get current tenant - if no tenant selected yet, skip user enrichment
       let currentTenant: TenantCode
       try {
-        currentTenant = await getCurrentTenantCode()
+        currentTenant = await getCurrentTenantCode(sessionWithAuthz)
       } catch {
         // No tenant context available (e.g., on world map page)
         return session
@@ -168,7 +169,7 @@ const baseAuthOptions: NextAuthConfig = {
       }
 
       // Cache miss - fetch from DB
-      const prisma = await getTenantPrisma()
+      const prisma = await getPrismaForTenant(currentTenant)
       const user = await prisma.user.findFirst({
         where: { email, isActive: true },
         select: { id: true, role: true, region: true, warehouseId: true },

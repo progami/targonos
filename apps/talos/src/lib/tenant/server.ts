@@ -3,13 +3,13 @@ import {
   TenantCode,
   TENANTS,
   TENANT_COOKIE_NAME,
-  DEFAULT_TENANT,
   isValidTenantCode,
   getTenantConfig,
   TenantConfig,
 } from './constants'
 import { getTenantPrismaClient } from './prisma-factory'
 import { PrismaClient } from '@targon/prisma-talos'
+import { resolveTenantCodeFromState } from './session'
 
 function assertSafePgIdentifier(value: string, label: string): asserts value is string {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
@@ -42,35 +42,30 @@ function getSchemaFromDatabaseUrl(databaseUrl: string, tenantCode: TenantCode): 
 /**
  * Get the current tenant code from cookies or headers (server-side)
  */
-export async function getCurrentTenantCode(): Promise<TenantCode> {
-  // First check headers (set by middleware)
+export async function getCurrentTenantCode(session?: unknown): Promise<TenantCode> {
   const headersList = await headers()
-  const headerTenant = headersList.get('x-tenant')
-  if (isValidTenantCode(headerTenant)) {
-    return headerTenant
-  }
-
-  // Fall back to cookie
   const cookieStore = await cookies()
   const cookieTenant = cookieStore.get(TENANT_COOKIE_NAME)?.value
-  if (isValidTenantCode(cookieTenant)) {
-    return cookieTenant
-  }
 
-  // Default tenant
-  return DEFAULT_TENANT
+  return resolveTenantCodeFromState({
+    headerTenant: headersList.get('x-tenant'),
+    sessionActiveTenant: typeof session === 'object' && session
+      ? (session as { activeTenant?: unknown }).activeTenant
+      : null,
+    cookieTenant: cookieTenant ?? null,
+  })
 }
 
 /**
  * Get the current tenant config (server-side)
  */
-export async function getCurrentTenant(): Promise<TenantConfig> {
-  const code = await getCurrentTenantCode()
+export async function getCurrentTenant(session?: unknown): Promise<TenantConfig> {
+  const code = await getCurrentTenantCode(session)
   return getTenantConfig(code)
 }
 
-export async function getCurrentTenantSchema(): Promise<string> {
-  const tenantCode = await getCurrentTenantCode()
+export async function getCurrentTenantSchema(session?: unknown): Promise<string> {
+  const tenantCode = await getCurrentTenantCode(session)
   const databaseUrl = process.env[TENANTS[tenantCode].envKey]
   if (!databaseUrl) {
     throw new Error(`Database URL not configured for tenant: ${tenantCode}. Set ${TENANTS[tenantCode].envKey}.`)
@@ -83,8 +78,8 @@ export async function getCurrentTenantSchema(): Promise<string> {
  * Get Prisma client for the current tenant (server-side)
  * Use this in Server Components and API routes
  */
-export async function getTenantPrisma(): Promise<PrismaClient> {
-  const tenantCode = await getCurrentTenantCode()
+export async function getTenantPrisma(session?: unknown): Promise<PrismaClient> {
+  const tenantCode = await getCurrentTenantCode(session)
   return await getTenantPrismaClient(tenantCode)
 }
 

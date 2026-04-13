@@ -11,7 +11,10 @@ import {
   getAllTenants,
   TenantCode,
 } from '@/lib/tenant/constants'
-import { getPortalTenantMemberships } from '@/lib/tenant/access'
+import {
+  getAuthorizedTenantCodesForSession,
+  getSessionActiveTenant,
+} from '@/lib/tenant/session'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,8 +22,8 @@ export function resolveCurrentTenantSelection(
   session: Session,
   cookieTenantCode: TenantCode | null,
 ): { available: TenantCode[]; current: TenantCode } {
-  const memberships = getPortalTenantMemberships(session as never)
-  const rawActiveTenant = (session as any)?.activeTenant
+  const memberships = getAuthorizedTenantCodesForSession(session)
+  const activeTenant = getSessionActiveTenant(session)
 
   if (memberships.length === 0) {
     return {
@@ -29,16 +32,10 @@ export function resolveCurrentTenantSelection(
     }
   }
 
-  if (typeof rawActiveTenant === 'string') {
-    const normalizedActiveTenant = rawActiveTenant.trim().toUpperCase()
-    if (isValidTenantCode(normalizedActiveTenant)) {
-      const tenantCode = normalizedActiveTenant as TenantCode
-      if (memberships.includes(tenantCode)) {
-        return {
-          available: memberships,
-          current: tenantCode,
-        }
-      }
+  if (activeTenant && memberships.includes(activeTenant)) {
+    return {
+      available: memberships,
+      current: activeTenant,
     }
   }
 

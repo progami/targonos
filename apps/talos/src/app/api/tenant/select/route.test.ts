@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { isTenantAllowedForSession } from '@/lib/tenant/access'
+import { isTenantAllowedForSession } from '@/lib/tenant/session'
 
 async function loadRouteModule() {
   process.env.NEXT_PUBLIC_APP_URL = 'https://os.targonglobal.com/talos'

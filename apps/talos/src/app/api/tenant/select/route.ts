@@ -8,7 +8,7 @@ import {
   TENANT_COOKIE_MAX_AGE,
   getTenantConfig,
 } from '@/lib/tenant/constants'
-import { isTenantAllowedForSession } from '@/lib/tenant/access'
+import { isTenantAllowedForSession } from '@/lib/tenant/session'
 
 export const dynamic = 'force-dynamic'
 

@@ -32,7 +32,7 @@ export async function requireTenantAccess(session: Session): Promise<void> {
     return
   }
 
-  const currentTenant = await getCurrentTenantCode()
+  const currentTenant = await getCurrentTenantCode(session)
   const userRegion = session.user?.region
 
   if (userRegion !== currentTenant) {

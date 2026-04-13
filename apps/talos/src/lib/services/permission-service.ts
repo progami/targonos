@@ -1,20 +1,13 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Permission, UserPermission, User, UserRole } from '@targon/prisma-talos'
 import { NotFoundError, ValidationError } from '@/lib/api'
+import { isSuperAdmin } from '@/lib/auth/super-admin'
 import { hasRoleBaselinePermission } from '@/lib/permissions/baseline'
 
-// Super admin emails - these users have all permissions automatically
-const SUPER_ADMIN_EMAILS = ['jarrar@targonglobal.com']
+export { isSuperAdmin } from '@/lib/auth/super-admin'
 
 function roleHasBaselinePermission(role: UserRole, permissionCode: string): boolean {
   return hasRoleBaselinePermission(role, permissionCode)
-}
-
-/**
- * Check if an email belongs to a super admin
- */
-export function isSuperAdmin(email: string): boolean {
-  return SUPER_ADMIN_EMAILS.includes(email.toLowerCase())
 }
 
 /**
