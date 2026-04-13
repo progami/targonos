@@ -150,4 +150,5 @@ export declare function resolveActiveTenantFromCookies(options: {
     cookieHeader?: string | null;
 }): Promise<string | undefined>;
 export declare function applyActiveTenantOverride(payload: PortalJwtPayload, appId: string, activeTenant: string | undefined): PortalJwtPayload;
+export { buildAppLoginRedirect } from './middleware-login.js';
 export { buildHostedAppUrl, normalizeBasePath } from './topology.js';

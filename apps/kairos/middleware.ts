@@ -1,22 +1,13 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { buildPortalUrl, getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
-
-function normalizeBasePath(value?: string | null) {
-  if (!value || value === '/') return ''
-  const trimmed = value.replace(/\/+$/g, '')
-  return trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-}
-
-function callbackUrlForRequest(request: NextRequest, appBasePath: string): string {
-  const origin = resolveAppAuthOrigin({ request })
-
-  const pathname = request.nextUrl.pathname.startsWith(appBasePath) || !appBasePath
-    ? request.nextUrl.pathname
-    : `${appBasePath}${request.nextUrl.pathname}`
-
-  return new URL(pathname + request.nextUrl.search, origin).toString()
-}
+import {
+  buildAppLoginRedirect,
+  getCandidateSessionCookieNames,
+  normalizeBasePath,
+  requireAppEntry,
+  resolveAppAuthOrigin,
+  resolvePortalAuthOrigin,
+} from '@targon/auth'
 
 export async function middleware(request: NextRequest) {
   const appBasePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? process.env.BASE_PATH)
@@ -90,8 +81,14 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    const login = buildPortalUrl('/login', { request })
-    login.searchParams.set('callbackUrl', callbackUrlForRequest(request, appBasePath))
+    const login = buildAppLoginRedirect({
+      portalOrigin: resolvePortalAuthOrigin({ request }),
+      appOrigin: resolveAppAuthOrigin({ request }),
+      appBasePath,
+      pathname: request.nextUrl.pathname,
+      search: request.nextUrl.search,
+      hash: request.nextUrl.hash,
+    })
     return NextResponse.redirect(login)
   }
 

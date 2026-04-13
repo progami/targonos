@@ -1068,4 +1068,5 @@ export function applyActiveTenantOverride(payload, appId, activeTenant) {
     }
     return nextPayload;
 }
+export { buildAppLoginRedirect } from './middleware-login.js';
 export { buildHostedAppUrl, normalizeBasePath } from './topology.js';
