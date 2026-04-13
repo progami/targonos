@@ -306,6 +306,7 @@ const baseAuthOptions: NextAuthConfig = {
       ;(session as any).roles = (token as any).roles
       ;(session as any).globalRoles = (token as any).globalRoles
       ;(session as any).authzVersion = (token as any).authzVersion
+      ;(session as any).activeTenant = (token as any).activeTenant ?? null
       ;(session as any).entitlements_ver = (token as any).entitlements_ver
       return session
     },

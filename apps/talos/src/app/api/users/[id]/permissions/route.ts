@@ -4,8 +4,8 @@ import {
   getUserPermissions,
   getUserPermissionRecords,
   grantPermission,
-  isSuperAdmin,
 } from '@/lib/services/permission-service'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 /**
  * GET /api/users/[id]/permissions
@@ -26,7 +26,7 @@ export const GET = withAuthAndParams(
 
     // Users can view their own permissions, super admins can view anyone's
     const isSelf = userId === session.user.id
-    const isAdmin = isSuperAdmin(session.user.email || '')
+    const isAdmin = isPortalPlatformAdmin(session)
 
     if (!isSelf && !isAdmin) {
       return ApiResponses.forbidden('You can only view your own permissions')
@@ -84,7 +84,7 @@ export const POST = withAuthAndParams(
     }
 
     // Only super admins can grant permissions
-    if (!isSuperAdmin(session.user.email || '')) {
+    if (!isPortalPlatformAdmin(session)) {
       return ApiResponses.forbidden('Only super admins can grant permissions')
     }
 

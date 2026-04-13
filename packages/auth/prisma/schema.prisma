@@ -71,6 +71,7 @@ model UserApp {
   source       AppAccessSource @default(manual)
   locked       Boolean   @default(false)
   departments  Json?
+  tenantMemberships Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   app  App  @relation(fields: [appId], references: [id], onDelete: Cascade)
@@ -83,6 +84,7 @@ model GroupAppMapping {
   googleGroup String
   appId       String
   departments Json?
+  tenantMemberships Json?
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt

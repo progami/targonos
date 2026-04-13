@@ -2,29 +2,35 @@ import { Session } from 'next-auth'
 import { headers } from 'next/headers'
 import { getCurrentTenantCode } from './server'
 import { TenantCode } from './constants'
+import { getAuthorizedTenantCodesForSession } from './session'
 
 /**
- * Error thrown when user's region doesn't match the current tenant
+ * Error thrown when the current tenant is outside the portal-authorized tenant set.
  */
 export class TenantAccessError extends Error {
   constructor(
-    public readonly userRegion: TenantCode | undefined,
+    public readonly allowedTenants: TenantCode[],
     public readonly currentTenant: TenantCode
   ) {
     super(
-      `Access denied: User region ${userRegion ?? 'undefined'} does not match tenant ${currentTenant}`
+      `Access denied: Tenant ${currentTenant} is not included in portal tenant access ${allowedTenants.join(', ')}`
     )
     this.name = 'TenantAccessError'
   }
 }
 
+export function hasTenantAccessForCode(session: Session, currentTenant: TenantCode): boolean {
+  return getAuthorizedTenantCodesForSession(session).includes(currentTenant)
+}
+
 /**
- * Validate that the user's region matches the current tenant.
+ * Validate that the current tenant is included in the portal-authorized tenant set.
  * Throws TenantAccessError if there's a mismatch.
  *
  * When the client explicitly sends an x-tenant header (e.g. for cross-region
  * purchase orders), the middleware sets x-tenant-override=1. In that case
- * the region check is skipped — the user intentionally chose the tenant.
+ * the tenant-membership check is skipped because the request already carries
+ * an explicit tenant override.
  */
 export async function requireTenantAccess(session: Session): Promise<void> {
   const headersList = await headers()
@@ -32,11 +38,9 @@ export async function requireTenantAccess(session: Session): Promise<void> {
     return
   }
 
-  const currentTenant = await getCurrentTenantCode()
-  const userRegion = session.user?.region
-
-  if (userRegion !== currentTenant) {
-    throw new TenantAccessError(userRegion, currentTenant)
+  const currentTenant = await getCurrentTenantCode(session)
+  if (!hasTenantAccessForCode(session, currentTenant)) {
+    throw new TenantAccessError(getAuthorizedTenantCodesForSession(session), currentTenant)
   }
 }
 

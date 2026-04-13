@@ -1,12 +1,19 @@
 import { test, expect } from '@playwright/test'
 
-const portalBaseUrl = process.env.PORTAL_BASE_URL
-if (!portalBaseUrl) {
-  throw new Error('PORTAL_BASE_URL must be defined for TargonOS e2e tests.')
-}
+import {
+  demoEmail,
+  escapeForRegExp,
+  portalBaseUrl,
+  submitLogin,
+} from './fixtures/dev-login'
 
-test('TargonOS home renders and shows portal title', async ({ page }) => {
-  await page.goto(portalBaseUrl, { waitUntil: 'domcontentloaded' })
-  // Either shows sign-in prompt or the launcher; both include the main brand text
-  await expect(page.locator('text=TargonOS Portal')).toBeVisible()
+test('TargonOS home renders the authenticated launcher', async ({ page }) => {
+  await submitLogin(page, `${portalBaseUrl}/login`)
+  await page.waitForURL(new RegExp(`^${escapeForRegExp(portalBaseUrl)}/?$`), {
+    timeout: 15_000,
+  })
+  await expect(page.getByText('TargonOS Portal')).toBeVisible()
+  await expect(page.getByText('Control Center')).toBeVisible()
+  await expect(page.getByText(demoEmail)).toBeVisible()
+  await expect(page).not.toHaveURL(/\/login$/)
 })

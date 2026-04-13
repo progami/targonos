@@ -9,7 +9,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import PermissionsPanel from './permissions-panel'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
-import { isSuperAdminEmail } from '@/lib/auth/super-admin'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 export default function PermissionsPage() {
   const router = useRouter()
@@ -23,7 +23,7 @@ export default function PermissionsPage() {
       return
     }
 
-    if (!isSuperAdminEmail(session.user.email)) {
+    if (!isPortalPlatformAdmin(session)) {
       toast.error('Only super admins can access this page')
       router.push('/dashboard')
     }
@@ -42,7 +42,7 @@ export default function PermissionsPage() {
     )
   }
 
-  if (!session || !isSuperAdminEmail(session.user.email)) {
+  if (!session || !isPortalPlatformAdmin(session)) {
     return null
   }
 

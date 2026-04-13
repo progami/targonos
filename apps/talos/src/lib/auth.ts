@@ -3,7 +3,8 @@ import type { NextAuthConfig, Session } from 'next-auth'
 import type { JWT } from 'next-auth/jwt'
 import Credentials from 'next-auth/providers/credentials'
 import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
-import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
+import { getCurrentTenantCode } from '@/lib/tenant/server'
+import { getPrismaForTenant } from '@/lib/tenant/access'
 import type { TenantCode } from '@/lib/tenant/constants'
 
 // In-memory cache for Talos user data to avoid DB queries on every request
@@ -20,6 +21,7 @@ type AuthzClaims = {
   roles?: unknown
   globalRoles?: unknown
   authzVersion?: unknown
+  activeTenant?: unknown
 }
 
 type SessionWithAuthz = Session & AuthzClaims
@@ -124,6 +126,11 @@ const baseAuthOptions: NextAuthConfig = {
       sessionWithAuthz.roles = tokenWithAuthz.roles
       sessionWithAuthz.globalRoles = tokenWithAuthz.globalRoles
       sessionWithAuthz.authzVersion = tokenWithAuthz.authzVersion
+      if (typeof tokenWithAuthz.activeTenant === 'string') {
+        sessionWithAuthz.activeTenant = tokenWithAuthz.activeTenant
+      } else {
+        sessionWithAuthz.activeTenant = null
+      }
 
       // Always hydrate a stable user id (portal-issued) so API routes don't crash
       // when a Talos user record doesn't exist yet in the tenant schema.
@@ -138,7 +145,7 @@ const baseAuthOptions: NextAuthConfig = {
       // Get current tenant - if no tenant selected yet, skip user enrichment
       let currentTenant: TenantCode
       try {
-        currentTenant = await getCurrentTenantCode()
+        currentTenant = await getCurrentTenantCode(sessionWithAuthz)
       } catch {
         // No tenant context available (e.g., on world map page)
         return session
@@ -162,7 +169,7 @@ const baseAuthOptions: NextAuthConfig = {
       }
 
       // Cache miss - fetch from DB
-      const prisma = await getTenantPrisma()
+      const prisma = await getPrismaForTenant(currentTenant)
       const user = await prisma.user.findFirst({
         where: { email, isActive: true },
         select: { id: true, role: true, region: true, warehouseId: true },

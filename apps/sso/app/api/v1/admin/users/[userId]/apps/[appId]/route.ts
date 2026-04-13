@@ -10,6 +10,7 @@ const updateGrantSchema = z.object({
   appName: z.string().min(1).optional(),
   locked: z.boolean().optional(),
   departments: z.array(z.string().min(1)).optional(),
+  tenantMemberships: z.array(z.string().min(1)).optional(),
 })
 
 async function resolveParams(context: { params: Promise<unknown> }) {
@@ -50,6 +51,7 @@ export async function PUT(request: Request, context: { params: Promise<unknown> 
     appSlug: appId,
     appName: parsed.data.appName,
     departments: parsed.data.departments ?? [],
+    tenantMemberships: parsed.data.tenantMemberships,
     locked: parsed.data.locked ?? true,
   })
   const authz = await getUserAuthz(userId)
