@@ -90,6 +90,10 @@ jobs:
         run: pnpm build
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
+      - name: Run auth topology contract tests
+        run: |
+          pnpm --filter @targon/auth test
+          node --test ecosystem.topology.test.cjs
   build-test-github-hosted:
     needs:
       - build-test-self-hosted

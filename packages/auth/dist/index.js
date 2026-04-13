@@ -1068,3 +1068,4 @@ export function applyActiveTenantOverride(payload, appId, activeTenant) {
     }
     return nextPayload;
 }
+export { buildHostedAppUrl, normalizeBasePath } from './topology.js';
