@@ -1,7 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { encode } from 'next-auth/jwt'
 
-import { normalizePortalAuthz, resolveAppAuthOrigin, resolvePortalAuthOrigin } from './index'
+import {
+  decodePortalSession,
+  normalizePortalAuthz,
+  resolveAppAuthOrigin,
+  resolvePortalAuthOrigin,
+} from './index'
 
 const ORIGINAL_ENV = { ...process.env }
 
@@ -147,4 +153,108 @@ test('normalizePortalAuthz defaults missing tenant memberships to []', () => {
       },
     },
   })
+})
+
+test('decodePortalSession applies a signed active tenant cookie when membership still allows it', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      authz: {
+        version: 1,
+        globalRoles: [],
+        apps: {
+          talos: {
+            departments: ['Ops'],
+            tenantMemberships: ['US', 'UK'],
+          },
+        },
+      },
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+  const activeTenantCookie = await encode({
+    token: { activeTenant: 'UK' },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: '__Secure-targon.active-tenant.talos',
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: `${sessionCookieName}=${sessionToken}; __Secure-targon.active-tenant.talos=${activeTenantCookie}`,
+    appId: 'talos',
+  })
+
+  assert.equal(payload?.activeTenant, 'UK')
+})
+
+test('decodePortalSession ignores a signed active tenant cookie after membership is removed', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      authz: {
+        version: 1,
+        globalRoles: [],
+        apps: {
+          talos: {
+            departments: ['Ops'],
+            tenantMemberships: ['US'],
+          },
+        },
+      },
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+  const activeTenantCookie = await encode({
+    token: { activeTenant: 'UK' },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: '__Secure-targon.active-tenant.talos',
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: `${sessionCookieName}=${sessionToken}; __Secure-targon.active-tenant.talos=${activeTenantCookie}`,
+    appId: 'talos',
+  })
+
+  assert.equal(payload?.activeTenant, undefined)
+})
+
+test('decodePortalSession strips an embedded active tenant that is no longer allowed for the app', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      activeTenant: 'UK',
+      authz: {
+        version: 1,
+        globalRoles: [],
+        apps: {
+          talos: {
+            departments: ['Ops'],
+            tenantMemberships: ['US'],
+          },
+        },
+      },
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: `${sessionCookieName}=${sessionToken}`,
+    appId: 'talos',
+  })
+
+  assert.equal(payload?.activeTenant, undefined)
 })

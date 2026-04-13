@@ -316,7 +316,11 @@ export async function decodePortalSession(options = {}) {
                 });
                 if (decoded && typeof decoded === 'object') {
                     const payload = decoded;
-                    return payload;
+                    if (!appId) {
+                        return payload;
+                    }
+                    const activeTenant = await resolveActiveTenantFromCookies({ appId, cookieHeader: header });
+                    return applyActiveTenantOverride(payload, appId, activeTenant);
                 }
             }
             catch (error) {
@@ -1031,4 +1035,36 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
         depts: departments,
         tenantMemberships,
     };
+}
+export async function resolveActiveTenantFromCookies(options) {
+    const cookieMap = parseCookieHeader(options.cookieHeader);
+    const cookieName = `__Secure-targon.active-tenant.${options.appId}`;
+    const values = cookieMap.get(cookieName);
+    const raw = values?.[0];
+    if (!raw)
+        return undefined;
+    const decoded = await decode({
+        token: raw,
+        secret: process.env.PORTAL_AUTH_SECRET,
+        salt: cookieName,
+    });
+    return typeof decoded?.activeTenant === 'string' ? decoded.activeTenant : undefined;
+}
+export function applyActiveTenantOverride(payload, appId, activeTenant) {
+    const nextPayload = activeTenant
+        ? {
+            ...payload,
+            activeTenant,
+        }
+        : payload;
+    if (typeof nextPayload.activeTenant !== 'string') {
+        return nextPayload;
+    }
+    const authz = normalizeAuthzFromClaims(nextPayload);
+    const grant = authz?.apps[appId];
+    if (!grant || !grant.tenantMemberships.includes(nextPayload.activeTenant)) {
+        const { activeTenant: _removed, ...rest } = nextPayload;
+        return rest;
+    }
+    return nextPayload;
 }

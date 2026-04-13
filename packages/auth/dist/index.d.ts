@@ -60,6 +60,7 @@ export interface PortalJwtPayload extends Record<string, unknown> {
     authzVersion?: number;
     roles?: RolesClaim;
     apps?: string[];
+    activeTenant?: string;
     exp?: number;
 }
 export interface DecodePortalSessionOptions {
@@ -144,3 +145,8 @@ export declare function hasCapability(options: {
     capability: string;
 }): boolean;
 export declare function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEntitlement | undefined;
+export declare function resolveActiveTenantFromCookies(options: {
+    appId: string;
+    cookieHeader?: string | null;
+}): Promise<string | undefined>;
+export declare function applyActiveTenantOverride(payload: PortalJwtPayload, appId: string, activeTenant: string | undefined): PortalJwtPayload;
