@@ -938,63 +938,114 @@ apply_hosted_env_overrides() {
   export NEXTAUTH_SECRET="$shared_secret"
 }
 
-read_env_value_from_file() {
-  local file="$1"
-  local key="$2"
-  if [[ ! -f "$file" ]]; then
-    return 1
-  fi
-
-  local value
-  value="$(
-    unset DATABASE_URL DATABASE_URL_US DATABASE_URL_UK PORTAL_AUTH_SECRET NEXTAUTH_SECRET
-    load_env_file "$file" >/dev/null
-    printf '%s' "${!key:-}"
-  )"
-
-  if [[ -z "${value//[[:space:]]/}" ]]; then
-    return 1
-  fi
-
-  printf '%s' "$value"
-}
-
-rewrite_database_url() {
-  local raw_url="$1"
-  local database_name="$2"
-  local schema_name="$3"
-  node -e '
-const url = new URL(process.argv[1])
-url.pathname = `/${process.argv[2]}`
-url.searchParams.set("schema", process.argv[3])
-url.searchParams.delete("pgbouncer")
-console.log(url.toString())
-' "$raw_url" "$database_name" "$schema_name"
-}
-
-prepare_portal_owner_migration_env() {
-  case "$app_key" in
-    sso|targon|targonos)
+portal_database_name_for_environment() {
+  case "$environment" in
+    dev)
+      printf 'portal_db_dev'
+      ;;
+    main)
+      printf 'portal_db'
       ;;
     *)
-      return 0
+      error "Unsupported environment for owner migration database: $environment"
+      exit 1
       ;;
   esac
+}
 
-  local raw_portal_admin_url="${PORTAL_ADMIN_DATABASE_URL:-}"
-  if [[ -z "${raw_portal_admin_url//[[:space:]]/}" ]]; then
-    local owner_env_file="$REPO_DIR/apps/sso/.env.production"
-    if ! raw_portal_admin_url="$(read_env_value_from_file "$owner_env_file" "PORTAL_DB_URL")"; then
-      error "Unable to resolve portal owner PORTAL_DB_URL from $owner_env_file"
+migration_owner_role_for_app() {
+  case "$app_key" in
+    sso|targon|targonos)
+      printf 'portal_auth'
+      ;;
+    atlas)
+      printf 'portal_atlas'
+      ;;
+    xplan|kairos)
+      printf 'portal_xplan'
+      ;;
+    talos|argus)
+      printf 'portal_talos'
+      ;;
+    plutus)
+      printf 'portal_plutus'
+      ;;
+    *)
+      error "No owner role mapping for migration-enabled app: $app_key"
       exit 1
-    fi
-  fi
+      ;;
+  esac
+}
 
-  if [[ "$environment" == "dev" ]]; then
-    export PORTAL_DB_URL="$(rewrite_database_url "$raw_portal_admin_url" "portal_db_dev" "auth_dev")"
-  else
-    export PORTAL_DB_URL="$(rewrite_database_url "$raw_portal_admin_url" "portal_db" "auth")"
-  fi
+migration_schema_for_app() {
+  case "$app_key:$environment" in
+    sso:dev|targon:dev|targonos:dev)
+      printf 'auth_dev'
+      ;;
+    sso:main|targon:main|targonos:main)
+      printf 'auth'
+      ;;
+    atlas:dev)
+      printf 'dev_atlas'
+      ;;
+    atlas:main)
+      printf 'atlas'
+      ;;
+    xplan:dev)
+      printf 'dev_xplan'
+      ;;
+    xplan:main)
+      printf 'xplan'
+      ;;
+    kairos:dev|kairos:main)
+      printf 'kairos'
+      ;;
+    plutus:dev)
+      printf 'plutus_dev'
+      ;;
+    plutus:main)
+      printf 'plutus'
+      ;;
+    argus:dev)
+      printf 'argus_dev'
+      ;;
+    argus:main)
+      printf 'main_argus'
+      ;;
+    *)
+      error "No schema mapping for migration-enabled app/environment: $app_key $environment"
+      exit 1
+      ;;
+  esac
+}
+
+build_owner_database_url() {
+  local owner_role="$1"
+  local database_name="$2"
+  local schema_name="$3"
+  printf 'postgresql://%s@localhost:5432/%s?schema=%s' "$owner_role" "$database_name" "$schema_name"
+}
+
+prepare_shared_owner_migration_env() {
+  local database_name
+  local owner_role
+  local schema_name
+  database_name="$(portal_database_name_for_environment)"
+  owner_role="$(migration_owner_role_for_app)"
+  schema_name="$(migration_schema_for_app)"
+
+  case "$app_key" in
+    sso|targon|targonos)
+      export PORTAL_DB_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
+      ;;
+    atlas|xplan|kairos|plutus|argus)
+      export DATABASE_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
+      ;;
+    *)
+      error "Shared owner migration env is not supported for app: $app_key"
+      exit 1
+      ;;
+  esac
 }
 
 prepare_talos_owner_migration_env() {
@@ -1002,27 +1053,32 @@ prepare_talos_owner_migration_env() {
     return 0
   fi
 
-  local owner_env_file="$app_dir/.env.dev"
-  local raw_us_url
-  local raw_uk_url
-  if ! raw_us_url="$(read_env_value_from_file "$owner_env_file" "DATABASE_URL_US")"; then
-    error "Unable to resolve Talos owner DATABASE_URL_US from $owner_env_file"
-    exit 1
-  fi
-  if ! raw_uk_url="$(read_env_value_from_file "$owner_env_file" "DATABASE_URL_UK")"; then
-    error "Unable to resolve Talos owner DATABASE_URL_UK from $owner_env_file"
-    exit 1
-  fi
+  local database_name
+  database_name="$(portal_database_name_for_environment)"
 
   if [[ "$environment" == "dev" ]]; then
-    export DATABASE_URL_US="$(rewrite_database_url "$raw_us_url" "portal_db_dev" "dev_talos_us")"
-    export DATABASE_URL_UK="$(rewrite_database_url "$raw_uk_url" "portal_db_dev" "dev_talos_uk")"
+    export DATABASE_URL_US="postgresql://portal_talos@localhost:5432/${database_name}?schema=dev_talos_us"
+    export DATABASE_URL_UK="postgresql://portal_talos@localhost:5432/${database_name}?schema=dev_talos_uk"
   else
-    export DATABASE_URL_US="$(rewrite_database_url "$raw_us_url" "portal_db" "main_talos_us")"
-    export DATABASE_URL_UK="$(rewrite_database_url "$raw_uk_url" "portal_db" "main_talos_uk")"
+    export DATABASE_URL_US="postgresql://portal_talos@localhost:5432/${database_name}?schema=main_talos_us"
+    export DATABASE_URL_UK="postgresql://portal_talos@localhost:5432/${database_name}?schema=main_talos_uk"
   fi
 
   export DATABASE_URL="$DATABASE_URL_US"
+}
+
+prepare_owner_migration_env() {
+  case "$app_key" in
+    talos)
+      prepare_talos_owner_migration_env
+      ;;
+    sso|targon|targonos|atlas|xplan|kairos|plutus|argus)
+      prepare_shared_owner_migration_env
+      ;;
+    *)
+      return 0
+      ;;
+  esac
 }
 
 ensure_app_env_loaded() {
@@ -1254,20 +1310,10 @@ if [[ -n "$migrate_cmd" ]]; then
 
   if [[ "$migration_env_ready" == "true" ]]; then
     cd "$REPO_DIR"
-    prepare_portal_owner_migration_env
-    prepare_talos_owner_migration_env
+    prepare_owner_migration_env
     if [[ "$app_key" == "atlas" && "$environment" == "dev" ]]; then
-      if eval "$migrate_cmd"; then
-        log "Migrations applied"
-      else
-        warn "Prisma migrate deploy failed for atlas dev; falling back to non-destructive db push"
-        if eval "cd $app_dir && pnpm exec prisma db push --schema prisma/schema.prisma --skip-generate"; then
-          log "Database schema synced"
-        else
-          error "Prisma db push failed for atlas dev; aborting deployment to avoid a broken app"
-          exit 1
-        fi
-      fi
+      eval "$migrate_cmd"
+      log "Migrations applied"
     else
       eval "$migrate_cmd"
       log "Migrations applied"

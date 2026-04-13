@@ -32,13 +32,44 @@ test('sso deploy uses PORTAL_DB_URL for migration readiness instead of app DATAB
   )
 })
 
-test('sso deploy rewrites auth migrations onto the portal owner connection', () => {
+test('shared-db deploys map apps onto deterministic owner roles and local owner URLs', () => {
   assert.match(
     deployScript,
-    /prepare_portal_owner_migration_env\(\)[\s\S]*?PORTAL_ADMIN_DATABASE_URL[\s\S]*?apps\/sso\/\.env\.production[\s\S]*?rewrite_database_url "\$raw_portal_admin_url" "portal_db_dev" "auth_dev"/,
+    /migration_owner_role_for_app\(\)[\s\S]*?sso\|targon\|targonos\)[\s\S]*?printf 'portal_auth'/,
   )
   assert.match(
     deployScript,
-    /prepare_portal_owner_migration_env[\s\S]*?rewrite_database_url "\$raw_portal_admin_url" "portal_db" "auth"/,
+    /migration_owner_role_for_app\(\)[\s\S]*?atlas\)[\s\S]*?printf 'portal_atlas'/,
+  )
+  assert.match(
+    deployScript,
+    /migration_owner_role_for_app\(\)[\s\S]*?xplan\|kairos\)[\s\S]*?printf 'portal_xplan'/,
+  )
+  assert.match(
+    deployScript,
+    /migration_owner_role_for_app\(\)[\s\S]*?talos\|argus\)[\s\S]*?printf 'portal_talos'/,
+  )
+  assert.match(
+    deployScript,
+    /migration_owner_role_for_app\(\)[\s\S]*?plutus\)[\s\S]*?printf 'portal_plutus'/,
+  )
+  assert.match(
+    deployScript,
+    /build_owner_database_url\(\)[\s\S]*?printf 'postgresql:\/\/%s@localhost:5432\/%s\?schema=%s'/,
+  )
+  assert.match(
+    deployScript,
+    /prepare_shared_owner_migration_env\(\)[\s\S]*?export PORTAL_DB_URL="\$\(build_owner_database_url "\$owner_role" "\$database_name" "\$schema_name"\)"/,
+  )
+  assert.match(
+    deployScript,
+    /prepare_shared_owner_migration_env\(\)[\s\S]*?export DATABASE_URL="\$\(build_owner_database_url "\$owner_role" "\$database_name" "\$schema_name"\)"/,
+  )
+})
+
+test('atlas dev deploy no longer falls back to db push on migrate errors', () => {
+  assert.doesNotMatch(
+    deployScript,
+    /Prisma migrate deploy failed for atlas dev; falling back to non-destructive db push/,
   )
 })
