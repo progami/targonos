@@ -815,6 +815,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
 // ===== Entitlement / Roles claim helpers =====
 export type AuthzAppGrant = {
   departments: string[];
+  tenantMemberships: string[];
 };
 
 export type PortalAuthz = {
@@ -826,6 +827,7 @@ export type PortalAuthz = {
 export type AppEntitlement = {
   departments?: string[];
   depts?: string[];
+  tenantMemberships?: string[];
 };
 
 export type RolesClaim = Record<string, AppEntitlement>; // legacy alias: { talos: { depts }, xplan: { ... } }
@@ -858,7 +860,8 @@ function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
     if (!grant || typeof grant !== 'object') continue;
     const rawGrant = grant as Record<string, unknown>;
     const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
-    apps[appId] = { departments };
+    const tenantMemberships = normalizeStringArray(rawGrant.tenantMemberships);
+    apps[appId] = { departments, tenantMemberships };
   }
 
   return apps;
@@ -1006,6 +1009,7 @@ function buildDevBypassAuthz(appId?: string): PortalAuthz {
   if (appId) {
     apps[appId] = {
       departments: [],
+      tenantMemberships: [],
     };
   }
 
@@ -1297,6 +1301,7 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
     return {
       departments: grant.departments,
       depts: grant.departments,
+      tenantMemberships: grant.tenantMemberships,
     };
   }
 
@@ -1309,8 +1314,10 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
   if (!ent || typeof ent !== 'object') return undefined;
   const raw = ent as Record<string, unknown>;
   const departments = normalizeStringArray(raw.departments ?? raw.depts);
+  const tenantMemberships = normalizeStringArray(raw.tenantMemberships);
   return {
     departments,
     depts: departments,
+    tenantMemberships,
   };
 }

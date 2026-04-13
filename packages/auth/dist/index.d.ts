@@ -100,6 +100,7 @@ export declare function resolveAppAuthOrigin(options?: PortalUrlOptions): string
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
 export type AuthzAppGrant = {
     departments: string[];
+    tenantMemberships: string[];
 };
 export type PortalAuthz = {
     version: number;
@@ -109,6 +110,7 @@ export type PortalAuthz = {
 export type AppEntitlement = {
     departments?: string[];
     depts?: string[];
+    tenantMemberships?: string[];
 };
 export type RolesClaim = Record<string, AppEntitlement>;
 export type AppLifecycle = 'active' | 'dev' | 'archive';

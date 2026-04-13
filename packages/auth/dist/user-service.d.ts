@@ -13,6 +13,7 @@ type ProvisionedAppAccess = {
     slug: string;
     name: string;
     departments: string[];
+    tenantMemberships: string[];
     source?: 'manual' | 'group' | 'bootstrap';
     locked?: boolean;
 };
@@ -21,6 +22,7 @@ export type ManualAppGrantInput = {
     appSlug: string;
     appName?: string;
     departments?: string[];
+    tenantMemberships?: string[];
     locked?: boolean;
 };
 export type GroupSyncResult = {
@@ -28,6 +30,13 @@ export type GroupSyncResult = {
     upsertedGrants: number;
     deletedGrants: number;
     skippedLocked: number;
+};
+export declare function normalizeTenantMemberships(value: unknown): string[];
+export declare function buildManualGrantUpdateValues(input: ManualAppGrantInput): {
+    source: 'manual';
+    locked: boolean;
+    departments: string[];
+    tenantMemberships?: string[];
 };
 export declare function provisionPortalUser(options: {
     email: string;

@@ -641,7 +641,8 @@ function normalizeAuthzApps(value) {
             continue;
         const rawGrant = grant;
         const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
-        apps[appId] = { departments };
+        const tenantMemberships = normalizeStringArray(rawGrant.tenantMemberships);
+        apps[appId] = { departments, tenantMemberships };
     }
     return apps;
 }
@@ -774,6 +775,7 @@ function buildDevBypassAuthz(appId) {
     if (appId) {
         apps[appId] = {
             departments: [],
+            tenantMemberships: [],
         };
     }
     return {
@@ -1010,6 +1012,7 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
         return {
             departments: grant.departments,
             depts: grant.departments,
+            tenantMemberships: grant.tenantMemberships,
         };
     }
     const rec = rolesOrAuthz;
@@ -1022,8 +1025,10 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
         return undefined;
     const raw = ent;
     const departments = normalizeStringArray(raw.departments ?? raw.depts);
+    const tenantMemberships = normalizeStringArray(raw.tenantMemberships);
     return {
         departments,
         depts: departments,
+        tenantMemberships,
     };
 }

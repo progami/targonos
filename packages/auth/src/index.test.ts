@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveAppAuthOrigin, resolvePortalAuthOrigin } from './index'
+import { normalizePortalAuthz, resolveAppAuthOrigin, resolvePortalAuthOrigin } from './index'
 
 const ORIGINAL_ENV = { ...process.env }
 
@@ -100,4 +100,51 @@ test('resolveAppAuthOrigin prefers configured app origins over forwarded request
   })
 
   assert.equal(origin, 'https://xplan.targonglobal.com')
+})
+
+test('normalizePortalAuthz preserves tenant memberships and departments', () => {
+  const authz = normalizePortalAuthz({
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['tenant-us', 'tenant-uk'],
+      },
+    },
+  })
+
+  assert.deepEqual(authz, {
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['tenant-us', 'tenant-uk'],
+      },
+    },
+  })
+})
+
+test('normalizePortalAuthz defaults missing tenant memberships to []', () => {
+  const authz = normalizePortalAuthz({
+    version: 1,
+    globalRoles: [],
+    apps: {
+      atlas: {
+        departments: ['Finance'],
+      },
+    },
+  })
+
+  assert.deepEqual(authz, {
+    version: 1,
+    globalRoles: [],
+    apps: {
+      atlas: {
+        departments: ['Finance'],
+        tenantMemberships: [],
+      },
+    },
+  })
 })
