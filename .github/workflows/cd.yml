@@ -321,8 +321,9 @@ jobs:
           BASE_SHA="${{ github.event.before }}"
           HEAD_SHA="${{ github.sha }}"
 
-          # Default to a small fanout; fall back to sequential when needed.
-          DEPLOY_CONCURRENCY="${DEPLOY_CONCURRENCY:-2}"
+          # Prisma migrate deploy uses a database-wide advisory lock.
+          # These apps share the same portal database, so deploy sequentially.
+          DEPLOY_CONCURRENCY="1"
 
           first_app="${apps[0]}"
 
@@ -341,27 +342,6 @@ jobs:
             CHANGED_FILES="$(cd "$DEPLOY_REPO_DIR" && git ls-files)"
           else
             CHANGED_FILES="$(cd "$DEPLOY_REPO_DIR" && git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
-          fi
-
-          unsafe_parallel="false"
-          if grep -qx 'apps/talos/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-talos/generated/' <<< "$CHANGED_FILES"; then
-            unsafe_parallel="true"
-          fi
-          if grep -qx 'apps/xplan/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-xplan/generated/' <<< "$CHANGED_FILES"; then
-            unsafe_parallel="true"
-          fi
-          if grep -qx 'apps/kairos/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-kairos/generated/' <<< "$CHANGED_FILES"; then
-            unsafe_parallel="true"
-          fi
-          if grep -qx 'apps/atlas/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-atlas/generated/' <<< "$CHANGED_FILES"; then
-            unsafe_parallel="true"
-          fi
-          if grep -qx 'apps/argus/prisma/schema.prisma' <<< "$CHANGED_FILES" && ! grep -q '^packages/prisma-argus/generated/' <<< "$CHANGED_FILES"; then
-            unsafe_parallel="true"
-          fi
-
-          if [[ ${#apps[@]} -le 1 || "$unsafe_parallel" == "true" ]]; then
-            DEPLOY_CONCURRENCY="1"
           fi
 
           echo "Deploying to $TARGET_ENV: ${apps[*]} (concurrency=$DEPLOY_CONCURRENCY)"
