@@ -12,18 +12,42 @@ function requireEnv(name) {
   return trimmed
 }
 
+function parseUrl(raw, fieldName) {
+  try {
+    return new URL(raw)
+  } catch {
+    throw new Error(`${fieldName} must be a valid absolute URL.`)
+  }
+}
+
+function normalizeUrl(raw, fieldName) {
+  const url = parseUrl(raw, fieldName)
+
+  if (url.pathname.length > 1) {
+    url.pathname = url.pathname.replace(/\/+$/g, '')
+  }
+
+  url.hash = ''
+
+  return url
+}
+
 export function compareTopology(input) {
-  if (input.buildPublicAppUrl !== input.runtimePublicAppUrl) {
+  const buildPublicUrl = normalizeUrl(input.buildPublicUrl, 'buildPublicUrl')
+  const runtimePublicUrl = normalizeUrl(input.runtimePublicUrl, 'runtimePublicUrl')
+  const expectedPortalOrigin = normalizeUrl(input.expectedPortalOrigin, 'expectedPortalOrigin')
+
+  if (buildPublicUrl.href !== runtimePublicUrl.href) {
     return {
       ok: false,
-      message: `Topology mismatch: buildPublicAppUrl=${input.buildPublicAppUrl} runtimePublicAppUrl=${input.runtimePublicAppUrl}`,
+      message: `Topology mismatch: buildPublicUrl=${buildPublicUrl.href} runtimePublicUrl=${runtimePublicUrl.href}`,
     }
   }
 
-  if (!input.runtimePublicAppUrl.startsWith(input.expectedPortalOrigin)) {
+  if (runtimePublicUrl.origin !== expectedPortalOrigin.origin) {
     return {
       ok: false,
-      message: `Topology mismatch: runtimePublicAppUrl=${input.runtimePublicAppUrl} expectedPortalOrigin=${input.expectedPortalOrigin}`,
+      message: `Topology mismatch: runtimePublicUrl=${runtimePublicUrl.href} expectedPortalOrigin=${expectedPortalOrigin.href}`,
     }
   }
 
@@ -33,8 +57,8 @@ export function compareTopology(input) {
 export function assertTopologyFromEnv() {
   const result = compareTopology({
     expectedPortalOrigin: requireEnv('EXPECTED_PORTAL_ORIGIN'),
-    buildPublicAppUrl: requireEnv('BUILD_PUBLIC_APP_URL'),
-    runtimePublicAppUrl: requireEnv('RUNTIME_PUBLIC_APP_URL'),
+    buildPublicUrl: requireEnv('BUILD_PUBLIC_URL'),
+    runtimePublicUrl: requireEnv('RUNTIME_PUBLIC_URL'),
   })
 
   if (!result.ok) {

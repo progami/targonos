@@ -18,6 +18,20 @@ function requireEnv(name: string): string {
   return trimmed
 }
 
+function requireSharedSecret(): string {
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET
+  if (typeof nextAuthSecret === 'string' && nextAuthSecret.trim() !== '') {
+    return nextAuthSecret.trim()
+  }
+
+  const portalAuthSecret = process.env.PORTAL_AUTH_SECRET
+  if (typeof portalAuthSecret === 'string' && portalAuthSecret.trim() !== '') {
+    return portalAuthSecret.trim()
+  }
+
+  throw new Error('NEXTAUTH_SECRET or PORTAL_AUTH_SECRET must be defined for hosted portal smoke tests.')
+}
+
 function buildPortalAuthz() {
   return {
     version: 1,
@@ -46,7 +60,7 @@ function buildScreenshotDirectory(): string {
 async function buildSessionCookie(portalBaseUrl: string) {
   const authz = buildPortalAuthz()
   const sessionCookieName = '__Secure-next-auth.session-token'
-  const secret = requireEnv('NEXTAUTH_SECRET')
+  const secret = requireSharedSecret()
   const activeTenant = requireEnv('E2E_ACTIVE_TENANT')
   const domain = new URL(portalBaseUrl).hostname
   const token = await encode({
@@ -79,7 +93,7 @@ async function buildSessionCookie(portalBaseUrl: string) {
 async function buildActiveTenantCookie(portalBaseUrl: string) {
   const appId = 'talos'
   const cookieName = `__Secure-targon.active-tenant.${appId}`
-  const secret = requireEnv('PORTAL_AUTH_SECRET')
+  const secret = requireSharedSecret()
   const domain = new URL(portalBaseUrl).hostname
   const value = await encode({
     token: { activeTenant: requireEnv('E2E_ACTIVE_TENANT') },

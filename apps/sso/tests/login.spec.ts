@@ -1,21 +1,6 @@
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect } from '@playwright/test'
 
-const portalBaseUrl = 'http://127.0.0.1:3200'
-const talosBaseUrl = 'http://127.0.0.1:3201/operations/purchase-orders'
-const demoUsername = 'e2e-user'
-const demoPassword = 'e2e-pass'
-
-function escapeForRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-async function submitLogin(page: Page, url: string) {
-  await page.goto(url, { waitUntil: 'domcontentloaded' })
-  await page.fill('input[name="emailOrUsername"]', demoUsername)
-  await page.fill('input[name="password"]', demoPassword)
-  await page.waitForSelector('button.submit-button:not([disabled])', { timeout: 15_000 })
-  await page.click('button.submit-button')
-}
+import { escapeForRegExp, portalBaseUrl, submitLogin, talosBaseUrl } from './fixtures/dev-login'
 
 test('portal login redirects to portal home', async ({ page }) => {
   await submitLogin(page, `${portalBaseUrl}/login`)
