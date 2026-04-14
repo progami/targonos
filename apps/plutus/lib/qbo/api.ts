@@ -2,6 +2,8 @@ import { getApiBaseUrl, refreshAccessToken } from './client';
 import { createLogger } from '@targon/logger';
 import { getCached, setCache, invalidateCache } from './cache';
 import { loadServerQboConnection, saveServerQboConnection } from './connection-store';
+import { classifyQboRefreshFailure, getQboConnectionErrorMessage } from './connection-feedback';
+import type { QboConnectionErrorCode } from './types';
 
 const logger = createLogger({ name: 'qbo-api' });
 
@@ -21,6 +23,14 @@ function escapeSoql(value: string): string {
 
 export class QboAuthError extends Error {
   name = 'QboAuthError';
+  readonly code?: QboConnectionErrorCode;
+  readonly details?: string;
+
+  constructor(message: string, options?: { code?: QboConnectionErrorCode; details?: string }) {
+    super(message);
+    this.code = options?.code;
+    this.details = options?.details;
+  }
 }
 
 /**
@@ -686,9 +696,17 @@ export async function getValidToken(
       const updatedConnection = await refreshConnectionSingleFlight(connection);
       return { accessToken: updatedConnection.accessToken, updatedConnection };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn('QBO token refresh failed', { realmId: connection.realmId, error: message });
-      throw new QboAuthError('Session expired. Please reconnect to QuickBooks.');
+      const details = error instanceof Error ? error.message : String(error);
+      const errorCode = classifyQboRefreshFailure(error);
+      logger.warn('QBO token refresh failed', {
+        realmId: connection.realmId,
+        error: details,
+        errorCode,
+      });
+      throw new QboAuthError(getQboConnectionErrorMessage(errorCode), {
+        code: errorCode,
+        details,
+      });
     }
   }
 
