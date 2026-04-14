@@ -48,15 +48,15 @@ function getTenantDatabaseUrl(tenantCode: TenantCode): string {
 /**
  * Create a new Prisma client for a tenant
  */
-function withSchema(databaseUrl: string, schema: string): string {
-  try {
-    const url = new URL(databaseUrl)
-    url.searchParams.set('schema', schema)
-    return url.toString()
-  } catch {
-    const separator = databaseUrl.includes('?') ? '&' : '?'
-    return `${databaseUrl}${separator}schema=${schema}`
-  }
+function searchPathOption(schema: string): string {
+  return `-csearch_path=${schema},public`
+}
+
+export function buildSchemaScopedDatabaseUrl(databaseUrl: string, schema: string): string {
+  const url = new URL(databaseUrl)
+  url.searchParams.set('schema', schema)
+  url.searchParams.set('options', searchPathOption(schema))
+  return url.toString()
 }
 
 function withApplicationName(databaseUrl: string, applicationName: string): string {
@@ -150,7 +150,7 @@ async function resolveDatasourceUrl(databaseUrl: string, tenantCode: TenantCode)
   const taggedDatabaseUrl = withApplicationName(databaseUrl, `talos-${tenantCode.toLowerCase()}`)
   const schemaOverride = process.env.PRISMA_SCHEMA
   if (schemaOverride) {
-    return withSchema(taggedDatabaseUrl, schemaOverride)
+    return buildSchemaScopedDatabaseUrl(taggedDatabaseUrl, schemaOverride)
   }
 
   let currentSchema: string | null = null
@@ -168,20 +168,20 @@ async function resolveDatasourceUrl(databaseUrl: string, tenantCode: TenantCode)
 
   try {
     const hasRequiredTables = await schemaHasTable(baseConnectionString, currentSchema, 'skus')
-    if (hasRequiredTables) return taggedDatabaseUrl
+    if (hasRequiredTables) return buildSchemaScopedDatabaseUrl(taggedDatabaseUrl, currentSchema)
 
     const bestSchema = await findBestSchemaForTenant(baseConnectionString, tenantCode, currentSchema)
     if (bestSchema && bestSchema !== currentSchema) {
       console.warn(
         `[tenant] Schema "${currentSchema}" missing expected tables for ${tenantCode}; using "${bestSchema}" instead`
       )
-      return withSchema(taggedDatabaseUrl, bestSchema)
+      return buildSchemaScopedDatabaseUrl(taggedDatabaseUrl, bestSchema)
     }
   } catch {
     // Fall back to provided schema URL if we cannot introspect (e.g., network/permissions)
   }
 
-  return taggedDatabaseUrl
+  return buildSchemaScopedDatabaseUrl(taggedDatabaseUrl, currentSchema)
 }
 
 async function createTenantClient(tenantCode: TenantCode): Promise<PrismaClient> {
