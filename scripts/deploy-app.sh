@@ -769,7 +769,7 @@ ensure_database_url() {
   if [[ "$environment" == "dev" ]]; then
     candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
   else
-    candidates=("$app_dir/.env.local" "$app_dir/.env.production" "$app_dir/.env")
+    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
   fi
 
   for file in "${candidates[@]}"; do
@@ -796,7 +796,7 @@ ensure_portal_db_url() {
   if [[ "$environment" == "dev" ]]; then
     candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
   else
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.production" "$sso_dir/.env")
+    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
   fi
   local file
 
@@ -880,7 +880,7 @@ resolve_portal_shared_secret() {
   if [[ "$environment" == "dev" ]]; then
     candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
   else
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.production" "$sso_dir/.env")
+    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
   fi
 
   local file
@@ -1087,7 +1087,7 @@ ensure_app_env_loaded() {
   if [[ "$environment" == "dev" ]]; then
     candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
   else
-    candidates=("$app_dir/.env.local" "$app_dir/.env.production" "$app_dir/.env")
+    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
   fi
 
   local file
