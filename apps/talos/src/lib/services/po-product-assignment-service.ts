@@ -1,6 +1,6 @@
 import { Prisma } from '@targon/prisma-talos'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { getAccessibleTenantCodesForEmail, getPrismaForTenant } from '@/lib/tenant/access'
+import { getPrismaForTenant } from '@/lib/tenant/access'
 import type { TenantCode } from '@/lib/tenant/constants'
 
 export type PoProductAssignmentRecord = {
@@ -102,41 +102,4 @@ export async function getAssignedSkuCodesAcrossTenants(
   }
 
   return Array.from(assigned)
-}
-
-export async function canViewManufacturingOrder(params: {
-  email: string
-  tenantCode: TenantCode
-  poId: string
-  isSuperAdmin: boolean
-}): Promise<boolean> {
-  if (params.isSuperAdmin) {
-    return true
-  }
-
-  const accessibleTenantCodes = await getAccessibleTenantCodesForEmail(params.email)
-  const assignedSkuCodes = await getAssignedSkuCodesAcrossTenants(params.email, accessibleTenantCodes)
-
-  if (assignedSkuCodes.length === 0) {
-    return false
-  }
-
-  const prisma = await getPrismaForTenant(params.tenantCode)
-  const matches = await prisma.purchaseOrder.findFirst({
-    where: {
-      id: params.poId,
-      isLegacy: false,
-      status: 'MANUFACTURING',
-      lines: {
-        some: {
-          skuCode: {
-            in: assignedSkuCodes,
-          },
-        },
-      },
-    },
-    select: { id: true },
-  })
-
-  return Boolean(matches)
 }

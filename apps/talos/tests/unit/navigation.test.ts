@@ -19,8 +19,7 @@ test('amazon workspace exposes the live tool surfaces in Talos', () => {
 
 test('main navigation surfaces live Talos pages and keeps super-admin routes gated', () => {
   const staffNavigation = buildMainNavigation({
-    role: 'staff',
-    email: 'ops@targonglobal.com',
+    isPlatformAdmin: false,
   })
 
   const amazonSection = staffNavigation.find((section) => section.title === 'Amazon')
@@ -48,8 +47,7 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   )
 
   const superAdminNavigation = buildMainNavigation({
-    role: 'admin',
-    email: 'jarrar@targonglobal.com',
+    isPlatformAdmin: true,
   })
   const superAdminConfiguration = superAdminNavigation.find(
     (section) => section.title === 'Configuration'

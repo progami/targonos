@@ -1,20 +1,13 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Permission, UserPermission, User, UserRole } from '@targon/prisma-talos'
 import { NotFoundError, ValidationError } from '@/lib/api'
+import { isSuperAdmin } from '@/lib/auth/super-admin'
 import { hasRoleBaselinePermission } from '@/lib/permissions/baseline'
 
-// Super admin emails - these users have all permissions automatically
-const SUPER_ADMIN_EMAILS = ['jarrar@targonglobal.com']
+export { isSuperAdmin } from '@/lib/auth/super-admin'
 
 function roleHasBaselinePermission(role: UserRole, permissionCode: string): boolean {
   return hasRoleBaselinePermission(role, permissionCode)
-}
-
-/**
- * Check if an email belongs to a super admin
- */
-export function isSuperAdmin(email: string): boolean {
-  return SUPER_ADMIN_EMAILS.includes(email.toLowerCase())
 }
 
 /**
@@ -254,16 +247,6 @@ export async function grantPermission(
 ): Promise<UserPermission> {
   const prisma = await getTenantPrisma()
 
-  // Verify the granter is a super admin
-  const granter = await prisma.user.findUnique({
-    where: { id: grantedById },
-    select: { email: true },
-  })
-
-  if (!granter || !isSuperAdmin(granter.email)) {
-    throw new ValidationError('Only super admins can grant permissions')
-  }
-
   // Find the permission
   const permission = await prisma.permission.findUnique({
     where: { code: permissionCode },
@@ -312,16 +295,6 @@ export async function revokePermission(
   revokedById: string
 ): Promise<void> {
   const prisma = await getTenantPrisma()
-
-  // Verify the revoker is a super admin
-  const revoker = await prisma.user.findUnique({
-    where: { id: revokedById },
-    select: { email: true },
-  })
-
-  if (!revoker || !isSuperAdmin(revoker.email)) {
-    throw new ValidationError('Only super admins can revoke permissions')
-  }
 
   // Find the permission
   const permission = await prisma.permission.findUnique({

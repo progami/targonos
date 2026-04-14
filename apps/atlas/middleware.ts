@@ -1,22 +1,18 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getCandidateSessionCookieNames, requireAppEntry } from '@targon/auth'
-
-import { portalUrl } from '@/lib/portal'
-import { resolveAppOrigin } from '@/lib/request-origin'
+import {
+  buildAppLoginRedirect,
+  getCandidateSessionCookieNames,
+  normalizeBasePath,
+  requireAppEntry,
+  resolveAppAuthOrigin,
+  resolvePortalAuthOrigin,
+} from '@targon/auth'
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const normalizeBasePath = (value?: string | null) => {
-    if (!value) return ''
-    const trimmed = value.trim()
-    if (!trimmed || trimmed === '/') return ''
-    const withLeading = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
-    return withLeading.length > 1 && withLeading.endsWith('/') ? withLeading.slice(0, -1) : withLeading
-  }
-
-  const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH || process.env.BASE_PATH || '/atlas')
+  const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? process.env.BASE_PATH ?? '/atlas')
   if (basePath && pathname.startsWith(`${basePath}${basePath}`)) {
     const url = request.nextUrl.clone()
     url.pathname = pathname.slice(basePath.length)
@@ -82,18 +78,14 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      const login = portalUrl('/login', request)
-      const callbackOrigin = resolveAppOrigin(request)
-      const callbackPathname = (() => {
-        if (!basePath) return request.nextUrl.pathname
-        if (request.nextUrl.pathname.startsWith(basePath)) return request.nextUrl.pathname
-        return request.nextUrl.pathname === '/' ? basePath : `${basePath}${request.nextUrl.pathname}`
-      })()
-      const callbackUrl = new URL(
-        callbackPathname + request.nextUrl.search + request.nextUrl.hash,
-        callbackOrigin,
-      )
-      login.searchParams.set('callbackUrl', callbackUrl.toString())
+      const login = buildAppLoginRedirect({
+        portalOrigin: resolvePortalAuthOrigin({ request }),
+        appOrigin: resolveAppAuthOrigin({ request }),
+        appBasePath: basePath,
+        pathname: request.nextUrl.pathname,
+        search: request.nextUrl.search,
+        hash: request.nextUrl.hash,
+      })
       return NextResponse.redirect(login)
     }
   }

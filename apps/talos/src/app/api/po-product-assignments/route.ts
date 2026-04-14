@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server'
 import { ApiResponses, withAuth, z } from '@/lib/api'
-import { isSuperAdmin } from '@/lib/services/permission-service'
 import {
   assignSkuToEmail,
   listAssignmentsByEmail,
   unassignSkuFromEmail,
 } from '@/lib/services/po-product-assignment-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 const AssignmentSchema = z.object({
   email: z.string().trim().email(),
@@ -14,7 +14,7 @@ const AssignmentSchema = z.object({
 })
 
 export const GET = withAuth(async (request: NextRequest, session) => {
-  if (!isSuperAdmin(session.user.email || '')) {
+  if (!isPortalPlatformAdmin(session)) {
     return ApiResponses.forbidden('Only super admins can manage PO product assignments')
   }
 
@@ -35,7 +35,7 @@ export const GET = withAuth(async (request: NextRequest, session) => {
 })
 
 export const POST = withAuth(async (request: NextRequest, session) => {
-  if (!isSuperAdmin(session.user.email || '')) {
+  if (!isPortalPlatformAdmin(session)) {
     return ApiResponses.forbidden('Only super admins can manage PO product assignments')
   }
 
@@ -72,7 +72,7 @@ export const POST = withAuth(async (request: NextRequest, session) => {
 })
 
 export const DELETE = withAuth(async (request: NextRequest, session) => {
-  if (!isSuperAdmin(session.user.email || '')) {
+  if (!isPortalPlatformAdmin(session)) {
     return ApiResponses.forbidden('Only super admins can manage PO product assignments')
   }
 

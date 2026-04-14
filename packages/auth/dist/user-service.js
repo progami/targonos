@@ -40,6 +40,7 @@ const userSelect = {
             source: true,
             locked: true,
             departments: true,
+            tenantMemberships: true,
             app: {
                 select: {
                     slug: true,
@@ -52,6 +53,26 @@ function normalizeDepartments(value) {
     return Array.isArray(value)
         ? value.map((item) => String(item).trim()).filter(Boolean)
         : [];
+}
+export function normalizeTenantMemberships(value) {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+    return Array.from(new Set(value.map((item) => String(item).trim()).filter(Boolean))).sort();
+}
+export function buildManualGrantUpdateValues(input) {
+    const base = {
+        source: 'manual',
+        locked: input.locked ?? true,
+        departments: input.departments ?? [],
+    };
+    if (input.tenantMemberships === undefined) {
+        return base;
+    }
+    return {
+        ...base,
+        tenantMemberships: normalizeTenantMemberships(input.tenantMemberships),
+    };
 }
 function normalizeOptionalName(value) {
     if (value === undefined) {
@@ -144,6 +165,7 @@ export async function provisionPortalUser(options) {
                     source: app.source ?? 'manual',
                     locked: app.locked ?? false,
                     departments: app.departments,
+                    tenantMemberships: normalizeTenantMemberships(app.tenantMemberships),
                 },
                 create: {
                     userId,
@@ -151,6 +173,7 @@ export async function provisionPortalUser(options) {
                     source: app.source ?? 'manual',
                     locked: app.locked ?? false,
                     departments: app.departments,
+                    tenantMemberships: normalizeTenantMemberships(app.tenantMemberships),
                 },
             });
         }
@@ -191,19 +214,15 @@ export async function upsertManualUserAppGrant(input) {
             },
             select: { id: true },
         });
+        const updateValues = buildManualGrantUpdateValues(input);
         await tx.userApp.upsert({
             where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
-            update: {
-                source: 'manual',
-                locked: input.locked ?? true,
-                departments: input.departments ?? [],
-            },
+            update: updateValues,
             create: {
                 userId: input.userId,
                 appId: appRecord.id,
-                source: 'manual',
-                locked: input.locked ?? true,
-                departments: input.departments ?? [],
+                ...updateValues,
+                tenantMemberships: normalizeTenantMemberships(input.tenantMemberships),
             },
         });
         await bumpAuthzVersion(tx, input.userId);
@@ -278,6 +297,7 @@ export async function syncGroupBasedAppAccess() {
             select: {
                 googleGroup: true,
                 departments: true,
+                tenantMemberships: true,
                 app: {
                     select: {
                         id: true,
@@ -294,6 +314,7 @@ export async function syncGroupBasedAppAccess() {
         list.push({
             appId: mapping.app.id,
             departments: normalizeDepartments(mapping.departments),
+            tenantMemberships: normalizeTenantMemberships(mapping.tenantMemberships),
         });
         mappingByGroup.set(key, list);
     }
@@ -313,12 +334,18 @@ export async function syncGroupBasedAppAccess() {
                 if (!existing) {
                     desiredByApp.set(mapping.appId, {
                         departments: mapping.departments,
+                        tenantMemberships: mapping.tenantMemberships,
                     });
                     continue;
                 }
                 const deptSet = new Set([...existing.departments, ...mapping.departments]);
+                const tenantMembershipSet = [
+                    ...existing.tenantMemberships,
+                    ...mapping.tenantMemberships,
+                ];
                 desiredByApp.set(mapping.appId, {
                     departments: Array.from(deptSet),
+                    tenantMemberships: normalizeTenantMemberships(tenantMembershipSet),
                 });
             }
         }
@@ -332,6 +359,7 @@ export async function syncGroupBasedAppAccess() {
                     source: true,
                     locked: true,
                     departments: true,
+                    tenantMemberships: true,
                 },
             });
             let changed = false;
@@ -352,9 +380,12 @@ export async function syncGroupBasedAppAccess() {
                 }
                 const current = existingGroupMap.get(appId);
                 const currentDepartments = current ? normalizeDepartments(current.departments) : [];
+                const currentTenantMemberships = current ? normalizeTenantMemberships(current.tenantMemberships) : [];
                 const sameDepartments = currentDepartments.length === desired.departments.length
                     && currentDepartments.every((dept, idx) => dept === desired.departments[idx]);
-                if (sameDepartments) {
+                const sameTenantMemberships = currentTenantMemberships.length === desired.tenantMemberships.length
+                    && currentTenantMemberships.every((tenantMembership, idx) => tenantMembership === desired.tenantMemberships[idx]);
+                if (sameDepartments && sameTenantMemberships) {
                     continue;
                 }
                 await tx.userApp.upsert({
@@ -366,6 +397,7 @@ export async function syncGroupBasedAppAccess() {
                     },
                     update: {
                         departments: desired.departments,
+                        tenantMemberships: desired.tenantMemberships,
                         source: 'group',
                         locked: false,
                     },
@@ -373,6 +405,7 @@ export async function syncGroupBasedAppAccess() {
                         userId: user.id,
                         appId,
                         departments: desired.departments,
+                        tenantMemberships: desired.tenantMemberships,
                         source: 'group',
                         locked: false,
                     },
@@ -465,13 +498,13 @@ function handleDevFallback(emailOrUsername, password) {
 function buildDemoUser() {
     const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase();
     const entitlements = {
-        talos: { departments: ['Ops'] },
-        atlas: { departments: ['People Ops'] },
-        website: { departments: [] },
-        kairos: { departments: ['Product'] },
-        xplan: { departments: ['Product'] },
-        hermes: { departments: ['Account / Listing'] },
-        plutus: { departments: ['Finance'] }
+        talos: { departments: ['Ops'], tenantMemberships: [] },
+        atlas: { departments: ['People Ops'], tenantMemberships: [] },
+        website: { departments: [], tenantMemberships: [] },
+        kairos: { departments: ['Product'], tenantMemberships: [] },
+        xplan: { departments: ['Product'], tenantMemberships: [] },
+        hermes: { departments: ['Account / Listing'], tenantMemberships: [] },
+        plutus: { departments: ['Finance'], tenantMemberships: [] }
     };
     return {
         id: DEMO_ADMIN_UUID,
@@ -492,6 +525,7 @@ export async function getUserEntitlements(userId) {
         where: { userId },
         select: {
             departments: true,
+            tenantMemberships: true,
             app: {
                 select: {
                     slug: true,
@@ -503,6 +537,7 @@ export async function getUserEntitlements(userId) {
     for (const assignment of assignments) {
         entitlements[assignment.app.slug] = {
             departments: normalizeDepartments(assignment.departments),
+            tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
         };
     }
     return entitlements;
@@ -540,6 +575,7 @@ export async function getUserAuthz(userId) {
             appAccess: {
                 select: {
                     departments: true,
+                    tenantMemberships: true,
                     app: {
                         select: {
                             slug: true,
@@ -569,6 +605,7 @@ export async function getUserAuthz(userId) {
     for (const assignment of user.appAccess) {
         apps[assignment.app.slug] = {
             departments: normalizeDepartments(assignment.departments),
+            tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
         };
     }
     return {
@@ -658,6 +695,7 @@ function mapPortalUser(user) {
     const entitlements = user.appAccess.reduce((acc, assignment) => {
         acc[assignment.app.slug] = {
             departments: normalizeDepartments(assignment.departments),
+            tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
         };
         return acc;
     }, {});

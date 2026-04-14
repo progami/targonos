@@ -32,6 +32,7 @@
     "db:migrate:sku-reference-fee-columns": "tsx scripts/migrations/add-sku-reference-fee-columns.ts",
     "db:migrate:normalize-amazon-referral-fee-percent-2026": "tsx scripts/migrations/normalize-amazon-referral-fee-percent-2026.ts",
     "db:migrate:supplier-defaults": "tsx scripts/migrations/add-supplier-default-columns.ts",
+    "db:migrate:warehouse-billing-config": "tsx scripts/migrations/add-warehouse-billing-config.ts",
     "db:migrate:warehouse-sku-storage-configs": "tsx scripts/migrations/add-warehouse-sku-storage-configs.ts",
     "db:migrate:purchase-order-documents": "tsx scripts/migrations/add-purchase-order-document-table.ts",
     "db:migrate:purchase-order-pi-documents-to-issued": "tsx scripts/migrations/move-pi-documents-to-issued.ts",

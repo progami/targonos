@@ -17,10 +17,18 @@ const DEPLOYABLE_APPS = [
   { id: 'argus', key: 'argus' }
 ]
 
+const DEPLOY_INFRASTRUCTURE_FILES = new Set([
+  '.github/workflows/cd.yml',
+  'ecosystem.config.js',
+  'scripts/deploy-app.sh',
+  'scripts/detect-cd-affected-apps.js',
+])
+
 const deployableAppKeysById = new Map(DEPLOYABLE_APPS.map((app) => [app.id, app.key]))
 
 const changedFiles = readChangedFilesFromStdin()
 const packagesChanged = changedFiles.some((filePath) => filePath.startsWith('packages/'))
+const deployInfrastructureChanged = changedFiles.some((filePath) => DEPLOY_INFRASTRUCTURE_FILES.has(filePath))
 
 const workspaces = discoverWorkspaces(repoRoot)
 const workspacesByName = new Map(workspaces.map((workspace) => [workspace.name, workspace]))
@@ -44,17 +52,23 @@ for (const filePath of changedFiles) {
 const affectedWorkspaces = collectDependentsClosure(changedWorkspaces, dependentsGraph)
 
 const affectedDeployableApps = new Set()
-for (const workspaceName of affectedWorkspaces) {
-  const workspace = workspacesByName.get(workspaceName)
-  if (!workspace || workspace.kind !== 'app') {
-    continue
+if (deployInfrastructureChanged) {
+  for (const deployableApp of DEPLOYABLE_APPS) {
+    affectedDeployableApps.add(deployableApp.key)
   }
+} else {
+  for (const workspaceName of affectedWorkspaces) {
+    const workspace = workspacesByName.get(workspaceName)
+    if (!workspace || workspace.kind !== 'app') {
+      continue
+    }
 
-  const deployKey = deployableAppKeysById.get(workspace.id)
-  if (!deployKey) {
-    continue
+    const deployKey = deployableAppKeysById.get(workspace.id)
+    if (!deployKey) {
+      continue
+    }
+    affectedDeployableApps.add(deployKey)
   }
-  affectedDeployableApps.add(deployKey)
 }
 
 const outputLines = []
@@ -66,7 +80,7 @@ if (packagesChanged) {
   outputLines.push('packages=true')
 }
 
-if (packagesChanged || affectedDeployableApps.size > 0) {
+if (packagesChanged || deployInfrastructureChanged || affectedDeployableApps.size > 0) {
   outputLines.push('any_app=true')
 } else {
   outputLines.push('any_app=false')

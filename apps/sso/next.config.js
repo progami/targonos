@@ -6,6 +6,7 @@ const nextConfig = {
   reactStrictMode: true,
   env: {
     NEXT_PUBLIC_VERSION: resolvedVersion,
+    NEXT_PUBLIC_PORTAL_AUTH_URL: process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
   },
   async redirects() {
     return [

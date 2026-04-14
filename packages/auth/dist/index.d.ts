@@ -60,6 +60,7 @@ export interface PortalJwtPayload extends Record<string, unknown> {
     authzVersion?: number;
     roles?: RolesClaim;
     apps?: string[];
+    activeTenant?: string;
     exp?: number;
 }
 export interface DecodePortalSessionOptions {
@@ -100,6 +101,7 @@ export declare function resolveAppAuthOrigin(options?: PortalUrlOptions): string
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
 export type AuthzAppGrant = {
     departments: string[];
+    tenantMemberships: string[];
 };
 export type PortalAuthz = {
     version: number;
@@ -109,6 +111,7 @@ export type PortalAuthz = {
 export type AppEntitlement = {
     departments?: string[];
     depts?: string[];
+    tenantMemberships?: string[];
 };
 export type RolesClaim = Record<string, AppEntitlement>;
 export type AppLifecycle = 'active' | 'dev' | 'archive';
@@ -142,3 +145,10 @@ export declare function hasCapability(options: {
     capability: string;
 }): boolean;
 export declare function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEntitlement | undefined;
+export declare function resolveActiveTenantFromCookies(options: {
+    appId: string;
+    cookieHeader?: string | null;
+}): Promise<string | undefined>;
+export declare function applyActiveTenantOverride(payload: PortalJwtPayload, appId: string, activeTenant: string | undefined): PortalJwtPayload;
+export { buildAppLoginRedirect } from './middleware-login.js';
+export { buildHostedAppUrl, normalizeBasePath } from './topology.js';

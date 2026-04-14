@@ -8,10 +8,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsc -w -p tsconfig.build.json",
+    "test": "tsx --test src/index.test.ts src/topology.test.ts src/middleware-login.test.ts",
     "type-check": "tsc --noEmit -p tsconfig.build.json",
     "lint": "echo 'No lint configured for auth package'",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma db push --schema prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "prepare": "prisma generate --schema prisma/schema.prisma"
   },
   "devDependencies": {

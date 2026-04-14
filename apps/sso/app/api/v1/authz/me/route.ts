@@ -22,7 +22,10 @@ export async function GET() {
   const authz = await getUserAuthz(userId)
 
   return NextResponse.json(
-    { authz },
+    {
+      authz,
+      activeTenant: (session as any).activeTenant ?? null,
+    },
     {
       headers: {
         'Cache-Control': 'no-store',

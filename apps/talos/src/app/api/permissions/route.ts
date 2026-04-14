@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server'
 import { withAuth, ApiResponses } from '@/lib/api'
-import { getAllPermissions, isSuperAdmin } from '@/lib/services/permission-service'
+import { getAllPermissions } from '@/lib/services/permission-service'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 /**
  * GET /api/permissions
  * List all available permissions (super admin only)
  */
 export const GET = withAuth(async (_request: NextRequest, session) => {
-  // Only super admins can view all permissions
-  if (!isSuperAdmin(session.user.email || '')) {
+  if (!isPortalPlatformAdmin(session)) {
     return ApiResponses.forbidden('Only super admins can view permissions')
   }
 

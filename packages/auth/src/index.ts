@@ -304,6 +304,7 @@ export interface PortalJwtPayload extends Record<string, unknown> {
   authzVersion?: number;
   roles?: RolesClaim;
   apps?: string[];
+  activeTenant?: string;
   exp?: number;
 }
 
@@ -429,8 +430,13 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
         });
         if (decoded && typeof decoded === 'object') {
           const payload = decoded as PortalJwtPayload;
+          if (!appId) {
+            return payload;
+          }
 
-          return payload;
+          const activeTenant = await resolveActiveTenantFromCookies({ appId, cookieHeader: header });
+
+          return applyActiveTenantOverride(payload, appId, activeTenant);
         }
       } catch (error) {
         if (debug) {
@@ -815,6 +821,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
 // ===== Entitlement / Roles claim helpers =====
 export type AuthzAppGrant = {
   departments: string[];
+  tenantMemberships: string[];
 };
 
 export type PortalAuthz = {
@@ -826,6 +833,7 @@ export type PortalAuthz = {
 export type AppEntitlement = {
   departments?: string[];
   depts?: string[];
+  tenantMemberships?: string[];
 };
 
 export type RolesClaim = Record<string, AppEntitlement>; // legacy alias: { talos: { depts }, xplan: { ... } }
@@ -858,7 +866,8 @@ function normalizeAuthzApps(value: unknown): Record<string, AuthzAppGrant> {
     if (!grant || typeof grant !== 'object') continue;
     const rawGrant = grant as Record<string, unknown>;
     const departments = normalizeStringArray(rawGrant.departments ?? rawGrant.depts);
-    apps[appId] = { departments };
+    const tenantMemberships = normalizeStringArray(rawGrant.tenantMemberships);
+    apps[appId] = { departments, tenantMemberships };
   }
 
   return apps;
@@ -1006,6 +1015,7 @@ function buildDevBypassAuthz(appId?: string): PortalAuthz {
   if (appId) {
     apps[appId] = {
       departments: [],
+      tenantMemberships: [],
     };
   }
 
@@ -1297,6 +1307,7 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
     return {
       departments: grant.departments,
       depts: grant.departments,
+      tenantMemberships: grant.tenantMemberships,
     };
   }
 
@@ -1309,8 +1320,57 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
   if (!ent || typeof ent !== 'object') return undefined;
   const raw = ent as Record<string, unknown>;
   const departments = normalizeStringArray(raw.departments ?? raw.depts);
+  const tenantMemberships = normalizeStringArray(raw.tenantMemberships);
   return {
     departments,
     depts: departments,
+    tenantMemberships,
   };
 }
+
+export async function resolveActiveTenantFromCookies(options: {
+  appId: string
+  cookieHeader?: string | null
+}): Promise<string | undefined> {
+  const cookieMap = parseCookieHeader(options.cookieHeader)
+  const cookieName = `__Secure-targon.active-tenant.${options.appId}`
+  const values = cookieMap.get(cookieName)
+  const raw = values?.[0]
+  if (!raw) return undefined
+
+  const decoded = await decode({
+    token: raw,
+    secret: process.env.PORTAL_AUTH_SECRET!,
+    salt: cookieName,
+  })
+
+  return typeof decoded?.activeTenant === 'string' ? decoded.activeTenant : undefined
+}
+
+export function applyActiveTenantOverride(
+  payload: PortalJwtPayload,
+  appId: string,
+  activeTenant: string | undefined,
+): PortalJwtPayload {
+  const nextPayload = activeTenant
+    ? {
+        ...payload,
+        activeTenant,
+      }
+    : payload
+  if (typeof nextPayload.activeTenant !== 'string') {
+    return nextPayload
+  }
+
+  const authz = normalizeAuthzFromClaims(nextPayload)
+  const grant = authz?.apps[appId]
+  if (!grant || !grant.tenantMemberships.includes(nextPayload.activeTenant)) {
+    const { activeTenant: _removed, ...rest } = nextPayload
+    return rest
+  }
+
+  return nextPayload
+}
+
+export { buildAppLoginRedirect } from './middleware-login.js'
+export { buildHostedAppUrl, normalizeBasePath } from './topology.js'

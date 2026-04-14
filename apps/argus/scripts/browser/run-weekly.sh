@@ -12,6 +12,7 @@ source "$SCRIPT_DIR/common.sh"
 
 LOG="/tmp/weekly-browser-sources.log"
 RUN_LOG_WRITER="$REPO_ROOT/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
+WPR_SYNC_SCRIPT="$REPO_ROOT/apps/argus/scripts/lib/sync-wpr-workspace.sh"
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
 RUN_STARTED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 BRAND_METRICS_SOURCE_LIMIT_NOTE="$("$NODE_BIN" "$SCRIPT_DIR/brand-metrics-availability.mjs" source-limit-note)"
@@ -72,6 +73,18 @@ run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "/
 run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "/tmp/weekly-scaleinsights.log"
 log "Brand Metrics note: $BRAND_METRICS_SOURCE_LIMIT_NOTE"
 run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "/tmp/weekly-brand-metrics.log"
+
+if [ "$FAILED" -eq 0 ]; then
+  log "Running: WPR workspace sync"
+  if bash "$WPR_SYNC_SCRIPT" --trigger weekly-browser-sources >> "$LOG" 2>&1; then
+    log "OK: WPR workspace sync"
+  else
+    local_exit_code=$?
+    log "FAILED: WPR workspace sync (exit $local_exit_code)"
+    FAILED_STEPS+=("WPR workspace sync")
+    FAILED=$((FAILED + 1))
+  fi
+fi
 
 log "=== Weekly Master Run Done ($FAILED failures) ==="
 

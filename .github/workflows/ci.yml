@@ -90,6 +90,20 @@ jobs:
         run: pnpm build
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
+      - name: Run auth topology contract tests
+        run: |
+          pnpm --filter @targon/auth test
+          node --test ecosystem.topology.test.cjs
+          pnpm run test:auth-topology
+      - name: Assert portal build/runtime topology
+        run: |
+          pnpm --filter @targon/sso build
+          build_public_url="$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('apps/sso/.next/required-server-files.json','utf8')); const value=data.config?.env?.NEXT_PUBLIC_PORTAL_AUTH_URL; if (typeof value !== 'string' || value.trim() === '') { throw new Error('apps/sso/.next/required-server-files.json is missing config.env.NEXT_PUBLIC_PORTAL_AUTH_URL'); } process.stdout.write(value.trim());")"
+          runtime_public_url="$(node -e "const fs=require('fs'); const lines=fs.readFileSync('apps/sso/.env.local','utf8').split(/\\r?\\n/); for (const line of lines) { if (line.startsWith('NEXT_PUBLIC_PORTAL_AUTH_URL=')) { process.stdout.write(line.slice('NEXT_PUBLIC_PORTAL_AUTH_URL='.length).trim()); process.exit(0); } } throw new Error('apps/sso/.env.local is missing NEXT_PUBLIC_PORTAL_AUTH_URL');")"
+          EXPECTED_PORTAL_ORIGIN="https://dev-os.targonglobal.com" \
+          BUILD_PUBLIC_URL="$build_public_url" \
+          RUNTIME_PUBLIC_URL="$runtime_public_url" \
+          pnpm run assert:auth-topology
   build-test-github-hosted:
     needs:
       - build-test-self-hosted

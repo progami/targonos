@@ -4,14 +4,14 @@ import {
   getAllUsersWithPermissions,
   isSuperAdmin,
 } from '@/lib/services/permission-service'
+import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
 /**
  * GET /api/users
  * List all users with their permissions (super admin only)
  */
 export const GET = withAuth(async (_request: NextRequest, session) => {
-  // Only super admins can list all users with permissions
-  if (!isSuperAdmin(session.user.email || '')) {
+  if (!isPortalPlatformAdmin(session)) {
     return ApiResponses.forbidden('Only super admins can view all users')
   }
 

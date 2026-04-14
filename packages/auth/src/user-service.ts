@@ -58,6 +58,7 @@ const userSelect = {
       source: true,
       locked: true,
       departments: true,
+      tenantMemberships: true,
       app: {
         select: {
           slug: true,
@@ -80,6 +81,7 @@ type PortalUserRecord = {
     source: string
     locked: boolean
     departments: unknown
+    tenantMemberships: unknown
     app: { slug: string }
   }>
 }
@@ -88,6 +90,7 @@ type ProvisionedAppAccess = {
   slug: string
   name: string
   departments: string[]
+  tenantMemberships: string[]
   source?: 'manual' | 'group' | 'bootstrap'
   locked?: boolean
 }
@@ -97,6 +100,7 @@ export type ManualAppGrantInput = {
   appSlug: string
   appName?: string
   departments?: string[]
+  tenantMemberships?: string[]
   locked?: boolean
 }
 
@@ -111,6 +115,36 @@ function normalizeDepartments(value: unknown): string[] {
   return Array.isArray(value)
     ? value.map((item) => String(item).trim()).filter(Boolean)
     : []
+}
+
+export function normalizeTenantMemberships(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return Array.from(new Set(value.map((item) => String(item).trim()).filter(Boolean))).sort()
+}
+
+export function buildManualGrantUpdateValues(input: ManualAppGrantInput): {
+  source: 'manual'
+  locked: boolean
+  departments: string[]
+  tenantMemberships?: string[]
+} {
+  const base = {
+    source: 'manual' as const,
+    locked: input.locked ?? true,
+    departments: input.departments ?? [],
+  }
+
+  if (input.tenantMemberships === undefined) {
+    return base
+  }
+
+  return {
+    ...base,
+    tenantMemberships: normalizeTenantMemberships(input.tenantMemberships),
+  }
 }
 
 function normalizeOptionalName(value: string | null | undefined): string | null | undefined {
@@ -226,6 +260,7 @@ export async function provisionPortalUser(options: {
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
+          tenantMemberships: normalizeTenantMemberships(app.tenantMemberships),
         },
         create: {
           userId,
@@ -233,6 +268,7 @@ export async function provisionPortalUser(options: {
           source: app.source ?? 'manual',
           locked: app.locked ?? false,
           departments: app.departments,
+          tenantMemberships: normalizeTenantMemberships(app.tenantMemberships),
         },
       })
     }
@@ -283,19 +319,16 @@ export async function upsertManualUserAppGrant(input: ManualAppGrantInput): Prom
       select: { id: true },
     })
 
+    const updateValues = buildManualGrantUpdateValues(input)
+
     await tx.userApp.upsert({
       where: { userId_appId: { userId: input.userId, appId: appRecord.id } },
-      update: {
-        source: 'manual',
-        locked: input.locked ?? true,
-        departments: input.departments ?? [],
-      },
+      update: updateValues,
       create: {
         userId: input.userId,
         appId: appRecord.id,
-        source: 'manual',
-        locked: input.locked ?? true,
-        departments: input.departments ?? [],
+        ...updateValues,
+        tenantMemberships: normalizeTenantMemberships(input.tenantMemberships),
       },
     })
 
@@ -386,6 +419,7 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
       select: {
         googleGroup: true,
         departments: true,
+        tenantMemberships: true,
         app: {
           select: {
             id: true,
@@ -396,13 +430,18 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
     }),
   ])
 
-  const mappingByGroup = new Map<string, Array<{ appId: string; departments: string[] }>>()
+  const mappingByGroup = new Map<string, Array<{
+    appId: string
+    departments: string[]
+    tenantMemberships: string[]
+  }>>()
   for (const mapping of mappings) {
     const key = mapping.googleGroup.trim()
     const list = mappingByGroup.get(key) ?? []
     list.push({
       appId: mapping.app.id,
       departments: normalizeDepartments(mapping.departments),
+      tenantMemberships: normalizeTenantMemberships(mapping.tenantMemberships),
     })
     mappingByGroup.set(key, list)
   }
@@ -414,7 +453,10 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
 
   for (const user of users) {
     const groupNames = membershipsByEmail[user.email.toLowerCase()] ?? []
-    const desiredByApp = new Map<string, { departments: string[] }>()
+    const desiredByApp = new Map<string, {
+      departments: string[]
+      tenantMemberships: string[]
+    }>()
 
     for (const groupName of groupNames) {
       const mappingsForGroup = mappingByGroup.get(groupName)
@@ -425,14 +467,20 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
         if (!existing) {
           desiredByApp.set(mapping.appId, {
             departments: mapping.departments,
+            tenantMemberships: mapping.tenantMemberships,
           })
           continue
         }
 
         const deptSet = new Set<string>([...existing.departments, ...mapping.departments])
+        const tenantMembershipSet = [
+          ...existing.tenantMemberships,
+          ...mapping.tenantMemberships,
+        ]
 
         desiredByApp.set(mapping.appId, {
           departments: Array.from(deptSet),
+          tenantMemberships: normalizeTenantMemberships(tenantMembershipSet),
         })
       }
     }
@@ -447,6 +495,7 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
           source: true,
           locked: true,
           departments: true,
+          tenantMemberships: true,
         },
       })
 
@@ -471,11 +520,17 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
 
         const current = existingGroupMap.get(appId)
         const currentDepartments = current ? normalizeDepartments(current.departments) : []
+        const currentTenantMemberships = current ? normalizeTenantMemberships(current.tenantMemberships) : []
         const sameDepartments =
           currentDepartments.length === desired.departments.length
           && currentDepartments.every((dept, idx) => dept === desired.departments[idx])
+        const sameTenantMemberships =
+          currentTenantMemberships.length === desired.tenantMemberships.length
+          && currentTenantMemberships.every(
+            (tenantMembership, idx) => tenantMembership === desired.tenantMemberships[idx],
+          )
 
-        if (sameDepartments) {
+        if (sameDepartments && sameTenantMemberships) {
           continue
         }
 
@@ -488,6 +543,7 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
           },
           update: {
             departments: desired.departments,
+            tenantMemberships: desired.tenantMemberships,
             source: 'group',
             locked: false,
           },
@@ -495,6 +551,7 @@ export async function syncGroupBasedAppAccess(): Promise<GroupSyncResult> {
             userId: user.id,
             appId,
             departments: desired.departments,
+            tenantMemberships: desired.tenantMemberships,
             source: 'group',
             locked: false,
           },
@@ -609,13 +666,13 @@ function handleDevFallback(emailOrUsername: string, password: string): Authentic
 function buildDemoUser(): AuthenticatedUser {
   const demoUsername = (process.env.DEMO_ADMIN_USERNAME || DEFAULT_DEMO_USERNAME).toLowerCase()
   const entitlements: AppEntitlementMap = {
-    talos: { departments: ['Ops'] },
-    atlas: { departments: ['People Ops'] },
-    website: { departments: [] },
-    kairos: { departments: ['Product'] },
-    xplan: { departments: ['Product'] },
-    hermes: { departments: ['Account / Listing'] },
-    plutus: { departments: ['Finance'] }
+    talos: { departments: ['Ops'], tenantMemberships: [] },
+    atlas: { departments: ['People Ops'], tenantMemberships: [] },
+    website: { departments: [], tenantMemberships: [] },
+    kairos: { departments: ['Product'], tenantMemberships: [] },
+    xplan: { departments: ['Product'], tenantMemberships: [] },
+    hermes: { departments: ['Account / Listing'], tenantMemberships: [] },
+    plutus: { departments: ['Finance'], tenantMemberships: [] }
   }
 
   return {
@@ -640,6 +697,7 @@ export async function getUserEntitlements(userId: string): Promise<AppEntitlemen
     where: { userId },
     select: {
       departments: true,
+      tenantMemberships: true,
       app: {
         select: {
           slug: true,
@@ -652,6 +710,7 @@ export async function getUserEntitlements(userId: string): Promise<AppEntitlemen
   for (const assignment of assignments) {
     entitlements[assignment.app.slug] = {
       departments: normalizeDepartments(assignment.departments),
+      tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
     }
   }
 
@@ -695,6 +754,7 @@ export async function getUserAuthz(userId: string): Promise<PortalAuthz> {
       appAccess: {
         select: {
           departments: true,
+          tenantMemberships: true,
           app: {
             select: {
               slug: true,
@@ -726,6 +786,7 @@ export async function getUserAuthz(userId: string): Promise<PortalAuthz> {
   for (const assignment of user.appAccess) {
     apps[assignment.app.slug] = {
       departments: normalizeDepartments(assignment.departments),
+      tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
     }
   }
 
@@ -829,6 +890,7 @@ function mapPortalUser(user: PortalUserRecord): AuthenticatedUser {
   const entitlements = user.appAccess.reduce<AppEntitlementMap>((acc, assignment) => {
     acc[assignment.app.slug] = {
       departments: normalizeDepartments(assignment.departments),
+      tenantMemberships: normalizeTenantMemberships(assignment.tenantMemberships),
     }
     return acc
   }, {} as AppEntitlementMap)

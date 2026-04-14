@@ -24,21 +24,41 @@ function loadEnvFile(filePath) {
   } catch { return {}; }
 }
 
-function envFilenamesFor(environment) {
+function envFilenamesFor(environment, includeLocal = true) {
   if (environment === 'dev') {
-    return ['.env', '.env.dev.ci', '.env.dev', '.env.local'];
+    const filenames = ['.env', '.env.dev.ci', '.env.dev'];
+    if (includeLocal) {
+      filenames.push('.env.local');
+    }
+    return filenames;
   }
 
-  return ['.env', '.env.production', '.env.local'];
+  const filenames = ['.env', '.env.production'];
+  if (includeLocal) {
+    filenames.push('.env.local');
+  }
+  return filenames;
 }
 
-function loadAppEnv(appDir, environment) {
+function loadAppEnv(appDir, environment, options = {}) {
+  const includeLocal = options.includeLocal === undefined ? true : options.includeLocal;
   const env = {};
 
-  for (const filename of envFilenamesFor(environment)) {
+  for (const filename of envFilenamesFor(environment, includeLocal)) {
     Object.assign(env, loadEnvFile(path.join(appDir, filename)));
   }
 
+  return env;
+}
+
+function pickProcessEnv(keys) {
+  const env = {};
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value !== undefined && value !== '') {
+      env[key] = value;
+    }
+  }
   return env;
 }
 
@@ -49,11 +69,181 @@ function createNextAppEnv(rootDir, appName, environment, runtimeEnv) {
   };
 }
 
-function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
+function getPortalHostedUrl(environment) {
+  if (environment === 'dev') {
+    return 'https://dev-os.targonglobal.com';
+  }
+
+  if (environment === 'production') {
+    return 'https://os.targonglobal.com';
+  }
+
+  throw new Error(`Unsupported environment for hosted portal URL: ${environment}`);
+}
+
+function getHostedCookieDomain(environment) {
+  if (environment === 'dev') {
+    return '.dev-os.targonglobal.com';
+  }
+
+  if (environment === 'production') {
+    return '.os.targonglobal.com';
+  }
+
+  throw new Error(`Unsupported environment for hosted cookie domain: ${environment}`);
+}
+
+function getHostedBuildMetadataEnv() {
+  return pickProcessEnv([
+    'NEXT_PUBLIC_VERSION',
+    'NEXT_PUBLIC_RELEASE_URL',
+    'NEXT_PUBLIC_COMMIT_SHA',
+    'BUILD_TIME',
+    'NEXT_PUBLIC_BUILD_TIME',
+  ]);
+}
+
+function getHostedSharedSecret(env) {
+  const sharedSecret = env.PORTAL_AUTH_SECRET ?? env.NEXTAUTH_SECRET;
+  if (!sharedSecret) {
+    throw new Error('Hosted portal auth secret is required.');
+  }
+  return sharedSecret;
+}
+
+function omitHostedManagedAppEnv(appEnv) {
+  const managedKeys = [
+    'BASE_URL',
+    'BUILD_TIME',
+    'COOKIE_DOMAIN',
+    'NEXTAUTH_SECRET',
+    'NEXTAUTH_URL',
+    'NEXT_PUBLIC_APP_URL',
+    'NEXT_PUBLIC_BUILD_TIME',
+    'NEXT_PUBLIC_COMMIT_SHA',
+    'NEXT_PUBLIC_PORTAL_APPS_BASE_URL',
+    'NEXT_PUBLIC_PORTAL_AUTH_URL',
+    'NEXT_PUBLIC_RELEASE_URL',
+    'NEXT_PUBLIC_VERSION',
+    'PORTAL_APPS_BASE_URL',
+    'PORTAL_AUTH_SECRET',
+    'PORTAL_AUTH_URL',
+  ];
+  const sanitized = { ...appEnv };
+  for (const key of managedKeys) {
+    delete sanitized[key];
+  }
+  return sanitized;
+}
+
+function createPortalRuntimeEnv(rootDir, environment, runtimeEnv) {
+  const portalBaseUrl = getPortalHostedUrl(environment);
+  const portalEnv = loadAppEnv(path.join(rootDir, 'apps/sso'), environment);
+  const sharedSecret = getHostedSharedSecret({
+    ...portalEnv,
+    ...pickProcessEnv(['PORTAL_AUTH_SECRET', 'NEXTAUTH_SECRET']),
+  });
+  const buildMetadataEnv = getHostedBuildMetadataEnv();
   return {
-    ...loadAppEnv(path.join(rootDir, 'apps/sso'), environment),
-    ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
+    ...portalEnv,
     ...runtimeEnv,
+    ...buildMetadataEnv,
+    PORTAL_AUTH_SECRET: sharedSecret,
+    NEXTAUTH_SECRET: sharedSecret,
+    COOKIE_DOMAIN: getHostedCookieDomain(environment),
+    PORTAL_APPS_BASE_URL: portalBaseUrl,
+    NEXT_PUBLIC_PORTAL_APPS_BASE_URL: portalBaseUrl,
+    PORTAL_AUTH_URL: portalBaseUrl,
+    NEXT_PUBLIC_PORTAL_AUTH_URL: portalBaseUrl,
+    NEXTAUTH_URL: portalBaseUrl,
+    NEXT_PUBLIC_APP_URL: portalBaseUrl,
+    BASE_URL: portalBaseUrl,
+  };
+}
+
+function normalizeHostedBasePath(rawValue) {
+  if (rawValue === undefined || rawValue === null) {
+    return '';
+  }
+
+  const trimmed = String(rawValue).trim();
+  if (trimmed === '' || trimmed === '/') {
+    return '';
+  }
+
+  const withoutTrailingSlash = trimmed.replace(/\/+$/g, '');
+  if (withoutTrailingSlash.startsWith('/')) {
+    return withoutTrailingSlash;
+  }
+
+  return `/${withoutTrailingSlash}`;
+}
+
+function buildHostedAppUrl(portalBaseUrl, basePath) {
+  const portalUrl = new URL(portalBaseUrl);
+  const normalizedBasePath = normalizeHostedBasePath(basePath);
+  portalUrl.pathname = normalizedBasePath === '' ? '/' : normalizedBasePath;
+  portalUrl.search = '';
+  portalUrl.hash = '';
+
+  if (portalUrl.pathname === '/') {
+    return portalUrl.origin;
+  }
+
+  return `${portalUrl.origin}${portalUrl.pathname}`;
+}
+
+function resolveHostedBasePath(appEnv, runtimeEnv) {
+  if (runtimeEnv.NEXT_PUBLIC_BASE_PATH !== undefined && runtimeEnv.NEXT_PUBLIC_BASE_PATH !== '') {
+    return runtimeEnv.NEXT_PUBLIC_BASE_PATH;
+  }
+
+  if (runtimeEnv.BASE_PATH !== undefined && runtimeEnv.BASE_PATH !== '') {
+    return runtimeEnv.BASE_PATH;
+  }
+
+  if (appEnv.NEXT_PUBLIC_BASE_PATH !== undefined && appEnv.NEXT_PUBLIC_BASE_PATH !== '') {
+    return appEnv.NEXT_PUBLIC_BASE_PATH;
+  }
+
+  if (appEnv.BASE_PATH !== undefined && appEnv.BASE_PATH !== '') {
+    return appEnv.BASE_PATH;
+  }
+
+  return '/';
+}
+
+function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
+  const portalEnv = createPortalRuntimeEnv(rootDir, environment, {});
+  const appEnv = omitHostedManagedAppEnv(loadAppEnv(path.join(rootDir, `apps/${appName}`), environment));
+  const portalBaseUrl = portalEnv.PORTAL_AUTH_URL;
+  if (!portalBaseUrl) {
+    throw new Error(`Missing PORTAL_AUTH_URL for ${appName} ${environment} runtime.`);
+  }
+  if (!portalEnv.PORTAL_DB_URL) {
+    throw new Error(`Missing PORTAL_DB_URL for ${appName} ${environment} runtime.`);
+  }
+
+  const basePath = resolveHostedBasePath(appEnv, runtimeEnv);
+  const appUrl = buildHostedAppUrl(portalBaseUrl, basePath);
+  const buildMetadataEnv = getHostedBuildMetadataEnv();
+  const sharedSecret = getHostedSharedSecret(portalEnv);
+
+  return {
+    ...appEnv,
+    ...runtimeEnv,
+    ...buildMetadataEnv,
+    PORTAL_AUTH_SECRET: sharedSecret,
+    NEXTAUTH_SECRET: sharedSecret,
+    PORTAL_DB_URL: portalEnv.PORTAL_DB_URL,
+    COOKIE_DOMAIN: portalEnv.COOKIE_DOMAIN,
+    PORTAL_APPS_BASE_URL: portalBaseUrl,
+    NEXT_PUBLIC_PORTAL_APPS_BASE_URL: portalBaseUrl,
+    PORTAL_AUTH_URL: portalBaseUrl,
+    NEXT_PUBLIC_PORTAL_AUTH_URL: portalBaseUrl,
+    NEXTAUTH_URL: appUrl,
+    NEXT_PUBLIC_APP_URL: appUrl,
+    BASE_URL: appUrl,
   };
 }
 
@@ -85,7 +275,7 @@ module.exports = {
       args: 'start -p 3100',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'sso', 'dev', { NODE_ENV: 'production', PORT: 3100 }),
+      env: createPortalRuntimeEnv(DEV_DIR, 'dev', { NODE_ENV: 'production', PORT: 3100 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -95,7 +285,13 @@ module.exports = {
       cwd: path.join(DEV_DIR, 'apps/talos'),
       script: 'server.js',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3101 },
+      env: createNextAppEnvWithPortal(DEV_DIR, 'talos', 'dev', {
+        NODE_ENV: 'production',
+        PORT: 3101,
+        BASE_PATH: '/talos',
+        NEXT_PUBLIC_BASE_PATH: '/talos',
+        SKIP_DOTENV: '1',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -119,7 +315,12 @@ module.exports = {
       args: 'start -p 3106',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'atlas', 'dev', { NODE_ENV: 'production', PORT: 3106 }),
+      env: createNextAppEnvWithPortal(DEV_DIR, 'atlas', 'dev', {
+        NODE_ENV: 'production',
+        PORT: 3106,
+        BASE_PATH: '/atlas',
+        NEXT_PUBLIC_BASE_PATH: '/atlas',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -131,7 +332,12 @@ module.exports = {
       args: 'start -p 3108',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'xplan', 'dev', { NODE_ENV: 'production', PORT: 3108 }),
+      env: createNextAppEnvWithPortal(DEV_DIR, 'xplan', 'dev', {
+        NODE_ENV: 'production',
+        PORT: 3108,
+        BASE_PATH: '/xplan',
+        NEXT_PUBLIC_BASE_PATH: '/xplan',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -144,10 +350,12 @@ module.exports = {
       args: 'start -p 3110',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'kairos', 'dev', {
+      env: createNextAppEnvWithPortal(DEV_DIR, 'kairos', 'dev', {
         NODE_ENV: 'production',
         PORT: 3110,
-        KAIROS_ML_URL: 'http://127.0.0.1:3111'
+        KAIROS_ML_URL: 'http://127.0.0.1:3111',
+        BASE_PATH: '/kairos',
+        NEXT_PUBLIC_BASE_PATH: '/kairos',
       }),
       autorestart: true,
       watch: false,
@@ -175,7 +383,9 @@ module.exports = {
       env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
         NODE_ENV: 'production',
         PORT: 3112,
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
       }),
       autorestart: true,
       watch: false,
@@ -224,11 +434,12 @@ module.exports = {
       args: 'start -p 3114',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'hermes', 'dev', {
+      env: createNextAppEnvWithPortal(DEV_DIR, 'hermes', 'dev', {
         NODE_ENV: 'production',
         PORT: 3114,
         BASE_PATH: '/hermes',
-        NEXT_PUBLIC_BASE_PATH: '/hermes'
+        NEXT_PUBLIC_BASE_PATH: '/hermes',
+        HERMES_AUTO_MIGRATE: '0',
       }),
       autorestart: true,
       watch: false,
@@ -261,16 +472,14 @@ module.exports = {
     {
       name: 'dev-argus',
       cwd: path.join(DEV_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3116',
+      script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'argus', 'dev', {
+      env: createNextAppEnvWithPortal(DEV_DIR, 'argus', 'dev', {
         NODE_ENV: 'production',
         PORT: 3116,
         BASE_PATH: '/argus',
-        NEXT_PUBLIC_BASE_PATH: '/argus',
-        NEXT_PUBLIC_APP_URL: 'https://dev-os.targonglobal.com/argus'
+        NEXT_PUBLIC_BASE_PATH: '/argus'
       }),
       autorestart: true,
       watch: false,
@@ -287,7 +496,7 @@ module.exports = {
       args: 'start -p 3000',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'sso', 'production', { NODE_ENV: 'production', PORT: 3000 }),
+      env: createPortalRuntimeEnv(MAIN_DIR, 'production', { NODE_ENV: 'production', PORT: 3000 }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -297,7 +506,13 @@ module.exports = {
       cwd: path.join(MAIN_DIR, 'apps/talos'),
       script: 'server.js',
       exec_mode: 'fork',
-      env: { NODE_ENV: 'production', PORT: 3001 },
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'talos', 'production', {
+        NODE_ENV: 'production',
+        PORT: 3001,
+        BASE_PATH: '/talos',
+        NEXT_PUBLIC_BASE_PATH: '/talos',
+        SKIP_DOTENV: '1',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
@@ -321,7 +536,12 @@ module.exports = {
       args: 'start -p 3006',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'atlas', 'production', { NODE_ENV: 'production', PORT: 3006 }),
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'atlas', 'production', {
+        NODE_ENV: 'production',
+        PORT: 3006,
+        BASE_PATH: '/atlas',
+        NEXT_PUBLIC_BASE_PATH: '/atlas',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -333,7 +553,12 @@ module.exports = {
       args: 'start -p 3008',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'xplan', 'production', { NODE_ENV: 'production', PORT: 3008 }),
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'xplan', 'production', {
+        NODE_ENV: 'production',
+        PORT: 3008,
+        BASE_PATH: '/xplan',
+        NEXT_PUBLIC_BASE_PATH: '/xplan',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -346,10 +571,12 @@ module.exports = {
       args: 'start -p 3010',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'kairos', 'production', {
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'kairos', 'production', {
         NODE_ENV: 'production',
         PORT: 3010,
-        KAIROS_ML_URL: 'http://127.0.0.1:3011'
+        KAIROS_ML_URL: 'http://127.0.0.1:3011',
+        BASE_PATH: '/kairos',
+        NEXT_PUBLIC_BASE_PATH: '/kairos',
       }),
       autorestart: true,
       watch: false,
@@ -377,7 +604,9 @@ module.exports = {
       env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
         NODE_ENV: 'production',
         PORT: 3012,
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
       }),
       autorestart: true,
       watch: false,
@@ -426,11 +655,12 @@ module.exports = {
       args: 'start -p 3014',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'hermes', 'production', {
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'hermes', 'production', {
         NODE_ENV: 'production',
         PORT: 3014,
         BASE_PATH: '/hermes',
-        NEXT_PUBLIC_BASE_PATH: '/hermes'
+        NEXT_PUBLIC_BASE_PATH: '/hermes',
+        HERMES_AUTO_MIGRATE: '0',
       }),
       autorestart: true,
       watch: false,
@@ -463,16 +693,14 @@ module.exports = {
     {
       name: 'main-argus',
       cwd: path.join(MAIN_DIR, 'apps/argus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3016',
+      script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'argus', 'production', {
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'argus', 'production', {
         NODE_ENV: 'production',
         PORT: 3016,
         BASE_PATH: '/argus',
-        NEXT_PUBLIC_BASE_PATH: '/argus',
-        NEXT_PUBLIC_APP_URL: 'https://os.targonglobal.com/argus'
+        NEXT_PUBLIC_BASE_PATH: '/argus'
       }),
       autorestart: true,
       watch: false,
@@ -480,3 +708,8 @@ module.exports = {
     },
   ]
 };
+
+module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
+module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
+module.exports.buildHostedAppUrl = buildHostedAppUrl;
+module.exports.getHostedCookieDomain = getHostedCookieDomain;
