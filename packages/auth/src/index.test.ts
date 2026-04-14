@@ -4,6 +4,8 @@ import { encode } from 'next-auth/jwt'
 
 import {
   decodePortalSession,
+  getCurrentAuthz,
+  hasPortalSession,
   normalizePortalAuthz,
   resolveAppAuthOrigin,
   resolvePortalAuthOrigin,
@@ -22,7 +24,7 @@ test.afterEach(() => {
   resetEnv()
 })
 
-test('resolvePortalAuthOrigin prefers the local portal in loopback development requests', () => {
+test('resolvePortalAuthOrigin uses configured portal auth env even for loopback requests', () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
   process.env.NEXT_PUBLIC_PORTAL_AUTH_URL = 'https://os.targonglobal.com'
   process.env.PORTAL_AUTH_URL = 'https://os.targonglobal.com'
@@ -35,26 +37,26 @@ test('resolvePortalAuthOrigin prefers the local portal in loopback development r
     },
   })
 
-  assert.equal(origin, 'http://localhost:3200')
-})
-
-test('resolvePortalAuthOrigin does not treat non-loopback IPv4 request origins as local development', () => {
-  Object.assign(process.env, { NODE_ENV: 'development' })
-  process.env.NEXT_PUBLIC_PORTAL_AUTH_URL = 'https://os.targonglobal.com'
-  process.env.PORTAL_AUTH_URL = 'https://os.targonglobal.com'
-  process.env.NEXTAUTH_URL = 'https://os.targonglobal.com'
-
-  const origin = resolvePortalAuthOrigin({
-    request: {
-      url: 'http://10.0.0.8/xplan/1-setup',
-      headers: new Headers(),
-    },
-  })
-
   assert.equal(origin, 'https://os.targonglobal.com')
 })
 
-test('resolveAppAuthOrigin prefers the loopback request origin over hosted env values', () => {
+test('resolvePortalAuthOrigin fails when portal auth env is missing', () => {
+  delete process.env.NEXT_PUBLIC_PORTAL_AUTH_URL
+  delete process.env.PORTAL_AUTH_URL
+  delete process.env.NEXTAUTH_URL
+
+  assert.throws(
+    () => resolvePortalAuthOrigin({
+      request: {
+        url: 'http://localhost:3008/xplan/1-setup',
+        headers: new Headers(),
+      },
+    }),
+    /Portal auth origin is not configured/,
+  )
+})
+
+test('resolveAppAuthOrigin uses configured app env even when request is loopback', () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
   process.env.NEXT_PUBLIC_APP_URL = 'https://xplan.targonglobal.com/xplan'
   process.env.BASE_URL = 'https://xplan.targonglobal.com/xplan'
@@ -69,28 +71,29 @@ test('resolveAppAuthOrigin prefers the loopback request origin over hosted env v
     },
   })
 
-  assert.equal(origin, 'http://localhost:3008')
+  assert.equal(origin, 'https://xplan.targonglobal.com')
 })
 
-test('resolveAppAuthOrigin prefers forwarded host and proto for deployed requests', () => {
+test('resolveAppAuthOrigin fails when app auth env is missing', () => {
   delete process.env.NEXT_PUBLIC_APP_URL
   delete process.env.BASE_URL
   delete process.env.NEXTAUTH_URL
 
-  const origin = resolveAppAuthOrigin({
-    request: {
-      url: 'https://internal.example/internal',
-      headers: new Headers({
-        'x-forwarded-host': 'ops.targonglobal.com',
-        'x-forwarded-proto': 'https',
-      }),
-    },
-  })
-
-  assert.equal(origin, 'https://ops.targonglobal.com')
+  assert.throws(
+    () => resolveAppAuthOrigin({
+      request: {
+        url: 'https://internal.example/internal',
+        headers: new Headers({
+          'x-forwarded-host': 'ops.targonglobal.com',
+          'x-forwarded-proto': 'https',
+        }),
+      },
+    }),
+    /Application origin is not configured/,
+  )
 })
 
-test('resolveAppAuthOrigin prefers configured app origins over forwarded request headers', () => {
+test('resolveAppAuthOrigin ignores forwarded request headers when app auth env is configured', () => {
   process.env.NEXT_PUBLIC_APP_URL = 'https://xplan.targonglobal.com'
   process.env.BASE_URL = 'https://xplan.targonglobal.com'
   process.env.NEXTAUTH_URL = 'https://xplan.targonglobal.com'
@@ -106,6 +109,85 @@ test('resolveAppAuthOrigin prefers configured app origins over forwarded request
   })
 
   assert.equal(origin, 'https://xplan.targonglobal.com')
+})
+
+test('hasPortalSession does not probe the portal when session decode fails', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+  process.env.PORTAL_AUTH_URL = 'https://os.targonglobal.com'
+
+  let fetchCalls = 0
+
+  const result = await hasPortalSession({
+    request: new Request('https://os.targonglobal.com/argus', {
+      headers: {
+        cookie: '__Secure-next-auth.session-token=not-a-valid-session',
+      },
+    }),
+    appId: 'argus',
+    fetchImpl: async () => {
+      fetchCalls += 1
+      return new Response(JSON.stringify({ user: { id: 'u_1' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    },
+  })
+
+  assert.equal(result, false)
+  assert.equal(fetchCalls, 0)
+})
+
+test('getCurrentAuthz requires portal-issued authz claims instead of fetching them out-of-band', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+  process.env.PORTAL_AUTH_URL = 'https://os.targonglobal.com'
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      email: 'user@targonglobal.com',
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+
+  let fetchCalls = 0
+
+  await assert.rejects(
+    () => getCurrentAuthz(
+      new Request('https://os.targonglobal.com/argus', {
+        headers: {
+          cookie: `${sessionCookieName}=${sessionToken}`,
+        },
+      }),
+      {
+        appId: 'argus',
+        fetchImpl: async () => {
+          fetchCalls += 1
+          return new Response(JSON.stringify({
+            authz: {
+              version: 1,
+              globalRoles: [],
+              apps: {
+                argus: {
+                  departments: [],
+                  tenantMemberships: [],
+                },
+              },
+            },
+          }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        },
+      },
+    ),
+    /AUTH_MISSING_AUTHZ/,
+  )
+
+  assert.equal(fetchCalls, 0)
 })
 
 test('normalizePortalAuthz preserves tenant memberships and departments', () => {
