@@ -85,6 +85,11 @@ import {
   buildLegacySettlementPagePath,
   remapLegacySettlementPath,
 } from '../lib/plutus/legacy-settlement-routes';
+import {
+  buildPlutusHomeRedirectPath,
+  classifyQboRefreshFailure,
+  classifyQboVerificationFailure,
+} from '../lib/qbo/connection-feedback';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
@@ -112,6 +117,41 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {
+  assert.equal(classifyQboRefreshFailure(new Error('invalid_client')), 'oauth_client_mismatch');
+});
+
+test('classifyQboRefreshFailure maps ci-placeholder config errors to oauth client mismatch', () => {
+  assert.equal(
+    classifyQboRefreshFailure(new Error('QBO_CLIENT_ID cannot use ci-placeholder')),
+    'oauth_client_mismatch',
+  );
+});
+
+test('classifyQboRefreshFailure maps invalid refresh token messages to refresh token invalid', () => {
+  assert.equal(
+    classifyQboRefreshFailure(new Error('The Refresh token is invalid, please Authorize again.')),
+    'refresh_token_invalid',
+  );
+});
+
+test('classifyQboVerificationFailure maps 403 to forbidden company and 401 to session expired', () => {
+  assert.equal(classifyQboVerificationFailure(403), 'qbo_company_forbidden');
+  assert.equal(classifyQboVerificationFailure(401), 'session_expired');
+});
+
+test('buildPlutusHomeRedirectPath preserves qbo callback query params', () => {
+  assert.equal(buildPlutusHomeRedirectPath({ connected: 'true' }), '/settlements?connected=true');
+  assert.equal(
+    buildPlutusHomeRedirectPath({ error: 'token_exchange_failed', ignored: 'x' }),
+    '/settlements?error=token_exchange_failed',
+  );
+  assert.equal(
+    buildPlutusHomeRedirectPath({ connected: ['true', 'false'], error: ['invalid_state'] }),
+    '/settlements?connected=true&error=invalid_state',
+  );
 });
 
 test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {

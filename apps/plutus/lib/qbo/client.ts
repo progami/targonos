@@ -20,10 +20,18 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function requireQboOAuthEnv(name: 'QBO_CLIENT_ID' | 'QBO_CLIENT_SECRET'): string {
+  const value = requireEnv(name);
+  if (value === 'ci-placeholder') {
+    throw new Error(`${name} cannot use ci-placeholder`);
+  }
+  return value;
+}
+
 export function getQboClientConfig(): QboClientConfig {
   return {
-    clientId: requireEnv('QBO_CLIENT_ID'),
-    clientSecret: requireEnv('QBO_CLIENT_SECRET'),
+    clientId: requireQboOAuthEnv('QBO_CLIENT_ID'),
+    clientSecret: requireQboOAuthEnv('QBO_CLIENT_SECRET'),
     redirectUri: requireEnv('QBO_REDIRECT_URI'),
     environment: (process.env.QBO_SANDBOX === 'true' ? 'sandbox' : 'production') as QboEnvironment,
   };

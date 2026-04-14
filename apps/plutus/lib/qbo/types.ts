@@ -1,3 +1,13 @@
+export type QboConnectionErrorCode =
+  | 'connect_failed'
+  | 'invalid_params'
+  | 'invalid_state'
+  | 'oauth_client_mismatch'
+  | 'qbo_company_forbidden'
+  | 'refresh_token_invalid'
+  | 'session_expired'
+  | 'token_exchange_failed';
+
 // QBO OAuth Token
 export interface QboToken {
   accessToken: string;
@@ -175,5 +185,6 @@ export interface QboConnectionStatus {
   partnerTaxEnabled?: boolean;
   subscription?: string;
   lastSyncAt?: Date;
+  errorCode?: QboConnectionErrorCode;
   error?: string;
 }

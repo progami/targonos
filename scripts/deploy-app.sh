@@ -1080,7 +1080,6 @@ prepare_owner_migration_env() {
       ;;
   esac
 }
-
 ensure_app_env_loaded() {
   local candidates=()
 
@@ -1099,6 +1098,41 @@ ensure_app_env_loaded() {
   done
 
   return 1
+}
+
+validate_plutus_qbo_env() {
+  local expected_redirect
+  expected_redirect="$(hosted_portal_origin)/plutus/api/qbo/callback"
+
+  if [[ -z "${QBO_CLIENT_ID:-}" ]]; then
+    error "QBO_CLIENT_ID is required for plutus deployments"
+    exit 1
+  fi
+
+  if [[ -z "${QBO_CLIENT_SECRET:-}" ]]; then
+    error "QBO_CLIENT_SECRET is required for plutus deployments"
+    exit 1
+  fi
+
+  if [[ "${QBO_CLIENT_ID}" == "ci-placeholder" ]]; then
+    error "QBO_CLIENT_ID cannot use ci-placeholder for plutus deployments"
+    exit 1
+  fi
+
+  if [[ "${QBO_CLIENT_SECRET}" == "ci-placeholder" ]]; then
+    error "QBO_CLIENT_SECRET cannot use ci-placeholder for plutus deployments"
+    exit 1
+  fi
+
+  if [[ -z "${QBO_REDIRECT_URI:-}" ]]; then
+    error "QBO_REDIRECT_URI is required for plutus deployments"
+    exit 1
+  fi
+
+  if [[ "${QBO_REDIRECT_URI}" != "$expected_redirect" ]]; then
+    error "QBO_REDIRECT_URI must be $expected_redirect for plutus deployments"
+    exit 1
+  fi
 }
 
 require_non_empty_env_var() {
@@ -1367,6 +1401,10 @@ fi
 
 apply_build_metadata_env
 apply_hosted_env_overrides
+
+if [[ "$app_key" == "plutus" ]]; then
+  validate_plutus_qbo_env
+fi
 
 if [[ "$app_key" == "argus" ]]; then
   run_argus_prebuild_checks
