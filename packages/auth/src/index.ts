@@ -114,105 +114,6 @@ export interface SharedAuthOptions {
  */
 const truthyValues = new Set(['1', 'true', 'yes', 'on']);
 
-export interface DevAuthDefaultsOptions {
-  appId?: string;
-  port?: string | number;
-  baseUrl?: string;
-  cookieDomain?: string;
-  portalUrl?: string;
-  publicPortalUrl?: string;
-  allowDefaults?: boolean;
-}
-
-/**
- * Provide sane defaults for local development so NextAuth stops warning about missing env vars.
- */
-export function applyDevAuthDefaults(options: DevAuthDefaultsOptions = {}) {
-  const env = process.env.NODE_ENV ?? 'development';
-  const isDevLike = env === 'development' || env === 'test';
-  if (!isDevLike) return;
-
-  const allowDefaultsEnv = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase());
-  const allowDefaults = options.allowDefaults ?? allowDefaultsEnv;
-
-  const missing: string[] = [];
-
-  const resolveSecret = () => {
-    const existingSecret = process.env.PORTAL_AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
-    if (existingSecret) {
-      if (!process.env.NEXTAUTH_SECRET) {
-        process.env.NEXTAUTH_SECRET = existingSecret;
-      }
-      return;
-    }
-
-    if (allowDefaults) {
-      const suffix = options.appId ? `-${options.appId}` : '';
-      process.env.NEXTAUTH_SECRET = `dev-only-nextauth-secret${suffix}-change-me`;
-      return;
-    }
-
-    missing.push('PORTAL_AUTH_SECRET or NEXTAUTH_SECRET');
-  };
-
-  const ensureValue = (current: string | undefined, label: string, fallback?: string) => {
-    if (current && current.trim() !== '') {
-      return current;
-    }
-    if (allowDefaults && fallback) {
-      return fallback;
-    }
-    missing.push(label);
-    return undefined;
-  };
-
-  resolveSecret();
-
-  const port = options.port ?? process.env.PORT ?? 3000;
-  const computedBaseUrl = options.baseUrl ?? `http://localhost:${port}`;
-
-  const nextAuthUrl = ensureValue(process.env.NEXTAUTH_URL, 'NEXTAUTH_URL', allowDefaults ? String(computedBaseUrl) : undefined);
-  if (nextAuthUrl && !process.env.NEXTAUTH_URL) {
-    process.env.NEXTAUTH_URL = nextAuthUrl;
-  }
-
-  const portalUrl = ensureValue(
-    process.env.PORTAL_AUTH_URL,
-    'PORTAL_AUTH_URL',
-    allowDefaults ? options.portalUrl ?? nextAuthUrl : undefined,
-  );
-  if (portalUrl && !process.env.PORTAL_AUTH_URL) {
-    process.env.PORTAL_AUTH_URL = portalUrl;
-  }
-
-  const publicPortalUrl = ensureValue(
-    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
-    'NEXT_PUBLIC_PORTAL_AUTH_URL',
-    allowDefaults ? options.publicPortalUrl ?? portalUrl ?? nextAuthUrl : undefined,
-  );
-  if (publicPortalUrl && !process.env.NEXT_PUBLIC_PORTAL_AUTH_URL) {
-    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL = publicPortalUrl;
-  }
-
-  const cookieDomain = ensureValue(
-    process.env.COOKIE_DOMAIN,
-    'COOKIE_DOMAIN',
-    allowDefaults ? options.cookieDomain : undefined,
-  );
-  if (cookieDomain && !process.env.COOKIE_DOMAIN) {
-    process.env.COOKIE_DOMAIN = cookieDomain;
-  }
-
-  if (missing.length > 0) {
-    throw new Error(`[auth] Missing required auth environment variables: ${missing.join(', ')}`);
-  }
-
-  if (process.env.NEXTAUTH_DEBUG === undefined) {
-    // Default to off; callers can opt-in with NEXTAUTH_DEBUG=1 if needed.
-    process.env.NEXTAUTH_DEBUG = '0';
-  }
-}
-
 export function withSharedAuth(base: NextAuthConfig, optsOrDomain: SharedAuthOptions | string): NextAuthConfig {
   const opts: SharedAuthOptions = typeof optsOrDomain === 'string'
     ? { cookieDomain: optsOrDomain }
@@ -317,51 +218,6 @@ export interface DecodePortalSessionOptions {
   request?: PortalUrlRequestLike;
 }
 
-function buildDevBypassSessionPayload(appId?: string): PortalJwtPayload {
-  const rawBypassUserId = process.env.DEV_AUTH_BYPASS_USER_ID;
-  const bypassUserId = rawBypassUserId && rawBypassUserId.trim() !== ''
-    ? rawBypassUserId.trim()
-    : 'dev-bypass-user';
-
-  const rawBypassEmail = process.env.DEV_AUTH_BYPASS_EMAIL;
-  const bypassEmail = rawBypassEmail && rawBypassEmail.trim() !== ''
-    ? rawBypassEmail.trim().toLowerCase()
-    : 'dev-bypass@targonglobal.com';
-
-  const rawBypassName = process.env.DEV_AUTH_BYPASS_NAME;
-  const bypassName = rawBypassName && rawBypassName.trim() !== ''
-    ? rawBypassName.trim()
-    : 'Dev Bypass';
-
-  const authz = buildDevBypassAuthz(appId);
-  return {
-    sub: bypassUserId,
-    email: bypassEmail,
-    name: bypassName,
-    authz,
-    roles: authz.apps,
-    globalRoles: authz.globalRoles,
-    authzVersion: authz.version,
-    apps: Object.keys(authz.apps),
-  };
-}
-
-function resolveDevBypassSessionPayload(options: {
-  appId?: string;
-  debug: boolean;
-  reason: string;
-  request?: PortalUrlRequestLike;
-}): PortalJwtPayload | null {
-  if (!isDevAuthBypassEnabled({ request: options.request })) {
-    return null;
-  }
-
-  if (options.debug) {
-    console.warn('[auth] decodePortalSession: returning dev bypass session payload', options.reason);
-  }
-  return buildDevBypassSessionPayload(options.appId);
-}
-
 export async function decodePortalSession(options: DecodePortalSessionOptions = {}): Promise<PortalJwtPayload | null> {
   const {
     cookieHeader,
@@ -369,22 +225,12 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
     appId,
     secret,
     debug = truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase()),
-    request,
   } = options;
 
   const header = cookieHeader ?? '';
   if (!header) {
     if (debug) {
       console.warn('[auth] decodePortalSession: missing cookie header');
-    }
-    const bypassPayload = resolveDevBypassSessionPayload({
-      appId,
-      debug,
-      reason: 'missing cookie header',
-      request,
-    });
-    if (bypassPayload) {
-      return bypassPayload;
     }
     return null;
   }
@@ -400,15 +246,6 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
   if (!resolvedSecret) {
     if (debug) {
       console.warn('[auth] decodePortalSession: missing shared secret');
-    }
-    const bypassPayload = resolveDevBypassSessionPayload({
-      appId,
-      debug,
-      reason: 'missing shared secret',
-      request,
-    });
-    if (bypassPayload) {
-      return bypassPayload;
     }
     return null;
   }
@@ -445,16 +282,6 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
         }
       }
     }
-  }
-
-  const bypassPayload = resolveDevBypassSessionPayload({
-    appId,
-    debug,
-    reason: 'unable to decode any session token',
-    request,
-  });
-  if (bypassPayload) {
-    return bypassPayload;
   }
 
   return null;
@@ -499,37 +326,6 @@ function normalizeOrigin(raw: string | undefined | null): string | undefined {
   }
 
   return undefined;
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase().replace(/\.$/, '');
-  if (!normalized) return false;
-  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
-    return true;
-  }
-  if (normalized === '127.0.0.1' || normalized === '::1' || normalized === '[::1]') {
-    return true;
-  }
-
-  const octets = normalized.split('.');
-  if (octets.length !== 4) {
-    return false;
-  }
-
-  if (!octets.every((octet) => /^\d+$/.test(octet))) {
-    return false;
-  }
-
-  return octets[0] === '127';
-}
-
-function isLoopbackOrigin(origin: string | undefined): boolean {
-  if (!origin) return false;
-  try {
-    return isLoopbackHostname(new URL(origin).hostname);
-  } catch {
-    return false;
-  }
 }
 
 function resolveConfiguredOrigin(candidates: Array<string | undefined>, errorMessage: string): string {
@@ -724,85 +520,6 @@ function resolveCookieNames(appId?: string, provided?: string[]): string[] {
   ]));
 }
 
-function isLocalhostOrigin(raw: string | undefined | null): boolean {
-  const origin = normalizeOrigin(raw);
-  if (!origin) return false;
-  try {
-    return isLoopbackOrigin(origin);
-  } catch {
-    return false;
-  }
-}
-
-function hasLocalhostBypassContext(options?: { request?: PortalUrlRequestLike }): boolean {
-  const envCandidates = [
-    process.env.NEXTAUTH_URL,
-    process.env.PORTAL_AUTH_URL,
-    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
-    process.env.NEXT_PUBLIC_APP_URL,
-  ];
-
-  if (envCandidates.some((candidate) => isLocalhostOrigin(candidate))) {
-    return true;
-  }
-
-  const requestUrl = options?.request?.url;
-  if (requestUrl) {
-    try {
-      const url = new URL(requestUrl);
-      if (isLoopbackHostname(url.hostname)) {
-        return true;
-      }
-    } catch {
-      // continue to host header checks below
-    }
-  }
-
-  const hostHeader = options?.request?.headers?.get('host');
-  if (hostHeader) {
-    try {
-      const url = new URL(`http://${hostHeader}`);
-      if (isLoopbackHostname(url.hostname)) {
-        return true;
-      }
-    } catch {
-      return false;
-    }
-  }
-
-  return false;
-}
-
-function isDevAuthBypassEnabled(options?: { request?: PortalUrlRequestLike }): boolean {
-  if (process.env.NODE_ENV === 'production') {
-    return false;
-  }
-
-  const allowSessionBypass = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase());
-  const allowDefaults = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase());
-  if (!allowSessionBypass && !allowDefaults) {
-    return false;
-  }
-
-  return hasLocalhostBypassContext(options);
-}
-
-function buildDevBypassAuthz(appId?: string): PortalAuthz {
-  const apps: Record<string, AuthzAppGrant> = {};
-  if (appId) {
-    apps[appId] = {
-      departments: [],
-      tenantMemberships: [],
-    };
-  }
-
-  return {
-    version: 1,
-    globalRoles: ['platform_admin'],
-    apps,
-  };
-}
-
 export async function getCurrentAuthz(
   request: Request,
   options?: {
@@ -835,24 +552,11 @@ export async function getCurrentAuthz(
   }
 
   if (!decoded) {
-    if (isDevAuthBypassEnabled({ request: request as unknown as PortalUrlRequestLike })) {
-      if (debug) {
-        console.warn('[auth] returning dev bypass authz because no authenticated portal session was found');
-      }
-      return buildDevBypassAuthz(options?.appId);
-    }
-
     throw new Error('AUTH_UNAUTHENTICATED');
   }
 
   const authz = normalizeAuthzFromClaims(decoded);
   if (!authz) {
-    if (isDevAuthBypassEnabled({ request: request as unknown as PortalUrlRequestLike })) {
-      if (debug) {
-        console.warn('[auth] returning dev bypass authz because authenticated session had no authz payload');
-      }
-      return buildDevBypassAuthz(options?.appId);
-    }
     throw new Error('AUTH_MISSING_AUTHZ');
   }
 
@@ -972,7 +676,7 @@ export function hasCapability(options: {
 }): boolean {
   const authz = normalizeAuthzFromSessionLike(options.session);
   if (!authz) {
-    return isDevAuthBypassEnabled();
+    return false;
   }
 
   if (authz.globalRoles.includes('platform_admin')) {

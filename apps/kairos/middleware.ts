@@ -35,21 +35,6 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const allowDevAuthBypass =
-    process.env.NODE_ENV !== 'production' &&
-    (
-      ['1', 'true', 'yes', 'on'].includes(
-        String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase(),
-      ) ||
-      ['1', 'true', 'yes', 'on'].includes(
-        String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase(),
-      )
-    )
-
-  if (allowDevAuthBypass) {
-    return NextResponse.next()
-  }
-
   const decision = await requireAppEntry({
     request,
     appId: 'kairos',

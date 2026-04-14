@@ -14,7 +14,11 @@ import ShieldOutlined from '@mui/icons-material/ShieldOutlined';
 import ArrowBack from '@mui/icons-material/ArrowBack';
 import OpenInNew from '@mui/icons-material/OpenInNew';
 
-const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || '/';
+const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL;
+
+if (!portalUrl) {
+  throw new Error('NEXT_PUBLIC_PORTAL_AUTH_URL must be defined for the xplan no-access page.');
+}
 
 export default function NoAccessPage() {
   return (

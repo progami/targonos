@@ -1,8 +1,7 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig, Session } from 'next-auth'
 import type { JWT } from 'next-auth/jwt'
-import Credentials from 'next-auth/providers/credentials'
-import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth'
+import { withSharedAuth } from '@targon/auth'
 import { getCurrentTenantCode } from '@/lib/tenant/server'
 import { getPrismaForTenant } from '@/lib/tenant/access'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -47,38 +46,17 @@ function setCachedUser(email: string, tenant: TenantCode, data: { id: string; ro
 if (!process.env.NEXT_PUBLIC_APP_URL) {
   throw new Error('NEXT_PUBLIC_APP_URL must be defined for Talos auth configuration.')
 }
+if (!process.env.NEXTAUTH_URL) {
+  throw new Error('NEXTAUTH_URL must be defined for Talos auth configuration.')
+}
 if (!process.env.PORTAL_AUTH_URL) {
   throw new Error('PORTAL_AUTH_URL must be defined for Talos auth configuration.')
 }
 if (!process.env.NEXT_PUBLIC_PORTAL_AUTH_URL) {
   throw new Error('NEXT_PUBLIC_PORTAL_AUTH_URL must be defined for Talos auth configuration.')
 }
-
-applyDevAuthDefaults({
-  appId: 'targon',
-})
-
-function sanitizeBaseUrl(raw?: string | null): string | undefined {
-  if (!raw) return undefined
-  try {
-    const url = new URL(raw)
-    url.hash = ''
-    url.search = ''
-    if (/\/api\/auth\/?$/.test(url.pathname)) {
-      url.pathname = url.pathname.replace(/\/?api\/auth\/?$/, '') || '/'
-    }
-    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-      url.pathname = url.pathname.slice(0, -1)
-    }
-    return url.origin + (url.pathname === '/' ? '' : url.pathname)
-  } catch {
-    return undefined
-  }
-}
-
-const normalizedNextAuthUrl = sanitizeBaseUrl(process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL)
-if (normalizedNextAuthUrl) {
-  process.env.NEXTAUTH_URL = normalizedNextAuthUrl
+if (!process.env.COOKIE_DOMAIN) {
+  throw new Error('COOKIE_DOMAIN must be defined for Talos auth configuration.')
 }
 
 const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET
@@ -95,20 +73,7 @@ const baseAuthOptions: NextAuthConfig = {
   },
   secret: sharedSecret,
   debug: false,
-  // Include a no-op credentials provider so NextAuth routes (csrf/session) function
-  // Talos does not authenticate locally; the portal issues the session cookie
-  providers: [
-    Credentials({
-      name: 'noop',
-      credentials: {
-        username: { label: 'Username', type: 'text' },
-        password: { label: 'Password', type: 'password' },
-      },
-      async authorize() {
-        return null
-      },
-    }),
-  ],
+  providers: [],
   callbacks: {
     async jwt({ token, user }) {
       // Talos is decode-only; preserve portal-issued claims
@@ -204,7 +169,7 @@ const baseAuthOptions: NextAuthConfig = {
 export const authOptions: NextAuthConfig = withSharedAuth(
   baseAuthOptions,
   {
-    cookieDomain: process.env.COOKIE_DOMAIN || '.targonglobal.com',
+    cookieDomain: process.env.COOKIE_DOMAIN,
     // Use portal cookie prefix so NextAuth reads the same dev cookie as Targon OS
     appId: 'targon',
   }

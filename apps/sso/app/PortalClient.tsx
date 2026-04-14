@@ -108,11 +108,7 @@ export default function PortalClient({ session, apps, accessApps, roles, isPlatf
               type="button"
               className={styles.signOut}
               onClick={() => {
-                const origin = typeof window !== 'undefined'
-                  ? window.location.origin
-                  : process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || ''
-                const fallback = origin || '/'
-                const callbackUrl = `${fallback.replace(/\/$/, '')}/login`
+                const callbackUrl = `${window.location.origin.replace(/\/$/, '')}/login`
                 void signOut({ callbackUrl })
               }}
             >

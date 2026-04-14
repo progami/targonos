@@ -5,6 +5,7 @@ import { encode } from 'next-auth/jwt'
 import {
   decodePortalSession,
   getCurrentAuthz,
+  hasCapability,
   hasPortalSession,
   normalizePortalAuthz,
   resolveAppAuthOrigin,
@@ -339,4 +340,58 @@ test('decodePortalSession strips an embedded active tenant that is no longer all
   })
 
   assert.equal(payload?.activeTenant, undefined)
+})
+
+test('decodePortalSession does not synthesize a dev session when auth bypass env is set', async () => {
+  process.env.NODE_ENV = 'development'
+  process.env.ALLOW_DEV_AUTH_DEFAULTS = 'true'
+  process.env.ALLOW_DEV_AUTH_SESSION_BYPASS = 'true'
+
+  const payload = await decodePortalSession({
+    cookieHeader: null,
+    appId: 'argus',
+    request: {
+      url: 'http://localhost:3216/argus',
+      headers: new Headers({
+        host: 'localhost:3216',
+      }),
+    },
+  })
+
+  assert.equal(payload, null)
+})
+
+test('getCurrentAuthz still throws AUTH_UNAUTHENTICATED when dev bypass env is set', async () => {
+  process.env.NODE_ENV = 'development'
+  process.env.ALLOW_DEV_AUTH_DEFAULTS = 'true'
+  process.env.ALLOW_DEV_AUTH_SESSION_BYPASS = 'true'
+
+  await assert.rejects(
+    () => getCurrentAuthz(
+      new Request('http://localhost:3216/argus', {
+        headers: {
+          host: 'localhost:3216',
+        },
+      }),
+      {
+        appId: 'argus',
+      },
+    ),
+    /AUTH_UNAUTHENTICATED/,
+  )
+})
+
+test('hasCapability returns false without authz even when dev bypass env is set', () => {
+  process.env.NODE_ENV = 'development'
+  process.env.ALLOW_DEV_AUTH_DEFAULTS = 'true'
+  process.env.ALLOW_DEV_AUTH_SESSION_BYPASS = 'true'
+
+  assert.equal(
+    hasCapability({
+      session: null,
+      appId: 'xplan',
+      capability: 'enter',
+    }),
+    false,
+  )
 })

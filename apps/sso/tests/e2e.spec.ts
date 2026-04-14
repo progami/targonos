@@ -4,11 +4,12 @@ import {
   demoEmail,
   escapeForRegExp,
   portalBaseUrl,
-  submitLogin,
+  seedPortalSession,
 } from './fixtures/dev-login'
 
 test('TargonOS home renders the authenticated launcher', async ({ page }) => {
-  await submitLogin(page, `${portalBaseUrl}/login`)
+  await seedPortalSession(page)
+  await page.goto(`${portalBaseUrl}/`, { waitUntil: 'domcontentloaded' })
   await page.waitForURL(new RegExp(`^${escapeForRegExp(portalBaseUrl)}/?$`), {
     timeout: 15_000,
   })
