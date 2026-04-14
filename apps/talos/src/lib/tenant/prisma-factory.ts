@@ -7,6 +7,7 @@ import { PrismaClient } from '@targon/prisma-talos'
 import { Client } from 'pg'
 import { logger } from '@/lib/logger'
 import { TenantCode, TENANTS, isValidTenantCode } from './constants'
+import { resolveTenantSchema } from './schema'
 
 // Global cache for Prisma clients per tenant
 const globalForPrisma = global as unknown as {
@@ -148,21 +149,11 @@ async function findBestSchemaForTenant(
 
 async function resolveDatasourceUrl(databaseUrl: string, tenantCode: TenantCode): Promise<string> {
   const taggedDatabaseUrl = withApplicationName(databaseUrl, `talos-${tenantCode.toLowerCase()}`)
-  const schemaOverride = process.env.PRISMA_SCHEMA
-  if (schemaOverride) {
-    return buildSchemaScopedDatabaseUrl(taggedDatabaseUrl, schemaOverride)
-  }
-
-  let currentSchema: string | null = null
-  try {
-    currentSchema = new URL(databaseUrl).searchParams.get('schema')
-  } catch {
-    currentSchema = null
-  }
-
-  if (!currentSchema) {
+  const resolvedSchema = resolveTenantSchema(databaseUrl, process.env.PRISMA_SCHEMA)
+  if (!resolvedSchema) {
     return taggedDatabaseUrl
   }
+  const currentSchema = resolvedSchema.schema
 
   const baseConnectionString = withoutSchema(taggedDatabaseUrl)
 
