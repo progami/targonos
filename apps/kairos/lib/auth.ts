@@ -1,31 +1,9 @@
 import NextAuth from 'next-auth';
 import type { NextAuthConfig } from 'next-auth';
 import type { NextRequest } from 'next/server';
-import { applyDevAuthDefaults, withSharedAuth } from '@targon/auth';
-
-applyDevAuthDefaults({
-  appId: 'kairos',
-});
+import { withSharedAuth } from '@targon/auth';
 
 type NextAuthResult = ReturnType<typeof NextAuth>;
-
-function sanitizeBaseUrl(raw?: string | null): string | undefined {
-  if (!raw) return undefined;
-  try {
-    const url = new URL(raw);
-    url.hash = '';
-    url.search = '';
-    if (/\/api\/auth\/?$/.test(url.pathname)) {
-      url.pathname = url.pathname.replace(/\/?api\/auth\/?$/, '') || '/';
-    }
-    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-      url.pathname = url.pathname.slice(0, -1);
-    }
-    return url.origin + (url.pathname === '/' ? '' : url.pathname);
-  } catch {
-    return undefined;
-  }
-}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -36,14 +14,11 @@ function requireEnv(name: string): string {
 }
 
 function resolveAuthOptions(): NextAuthConfig {
+  requireEnv('COOKIE_DOMAIN');
+  requireEnv('NEXTAUTH_URL');
   requireEnv('NEXT_PUBLIC_APP_URL');
   requireEnv('PORTAL_AUTH_URL');
   requireEnv('NEXT_PUBLIC_PORTAL_AUTH_URL');
-
-  const normalizedNextAuthUrl = sanitizeBaseUrl(process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL);
-  if (normalizedNextAuthUrl) {
-    process.env.NEXTAUTH_URL = normalizedNextAuthUrl;
-  }
 
   const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET;
   if (!sharedSecret) {
@@ -76,7 +51,7 @@ function resolveAuthOptions(): NextAuthConfig {
   };
 
   return withSharedAuth(baseAuthOptions, {
-    cookieDomain: process.env.COOKIE_DOMAIN || '.targonglobal.com',
+    cookieDomain: requireEnv('COOKIE_DOMAIN'),
     appId: 'targon',
   });
 }

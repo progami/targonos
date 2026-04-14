@@ -1,8 +1,9 @@
 import { handlers } from '@/lib/auth'
+import { requireAuthEnv } from '@/lib/required-auth-env'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
-const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || '.targonglobal.com'
+const COOKIE_DOMAIN = requireAuthEnv('COOKIE_DOMAIN')
 
 async function clearAuthCookies() {
   const cookieStore = await cookies()

@@ -5,7 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function NoAccessPage() {
-  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || process.env.PORTAL_AUTH_URL || '/';
+  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL;
+
+  if (!portalUrl) {
+    throw new Error('NEXT_PUBLIC_PORTAL_AUTH_URL must be defined for the Kairos no-access page.');
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 dark:bg-slate-950">
