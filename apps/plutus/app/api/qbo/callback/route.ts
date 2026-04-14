@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { exchangeCodeForTokens } from '@/lib/qbo/client';
 import { createLogger } from '@targon/logger';
 import { z } from 'zod';
-import { saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import type { QboConnection } from '@/lib/qbo/api';
 import { decodePlutusPortalSession, isPlatformAdminPortalSession } from '@/lib/portal-session';
 
@@ -79,6 +79,14 @@ export async function GET(req: NextRequest) {
       expiresAt: new Date(Date.now() + tokens.expiresIn * 1000).toISOString(),
     };
 
+    const previousConnection = await getQboConnection();
+    if (previousConnection !== null && previousConnection.realmId !== connection.realmId) {
+      logger.warn('QBO realm changed during callback', {
+        previousRealmId: previousConnection.realmId,
+        nextRealmId: connection.realmId,
+      });
+    }
+
     // Store full connection server-side only
     await saveServerQboConnection(connection);
 
@@ -93,7 +101,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.redirect(new URL(`${basePath}?connected=true`, baseUrl));
   } catch (error) {
-    logger.error('QBO callback failed', error);
+    logger.error('QBO callback failed', {
+      realmId: req.nextUrl.searchParams.get('realmId'),
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.redirect(new URL(`${basePath}?error=token_exchange_failed`, baseUrl));
   }
 }

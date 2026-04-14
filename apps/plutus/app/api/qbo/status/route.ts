@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 import { getApiBaseUrl } from '@/lib/qbo/client';
-import { getValidToken } from '@/lib/qbo/api';
+import { QboAuthError, getValidToken } from '@/lib/qbo/api';
+import { classifyQboVerificationFailure, getQboConnectionErrorMessage } from '@/lib/qbo/connection-feedback';
 import type { QboConnectionStatus, QboCompanyInfoResponse, QboPreferences } from '@/lib/qbo/types';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { decodePlutusPortalSession, isPlatformAdminPortalSession } from '@/lib/portal-session';
@@ -32,13 +33,23 @@ export async function GET(request: Request) {
       logger.info('QBO token refreshed successfully');
     }
   } catch (refreshError) {
+    if (!(refreshError instanceof QboAuthError)) {
+      throw refreshError;
+    }
+    if (refreshError.code === undefined) {
+      throw new Error('QboAuthError.code is required');
+    }
+
     logger.warn('Token refresh failed', {
-      error: refreshError instanceof Error ? refreshError.message : String(refreshError),
+      realmId: connection.realmId,
+      error: refreshError.details ?? refreshError.message,
+      errorCode: refreshError.code,
     });
     return NextResponse.json<QboConnectionStatus>({
       connected: false,
       canConnect,
-      error: 'Session expired. Please reconnect to QuickBooks.',
+      errorCode: refreshError.code,
+      error: refreshError.message,
     });
   }
 
@@ -56,12 +67,17 @@ export async function GET(request: Request) {
     );
 
     if (response.status === 401 || response.status === 403) {
-      // Token is truly invalid - user needs to reconnect
-      logger.error('QBO authentication failed', { status: response.status });
+      const errorCode = classifyQboVerificationFailure(response.status);
+      logger.error('QBO authentication failed', {
+        realmId: connection.realmId,
+        status: response.status,
+        errorCode,
+      });
       return NextResponse.json<QboConnectionStatus>({
         connected: false,
         canConnect,
-        error: 'Session expired. Please reconnect to QuickBooks.',
+        errorCode,
+        error: getQboConnectionErrorMessage(errorCode),
       });
     }
 

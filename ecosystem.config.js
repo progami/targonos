@@ -24,7 +24,8 @@ function loadEnvFile(filePath) {
   } catch { return {}; }
 }
 
-function envFilenamesFor(environment, includeLocal = true) {
+function envFilenamesFor(environment, includeLocal = true, options = {}) {
+  const preferLocal = options.preferLocal === undefined ? true : options.preferLocal;
   if (environment === 'dev') {
     const filenames = ['.env', '.env.dev.ci', '.env.dev'];
     if (includeLocal) {
@@ -33,8 +34,12 @@ function envFilenamesFor(environment, includeLocal = true) {
     return filenames;
   }
 
-  const filenames = ['.env', '.env.production'];
-  if (includeLocal) {
+  const filenames = ['.env'];
+  if (includeLocal && !preferLocal) {
+    filenames.push('.env.local');
+  }
+  filenames.push('.env.production');
+  if (includeLocal && preferLocal) {
     filenames.push('.env.local');
   }
   return filenames;
@@ -42,9 +47,10 @@ function envFilenamesFor(environment, includeLocal = true) {
 
 function loadAppEnv(appDir, environment, options = {}) {
   const includeLocal = options.includeLocal === undefined ? true : options.includeLocal;
+  const preferLocal = options.preferLocal === undefined ? true : options.preferLocal;
   const env = {};
 
-  for (const filename of envFilenamesFor(environment, includeLocal)) {
+  for (const filename of envFilenamesFor(environment, includeLocal, { preferLocal })) {
     Object.assign(env, loadEnvFile(path.join(appDir, filename)));
   }
 
@@ -66,6 +72,20 @@ function createNextAppEnv(rootDir, appName, environment, runtimeEnv) {
   return {
     ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
     ...runtimeEnv,
+  };
+}
+
+function getHostedEnvLoadOptions(environment) {
+  if (environment === 'production') {
+    return {
+      includeLocal: true,
+      preferLocal: false,
+    };
+  }
+
+  return {
+    includeLocal: true,
+    preferLocal: true,
   };
 }
 
@@ -138,18 +158,29 @@ function omitHostedManagedAppEnv(appEnv) {
 
 function createPortalRuntimeEnv(rootDir, environment, runtimeEnv) {
   const portalBaseUrl = getPortalHostedUrl(environment);
-  const portalEnv = loadAppEnv(path.join(rootDir, 'apps/sso'), environment);
+  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
+  const portalEnv = loadAppEnv(path.join(rootDir, 'apps/sso'), environment, hostedLoadOptions);
+  const portalProcessEnv = pickProcessEnv(['PORTAL_AUTH_SECRET', 'NEXTAUTH_SECRET', 'PORTAL_DB_URL']);
   const sharedSecret = getHostedSharedSecret({
     ...portalEnv,
-    ...pickProcessEnv(['PORTAL_AUTH_SECRET', 'NEXTAUTH_SECRET']),
+    ...portalProcessEnv,
   });
   const buildMetadataEnv = getHostedBuildMetadataEnv();
+  let portalDatabaseUrl = portalEnv.PORTAL_DB_URL;
+  if (portalProcessEnv.PORTAL_DB_URL !== undefined) {
+    portalDatabaseUrl = portalProcessEnv.PORTAL_DB_URL;
+  }
+  if (!portalDatabaseUrl) {
+    throw new Error(`Missing PORTAL_DB_URL for hosted portal ${environment} runtime.`);
+  }
+
   return {
     ...portalEnv,
     ...runtimeEnv,
     ...buildMetadataEnv,
     PORTAL_AUTH_SECRET: sharedSecret,
     NEXTAUTH_SECRET: sharedSecret,
+    PORTAL_DB_URL: portalDatabaseUrl,
     COOKIE_DOMAIN: getHostedCookieDomain(environment),
     PORTAL_APPS_BASE_URL: portalBaseUrl,
     NEXT_PUBLIC_PORTAL_APPS_BASE_URL: portalBaseUrl,
@@ -215,7 +246,10 @@ function resolveHostedBasePath(appEnv, runtimeEnv) {
 
 function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   const portalEnv = createPortalRuntimeEnv(rootDir, environment, {});
-  const appEnv = omitHostedManagedAppEnv(loadAppEnv(path.join(rootDir, `apps/${appName}`), environment));
+  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
+  const appEnv = omitHostedManagedAppEnv(
+    loadAppEnv(path.join(rootDir, `apps/${appName}`), environment, hostedLoadOptions),
+  );
   const portalBaseUrl = portalEnv.PORTAL_AUTH_URL;
   if (!portalBaseUrl) {
     throw new Error(`Missing PORTAL_AUTH_URL for ${appName} ${environment} runtime.`);
@@ -398,12 +432,13 @@ module.exports = {
       args: 'scripts/cashflow-refresh-worker.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: {
-        ...loadEnvFile(path.join(DEV_DIR, 'apps/plutus/.env.local')),
+      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
         NODE_ENV: 'production',
         PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '0',
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
-      },
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -415,14 +450,15 @@ module.exports = {
       args: 'scripts/settlement-sync-worker.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: {
-        ...loadEnvFile(path.join(DEV_DIR, 'apps/plutus/.env.local')),
+      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '0',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
         PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH
-      },
+        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -619,12 +655,13 @@ module.exports = {
       args: 'scripts/cashflow-refresh-worker.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: {
-        ...loadEnvFile(path.join(MAIN_DIR, 'apps/plutus/.env.local')),
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
         NODE_ENV: 'production',
         PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1',
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
-      },
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -636,14 +673,15 @@ module.exports = {
       args: 'scripts/settlement-sync-worker.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: {
-        ...loadEnvFile(path.join(MAIN_DIR, 'apps/plutus/.env.local')),
+      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '1',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
         PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH
-      },
+        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
+        BASE_PATH: '/plutus',
+        NEXT_PUBLIC_BASE_PATH: '/plutus',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -708,7 +746,6 @@ module.exports = {
     },
   ]
 };
-
 module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
 module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
 module.exports.buildHostedAppUrl = buildHostedAppUrl;
