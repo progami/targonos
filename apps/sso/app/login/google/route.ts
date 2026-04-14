@@ -1,9 +1,10 @@
 import { signIn } from '@/lib/auth'
+import { requireAuthEnv } from '@/lib/required-auth-env'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const COOKIE_DOMAIN = process.env.COOKIE_DOMAIN || '.targonglobal.com'
+const COOKIE_DOMAIN = requireAuthEnv('COOKIE_DOMAIN')
 
 const AUTH_COOKIE_PATTERNS = ['authjs', 'next-auth', '__Secure-', '__Host-', 'csrf', 'pkce', 'callback', 'targon', 'session']
 const KNOWN_COOKIES = [
@@ -108,4 +109,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 }
-

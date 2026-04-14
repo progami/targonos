@@ -2,7 +2,11 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { ExternalLink, ShieldX } from '@/lib/lucide-icons'
 
 export default function NoAccessPage() {
-  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL || process.env.PORTAL_AUTH_URL || '/'
+  const portalUrl = process.env.NEXT_PUBLIC_PORTAL_AUTH_URL
+
+  if (!portalUrl) {
+    throw new Error('NEXT_PUBLIC_PORTAL_AUTH_URL must be defined for the Talos no-access page.')
+  }
 
   return (
     <PageContainer className="min-h-screen">

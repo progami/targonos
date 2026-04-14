@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { applyDevAuthDefaults, getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
+import { getCandidateSessionCookieNames, requireAppEntry, resolveAppAuthOrigin } from '@targon/auth'
 
 import { getBasePath, withoutBasePath } from '@/lib/utils/base-path'
 import { portalUrl } from '@/lib/portal'
 import { TENANT_COOKIE_NAME, isValidTenantCode } from '@/lib/tenant/constants'
-
-applyDevAuthDefaults({
-  // Align with portal default secret in local dev when ALLOW_DEV_AUTH_DEFAULTS=true.
-  appId: 'targon',
-})
 
 function resolveAppOrigin(request: NextRequest): string {
   return resolveAppAuthOrigin({ request })
@@ -67,72 +62,59 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const allowDevAuthBypass =
-    process.env.NODE_ENV !== 'production' &&
-    (
-      ['1', 'true', 'yes', 'on'].includes(
-        String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS ?? '').toLowerCase(),
-      ) ||
-      ['1', 'true', 'yes', 'on'].includes(
-        String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase(),
-      )
-    )
-
   const cookieNames = Array.from(new Set([
     ...getCandidateSessionCookieNames('targon'),
     ...getCandidateSessionCookieNames('talos'),
   ]))
 
-  if (!allowDevAuthBypass) {
-    const decision = await requireAppEntry({
-      request,
-      appId: 'talos',
-      lifecycle: 'active',
-      entryPolicy: 'role_gated',
-      cookieNames,
+  const decision = await requireAppEntry({
+    request,
+    appId: 'talos',
+    lifecycle: 'active',
+    entryPolicy: 'role_gated',
+    cookieNames,
+  })
+
+  if (!decision.allowed) {
+    console.info('[authz][talos] denied', {
+      path: normalizedPath,
+      status: decision.status,
+      reason: decision.reason,
     })
 
-    if (!decision.allowed) {
-      console.info('[authz][talos] denied', {
-        path: normalizedPath,
-        status: decision.status,
-        reason: decision.reason,
-      })
+    if (normalizedPath.startsWith('/api/')) {
+      const status = decision.status === 'unauthenticated' ? 401 : 403
+      const errorMsg = decision.status === 'unauthenticated'
+        ? 'Authentication required'
+        : 'No access to Talos'
 
-      if (normalizedPath.startsWith('/api/')) {
-        const status = decision.status === 'unauthenticated' ? 401 : 403
-        const errorMsg = decision.status === 'unauthenticated'
-          ? 'Authentication required'
-          : 'No access to Talos'
-
-        return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
-      }
-
-      if (decision.status === 'forbidden') {
-        const url = request.nextUrl.clone()
-        url.pathname = '/no-access'
-        url.search = ''
-        return NextResponse.redirect(url)
-      }
-
-      const origin = resolveAppOrigin(request)
-
-      const rawBasePath = (process.env.BASE_PATH ?? '').trim()
-      const normalizedBasePath = rawBasePath && rawBasePath !== '/'
-        ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
-        : ''
-      const appBasePath = normalizedBasePath.endsWith('/')
-        ? normalizedBasePath.slice(0, -1)
-        : normalizedBasePath
-      const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
-        ? `${appBasePath}${pathname}`
-        : pathname
-      const callbackUrl = new URL(callbackPath + request.nextUrl.search, origin).toString()
-
-      const redirect = portalUrl('/login', request)
-      redirect.searchParams.set('callbackUrl', callbackUrl)
-      return NextResponse.redirect(redirect)
+      return NextResponse.json({ error: errorMsg, reason: decision.reason }, { status })
     }
+
+    if (decision.status === 'forbidden') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/no-access'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+
+    const origin = resolveAppOrigin(request)
+
+    const rawBasePath = (process.env.BASE_PATH ?? '').trim()
+    const normalizedBasePath = rawBasePath && rawBasePath !== '/'
+      ? (rawBasePath.startsWith('/') ? rawBasePath : `/${rawBasePath}`)
+      : ''
+    const appBasePath = normalizedBasePath.endsWith('/')
+      ? normalizedBasePath.slice(0, -1)
+      : normalizedBasePath
+    const callbackPath = appBasePath && !pathname.startsWith(appBasePath)
+      ? `${appBasePath}${pathname}`
+      : pathname
+    const callbackUrl = new URL(callbackPath + request.nextUrl.search, origin).toString()
+
+    const redirect = portalUrl('/login', request)
+    redirect.searchParams.set('callbackUrl', callbackUrl)
+    return NextResponse.redirect(redirect)
   }
 
   const tenantCookie = request.cookies.get(TENANT_COOKIE_NAME)?.value

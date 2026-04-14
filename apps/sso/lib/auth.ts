@@ -1,34 +1,14 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig } from 'next-auth'
-import Credentials from 'next-auth/providers/credentials'
 import Google from 'next-auth/providers/google'
-import { applyDevAuthDefaults, type PortalAuthz, withSharedAuth } from '@targon/auth'
+import { type PortalAuthz, withSharedAuth } from '@targon/auth'
 import {
-  authenticateWithPortalDirectory,
   getOrCreatePortalUserByEmail,
   getUserAuthz,
   getUserByEmail,
 } from '@targon/auth/server'
 import { resolvePortalCallbackTarget } from './callback-target'
-
-const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'on'])
-
-applyDevAuthDefaults({
-  appId: 'targon',
-})
-
-if (!process.env.NEXTAUTH_URL) {
-  throw new Error('NEXTAUTH_URL must be defined for portal authentication.')
-}
-if (!process.env.PORTAL_AUTH_URL) {
-  throw new Error('PORTAL_AUTH_URL must be defined for portal authentication.')
-}
-if (!process.env.NEXT_PUBLIC_PORTAL_AUTH_URL) {
-  throw new Error('NEXT_PUBLIC_PORTAL_AUTH_URL must be defined for portal authentication.')
-}
-if (!process.env.COOKIE_DOMAIN) {
-  throw new Error('COOKIE_DOMAIN must be defined for portal authentication.')
-}
+import { requireAuthEnv } from './required-auth-env'
 
 const ORG_EMAIL_DOMAIN = 'targonglobal.com'
 
@@ -37,82 +17,14 @@ function isOrgEmail(email: string): boolean {
   return normalized.endsWith(`@${ORG_EMAIL_DOMAIN}`)
 }
 
-function sanitizeBaseUrl(raw?: string | null): string | undefined {
-  if (!raw) return undefined
-  try {
-    const url = new URL(raw)
-    url.hash = ''
-    url.search = ''
-    if (/\/api\/auth\/?$/.test(url.pathname)) {
-      url.pathname = url.pathname.replace(/\/?api\/auth\/?$/, '') || '/'
-    }
-    if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-      url.pathname = url.pathname.slice(0, -1)
-    }
-    return url.origin + (url.pathname === '/' ? '' : url.pathname)
-  } catch {
-    return undefined
-  }
-}
+const nextAuthUrl = requireAuthEnv('NEXTAUTH_URL')
+requireAuthEnv('PORTAL_AUTH_URL')
+requireAuthEnv('NEXT_PUBLIC_PORTAL_AUTH_URL')
+const cookieDomain = requireAuthEnv('COOKIE_DOMAIN')
+const googleClientId = requireAuthEnv('GOOGLE_CLIENT_ID')
+const googleClientSecret = requireAuthEnv('GOOGLE_CLIENT_SECRET')
 
-function isLocalCookieHost(hostname: string): boolean {
-  const normalized = hostname.trim().toLowerCase().replace(/\.$/, '')
-  if (!normalized) return false
-  if (normalized === 'localhost' || normalized.endsWith('.localhost')) {
-    return true
-  }
-  return /^\d+\.\d+\.\d+\.\d+$/.test(normalized)
-}
-
-function resolveCookieDomain(explicit: string | undefined, baseUrl: string | undefined): string {
-  const trimmed = explicit?.trim()
-  if (baseUrl) {
-    try {
-      const { hostname } = new URL(baseUrl)
-      const normalizedHost = hostname.replace(/\.$/, '')
-      if (trimmed && trimmed !== '') {
-        const normalizedExplicit = trimmed.startsWith('.') ? trimmed.slice(1) : trimmed
-        if (isLocalCookieHost(normalizedExplicit)) {
-          return normalizedExplicit
-        }
-        if (isLocalCookieHost(normalizedHost)) {
-          return normalizedHost
-        }
-        if (normalizedHost && !normalizedHost.endsWith(normalizedExplicit)) {
-          return `.${normalizedHost}`
-        }
-        return trimmed.startsWith('.') ? trimmed : `.${trimmed}`
-      }
-      if (normalizedHost) {
-        if (isLocalCookieHost(normalizedHost)) {
-          return normalizedHost
-        }
-        return `.${normalizedHost}`
-      }
-    } catch {
-      // fall back to default domain below
-    }
-  } else if (trimmed && trimmed !== '') {
-    if (isLocalCookieHost(trimmed)) {
-      return trimmed
-    }
-    return trimmed.startsWith('.') ? trimmed : `.${trimmed}`
-  }
-  return '.targonglobal.com'
-}
-
-const normalizedBaseUrl = sanitizeBaseUrl(process.env.NEXTAUTH_URL || process.env.PORTAL_AUTH_URL)
-if (normalizedBaseUrl) {
-  process.env.NEXTAUTH_URL = normalizedBaseUrl
-  if (!process.env.PORTAL_AUTH_URL) {
-    process.env.PORTAL_AUTH_URL = normalizedBaseUrl
-  }
-}
-
-const resolvedCookieDomain = resolveCookieDomain(process.env.COOKIE_DOMAIN, process.env.NEXTAUTH_URL)
-process.env.COOKIE_DOMAIN = resolvedCookieDomain
-
-const portalHostname = new URL(process.env.NEXTAUTH_URL).hostname.trim().toLowerCase()
+const portalHostname = new URL(nextAuthUrl).hostname.trim().toLowerCase()
 const AUTO_PROVISION_PORTAL_USERS = !portalHostname.startsWith('dev-os.')
 
 const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET
@@ -120,54 +32,18 @@ if (sharedSecret) {
   process.env.NEXTAUTH_SECRET = sharedSecret
 }
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID
-const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
-const hasGoogleOAuth = Boolean(googleClientId && googleClientSecret)
-const allowDevAuthBypass =
-  process.env.NODE_ENV !== 'production' &&
-  (TRUTHY_VALUES.has(String(process.env.ALLOW_DEV_AUTH_SESSION_BYPASS || '').toLowerCase()) ||
-    TRUTHY_VALUES.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS || '').toLowerCase()))
-
-if (!hasGoogleOAuth && !allowDevAuthBypass) {
-  throw new Error('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be configured for Targon auth.')
+if (!sharedSecret) {
+  throw new Error('PORTAL_AUTH_SECRET or NEXTAUTH_SECRET must be defined for portal authentication.')
 }
 
 const providers: NextAuthConfig['providers'] = [
-  ...(allowDevAuthBypass
-    ? [
-        Credentials({
-          name: 'Development credentials',
-          credentials: {
-            emailOrUsername: { label: 'Email or username', type: 'text' },
-            password: { label: 'Password', type: 'password' },
-          },
-          async authorize(credentials) {
-            const portalUser = await authenticateWithPortalDirectory(credentials)
-            if (!portalUser) {
-              return null
-            }
-
-            return {
-              id: portalUser.id,
-              email: portalUser.email,
-              name: portalUser.fullName || portalUser.email,
-              portalUser,
-            }
-          },
-        }),
-      ]
-    : []),
-  ...(hasGoogleOAuth
-    ? [
-        Google({
-          clientId: googleClientId || '',
-          clientSecret: googleClientSecret || '',
-          authorization: {
-            params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' },
-          },
-        }),
-      ]
-    : []),
+  Google({
+    clientId: googleClientId,
+    clientSecret: googleClientSecret,
+    authorization: {
+      params: { prompt: 'select_account', access_type: 'offline', response_type: 'code' },
+    },
+  }),
 ]
 
 const ENTITLEMENTS_REFRESH_INTERVAL_MS = 60_000
@@ -184,10 +60,6 @@ const baseAuthOptions: NextAuthConfig = {
   providers,
   callbacks: {
     async signIn({ user, account, profile }) {
-      if (account?.provider === 'credentials') {
-        return Boolean((user as any)?.portalUser)
-      }
-
       if (account?.provider === 'google') {
         const email = (profile?.email || user?.email || '').toLowerCase()
         const emailVerified = typeof (profile as any)?.email_verified === 'boolean'
@@ -318,7 +190,7 @@ const baseAuthOptions: NextAuthConfig = {
 }
 
 export const authOptions: NextAuthConfig = withSharedAuth(baseAuthOptions, {
-  cookieDomain: resolvedCookieDomain,
+  cookieDomain,
   appId: 'targon',
 })
 

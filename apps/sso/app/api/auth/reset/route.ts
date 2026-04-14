@@ -1,12 +1,12 @@
+import { requireAuthEnv } from '@/lib/required-auth-env'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
 const AUTH_COOKIE_PATTERNS = ['authjs', 'next-auth', '__Secure-', '__Host-', 'csrf', 'pkce', 'callback', 'targon', 'session']
+const cookieDomain = requireAuthEnv('COOKIE_DOMAIN')
+const baseUrl = requireAuthEnv('NEXTAUTH_URL')
 
 export async function GET(request: NextRequest) {
-  const cookieDomain = process.env.COOKIE_DOMAIN || '.targonglobal.com'
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://os.targonglobal.com'
-
   // Get provider and callbackUrl for direct signin flow
   const provider = request.nextUrl.searchParams.get('provider')
   const callbackUrl = request.nextUrl.searchParams.get('callbackUrl') || '/'
