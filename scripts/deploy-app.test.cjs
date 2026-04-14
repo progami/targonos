@@ -73,3 +73,22 @@ test('atlas dev deploy no longer falls back to db push on migrate errors', () =>
     /Prisma migrate deploy failed for atlas dev; falling back to non-destructive db push/,
   )
 })
+
+test('production deploys prefer .env.production before .env.local', () => {
+  assert.match(
+    deployScript,
+    /ensure_database_url\(\)[\s\S]*?else[\s\S]*?candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
+  )
+  assert.match(
+    deployScript,
+    /ensure_portal_db_url\(\)[\s\S]*?else[\s\S]*?candidates=\("\$sso_dir\/.env.production" "\$sso_dir\/.env.local" "\$sso_dir\/.env"\)/,
+  )
+  assert.match(
+    deployScript,
+    /resolve_portal_shared_secret\(\)[\s\S]*?else[\s\S]*?candidates=\("\$sso_dir\/.env.production" "\$sso_dir\/.env.local" "\$sso_dir\/.env"\)/,
+  )
+  assert.match(
+    deployScript,
+    /ensure_app_env_loaded\(\)[\s\S]*?else[\s\S]*?candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
+  )
+})
