@@ -7,6 +7,10 @@ import { fileURLToPath } from 'node:url'
 import type { PrismaClient } from '@targon/prisma-talos'
 import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
 import type { TenantCode } from '../../src/lib/tenant/constants'
+import {
+  TALOS_PERMISSION_CATALOG,
+  buildPermissionCatalogUpsertSql,
+} from '../../src/lib/permissions/catalog'
 
 type ScriptOptions = {
   tenants: TenantCode[]
@@ -224,7 +228,73 @@ function buildRequiredEnumValuesCheck(
   }
 }
 
+function buildRequiredTextValuesCheck(
+  label: string,
+  table: string,
+  column: string,
+  values: string[]
+): SchemaCheck {
+  const requiredValues = values
+    .map((value) => `(${sqlString(value)})`)
+    .join(',\n          ')
+
+  return {
+    label,
+    sql: `
+      SELECT NOT EXISTS (
+        SELECT required.value
+        FROM (
+          VALUES
+          ${requiredValues}
+        ) AS required(value)
+        WHERE NOT EXISTS (
+          SELECT 1
+          FROM ${table} t
+          WHERE t.${column} = required.value
+        )
+      ) AS value
+    `,
+  }
+}
+
 const baselineChecks: SchemaCheck[] = [
+  buildTableExistsCheck('permissions table', 'permissions'),
+  buildRequiredColumnsCheck('permissions columns', 'permissions', [
+    'id',
+    'code',
+    'name',
+    'description',
+    'category',
+    'created_at',
+    'updated_at',
+  ]),
+  buildRequiredIndexesCheck('permissions indexes', [
+    'permissions_code_key',
+    'permissions_category_idx',
+  ]),
+  buildTableExistsCheck('user_permissions table', 'user_permissions'),
+  buildRequiredColumnsCheck('user_permissions columns', 'user_permissions', [
+    'id',
+    'user_id',
+    'permission_id',
+    'granted_by_id',
+    'granted_at',
+  ]),
+  buildRequiredIndexesCheck('user_permissions indexes', [
+    'user_permissions_userId_permissionId_key',
+    'user_permissions_user_id_idx',
+    'user_permissions_permission_id_idx',
+  ]),
+  buildRequiredConstraintsCheck('user_permissions constraints', [
+    'user_permissions_user_id_fkey',
+    'user_permissions_permission_id_fkey',
+  ]),
+  buildRequiredTextValuesCheck(
+    'permission catalog seed',
+    '"permissions"',
+    '"code"',
+    TALOS_PERMISSION_CATALOG.map((permission) => permission.code)
+  ),
   buildTableExistsCheck('suppliers table', 'suppliers'),
   buildRequiredColumnsCheck('suppliers columns', 'suppliers', [
     'id',
@@ -412,6 +482,72 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   console.info(`\n[${tenant}] Ensuring baseline schema is present`)
 
   const ddlStatements: string[] = [
+    // RBAC catalog and direct permission grants
+    `
+      CREATE TABLE IF NOT EXISTS "permissions" (
+        "id" text NOT NULL,
+        "code" text NOT NULL,
+        "name" text NOT NULL,
+        "description" text,
+        "category" text NOT NULL,
+        "created_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "permissions_pkey" PRIMARY KEY ("id")
+      )
+    `,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "permissions_code_key" ON "permissions"("code")`,
+    `CREATE INDEX IF NOT EXISTS "permissions_category_idx" ON "permissions"("category")`,
+    `
+      CREATE TABLE IF NOT EXISTS "user_permissions" (
+        "id" text NOT NULL,
+        "user_id" text NOT NULL,
+        "permission_id" text NOT NULL,
+        "granted_by_id" text NOT NULL,
+        "granted_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "user_permissions_pkey" PRIMARY KEY ("id")
+      )
+    `,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "user_permissions_userId_permissionId_key" ON "user_permissions"("user_id", "permission_id")`,
+    `CREATE INDEX IF NOT EXISTS "user_permissions_user_id_idx" ON "user_permissions"("user_id")`,
+    `CREATE INDEX IF NOT EXISTS "user_permissions_permission_id_idx" ON "user_permissions"("permission_id")`,
+    `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.conname = 'user_permissions_user_id_fkey'
+            AND n.nspname = current_schema()
+        ) THEN
+          ALTER TABLE "user_permissions"
+            ADD CONSTRAINT "user_permissions_user_id_fkey"
+            FOREIGN KEY ("user_id") REFERENCES "users"("id")
+            ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `,
+    `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+          WHERE c.conname = 'user_permissions_permission_id_fkey'
+            AND n.nspname = current_schema()
+        ) THEN
+          ALTER TABLE "user_permissions"
+            ADD CONSTRAINT "user_permissions_permission_id_fkey"
+            FOREIGN KEY ("permission_id") REFERENCES "permissions"("id")
+            ON DELETE CASCADE ON UPDATE CASCADE;
+        END IF;
+      END $$;
+    `,
+    buildPermissionCatalogUpsertSql(),
+
     // suppliers table (missing in some schemas)
     `
       CREATE TABLE IF NOT EXISTS "suppliers" (
