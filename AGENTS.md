@@ -42,9 +42,8 @@ Examples: `xplan/fix-toolbar-visibility`, `talos/add-amazon-import`, `atlas/impr
 
 PR titles must include:
 - the app scope (e.g. `fix(talos): ...`)
-- the agent tag: `[claude]`
 
-Example: `fix(talos): use presigned URL for PO document uploads [claude]`
+Example: `fix(talos): use presigned URL for PO document uploads`
 
 ### PR Workflow
 
