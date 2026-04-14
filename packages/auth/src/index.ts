@@ -481,9 +481,6 @@ export interface PortalSessionProbeOptions {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_PORTAL_DEV = 'http://localhost:3200';
-const missingSecretWarnings = new Set<string>();
-
 function normalizeOrigin(raw: string | undefined | null): string | undefined {
   if (!raw) return undefined;
   const trimmed = raw.trim();
@@ -535,116 +532,25 @@ function isLoopbackOrigin(origin: string | undefined): boolean {
   }
 }
 
-function originFromRequestLike(request: PortalUrlRequestLike | undefined): string | undefined {
-  if (!request) return undefined;
-  const url = request.url ? new URL(request.url) : null;
-  return normalizeOrigin(url?.origin ?? undefined);
-}
-
-function normalizeProtocol(rawProtocol: string | undefined): string | undefined {
-  if (!rawProtocol) return undefined;
-  const trimmed = rawProtocol.trim();
-  if (!trimmed) return undefined;
-  return trimmed.endsWith(':') ? trimmed.slice(0, -1) : trimmed;
-}
-
-function originFromRequestHeaders(request: PortalUrlRequestLike | undefined): string | undefined {
-  if (!request) return undefined;
-
-  const forwardedHostRaw = request.headers.get('x-forwarded-host');
-  const hostRaw = forwardedHostRaw ?? request.headers.get('host');
-  if (!hostRaw) {
-    return undefined;
-  }
-
-  const host = hostRaw.split(',')[0]?.trim();
-  if (!host) {
-    return undefined;
-  }
-
-  const forwardedProtoRaw = request.headers.get('x-forwarded-proto');
-  const forwardedProto = forwardedProtoRaw ? normalizeProtocol(forwardedProtoRaw.split(',')[0]) : undefined;
-
-  let requestProtocol: string | undefined;
-  if (request.url) {
-    try {
-      requestProtocol = normalizeProtocol(new URL(request.url).protocol);
-    } catch {
-      requestProtocol = undefined;
-    }
-  }
-
-  return normalizeOrigin(`${forwardedProto ?? requestProtocol ?? 'https'}://${host}`);
-}
-
-function originFromGlobalScope(): string | undefined {
-  if (typeof globalThis === 'undefined') {
-    return undefined;
-  }
-  const maybeLocation = (globalThis as any)?.location;
-  if (maybeLocation && typeof maybeLocation.origin === 'string') {
-    return normalizeOrigin(maybeLocation.origin);
-  }
-  return undefined;
-}
-
-export function resolvePortalAuthOrigin(options?: PortalUrlOptions): string {
-  const requestOrigin = originFromRequestLike(options?.request);
-  const requestIsLoopback = isLoopbackOrigin(requestOrigin);
-  const envCandidates = [
-    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
-    process.env.PORTAL_AUTH_URL,
-    process.env.NEXTAUTH_URL,
-  ];
-
-  if (requestIsLoopback) {
-    for (const candidate of envCandidates) {
-      const normalized = normalizeOrigin(candidate);
-      if (normalized && isLoopbackOrigin(normalized)) {
-        return normalized;
-      }
-    }
-
-    const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
-    if (fallbackOrigin && isLoopbackOrigin(fallbackOrigin)) {
-      return fallbackOrigin;
-    }
-
-    const globalOrigin = originFromGlobalScope();
-    if (globalOrigin && isLoopbackOrigin(globalOrigin)) {
-      return globalOrigin;
-    }
-
-    return DEFAULT_PORTAL_DEV;
-  }
-
-  for (const candidate of envCandidates) {
+function resolveConfiguredOrigin(candidates: Array<string | undefined>, errorMessage: string): string {
+  for (const candidate of candidates) {
     const normalized = normalizeOrigin(candidate);
     if (normalized) {
       return normalized;
     }
   }
 
-  if (requestOrigin) {
-    return requestOrigin;
-  }
+  throw new Error(errorMessage);
+}
 
-  const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
-  if (fallbackOrigin) {
-    return fallbackOrigin;
-  }
+export function resolvePortalAuthOrigin(options?: PortalUrlOptions): string {
+  void options;
 
-  const globalOrigin = originFromGlobalScope();
-  if (globalOrigin) {
-    return globalOrigin;
-  }
-
-  const allowDefaults = truthyValues.has(String(process.env.ALLOW_DEV_AUTH_DEFAULTS ?? '').toLowerCase());
-  if (allowDefaults && process.env.NODE_ENV !== 'production') {
-    return DEFAULT_PORTAL_DEV;
-  }
-
-  throw new Error('Portal auth origin is not configured. Set PORTAL_AUTH_URL or NEXT_PUBLIC_PORTAL_AUTH_URL.');
+  return resolveConfiguredOrigin([
+    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
+    process.env.PORTAL_AUTH_URL,
+    process.env.NEXTAUTH_URL,
+  ], 'Portal auth origin is not configured. Set PORTAL_AUTH_URL or NEXT_PUBLIC_PORTAL_AUTH_URL.');
 }
 
 export function buildPortalUrl(path: string, options?: PortalUrlOptions): URL {
@@ -653,59 +559,18 @@ export function buildPortalUrl(path: string, options?: PortalUrlOptions): URL {
 }
 
 export function resolveAppAuthOrigin(options?: PortalUrlOptions): string {
-  const headerOrigin = originFromRequestHeaders(options?.request);
-  const requestOrigin = originFromRequestLike(options?.request);
-  const fallbackOrigin = normalizeOrigin(options?.fallbackOrigin);
-  const envCandidates = [
+  void options;
+
+  return resolveConfiguredOrigin([
     process.env.NEXT_PUBLIC_APP_URL,
     process.env.BASE_URL,
     process.env.NEXTAUTH_URL,
-  ];
-
-  if (headerOrigin && isLoopbackOrigin(headerOrigin)) {
-    return headerOrigin;
-  }
-
-  if (requestOrigin && isLoopbackOrigin(requestOrigin)) {
-    return requestOrigin;
-  }
-
-  if (fallbackOrigin && isLoopbackOrigin(fallbackOrigin)) {
-    return fallbackOrigin;
-  }
-
-  for (const candidate of envCandidates) {
-    const normalized = normalizeOrigin(candidate);
-    if (normalized) {
-      return normalized;
-    }
-  }
-
-  if (headerOrigin) {
-    return headerOrigin;
-  }
-
-  if (requestOrigin) {
-    return requestOrigin;
-  }
-
-  if (fallbackOrigin) {
-    return fallbackOrigin;
-  }
-
-  const globalOrigin = originFromGlobalScope();
-  if (globalOrigin) {
-    return globalOrigin;
-  }
-
-  throw new Error('Application origin is not configured. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.');
+  ], 'Application origin is not configured. Set NEXT_PUBLIC_APP_URL, BASE_URL, or NEXTAUTH_URL.');
 }
 
 /**
  * Determine whether a request already carries a valid portal NextAuth session.
- * - Tries to decode the session cookie locally using the shared secret.
- * - Falls back to probing the portal `/api/auth/session` endpoint to handle
- *   environments where app-specific secrets differ from the portal.
+ * - Decodes the session cookie locally using the shared secret.
  */
 export async function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean> {
   const {
@@ -713,7 +578,6 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
     appId,
     cookieNames,
     debug = options.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase()),
-    fetchImpl,
   } = options;
 
   const names = Array.from(new Set((cookieNames && cookieNames.length > 0)
@@ -737,85 +601,7 @@ export async function hasPortalSession(options: PortalSessionProbeOptions): Prom
     return true;
   }
 
-  if (!sharedSecret && debug) {
-    const warnKey = names.join('|') || 'global';
-    if (!missingSecretWarnings.has(warnKey)) {
-      missingSecretWarnings.add(warnKey);
-      console.warn('[auth] missing shared NEXTAUTH_SECRET; falling back to portal probe');
-    }
-  }
-
-  if (!cookieHeader) {
-    return false;
-  }
-
-  const hasCandidateCookie = names.some((name) => cookieHeader.includes(`${name}=`));
-  if (!hasCandidateCookie) {
-    return false;
-  }
-
-  let portalBase: string | undefined = options.portalUrl ? normalizeOrigin(options.portalUrl) : undefined;
-  if (!portalBase) {
-    try {
-      portalBase = resolvePortalAuthOrigin({ request: options.request as unknown as PortalUrlRequestLike });
-    } catch (error) {
-      if (debug) {
-        const detail = error instanceof Error ? error.message : String(error);
-        console.warn('[auth] unable to resolve portal origin', detail);
-      }
-      portalBase = undefined;
-    }
-  }
-
-  if (!portalBase) {
-    return false;
-  }
-
-  try {
-    const endpoint = new URL('/api/auth/session', portalBase);
-    const res = await (fetchImpl ?? fetch)(endpoint, {
-      method: 'GET',
-      headers: {
-        cookie: cookieHeader,
-        accept: 'application/json',
-        'x-targon-session-probe': '1',
-      },
-      cache: 'no-store',
-    });
-   if (!res.ok) {
-     if (debug) {
-       console.warn('[auth] portal session probe returned status', res.status);
-     }
-     return false;
-   }
-   const data = await res.json().catch(() => null);
-    if (data?.user) {
-      return true;
-    }
-
-    const allowDevProbeBypass = isDevAuthBypassEnabled({ request });
-
-    if (allowDevProbeBypass) {
-      if (debug) {
-        console.warn(
-          '[auth] portal session probe returned 200 but no user; allowing due to dev override',
-          data
-        );
-      }
-      return true;
-    }
-
-    if (debug) {
-      console.warn('[auth] portal session probe returned 200 but no user payload; treating as unauthenticated', data);
-    }
-    return false;
- } catch (error) {
-   if (debug) {
-     const detail = error instanceof Error ? error.message : String(error);
-     console.warn('[auth] portal session probe failed', detail);
-   }
-    return false;
-  }
+  return false;
 }
 
 // ===== Entitlement / Roles claim helpers =====
@@ -938,15 +724,6 @@ function resolveCookieNames(appId?: string, provided?: string[]): string[] {
   ]));
 }
 
-function normalizeAuthzApiResponse(value: unknown): PortalAuthz | null {
-  if (!value || typeof value !== 'object') return null;
-  const raw = value as Record<string, unknown>;
-  if ('authz' in raw) {
-    return normalizePortalAuthz(raw.authz);
-  }
-  return normalizePortalAuthz(value);
-}
-
 function isLocalhostOrigin(raw: string | undefined | null): boolean {
   const origin = normalizeOrigin(raw);
   if (!origin) return false;
@@ -1026,62 +803,6 @@ function buildDevBypassAuthz(appId?: string): PortalAuthz {
   };
 }
 
-async function fetchPortalAuthz(options: {
-  request: Request;
-  cookieHeader: string;
-  debug: boolean;
-  fetchImpl?: typeof fetch;
-}): Promise<PortalAuthz | null> {
-  const { request, cookieHeader, debug, fetchImpl } = options;
-
-  let portalBase: string;
-  try {
-    portalBase = resolvePortalAuthOrigin({ request: request as unknown as PortalUrlRequestLike });
-  } catch (error) {
-    if (debug) {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.warn('[auth] unable to resolve portal auth origin for authz fetch', detail);
-    }
-    return null;
-  }
-
-  try {
-    const endpoint = new URL('/api/v1/authz/me', portalBase);
-    const response = await (fetchImpl ?? fetch)(endpoint, {
-      method: 'GET',
-      headers: {
-        cookie: cookieHeader,
-        accept: 'application/json',
-        'x-targon-authz-probe': '1',
-      },
-      cache: 'no-store',
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      return null;
-    }
-    if (!response.ok) {
-      if (debug) {
-        console.warn('[auth] portal authz endpoint returned status', response.status);
-      }
-      return null;
-    }
-
-    const payload = await response.json().catch(() => null);
-    const authz = normalizeAuthzApiResponse(payload);
-    if (!authz && debug) {
-      console.warn('[auth] portal authz endpoint returned invalid payload', payload);
-    }
-    return authz;
-  } catch (error) {
-    if (debug) {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.warn('[auth] portal authz fetch failed', detail);
-    }
-    return null;
-  }
-}
-
 export async function getCurrentAuthz(
   request: Request,
   options?: {
@@ -1114,26 +835,6 @@ export async function getCurrentAuthz(
   }
 
   if (!decoded) {
-    const authzFromPortalWithoutDecode =
-      cookieHeader
-        ? await fetchPortalAuthz({
-            request,
-            cookieHeader,
-            debug,
-            fetchImpl: options?.fetchImpl,
-          })
-        : null;
-
-    if (authzFromPortalWithoutDecode) {
-      if (cacheKey) {
-        authzCache.set(cacheKey, {
-          authz: authzFromPortalWithoutDecode,
-          expiresAt: now + AUTHZ_CACHE_TTL_MS,
-        });
-      }
-      return authzFromPortalWithoutDecode;
-    }
-
     if (isDevAuthBypassEnabled({ request: request as unknown as PortalUrlRequestLike })) {
       if (debug) {
         console.warn('[auth] returning dev bypass authz because no authenticated portal session was found');
@@ -1144,17 +845,7 @@ export async function getCurrentAuthz(
     throw new Error('AUTH_UNAUTHENTICATED');
   }
 
-  const authzFromPortal =
-    cookieHeader
-      ? await fetchPortalAuthz({
-          request,
-          cookieHeader,
-          debug,
-          fetchImpl: options?.fetchImpl,
-        })
-      : null;
-
-  const authz = authzFromPortal ?? normalizeAuthzFromClaims(decoded);
+  const authz = normalizeAuthzFromClaims(decoded);
   if (!authz) {
     if (isDevAuthBypassEnabled({ request: request as unknown as PortalUrlRequestLike })) {
       if (debug) {

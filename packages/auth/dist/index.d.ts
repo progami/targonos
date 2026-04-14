@@ -94,9 +94,7 @@ export declare function buildPortalUrl(path: string, options?: PortalUrlOptions)
 export declare function resolveAppAuthOrigin(options?: PortalUrlOptions): string;
 /**
  * Determine whether a request already carries a valid portal NextAuth session.
- * - Tries to decode the session cookie locally using the shared secret.
- * - Falls back to probing the portal `/api/auth/session` endpoint to handle
- *   environments where app-specific secrets differ from the portal.
+ * - Decodes the session cookie locally using the shared secret.
  */
 export declare function hasPortalSession(options: PortalSessionProbeOptions): Promise<boolean>;
 export type AuthzAppGrant = {
