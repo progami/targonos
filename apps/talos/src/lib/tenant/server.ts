@@ -10,6 +10,7 @@ import {
 import { getTenantPrismaClient } from './prisma-factory'
 import { PrismaClient } from '@targon/prisma-talos'
 import { resolveTenantCodeFromState } from './session'
+import { resolveTenantSchema } from './schema'
 
 function assertSafePgIdentifier(value: string, label: string): asserts value is string {
   if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
@@ -18,25 +19,15 @@ function assertSafePgIdentifier(value: string, label: string): asserts value is 
 }
 
 function getSchemaFromDatabaseUrl(databaseUrl: string, tenantCode: TenantCode): string {
-  const override = process.env.PRISMA_SCHEMA
-  if (override) {
-    assertSafePgIdentifier(override, 'PRISMA_SCHEMA')
-    return override
-  }
-
-  let schema: string | null = null
-  try {
-    schema = new URL(databaseUrl).searchParams.get('schema')
-  } catch {
-    schema = null
-  }
-
-  if (!schema) {
+  const resolvedSchema = resolveTenantSchema(databaseUrl, process.env.PRISMA_SCHEMA)
+  if (!resolvedSchema) {
     throw new Error(`Missing schema for tenant ${tenantCode}. Add ?schema=... to ${TENANTS[tenantCode].envKey}.`)
   }
-
-  assertSafePgIdentifier(schema, `${TENANTS[tenantCode].envKey} schema`)
-  return schema
+  const label = resolvedSchema.source === 'override'
+    ? 'PRISMA_SCHEMA'
+    : `${TENANTS[tenantCode].envKey} schema`
+  assertSafePgIdentifier(resolvedSchema.schema, label)
+  return resolvedSchema.schema
 }
 
 /**
