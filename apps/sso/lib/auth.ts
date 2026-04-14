@@ -9,27 +9,12 @@ import {
   getUserAuthz,
   getUserByEmail,
 } from '@targon/auth/server'
+import { resolvePortalCallbackTarget } from './callback-target'
 
 const TRUTHY_VALUES = new Set(['1', 'true', 'yes', 'on'])
 
 applyDevAuthDefaults({
   appId: 'targon',
-  allowDefaults: true,
-  baseUrl:
-    process.env.NEXTAUTH_URL ||
-    process.env.PORTAL_AUTH_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:3200',
-  portalUrl:
-    process.env.PORTAL_AUTH_URL ||
-    process.env.NEXTAUTH_URL ||
-    'http://localhost:3200',
-  publicPortalUrl:
-    process.env.NEXT_PUBLIC_PORTAL_AUTH_URL ||
-    process.env.PORTAL_AUTH_URL ||
-    process.env.NEXTAUTH_URL ||
-    'http://localhost:3200',
-  cookieDomain: process.env.COOKIE_DOMAIN || 'localhost',
 })
 
 if (!process.env.NEXTAUTH_URL) {
@@ -319,41 +304,13 @@ const baseAuthOptions: NextAuthConfig = {
         return baseUrl
       }
 
-      try {
-        const target = new URL(url, baseUrl)
-        const base = new URL(baseUrl)
-        if (target.origin === base.origin) return target.toString()
-
-        const hostMismatch = target.hostname !== base.hostname
-        const bothPortalHosts =
-          target.hostname.endsWith('.os.targonglobal.com') &&
-          base.hostname.endsWith('.targonglobal.com')
-        if (hostMismatch && bothPortalHosts) {
-          const loginOrigin = `${target.protocol}//${target.hostname}`
-          const rewritten = new URL('/login', loginOrigin)
-          rewritten.searchParams.set('callbackUrl', target.toString())
-          return rewritten.toString()
-        }
-
-        if (process.env.NODE_ENV !== 'production') {
-          if (target.hostname === 'localhost' || target.hostname === '127.0.0.1') {
-            const relay = new URL('/auth/relay', base)
-            relay.searchParams.set('to', target.toString())
-            return relay.toString()
-          }
-          return baseUrl
-        }
-        const cookieDomain = resolvedCookieDomain.replace(/^\./, '').toLowerCase()
-        const targetHostname = target.hostname.toLowerCase()
-        const isAllowedHost =
-          cookieDomain.length > 0 &&
-          (targetHostname === cookieDomain || targetHostname.endsWith(`.${cookieDomain}`))
-        if (isAllowedHost) {
-          const relay = new URL('/auth/relay', base)
-          relay.searchParams.set('to', target.toString())
-          return relay.toString()
-        }
-      } catch {}
+      const target = resolvePortalCallbackTarget({
+        targetUrl: url,
+        portalBaseUrl: baseUrl,
+      })
+      if (target) {
+        return target
+      }
 
       return baseUrl
     },
