@@ -35,8 +35,7 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
     if (
       (tx.transactionType === 'Bill' ||
         tx.transactionType === 'Purchase' ||
-        tx.transactionType === 'Invoice' ||
-        tx.transactionType === 'BillPayment') &&
+        tx.transactionType === 'Invoice') &&
       (tx.docNumber === null || tx.docNumber.trim() === '')
     ) {
       pushFinding(
@@ -65,7 +64,7 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
     if (
       tx.privateNote?.toLowerCase().includes('transfer') &&
       tx.transactionType === 'Purchase' &&
-      tx.postingAccounts.some((account) => account.toLowerCase().includes('expenses'))
+      tx.postingAccounts.some((account) => account.toLowerCase().includes('expense'))
     ) {
       pushFinding(
         findings,

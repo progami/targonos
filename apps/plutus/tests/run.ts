@@ -2606,4 +2606,27 @@ test('audit flags transfer-like expenses posted to p-and-l accounts', () => {
   ]);
 });
 
+test('audit does not require doc number for transfer transactions', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Transfer',
+    transactionId: 'T1',
+    txnDate: '2026-04-01',
+    amount: 250,
+    currency: 'USD',
+    counterparty: 'Operating account',
+    docNumber: null,
+    privateNote: 'Owner funding move',
+    dueDate: null,
+    postingAccounts: ['Assets:Bank'],
+    lineDescriptions: ['Transfer between cash accounts'],
+    attachmentFileNames: [],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
+});
+
 process.stdout.write('All tests passed.\n');
