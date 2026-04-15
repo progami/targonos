@@ -10,6 +10,7 @@ export type SettlementListRowViewModel = {
   title: string;
   subtitle: string;
   statusText: PlutusSettlementStatus;
+  warningText: string | null;
 };
 
 export type SettlementListRowViewModelInput = {
@@ -21,6 +22,7 @@ export type SettlementListRowViewModelInput = {
   plutusStatus: PlutusSettlementStatus;
   splitCount: number;
   isSplit: boolean;
+  hasInconsistency: boolean;
   children: Array<{ docNumber: string }>;
 };
 
@@ -162,6 +164,7 @@ export function buildSettlementListRowViewModel(input: SettlementListRowViewMode
     title,
     subtitle: subtitleParts.join(' · '),
     statusText: input.plutusStatus,
+    warningText: input.hasInconsistency ? 'Child posting states need review' : null,
   };
 }
 

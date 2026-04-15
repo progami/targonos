@@ -332,6 +332,7 @@ test('buildSettlementListRowViewModel keeps split settlements on one row with on
     plutusStatus: 'Pending',
     splitCount: 2,
     isSplit: true,
+    hasInconsistency: false,
     children: [
       { docNumber: 'UK-260327-260331-S1-A' },
       { docNumber: 'UK-260327-260331-S1-B' },
@@ -353,11 +354,33 @@ test('buildSettlementListRowViewModel keeps non-split settlements to one seconda
     plutusStatus: 'Processed',
     splitCount: 1,
     isSplit: false,
+    hasInconsistency: false,
     children: [{ docNumber: 'UK-260213-260227-S1' }],
   } as const;
 
   const view = buildSettlementListRowViewModel(row);
   assert.equal(view.subtitle, 'Amazon.co.uk');
+});
+
+test('buildSettlementListRowViewModel carries a warning when child posting states disagree', () => {
+  const row = {
+    sourceSettlementId: 'EG-hidden-source-id',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-03-27',
+    periodEnd: '2026-04-10',
+    settlementTotal: 0,
+    plutusStatus: 'Pending',
+    splitCount: 2,
+    isSplit: true,
+    hasInconsistency: true,
+    children: [
+      { docNumber: 'UK-260327-260331-S1-A' },
+      { docNumber: 'UK-260327-260331-S1-B' },
+    ],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.warningText, 'Child posting states need review');
 });
 
 test('buildSettlementPostingSectionViewModels orders child postings chronologically and carries inline blocking state', () => {

@@ -834,6 +834,11 @@ export default function SettlementsPage() {
                             <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem', mt: 0.25 }}>
                               {rowView.subtitle}
                             </Typography>
+                            {rowView.warningText !== null && (
+                              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'warning.dark', fontWeight: 600 }}>
+                                {rowView.warningText}
+                              </Typography>
+                            )}
                           </Box>
                         </MuiTableCell>
                         <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>

@@ -308,6 +308,7 @@ export default function ParentSettlementDetailPage() {
             plutusStatus: data.settlement.plutusStatus,
             splitCount: data.settlement.splitCount,
             isSplit: data.settlement.isSplit,
+            hasInconsistency: data.settlement.hasInconsistency,
             children: data.children.map((child) => ({ docNumber: child.docNumber })),
           })
         : null,
