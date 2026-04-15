@@ -190,6 +190,7 @@ function serviceFeeMemo(feeType: string): string | null {
   if (feeType === 'AmazonUpstreamProcessingFee') return 'Amazon FBA Fees - AWD Processing Fee';
   if (feeType === 'AmazonUpstreamStorageTransportationFee') return 'Amazon FBA Fees - AWD Transportation Fee';
   if (feeType === 'FBAPerUnitFulfillmentFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment';
+  if (feeType === 'FBADisposalFee') return 'Amazon FBA Fees - FBA Pick & Pack Fee Adjustment';
   if (feeType === 'FBAStorageFee') return 'Amazon Storage Fees - Storage Fee';
   if (feeType === 'STARStorageFee') return 'Amazon Storage Fees - AWD Storage Fee';
   if (feeType === 'FBAWeightBasedFee') return null;
@@ -206,6 +207,8 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
     return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';
   if (type === 'FREE_REPLACEMENT_REFUND_ITEMS')
     return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Free Replacement Refund Items';
+  if (type === 'COMPENSATED_CLAWBACK')
+    return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Compensated Clawback';
   return null;
 }
 
@@ -542,6 +545,75 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
       description: memo,
       netCents: cents,
     });
+  }
+
+  // Removal shipment liquidations
+  for (const removal of input.events.RemovalShipmentEventList ?? []) {
+    const postedDate = requirePostedDate(removal.PostedDate, 'RemovalShipmentEvent');
+    const localIsoDay = isoTimestampToZonedIsoDay(postedDate, timeZone, 'RemovalShipmentEvent.PostedDate');
+    const segment = requireSegmentForIsoDay(localIsoDay);
+
+    const transactionType = typeof removal.TransactionType === 'string' ? removal.TransactionType : '';
+    if (transactionType !== 'CUSTOMER_RETURN_BASED_WHOLESALE_LIQUIDATION') {
+      throw new Error(`Unhandled removal shipment transaction type: ${transactionType}`);
+    }
+
+    const orderId = typeof removal.OrderId === 'string' ? removal.OrderId : '';
+    const items = removal.RemovalShipmentItemList ?? [];
+    for (const item of items) {
+      const skuRaw = typeof item.FulfillmentNetworkSKU === 'string' ? item.FulfillmentNetworkSKU : '';
+      const qty = typeof item.Quantity === 'number' && Number.isInteger(item.Quantity) ? item.Quantity : 0;
+
+      const taxAmount = item.TaxAmount;
+      if (taxAmount) {
+        const taxCents = moneyToCents(taxAmount, 'Removal shipment tax amount');
+        if (taxCents !== 0) throw new Error(`Unhandled nonzero removal shipment tax amount: ${taxCents}`);
+      }
+
+      const taxWithheld = item.TaxWithheld;
+      if (taxWithheld) {
+        const withheldCents = moneyToCents(taxWithheld, 'Removal shipment tax withheld');
+        if (withheldCents !== 0) throw new Error(`Unhandled nonzero removal shipment tax withheld: ${withheldCents}`);
+      }
+
+      const revenue = item.Revenue;
+      if (revenue) {
+        const cents = moneyToCents(revenue, 'Removal shipment revenue');
+        if (cents !== 0) {
+          const memo = 'Amazon Sales - Removal Shipment Revenue';
+          addCents(segment.memoTotalsCents, memo, cents);
+          segment.auditRows.push({
+            invoiceId: segment.docNumber,
+            market: 'us',
+            date: localIsoDay,
+            orderId,
+            sku: skuRaw,
+            quantity: qty,
+            description: memo,
+            netCents: cents,
+          });
+        }
+      }
+
+      const feeAmount = item.FeeAmount;
+      if (feeAmount) {
+        const cents = moneyToCents(feeAmount, 'Removal shipment fee amount');
+        if (cents !== 0) {
+          const memo = 'Amazon FBA Fees - Removal Shipment Fee';
+          addCents(segment.memoTotalsCents, memo, cents);
+          segment.auditRows.push({
+            invoiceId: segment.docNumber,
+            market: 'us',
+            date: localIsoDay,
+            orderId,
+            sku: skuRaw,
+            quantity: 0,
+            description: memo,
+            netCents: cents,
+          });
+        }
+      }
+    }
   }
 
   // Service fees (no PostedDate; assign to last segment)

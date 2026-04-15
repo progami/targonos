@@ -1210,6 +1210,103 @@ test('buildUsSettlementDraftFromSpApiFinances maps free replacement refund item 
   );
 });
 
+test('buildUsSettlementDraftFromSpApiFinances maps compensated clawback adjustments', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-COMPENSATED-CLAWBACK-1',
+    eventGroupId: 'GROUP-COMPENSATED-CLAWBACK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -4.26 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          AdjustmentType: 'COMPENSATED_CLAWBACK',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -4.26 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get(
+      'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Compensated Clawback',
+    ),
+    -426,
+  );
+});
+
+test('buildUsSettlementDraftFromSpApiFinances maps FBA disposal service fees', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-FBA-DISPOSAL-1',
+    eventGroupId: 'GROUP-FBA-DISPOSAL-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -2.27 },
+    },
+    events: {
+      ServiceFeeEventList: [
+        {
+          FeeList: [
+            {
+              FeeType: 'FBADisposalFee',
+              FeeAmount: { CurrencyCode: 'USD', CurrencyAmount: -2.27 },
+            },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon FBA Fees - FBA Pick & Pack Fee Adjustment'), -227);
+});
+
+test('buildUsSettlementDraftFromSpApiFinances maps removal shipment liquidation revenue and fees', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-REMOVAL-LIQUIDATION-1',
+    eventGroupId: 'GROUP-REMOVAL-LIQUIDATION-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: 0.24 },
+    },
+    events: {
+      RemovalShipmentEventList: [
+        {
+          OrderId: 'ORDER-REMOVAL-LIQUIDATION-1',
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          TransactionType: 'CUSTOMER_RETURN_BASED_WHOLESALE_LIQUIDATION',
+          RemovalShipmentItemList: [
+            {
+              FulfillmentNetworkSKU: 'FNSKU-REMOVAL-1',
+              Quantity: 1,
+              FeeAmount: { CurrencyCode: 'USD', CurrencyAmount: -0.46 },
+              Revenue: { CurrencyCode: 'USD', CurrencyAmount: 0.7 },
+              TaxAmount: { CurrencyCode: 'USD', CurrencyAmount: 0 },
+              TaxWithheld: { CurrencyCode: 'USD', CurrencyAmount: 0 },
+            },
+          ],
+        },
+      ],
+    } as any,
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon Sales - Removal Shipment Revenue'), 70);
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon FBA Fees - Removal Shipment Fee'), -46);
+});
+
 test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-UK-1',
