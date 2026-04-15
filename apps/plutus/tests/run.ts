@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -131,10 +130,6 @@ function withDatabaseUrl(databaseUrl: string | undefined, fn: () => void) {
   }
 }
 
-function readAppFile(...segments: string[]) {
-  return readFileSync(path.join(process.cwd(), ...segments), 'utf8');
-}
-
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('Amazon.com'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('amazon.co.uk'), 'amazon.co.uk');
@@ -148,6 +143,12 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('cashflow snapshot module remains safe for the Node refresh worker', () => {
+  const snapshotSource = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(snapshotSource, /^import ['"]server-only['"];?$/m);
 });
 
 test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
@@ -173,12 +174,12 @@ test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
 });
 
 test('cashflow snapshot server-only guard stays out of standalone worker path', () => {
-  const snapshotModule = readAppFile('lib/plutus/cashflow/snapshot.ts');
-  const snapshotServerModule = readAppFile('lib/plutus/cashflow/snapshot.server.ts');
-  const workerModule = readAppFile('scripts/cashflow-refresh-worker.ts');
-  const snapshotRoute = readAppFile('app/api/plutus/cashflow/snapshot/route.ts');
-  const exportRoute = readAppFile('app/api/plutus/cashflow/export/route.ts');
-  const configRoute = readAppFile('app/api/plutus/cashflow/config/route.ts');
+  const snapshotModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
+  const snapshotServerModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.server.ts', import.meta.url), 'utf8');
+  const workerModule = readFileSync(new URL('../scripts/cashflow-refresh-worker.ts', import.meta.url), 'utf8');
+  const snapshotRoute = readFileSync(new URL('../app/api/plutus/cashflow/snapshot/route.ts', import.meta.url), 'utf8');
+  const exportRoute = readFileSync(new URL('../app/api/plutus/cashflow/export/route.ts', import.meta.url), 'utf8');
+  const configRoute = readFileSync(new URL('../app/api/plutus/cashflow/config/route.ts', import.meta.url), 'utf8');
 
   assert.equal(snapshotModule.includes("import 'server-only';"), false);
   assert.equal(snapshotServerModule.includes("import 'server-only';"), true);
