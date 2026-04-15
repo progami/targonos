@@ -2664,6 +2664,32 @@ test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and att
   assert.deepEqual(normalized.attachmentFileNames, ['bitwarden-1093.txt']);
 });
 
+test('normalizePurchaseForAudit preserves item-based accounts and omits missing descriptions', () => {
+  const normalized = normalizePurchaseForAudit(
+    {
+      Id: '1094',
+      TxnDate: '2026-04-07',
+      TotalAmt: 42,
+      PaymentType: 'CreditCard',
+      DocNumber: 'BITWARDEN-20260407',
+      PrivateNote: 'Bitwarden follow-up purchase.',
+      EntityRef: { value: '76', name: 'Bitwarden' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 42,
+          ItemBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Software & apps' } },
+        },
+      ],
+      SyncToken: '1',
+    },
+    ['bitwarden-1094.txt'],
+  );
+
+  assert.deepEqual(normalized.postingAccounts, ['Office expenses:Software & apps']);
+  assert.deepEqual(normalized.lineDescriptions, []);
+});
+
 test('normalizeJournalEntryForAudit captures line descriptions and control-account usage', () => {
   const normalized = normalizeJournalEntryForAudit(
     {

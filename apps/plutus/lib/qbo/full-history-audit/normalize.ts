@@ -2,9 +2,20 @@ import type { QboJournalEntry, QboPurchase } from '@/lib/qbo/api';
 import type { NormalizedAuditTransaction } from './types';
 
 function collectPurchasePostingAccounts(purchase: QboPurchase): string[] {
-  return (purchase.Line ?? [])
-    .map((line) => line.AccountBasedExpenseLineDetail?.AccountRef.name ?? '')
-    .filter((account) => account.length > 0);
+  const accounts: string[] = [];
+
+  for (const line of purchase.Line ?? []) {
+    const accountName =
+      line.AccountBasedExpenseLineDetail?.AccountRef.name ??
+      line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
+      null;
+
+    if (accountName !== null) {
+      accounts.push(accountName);
+    }
+  }
+
+  return accounts;
 }
 
 function collectJournalEntryPostingAccounts(journalEntry: QboJournalEntry): string[] {
@@ -12,7 +23,15 @@ function collectJournalEntryPostingAccounts(journalEntry: QboJournalEntry): stri
 }
 
 function collectLineDescriptions(lines: Array<{ Description?: string }>): string[] {
-  return lines.map((line) => line.Description ?? '');
+  const descriptions: string[] = [];
+
+  for (const line of lines) {
+    if (line.Description !== undefined) {
+      descriptions.push(line.Description);
+    }
+  }
+
+  return descriptions;
 }
 
 export function normalizePurchaseForAudit(
