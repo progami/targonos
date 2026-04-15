@@ -380,6 +380,7 @@ test('buildSettlementPostingSectionViewModels orders child postings chronologica
 
   const sections = buildSettlementPostingSectionViewModels(detail, null);
   assert.equal(sections[0]?.docNumber, 'UK-260327-260331-S1-A');
+  assert.equal(sections[0]?.invoiceId, 'INV-1');
   assert.equal(sections[1]?.blockMessage, 'No audit invoice matched');
 });
 

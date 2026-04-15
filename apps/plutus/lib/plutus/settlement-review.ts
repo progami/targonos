@@ -176,7 +176,12 @@ export function buildSettlementPostingSectionViewModels(
         postedDate: child.postedDate,
         settlementTotal: child.settlementTotal,
         plutusStatus: child.plutusStatus,
-        invoiceId: child.processing?.invoiceId ?? child.rollback?.invoiceId ?? previewChild?.invoiceId ?? null,
+        invoiceId:
+          (child.invoiceResolution.status === 'resolved' ? child.invoiceResolution.invoiceId : null) ??
+          child.processing?.invoiceId ??
+          child.rollback?.invoiceId ??
+          previewChild?.invoiceId ??
+          null,
         blockMessage: blockMessages[0] ?? null,
         blockMessages,
       };
