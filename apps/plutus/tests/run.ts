@@ -2661,6 +2661,7 @@ test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and att
 
   assert.equal(normalized.counterparty, 'Bitwarden');
   assert.deepEqual(normalized.postingAccounts, ['Office expenses:Software & apps']);
+  assert.deepEqual(normalized.lineDescriptions, ['BITWARDEN']);
   assert.deepEqual(normalized.attachmentFileNames, ['bitwarden-1093.txt']);
 });
 
@@ -2718,7 +2719,10 @@ test('normalizeJournalEntryForAudit captures line descriptions and control-accou
 
   assert.equal(normalized.transactionType, 'JournalEntry');
   assert.equal(normalized.postingAccounts.includes('Plutus Settlement Control'), true);
-  assert.equal(normalized.lineDescriptions.length, 2);
+  assert.deepEqual(normalized.lineDescriptions, [
+    'Temporary suspense for Amazon-originated Chase USD receipt pending settlement sync',
+    'Offset to Plutus Settlement Control until final Amazon settlement journal is regenerated',
+  ]);
 });
 
 test('mergeAttachmentRefs maps attachables back to transaction ids', () => {
