@@ -1,8 +1,23 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import type { Page } from '@playwright/test'
+import { expect, type Page, type Response } from '@playwright/test'
 import { encode } from 'next-auth/jwt'
+
+type CriticalResponseRecord = {
+  method: string
+  resourceType: string
+  status: number
+  url: string
+}
+
+const criticalStatusCodes = new Set([401, 403, 500, 502])
+const trackedResourceTypes = new Set(['document', 'fetch', 'xhr'])
+const hostedErrorMarkers = [
+  'Bad gateway',
+  'Error code 502',
+  "Unexpected token '<'",
+] as const
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -18,18 +33,12 @@ function requireEnv(name: string): string {
   return trimmed
 }
 
-function requireSharedSecret(): string {
-  const nextAuthSecret = process.env.NEXTAUTH_SECRET
-  if (typeof nextAuthSecret === 'string' && nextAuthSecret.trim() !== '') {
-    return nextAuthSecret.trim()
-  }
+function getHostedPortalBaseUrl() {
+  return requireEnv('PORTAL_BASE_URL')
+}
 
-  const portalAuthSecret = process.env.PORTAL_AUTH_SECRET
-  if (typeof portalAuthSecret === 'string' && portalAuthSecret.trim() !== '') {
-    return portalAuthSecret.trim()
-  }
-
-  throw new Error('NEXTAUTH_SECRET or PORTAL_AUTH_SECRET must be defined for hosted portal smoke tests.')
+function getHostedPortalOrigin() {
+  return new URL(getHostedPortalBaseUrl()).origin
 }
 
 function buildPortalAuthz() {
@@ -50,8 +59,7 @@ function buildPortalAuthz() {
 }
 
 function buildScreenshotDirectory(): string {
-  const portalBaseUrl = requireEnv('PORTAL_BASE_URL')
-  const portalHost = new URL(portalBaseUrl).hostname
+  const portalHost = new URL(getHostedPortalBaseUrl()).hostname
   const outputDir = path.join(process.cwd(), '.codex-artifacts', 'hosted-smoke', portalHost)
   fs.mkdirSync(outputDir, { recursive: true })
   return outputDir
@@ -60,7 +68,7 @@ function buildScreenshotDirectory(): string {
 async function buildSessionCookie(portalBaseUrl: string) {
   const authz = buildPortalAuthz()
   const sessionCookieName = '__Secure-next-auth.session-token'
-  const secret = requireSharedSecret()
+  const secret = requireEnv('NEXTAUTH_SECRET')
   const activeTenant = requireEnv('E2E_ACTIVE_TENANT')
   const domain = new URL(portalBaseUrl).hostname
   const token = await encode({
@@ -93,7 +101,7 @@ async function buildSessionCookie(portalBaseUrl: string) {
 async function buildActiveTenantCookie(portalBaseUrl: string) {
   const appId = 'talos'
   const cookieName = `__Secure-targon.active-tenant.${appId}`
-  const secret = requireSharedSecret()
+  const secret = requireEnv('NEXTAUTH_SECRET')
   const domain = new URL(portalBaseUrl).hostname
   const value = await encode({
     token: { activeTenant: requireEnv('E2E_ACTIVE_TENANT') },
@@ -125,17 +133,91 @@ function buildTalosTenantCookie(portalBaseUrl: string) {
 }
 
 export async function loginToHostedPortal(page: Page) {
-  const portalBaseUrl = requireEnv('PORTAL_BASE_URL')
   const context = page.context()
   await context.clearCookies()
   await context.addCookies([
-    await buildSessionCookie(portalBaseUrl),
-    await buildActiveTenantCookie(portalBaseUrl),
-    buildTalosTenantCookie(portalBaseUrl),
+    await buildSessionCookie(getHostedPortalBaseUrl()),
+    await buildActiveTenantCookie(getHostedPortalBaseUrl()),
+    buildTalosTenantCookie(getHostedPortalBaseUrl()),
   ])
-  await page.goto(`${portalBaseUrl}/`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${getHostedPortalBaseUrl()}/`, { waitUntil: 'domcontentloaded' })
 }
 
 export function hostedScreenshotPath(routeName: string): string {
   return path.join(buildScreenshotDirectory(), `${routeName}.png`)
+}
+
+export function hostedRoute(pathname: string): string {
+  return new URL(pathname, getHostedPortalBaseUrl()).toString()
+}
+
+export function hostedPortalBaseUrl() {
+  return getHostedPortalBaseUrl()
+}
+
+export function hostedVersionBadge(page: Page) {
+  return page.getByRole('link', { name: /v\d+\.\d+\.\d+/i }).first()
+}
+
+export async function assertHostedVersionBadge(page: Page) {
+  await expect(hostedVersionBadge(page)).toBeVisible({ timeout: 20_000 })
+}
+
+export async function assertNoHostedErrorMarkers(page: Page) {
+  const bodyText = await page.locator('body').innerText()
+  for (const marker of hostedErrorMarkers) {
+    expect(bodyText).not.toContain(marker)
+  }
+}
+
+export async function assertNoHostedAuthRedirect(page: Page) {
+  const currentUrl = page.url()
+  expect(currentUrl).not.toContain('/login')
+  expect(currentUrl).not.toContain('/no-access')
+}
+
+export function installHostedResponseTracker(page: Page) {
+  const criticalResponses: CriticalResponseRecord[] = []
+
+  const handleResponse = (response: Response) => {
+    const request = response.request()
+    const resourceType = request.resourceType()
+    if (!trackedResourceTypes.has(resourceType)) {
+      return
+    }
+
+    const responseUrl = new URL(response.url())
+    if (responseUrl.origin !== getHostedPortalOrigin()) {
+      return
+    }
+
+    const status = response.status()
+    if (!criticalStatusCodes.has(status)) {
+      return
+    }
+
+    criticalResponses.push({
+      method: request.method(),
+      resourceType,
+      status,
+      url: response.url(),
+    })
+  }
+
+  page.on('response', handleResponse)
+
+  return {
+    assertNone() {
+      expect(
+        criticalResponses,
+        `Hosted app returned critical responses: ${JSON.stringify(criticalResponses, null, 2)}`,
+      ).toEqual([])
+    },
+    reset() {
+      criticalResponses.length = 0
+    },
+    dispose() {
+      page.off('response', handleResponse)
+    },
+  }
 }

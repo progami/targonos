@@ -95,6 +95,24 @@ jobs:
           pnpm --filter @targon/auth test
           node --test ecosystem.topology.test.cjs
           pnpm run test:auth-topology
+      - name: Run SSO auth smoke tests
+        run: pnpm --filter @targon/sso test:auth-smoke
+      - name: Run hosted cross-app auth smoke
+        if: runner.os == 'macOS' && vars.USE_SELF_HOSTED == 'true'
+        env:
+          PORTAL_BASE_URL: https://dev-os.targonglobal.com
+          E2E_PORTAL_USER_ID: user-jarrar
+          E2E_PORTAL_EMAIL: jarrar@targonglobal.com
+          E2E_PORTAL_NAME: Jarrar Amjad
+          E2E_ACTIVE_TENANT: US
+        run: |
+          PM2_RUNTIME_JSON="$(pm2 jlist)"
+          NEXTAUTH_SECRET="$(printf '%s' "$PM2_RUNTIME_JSON" | node -e "const fs=require('fs'); const processes=JSON.parse(fs.readFileSync(0,'utf8')); const app=processes.find((entry)=>entry.name==='dev-targonos'); if (!app) { throw new Error('dev-targonos pm2 process not found'); } const secret=app.pm2_env?.NEXTAUTH_SECRET; if (typeof secret !== 'string' || secret.trim() === '') { throw new Error('dev-targonos NEXTAUTH_SECRET is missing'); } process.stdout.write(secret.trim());")"
+          PORTAL_DB_URL="$(printf '%s' "$PM2_RUNTIME_JSON" | node -e "const fs=require('fs'); const processes=JSON.parse(fs.readFileSync(0,'utf8')); const app=processes.find((entry)=>entry.name==='dev-targonos'); if (!app) { throw new Error('dev-targonos pm2 process not found'); } const value=app.pm2_env?.PORTAL_DB_URL; if (typeof value !== 'string' || value.trim() === '') { throw new Error('dev-targonos PORTAL_DB_URL is missing'); } process.stdout.write(value.trim());")"
+          export NEXTAUTH_SECRET
+          export PORTAL_DB_URL
+          pnpm exec tsx apps/sso/scripts/ensure-hosted-smoke-user.ts
+          pnpm --filter @targon/sso test:hosted-smoke
       - name: Assert portal build/runtime topology
         run: |
           pnpm --filter @targon/sso build
