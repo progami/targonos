@@ -2636,6 +2636,43 @@ test('audit does not require doc number for transfer transactions', () => {
   assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
 });
 
+test('audit keeps the original transfer mispost guard purchase-only and expense-based', () => {
+  const purchaseTx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'P-transfer',
+    txnDate: '2026-04-01',
+    amount: 250,
+    currency: 'USD',
+    counterparty: 'Operating account',
+    docNumber: 'T-1',
+    privateNote: 'Transfer to Wise',
+    dueDate: null,
+    postingAccounts: ['Office expense:Software'],
+    lineDescriptions: ['Transfer between cash accounts'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const transferTx: NormalizedAuditTransaction = {
+    ...purchaseTx,
+    transactionType: 'Transfer',
+    transactionId: 'T-transfer',
+  };
+
+  const purchaseFindings = classifyAuditExceptions([purchaseTx]);
+  const transferFindings = classifyAuditExceptions([transferTx]);
+  assert.equal(
+    purchaseFindings.some((finding) => finding.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'),
+    true,
+  );
+  assert.equal(
+    transferFindings.some((finding) => finding.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'),
+    false,
+  );
+});
+
 test('audit flags likely duplicates by date amount and counterparty', () => {
   const input: NormalizedAuditTransaction[] = [
     {
@@ -2689,7 +2726,7 @@ test('audit flags unresolved settlement-control usage', () => {
     docNumber: 'AMZN-1',
     privateNote: 'Temporary suspense entry',
     dueDate: null,
-    postingAccounts: ['Plutus Settlement Control'],
+    postingAccounts: ['plutus settlement control'],
     lineDescriptions: ['Temporary suspense entry'],
     attachmentFileNames: ['support.txt'],
     isInReconciledPeriod: true,
@@ -2699,6 +2736,29 @@ test('audit flags unresolved settlement-control usage', () => {
 
   const findings = classifyAuditExceptions([tx]);
   assert.equal(findings.some((f) => f.ruleId === 'UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY'), true);
+});
+
+test('audit flags bank fee activity from note and line description cues', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'F1',
+    txnDate: '2026-04-02',
+    amount: 17.5,
+    currency: 'USD',
+    counterparty: 'Capital One',
+    docNumber: 'FEE-1',
+    privateNote: 'Monthly card fee for account maintenance',
+    dueDate: null,
+    postingAccounts: ['Other expenses:Misc'],
+    lineDescriptions: ['Card service fee'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.equal(findings.some((f) => f.ruleId === 'BANK_FEE_MISCLASSIFIED'), true);
 });
 
 test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and attachments', () => {

@@ -1,6 +1,25 @@
 import type { AuditException, NormalizedAuditTransaction } from './types';
 
 const FOREIGN_CURRENCY_CODES = ['USD', 'GBP', 'EUR', 'CAD', 'AUD', 'JPY', 'CHF', 'NZD', 'MXN'];
+const FEE_CUES = ['fee', 'fees', 'service charge', 'service charges', 'monthly fee', 'card fee', 'processing fee', 'maintenance fee'];
+const BANK_CARD_CUES = [
+  'bank',
+  'card',
+  'credit card',
+  'debit card',
+  'visa',
+  'mastercard',
+  'amex',
+  'american express',
+  'chase',
+  'capital one',
+  'wells fargo',
+  'bank of america',
+  'citibank',
+  'paypal',
+  'stripe',
+  'square',
+];
 
 function pushFinding(
   out: AuditException[],
@@ -30,15 +49,15 @@ function pushFinding(
   });
 }
 
-function looksTransferLike(tx: NormalizedAuditTransaction): boolean {
-  const text = `${tx.privateNote || ''} ${tx.lineDescriptions.join(' ')}`.toLowerCase();
-  return text.includes('transfer') || text.includes('wise') || text.includes('funding');
-}
-
 function containsControlAccount(tx: NormalizedAuditTransaction): boolean {
-  return tx.postingAccounts.some((account) =>
-    account.includes('Settlement Control') || account.includes('Clearing') || account.includes('Suspense'),
-  );
+  return tx.postingAccounts.some((account) => {
+    const lower = account.toLowerCase();
+    return (
+      lower.includes('settlement control') ||
+      lower.includes('clearing') ||
+      lower.includes('suspense')
+    );
+  });
 }
 
 function duplicateKey(tx: NormalizedAuditTransaction): string {
@@ -53,6 +72,13 @@ function isOwnerEquityAccount(account: string): boolean {
 function isBankFeeAccount(account: string): boolean {
   const lower = account.toLowerCase();
   return lower.includes('bank fees') || lower.includes('service charges');
+}
+
+function isLikelyBankCardFee(tx: NormalizedAuditTransaction): boolean {
+  const text = `${tx.counterparty || ''} ${tx.privateNote || ''} ${tx.lineDescriptions.join(' ')}`.toLowerCase();
+  const hasFeeCue = FEE_CUES.some((cue) => text.includes(cue));
+  const hasBankCardCue = BANK_CARD_CUES.some((cue) => text.includes(cue));
+  return hasFeeCue && hasBankCardCue;
 }
 
 function mentionsDifferentCurrency(tx: NormalizedAuditTransaction): boolean {
@@ -110,6 +136,23 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
       );
     }
 
+    if (
+      tx.privateNote?.toLowerCase().includes('transfer') &&
+      tx.transactionType === 'Purchase' &&
+      tx.postingAccounts.some((account) => account.toLowerCase().includes('expense'))
+    ) {
+      pushFinding(
+        findings,
+        tx,
+        'TRANSFER_LIKE_ACTIVITY_MISPOSTED',
+        'chart_of_accounts_sanity',
+        'Critical',
+        'Transfer-like activity is posted to a P&L account.',
+        'Rebuild as transfer-style activity.',
+        'not_required',
+      );
+    }
+
     if (duplicateCounts.get(duplicateKey(tx))! > 1) {
       pushFinding(
         findings,
@@ -152,11 +195,7 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
       );
     }
 
-    if (
-      tx.counterparty?.toLowerCase().includes('chase') &&
-      tx.lineDescriptions.join(' ').toLowerCase().includes('fee') &&
-      !tx.postingAccounts.some((account) => isBankFeeAccount(account))
-    ) {
+    if (isLikelyBankCardFee(tx) && !tx.postingAccounts.some((account) => isBankFeeAccount(account))) {
       pushFinding(
         findings,
         tx,
@@ -182,18 +221,6 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
       );
     }
 
-    if (looksTransferLike(tx) && tx.postingAccounts.some((account) => account.toLowerCase().includes('expenses'))) {
-      pushFinding(
-        findings,
-        tx,
-        'TRANSFER_LIKE_ACTIVITY_MISPOSTED',
-        'chart_of_accounts_sanity',
-        'Critical',
-        'Transfer-like activity is posted to a P&L account.',
-        'Rebuild as transfer-style activity.',
-        'not_required',
-      );
-    }
   }
 
   return findings;
