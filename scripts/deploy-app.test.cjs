@@ -92,3 +92,48 @@ test('production deploys prefer .env.production before .env.local', () => {
     /ensure_app_env_loaded\(\)[\s\S]*?else[\s\S]*?candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
   )
 })
+
+test('pm2 starts scrub workflow-inherited database and hosted runtime env', () => {
+  const match = deployScript.match(/run_pm2_sanitized\(\) \{[\s\S]*?\n\}/)
+  assert.ok(match, 'run_pm2_sanitized block should exist')
+  const block = match[0]
+
+  for (const key of [
+    'DATABASE_URL',
+    'DATABASE_URL_US',
+    'DATABASE_URL_UK',
+    'PORTAL_DB_URL',
+    'PGHOSTADDR',
+    'PGPASSFILE',
+    'PGSERVICE',
+    'PGSERVICEFILE',
+    'PGSSLMODE',
+    'PGSSLCERT',
+    'PGSSLKEY',
+    'PGSSLROOTCERT',
+    'PGUSER',
+    'PGPASSWORD',
+    'PGDATABASE',
+    'PGHOST',
+    'PGPORT',
+    'PGOPTIONS',
+    'NODE_ENV',
+    'PORT',
+    'HOST',
+    'BASE_PATH',
+    'NEXT_PUBLIC_BASE_PATH',
+    'NEXT_PUBLIC_APP_URL',
+    'BASE_URL',
+    'PORTAL_AUTH_URL',
+    'NEXT_PUBLIC_PORTAL_AUTH_URL',
+    'PORTAL_APPS_BASE_URL',
+    'NEXT_PUBLIC_PORTAL_APPS_BASE_URL',
+    'NEXTAUTH_URL',
+    'PORTAL_AUTH_SECRET',
+    'NEXTAUTH_SECRET',
+    'COOKIE_DOMAIN',
+    'CSRF_ALLOWED_ORIGINS',
+  ]) {
+    assert.match(block, new RegExp(`${key}=\\s*\\\\`))
+  }
+})
