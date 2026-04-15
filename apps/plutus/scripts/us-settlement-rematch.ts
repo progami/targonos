@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { db } from '@/lib/db';
+import { db, dbTableIdentifier } from '@/lib/db';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -127,7 +127,9 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
-  const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
+  const auditDataRowTable = dbTableIdentifier('AuditDataRow');
+
+  const rows = await db.$queryRawUnsafe<AuditInvoiceRowSummary[]>(`
     SELECT "invoiceId",
            CASE
              WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
@@ -138,10 +140,10 @@ async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
            MIN("date") AS "minDate",
            MAX("date") AS "maxDate",
            ARRAY_AGG(DISTINCT "market") AS "markets"
-    FROM plutus."AuditDataRow"
+    FROM ${auditDataRowTable}
     GROUP BY "invoiceId", "marketplaceId"
     ORDER BY "invoiceId", "marketplaceId"
-  `;
+  `);
 
   return rows.flatMap((r) => {
     if (r.marketplaceId !== 'amazon.com' && r.marketplaceId !== 'amazon.co.uk') {

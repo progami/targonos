@@ -6,6 +6,7 @@ type GlobalWithPrisma = typeof globalThis & {
 
 const DEFAULT_SCHEMA = 'plutus';
 const APPLICATION_NAME = 'plutus';
+const POSTGRES_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function resolveDatasourceUrl() {
   const raw = process.env.DATABASE_URL;
@@ -21,6 +22,35 @@ function resolveDatasourceUrl() {
   } catch {
     return raw;
   }
+}
+
+export function getDatasourceSchema() {
+  const raw = process.env.DATABASE_URL;
+  if (raw === undefined) {
+    throw new Error('DATABASE_URL is required for Plutus database queries');
+  }
+  if (raw === '') {
+    throw new Error('DATABASE_URL is required for Plutus database queries');
+  }
+
+  const parsed = new URL(raw);
+  const schema = parsed.searchParams.get('schema');
+  if (schema === null || schema === '') {
+    throw new Error('DATABASE_URL must include a schema for Plutus database queries');
+  }
+  if (!POSTGRES_IDENTIFIER_RE.test(schema)) {
+    throw new Error(`Invalid database schema identifier: ${schema}`);
+  }
+
+  return schema;
+}
+
+export function dbTableIdentifier(tableName: string) {
+  if (!POSTGRES_IDENTIFIER_RE.test(tableName)) {
+    throw new Error(`Invalid database table identifier: ${tableName}`);
+  }
+
+  return `"${getDatasourceSchema()}"."${tableName}"`;
 }
 
 const globalForPrisma = globalThis as GlobalWithPrisma;

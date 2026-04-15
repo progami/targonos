@@ -9,6 +9,7 @@ import {
   formatAuditInvoiceResolutionMessage,
   resolveAuditInvoiceForSettlementChild,
 } from '../lib/plutus/audit-invoice-resolution';
+import { dbTableIdentifier, getDatasourceSchema } from '../lib/db';
 import {
   computeSaleCostFromAverage,
   createEmptyLedgerSnapshot,
@@ -77,6 +78,11 @@ import {
   groupSettlementChildren,
 } from '../lib/plutus/settlement-parents';
 import { getSettlementDisplayId } from '../lib/plutus/settlement-display';
+import {
+  buildSettlementListRowViewModel,
+  buildSettlementHistoryViewModel,
+  buildSettlementPostingSectionViewModels,
+} from '../lib/plutus/settlement-review';
 import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
 import {
   buildLegacySettlementApiPath,
@@ -104,6 +110,25 @@ function test(name: string, fn: () => void) {
   }
 }
 
+function withDatabaseUrl(databaseUrl: string | undefined, fn: () => void) {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = databaseUrl;
+  }
+
+  try {
+    fn();
+  } finally {
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+  }
+}
+
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('Amazon.com'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('amazon.co.uk'), 'amazon.co.uk');
@@ -117,6 +142,28 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
+    assert.equal(getDatasourceSchema(), 'plutus_dev');
+    assert.equal(dbTableIdentifier('AuditDataRow'), '"plutus_dev"."AuditDataRow"');
+  });
+});
+
+test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
+  withDatabaseUrl(undefined, () => {
+    assert.throws(() => getDatasourceSchema(), /DATABASE_URL is required/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db', () => {
+    assert.throws(() => getDatasourceSchema(), /must include a schema/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus-dev', () => {
+    assert.throws(() => getDatasourceSchema(), /Invalid database schema identifier/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
+    assert.throws(() => dbTableIdentifier('AuditDataRow;DROP'), /Invalid database table identifier/);
+  });
 });
 
 test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {
@@ -315,6 +362,238 @@ test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the 
     }),
     'UK-260130-260131-S1',
   );
+});
+
+test('buildSettlementListRowViewModel keeps split settlements on one row with one muted subline', () => {
+  const row = {
+    sourceSettlementId: 'EG-hidden-source-id',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-03-27',
+    periodEnd: '2026-04-10',
+    settlementTotal: 0,
+    plutusStatus: 'Pending',
+    splitCount: 2,
+    isSplit: true,
+    hasInconsistency: false,
+    children: [
+      { docNumber: 'UK-260327-260331-S1-A' },
+      { docNumber: 'UK-260327-260331-S1-B' },
+    ],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.title, 'UK-260327-260331-S1-A');
+  assert.equal(view.subtitle, 'Amazon.co.uk · split across month-end · 2 postings');
+});
+
+test('buildSettlementListRowViewModel keeps non-split settlements to one secondary label', () => {
+  const row = {
+    sourceSettlementId: 'UK-260213-260227-S1',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-02-13',
+    periodEnd: '2026-02-27',
+    settlementTotal: 4508.25,
+    plutusStatus: 'Processed',
+    splitCount: 1,
+    isSplit: false,
+    hasInconsistency: false,
+    children: [{ docNumber: 'UK-260213-260227-S1' }],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.subtitle, 'Amazon.co.uk');
+});
+
+test('buildSettlementListRowViewModel carries a warning when child posting states disagree', () => {
+  const row = {
+    sourceSettlementId: 'EG-hidden-source-id',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-03-27',
+    periodEnd: '2026-04-10',
+    settlementTotal: 0,
+    plutusStatus: 'Pending',
+    splitCount: 2,
+    isSplit: true,
+    hasInconsistency: true,
+    children: [
+      { docNumber: 'UK-260327-260331-S1-A' },
+      { docNumber: 'UK-260327-260331-S1-B' },
+    ],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.warningText, 'Child posting states need review');
+});
+
+test('buildSettlementPostingSectionViewModels orders child postings chronologically and carries inline blocking state', () => {
+  const detail = {
+    settlement: { sourceSettlementId: 'UK-260327-260331-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },
+    children: [
+      {
+        qboJournalEntryId: 'je-b',
+        docNumber: 'UK-260327-260331-S1-B',
+        periodStart: '2026-04-01',
+        periodEnd: '2026-04-10',
+        postedDate: '2026-04-10',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'unresolved', reason: 'none', candidateInvoiceIds: [] },
+        invoiceResolutionMessage: 'No audit invoice matched',
+        processing: null,
+        rollback: null,
+      },
+      {
+        qboJournalEntryId: 'je-a',
+        docNumber: 'UK-260327-260331-S1-A',
+        periodStart: '2026-03-27',
+        periodEnd: '2026-03-31',
+        postedDate: '2026-03-31',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-1', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+    ],
+    history: [],
+  } as const;
+
+  const sections = buildSettlementPostingSectionViewModels(detail, null);
+  assert.equal(sections[0]?.docNumber, 'UK-260327-260331-S1-A');
+  assert.equal(sections[0]?.invoiceId, 'INV-1');
+  assert.equal(sections[0]?.blockState, 'ready');
+  assert.equal(sections[1]?.blockMessage, 'No audit invoice matched');
+});
+
+test('buildSettlementPostingSectionViewModels preserves preview severity and shared section shape', () => {
+  const detail = {
+    settlement: { sourceSettlementId: 'UK-260401-260410-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },
+    children: [
+      {
+        qboJournalEntryId: 'je-warning',
+        docNumber: 'UK-260401-260405-S1-A',
+        periodStart: '2026-04-01',
+        periodEnd: '2026-04-05',
+        postedDate: '2026-04-05',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-KEEP', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+      {
+        qboJournalEntryId: 'je-blocked',
+        docNumber: 'UK-260406-260410-S1-B',
+        periodStart: '2026-04-06',
+        periodEnd: '2026-04-10',
+        postedDate: '2026-04-10',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-BLOCKED', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+    ],
+    history: [],
+  } as const;
+
+  const preview = {
+    children: [
+      {
+        qboJournalEntryId: 'je-warning',
+        docNumber: 'UK-260401-260405-S1-A',
+        invoiceId: 'INV-PREVIEW-WARN',
+        preview: {
+          blocks: [{ code: 'PNL_ALLOCATION_WARNING', message: 'Preview warning' }],
+          sales: [],
+          returns: [],
+          cogsJournalEntry: { lines: [] },
+          pnlJournalEntry: { lines: [] },
+        },
+      },
+      {
+        qboJournalEntryId: 'je-blocked',
+        docNumber: 'UK-260406-260410-S1-B',
+        invoiceId: 'INV-PREVIEW-BLOCKED',
+        preview: {
+          blocks: [{ code: 'MISSING_ACCOUNT_MAPPING', message: 'Preview blocked' }],
+          sales: [],
+          returns: [],
+          cogsJournalEntry: { lines: [] },
+          pnlJournalEntry: { lines: [] },
+        },
+      },
+    ],
+  } as const;
+
+  const sections = buildSettlementPostingSectionViewModels(detail, preview);
+  assert.equal(sections[0]?.invoiceId, 'INV-KEEP');
+  assert.equal(sections[0]?.blockState, 'warning');
+  assert.equal(sections[0]?.blocks[0]?.severity, 'warning');
+  assert.equal(sections[0]?.blocks[0]?.message, 'Preview warning');
+  assert.equal(sections[1]?.blockState, 'blocked');
+  assert.equal(sections[1]?.blocks[0]?.severity, 'blocked');
+  assert.equal(sections[1]?.blockMessage, 'Preview blocked');
+  assert.deepEqual(Object.keys(sections[0] ?? {}), Object.keys(sections[1] ?? {}));
+});
+
+test('buildSettlementHistoryViewModel returns compact timestamp-first rows', () => {
+  const rows = buildSettlementHistoryViewModel([
+    {
+      id: '1',
+      timestamp: '2026-04-10T06:04:22.000Z',
+      title: 'Processed',
+      description: 'Processed in Plutus',
+      childDocNumber: 'UK-260327-260331-S1-A',
+      kind: 'processed',
+    },
+  ]);
+
+  assert.equal(rows[0]?.timestampText.includes('2026'), true);
+  assert.equal(rows[0]?.message, 'Processed in Plutus · UK-260327-260331-S1-A');
+});
+
+test('buildSettlementHistoryViewModel orders compact rows newest-first', () => {
+  const history = buildSettlementHistoryViewModel([
+    {
+      id: 'h-1',
+      timestamp: '2026-04-05T12:30:00.000Z',
+      title: 'Processed in Plutus',
+      description: 'Matched to invoice INV-2.',
+      childDocNumber: 'UK-260401-260405-S1-A',
+      kind: 'processed',
+    },
+    {
+      id: 'h-2',
+      timestamp: '2026-04-06T12:30:00.000Z',
+      title: 'Rolled back in Plutus',
+      description: 'Previously processed with invoice INV-2.',
+      childDocNumber: 'UK-260406-260410-S1-B',
+      kind: 'rolled_back',
+    },
+    {
+      id: 'h-0',
+      timestamp: '2026-04-01T12:30:00.000Z',
+      title: 'Posting created',
+      description: 'Month-end posting UK-260401-260405-S1-A was posted to QBO.',
+      childDocNumber: 'UK-260401-260405-S1-A',
+      kind: 'posted',
+    },
+  ]);
+
+  assert.equal(history[0]?.id, 'h-2');
+  assert.equal(
+    history[0]?.message,
+    'Rolled back in Plutus · Previously processed with invoice INV-2. · UK-260406-260410-S1-B',
+  );
+  assert.equal(history[2]?.kind, 'posted');
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
