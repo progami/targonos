@@ -1,8 +1,8 @@
 import type { Page } from '@playwright/test'
 import { encode } from 'next-auth/jwt'
 
-export const portalBaseUrl = 'http://127.0.0.1:3200'
-export const talosBaseUrl = 'http://localhost:3201/operations/purchase-orders'
+export const portalBaseUrl = 'http://127.0.0.1:3320'
+export const talosBaseUrl = 'http://localhost:3321/operations/purchase-orders'
 export const demoEmail = 'e2e@targonglobal.com'
 export const sessionCookieName = 'targon.next-auth.session-token'
 const portalAuthSecret = 'playwright-portal-auth-secret-000000000000'
@@ -51,8 +51,7 @@ export async function seedPortalSession(page: Page) {
     {
       name: sessionCookieName,
       value: token,
-      domain: '127.0.0.1',
-      path: '/',
+      url: portalBaseUrl,
       httpOnly: true,
       secure: false,
       sameSite: 'Lax',
