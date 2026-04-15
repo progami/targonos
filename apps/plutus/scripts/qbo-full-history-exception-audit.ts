@@ -27,6 +27,15 @@ function parseArgs(argv: string[]) {
   return { outDir };
 }
 
+function getAttachmentFileNames(attachmentMap: Map<string, string[]>, transactionType: string, transactionId: string): string[] {
+  const attachmentFileNames = attachmentMap.get(`${transactionType}:${transactionId}`);
+  if (attachmentFileNames === undefined) {
+    return [];
+  }
+
+  return attachmentFileNames;
+}
+
 async function main() {
   const { outDir } = parseArgs(process.argv.slice(2));
   const activeConnection = await getActiveQboConnection();
@@ -39,16 +48,19 @@ async function main() {
   const attachmentMap = mergeAttachmentRefs(sourceData.attachables.rows);
   const normalized = [
     ...sourceData.purchases.rows.map((purchase) =>
-      normalizePurchaseForAudit(purchase, attachmentMap.get(`Purchase:${purchase.Id}`) || []),
+      normalizePurchaseForAudit(purchase, getAttachmentFileNames(attachmentMap, 'Purchase', purchase.Id)),
     ),
     ...sourceData.bills.rows.map((bill) =>
-      normalizeBillForAudit(bill, attachmentMap.get(`Bill:${bill.Id}`) || []),
+      normalizeBillForAudit(bill, getAttachmentFileNames(attachmentMap, 'Bill', bill.Id)),
     ),
     ...sourceData.journalEntries.rows.map((journalEntry) =>
-      normalizeJournalEntryForAudit(journalEntry, attachmentMap.get(`JournalEntry:${journalEntry.Id}`) || []),
+      normalizeJournalEntryForAudit(
+        journalEntry,
+        getAttachmentFileNames(attachmentMap, 'JournalEntry', journalEntry.Id),
+      ),
     ),
     ...sourceData.transfers.rows.map((transfer) =>
-      normalizeTransferForAudit(transfer, attachmentMap.get(`Transfer:${transfer.Id}`) || []),
+      normalizeTransferForAudit(transfer, getAttachmentFileNames(attachmentMap, 'Transfer', transfer.Id)),
     ),
   ];
 

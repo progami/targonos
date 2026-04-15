@@ -1,4 +1,4 @@
-import type { QboJournalEntry, QboPurchase } from '@/lib/qbo/api';
+import type { QboBill, QboJournalEntry, QboPurchase } from '@/lib/qbo/api';
 import type { NormalizedAuditTransaction } from './types';
 
 function collectPurchasePostingAccounts(purchase: QboPurchase): string[] {
@@ -20,6 +20,23 @@ function collectPurchasePostingAccounts(purchase: QboPurchase): string[] {
 
 function collectJournalEntryPostingAccounts(journalEntry: QboJournalEntry): string[] {
   return journalEntry.Line.map((line) => line.JournalEntryLineDetail.AccountRef.name ?? '');
+}
+
+function collectBillPostingAccounts(bill: QboBill): string[] {
+  const accounts: string[] = [];
+
+  for (const line of bill.Line ?? []) {
+    const accountName =
+      line.AccountBasedExpenseLineDetail?.AccountRef.name ??
+      line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
+      null;
+
+    if (accountName !== null) {
+      accounts.push(accountName);
+    }
+  }
+
+  return accounts;
 }
 
 function collectLineDescriptions(lines: Array<{ Description?: string }>): string[] {
@@ -81,7 +98,7 @@ export function normalizeJournalEntryForAudit(
 }
 
 export function normalizeBillForAudit(
-  bill: any,
+  bill: QboBill,
   attachmentFileNames: string[],
 ): NormalizedAuditTransaction {
   return {
@@ -89,18 +106,16 @@ export function normalizeBillForAudit(
     transactionId: bill.Id,
     txnDate: bill.TxnDate,
     amount: bill.TotalAmt,
-    currency: bill.CurrencyRef?.value || null,
-    counterparty: bill.VendorRef?.name || null,
-    docNumber: bill.DocNumber || null,
-    privateNote: bill.PrivateNote || null,
-    dueDate: bill.DueDate || null,
-    postingAccounts: (bill.Line || [])
-      .map((line: any) => line.AccountBasedExpenseLineDetail?.AccountRef?.name || '')
-      .filter(Boolean),
-    lineDescriptions: (bill.Line || []).map((line: any) => line.Description || ''),
+    currency: bill.CurrencyRef?.value ?? null,
+    counterparty: bill.VendorRef?.name ?? null,
+    docNumber: bill.DocNumber ?? null,
+    privateNote: bill.PrivateNote ?? null,
+    dueDate: bill.DueDate ?? null,
+    postingAccounts: collectBillPostingAccounts(bill),
+    lineDescriptions: collectLineDescriptions(bill.Line ?? []),
     attachmentFileNames,
     isInReconciledPeriod: false,
-    lastUpdatedTime: bill.MetaData?.LastUpdatedTime || null,
+    lastUpdatedTime: bill.MetaData?.LastUpdatedTime ?? null,
     sourceTag: null,
   };
 }

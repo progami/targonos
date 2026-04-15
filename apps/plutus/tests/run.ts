@@ -2970,6 +2970,13 @@ test('normalizeBillForAudit preserves vendor due date accounts and attachments',
             AccountRef: { value: '300', name: 'Inventory Asset' },
           },
         },
+        {
+          Id: '2',
+          Amount: 250,
+          ItemBasedExpenseLineDetail: {
+            AccountRef: { value: '301', name: 'Freight Clearing' },
+          },
+        },
       ],
       MetaData: {
         CreateTime: '2026-04-01T00:00:00Z',
@@ -2982,7 +2989,7 @@ test('normalizeBillForAudit preserves vendor due date accounts and attachments',
   assert.equal(normalized.transactionType, 'Bill');
   assert.equal(normalized.counterparty, 'Vendor A');
   assert.equal(normalized.dueDate, '2026-04-30');
-  assert.deepEqual(normalized.postingAccounts, ['Inventory Asset']);
+  assert.deepEqual(normalized.postingAccounts, ['Inventory Asset', 'Freight Clearing']);
   assert.deepEqual(normalized.lineDescriptions, ['Widgets']);
   assert.deepEqual(normalized.attachmentFileNames, ['invoice.pdf']);
 });
