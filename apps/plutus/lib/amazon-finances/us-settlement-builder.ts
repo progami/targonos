@@ -204,6 +204,8 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
   if (type === 'MISSING_FROM_INBOUND') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Missing From Inbound';
   if (type === 'REVERSAL_REIMBURSEMENT')
     return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';
+  if (type === 'FREE_REPLACEMENT_REFUND_ITEMS')
+    return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Free Replacement Refund Items';
   return null;
 }
 
