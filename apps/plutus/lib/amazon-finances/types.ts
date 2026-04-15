@@ -128,6 +128,25 @@ export type SpApiServiceFeeEvent = {
   FeeList?: SpApiFeeComponent[];
 };
 
+export type SpApiRemovalShipmentItem = {
+  Quantity?: number;
+  FulfillmentNetworkSKU?: string;
+  RemovalShipmentItemId?: string;
+  FeeAmount?: SpApiMoney;
+  Revenue?: SpApiMoney;
+  TaxAmount?: SpApiMoney;
+  TaxWithheld?: SpApiMoney;
+  TaxCollectionModel?: string;
+};
+
+export type SpApiRemovalShipmentEvent = {
+  OrderId?: string;
+  MerchantOrderId?: string;
+  PostedDate?: string;
+  TransactionType?: string;
+  RemovalShipmentItemList?: SpApiRemovalShipmentItem[];
+};
+
 export type SpApiProductAdsPaymentEvent = {
   postedDate?: string;
   transactionType?: string;
@@ -142,6 +161,7 @@ export type SpApiFinancialEvents = {
   RefundEventList?: SpApiRefundEvent[];
   AdjustmentEventList?: SpApiAdjustmentEvent[];
   ServiceFeeEventList?: SpApiServiceFeeEvent[];
+  RemovalShipmentEventList?: SpApiRemovalShipmentEvent[];
   ProductAdsPaymentEventList?: SpApiProductAdsPaymentEvent[];
   AdhocDisbursementEventList?: Array<{
     TransactionType?: string;
