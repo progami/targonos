@@ -1179,6 +1179,37 @@ test('buildUsSettlementDraftFromSpApiFinances maps reversal reimbursement adjust
   );
 });
 
+test('buildUsSettlementDraftFromSpApiFinances maps free replacement refund item adjustments', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-FREE-REPLACEMENT-REFUND-1',
+    eventGroupId: 'GROUP-FREE-REPLACEMENT-REFUND-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -4 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          AdjustmentType: 'FREE_REPLACEMENT_REFUND_ITEMS',
+          AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -4 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get(
+      'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Free Replacement Refund Items',
+    ),
+    -400,
+  );
+});
+
 test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-UK-1',
