@@ -133,13 +133,23 @@ function feeTypeMemoForShipment(feeType: string): string | null {
   return null;
 }
 
+const MARKETPLACE_PRINCIPAL_WITHHELD_CHARGE_TYPES = new Set([
+  'MarketplaceFacilitatorTax-Principal',
+  'LowValueGoodsTax-Principal',
+]);
+
+const MARKETPLACE_SHIPPING_WITHHELD_CHARGE_TYPES = new Set([
+  'MarketplaceFacilitatorTax-Shipping',
+  'LowValueGoodsTax-Shipping',
+]);
+
 function withheldChargeMemo(chargeType: string, context: 'shipment' | 'refund'): string | null {
-  if (chargeType === 'MarketplaceFacilitatorTax-Principal') {
+  if (MARKETPLACE_PRINCIPAL_WITHHELD_CHARGE_TYPES.has(chargeType)) {
     return context === 'shipment'
       ? 'Amazon Sales Tax - Marketplace Facilitator Tax - (Principal)'
       : 'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Principal)';
   }
-  if (chargeType === 'MarketplaceFacilitatorTax-Shipping') {
+  if (MARKETPLACE_SHIPPING_WITHHELD_CHARGE_TYPES.has(chargeType)) {
     return context === 'shipment'
       ? 'Amazon Sales Tax - Marketplace Facilitator Tax - (Shipping)'
       : 'Amazon Sales Tax - Refunded Marketplace Facilitator Tax - (Shipping)';
