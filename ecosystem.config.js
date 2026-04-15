@@ -281,6 +281,14 @@ function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   };
 }
 
+function createHermesWorkerEnv(rootDir, environment, runtimeEnv) {
+  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
+  return {
+    ...loadAppEnv(path.join(rootDir, 'apps/hermes'), environment, hostedLoadOptions),
+    ...runtimeEnv,
+  };
+}
+
 if (!DEV_DIR) {
   throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
 }
@@ -488,7 +496,10 @@ module.exports = {
       args: 'src/server/jobs/orders-sync-hourly.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { ...loadEnvFile(path.join(DEV_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      env: createHermesWorkerEnv(DEV_DIR, 'dev', {
+        NODE_ENV: 'production',
+        HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60,
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -500,7 +511,9 @@ module.exports = {
       args: 'src/server/jobs/request-review-dispatcher.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { ...loadEnvFile(path.join(DEV_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production' },
+      env: createHermesWorkerEnv(DEV_DIR, 'dev', {
+        NODE_ENV: 'production',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -711,7 +724,10 @@ module.exports = {
       args: 'src/server/jobs/orders-sync-hourly.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { ...loadEnvFile(path.join(MAIN_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production', HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60 },
+      env: createHermesWorkerEnv(MAIN_DIR, 'production', {
+        NODE_ENV: 'production',
+        HERMES_ORDERS_SYNC_INTERVAL_MINUTES: 60,
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -723,7 +739,9 @@ module.exports = {
       args: 'src/server/jobs/request-review-dispatcher.ts',
       interpreter: 'none',
       exec_mode: 'fork',
-      env: { ...loadEnvFile(path.join(MAIN_DIR, 'apps/hermes/.env.local')), NODE_ENV: 'production' },
+      env: createHermesWorkerEnv(MAIN_DIR, 'production', {
+        NODE_ENV: 'production',
+      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -748,5 +766,6 @@ module.exports = {
 };
 module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
 module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
+module.exports.createHermesWorkerEnv = createHermesWorkerEnv;
 module.exports.buildHostedAppUrl = buildHostedAppUrl;
 module.exports.getHostedCookieDomain = getHostedCookieDomain;
