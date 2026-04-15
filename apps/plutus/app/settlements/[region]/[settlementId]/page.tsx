@@ -459,13 +459,18 @@ export default function ParentSettlementDetailPage() {
           {data && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {data.settlement.plutusStatus !== 'Processed' && (
-                <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
-                  {isProcessing
-                    ? 'Processing…'
-                    : data.settlement.plutusStatus === 'RolledBack'
-                      ? 'Reprocess settlement'
-                      : 'Process settlement'}
-                </Button>
+                <>
+                  <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
+                    {isPreviewLoading ? 'Previewing…' : 'Preview'}
+                  </Button>
+                  <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
+                    {isProcessing
+                      ? 'Processing…'
+                      : data.settlement.plutusStatus === 'RolledBack'
+                        ? 'Reprocess settlement'
+                        : 'Process settlement'}
+                  </Button>
+                </>
               )}
               {data.settlement.plutusStatus === 'Processed' && (
                 <>
@@ -550,9 +555,16 @@ export default function ParentSettlementDetailPage() {
                     );
                   })}
                 </Box>
+
+                <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+                    History
+                  </Typography>
+                  <SettlementHistoryList rows={historyRows} />
+                </Box>
               </Box>
             ) : (
-              <Box sx={{ display: 'grid', gap: 1.5 }}>
+              <Box sx={{ display: 'grid', gap: 0.75 }}>
                 <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
                   <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
                     {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)}
@@ -576,13 +588,9 @@ export default function ParentSettlementDetailPage() {
                       : formatMoney(data.settlement.settlementTotal, data.settlement.marketplace.currency)}
                   </Typography>
                 </Box>
-
-                <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
-                  <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
-                    History
-                  </Typography>
-                  <SettlementHistoryList rows={historyRows} />
-                </Box>
+                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                  {data.settlement.childCount} posting{data.settlement.childCount === 1 ? '' : 's'} · {data.settlement.marketplace.region} settlement workspace
+                </Typography>
               </Box>
             )}
           </Box>
