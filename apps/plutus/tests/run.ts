@@ -1110,6 +1110,44 @@ test('buildUsSettlementDraftFromSpApiFinances maps low value goods withheld tax'
   );
 });
 
+test('buildUsSettlementDraftFromSpApiFinances maps refunded shipping tax', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-REFUND-SHIPPING-TAX-1',
+    eventGroupId: 'GROUP-REFUND-SHIPPING-TAX-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: -11 },
+    },
+    events: {
+      RefundEventList: [
+        {
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          AmazonOrderId: 'ORDER-REFUND-SHIPPING-TAX-1',
+          ShipmentItemAdjustmentList: [
+            {
+              SellerSKU: 'SKU-REFUND-SHIPPING-TAX-1',
+              QuantityShipped: 1,
+              ItemChargeAdjustmentList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: -10 } },
+                { ChargeType: 'ShippingTax', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 } },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map([['SKU-REFUND-SHIPPING-TAX-1', 'Brand A']]),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get('Amazon Sales Tax - Refund - Item Price - Tax'),
+    -100,
+  );
+});
+
 test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUkSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-UK-1',

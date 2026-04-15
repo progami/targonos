@@ -162,7 +162,7 @@ function chargeTypeMemoForRefund(input: { chargeType: string; brandLabel: string
   if (input.chargeType === 'RestockingFee') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
   if (input.chargeType === 'ShippingCharge') return `Amazon Refunds - Refunded Shipping - ${input.brandLabel}`;
   if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
-  if (input.chargeType === 'ShippingTax') return null;
+  if (input.chargeType === 'ShippingTax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
   if (input.chargeType === 'GiftWrap') return null;
   if (input.chargeType === 'GiftWrapTax') return null;
   return null;
