@@ -34,20 +34,6 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
     if (tx.docNumber === null || tx.docNumber.trim() === '') {
       pushFinding(findings, tx, 'DOCNUMBER_MISSING', 'field_completeness', 'High', 'DocNumber is missing.', 'Populate DocNumber.');
     }
-    if (tx.transactionType === 'Bill' && (tx.dueDate === null || tx.dueDate.trim() === '')) {
-      pushFinding(findings, tx, 'BILL_DUE_DATE_MISSING', 'field_completeness', 'High', 'Bill due date is missing.', 'Populate DueDate.');
-    }
-    if (tx.lineDescriptions.some((description) => description.trim() === '')) {
-      pushFinding(
-        findings,
-        tx,
-        'LINE_DESCRIPTION_MISSING',
-        'field_completeness',
-        'High',
-        'One or more line descriptions are blank.',
-        'Add meaningful line descriptions.',
-      );
-    }
     if (tx.transactionType === 'Bill' && tx.attachmentFileNames.length === 0) {
       pushFinding(
         findings,

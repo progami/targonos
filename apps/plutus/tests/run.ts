@@ -92,8 +92,8 @@ import {
 } from '../lib/qbo/connection-feedback';
 import {
   classifyAuditExceptions,
-  type NormalizedAuditTransaction,
 } from '../lib/qbo/full-history-audit/rules';
+import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
@@ -2549,7 +2549,7 @@ test('audit flags missing doc number and missing attachment on bills', () => {
   const findings = classifyAuditExceptions([tx]);
   assert.deepEqual(
     findings.map((f) => f.ruleId).sort(),
-    ['ATTACHMENT_REQUIRED_MISSING', 'BILL_DUE_DATE_MISSING', 'DOCNUMBER_MISSING', 'LINE_DESCRIPTION_MISSING'].sort(),
+    ['ATTACHMENT_REQUIRED_MISSING', 'DOCNUMBER_MISSING'].sort(),
   );
 });
 
