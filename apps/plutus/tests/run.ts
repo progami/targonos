@@ -94,6 +94,10 @@ import {
   classifyAuditExceptions,
 } from '../lib/qbo/full-history-audit/rules';
 import {
+  normalizeJournalEntryForAudit,
+  normalizePurchaseForAudit,
+} from '../lib/qbo/full-history-audit/normalize';
+import {
   getActiveQboConnection,
   mergeAttachmentRefs,
   qboFullHistoryAuditDeps,
@@ -2630,6 +2634,65 @@ test('audit does not require doc number for transfer transactions', () => {
 
   const findings = classifyAuditExceptions([tx]);
   assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
+});
+
+test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and attachments', () => {
+  const normalized = normalizePurchaseForAudit(
+    {
+      Id: '1093',
+      TxnDate: '2026-04-06',
+      TotalAmt: 19.8,
+      PaymentType: 'CreditCard',
+      DocNumber: 'BITWARDEN-20260406',
+      PrivateNote: 'Bitwarden software subscription matched from Chase Ink card feed.',
+      EntityRef: { value: '76', name: 'Bitwarden' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 19.8,
+          Description: 'BITWARDEN',
+          AccountBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Software & apps' } },
+        },
+      ],
+      SyncToken: '1',
+    },
+    ['bitwarden-1093.txt'],
+  );
+
+  assert.equal(normalized.counterparty, 'Bitwarden');
+  assert.deepEqual(normalized.postingAccounts, ['Office expenses:Software & apps']);
+  assert.deepEqual(normalized.attachmentFileNames, ['bitwarden-1093.txt']);
+});
+
+test('normalizeJournalEntryForAudit captures line descriptions and control-account usage', () => {
+  const normalized = normalizeJournalEntryForAudit(
+    {
+      Id: '1098',
+      SyncToken: '1',
+      TxnDate: '2026-04-03',
+      DocNumber: 'AMZN-260403-1164',
+      PrivateNote: 'Temporary Amazon bank-receipt suspense entry.',
+      Line: [
+        {
+          Amount: 11.64,
+          Description: 'Temporary suspense for Amazon-originated Chase USD receipt pending settlement sync',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Debit', AccountRef: { value: '136', name: 'Targon US Chase USD (9899)' } },
+        },
+        {
+          Amount: 11.64,
+          Description: 'Offset to Plutus Settlement Control until final Amazon settlement journal is regenerated',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Credit', AccountRef: { value: '178', name: 'Plutus Settlement Control' } },
+        },
+      ],
+    },
+    ['support.txt'],
+  );
+
+  assert.equal(normalized.transactionType, 'JournalEntry');
+  assert.equal(normalized.postingAccounts.includes('Plutus Settlement Control'), true);
+  assert.equal(normalized.lineDescriptions.length, 2);
 });
 
 test('mergeAttachmentRefs maps attachables back to transaction ids', () => {
