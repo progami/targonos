@@ -83,9 +83,8 @@ export type SettlementPostingPreviewInput = {
 
 export type SettlementHistoryViewModel = {
   id: string;
-  title: string;
-  subtitle: string;
-  timestamp: string;
+  timestampText: string;
+  message: string;
   kind: 'posted' | 'processed' | 'rolled_back';
 };
 
@@ -97,6 +96,17 @@ export type SettlementHistoryEventInput = {
   childDocNumber: string;
   kind: 'posted' | 'processed' | 'rolled_back';
 };
+
+function formatHistoryTimestamp(value: string): string {
+  return new Date(value).toLocaleString('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
 
 function compareNullableIsoDay(a: string | null, b: string | null): number {
   if (a === null && b === null) return 0;
@@ -215,16 +225,15 @@ export function buildSettlementPostingSectionViewModels(
     });
 }
 
-export function buildSettlementHistoryViewModel(input: {
-  history: readonly SettlementHistoryEventInput[];
-}): SettlementHistoryViewModel[] {
-  return [...input.history]
+export function buildSettlementHistoryViewModel(
+  history: readonly SettlementHistoryEventInput[],
+): SettlementHistoryViewModel[] {
+  return [...history]
     .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
     .map((entry) => ({
       id: entry.id,
-      title: entry.title,
-      subtitle: `${entry.description} · ${entry.childDocNumber}`,
-      timestamp: entry.timestamp,
+      timestampText: formatHistoryTimestamp(entry.timestamp),
+      message: `${entry.description} · ${entry.childDocNumber}`,
       kind: entry.kind,
     }));
 }

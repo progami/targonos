@@ -502,38 +502,52 @@ test('buildSettlementPostingSectionViewModels preserves preview severity and sha
   assert.deepEqual(Object.keys(sections[0] ?? {}), Object.keys(sections[1] ?? {}));
 });
 
-test('buildSettlementHistoryViewModel orders entries newest-first and keeps compact text', () => {
-  const history = buildSettlementHistoryViewModel({
-    history: [
-      {
-        id: 'h-1',
-        timestamp: '2026-04-05T12:30:00.000Z',
-        title: 'Processed in Plutus',
-        description: 'Matched to invoice INV-2.',
-        childDocNumber: 'UK-260401-260405-S1-A',
-        kind: 'processed',
-      },
-      {
-        id: 'h-2',
-        timestamp: '2026-04-06T12:30:00.000Z',
-        title: 'Rolled back in Plutus',
-        description: 'Previously processed with invoice INV-2.',
-        childDocNumber: 'UK-260406-260410-S1-B',
-        kind: 'rolled_back',
-      },
-      {
-        id: 'h-0',
-        timestamp: '2026-04-01T12:30:00.000Z',
-        title: 'Posting created',
-        description: 'Month-end posting UK-260401-260405-S1-A was posted to QBO.',
-        childDocNumber: 'UK-260401-260405-S1-A',
-        kind: 'posted',
-      },
-    ],
-  });
+test('buildSettlementHistoryViewModel returns compact timestamp-first rows', () => {
+  const rows = buildSettlementHistoryViewModel([
+    {
+      id: '1',
+      timestamp: '2026-04-10T06:04:22.000Z',
+      title: 'Processed',
+      description: 'Processed in Plutus',
+      childDocNumber: 'UK-260327-260331-S1-A',
+      kind: 'processed',
+    },
+  ]);
+
+  assert.equal(rows[0]?.timestampText.includes('2026'), true);
+  assert.equal(rows[0]?.message, 'Processed in Plutus · UK-260327-260331-S1-A');
+});
+
+test('buildSettlementHistoryViewModel orders compact rows newest-first', () => {
+  const history = buildSettlementHistoryViewModel([
+    {
+      id: 'h-1',
+      timestamp: '2026-04-05T12:30:00.000Z',
+      title: 'Processed in Plutus',
+      description: 'Matched to invoice INV-2.',
+      childDocNumber: 'UK-260401-260405-S1-A',
+      kind: 'processed',
+    },
+    {
+      id: 'h-2',
+      timestamp: '2026-04-06T12:30:00.000Z',
+      title: 'Rolled back in Plutus',
+      description: 'Previously processed with invoice INV-2.',
+      childDocNumber: 'UK-260406-260410-S1-B',
+      kind: 'rolled_back',
+    },
+    {
+      id: 'h-0',
+      timestamp: '2026-04-01T12:30:00.000Z',
+      title: 'Posting created',
+      description: 'Month-end posting UK-260401-260405-S1-A was posted to QBO.',
+      childDocNumber: 'UK-260401-260405-S1-A',
+      kind: 'posted',
+    },
+  ]);
 
   assert.equal(history[0]?.id, 'h-2');
-  assert.equal(history[0]?.subtitle, 'Previously processed with invoice INV-2. · UK-260406-260410-S1-B');
+  assert.equal(history[0]?.message, 'Previously processed with invoice INV-2. · UK-260406-260410-S1-B');
   assert.equal(history[2]?.kind, 'posted');
 });
 
