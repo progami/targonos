@@ -4,12 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -18,18 +14,18 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Skeleton from '@mui/material/Skeleton';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { SettlementHistoryList } from '@/components/settlements/settlement-history-list';
+import { SettlementLedgerSection } from '@/components/settlements/settlement-ledger-section';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
-import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
-import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
+import {
+  buildSettlementHistoryViewModel,
+  buildSettlementListRowViewModel,
+  buildSettlementPostingSectionViewModels,
+} from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -148,10 +144,12 @@ type ParentPreviewResponse = {
   }>;
 };
 
-type DetailTab = 'sales-fees' | 'history';
+type DetailTab = 'review' | 'analysis';
 
 function readDetailTab(value: string | null): DetailTab {
-  return value === 'history' ? 'history' : 'sales-fees';
+  if (value === 'analysis') return 'analysis';
+  if (value === 'history') return 'analysis';
+  return 'review';
 }
 
 function formatPeriod(start: string | null, end: string | null): string {
@@ -185,24 +183,6 @@ function formatMoney(amount: number, currency: string): string {
 
   if (amount < 0) return `(${formatted})`;
   return formatted;
-}
-
-function formatTimestamp(value: string): string {
-  return new Date(value).toLocaleString('en-US', {
-    timeZone: 'UTC',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-function buildVisibleSettlementId(data: ParentSettlementDetailResponse): string {
-  return getSettlementDisplayId({
-    sourceSettlementId: data.settlement.sourceSettlementId,
-    childDocNumbers: data.children.map((child) => child.docNumber),
-  })
 }
 
 function PlutusPill({ status }: { status: ParentSettlementDetailResponse['settlement']['plutusStatus'] }) {
@@ -260,12 +240,6 @@ async function rollbackParentSettlement(region: string, settlementId: string) {
   }
 }
 
-function previewHasBlockingBlocks(preview: ParentPreviewResponse): boolean {
-  return preview.children.some((child) =>
-    child.preview.blocks.some((block) => isBlockingProcessingCode(block.code)),
-  );
-}
-
 export default function ParentSettlementDetailPage() {
   const { enqueueSnackbar } = useSnackbar();
   const params = useParams();
@@ -301,12 +275,61 @@ export default function ParentSettlementDetailPage() {
     enabled: connection?.connected !== false,
     staleTime: 5 * 60 * 1000,
   });
-
   useEffect(() => {
     const nextTab = readDetailTab(searchParams.get('tab'));
     setTab((current) => (current === nextTab ? current : nextTab));
   }, [searchParams]);
-  const visibleSettlementId = useMemo(() => (data ? buildVisibleSettlementId(data) : ''), [data]);
+  const settlementView = useMemo(
+    () =>
+      data
+        ? buildSettlementListRowViewModel({
+            sourceSettlementId: data.settlement.sourceSettlementId,
+            marketplace: { label: data.settlement.marketplace.label },
+            periodStart: data.settlement.periodStart,
+            periodEnd: data.settlement.periodEnd,
+            settlementTotal: data.settlement.settlementTotal,
+            plutusStatus: data.settlement.plutusStatus,
+            splitCount: data.settlement.splitCount,
+            isSplit: data.settlement.isSplit,
+            hasInconsistency: data.settlement.hasInconsistency,
+            children: data.children.map((child) => ({ docNumber: child.docNumber })),
+          })
+        : null,
+    [data],
+  );
+  const visibleSettlementId = settlementView ? settlementView.title : '';
+  const postingSections = useMemo(
+    () =>
+      data
+        ? buildSettlementPostingSectionViewModels(
+            {
+              settlement: data.settlement,
+              children: data.children,
+            },
+            null,
+          )
+        : [],
+    [data],
+  );
+  const previewSections = useMemo(
+    () =>
+      data && preview
+        ? buildSettlementPostingSectionViewModels(
+            {
+              settlement: data.settlement,
+              children: data.children,
+            },
+            preview,
+          )
+        : [],
+    [data, preview],
+  );
+  const ledgerSections = preview === null ? postingSections : previewSections;
+  const childByJournalEntryId = useMemo(
+    () => new Map((data?.children ?? []).map((child) => [child.qboJournalEntryId, child] as const)),
+    [data],
+  );
+  const historyRows = useMemo(() => (data ? buildSettlementHistoryViewModel(data.history) : []), [data]);
   const unresolvedChildren = useMemo(
     () => (data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : []),
     [data],
@@ -315,8 +338,8 @@ export default function ParentSettlementDetailPage() {
   function handleTabChange(nextTab: DetailTab) {
     setTab(nextTab);
     const nextParams = new URLSearchParams(searchParams.toString());
-    if (nextTab === 'history') {
-      nextParams.set('tab', 'history');
+    if (nextTab === 'analysis') {
+      nextParams.set('tab', 'analysis');
     } else {
       nextParams.delete('tab');
     }
@@ -422,7 +445,8 @@ export default function ParentSettlementDetailPage() {
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '78rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'grid', gap: 0.35 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <BackButton />
             {data && (
               <>
@@ -430,21 +454,32 @@ export default function ParentSettlementDetailPage() {
                 <Typography variant="h4" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>
                   {visibleSettlementId}
                 </Typography>
-                <PlutusPill status={data.settlement.plutusStatus} />
+                <PlutusPill status={settlementView ? settlementView.statusText : data.settlement.plutusStatus} />
               </>
             )}
+            </Box>
+            {data ? (
+              <Typography sx={{ pl: { sm: '2.25rem' }, fontSize: '0.8rem', color: 'text.secondary' }}>
+                {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)} · {data.settlement.marketplace.label}
+              </Typography>
+            ) : null}
           </Box>
 
           {data && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {data.settlement.plutusStatus !== 'Processed' && (
-                <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
-                  {isProcessing
-                    ? 'Processing…'
-                    : data.settlement.plutusStatus === 'RolledBack'
-                      ? 'Reprocess settlement'
-                      : 'Process settlement'}
-                </Button>
+                <>
+                  <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
+                    {isPreviewLoading ? 'Previewing…' : 'Preview'}
+                  </Button>
+                  <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
+                    {isProcessing
+                      ? 'Processing…'
+                      : data.settlement.plutusStatus === 'RolledBack'
+                        ? 'Reprocess settlement'
+                        : 'Process settlement'}
+                  </Button>
+                </>
               )}
               {data.settlement.plutusStatus === 'Processed' && (
                 <>
@@ -462,368 +497,112 @@ export default function ParentSettlementDetailPage() {
 
         {isLoading && (
           <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
-            <Skeleton variant="rounded" sx={{ height: 120 }} />
-            <Skeleton variant="rounded" sx={{ height: 240 }} />
+            <Skeleton variant="rounded" sx={{ height: 96 }} />
+            <Skeleton variant="rounded" sx={{ height: 320 }} />
           </Box>
         )}
 
         {!isLoading && error && (
-          <Card sx={{ mt: 3, border: 1, borderColor: 'error.light' }}>
-            <CardContent>
-              <Typography color="error.main">{error instanceof Error ? error.message : String(error)}</Typography>
-            </CardContent>
-          </Card>
+          <Box sx={{ mt: 3, py: 1.5, borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'error.light' }}>
+            <Typography color="error.main">{error instanceof Error ? error.message : String(error)}</Typography>
+          </Box>
         )}
 
         {!isLoading && data && (
-          <>
-            <Card sx={{ mt: 3, border: 1, borderColor: data.settlement.isSplit ? 'rgba(0, 194, 185, 0.3)' : 'divider', background: data.settlement.isSplit ? 'linear-gradient(135deg, rgba(0,194,185,0.08), rgba(0,44,81,0.02))' : 'background.paper' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-                  <Box sx={{ maxWidth: '48rem' }}>
-                    <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#008f87', fontWeight: 700 }}>
-                      Source settlement
-                    </Typography>
-                    <Typography sx={{ mt: 1, fontSize: '1.25rem', fontWeight: 700, color: 'text.primary' }}>
-                      {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)}
-                    </Typography>
-                    <Typography sx={{ mt: 0.75, color: 'text.secondary', maxWidth: '44rem' }}>
-                      {data.settlement.isSplit
-                        ? `This settlement crosses month-end, so Plutus posted it as ${data.settlement.splitCount} month-end postings in QBO. The postings are shown below as accounting detail, not as separate settlements.`
-                        : 'This settlement was posted as a single month-end posting in QBO.'}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'grid', gap: 1, minWidth: 220 }}>
-                    <Box sx={{ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Settlement value</Typography>
-                      <Typography sx={{ mt: 0.25, fontSize: '1.1rem', fontWeight: 700 }}>
-                        {data.settlement.settlementTotal === null ? '—' : formatMoney(data.settlement.settlementTotal, data.settlement.marketplace.currency)}
-                      </Typography>
-                    </Box>
-                    <Box sx={{ px: 1.5, py: 1.25, borderRadius: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
-                      <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Posted</Typography>
-                      <Typography sx={{ mt: 0.25, fontSize: '0.95rem', fontWeight: 600 }}>
-                        {new Date(`${data.settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </Box>
-
-                {data.settlement.hasInconsistency && (
-                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5 }}>
-                    <WarningAmberIcon sx={{ fontSize: 18, color: 'warning.dark', mt: 0.1 }} />
-                    <Typography sx={{ fontSize: '0.875rem', color: 'warning.dark' }}>
-                      Plutus found mixed child posting states inside this settlement. The UI treats that as a backend inconsistency and will not show a mixed settlement status.
-                    </Typography>
-                  </Box>
-                )}
-
-                {actionError && (
-                  <Box sx={{ mt: 2, borderRadius: 2, border: 1, borderColor: 'error.light', bgcolor: 'error.50', p: 1.5 }}>
-                    <Typography sx={{ fontSize: '0.875rem', color: 'error.dark' }}>{actionError}</Typography>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
-
-            <Box sx={{ mt: 3, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
-              {[
-                { label: 'Total Settlements', value: '1' },
-                { label: 'Month-end Postings', value: String(data.settlement.splitCount) },
-                { label: 'Marketplace', value: data.settlement.marketplace.label },
-              ].map((metric) => (
-                <Card key={metric.label} sx={{ border: 1, borderColor: 'divider' }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography sx={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                      {metric.label}
-                    </Typography>
-                    <Typography sx={{ mt: 0.5, fontSize: '1.4rem', fontWeight: 700, color: 'text.primary' }}>
-                      {metric.value}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              ))}
-            </Box>
-
-            <Box sx={{ mt: 3 }}>
-              <Tabs value={tab} onChange={(_, value: DetailTab) => handleTabChange(value)} sx={{ minHeight: 42, '& .MuiTab-root': { textTransform: 'none', minHeight: 42 } }}>
-                <Tab value="sales-fees" label="Sales & Fees" />
-                <Tab value="history" label="History" />
+          <Box sx={{ mt: 3, display: 'grid', gap: 2.5 }}>
+            <Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Tabs
+                value={tab}
+                onChange={(_, value: DetailTab) => handleTabChange(value)}
+                sx={{ minHeight: 42, '& .MuiTab-root': { minHeight: 42, textTransform: 'none' } }}
+              >
+                <Tab value="review" label="Ledger review" />
+                <Tab value="analysis" label="Analysis" />
               </Tabs>
             </Box>
 
-            {tab === 'sales-fees' && (
-              <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
-                <Card sx={{ border: 1, borderColor: 'divider' }}>
-                  <CardContent sx={{ p: 3 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-                      <Box>
-                        <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Audit invoice mapping</Typography>
-                        <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                          {data.settlement.plutusStatus === 'Processed'
-                            ? 'Plutus already processed this settlement with the invoice mappings shown below.'
-                            : 'Plutus resolves the audit invoice for each month-end posting in the backend before previewing or processing.'}
-                        </Typography>
-                      </Box>
-                      {data.settlement.plutusStatus !== 'Processed' && (
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
-                            {isPreviewLoading ? 'Previewing…' : 'Preview'}
-                          </Button>
-                          <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
-                            {isProcessing
-                              ? 'Processing…'
-                              : data.settlement.plutusStatus === 'RolledBack'
-                                ? 'Reprocess settlement'
-                                : 'Process settlement'}
-                          </Button>
-                        </Box>
-                      )}
-                    </Box>
+            {tab === 'review' ? (
+              <Box sx={{ display: 'grid', gap: 1.5 }}>
+                {data.settlement.isSplit ? (
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                    {data.settlement.splitCount} month-end postings cover this settlement. Review them in order below.
+                  </Typography>
+                ) : null}
 
-                    {unresolvedChildren.length > 0 && (
-                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'flex-start', gap: 1, borderRadius: 2, border: 1, borderColor: 'warning.light', bgcolor: 'warning.50', p: 1.5 }}>
-                        <WarningAmberIcon sx={{ fontSize: 18, color: 'warning.dark', mt: 0.1 }} />
-                        <Typography sx={{ fontSize: '0.875rem', color: 'warning.dark' }}>
-                          Preview and processing stay blocked until every month-end posting resolves to exactly one stored audit invoice.
-                        </Typography>
-                      </Box>
-                    )}
+                {data.settlement.hasInconsistency ? (
+                  <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
+                    Child posting states disagree. Treat this settlement as inconsistent until the backend state is repaired.
+                  </Typography>
+                ) : null}
 
-                    <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                      {data.children.map((child) => (
-                        <Box
-                          key={child.qboJournalEntryId}
-                          sx={{
-                            display: 'grid',
-                            gap: 1,
-                            gridTemplateColumns: { xs: '1fr', lg: '1.2fr 1fr' },
-                            alignItems: 'center',
-                            border: 1,
-                            borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
-                            borderRadius: 2,
-                            p: 1.5,
-                            bgcolor: 'background.paper',
-                          }}
-                        >
-                          <Box>
-                            <Typography sx={{ fontWeight: 600 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
-                            <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                              Posting {child.docNumber}
-                            </Typography>
-                          </Box>
+                {unresolvedChildren.length > 0 ? (
+                  <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
+                    Preview and processing stay blocked until every posting resolves to one audit invoice.
+                  </Typography>
+                ) : null}
 
-                          <Box
-                            sx={{
-                              borderRadius: 2,
-                              border: 1,
-                              borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
-                              bgcolor: child.invoiceResolution.status === 'resolved' ? 'action.hover' : 'warning.50',
-                              px: 1.25,
-                              py: 1,
-                            }}
-                          >
-                            <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: child.invoiceResolution.status === 'resolved' ? 'text.secondary' : 'warning.dark' }}>
-                              {child.invoiceResolution.status === 'resolved' ? 'Invoice' : 'Resolution blocked'}
-                            </Typography>
-                            <Typography sx={{ mt: 0.35, fontWeight: 600, color: child.invoiceResolution.status === 'resolved' ? 'text.primary' : 'warning.dark' }}>
-                              {child.invoiceResolution.status === 'resolved' ? child.invoiceResolution.invoiceId : child.invoiceResolutionMessage}
-                            </Typography>
-                            {child.invoiceResolution.status === 'resolved' && (
-                              <Typography sx={{ mt: 0.25, fontSize: '0.78rem', color: 'text.secondary' }}>
-                                {child.invoiceResolutionMessage}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                      ))}
-                    </Box>
-                  </CardContent>
-                </Card>
-
-                {preview && (
-                  <Card sx={{ border: 1, borderColor: previewHasBlockingBlocks(preview) ? 'warning.light' : 'divider' }}>
-                    <CardContent sx={{ p: 3 }}>
-                      <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Preview</Typography>
-                      <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Review the child posting previews below. Processing remains parent-level.
-                      </Typography>
-
-                      <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                        {preview.children.map((child) => {
-                          const blockingBlocks = child.preview.blocks.filter((block) => isBlockingProcessingCode(block.code));
-                          const warningBlocks = child.preview.blocks.filter((block) => !isBlockingProcessingCode(block.code));
-                          return (
-                            <Card key={child.qboJournalEntryId} variant="outlined" sx={{ borderColor: blockingBlocks.length > 0 ? 'warning.light' : 'divider' }}>
-                              <CardContent sx={{ p: 2 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-                                  <Box>
-                                    <Typography sx={{ fontWeight: 700 }}>{child.docNumber}</Typography>
-                                    <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                      Invoice {child.invoiceId}
-                                    </Typography>
-                                  </Box>
-                                  <Chip
-                                    size="small"
-                                    label={blockingBlocks.length > 0 ? 'Blocked' : warningBlocks.length > 0 ? 'Ready with warnings' : 'Ready'}
-                                    color={blockingBlocks.length > 0 ? 'warning' : 'success'}
-                                  />
-                                </Box>
-
-                                <Box sx={{ mt: 1.5, display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
-                                  <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Sales rows</Typography>
-                                    <Typography sx={{ mt: 0.35, fontWeight: 700 }}>{child.preview.sales.length}</Typography>
-                                  </Box>
-                                  <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Return rows</Typography>
-                                    <Typography sx={{ mt: 0.35, fontWeight: 700 }}>{child.preview.returns.length}</Typography>
-                                  </Box>
-                                  <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Plutus JE lines</Typography>
-                                    <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                      {child.preview.cogsJournalEntry.lines.length + child.preview.pnlJournalEntry.lines.length}
-                                    </Typography>
-                                  </Box>
-                                </Box>
-
-                                {child.preview.blocks.length > 0 && (
-                                  <Box sx={{ mt: 1.5, display: 'grid', gap: 0.75 }}>
-                                    {child.preview.blocks.map((block, index) => (
-                                      <Box key={`${child.qboJournalEntryId}:${index}`} sx={{ borderRadius: 2, border: 1, borderColor: isBlockingProcessingCode(block.code) ? 'warning.light' : 'divider', bgcolor: isBlockingProcessingCode(block.code) ? 'warning.50' : 'action.hover', p: 1 }}>
-                                        <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
-                                          {block.code}
-                                        </Typography>
-                                        <Typography sx={{ mt: 0.25, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                          {block.message}
-                                        </Typography>
-                                      </Box>
-                                    ))}
-                                  </Box>
-                                )}
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </Box>
-                    </CardContent>
-                  </Card>
+                {actionError === null ? null : (
+                  <Typography color="error.main" sx={{ fontSize: '0.8rem' }}>
+                    {actionError}
+                  </Typography>
                 )}
 
-                <Card sx={{ border: 1, borderColor: 'divider' }}>
-                  <CardContent sx={{ p: 3 }}>
-                    <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Month-end postings</Typography>
-                    <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                      These are the internal accounting postings created for this source settlement. They stay here so the top-level settlements list remains aligned with Amazon.
-                    </Typography>
+                <Box component="section" sx={{ display: 'grid', gap: 0 }}>
+                  {ledgerSections.map((section) => {
+                    const child = childByJournalEntryId.get(section.qboJournalEntryId);
+                    if (child === undefined) {
+                      throw new Error(`Missing child posting for ${section.qboJournalEntryId}`);
+                    }
 
-                    <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                      {data.children.map((child) => (
-                        <Card key={child.qboJournalEntryId} variant="outlined" sx={{ borderColor: child.plutusStatus === 'Processed' ? 'rgba(34,197,94,0.28)' : 'divider' }}>
-                          <CardContent sx={{ p: 2.5 }}>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-                              <Box>
-                                <Typography sx={{ fontWeight: 700 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
-                                <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                  {child.docNumber}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <PlutusPill status={child.plutusStatus} />
-                                <Button
-                                  component="a"
-                                  href={`https://app.qbo.intuit.com/app/journal?txnId=${child.qboJournalEntryId}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  variant="text"
-                                  endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
-                                >
-                                  Open in QBO
-                                </Button>
-                              </Box>
-                            </Box>
+                    return (
+                      <SettlementLedgerSection
+                        key={section.qboJournalEntryId}
+                        section={section}
+                        currency={data.settlement.marketplace.currency}
+                        lines={child.lines}
+                      />
+                    );
+                  })}
+                </Box>
 
-                            <Box sx={{ mt: 1.5, display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' } }}>
-                              <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Posting total</Typography>
-                                <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {child.settlementTotal === null ? '—' : formatMoney(child.settlementTotal, child.marketplace.currency)}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Posted date</Typography>
-                                <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {new Date(`${child.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                                </Typography>
-                              </Box>
-                              <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
-                                <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Matched invoice</Typography>
-                                <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {child.processing?.invoiceId ?? child.rollback?.invoiceId ?? 'Not processed'}
-                                </Typography>
-                              </Box>
-                            </Box>
-
-                            <Box component="details" sx={{ mt: 1.5 }}>
-                              <Box component="summary" sx={{ cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600 }}>
-                                Journal lines
-                              </Box>
-                              <Box sx={{ mt: 1.25, overflowX: 'auto' }}>
-                                <Table size="small">
-                                  <TableHead>
-                                    <TableRow>
-                                      <TableCell>Description</TableCell>
-                                      <TableCell>Account</TableCell>
-                                      <TableCell align="right">Amount</TableCell>
-                                    </TableRow>
-                                  </TableHead>
-                                  <TableBody>
-                                    {child.lines.map((line, index) => {
-                                      const signed = line.postingType === 'Debit' ? line.amount : -line.amount;
-                                      return (
-                                        <TableRow key={`${child.qboJournalEntryId}:${line.id ?? index}`}>
-                                          <TableCell>{line.description === '' ? '—' : line.description}</TableCell>
-                                          <TableCell>{line.accountFullyQualifiedName ?? line.accountName}</TableCell>
-                                          <TableCell align="right">{formatMoney(signed, child.marketplace.currency)}</TableCell>
-                                        </TableRow>
-                                      );
-                                    })}
-                                  </TableBody>
-                                </Table>
-                              </Box>
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </Box>
-                  </CardContent>
-                </Card>
+                <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+                    History
+                  </Typography>
+                  <SettlementHistoryList rows={historyRows} />
+                </Box>
+              </Box>
+            ) : (
+              <Box sx={{ display: 'grid', gap: 0.75 }}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    {data.settlement.marketplace.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    Posted{' '}
+                    {new Date(`${data.settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', {
+                      timeZone: 'UTC',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    Total{' '}
+                    {data.settlement.settlementTotal === null
+                      ? '—'
+                      : formatMoney(data.settlement.settlementTotal, data.settlement.marketplace.currency)}
+                  </Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                  {data.settlement.childCount} posting{data.settlement.childCount === 1 ? '' : 's'} · {data.settlement.marketplace.region} settlement workspace
+                </Typography>
               </Box>
             )}
-
-            {tab === 'history' && (
-              <Card sx={{ mt: 3, border: 1, borderColor: 'divider' }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Settlement history</Typography>
-                  <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
-                    Timeline for the source settlement and its month-end postings.
-                  </Typography>
-
-                  <Box sx={{ mt: 2, display: 'grid', gap: 1.25 }}>
-                    {data.history.map((entry) => (
-                      <Box key={entry.id} sx={{ display: 'grid', gap: 0.35, borderLeft: '2px solid #00C2B9', pl: 1.5, py: 0.5 }}>
-                        <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>{entry.title}</Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                          {entry.description} · {entry.childDocNumber}
-                        </Typography>
-                        <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{formatTimestamp(entry.timestamp)}</Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </CardContent>
-              </Card>
-            )}
-          </>
+          </Box>
         )}
 
         <Dialog open={rollbackOpen} onClose={() => setRollbackOpen(false)}>
