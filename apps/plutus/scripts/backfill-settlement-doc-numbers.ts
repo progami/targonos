@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { db } from '@/lib/db';
+import { db, dbTableIdentifier } from '@/lib/db';
 import type { QboConnection, QboJournalEntry } from '@/lib/qbo/api';
 import { fetchJournalEntries, fetchJournalEntryById, updateJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
@@ -257,6 +257,7 @@ async function fetchSettlementJournalEntries(input: {
 async function main(): Promise<void> {
   await loadPlutusEnv();
   const options = parseArgs(process.argv.slice(2));
+  const auditDataRowTable = dbTableIdentifier('AuditDataRow');
 
   const connection = await getQboConnection();
   if (!connection) {
@@ -284,7 +285,7 @@ async function main(): Promise<void> {
         qboPnlReclassJournalEntryId: true,
       },
     }),
-    db.$queryRaw<AuditInvoiceRow[]>`SELECT DISTINCT "invoiceId" FROM plutus."AuditDataRow"`,
+    db.$queryRawUnsafe<AuditInvoiceRow[]>(`SELECT DISTINCT "invoiceId" FROM ${auditDataRowTable}`),
   ]);
 
   const processingRows: SettlementRowCore[] = processingRowsRaw;

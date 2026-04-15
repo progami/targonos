@@ -1,6 +1,6 @@
 import { createLogger } from '@targon/logger';
 
-import { db } from '@/lib/db';
+import { db, dbTableIdentifier } from '@/lib/db';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
 import { loadAuditRowsFromDb } from '@/lib/plutus/audit-data';
@@ -48,7 +48,9 @@ function invoiceKey(input: { marketplace: MarketplaceId; invoiceId: string }): s
 }
 
 async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
-  const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
+  const auditDataRowTable = dbTableIdentifier('AuditDataRow');
+
+  const rows = await db.$queryRawUnsafe<AuditInvoiceRowSummary[]>(`
     SELECT "invoiceId",
            CASE
              WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
@@ -59,10 +61,10 @@ async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
            MIN("date") AS "minDate",
            MAX("date") AS "maxDate",
            ARRAY_AGG(DISTINCT "market") AS "markets"
-    FROM plutus."AuditDataRow"
+    FROM ${auditDataRowTable}
     GROUP BY "invoiceId", "marketplaceId"
     ORDER BY "invoiceId", "marketplaceId"
-  `;
+  `);
 
   return rows.map((r) => {
     if (r.marketplaceId !== 'amazon.com' && r.marketplaceId !== 'amazon.co.uk') {

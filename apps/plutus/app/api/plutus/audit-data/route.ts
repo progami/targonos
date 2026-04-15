@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { db, dbTableIdentifier } from '@/lib/db';
 import type { MarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
+  const auditDataRowTable = dbTableIdentifier('AuditDataRow');
+
   const uploads = await db.auditDataUpload.findMany({
     orderBy: { uploadedAt: 'desc' },
     select: {
@@ -17,9 +19,9 @@ export async function GET() {
   });
 
   // Get per-invoice row counts and date ranges
-  const invoiceSummaries = await db.$queryRaw<
+  const invoiceSummaries = await db.$queryRawUnsafe<
     Array<{ invoiceId: string; marketplaceId: string | null; rowCount: bigint; minDate: string; maxDate: string; markets: string[] }>
-  >`
+  >(`
     SELECT "invoiceId",
            CASE
              WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
@@ -30,10 +32,10 @@ export async function GET() {
            MIN("date") AS "minDate",
            MAX("date") AS "maxDate",
            ARRAY_AGG(DISTINCT "market") AS markets
-    FROM plutus."AuditDataRow"
+    FROM ${auditDataRowTable}
     GROUP BY "invoiceId", "marketplaceId"
     ORDER BY "invoiceId", "marketplaceId"
-  `;
+  `);
 
   const invoices = invoiceSummaries.map((s) => {
     if (s.marketplaceId !== 'amazon.com' && s.marketplaceId !== 'amazon.co.uk') {

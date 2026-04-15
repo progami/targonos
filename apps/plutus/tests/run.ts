@@ -9,6 +9,7 @@ import {
   formatAuditInvoiceResolutionMessage,
   resolveAuditInvoiceForSettlementChild,
 } from '../lib/plutus/audit-invoice-resolution';
+import { dbTableIdentifier, getDatasourceSchema } from '../lib/db';
 import {
   computeSaleCostFromAverage,
   createEmptyLedgerSnapshot,
@@ -109,6 +110,25 @@ function test(name: string, fn: () => void) {
   }
 }
 
+function withDatabaseUrl(databaseUrl: string | undefined, fn: () => void) {
+  const previousDatabaseUrl = process.env.DATABASE_URL;
+  if (databaseUrl === undefined) {
+    delete process.env.DATABASE_URL;
+  } else {
+    process.env.DATABASE_URL = databaseUrl;
+  }
+
+  try {
+    fn();
+  } finally {
+    if (previousDatabaseUrl === undefined) {
+      delete process.env.DATABASE_URL;
+    } else {
+      process.env.DATABASE_URL = previousDatabaseUrl;
+    }
+  }
+}
+
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('Amazon.com'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('amazon.co.uk'), 'amazon.co.uk');
@@ -122,6 +142,28 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
+    assert.equal(getDatasourceSchema(), 'plutus_dev');
+    assert.equal(dbTableIdentifier('AuditDataRow'), '"plutus_dev"."AuditDataRow"');
+  });
+});
+
+test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
+  withDatabaseUrl(undefined, () => {
+    assert.throws(() => getDatasourceSchema(), /DATABASE_URL is required/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db', () => {
+    assert.throws(() => getDatasourceSchema(), /must include a schema/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus-dev', () => {
+    assert.throws(() => getDatasourceSchema(), /Invalid database schema identifier/);
+  });
+  withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
+    assert.throws(() => dbTableIdentifier('AuditDataRow;DROP'), /Invalid database table identifier/);
+  });
 });
 
 test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {

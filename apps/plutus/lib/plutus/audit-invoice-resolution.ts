@@ -1,4 +1,4 @@
-import { db } from '@/lib/db';
+import { db, dbTableIdentifier } from '@/lib/db';
 
 import {
   selectAuditInvoiceForSettlement,
@@ -62,7 +62,9 @@ function buildUnresolvedResolution(match: Exclude<AuditInvoiceMatch, { kind: 'ma
 }
 
 export async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[]> {
-  const rows = await db.$queryRaw<AuditInvoiceRowSummary[]>`
+  const auditDataRowTable = dbTableIdentifier('AuditDataRow');
+
+  const rows = await db.$queryRawUnsafe<AuditInvoiceRowSummary[]>(`
     SELECT "invoiceId",
            CASE
              WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
@@ -73,10 +75,10 @@ export async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[
            MIN("date") AS "minDate",
            MAX("date") AS "maxDate",
            ARRAY_AGG(DISTINCT "market") AS "markets"
-    FROM plutus."AuditDataRow"
+    FROM ${auditDataRowTable}
     GROUP BY "invoiceId", "marketplaceId"
     ORDER BY "invoiceId", "marketplaceId"
-  `;
+  `);
 
   return rows.map((row) => {
     if (row.marketplaceId !== 'amazon.com' && row.marketplaceId !== 'amazon.co.uk') {
