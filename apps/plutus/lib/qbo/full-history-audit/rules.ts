@@ -8,6 +8,7 @@ function pushFinding(
   severity: AuditException['severity'],
   exceptionMessage: string,
   suggestedFix: string,
+  supportStatus: AuditException['supportStatus'],
 ): void {
   out.push({
     transactionType: tx.transactionType,
@@ -22,7 +23,7 @@ function pushFinding(
     severity,
     exceptionMessage,
     suggestedFix,
-    supportStatus: tx.attachmentFileNames.length > 0 ? 'attached' : 'missing',
+    supportStatus,
     reconciledPeriodRisk: tx.isInReconciledPeriod ? 'yes' : 'no',
   });
 }
@@ -31,8 +32,23 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
   const findings: AuditException[] = [];
 
   for (const tx of transactions) {
-    if (tx.docNumber === null || tx.docNumber.trim() === '') {
-      pushFinding(findings, tx, 'DOCNUMBER_MISSING', 'field_completeness', 'High', 'DocNumber is missing.', 'Populate DocNumber.');
+    if (
+      (tx.transactionType === 'Bill' ||
+        tx.transactionType === 'Purchase' ||
+        tx.transactionType === 'Invoice' ||
+        tx.transactionType === 'BillPayment') &&
+      (tx.docNumber === null || tx.docNumber.trim() === '')
+    ) {
+      pushFinding(
+        findings,
+        tx,
+        'DOCNUMBER_MISSING',
+        'field_completeness',
+        'High',
+        'DocNumber is missing.',
+        'Populate DocNumber.',
+        'not_required',
+      );
     }
     if (tx.transactionType === 'Bill' && tx.attachmentFileNames.length === 0) {
       pushFinding(
@@ -43,12 +59,13 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
         'High',
         'Bill has no attachment.',
         'Attach the supporting invoice.',
+        'missing',
       );
     }
     if (
       tx.privateNote?.toLowerCase().includes('transfer') &&
       tx.transactionType === 'Purchase' &&
-      tx.postingAccounts.some((account) => account.includes('expenses'))
+      tx.postingAccounts.some((account) => account.toLowerCase().includes('expenses'))
     ) {
       pushFinding(
         findings,
@@ -58,6 +75,7 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
         'Critical',
         'Transfer-like activity is posted to a P&L account.',
         'Rebuild as transfer-style activity.',
+        'not_required',
       );
     }
   }

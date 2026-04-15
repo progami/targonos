@@ -2548,8 +2548,26 @@ test('audit flags missing doc number and missing attachment on bills', () => {
 
   const findings = classifyAuditExceptions([tx]);
   assert.deepEqual(
-    findings.map((f) => f.ruleId).sort(),
-    ['ATTACHMENT_REQUIRED_MISSING', 'DOCNUMBER_MISSING'].sort(),
+    findings.map((finding) => ({
+      ruleId: finding.ruleId,
+      severity: finding.severity,
+      ruleGroup: finding.ruleGroup,
+      supportStatus: finding.supportStatus,
+    })).sort((left, right) => left.ruleId.localeCompare(right.ruleId)),
+    [
+      {
+        ruleId: 'ATTACHMENT_REQUIRED_MISSING',
+        severity: 'High',
+        ruleGroup: 'attachment_controls',
+        supportStatus: 'missing',
+      },
+      {
+        ruleId: 'DOCNUMBER_MISSING',
+        severity: 'High',
+        ruleGroup: 'field_completeness',
+        supportStatus: 'not_required',
+      },
+    ].sort((left, right) => left.ruleId.localeCompare(right.ruleId)),
   );
 });
 
@@ -2564,7 +2582,7 @@ test('audit flags transfer-like expenses posted to p-and-l accounts', () => {
     docNumber: 'INT-001',
     privateNote: 'Transfer to Wise',
     dueDate: null,
-    postingAccounts: ['General business expenses:Software & apps'],
+    postingAccounts: ['General Business Expenses:Software & Apps'],
     lineDescriptions: ['Transfer to Wise USD'],
     attachmentFileNames: ['support.txt'],
     isInReconciledPeriod: false,
@@ -2573,7 +2591,19 @@ test('audit flags transfer-like expenses posted to p-and-l accounts', () => {
   };
 
   const findings = classifyAuditExceptions([tx]);
-  assert.equal(findings.some((f) => f.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'), true);
+  assert.deepEqual(findings.map((finding) => ({
+    ruleId: finding.ruleId,
+    severity: finding.severity,
+    ruleGroup: finding.ruleGroup,
+    supportStatus: finding.supportStatus,
+  })), [
+    {
+      ruleId: 'TRANSFER_LIKE_ACTIVITY_MISPOSTED',
+      severity: 'Critical',
+      ruleGroup: 'chart_of_accounts_sanity',
+      supportStatus: 'not_required',
+    },
+  ]);
 });
 
 process.stdout.write('All tests passed.\n');
