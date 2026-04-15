@@ -420,7 +420,6 @@ async function main(): Promise<void> {
   }
 
   const results: SegmentResult[] = [];
-  const splitByMonth = process.env.PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH === 'true';
 
   for (const settlementId of targetSettlementIds) {
     const settlementJournals = journalsBySettlement.get(settlementId);
@@ -451,7 +450,6 @@ async function main(): Promise<void> {
       events,
       skuToBrandName,
       brandLabelByBrandName,
-      splitByMonth,
     });
 
     const journalsByDocNumber = new Map<string, QboJournalEntry>();
