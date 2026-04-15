@@ -129,6 +129,10 @@ export interface QboPurchase {
   PaymentType: 'Cash' | 'Check' | 'CreditCard';
   DocNumber?: string;
   PrivateNote?: string;
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
   EntityRef?: {
     value: string;
     name: string;
@@ -1837,6 +1841,7 @@ export async function createPurchase(
     docNumber?: string;
     vendorId?: string;
     privateNote?: string;
+    currencyCode?: string;
     lines: Array<{
       amount: number;
       accountId: string;
@@ -1870,6 +1875,9 @@ export async function createPurchase(
   }
   if (input.privateNote !== undefined) {
     payload.PrivateNote = input.privateNote;
+  }
+  if (input.currencyCode !== undefined) {
+    payload.CurrencyRef = { value: input.currencyCode };
   }
 
   logger.info('Creating purchase in QBO', {

@@ -97,18 +97,37 @@ import {
   classifyQboRefreshFailure,
   classifyQboVerificationFailure,
 } from '../lib/qbo/connection-feedback';
+import {
+  classifyAuditExceptions,
+} from '../lib/qbo/full-history-audit/rules';
+import {
+  normalizeBillForAudit,
+  normalizeJournalEntryForAudit,
+  normalizePurchaseForAudit,
+  normalizeTransferForAudit,
+} from '../lib/qbo/full-history-audit/normalize';
+import {
+  fetchAuditSourceData,
+  getActiveQboConnection,
+  mergeAttachmentRefs,
+  qboFullHistoryAuditDeps,
+  qboQueryAll,
+  summarizeCoverage,
+} from '../lib/qbo/full-history-audit/fetch';
+import { buildAuditCsv, buildAuditMarkdownSummary } from '../lib/qbo/full-history-audit/report';
+import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
-import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
+import type { QboAccount, QboBill, QboConnection, QboRecurringTransaction } from '../lib/qbo/api';
 
-function test(name: string, fn: () => void) {
-  try {
-    fn();
-    process.stdout.write(`ok - ${name}\n`);
-  } catch (error) {
-    process.stderr.write(`not ok - ${name}\n`);
-    throw error;
-  }
+const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [];
+
+function test(name: string, fn: () => void | Promise<void>) {
+  tests.push({ name, fn });
+}
+
+function ruleIds(findings: Array<{ ruleId: string }>): string[] {
+  return findings.map((finding) => finding.ruleId).sort();
 }
 
 function withDatabaseUrl(databaseUrl: string | undefined, fn: () => void) {
@@ -939,7 +958,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
   assert.equal(csv, expected);
 });
 
-test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement periods', () => {
+test('buildUsSettlementDraftFromSpApiFinances splits cross-month settlement periods by default', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-1',
     eventGroupId: 'GROUP-1',
@@ -961,17 +980,20 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
     skuToBrandName: new Map(),
   });
 
-  assert.equal(draft.segments.length, 1);
-  assert.equal(draft.segments[0]?.docNumber, 'US-251219-260102-S1');
+  assert.equal(draft.segments.length, 2);
+  assert.equal(draft.segments[0]?.docNumber, 'US-251219-251231-S1');
+  assert.equal(draft.segments[1]?.docNumber, 'US-260101-260102-S2');
 
-  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  const cents = draft.segments[1]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);
 
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
+  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
 });
 
-test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+test('buildUsSettlementDraftFromSpApiFinances splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-1',
     eventGroupId: 'GROUP-SPLIT-1',
@@ -996,7 +1018,6 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
       ],
     },
     skuToBrandName: new Map(),
-    splitByMonth: true,
   });
 
   assert.equal(draft.segments.length, 3);
@@ -1027,6 +1048,19 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
   assert.equal(seg3.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
   assert.equal(seg3.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
   assert.equal(sum(seg3.memoTotalsCents), -300);
+});
+
+test('US settlement SP-API paths do not gate month splitting on runtime env', () => {
+  const sourcePaths = [
+    '../lib/amazon-finances/us-settlement-sync.ts',
+    '../scripts/us-settlement-ingest-spapi.ts',
+    '../scripts/us-settlement-reconcile-spapi.ts',
+  ];
+
+  for (const sourcePath of sourcePaths) {
+    const source = readFileSync(new URL(sourcePath, import.meta.url), 'utf8');
+    assert.equal(source.includes('PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH'), false);
+  }
 });
 
 test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
@@ -2825,4 +2859,820 @@ test('historical refund routing keeps multiple dated refunds for the same order 
   assert.equal(currentSettlementRefundGroups.size, 0);
 });
 
-process.stdout.write('All tests passed.\n');
+test('audit flags missing doc number and missing attachment on bills', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Bill',
+    transactionId: 'B1',
+    txnDate: '2026-04-01',
+    amount: 1250,
+    currency: 'USD',
+    counterparty: 'Vendor A',
+    docNumber: null,
+    privateNote: 'April inventory invoice',
+    dueDate: null,
+    postingAccounts: ['Inventory'],
+    lineDescriptions: [''],
+    attachmentFileNames: [],
+    isInReconciledPeriod: null,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(
+    findings.map((finding) => finding.reconciledPeriodRisk),
+    ['unknown', 'unknown'],
+  );
+  assert.deepEqual(
+    findings.map((finding) => ({
+      ruleId: finding.ruleId,
+      severity: finding.severity,
+      ruleGroup: finding.ruleGroup,
+      supportStatus: finding.supportStatus,
+    })).sort((left, right) => left.ruleId.localeCompare(right.ruleId)),
+    [
+      {
+        ruleId: 'ATTACHMENT_REQUIRED_MISSING',
+        severity: 'High',
+        ruleGroup: 'attachment_controls',
+        supportStatus: 'missing',
+      },
+      {
+        ruleId: 'DOCNUMBER_MISSING',
+        severity: 'High',
+        ruleGroup: 'field_completeness',
+        supportStatus: 'not_required',
+      },
+    ].sort((left, right) => left.ruleId.localeCompare(right.ruleId)),
+  );
+});
+
+test('audit flags transfer-like expenses posted to p-and-l accounts', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'P1',
+    txnDate: '2026-04-01',
+    amount: 1000,
+    currency: 'USD',
+    counterparty: 'Internal funding move',
+    docNumber: 'INT-001',
+    privateNote: 'Transfer to Wise',
+    dueDate: null,
+    postingAccounts: ['General Business Expenses:Software & Apps'],
+    lineDescriptions: ['Transfer to Wise USD'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(findings.map((finding) => ({
+    ruleId: finding.ruleId,
+    severity: finding.severity,
+    ruleGroup: finding.ruleGroup,
+    supportStatus: finding.supportStatus,
+  })), [
+    {
+      ruleId: 'TRANSFER_LIKE_ACTIVITY_MISPOSTED',
+      severity: 'Critical',
+      ruleGroup: 'chart_of_accounts_sanity',
+      supportStatus: 'not_required',
+    },
+  ]);
+});
+
+test('audit does not require doc number for transfer transactions', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Transfer',
+    transactionId: 'T1',
+    txnDate: '2026-04-01',
+    amount: 250,
+    currency: 'USD',
+    counterparty: 'Operating account',
+    docNumber: null,
+    privateNote: 'Owner funding move',
+    dueDate: null,
+    postingAccounts: ['Assets:Bank'],
+    lineDescriptions: ['Transfer between cash accounts'],
+    attachmentFileNames: [],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
+});
+
+test('audit keeps the original transfer mispost guard purchase-only and expense-based', () => {
+  const purchaseTx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'P-transfer',
+    txnDate: '2026-04-01',
+    amount: 250,
+    currency: 'USD',
+    counterparty: 'Operating account',
+    docNumber: 'T-1',
+    privateNote: 'Transfer to Wise',
+    dueDate: null,
+    postingAccounts: ['Office expense:Software'],
+    lineDescriptions: ['Transfer between cash accounts'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const transferTx: NormalizedAuditTransaction = {
+    ...purchaseTx,
+    transactionType: 'Transfer',
+    transactionId: 'T-transfer',
+  };
+
+  const purchaseFindings = classifyAuditExceptions([purchaseTx]);
+  const transferFindings = classifyAuditExceptions([transferTx]);
+  assert.deepEqual(ruleIds(purchaseFindings), ['TRANSFER_LIKE_ACTIVITY_MISPOSTED']);
+  assert.deepEqual(ruleIds(transferFindings), []);
+});
+
+test('audit flags likely duplicates by date amount and counterparty', () => {
+  const input: NormalizedAuditTransaction[] = [
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P100',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X1',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['x.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P101',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X1',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['y.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+  ];
+
+  const findings = classifyAuditExceptions(input);
+  assert.deepEqual(ruleIds(findings), ['LIKELY_DUPLICATE', 'LIKELY_DUPLICATE']);
+});
+
+test('audit does not flag duplicates when the doc numbers differ', () => {
+  const input: NormalizedAuditTransaction[] = [
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P200',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X1',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['x.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P201',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X2',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['y.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+  ];
+
+  const findings = classifyAuditExceptions(input);
+  assert.deepEqual(ruleIds(findings), []);
+});
+
+test('audit flags unresolved settlement-control usage', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'JournalEntry',
+    transactionId: 'J1',
+    txnDate: '2025-01-10',
+    amount: 11.64,
+    currency: 'USD',
+    counterparty: null,
+    docNumber: 'AMZN-1',
+    privateNote: 'Temporary suspense entry',
+    dueDate: null,
+    postingAccounts: ['plutus settlement control'],
+    lineDescriptions: ['Temporary suspense entry'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: true,
+    lastUpdatedTime: '2025-01-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx], { asOfDate: '2026-04-10', staleControlAccountDays: 365 });
+  assert.deepEqual(ruleIds(findings), ['UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY']);
+});
+
+test('audit flags bank fee activity from note and line description cues', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'F1',
+    txnDate: '2026-04-02',
+    amount: 17.5,
+    currency: 'USD',
+    counterparty: 'Capital One',
+    docNumber: 'FEE-1',
+    privateNote: 'Monthly card fee for account maintenance',
+    dueDate: null,
+    postingAccounts: ['Other expenses:Misc'],
+    lineDescriptions: ['Card service fee'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), ['BANK_FEE_MISCLASSIFIED']);
+});
+
+test('audit accepts merchant processing fee accounts', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'F2',
+    txnDate: '2026-04-03',
+    amount: 21.75,
+    currency: 'USD',
+    counterparty: 'Stripe',
+    docNumber: 'FEE-2',
+    privateNote: 'Monthly card fee for account maintenance',
+    dueDate: null,
+    postingAccounts: ['Merchant processing fees'],
+    lineDescriptions: ['Card service fee'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), []);
+});
+
+test('audit flags owner activity misclassified away from owner equity', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'O1',
+    txnDate: '2026-04-04',
+    amount: 300,
+    currency: 'USD',
+    counterparty: 'Owner distribution',
+    docNumber: 'OWN-1',
+    privateNote: 'Owner reimbursement',
+    dueDate: null,
+    postingAccounts: ['Other expenses:Misc'],
+    lineDescriptions: ['Owner reimbursement'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), ['OWNER_ACTIVITY_MISCLASSIFIED']);
+});
+
+test('audit flags currency counterparty mismatch on purchases when currency is preserved', () => {
+  const purchase = normalizePurchaseForAudit(
+    {
+      Id: 'C1',
+      SyncToken: '1',
+      TxnDate: '2026-04-05',
+      TotalAmt: 42.5,
+      PaymentType: 'CreditCard',
+      DocNumber: 'CUR-1',
+      PrivateNote: 'GBP charge from overseas vendor',
+      CurrencyRef: { value: 'USD' },
+      EntityRef: { value: '91', name: 'Overseas Vendor' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 42.5,
+          Description: 'GBP card charge',
+          AccountBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Travel' } },
+        },
+      ],
+      MetaData: { CreateTime: '2026-04-05T10:00:00Z', LastUpdatedTime: '2026-04-10T10:00:00Z' },
+    },
+    ['support.txt'],
+  );
+
+  assert.equal(purchase.currency, 'USD');
+
+  const findings = classifyAuditExceptions([purchase]);
+  assert.deepEqual(ruleIds(findings), ['CURRENCY_COUNTERPARTY_MISMATCH']);
+});
+
+test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and attachments', () => {
+  const normalized = normalizePurchaseForAudit(
+    {
+      Id: '1093',
+      TxnDate: '2026-04-06',
+      TotalAmt: 19.8,
+      PaymentType: 'CreditCard',
+      DocNumber: 'BITWARDEN-20260406',
+      PrivateNote: 'Bitwarden software subscription matched from Chase Ink card feed.',
+      EntityRef: { value: '76', name: 'Bitwarden' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 19.8,
+          Description: 'BITWARDEN',
+          AccountBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Software & apps' } },
+        },
+      ],
+      SyncToken: '1',
+    },
+    ['bitwarden-1093.txt'],
+  );
+
+  assert.equal(normalized.counterparty, 'Bitwarden');
+  assert.deepEqual(normalized.postingAccounts, ['Office expenses:Software & apps']);
+  assert.deepEqual(normalized.lineDescriptions, ['BITWARDEN']);
+  assert.deepEqual(normalized.attachmentFileNames, ['bitwarden-1093.txt']);
+});
+
+test('normalizePurchaseForAudit preserves item-based accounts and omits missing descriptions', () => {
+  const normalized = normalizePurchaseForAudit(
+    {
+      Id: '1094',
+      TxnDate: '2026-04-07',
+      TotalAmt: 42,
+      PaymentType: 'CreditCard',
+      DocNumber: 'BITWARDEN-20260407',
+      PrivateNote: 'Bitwarden follow-up purchase.',
+      EntityRef: { value: '76', name: 'Bitwarden' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 42,
+          ItemBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Software & apps' } },
+        },
+      ],
+      SyncToken: '1',
+    },
+    ['bitwarden-1094.txt'],
+  );
+
+  assert.deepEqual(normalized.postingAccounts, ['Office expenses:Software & apps']);
+  assert.deepEqual(normalized.lineDescriptions, []);
+});
+
+test('normalizeJournalEntryForAudit captures line descriptions and control-account usage', () => {
+  const normalized = normalizeJournalEntryForAudit(
+    {
+      Id: '1098',
+      SyncToken: '1',
+      TxnDate: '2026-04-03',
+      DocNumber: 'AMZN-260403-1164',
+      PrivateNote: 'Temporary Amazon bank-receipt suspense entry.',
+      Line: [
+        {
+          Amount: 11.64,
+          Description: 'Temporary suspense for Amazon-originated Chase USD receipt pending settlement sync',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Debit', AccountRef: { value: '136', name: 'Targon US Chase USD (9899)' } },
+        },
+        {
+          Amount: 11.64,
+          Description: 'Offset to Plutus Settlement Control until final Amazon settlement journal is regenerated',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Credit', AccountRef: { value: '178', name: 'Plutus Settlement Control' } },
+        },
+      ],
+    },
+    ['support.txt'],
+  );
+
+  assert.equal(normalized.transactionType, 'JournalEntry');
+  assert.equal(normalized.postingAccounts.includes('Plutus Settlement Control'), true);
+  assert.deepEqual(normalized.lineDescriptions, [
+    'Temporary suspense for Amazon-originated Chase USD receipt pending settlement sync',
+    'Offset to Plutus Settlement Control until final Amazon settlement journal is regenerated',
+  ]);
+});
+
+test('normalizeBillForAudit preserves vendor due date accounts and attachments', () => {
+  const normalized = normalizeBillForAudit(
+    {
+      Id: '10',
+      SyncToken: '0',
+      TxnDate: '2026-04-01',
+      TotalAmt: 1250,
+      DocNumber: 'B-10',
+      DueDate: '2026-04-30',
+      PrivateNote: 'Inventory replenishment',
+      CurrencyRef: { value: 'USD' },
+      VendorRef: { value: '20', name: 'Vendor A' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 1000,
+          Description: 'Widgets',
+          AccountBasedExpenseLineDetail: {
+            AccountRef: { value: '300', name: 'Inventory Asset' },
+          },
+        },
+        {
+          Id: '2',
+          Amount: 250,
+          ItemBasedExpenseLineDetail: {
+            AccountRef: { value: '301', name: 'Freight Clearing' },
+          },
+        },
+      ],
+      MetaData: {
+        CreateTime: '2026-04-01T00:00:00Z',
+        LastUpdatedTime: '2026-04-02T00:00:00Z',
+      },
+    },
+    ['invoice.pdf'],
+  );
+
+  assert.equal(normalized.transactionType, 'Bill');
+  assert.equal(normalized.counterparty, 'Vendor A');
+  assert.equal(normalized.dueDate, '2026-04-30');
+  assert.deepEqual(normalized.postingAccounts, ['Inventory Asset', 'Freight Clearing']);
+  assert.deepEqual(normalized.lineDescriptions, ['Widgets']);
+  assert.deepEqual(normalized.attachmentFileNames, ['invoice.pdf']);
+});
+
+test('normalizeTransferForAudit preserves both transfer accounts', () => {
+  const normalized = normalizeTransferForAudit(
+    {
+      Id: '55',
+      TxnDate: '2026-04-03',
+      Amount: 500,
+      DocNumber: 'TR-55',
+      PrivateNote: 'Sweep',
+      CurrencyRef: { value: 'USD' },
+      FromAccountRef: { value: '10', name: 'Chase Checking' },
+      ToAccountRef: { value: '20', name: 'Reserve Account' },
+      MetaData: {
+        LastUpdatedTime: '2026-04-03T10:00:00Z',
+      },
+    },
+    ['support.pdf'],
+  );
+
+  assert.equal(normalized.transactionType, 'Transfer');
+  assert.deepEqual(normalized.postingAccounts, ['Chase Checking', 'Reserve Account']);
+  assert.equal(normalized.counterparty, null);
+  assert.deepEqual(normalized.attachmentFileNames, ['support.pdf']);
+});
+
+test('mergeAttachmentRefs maps attachables back to transaction ids', () => {
+  const result = mergeAttachmentRefs(
+    [
+      { Id: 'A1', FileName: 'bill.pdf', AttachableRef: [{ EntityRef: { type: 'Bill', value: '10' } }] },
+      { Id: 'A2', FileName: 'support.txt', AttachableRef: [{ EntityRef: { type: 'JournalEntry', value: '20' } }] },
+    ],
+  );
+  assert.deepEqual(result.get('Bill:10'), ['bill.pdf']);
+  assert.deepEqual(result.get('JournalEntry:20'), ['support.txt']);
+});
+
+test('summarizeCoverage preserves partial coverage failures', () => {
+  const summary = summarizeCoverage([
+    { transactionType: 'Purchase', scannedCount: 100, complete: true },
+    { transactionType: 'Transfer', scannedCount: 80, complete: false },
+  ]);
+  assert.equal(summary.completeCoverage, false);
+  assert.equal(summary.failedTypes[0], 'Transfer');
+});
+
+test('audit coverage summary reports failed transaction-type coverage', () => {
+  const coverage = summarizeCoverage([
+    { transactionType: 'Purchase', scannedCount: 10, complete: true },
+    { transactionType: 'Bill', scannedCount: 5, complete: true },
+    { transactionType: 'Transfer', scannedCount: 3, complete: false },
+    { transactionType: 'Attachable', scannedCount: 2, complete: false },
+  ]);
+  assert.equal(coverage.completeCoverage, false);
+  assert.deepEqual(coverage.failedTypes, ['Transfer', 'Attachable']);
+});
+
+test('audit report builders render severity totals and csv rows', () => {
+  const rows = [
+    {
+      transactionType: 'Bill',
+      transactionId: '10',
+      txnDate: '2026-04-01',
+      amount: 1250,
+      currency: 'USD',
+      counterparty: 'Vendor A',
+      postingAccountSummary: 'Inventory',
+      ruleId: 'ATTACHMENT_REQUIRED_MISSING',
+      ruleGroup: 'attachment_controls',
+      severity: 'High',
+      exceptionMessage: 'Bill has no attachment, review "support" docs.',
+      suggestedFix: 'Attach the supporting invoice,\nthen mark "received".',
+      supportStatus: 'missing',
+      reconciledPeriodRisk: 'no',
+    },
+  ] as const;
+
+  const csv = buildAuditCsv(rows);
+  const summary = buildAuditMarkdownSummary(rows, { Purchase: 10, Bill: 1 });
+  assert.equal(csv.includes('ATTACHMENT_REQUIRED_MISSING'), true);
+  assert.equal(
+    csv.includes('"Bill has no attachment, review ""support"" docs."'),
+    true,
+  );
+  assert.equal(
+    csv.includes('"Attach the supporting invoice,\nthen mark ""received""."'),
+    true,
+  );
+  assert.equal(csv.includes('\\"support\\"'), false);
+  assert.equal(summary.includes('High'), true);
+  assert.equal(summary.includes('Bill: 1'), true);
+});
+
+function makeQboResponse(body: Record<string, unknown>, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
+}
+
+test('getActiveQboConnection refreshes and persists updated connection state', async () => {
+  const originalDeps = {
+    getQboConnection: qboFullHistoryAuditDeps.getQboConnection,
+    getValidToken: qboFullHistoryAuditDeps.getValidToken,
+    saveServerQboConnection: qboFullHistoryAuditDeps.saveServerQboConnection,
+    fetch: qboFullHistoryAuditDeps.fetch,
+    sleep: qboFullHistoryAuditDeps.sleep,
+  };
+
+  const storedConnection: QboConnection = {
+    realmId: '123',
+    accessToken: 'stale-token',
+    refreshToken: 'refresh-token',
+    expiresAt: '2026-04-14T00:00:00.000Z',
+  };
+  const refreshedConnection: QboConnection = {
+    ...storedConnection,
+    accessToken: 'fresh-token',
+    expiresAt: '2026-04-14T02:00:00.000Z',
+  };
+
+  let savedConnection: QboConnection | null = null;
+
+  qboFullHistoryAuditDeps.getQboConnection = async () => storedConnection;
+  qboFullHistoryAuditDeps.getValidToken = async () => ({
+    accessToken: refreshedConnection.accessToken,
+    updatedConnection: refreshedConnection,
+  });
+  qboFullHistoryAuditDeps.saveServerQboConnection = async (connection) => {
+    savedConnection = connection;
+  };
+
+  try {
+    const active = await getActiveQboConnection();
+    assert.equal(active.accessToken, 'fresh-token');
+    assert.equal(active.connection.accessToken, 'fresh-token');
+    assert.deepEqual(savedConnection, refreshedConnection);
+
+    let observedAuthorization = '';
+    qboFullHistoryAuditDeps.fetch = async (_url, init) => {
+      observedAuthorization = new Headers(init?.headers).get('Authorization') ?? '';
+      return makeQboResponse({ QueryResponse: { Bill: [] } });
+    };
+    qboFullHistoryAuditDeps.sleep = async () => {};
+
+    const queryResult = await qboQueryAll(active, 'SELECT * FROM Bill');
+    assert.equal(queryResult.complete, true);
+    assert.equal(observedAuthorization, 'Bearer fresh-token');
+  } finally {
+    qboFullHistoryAuditDeps.getQboConnection = originalDeps.getQboConnection;
+    qboFullHistoryAuditDeps.getValidToken = originalDeps.getValidToken;
+    qboFullHistoryAuditDeps.saveServerQboConnection = originalDeps.saveServerQboConnection;
+    qboFullHistoryAuditDeps.fetch = originalDeps.fetch;
+    qboFullHistoryAuditDeps.sleep = originalDeps.sleep;
+  }
+});
+
+test('qboQueryAll paginates until the final short page', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requests: string[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async (url) => {
+    requests.push(url);
+    if (requests.length === 1) {
+      return makeQboResponse({
+        QueryResponse: {
+          Bill: Array.from({ length: 1000 }, (_, index) => ({ Id: `B${index + 1}` })),
+        },
+      });
+    }
+
+    if (requests.length === 2) {
+      return makeQboResponse({
+        QueryResponse: {
+          Bill: [{ Id: 'B1001' }],
+        },
+      });
+    }
+
+    throw new Error('unexpected fetch');
+  };
+
+  try {
+    const result = await qboQueryAll(
+      {
+        connection: {
+          realmId: '123',
+          accessToken: 'fresh-token',
+        },
+        accessToken: 'fresh-token',
+      },
+      'SELECT * FROM Bill',
+    );
+
+    assert.equal(result.complete, true);
+    assert.equal(result.rows.length, 1001);
+    assert.equal(requests.length, 2);
+    assert.match(requests[0] ?? '', /STARTPOSITION%201%20MAXRESULTS%201000/);
+    assert.match(requests[1] ?? '', /STARTPOSITION%201001%20MAXRESULTS%201000/);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('qboQueryAll retries retryable qbo responses before succeeding', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requests: number[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async () => {
+    requests.push(requests.length + 1);
+    if (requests.length < 3) {
+      return makeQboResponse({ QueryResponse: { Bill: [] } }, 503);
+    }
+
+    return makeQboResponse({
+      QueryResponse: {
+        Bill: [{ Id: 'B1' }],
+      },
+    });
+  };
+
+  try {
+    const result = await qboQueryAll(
+      {
+        connection: {
+          realmId: '123',
+          accessToken: 'fresh-token',
+        },
+        accessToken: 'fresh-token',
+      },
+      'SELECT * FROM Bill',
+    );
+
+    assert.equal(result.complete, true);
+    assert.equal(result.rows.length, 1);
+    assert.equal(requests.length, 3);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('qboQueryAll throws after bounded network retries', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  let attempts = 0;
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async () => {
+    attempts++;
+    throw new Error('socket hang up');
+  };
+
+  try {
+    await assert.rejects(
+      qboQueryAll(
+        {
+          connection: {
+            realmId: '123',
+            accessToken: 'fresh-token',
+          },
+          accessToken: 'fresh-token',
+        },
+        'SELECT * FROM Bill',
+      ),
+      /socket hang up/,
+    );
+    assert.equal(attempts, 4);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('fetchAuditSourceData queries purchases bills journal entries transfers and attachables', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requestedQueries: string[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async (url) => {
+    const requestUrl = new URL(url);
+    const query = requestUrl.searchParams.get('query') ?? '';
+    requestedQueries.push(query);
+
+    if (query.includes('FROM Purchase')) {
+      return makeQboResponse({ QueryResponse: { Purchase: [{ Id: 'P1' }] } });
+    }
+    if (query.includes('FROM Bill')) {
+      return makeQboResponse({ QueryResponse: { Bill: [{ Id: 'B1' }] } });
+    }
+    if (query.includes('FROM JournalEntry')) {
+      return makeQboResponse({ QueryResponse: { JournalEntry: [{ Id: 'J1' }] } });
+    }
+    if (query.includes('FROM Transfer')) {
+      return makeQboResponse({ QueryResponse: { Transfer: [{ Id: 'T1' }] } });
+    }
+    if (query.includes('FROM Attachable')) {
+      return makeQboResponse({ QueryResponse: { Attachable: [{ Id: 'A1' }] } });
+    }
+
+    throw new Error(`unexpected query: ${query}`);
+  };
+
+  try {
+    const result = await fetchAuditSourceData('fresh-token', '123', 'https://example.com');
+    assert.equal(result.purchases.rows.length, 1);
+    assert.equal(result.bills.rows.length, 1);
+    assert.equal(result.journalEntries.rows.length, 1);
+    assert.equal(result.transfers.rows.length, 1);
+    assert.equal(result.attachables.rows.length, 1);
+    assert.equal(requestedQueries.length, 5);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+
+void (async () => {
+  for (const { name, fn } of tests) {
+    try {
+      await fn();
+      process.stdout.write(`ok - ${name}\n`);
+    } catch (error) {
+      process.stderr.write(`not ok - ${name}\n`);
+      throw error;
+    }
+  }
+
+  process.stdout.write('All tests passed.\n');
+})().catch(() => {
+  process.exitCode = 1;
+});
