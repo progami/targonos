@@ -99,6 +99,7 @@ import {
   normalizePurchaseForAudit,
 } from '../lib/qbo/full-history-audit/normalize';
 import {
+  fetchAuditSourceData,
   getActiveQboConnection,
   mergeAttachmentRefs,
   qboFullHistoryAuditDeps,
@@ -107,6 +108,10 @@ import {
 } from '../lib/qbo/full-history-audit/fetch';
 import { buildAuditCsv, buildAuditMarkdownSummary } from '../lib/qbo/full-history-audit/report';
 import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
+import {
+  normalizeBillForAudit,
+  normalizeTransferForAudit,
+} from '../lib/qbo/full-history-audit/normalize';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
@@ -2944,6 +2949,68 @@ test('normalizeJournalEntryForAudit captures line descriptions and control-accou
   ]);
 });
 
+test('normalizeBillForAudit preserves vendor due date accounts and attachments', () => {
+  const normalized = normalizeBillForAudit(
+    {
+      Id: '10',
+      SyncToken: '0',
+      TxnDate: '2026-04-01',
+      TotalAmt: 1250,
+      DocNumber: 'B-10',
+      DueDate: '2026-04-30',
+      PrivateNote: 'Inventory replenishment',
+      CurrencyRef: { value: 'USD' },
+      VendorRef: { value: '20', name: 'Vendor A' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 1000,
+          Description: 'Widgets',
+          AccountBasedExpenseLineDetail: {
+            AccountRef: { value: '300', name: 'Inventory Asset' },
+          },
+        },
+      ],
+      MetaData: {
+        CreateTime: '2026-04-01T00:00:00Z',
+        LastUpdatedTime: '2026-04-02T00:00:00Z',
+      },
+    },
+    ['invoice.pdf'],
+  );
+
+  assert.equal(normalized.transactionType, 'Bill');
+  assert.equal(normalized.counterparty, 'Vendor A');
+  assert.equal(normalized.dueDate, '2026-04-30');
+  assert.deepEqual(normalized.postingAccounts, ['Inventory Asset']);
+  assert.deepEqual(normalized.lineDescriptions, ['Widgets']);
+  assert.deepEqual(normalized.attachmentFileNames, ['invoice.pdf']);
+});
+
+test('normalizeTransferForAudit preserves both transfer accounts', () => {
+  const normalized = normalizeTransferForAudit(
+    {
+      Id: '55',
+      TxnDate: '2026-04-03',
+      Amount: 500,
+      DocNumber: 'TR-55',
+      PrivateNote: 'Sweep',
+      CurrencyRef: { value: 'USD' },
+      FromAccountRef: { value: '10', name: 'Chase Checking' },
+      ToAccountRef: { value: '20', name: 'Reserve Account' },
+      MetaData: {
+        LastUpdatedTime: '2026-04-03T10:00:00Z',
+      },
+    },
+    ['support.pdf'],
+  );
+
+  assert.equal(normalized.transactionType, 'Transfer');
+  assert.deepEqual(normalized.postingAccounts, ['Chase Checking', 'Reserve Account']);
+  assert.equal(normalized.counterparty, null);
+  assert.deepEqual(normalized.attachmentFileNames, ['support.pdf']);
+});
+
 test('mergeAttachmentRefs maps attachables back to transaction ids', () => {
   const result = mergeAttachmentRefs(
     [
@@ -2962,6 +3029,16 @@ test('summarizeCoverage preserves partial coverage failures', () => {
   ]);
   assert.equal(summary.completeCoverage, false);
   assert.equal(summary.failedTypes[0], 'Transfer');
+});
+
+test('audit coverage summary reports failed transaction-type coverage', () => {
+  const coverage = summarizeCoverage([
+    { transactionType: 'Purchase', scannedCount: 10, complete: true },
+    { transactionType: 'Bill', scannedCount: 5, complete: true },
+    { transactionType: 'Transfer', scannedCount: 3, complete: false },
+  ]);
+  assert.equal(coverage.completeCoverage, false);
+  assert.deepEqual(coverage.failedTypes, ['Transfer']);
 });
 
 test('audit report builders render severity totals and csv rows', () => {
@@ -3182,6 +3259,50 @@ test('qboQueryAll throws after bounded network retries', async () => {
       /socket hang up/,
     );
     assert.equal(attempts, 4);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('fetchAuditSourceData queries purchases bills journal entries transfers and attachables', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requestedQueries: string[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async (url) => {
+    const requestUrl = new URL(url);
+    const query = requestUrl.searchParams.get('query') ?? '';
+    requestedQueries.push(query);
+
+    if (query.includes('FROM Purchase')) {
+      return makeQboResponse({ QueryResponse: { Purchase: [{ Id: 'P1' }] } });
+    }
+    if (query.includes('FROM Bill')) {
+      return makeQboResponse({ QueryResponse: { Bill: [{ Id: 'B1' }] } });
+    }
+    if (query.includes('FROM JournalEntry')) {
+      return makeQboResponse({ QueryResponse: { JournalEntry: [{ Id: 'J1' }] } });
+    }
+    if (query.includes('FROM Transfer')) {
+      return makeQboResponse({ QueryResponse: { Transfer: [{ Id: 'T1' }] } });
+    }
+    if (query.includes('FROM Attachable')) {
+      return makeQboResponse({ QueryResponse: { Attachable: [{ Id: 'A1' }] } });
+    }
+
+    throw new Error(`unexpected query: ${query}`);
+  };
+
+  try {
+    const result = await fetchAuditSourceData('fresh-token', '123', 'https://example.com');
+    assert.equal(result.purchases.rows.length, 1);
+    assert.equal(result.bills.rows.length, 1);
+    assert.equal(result.journalEntries.rows.length, 1);
+    assert.equal(result.transfers.rows.length, 1);
+    assert.equal(result.attachables.rows.length, 1);
+    assert.equal(requestedQueries.length, 5);
   } finally {
     qboFullHistoryAuditDeps.fetch = originalFetch;
     qboFullHistoryAuditDeps.sleep = originalSleep;

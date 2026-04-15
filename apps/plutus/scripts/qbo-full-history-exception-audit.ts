@@ -1,16 +1,20 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import type { QboJournalEntry, QboPurchase } from '@/lib/qbo/api';
+import { getApiBaseUrl } from '@/lib/qbo/client';
 import {
   type CoverageRow,
-  type RawAttachable,
+  fetchAuditSourceData,
   getActiveQboConnection,
   mergeAttachmentRefs,
-  qboQueryAll,
   summarizeCoverage,
 } from '@/lib/qbo/full-history-audit/fetch';
-import { normalizeJournalEntryForAudit, normalizePurchaseForAudit } from '@/lib/qbo/full-history-audit/normalize';
+import {
+  normalizeBillForAudit,
+  normalizeJournalEntryForAudit,
+  normalizePurchaseForAudit,
+  normalizeTransferForAudit,
+} from '@/lib/qbo/full-history-audit/normalize';
 import { buildAuditCsv, buildAuditMarkdownSummary } from '@/lib/qbo/full-history-audit/report';
 import { classifyAuditExceptions } from '@/lib/qbo/full-history-audit/rules';
 
@@ -26,40 +30,49 @@ function parseArgs(argv: string[]) {
 async function main() {
   const { outDir } = parseArgs(process.argv.slice(2));
   const activeConnection = await getActiveQboConnection();
-
-  const purchasesResult = await qboQueryAll(activeConnection, 'SELECT * FROM Purchase ORDERBY TxnDate');
-  const journalEntriesResult = await qboQueryAll(activeConnection, 'SELECT * FROM JournalEntry ORDERBY TxnDate');
-  const attachablesResult = await qboQueryAll(activeConnection, 'SELECT * FROM Attachable');
-
-  const purchases = purchasesResult.rows as unknown as QboPurchase[];
-  const journalEntries = journalEntriesResult.rows as unknown as QboJournalEntry[];
-  const attachables = attachablesResult.rows as unknown as RawAttachable[];
-
-  const attachmentMap = mergeAttachmentRefs(attachables);
+  const baseUrl = getApiBaseUrl();
+  const sourceData = await fetchAuditSourceData(
+    activeConnection.accessToken,
+    activeConnection.connection.realmId,
+    baseUrl,
+  );
+  const attachmentMap = mergeAttachmentRefs(sourceData.attachables.rows);
   const normalized = [
-    ...purchases.map((purchase) => {
-      const attachmentRefs = attachmentMap.get(`Purchase:${purchase.Id}`);
-      const attachmentFileNames = attachmentRefs === undefined ? [] : attachmentRefs;
-      return normalizePurchaseForAudit(purchase, attachmentFileNames);
-    }),
-    ...journalEntries.map((journalEntry) => {
-      const attachmentRefs = attachmentMap.get(`JournalEntry:${journalEntry.Id}`);
-      const attachmentFileNames = attachmentRefs === undefined ? [] : attachmentRefs;
-      return normalizeJournalEntryForAudit(journalEntry, attachmentFileNames);
-    }),
+    ...sourceData.purchases.rows.map((purchase) =>
+      normalizePurchaseForAudit(purchase, attachmentMap.get(`Purchase:${purchase.Id}`) || []),
+    ),
+    ...sourceData.bills.rows.map((bill) =>
+      normalizeBillForAudit(bill, attachmentMap.get(`Bill:${bill.Id}`) || []),
+    ),
+    ...sourceData.journalEntries.rows.map((journalEntry) =>
+      normalizeJournalEntryForAudit(journalEntry, attachmentMap.get(`JournalEntry:${journalEntry.Id}`) || []),
+    ),
+    ...sourceData.transfers.rows.map((transfer) =>
+      normalizeTransferForAudit(transfer, attachmentMap.get(`Transfer:${transfer.Id}`) || []),
+    ),
   ];
 
   const findings = classifyAuditExceptions(normalized);
   const coverageRows: CoverageRow[] = [
     {
       transactionType: 'Purchase',
-      scannedCount: purchases.length,
-      complete: purchasesResult.complete,
+      scannedCount: sourceData.purchases.rows.length,
+      complete: sourceData.purchases.complete,
+    },
+    {
+      transactionType: 'Bill',
+      scannedCount: sourceData.bills.rows.length,
+      complete: sourceData.bills.complete,
     },
     {
       transactionType: 'JournalEntry',
-      scannedCount: journalEntries.length,
-      complete: journalEntriesResult.complete,
+      scannedCount: sourceData.journalEntries.rows.length,
+      complete: sourceData.journalEntries.complete,
+    },
+    {
+      transactionType: 'Transfer',
+      scannedCount: sourceData.transfers.rows.length,
+      complete: sourceData.transfers.complete,
     },
   ];
   const coverage = summarizeCoverage(coverageRows);
@@ -69,13 +82,15 @@ async function main() {
   await fs.writeFile(
     path.join(outDir, 'qbo-full-history-exception-audit.md'),
     buildAuditMarkdownSummary(findings, {
-      Purchase: purchases.length,
-      JournalEntry: journalEntries.length,
-      Attachable: attachables.length,
+      Purchase: sourceData.purchases.rows.length,
+      Bill: sourceData.bills.rows.length,
+      JournalEntry: sourceData.journalEntries.rows.length,
+      Transfer: sourceData.transfers.rows.length,
+      Attachable: sourceData.attachables.rows.length,
     }) +
       `\n\n## Coverage\n- completeCoverage: ${coverage.completeCoverage}\n- failedTypes: ${
         coverage.failedTypes.length === 0 ? 'none' : coverage.failedTypes.join(', ')
-      }\n- attachablesComplete: ${attachablesResult.complete}\n`,
+      }\n- attachablesComplete: ${sourceData.attachables.complete}\n`,
   );
 
   console.log(
@@ -85,8 +100,8 @@ async function main() {
         findings: findings.length,
         coverage: {
           ...coverage,
-          attachablesComplete: attachablesResult.complete,
-          attachablesScannedCount: attachables.length,
+          attachablesComplete: sourceData.attachables.complete,
+          attachablesScannedCount: sourceData.attachables.rows.length,
         },
       },
       null,

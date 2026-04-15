@@ -128,39 +128,23 @@ export type ActiveQboConnection = {
   accessToken: string;
 };
 
-export async function getActiveQboConnection(): Promise<ActiveQboConnection> {
-  const connection = await qboFullHistoryAuditDeps.getQboConnection();
-  if (connection === null) {
-    throw new Error('No active QBO connection');
-  }
-
-  const { accessToken, updatedConnection } = await qboFullHistoryAuditDeps.getValidToken(connection);
-  if (updatedConnection !== undefined) {
-    await qboFullHistoryAuditDeps.saveServerQboConnection(updatedConnection);
-  }
-
-  return {
-    connection: updatedConnection ?? connection,
-    accessToken,
-  };
-}
-
-export async function qboQueryAll(
-  activeConnection: ActiveQboConnection,
-  query: string,
-): Promise<{ rows: Record<string, unknown>[]; complete: boolean }> {
-  const baseUrl = getApiBaseUrl();
+async function qboQueryAllByCredentials<T extends Record<string, unknown>>(
+  accessToken: string,
+  realmId: string,
+  baseUrl: string,
+  buildQuery: (startPosition: number, maxResults: number) => string,
+): Promise<{ rows: T[]; complete: boolean }> {
   const maxResults = 1000;
   let startPosition = 1;
-  const rows: Record<string, unknown>[] = [];
+  const rows: T[] = [];
 
   while (true) {
-    const pageQuery = `${query} STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
+    const pageQuery = buildQuery(startPosition, maxResults);
     const response = await fetchWithRetry(
-      `${baseUrl}/v3/company/${activeConnection.connection.realmId}/query?query=${encodeURIComponent(pageQuery)}`,
+      `${baseUrl}/v3/company/${realmId}/query?query=${encodeURIComponent(pageQuery)}`,
       {
         headers: {
-          Authorization: `Bearer ${activeConnection.accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           Accept: 'application/json',
         },
       },
@@ -187,7 +171,7 @@ export async function qboQueryAll(
       return { rows, complete: true };
     }
 
-    rows.push(...pageRows);
+    rows.push(...(pageRows as T[]));
 
     if (pageRows.length < maxResults) {
       return { rows, complete: true };
@@ -195,4 +179,70 @@ export async function qboQueryAll(
 
     startPosition += maxResults;
   }
+}
+
+export async function getActiveQboConnection(): Promise<ActiveQboConnection> {
+  const connection = await qboFullHistoryAuditDeps.getQboConnection();
+  if (connection === null) {
+    throw new Error('No active QBO connection');
+  }
+
+  const { accessToken, updatedConnection } = await qboFullHistoryAuditDeps.getValidToken(connection);
+  if (updatedConnection !== undefined) {
+    await qboFullHistoryAuditDeps.saveServerQboConnection(updatedConnection);
+  }
+
+  return {
+    connection: updatedConnection ?? connection,
+    accessToken,
+  };
+}
+
+export async function fetchAuditSourceData(accessToken: string, realmId: string, baseUrl: string) {
+  const [purchases, bills, journalEntries, transfers, attachables] = await Promise.all([
+    qboQueryAllByCredentials<any>(
+      accessToken,
+      realmId,
+      baseUrl,
+      (start, max) => `SELECT * FROM Purchase ORDERBY TxnDate STARTPOSITION ${start} MAXRESULTS ${max}`,
+    ),
+    qboQueryAllByCredentials<any>(
+      accessToken,
+      realmId,
+      baseUrl,
+      (start, max) => `SELECT * FROM Bill ORDERBY TxnDate STARTPOSITION ${start} MAXRESULTS ${max}`,
+    ),
+    qboQueryAllByCredentials<any>(
+      accessToken,
+      realmId,
+      baseUrl,
+      (start, max) => `SELECT * FROM JournalEntry ORDERBY TxnDate STARTPOSITION ${start} MAXRESULTS ${max}`,
+    ),
+    qboQueryAllByCredentials<any>(
+      accessToken,
+      realmId,
+      baseUrl,
+      (start, max) => `SELECT * FROM Transfer ORDERBY TxnDate STARTPOSITION ${start} MAXRESULTS ${max}`,
+    ),
+    qboQueryAllByCredentials<any>(
+      accessToken,
+      realmId,
+      baseUrl,
+      (start, max) => `SELECT * FROM Attachable STARTPOSITION ${start} MAXRESULTS ${max}`,
+    ),
+  ]);
+
+  return { purchases, bills, journalEntries, transfers, attachables };
+}
+
+export async function qboQueryAll(
+  activeConnection: ActiveQboConnection,
+  query: string,
+): Promise<{ rows: Record<string, unknown>[]; complete: boolean }> {
+  return qboQueryAllByCredentials<Record<string, unknown>>(
+    activeConnection.accessToken,
+    activeConnection.connection.realmId,
+    getApiBaseUrl(),
+    (startPosition, maxResults) => `${query} STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`,
+  );
 }

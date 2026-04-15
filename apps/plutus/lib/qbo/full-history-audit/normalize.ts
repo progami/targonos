@@ -79,3 +79,51 @@ export function normalizeJournalEntryForAudit(
     sourceTag: null,
   };
 }
+
+export function normalizeBillForAudit(
+  bill: any,
+  attachmentFileNames: string[],
+): NormalizedAuditTransaction {
+  return {
+    transactionType: 'Bill',
+    transactionId: bill.Id,
+    txnDate: bill.TxnDate,
+    amount: bill.TotalAmt,
+    currency: bill.CurrencyRef?.value || null,
+    counterparty: bill.VendorRef?.name || null,
+    docNumber: bill.DocNumber || null,
+    privateNote: bill.PrivateNote || null,
+    dueDate: bill.DueDate || null,
+    postingAccounts: (bill.Line || [])
+      .map((line: any) => line.AccountBasedExpenseLineDetail?.AccountRef?.name || '')
+      .filter(Boolean),
+    lineDescriptions: (bill.Line || []).map((line: any) => line.Description || ''),
+    attachmentFileNames,
+    isInReconciledPeriod: false,
+    lastUpdatedTime: bill.MetaData?.LastUpdatedTime || null,
+    sourceTag: null,
+  };
+}
+
+export function normalizeTransferForAudit(
+  transfer: any,
+  attachmentFileNames: string[],
+): NormalizedAuditTransaction {
+  return {
+    transactionType: 'Transfer',
+    transactionId: transfer.Id,
+    txnDate: transfer.TxnDate,
+    amount: transfer.Amount,
+    currency: transfer.CurrencyRef?.value || null,
+    counterparty: null,
+    docNumber: transfer.DocNumber || null,
+    privateNote: transfer.PrivateNote || null,
+    dueDate: null,
+    postingAccounts: [transfer.FromAccountRef?.name || '', transfer.ToAccountRef?.name || ''].filter(Boolean),
+    lineDescriptions: [],
+    attachmentFileNames,
+    isInReconciledPeriod: false,
+    lastUpdatedTime: transfer.MetaData?.LastUpdatedTime || null,
+    sourceTag: null,
+  };
+}
