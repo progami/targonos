@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { encode } from 'next-auth/jwt'
 
+import { buildExpiredAuthCookieHeaders } from '../lib/auth-cookie-clear'
 import { portalBaseUrl, sessionCookieName } from './fixtures/dev-login'
 
 const staleSessionSecret = 'playwright-stale-session-secret-111111111111'
@@ -74,4 +75,23 @@ test('portal recovers from a stale encrypted session cookie and still redirects 
     .join('\n')
 
   expect(sessionSetCookieHeader).toContain(`${sessionCookieName}=;`)
+})
+
+test('auth cleanup clears legacy parent-domain session cookies', () => {
+  const headers = buildExpiredAuthCookieHeaders({
+    cookieDomain: '.os.targonglobal.com',
+    requestCookieNames: ['__Secure-next-auth.session-token'],
+  })
+
+  const matchingHeaders = headers.filter((header) => header.startsWith('__Secure-next-auth.session-token=;'))
+
+  expect(matchingHeaders).toContain(
+    '__Secure-next-auth.session-token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
+  )
+  expect(matchingHeaders).toContain(
+    '__Secure-next-auth.session-token=; Domain=.os.targonglobal.com; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
+  )
+  expect(matchingHeaders).toContain(
+    '__Secure-next-auth.session-token=; Domain=.targonglobal.com; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; HttpOnly; Secure; SameSite=Lax',
+  )
 })
