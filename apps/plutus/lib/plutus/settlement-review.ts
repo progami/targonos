@@ -1,12 +1,15 @@
 import { getSettlementDisplayId } from './settlement-display';
 import type { AuditInvoiceResolution } from './audit-invoice-resolution';
+import { isBlockingProcessingCode } from './settlement-types';
 
 type PlutusSettlementStatus = 'Pending' | 'Processed' | 'RolledBack';
+export type SettlementPostingBlockSeverity = 'blocked' | 'warning';
+export type SettlementPostingBlockState = 'blocked' | 'warning' | 'ready';
 
 export type SettlementListRowViewModel = {
   title: string;
   subtitle: string;
-  statusText: string;
+  statusText: PlutusSettlementStatus;
 };
 
 export type SettlementListRowViewModelInput = {
@@ -30,6 +33,13 @@ export type SettlementPostingSectionViewModel = {
   settlementTotal: number | null;
   plutusStatus: PlutusSettlementStatus;
   invoiceId: string | null;
+  resolutionMessage: string | null;
+  blockState: SettlementPostingBlockState;
+  blocks: Array<{
+    code: string;
+    message: string;
+    severity: SettlementPostingBlockSeverity;
+  }>;
   blockMessage: string | null;
   blockMessages: string[];
 };
@@ -116,20 +126,48 @@ function compareNullableIsoDay(a: string | null, b: string | null): number {
   return a.localeCompare(b);
 }
 
-function buildBlockMessages(
-  previewChild: SettlementPostingSectionPreviewChildInput | undefined,
-  invoiceResolution: AuditInvoiceResolution,
-  invoiceResolutionMessage: string,
-): string[] {
-  if (invoiceResolution.status === 'unresolved') {
-    return [invoiceResolutionMessage];
+function mapPreviewBlockSeverity(code: string): SettlementPostingBlockSeverity {
+  return isBlockingProcessingCode(code) ? 'blocked' : 'warning';
+}
+
+function summarizeBlockState(blocks: Array<{ severity: SettlementPostingBlockSeverity }>): SettlementPostingBlockState {
+  const hasBlocked = blocks.some((block) => block.severity === 'blocked');
+  if (hasBlocked) return 'blocked';
+
+  const hasWarning = blocks.some((block) => block.severity === 'warning');
+  if (hasWarning) return 'warning';
+
+  return 'ready';
+}
+
+function buildSectionBlocks(input: {
+  previewChild: SettlementPostingSectionPreviewChildInput | undefined;
+  invoiceResolution: AuditInvoiceResolution;
+  invoiceResolutionMessage: string;
+}): Array<{ code: string; message: string; severity: SettlementPostingBlockSeverity }> {
+  if (input.invoiceResolution.status === 'unresolved') {
+    return [
+      {
+        code: 'INVOICE_RESOLUTION',
+        message: input.invoiceResolutionMessage,
+        severity: 'blocked',
+      },
+    ];
   }
 
-  if (!previewChild) {
+  if (input.previewChild === undefined) {
     return [];
   }
 
-  return previewChild.preview.blocks.map((block) => block.message);
+  return input.previewChild.preview.blocks.map((block) => ({
+    code: block.code,
+    message: block.message,
+    severity: mapPreviewBlockSeverity(block.code),
+  }));
+}
+
+function buildBlockMessages(blocks: Array<{ message: string }>): string[] {
+  return blocks.map((block) => block.message);
 }
 
 export function buildSettlementListRowViewModel(input: SettlementListRowViewModelInput): SettlementListRowViewModel {
@@ -156,7 +194,9 @@ export function buildSettlementPostingSectionViewModels(
   input: SettlementPostingSectionInput,
   preview: SettlementPostingPreviewInput | null,
 ): SettlementPostingSectionViewModel[] {
-  const previewById = new Map(preview?.children.map((child) => [child.qboJournalEntryId, child] as const));
+  const previewById = new Map(
+    preview === null ? [] : preview.children.map((child) => [child.qboJournalEntryId, child] as const),
+  );
 
   return [...input.children]
     .sort((a, b) => {
@@ -166,7 +206,12 @@ export function buildSettlementPostingSectionViewModels(
     })
     .map((child) => {
       const previewChild = previewById.get(child.qboJournalEntryId);
-      const blockMessages = buildBlockMessages(previewChild, child.invoiceResolution, child.invoiceResolutionMessage);
+      const blocks = buildSectionBlocks({
+        previewChild,
+        invoiceResolution: child.invoiceResolution,
+        invoiceResolutionMessage: child.invoiceResolutionMessage,
+      });
+      const blockMessages = buildBlockMessages(blocks);
 
       return {
         qboJournalEntryId: child.qboJournalEntryId,
@@ -176,12 +221,16 @@ export function buildSettlementPostingSectionViewModels(
         postedDate: child.postedDate,
         settlementTotal: child.settlementTotal,
         plutusStatus: child.plutusStatus,
-        invoiceId:
-          (child.invoiceResolution.status === 'resolved' ? child.invoiceResolution.invoiceId : null) ??
-          child.processing?.invoiceId ??
-          child.rollback?.invoiceId ??
-          previewChild?.invoiceId ??
-          null,
+        invoiceId: (() => {
+          if (child.invoiceResolution.status === 'resolved') return child.invoiceResolution.invoiceId;
+          if (child.processing !== null) return child.processing.invoiceId;
+          if (child.rollback !== null) return child.rollback.invoiceId;
+          if (previewChild !== undefined) return previewChild.invoiceId;
+          return null;
+        })(),
+        resolutionMessage: child.invoiceResolution.status === 'resolved' ? child.invoiceResolutionMessage : null,
+        blockState: summarizeBlockState(blocks),
+        blocks,
         blockMessage: blockMessages[0] ?? null,
         blockMessages,
       };

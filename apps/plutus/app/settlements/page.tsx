@@ -44,7 +44,7 @@ import {
   useSettlementsListStore,
   type SettlementListStatus,
 } from '@/lib/store/settlements';
-import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
+import { buildSettlementListRowViewModel } from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -246,13 +246,6 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
 
 function buildParentSettlementHref(settlement: SettlementRow): string {
   return `/settlements/${settlement.marketplace.region}/${encodeURIComponent(settlement.sourceSettlementId)}`;
-}
-
-function buildVisibleSettlementId(settlement: SettlementRow): string {
-  return getSettlementDisplayId({
-    sourceSettlementId: settlement.sourceSettlementId,
-    childDocNumbers: settlement.children.map((child) => child.docNumber),
-  })
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
@@ -845,7 +838,17 @@ export default function SettlementsPage() {
                       !error &&
                       settlements.map((s) => {
                         const settlementHref = buildParentSettlementHref(s);
-                        const visibleSettlementId = buildVisibleSettlementId(s);
+                        const rowView = buildSettlementListRowViewModel({
+                          sourceSettlementId: s.sourceSettlementId,
+                          marketplace: { label: s.marketplace.label },
+                          periodStart: s.periodStart,
+                          periodEnd: s.periodEnd,
+                          settlementTotal: s.settlementTotal,
+                          plutusStatus: s.plutusStatus,
+                          splitCount: s.splitCount,
+                          isSplit: s.isSplit,
+                          children: s.children.map((child) => ({ docNumber: child.docNumber })),
+                        });
 
                         return (
                           <MuiTableRow
@@ -857,26 +860,11 @@ export default function SettlementsPage() {
                               <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
                                 <MarketplaceFlag region={s.marketplace.region} />
                                 <Box sx={{ minWidth: 0 }}>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-                                    <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
-                                      {s.marketplace.label}
-                                    </Box>
-                                    {s.isSplit && (
-                                      <Chip
-                                        label={`Split into ${s.splitCount} month-end postings`}
-                                        size="small"
-                                        variant="outlined"
-                                        sx={{
-                                          ...chipBase,
-                                          borderColor: 'rgba(0, 194, 185, 0.35)',
-                                          bgcolor: 'rgba(0, 194, 185, 0.08)',
-                                          color: '#007d76',
-                                        }}
-                                      />
-                                    )}
+                                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', fontWeight: 500, color: 'text.primary' }}>
+                                    {rowView.title}
                                   </Box>
-                                  <Box sx={{ mt: 0.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', color: 'text.secondary' }}>
-                                    {visibleSettlementId}
+                                  <Box sx={{ mt: 0.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', color: 'text.secondary' }}>
+                                    {rowView.subtitle}
                                   </Box>
                                   <Box sx={{ mt: 0.35, fontSize: '0.75rem', color: 'text.secondary' }}>
                                     {s.childCount === 1 ? '1 month-end posting' : `${s.childCount} month-end postings`}
@@ -902,7 +890,7 @@ export default function SettlementsPage() {
                             </MuiTableCell>
                             <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-                                <PlutusPill status={s.plutusStatus} />
+                                <PlutusPill status={rowView.statusText} />
                                 <SplitButton
                                   onClick={() => router.push(settlementHref)}
                                   dropdownItems={[

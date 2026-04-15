@@ -79,6 +79,7 @@ import {
 import { getSettlementDisplayId } from '../lib/plutus/settlement-display';
 import {
   buildSettlementListRowViewModel,
+  buildSettlementHistoryViewModel,
   buildSettlementPostingSectionViewModels,
 } from '../lib/plutus/settlement-review';
 import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
@@ -381,7 +382,119 @@ test('buildSettlementPostingSectionViewModels orders child postings chronologica
   const sections = buildSettlementPostingSectionViewModels(detail, null);
   assert.equal(sections[0]?.docNumber, 'UK-260327-260331-S1-A');
   assert.equal(sections[0]?.invoiceId, 'INV-1');
+  assert.equal(sections[0]?.blockState, 'ready');
   assert.equal(sections[1]?.blockMessage, 'No audit invoice matched');
+});
+
+test('buildSettlementPostingSectionViewModels preserves preview severity and shared section shape', () => {
+  const detail = {
+    settlement: { sourceSettlementId: 'UK-260401-260410-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },
+    children: [
+      {
+        qboJournalEntryId: 'je-warning',
+        docNumber: 'UK-260401-260405-S1-A',
+        periodStart: '2026-04-01',
+        periodEnd: '2026-04-05',
+        postedDate: '2026-04-05',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-KEEP', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+      {
+        qboJournalEntryId: 'je-blocked',
+        docNumber: 'UK-260406-260410-S1-B',
+        periodStart: '2026-04-06',
+        periodEnd: '2026-04-10',
+        postedDate: '2026-04-10',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-BLOCKED', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+    ],
+    history: [],
+  } as const;
+
+  const preview = {
+    children: [
+      {
+        qboJournalEntryId: 'je-warning',
+        docNumber: 'UK-260401-260405-S1-A',
+        invoiceId: 'INV-PREVIEW-WARN',
+        preview: {
+          blocks: [{ code: 'PNL_ALLOCATION_WARNING', message: 'Preview warning' }],
+          sales: [],
+          returns: [],
+          cogsJournalEntry: { lines: [] },
+          pnlJournalEntry: { lines: [] },
+        },
+      },
+      {
+        qboJournalEntryId: 'je-blocked',
+        docNumber: 'UK-260406-260410-S1-B',
+        invoiceId: 'INV-PREVIEW-BLOCKED',
+        preview: {
+          blocks: [{ code: 'MISSING_ACCOUNT_MAPPING', message: 'Preview blocked' }],
+          sales: [],
+          returns: [],
+          cogsJournalEntry: { lines: [] },
+          pnlJournalEntry: { lines: [] },
+        },
+      },
+    ],
+  } as const;
+
+  const sections = buildSettlementPostingSectionViewModels(detail, preview);
+  assert.equal(sections[0]?.invoiceId, 'INV-KEEP');
+  assert.equal(sections[0]?.blockState, 'warning');
+  assert.equal(sections[0]?.blocks[0]?.severity, 'warning');
+  assert.equal(sections[0]?.blocks[0]?.message, 'Preview warning');
+  assert.equal(sections[1]?.blockState, 'blocked');
+  assert.equal(sections[1]?.blocks[0]?.severity, 'blocked');
+  assert.equal(sections[1]?.blockMessage, 'Preview blocked');
+  assert.deepEqual(Object.keys(sections[0] ?? {}), Object.keys(sections[1] ?? {}));
+});
+
+test('buildSettlementHistoryViewModel orders entries newest-first and keeps compact text', () => {
+  const history = buildSettlementHistoryViewModel({
+    history: [
+      {
+        id: 'h-1',
+        timestamp: '2026-04-05T12:30:00.000Z',
+        title: 'Processed in Plutus',
+        description: 'Matched to invoice INV-2.',
+        childDocNumber: 'UK-260401-260405-S1-A',
+        kind: 'processed',
+      },
+      {
+        id: 'h-2',
+        timestamp: '2026-04-06T12:30:00.000Z',
+        title: 'Rolled back in Plutus',
+        description: 'Previously processed with invoice INV-2.',
+        childDocNumber: 'UK-260406-260410-S1-B',
+        kind: 'rolled_back',
+      },
+      {
+        id: 'h-0',
+        timestamp: '2026-04-01T12:30:00.000Z',
+        title: 'Posting created',
+        description: 'Month-end posting UK-260401-260405-S1-A was posted to QBO.',
+        childDocNumber: 'UK-260401-260405-S1-A',
+        kind: 'posted',
+      },
+    ],
+  });
+
+  assert.equal(history[0]?.id, 'h-2');
+  assert.equal(history[0]?.subtitle, 'Previously processed with invoice INV-2. · UK-260406-260410-S1-B');
+  assert.equal(history[2]?.kind, 'posted');
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {

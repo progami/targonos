@@ -28,8 +28,11 @@ import Typography from '@mui/material/Typography';
 import { BackButton } from '@/components/back-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
-import { getSettlementDisplayId } from '@/lib/plutus/settlement-display';
-import { isBlockingProcessingCode } from '@/lib/plutus/settlement-types';
+import {
+  buildSettlementHistoryViewModel,
+  buildSettlementListRowViewModel,
+  buildSettlementPostingSectionViewModels,
+} from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -198,13 +201,6 @@ function formatTimestamp(value: string): string {
   });
 }
 
-function buildVisibleSettlementId(data: ParentSettlementDetailResponse): string {
-  return getSettlementDisplayId({
-    sourceSettlementId: data.settlement.sourceSettlementId,
-    childDocNumbers: data.children.map((child) => child.docNumber),
-  })
-}
-
 function PlutusPill({ status }: { status: ParentSettlementDetailResponse['settlement']['plutusStatus'] }) {
   if (status === 'Processed') {
     return <Chip label="Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
@@ -260,12 +256,6 @@ async function rollbackParentSettlement(region: string, settlementId: string) {
   }
 }
 
-function previewHasBlockingBlocks(preview: ParentPreviewResponse): boolean {
-  return preview.children.some((child) =>
-    child.preview.blocks.some((block) => isBlockingProcessingCode(block.code)),
-  );
-}
-
 export default function ParentSettlementDetailPage() {
   const { enqueueSnackbar } = useSnackbar();
   const params = useParams();
@@ -306,7 +296,55 @@ export default function ParentSettlementDetailPage() {
     const nextTab = readDetailTab(searchParams.get('tab'));
     setTab((current) => (current === nextTab ? current : nextTab));
   }, [searchParams]);
-  const visibleSettlementId = useMemo(() => (data ? buildVisibleSettlementId(data) : ''), [data]);
+  const settlementView = useMemo(
+    () =>
+      data
+        ? buildSettlementListRowViewModel({
+            sourceSettlementId: data.settlement.sourceSettlementId,
+            marketplace: { label: data.settlement.marketplace.label },
+            periodStart: data.settlement.periodStart,
+            periodEnd: data.settlement.periodEnd,
+            settlementTotal: data.settlement.settlementTotal,
+            plutusStatus: data.settlement.plutusStatus,
+            splitCount: data.settlement.splitCount,
+            isSplit: data.settlement.isSplit,
+            children: data.children.map((child) => ({ docNumber: child.docNumber })),
+          })
+        : null,
+    [data],
+  );
+  const visibleSettlementId = settlementView ? settlementView.title : '';
+  const postingSections = useMemo(
+    () =>
+      data
+        ? buildSettlementPostingSectionViewModels(
+            {
+              settlement: data.settlement,
+              children: data.children,
+            },
+            null,
+          )
+        : [],
+    [data],
+  );
+  const previewSections = useMemo(
+    () =>
+      data && preview
+        ? buildSettlementPostingSectionViewModels(
+            {
+              settlement: data.settlement,
+              children: data.children,
+            },
+            preview,
+          )
+        : [],
+    [data, preview],
+  );
+  const previewSectionById = useMemo(
+    () => new Map(previewSections.map((section) => [section.qboJournalEntryId, section] as const)),
+    [previewSections],
+  );
+  const historyRows = useMemo(() => (data ? buildSettlementHistoryViewModel({ history: data.history }) : []), [data]);
   const unresolvedChildren = useMemo(
     () => (data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : []),
     [data],
@@ -430,7 +468,7 @@ export default function ParentSettlementDetailPage() {
                 <Typography variant="h4" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>
                   {visibleSettlementId}
                 </Typography>
-                <PlutusPill status={data.settlement.plutusStatus} />
+                <PlutusPill status={settlementView ? settlementView.statusText : data.settlement.plutusStatus} />
               </>
             )}
           </Box>
@@ -591,25 +629,25 @@ export default function ParentSettlementDetailPage() {
                     )}
 
                     <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                      {data.children.map((child) => (
+                      {postingSections.map((section) => (
                         <Box
-                          key={child.qboJournalEntryId}
+                          key={section.qboJournalEntryId}
                           sx={{
                             display: 'grid',
                             gap: 1,
                             gridTemplateColumns: { xs: '1fr', lg: '1.2fr 1fr' },
                             alignItems: 'center',
                             border: 1,
-                            borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
+                            borderColor: section.blockState === 'ready' ? 'divider' : 'warning.light',
                             borderRadius: 2,
                             p: 1.5,
                             bgcolor: 'background.paper',
                           }}
                         >
                           <Box>
-                            <Typography sx={{ fontWeight: 600 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
+                            <Typography sx={{ fontWeight: 600 }}>{formatPeriod(section.periodStart, section.periodEnd)}</Typography>
                             <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                              Posting {child.docNumber}
+                              Posting {section.docNumber}
                             </Typography>
                           </Box>
 
@@ -617,21 +655,21 @@ export default function ParentSettlementDetailPage() {
                             sx={{
                               borderRadius: 2,
                               border: 1,
-                              borderColor: child.invoiceResolution.status === 'resolved' ? 'divider' : 'warning.light',
-                              bgcolor: child.invoiceResolution.status === 'resolved' ? 'action.hover' : 'warning.50',
+                              borderColor: section.blockState === 'ready' ? 'divider' : 'warning.light',
+                              bgcolor: section.blockState === 'ready' ? 'action.hover' : 'warning.50',
                               px: 1.25,
                               py: 1,
                             }}
                           >
-                            <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: child.invoiceResolution.status === 'resolved' ? 'text.secondary' : 'warning.dark' }}>
-                              {child.invoiceResolution.status === 'resolved' ? 'Invoice' : 'Resolution blocked'}
+                            <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: section.blockState === 'ready' ? 'text.secondary' : 'warning.dark' }}>
+                              {section.blockState === 'ready' ? 'Invoice' : 'Resolution blocked'}
                             </Typography>
-                            <Typography sx={{ mt: 0.35, fontWeight: 600, color: child.invoiceResolution.status === 'resolved' ? 'text.primary' : 'warning.dark' }}>
-                              {child.invoiceResolution.status === 'resolved' ? child.invoiceResolution.invoiceId : child.invoiceResolutionMessage}
+                            <Typography sx={{ mt: 0.35, fontWeight: 600, color: section.blockState === 'ready' ? 'text.primary' : 'warning.dark' }}>
+                              {section.blockState === 'ready' ? section.invoiceId : section.blockMessage}
                             </Typography>
-                            {child.invoiceResolution.status === 'resolved' && (
+                            {section.blockState === 'ready' && section.resolutionMessage !== null && (
                               <Typography sx={{ mt: 0.25, fontSize: '0.78rem', color: 'text.secondary' }}>
-                                {child.invoiceResolutionMessage}
+                                {section.resolutionMessage}
                               </Typography>
                             )}
                           </Box>
@@ -642,7 +680,7 @@ export default function ParentSettlementDetailPage() {
                 </Card>
 
                 {preview && (
-                  <Card sx={{ border: 1, borderColor: previewHasBlockingBlocks(preview) ? 'warning.light' : 'divider' }}>
+                  <Card sx={{ border: 1, borderColor: previewSections.some((section) => section.blockState === 'blocked') ? 'warning.light' : 'divider' }}>
                     <CardContent sx={{ p: 3 }}>
                       <Typography sx={{ fontSize: '1rem', fontWeight: 700 }}>Preview</Typography>
                       <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
@@ -651,22 +689,26 @@ export default function ParentSettlementDetailPage() {
 
                       <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
                         {preview.children.map((child) => {
-                          const blockingBlocks = child.preview.blocks.filter((block) => isBlockingProcessingCode(block.code));
-                          const warningBlocks = child.preview.blocks.filter((block) => !isBlockingProcessingCode(block.code));
+                          const section = previewSectionById.get(child.qboJournalEntryId);
+                          if (section === undefined) {
+                            throw new Error(`Missing preview section for ${child.docNumber}`);
+                          }
+
+                          const warningBlocks = section.blocks.filter((block) => block.severity === 'warning');
                           return (
-                            <Card key={child.qboJournalEntryId} variant="outlined" sx={{ borderColor: blockingBlocks.length > 0 ? 'warning.light' : 'divider' }}>
+                            <Card key={child.qboJournalEntryId} variant="outlined" sx={{ borderColor: section.blockState === 'blocked' ? 'warning.light' : 'divider' }}>
                               <CardContent sx={{ p: 2 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                                   <Box>
                                     <Typography sx={{ fontWeight: 700 }}>{child.docNumber}</Typography>
                                     <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                      Invoice {child.invoiceId}
+                                      Invoice {section.invoiceId}
                                     </Typography>
                                   </Box>
                                   <Chip
                                     size="small"
-                                    label={blockingBlocks.length > 0 ? 'Blocked' : warningBlocks.length > 0 ? 'Ready with warnings' : 'Ready'}
-                                    color={blockingBlocks.length > 0 ? 'warning' : 'success'}
+                                    label={section.blockState === 'blocked' ? 'Blocked' : warningBlocks.length > 0 ? 'Ready with warnings' : 'Ready'}
+                                    color={section.blockState === 'blocked' ? 'warning' : 'success'}
                                   />
                                 </Box>
 
@@ -687,10 +729,19 @@ export default function ParentSettlementDetailPage() {
                                   </Box>
                                 </Box>
 
-                                {child.preview.blocks.length > 0 && (
+                                {section.blocks.length > 0 && (
                                   <Box sx={{ mt: 1.5, display: 'grid', gap: 0.75 }}>
-                                    {child.preview.blocks.map((block, index) => (
-                                      <Box key={`${child.qboJournalEntryId}:${index}`} sx={{ borderRadius: 2, border: 1, borderColor: isBlockingProcessingCode(block.code) ? 'warning.light' : 'divider', bgcolor: isBlockingProcessingCode(block.code) ? 'warning.50' : 'action.hover', p: 1 }}>
+                                    {section.blocks.map((block, index) => (
+                                      <Box
+                                        key={`${child.qboJournalEntryId}:${index}`}
+                                        sx={{
+                                          borderRadius: 2,
+                                          border: 1,
+                                          borderColor: block.severity === 'blocked' ? 'warning.light' : 'divider',
+                                          bgcolor: block.severity === 'blocked' ? 'warning.50' : 'action.hover',
+                                          p: 1,
+                                        }}
+                                      >
                                         <Typography sx={{ fontSize: '0.8rem', fontWeight: 600 }}>
                                           {block.code}
                                         </Typography>
@@ -718,21 +769,21 @@ export default function ParentSettlementDetailPage() {
                     </Typography>
 
                     <Box sx={{ mt: 2, display: 'grid', gap: 1.5 }}>
-                      {data.children.map((child) => (
-                        <Card key={child.qboJournalEntryId} variant="outlined" sx={{ borderColor: child.plutusStatus === 'Processed' ? 'rgba(34,197,94,0.28)' : 'divider' }}>
+                      {postingSections.map((section) => (
+                        <Card key={section.qboJournalEntryId} variant="outlined" sx={{ borderColor: section.plutusStatus === 'Processed' ? 'rgba(34,197,94,0.28)' : 'divider' }}>
                           <CardContent sx={{ p: 2.5 }}>
                             <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
                               <Box>
-                                <Typography sx={{ fontWeight: 700 }}>{formatPeriod(child.periodStart, child.periodEnd)}</Typography>
+                                <Typography sx={{ fontWeight: 700 }}>{formatPeriod(section.periodStart, section.periodEnd)}</Typography>
                                 <Typography sx={{ mt: 0.35, fontSize: '0.8rem', color: 'text.secondary' }}>
-                                  {child.docNumber}
+                                  {section.docNumber}
                                 </Typography>
                               </Box>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                                <PlutusPill status={child.plutusStatus} />
+                                <PlutusPill status={section.plutusStatus} />
                                 <Button
                                   component="a"
-                                  href={`https://app.qbo.intuit.com/app/journal?txnId=${child.qboJournalEntryId}`}
+                                  href={`https://app.qbo.intuit.com/app/journal?txnId=${section.qboJournalEntryId}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   variant="text"
@@ -747,19 +798,19 @@ export default function ParentSettlementDetailPage() {
                               <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
                                 <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Posting total</Typography>
                                 <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {child.settlementTotal === null ? '—' : formatMoney(child.settlementTotal, child.marketplace.currency)}
+                                  {section.settlementTotal === null ? '—' : formatMoney(section.settlementTotal, data.settlement.marketplace.currency)}
                                 </Typography>
                               </Box>
                               <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
                                 <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Posted date</Typography>
                                 <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {new Date(`${child.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                                  {new Date(`${section.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
                                 </Typography>
                               </Box>
                               <Box sx={{ borderRadius: 2, bgcolor: 'action.hover', p: 1.25 }}>
                                 <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>Matched invoice</Typography>
                                 <Typography sx={{ mt: 0.35, fontWeight: 700 }}>
-                                  {child.processing?.invoiceId ?? child.rollback?.invoiceId ?? 'Not processed'}
+                                  {section.invoiceId ?? 'Not processed'}
                                 </Typography>
                               </Box>
                             </Box>
@@ -778,13 +829,13 @@ export default function ParentSettlementDetailPage() {
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {child.lines.map((line, index) => {
+                                    {data.children.find((child) => child.qboJournalEntryId === section.qboJournalEntryId)?.lines.map((line, index) => {
                                       const signed = line.postingType === 'Debit' ? line.amount : -line.amount;
                                       return (
-                                        <TableRow key={`${child.qboJournalEntryId}:${line.id ?? index}`}>
+                                        <TableRow key={`${section.qboJournalEntryId}:${line.id ?? index}`}>
                                           <TableCell>{line.description === '' ? '—' : line.description}</TableCell>
                                           <TableCell>{line.accountFullyQualifiedName ?? line.accountName}</TableCell>
-                                          <TableCell align="right">{formatMoney(signed, child.marketplace.currency)}</TableCell>
+                                          <TableCell align="right">{formatMoney(signed, data.settlement.marketplace.currency)}</TableCell>
                                         </TableRow>
                                       );
                                     })}
@@ -810,12 +861,10 @@ export default function ParentSettlementDetailPage() {
                   </Typography>
 
                   <Box sx={{ mt: 2, display: 'grid', gap: 1.25 }}>
-                    {data.history.map((entry) => (
+                    {historyRows.map((entry) => (
                       <Box key={entry.id} sx={{ display: 'grid', gap: 0.35, borderLeft: '2px solid #00C2B9', pl: 1.5, py: 0.5 }}>
                         <Typography sx={{ fontSize: '0.875rem', fontWeight: 700 }}>{entry.title}</Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                          {entry.description} · {entry.childDocNumber}
-                        </Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{entry.subtitle}</Typography>
                         <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>{formatTimestamp(entry.timestamp)}</Typography>
                       </Box>
                     ))}
