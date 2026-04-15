@@ -202,6 +202,8 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
   if (type === 'ReserveDebit') return 'Amazon Reserved Balances - Current Reserve Amount';
   if (type === 'WAREHOUSE_DAMAGE') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Warehouse Damage';
   if (type === 'MISSING_FROM_INBOUND') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Missing From Inbound';
+  if (type === 'REVERSAL_REIMBURSEMENT')
+    return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';
   return null;
 }
 
