@@ -44,6 +44,15 @@ export type ParsedCaseReport = {
   sections: CaseReportSection[];
 };
 
+export type CaseReportDaySummary = {
+  reportDate: string;
+  totalRows: number;
+  actionDueRows: number;
+  newCaseRows: number;
+  forumWatchRows: number;
+  watchingRows: number;
+};
+
 export type CaseReportBundle = ParsedCaseReport & {
   marketSlug: CaseReportMarketSlug;
   marketLabel: string;
@@ -51,6 +60,7 @@ export type CaseReportBundle = ParsedCaseReport & {
   reportPath: string;
   caseJsonPath: string;
   availableReportDates: string[];
+  daySummaries: CaseReportDaySummary[];
   trackedCaseIds: string[];
   generatedAt: string | null;
 };
@@ -167,6 +177,71 @@ async function listAvailableReportDates(caseRoot: string): Promise<string[]> {
     .sort((left, right) => right.localeCompare(left));
 }
 
+function countCaseReportRows(parsedReport: ParsedCaseReport): CaseReportDaySummary {
+  const summary: CaseReportDaySummary = {
+    reportDate: parsedReport.reportDate,
+    totalRows: 0,
+    actionDueRows: 0,
+    newCaseRows: 0,
+    forumWatchRows: 0,
+    watchingRows: 0,
+  };
+
+  for (const section of parsedReport.sections) {
+    for (const row of section.rows) {
+      summary.totalRows += 1;
+
+      if (row.category === 'Action due') {
+        summary.actionDueRows += 1;
+        continue;
+      }
+
+      if (row.category === 'New case') {
+        summary.newCaseRows += 1;
+        continue;
+      }
+
+      if (row.category === 'Forum watch') {
+        summary.forumWatchRows += 1;
+        continue;
+      }
+
+      if (row.category === 'Watching') {
+        summary.watchingRows += 1;
+        continue;
+      }
+
+      throw new Error(`Unsupported case report summary category: ${row.category}`);
+    }
+  }
+
+  return summary;
+}
+
+async function readCaseReportDaySummaries(
+  caseRoot: string,
+  availableReportDates: string[],
+  marketCode: string,
+): Promise<CaseReportDaySummary[]> {
+  return Promise.all(
+    availableReportDates.map(async (reportDate) => {
+      const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
+      const markdown = await fs.readFile(reportPath, 'utf8');
+      const parsedReport = parseCaseReportMarkdown(markdown);
+
+      if (parsedReport.reportDate !== reportDate) {
+        throw new Error(`Case report date mismatch: expected ${reportDate}, got ${parsedReport.reportDate}`);
+      }
+
+      if (parsedReport.marketCode !== marketCode) {
+        throw new Error(`Case report market mismatch: expected ${marketCode}, got ${parsedReport.marketCode}`);
+      }
+
+      return countCaseReportRows(parsedReport);
+    }),
+  );
+}
+
 export async function readCaseReportBundleFromCaseRoot(
   caseRoot: string,
   marketSlug: CaseReportMarketSlug,
@@ -207,6 +282,8 @@ export async function readCaseReportBundleFromCaseRoot(
     throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseState.market}`);
   }
 
+  const daySummaries = await readCaseReportDaySummaries(caseRoot, availableReportDates, market.marketCode);
+
   return {
     ...parsedReport,
     marketSlug,
@@ -215,6 +292,7 @@ export async function readCaseReportBundleFromCaseRoot(
     reportPath,
     caseJsonPath,
     availableReportDates,
+    daySummaries,
     trackedCaseIds: Array.isArray(caseState.tracked_case_ids) ? caseState.tracked_case_ids : [],
     generatedAt: typeof caseState.generated_at === 'string' ? caseState.generated_at : null,
   };

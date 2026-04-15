@@ -21,6 +21,7 @@ import {
 import { getCaseQueueBorderColor } from '@/lib/cases/theme'
 import { CaseApprovalQueueTable } from './approval-queue-table'
 import { CaseApprovalDetailBand } from './approval-detail-band'
+import { CaseDaySummaryTable } from './day-summary-table'
 
 const MARKET_OPTIONS = [
   { slug: 'us', label: 'USA - Dust Sheets' },
@@ -106,8 +107,8 @@ export function CaseApprovalQueuePage({ bundle }: { bundle: CaseReportBundle }) 
     router.push(`/cases/${event.target.value}`)
   }
 
-  function handleReportDateChange(event: SelectChangeEvent<string>) {
-    router.push(`/cases/${bundle.marketSlug}/${event.target.value}`)
+  function handleReportDateChange(reportDate: string) {
+    router.push(`/cases/${bundle.marketSlug}/${reportDate}`)
   }
 
   function handleDecisionFilterChange(event: SelectChangeEvent<string>) {
@@ -146,16 +147,6 @@ export function CaseApprovalQueuePage({ bundle }: { bundle: CaseReportBundle }) 
             </Select>
           </FormControl>
 
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <Select value={bundle.reportDate} onChange={handleReportDateChange}>
-              {bundle.availableReportDates.map((reportDate) => (
-                <MenuItem key={reportDate} value={reportDate}>
-                  {reportDate}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
           <TextField
             size="small"
             placeholder="Search"
@@ -182,6 +173,12 @@ export function CaseApprovalQueuePage({ bundle }: { bundle: CaseReportBundle }) 
         selectedRowKey={selectedRowKey}
         onSelectRow={setSelectedRowKey}
         onDecision={handleDecision}
+      />
+
+      <CaseDaySummaryTable
+        daySummaries={bundle.daySummaries}
+        selectedReportDate={bundle.reportDate}
+        onSelectReportDate={handleReportDateChange}
       />
 
       <CaseApprovalDetailBand row={selectedRow} />

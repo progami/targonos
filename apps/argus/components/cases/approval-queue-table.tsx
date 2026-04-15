@@ -63,9 +63,12 @@ function DecisionCell({
         }}
         sx={(theme) => ({
           minWidth: 0,
-          px: 0.75,
+          px: 0.45,
+          py: 0,
           color: getCaseQueueActionColor('approve', theme.palette.mode),
+          fontSize: '0.72rem',
           fontWeight: 700,
+          lineHeight: 1.15,
           textTransform: 'none',
         })}
       >
@@ -79,9 +82,12 @@ function DecisionCell({
         }}
         sx={(theme) => ({
           minWidth: 0,
-          px: 0.75,
+          px: 0.45,
+          py: 0,
           color: getCaseQueueActionColor('reject', theme.palette.mode),
+          fontSize: '0.72rem',
           fontWeight: 700,
+          lineHeight: 1.15,
           textTransform: 'none',
         })}
       >
@@ -99,14 +105,14 @@ function CategoryCell({ category }: { category: string }) {
         return {
           display: 'inline-flex',
           alignItems: 'center',
-          px: 0.9,
-          py: 0.35,
+          px: 0.65,
+          py: 0.22,
           border: '1px solid',
           borderColor: tone.border,
           bgcolor: tone.background,
           color: tone.color,
           borderRadius: 1,
-          fontSize: '0.74rem',
+          fontSize: '0.66rem',
           fontWeight: 700,
           lineHeight: 1.1,
           whiteSpace: 'nowrap',
@@ -123,12 +129,14 @@ function HeaderCell({ label, align = 'left' }: { label: string; align?: 'left' |
     <TableCell
       align={align}
       sx={(theme) => ({
+        px: 1,
+        py: 0.55,
         borderBottom: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         bgcolor: 'background.paper',
         color: getCaseQueueMutedTextColor(theme.palette.mode),
-        fontSize: '0.7rem',
-        fontWeight: 700,
+        fontSize: '0.62rem',
+        fontWeight: 800,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
         whiteSpace: 'nowrap',
@@ -152,12 +160,15 @@ function BodyCell({
     <TableCell
       align={align}
       sx={{
+        px: 1,
+        py: 0.45,
         borderBottom: 'none',
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
         fontFamily: mono ? 'var(--font-mono), "JetBrains Mono", monospace' : 'inherit',
-        fontSize: '0.92rem',
+        fontSize: '0.78rem',
+        lineHeight: 1.25,
       }}
     >
       {children}
@@ -177,7 +188,8 @@ export function CaseApprovalQueueTable({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        maxHeight: 560,
+        height: 260,
+        overflow: 'auto',
       })}
     >
       <Table stickyHeader size="small" sx={{ tableLayout: 'fixed' }}>
@@ -221,17 +233,15 @@ export function CaseApprovalQueueTable({
                 '& td': {
                   borderTop: '1px solid',
                   borderColor: getCaseQueueBorderColor(theme.palette.mode),
+                  ...(row.rowKey === selectedRowKey
+                    ? {
+                        bgcolor: getCaseQueueSelectedRowBackground(theme.palette.mode),
+                      }
+                    : null),
                 },
                 '&:first-of-type td': {
                   borderTop: 'none',
                 },
-                ...(row.rowKey === selectedRowKey
-                  ? {
-                      '& td': {
-                        bgcolor: getCaseQueueSelectedRowBackground(theme.palette.mode),
-                      },
-                    }
-                  : null),
               })}
             >
               <BodyCell>
