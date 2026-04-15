@@ -343,6 +343,23 @@ test('buildSettlementListRowViewModel keeps split settlements on one row with on
   assert.equal(view.subtitle, 'Amazon.co.uk · split across month-end · 2 postings');
 });
 
+test('buildSettlementListRowViewModel keeps non-split settlements to one secondary label', () => {
+  const row = {
+    sourceSettlementId: 'UK-260213-260227-S1',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-02-13',
+    periodEnd: '2026-02-27',
+    settlementTotal: 4508.25,
+    plutusStatus: 'Processed',
+    splitCount: 1,
+    isSplit: false,
+    children: [{ docNumber: 'UK-260213-260227-S1' }],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.subtitle, 'Amazon.co.uk');
+});
+
 test('buildSettlementPostingSectionViewModels orders child postings chronologically and carries inline blocking state', () => {
   const detail = {
     settlement: { sourceSettlementId: 'UK-260327-260331-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },

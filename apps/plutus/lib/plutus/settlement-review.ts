@@ -96,29 +96,6 @@ export type SettlementHistoryEventInput = {
   kind: 'posted' | 'processed' | 'rolled_back';
 };
 
-function formatPeriod(start: string | null, end: string | null): string {
-  if (start === null || end === null) return '—';
-
-  const startDate = new Date(`${start}T00:00:00Z`);
-  const endDate = new Date(`${end}T00:00:00Z`);
-  const sameYear = startDate.getUTCFullYear() === endDate.getUTCFullYear();
-
-  const startText = startDate.toLocaleDateString('en-US', {
-    timeZone: 'UTC',
-    month: 'short',
-    day: 'numeric',
-    year: sameYear ? undefined : 'numeric',
-  });
-  const endText = endDate.toLocaleDateString('en-US', {
-    timeZone: 'UTC',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-
-  return `${startText} – ${endText}`;
-}
-
 function compareNullableIsoDay(a: string | null, b: string | null): number {
   if (a === null && b === null) return 0;
   if (a === null) return 1;
@@ -179,8 +156,6 @@ export function buildSettlementListRowViewModel(input: SettlementListRowViewMode
   const subtitleParts = [input.marketplace.label];
   if (input.isSplit && input.splitCount > 1) {
     subtitleParts.push('split across month-end', `${input.splitCount} postings`);
-  } else {
-    subtitleParts.push(formatPeriod(input.periodStart, input.periodEnd));
   }
 
   return {

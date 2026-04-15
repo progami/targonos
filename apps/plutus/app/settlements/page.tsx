@@ -14,7 +14,6 @@ import Checkbox from '@mui/material/Checkbox';
 import Box from '@mui/material/Box';
 import MuiButton from '@mui/material/Button';
 import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
 import Dialog from '@mui/material/Dialog';
@@ -33,7 +32,6 @@ import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import { EmptyState } from '@/components/ui/empty-state';
-import { MarketplaceFlag } from '@/components/ui/marketplace-flag';
 import { PageHeader } from '@/components/page-header';
 import { SplitButton } from '@/components/ui/split-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
@@ -594,387 +592,346 @@ export default function SettlementsPage() {
           </Box>
         </Box>
 
-        <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
-          {/* Filter Bar */}
-          <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-                {/* Row 1: Search + Date Range */}
-                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1.4fr 0.55fr 0.55fr' }, alignItems: { md: 'end' } }}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                      Search
-                    </Typography>
-                    <Box sx={{ position: 'relative' }}>
-                      <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
-                      <TextField
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        placeholder="Amazon settlement ID, posting doc number, memo…"
-                        size="small"
-                        variant="outlined"
-                        fullWidth
-                        slotProps={textFieldInputSlotProps}
-                        sx={{
-                          ...textFieldSx,
-                          '& .MuiOutlinedInput-root': {
-                            ...textFieldSx['& .MuiOutlinedInput-root'],
-                            '& input': { pl: 4.5 },
-                          },
-                        }}
-                      />
-                    </Box>
-                  </Box>
+        <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-end' }}>
+          <Box sx={{ flex: '1 1 22rem', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+              Search
+            </Typography>
+            <Box sx={{ position: 'relative' }}>
+              <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+              <TextField
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Amazon settlement ID, posting doc number, memo…"
+                size="small"
+                variant="outlined"
+                fullWidth
+                slotProps={textFieldInputSlotProps}
+                sx={{
+                  ...textFieldSx,
+                  '& .MuiOutlinedInput-root': {
+                    ...textFieldSx['& .MuiOutlinedInput-root'],
+                    '& input': { pl: 4.5 },
+                  },
+                }}
+              />
+            </Box>
+          </Box>
 
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                      Start date
-                    </Typography>
-                    <TextField
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => {
-                        const value = e.target.value.trim();
-                        setStartDate(value);
-                        setPage(1);
-                      }}
-                      size="small"
-                      variant="outlined"
-                      fullWidth
-                      slotProps={textFieldInputSlotProps}
-                      sx={textFieldSx}
-                    />
-                  </Box>
+          <Box sx={{ width: { xs: '100%', sm: '10rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+              Start date
+            </Typography>
+            <TextField
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                const value = e.target.value.trim();
+                setStartDate(value);
+                setPage(1);
+              }}
+              size="small"
+              variant="outlined"
+              fullWidth
+              slotProps={textFieldInputSlotProps}
+              sx={textFieldSx}
+            />
+          </Box>
 
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                      End date
-                    </Typography>
-                    <TextField
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => {
-                        const value = e.target.value.trim();
-                        setEndDate(value);
-                        setPage(1);
-                      }}
-                      size="small"
-                      variant="outlined"
-                      fullWidth
-                      slotProps={textFieldInputSlotProps}
-                      sx={textFieldSx}
-                    />
-                  </Box>
+          <Box sx={{ width: { xs: '100%', sm: '10rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+              End date
+            </Typography>
+            <TextField
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                const value = e.target.value.trim();
+                setEndDate(value);
+                setPage(1);
+              }}
+              size="small"
+              variant="outlined"
+              fullWidth
+              slotProps={textFieldInputSlotProps}
+              sx={textFieldSx}
+            />
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: '14rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+              Settlement Total
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                value={totalMin}
+                onChange={(e) => setTotalMin(e.target.value)}
+                placeholder="Min"
+                size="small"
+                variant="outlined"
+                fullWidth
+                slotProps={textFieldInputSlotProps}
+                sx={textFieldSx}
+              />
+              <TextField
+                value={totalMax}
+                onChange={(e) => setTotalMax(e.target.value)}
+                placeholder="Max"
+                size="small"
+                variant="outlined"
+                fullWidth
+                slotProps={textFieldInputSlotProps}
+                sx={textFieldSx}
+              />
+            </Box>
+          </Box>
+
+          <Box sx={{ width: { xs: '100%', sm: '12rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+              Settlement Status
+            </Typography>
+            <Box>
+              <MuiButton
+                variant="outlined"
+                disableElevation
+                onClick={(e) => setStatusAnchorEl(statusAnchorEl ? null : e.currentTarget)}
+                sx={{
+                  ...outlineSx,
+                  ...defaultSize,
+                  width: '100%',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
                 </Box>
-
-                {/* Row 2: Settlement Total + Status + Filter + Clear */}
-                <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { md: '1fr 1fr auto auto' }, alignItems: { md: 'end' } }}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                      Settlement Total
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <TextField
-                        value={totalMin}
-                        onChange={(e) => setTotalMin(e.target.value)}
-                        placeholder="Min"
-                        size="small"
-                        variant="outlined"
-                        fullWidth
-                        slotProps={textFieldInputSlotProps}
-                        sx={textFieldSx}
-                      />
-                      <TextField
-                        value={totalMax}
-                        onChange={(e) => setTotalMax(e.target.value)}
-                        placeholder="Max"
-                        size="small"
-                        variant="outlined"
-                        fullWidth
-                        slotProps={textFieldInputSlotProps}
-                        sx={textFieldSx}
-                      />
-                    </Box>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-                    <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-                      Settlement Status
-                    </Typography>
-                    <Box>
-                      <MuiButton
-                        variant="outlined"
-                        disableElevation
-                        onClick={(e) => setStatusAnchorEl(statusAnchorEl ? null : e.currentTarget)}
-                        sx={{
-                          ...outlineSx,
-                          ...defaultSize,
-                          width: '100%',
-                          justifyContent: 'space-between',
-                        }}
-                      >
-                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
-                        </Box>
-                        <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>&#9662;</Box>
-                      </MuiButton>
-                      <Popper open={Boolean(statusAnchorEl)} anchorEl={statusAnchorEl} placement="bottom-start" sx={{ zIndex: 1300 }}>
-                        <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
-                          <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
-                            {SETTLEMENT_LIST_STATUSES.map((status) => (
-                              <FormControlLabel
-                                key={status}
-                                control={
-                                  <Checkbox
-                                    size="small"
-                                    checked={statusFilter.includes(status)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setStatusFilter([...statusFilter, status]);
-                                      } else {
-                                        setStatusFilter(statusFilter.filter((s) => s !== status));
-                                      }
-                                      setPage(1);
-                                    }}
-                                    sx={{ py: 0.25 }}
-                                  />
-                                }
-                                label={<Typography sx={{ fontSize: '0.875rem' }}>{status === 'RolledBack' ? 'Rolled Back' : status}</Typography>}
-                                sx={{ display: 'flex', mx: 0 }}
-                              />
-                            ))}
-                          </Card>
-                        </ClickAwayListener>
-                      </Popper>
-                    </Box>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
-                    <MuiButton
-                      variant="contained"
-                      disableElevation
-                      onClick={() => {
-                        setPage(1);
-                        queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-                      }}
-                      startIcon={<FilterListIcon sx={{ fontSize: 14 }} />}
-                      sx={{ ...defaultBtnSx, ...defaultSize }}
-                    >
-                      Filter
-                    </MuiButton>
-                  </Box>
-
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 1 }}>
-                    <MuiButton
-                      variant="outlined"
-                      disableElevation
-                      onClick={() => {
-                        clear();
-                      }}
-                      disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && statusFilter.length === 0 && totalMin.trim() === '' && totalMax.trim() === ''}
-                      sx={{ ...outlineSx, ...defaultSize }}
-                    >
-                      Clear
-                    </MuiButton>
-                  </Box>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
-          {/* Table */}
-          <Card sx={{ border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-            <CardContent sx={{ p: 0, '&:last-child': { pb: 0 } }}>
-              <Box sx={{ overflow: 'auto' }}>
-                <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
-                  <MuiTableHead
-                    sx={{
-                      bgcolor: 'rgba(245, 245, 245, 0.8)',
-                      '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
-                      '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
-                    }}
-                  >
-                    <MuiTableRow>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Marketplace</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                      <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Status</MuiTableCell>
-                    </MuiTableRow>
-                  </MuiTableHead>
-                  <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
-                    {isLoading && (
-                      <>
-                        {Array.from({ length: 6 }).map((_, idx) => (
-                          <MuiTableRow key={idx} sx={rowHoverSx}>
-                            <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 2 }}>
-                              <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
-                            </MuiTableCell>
-                          </MuiTableRow>
-                        ))}
-                      </>
-                    )}
-
-                    {!isLoading && error && (
-                      <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
-                          {error instanceof Error ? error.message : String(error)}
-                        </MuiTableCell>
-                      </MuiTableRow>
-                    )}
-
-                    {!isLoading && !error && settlements.length === 0 && (
-                      <MuiTableRow sx={rowHoverSx}>
-                        <MuiTableCell colSpan={4} sx={tdSx}>
-                          <EmptyState
-                            icon={<SettlementsEmptyIcon />}
-                            title="No settlements found"
-                            description="No settlements match your current filters. Try adjusting the date range or search terms."
+                <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>&#9662;</Box>
+              </MuiButton>
+              <Popper open={Boolean(statusAnchorEl)} anchorEl={statusAnchorEl} placement="bottom-start" sx={{ zIndex: 1300 }}>
+                <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
+                  <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
+                    {SETTLEMENT_LIST_STATUSES.map((status) => (
+                      <FormControlLabel
+                        key={status}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={statusFilter.includes(status)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setStatusFilter([...statusFilter, status]);
+                              } else {
+                                setStatusFilter(statusFilter.filter((s) => s !== status));
+                              }
+                              setPage(1);
+                            }}
+                            sx={{ py: 0.25 }}
                           />
+                        }
+                        label={<Typography sx={{ fontSize: '0.875rem' }}>{status === 'RolledBack' ? 'Rolled Back' : status}</Typography>}
+                        sx={{ display: 'flex', mx: 0 }}
+                      />
+                    ))}
+                  </Card>
+                </ClickAwayListener>
+              </Popper>
+            </Box>
+          </Box>
+
+          <MuiButton
+            variant="contained"
+            disableElevation
+            onClick={() => {
+              setPage(1);
+              queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
+            }}
+            startIcon={<FilterListIcon sx={{ fontSize: 14 }} />}
+            sx={{ ...defaultBtnSx, ...defaultSize }}
+          >
+            Filter
+          </MuiButton>
+
+          <MuiButton
+            variant="outlined"
+            disableElevation
+            onClick={() => {
+              clear();
+            }}
+            disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && statusFilter.length === 0 && totalMin.trim() === '' && totalMax.trim() === ''}
+            sx={{ ...outlineSx, ...defaultSize }}
+          >
+            Clear
+          </MuiButton>
+        </Box>
+
+        <Box sx={{ mt: 2, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
+          <Box sx={{ overflow: 'auto' }}>
+            <MuiTable sx={{ width: '100%', fontSize: '0.875rem' }}>
+              <MuiTableHead
+                sx={{
+                  bgcolor: 'rgba(245, 245, 245, 0.8)',
+                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
+                }}
+              >
+                <MuiTableRow>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement</MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Status</MuiTableCell>
+                </MuiTableRow>
+              </MuiTableHead>
+              <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
+                {isLoading && (
+                  <>
+                    {Array.from({ length: 6 }).map((_, idx) => (
+                      <MuiTableRow key={idx} sx={rowHoverSx}>
+                        <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 2 }}>
+                          <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
                         </MuiTableCell>
                       </MuiTableRow>
-                    )}
+                    ))}
+                  </>
+                )}
 
-                    {!isLoading &&
-                      !error &&
-                      settlements.map((s) => {
-                        const settlementHref = buildParentSettlementHref(s);
-                        const rowView = buildSettlementListRowViewModel({
-                          sourceSettlementId: s.sourceSettlementId,
-                          marketplace: { label: s.marketplace.label },
-                          periodStart: s.periodStart,
-                          periodEnd: s.periodEnd,
-                          settlementTotal: s.settlementTotal,
-                          plutusStatus: s.plutusStatus,
-                          splitCount: s.splitCount,
-                          isSplit: s.isSplit,
-                          children: s.children.map((child) => ({ docNumber: child.docNumber })),
-                        });
+                {!isLoading && error && (
+                  <MuiTableRow sx={rowHoverSx}>
+                    <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
+                      {error instanceof Error ? error.message : String(error)}
+                    </MuiTableCell>
+                  </MuiTableRow>
+                )}
 
-                        return (
-                          <MuiTableRow
-                            key={s.parentId}
-                            sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}
-                            onClick={() => router.push(settlementHref)}
-                          >
-                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
-                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-                                <MarketplaceFlag region={s.marketplace.region} />
-                                <Box sx={{ minWidth: 0 }}>
-                                  <Box sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.8125rem', fontWeight: 500, color: 'text.primary' }}>
-                                    {rowView.title}
-                                  </Box>
-                                  <Box sx={{ mt: 0.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem', color: 'text.secondary' }}>
-                                    {rowView.subtitle}
-                                  </Box>
-                                  <Box sx={{ mt: 0.35, fontSize: '0.75rem', color: 'text.secondary' }}>
-                                    {s.childCount === 1 ? '1 month-end posting' : `${s.childCount} month-end postings`}
-                                  </Box>
-                                  {s.hasInconsistency && (
-                                    <Box sx={{ mt: 0.5, fontSize: '0.75rem', color: 'warning.dark', fontWeight: 600 }}>
-                                      Child posting states need review
-                                    </Box>
-                                  )}
-                                </Box>
-                              </Box>
-                            </MuiTableCell>
-                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
-                              <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
-                                {formatPeriod(s.periodStart, s.periodEnd)}
-                              </Box>
-                              <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
-                                Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
-                              </Box>
-                            </MuiTableCell>
-                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                              {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
-                            </MuiTableCell>
-                            <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
-                                <PlutusPill status={rowView.statusText} />
-                                <SplitButton
-                                  onClick={() => router.push(settlementHref)}
-                                  dropdownItems={[
-                                    { label: 'Open settlement', onClick: () => router.push(settlementHref) },
-                                    { label: 'History', onClick: () => router.push(`${settlementHref}?tab=history`) },
-                                    {
-                                      label: 'Sync from Amazon',
-                                      onClick: () =>
-                                        openSyncDialog({
-                                          region: s.marketplace.region,
-                                          settlementId: s.sourceSettlementId,
-                                          postedDate: s.postedDate,
-                                        }),
-                                    },
-                                  ]}
-                                >
-                                  Action
-                                </SplitButton>
-                              </Box>
-                            </MuiTableCell>
-                          </MuiTableRow>
-                        );
-                      })}
-                  </MuiTableBody>
-                </MuiTable>
+                {!isLoading && !error && settlements.length === 0 && (
+                  <MuiTableRow sx={rowHoverSx}>
+                    <MuiTableCell colSpan={4} sx={tdSx}>
+                      <EmptyState
+                        icon={<SettlementsEmptyIcon />}
+                        title="No settlements found"
+                        description="No settlements match your current filters. Try adjusting the date range or search terms."
+                      />
+                    </MuiTableCell>
+                  </MuiTableRow>
+                )}
+
+                {!isLoading &&
+                  !error &&
+                  settlements.map((s) => {
+                    const settlementHref = buildParentSettlementHref(s);
+                    const rowView = buildSettlementListRowViewModel(s);
+
+                    return (
+                      <MuiTableRow
+                        key={s.parentId}
+                        sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}
+                        onClick={() => router.push(settlementHref)}
+                      >
+                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
+                          <Box>
+                            <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
+                              {rowView.title}
+                            </Typography>
+                            <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem', mt: 0.25 }}>
+                              {rowView.subtitle}
+                            </Typography>
+                          </Box>
+                        </MuiTableCell>
+                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem' }}>
+                          <Box sx={{ fontWeight: 500, color: 'text.primary' }}>
+                            {formatPeriod(s.periodStart, s.periodEnd)}
+                          </Box>
+                          <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
+                            Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Box>
+                        </MuiTableCell>
+                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
+                          {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
+                        </MuiTableCell>
+                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+                            <PlutusPill status={rowView.statusText} />
+                            <SplitButton
+                              onClick={() => router.push(settlementHref)}
+                              dropdownItems={[
+                                { label: 'Open settlement', onClick: () => router.push(settlementHref) },
+                                { label: 'History', onClick: () => router.push(`${settlementHref}?tab=history`) },
+                                {
+                                  label: 'Sync from Amazon',
+                                  onClick: () =>
+                                    openSyncDialog({
+                                      region: s.marketplace.region,
+                                      settlementId: s.sourceSettlementId,
+                                      postedDate: s.postedDate,
+                                    }),
+                                },
+                              ]}
+                            >
+                              Action
+                            </SplitButton>
+                          </Box>
+                        </MuiTableCell>
+                      </MuiTableRow>
+                    );
+                  })}
+              </MuiTableBody>
+            </MuiTable>
+          </Box>
+
+          {data && data.pagination.totalPages > 1 && (
+            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+                Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <MuiButton
+                  variant="outlined"
+                  disableElevation
+                  disabled={page <= 1}
+                  onClick={() => setPage(page - 1)}
+                  sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
+                >
+                  <ChevronLeftIcon sx={{ fontSize: 16 }} />
+                </MuiButton>
+                {Array.from({ length: Math.min(data.pagination.totalPages, 5) }).map((_, idx) => {
+                  const pageNum = idx + 1;
+                  return (
+                    <MuiButton
+                      key={pageNum}
+                      variant={page === pageNum ? 'contained' : 'outlined'}
+                      disableElevation
+                      onClick={() => setPage(pageNum)}
+                      sx={{
+                        ...(page === pageNum ? defaultBtnSx : outlineSx),
+                        ...smSize,
+                        height: 32,
+                        width: 32,
+                        p: 0,
+                        minWidth: 32,
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {pageNum}
+                    </MuiButton>
+                  );
+                })}
+                {data.pagination.totalPages > 5 && (
+                  <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
+                )}
+                <MuiButton
+                  variant="outlined"
+                  disableElevation
+                  disabled={page >= data.pagination.totalPages}
+                  onClick={() => setPage(page + 1)}
+                  sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
+                >
+                  <ChevronRightIcon sx={{ fontSize: 16 }} />
+                </MuiButton>
               </Box>
+            </Box>
+          )}
+        </Box>
 
-              {data && data.pagination.totalPages > 1 && (
-                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
-                    Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
-                  </Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <MuiButton
-                      variant="outlined"
-                      disableElevation
-                      disabled={page <= 1}
-                      onClick={() => setPage(page - 1)}
-                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
-                    >
-                      <ChevronLeftIcon sx={{ fontSize: 16 }} />
-                    </MuiButton>
-                    {/* Page number buttons */}
-                    {Array.from({ length: Math.min(data.pagination.totalPages, 5) }).map((_, idx) => {
-                      const pageNum = idx + 1;
-                      return (
-                        <MuiButton
-                          key={pageNum}
-                          variant={page === pageNum ? 'contained' : 'outlined'}
-                          disableElevation
-                          onClick={() => setPage(pageNum)}
-                          sx={{
-                            ...(page === pageNum ? defaultBtnSx : outlineSx),
-                            ...smSize,
-                            height: 32,
-                            width: 32,
-                            p: 0,
-                            minWidth: 32,
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          {pageNum}
-                        </MuiButton>
-                      );
-                    })}
-                    {data.pagination.totalPages > 5 && (
-                      <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
-                    )}
-                    <MuiButton
-                      variant="outlined"
-                      disableElevation
-                      disabled={page >= data.pagination.totalPages}
-                      onClick={() => setPage(page + 1)}
-                      sx={{ ...outlineSx, ...smSize, height: 32, width: 32, p: 0, minWidth: 32 }}
-                    >
-                      <ChevronRightIcon sx={{ fontSize: 16 }} />
-                    </MuiButton>
-                  </Box>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-
-          <Dialog
+        <Dialog
             open={syncOpen}
             onClose={() => setSyncOpen(false)}
             maxWidth="md"
@@ -1105,6 +1062,5 @@ export default function SettlementsPage() {
           </Dialog>
         </Box>
       </Box>
-    </Box>
   );
 }
