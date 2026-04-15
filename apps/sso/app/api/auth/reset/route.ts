@@ -1,15 +1,15 @@
+import { appendExpiredAuthCookieHeaders } from '@/lib/auth-cookie-clear'
 import { requireAuthEnv } from '@/lib/required-auth-env'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const AUTH_COOKIE_PATTERNS = ['authjs', 'next-auth', '__Secure-', '__Host-', 'csrf', 'pkce', 'callback', 'targon', 'session']
 const cookieDomain = requireAuthEnv('COOKIE_DOMAIN')
 const baseUrl = requireAuthEnv('NEXTAUTH_URL')
 
 export async function GET(request: NextRequest) {
   // Get provider and callbackUrl for direct signin flow
   const provider = request.nextUrl.searchParams.get('provider')
-  const callbackUrl = request.nextUrl.searchParams.get('callbackUrl') || '/'
+  const callbackUrl = request.nextUrl.searchParams.get('callbackUrl') ?? '/'
 
   // Clear cookies first, then start the OAuth flow in a clean request.
   const redirectUrl = new URL(provider === 'google' ? '/login/google' : '/login', baseUrl)
@@ -17,74 +17,10 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(redirectUrl)
 
-  // Clear ALL auth-related cookies
-  const cookies = request.cookies.getAll()
-
-  // Known cookie names that NextAuth uses
-  const knownCookies = [
-    '__Secure-next-auth.session-token',
-    '__Secure-next-auth.callback-url',
-    '__Secure-next-auth.csrf-token',
-    '__Host-next-auth.csrf-token',
-    'next-auth.session-token',
-    'next-auth.callback-url',
-    'next-auth.csrf-token',
-    'targon.next-auth.session-token',
-    'targon.next-auth.callback-url',
-    'targon.next-auth.csrf-token',
-    '__Secure-authjs.session-token',
-    '__Secure-authjs.callback-url',
-    '__Secure-authjs.csrf-token',
-    'authjs.session-token',
-    'authjs.callback-url',
-    'authjs.csrf-token',
-  ]
-
-  // Clear all known cookies explicitly
-  for (const name of knownCookies) {
-    // With domain and secure
-    response.cookies.set({
-      name,
-      value: '',
-      domain: cookieDomain,
-      path: '/',
-      maxAge: 0,
-      expires: new Date(0),
-      secure: true,
-    })
-    // Without domain (for host-only cookies)
-    response.cookies.set({
-      name,
-      value: '',
-      path: '/',
-      maxAge: 0,
-      expires: new Date(0),
-      secure: true,
-    })
-  }
-
-  // Also clear any cookies from the request that match patterns
-  for (const cookie of cookies) {
-    const nameLower = cookie.name.toLowerCase()
-    if (AUTH_COOKIE_PATTERNS.some(p => nameLower.includes(p.toLowerCase()))) {
-      response.cookies.set({
-        name: cookie.name,
-        value: '',
-        domain: cookieDomain,
-        path: '/',
-        maxAge: 0,
-        expires: new Date(0),
-        secure: true,
-      })
-      response.cookies.set({
-        name: cookie.name,
-        value: '',
-        path: '/',
-        maxAge: 0,
-        expires: new Date(0),
-      })
-    }
-  }
+  appendExpiredAuthCookieHeaders(response, {
+    cookieDomain,
+    requestCookieNames: request.cookies.getAll().map((cookie) => cookie.name),
+  })
 
   return response
 }
