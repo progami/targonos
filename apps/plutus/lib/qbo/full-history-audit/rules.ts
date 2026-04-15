@@ -20,6 +20,17 @@ const BANK_CARD_CUES = [
   'stripe',
   'square',
 ];
+const ACCEPTED_FEE_ACCOUNT_CUES = [
+  'bank fees',
+  'service charges',
+  'merchant processing fees',
+  'merchant fees',
+  'payment processing fees',
+  'processor fees',
+  'merchant service charges',
+  'card processing fees',
+  'credit card processing fees',
+];
 
 function pushFinding(
   out: AuditException[],
@@ -71,7 +82,7 @@ function isOwnerEquityAccount(account: string): boolean {
 
 function isBankFeeAccount(account: string): boolean {
   const lower = account.toLowerCase();
-  return lower.includes('bank fees') || lower.includes('service charges');
+  return ACCEPTED_FEE_ACCOUNT_CUES.some((cue) => lower.includes(cue));
 }
 
 function isLikelyBankCardFee(tx: NormalizedAuditTransaction): boolean {
@@ -79,6 +90,30 @@ function isLikelyBankCardFee(tx: NormalizedAuditTransaction): boolean {
   const hasFeeCue = FEE_CUES.some((cue) => text.includes(cue));
   const hasBankCardCue = BANK_CARD_CUES.some((cue) => text.includes(cue));
   return hasFeeCue && hasBankCardCue;
+}
+
+function parseAuditDate(date: string): number {
+  return Date.parse(`${date}T00:00:00Z`);
+}
+
+function inferAuditAsOfDate(transactions: NormalizedAuditTransaction[]): string | null {
+  let latest = -Infinity;
+  let latestDate: string | null = null;
+
+  for (const tx of transactions) {
+    const time = parseAuditDate(tx.txnDate);
+    if (Number.isFinite(time) && time > latest) {
+      latest = time;
+      latestDate = tx.txnDate;
+    }
+  }
+
+  return latestDate;
+}
+
+function isOlderThanDays(txnDate: string, asOfDate: string, staleDays: number): boolean {
+  const ageMs = parseAuditDate(asOfDate) - parseAuditDate(txnDate);
+  return Number.isFinite(ageMs) && ageMs > staleDays * 24 * 60 * 60 * 1000;
 }
 
 function mentionsDifferentCurrency(tx: NormalizedAuditTransaction): boolean {
@@ -96,9 +131,19 @@ function mentionsDifferentCurrency(tx: NormalizedAuditTransaction): boolean {
   return false;
 }
 
-export function classifyAuditExceptions(transactions: NormalizedAuditTransaction[]): AuditException[] {
+export interface AuditClassificationOptions {
+  asOfDate?: string;
+  staleControlAccountDays?: number;
+}
+
+export function classifyAuditExceptions(
+  transactions: NormalizedAuditTransaction[],
+  options: AuditClassificationOptions = {},
+): AuditException[] {
   const findings: AuditException[] = [];
   const duplicateCounts = new Map<string, number>();
+  const asOfDate = options.asOfDate ?? inferAuditAsOfDate(transactions);
+  const staleControlAccountDays = options.staleControlAccountDays ?? 365;
 
   for (const tx of transactions) {
     const key = duplicateKey(tx);
@@ -166,7 +211,7 @@ export function classifyAuditExceptions(transactions: NormalizedAuditTransaction
       );
     }
 
-    if (containsControlAccount(tx) && tx.txnDate < '2026-01-01') {
+    if (asOfDate !== null && containsControlAccount(tx) && isOlderThanDays(tx.txnDate, asOfDate, staleControlAccountDays)) {
       pushFinding(
         findings,
         tx,

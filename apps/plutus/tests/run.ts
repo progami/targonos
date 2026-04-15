@@ -115,6 +115,10 @@ function test(name: string, fn: () => void | Promise<void>) {
   tests.push({ name, fn });
 }
 
+function ruleIds(findings: Array<{ ruleId: string }>): string[] {
+  return findings.map((finding) => finding.ruleId).sort();
+}
+
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('Amazon.com'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('amazon.co.uk'), 'amazon.co.uk');
@@ -2663,14 +2667,8 @@ test('audit keeps the original transfer mispost guard purchase-only and expense-
 
   const purchaseFindings = classifyAuditExceptions([purchaseTx]);
   const transferFindings = classifyAuditExceptions([transferTx]);
-  assert.equal(
-    purchaseFindings.some((finding) => finding.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'),
-    true,
-  );
-  assert.equal(
-    transferFindings.some((finding) => finding.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'),
-    false,
-  );
+  assert.deepEqual(ruleIds(purchaseFindings), ['TRANSFER_LIKE_ACTIVITY_MISPOSTED']);
+  assert.deepEqual(ruleIds(transferFindings), []);
 });
 
 test('audit flags likely duplicates by date amount and counterparty', () => {
@@ -2712,7 +2710,7 @@ test('audit flags likely duplicates by date amount and counterparty', () => {
   ];
 
   const findings = classifyAuditExceptions(input);
-  assert.equal(findings.some((f) => f.ruleId === 'LIKELY_DUPLICATE'), true);
+  assert.deepEqual(ruleIds(findings), ['LIKELY_DUPLICATE', 'LIKELY_DUPLICATE']);
 });
 
 test('audit flags unresolved settlement-control usage', () => {
@@ -2734,8 +2732,8 @@ test('audit flags unresolved settlement-control usage', () => {
     sourceTag: null,
   };
 
-  const findings = classifyAuditExceptions([tx]);
-  assert.equal(findings.some((f) => f.ruleId === 'UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY'), true);
+  const findings = classifyAuditExceptions([tx], { asOfDate: '2026-04-10', staleControlAccountDays: 365 });
+  assert.deepEqual(ruleIds(findings), ['UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY']);
 });
 
 test('audit flags bank fee activity from note and line description cues', () => {
@@ -2758,7 +2756,84 @@ test('audit flags bank fee activity from note and line description cues', () => 
   };
 
   const findings = classifyAuditExceptions([tx]);
-  assert.equal(findings.some((f) => f.ruleId === 'BANK_FEE_MISCLASSIFIED'), true);
+  assert.deepEqual(ruleIds(findings), ['BANK_FEE_MISCLASSIFIED']);
+});
+
+test('audit accepts merchant processing fee accounts', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'F2',
+    txnDate: '2026-04-03',
+    amount: 21.75,
+    currency: 'USD',
+    counterparty: 'Stripe',
+    docNumber: 'FEE-2',
+    privateNote: 'Monthly card fee for account maintenance',
+    dueDate: null,
+    postingAccounts: ['Merchant processing fees'],
+    lineDescriptions: ['Card service fee'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), []);
+});
+
+test('audit flags owner activity misclassified away from owner equity', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'O1',
+    txnDate: '2026-04-04',
+    amount: 300,
+    currency: 'USD',
+    counterparty: 'Owner distribution',
+    docNumber: 'OWN-1',
+    privateNote: 'Owner reimbursement',
+    dueDate: null,
+    postingAccounts: ['Other expenses:Misc'],
+    lineDescriptions: ['Owner reimbursement'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), ['OWNER_ACTIVITY_MISCLASSIFIED']);
+});
+
+test('audit flags currency counterparty mismatch on purchases when currency is preserved', () => {
+  const purchase = normalizePurchaseForAudit(
+    {
+      Id: 'C1',
+      SyncToken: '1',
+      TxnDate: '2026-04-05',
+      TotalAmt: 42.5,
+      PaymentType: 'CreditCard',
+      DocNumber: 'CUR-1',
+      PrivateNote: 'GBP charge from overseas vendor',
+      CurrencyRef: { value: 'USD' },
+      EntityRef: { value: '91', name: 'Overseas Vendor' },
+      Line: [
+        {
+          Id: '1',
+          Amount: 42.5,
+          Description: 'GBP card charge',
+          AccountBasedExpenseLineDetail: { AccountRef: { value: '500', name: 'Office expenses:Travel' } },
+        },
+      ],
+      MetaData: { CreateTime: '2026-04-05T10:00:00Z', LastUpdatedTime: '2026-04-10T10:00:00Z' },
+    },
+    ['support.txt'],
+  );
+
+  assert.equal(purchase.currency, 'USD');
+
+  const findings = classifyAuditExceptions([purchase]);
+  assert.deepEqual(ruleIds(findings), ['CURRENCY_COUNTERPARTY_MISMATCH']);
 });
 
 test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and attachments', () => {

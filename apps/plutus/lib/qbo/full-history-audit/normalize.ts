@@ -43,7 +43,7 @@ export function normalizePurchaseForAudit(
     transactionId: purchase.Id,
     txnDate: purchase.TxnDate,
     amount: purchase.TotalAmt,
-    currency: null,
+    currency: purchase.CurrencyRef?.value ?? null,
     counterparty: purchase.EntityRef?.name ?? null,
     docNumber: purchase.DocNumber ?? null,
     privateNote: purchase.PrivateNote ?? null,
