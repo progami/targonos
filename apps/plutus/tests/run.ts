@@ -93,6 +93,10 @@ import {
 import {
   classifyAuditExceptions,
 } from '../lib/qbo/full-history-audit/rules';
+import {
+  mergeAttachmentRefs,
+  summarizeCoverage,
+} from '../lib/qbo/full-history-audit/fetch';
 import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
@@ -2627,6 +2631,26 @@ test('audit does not require doc number for transfer transactions', () => {
 
   const findings = classifyAuditExceptions([tx]);
   assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
+});
+
+test('mergeAttachmentRefs maps attachables back to transaction ids', () => {
+  const result = mergeAttachmentRefs(
+    [
+      { Id: 'A1', FileName: 'bill.pdf', AttachableRef: [{ EntityRef: { type: 'Bill', value: '10' } }] },
+      { Id: 'A2', FileName: 'support.txt', AttachableRef: [{ EntityRef: { type: 'JournalEntry', value: '20' } }] },
+    ],
+  );
+  assert.deepEqual(result.get('Bill:10'), ['bill.pdf']);
+  assert.deepEqual(result.get('JournalEntry:20'), ['support.txt']);
+});
+
+test('summarizeCoverage preserves partial coverage failures', () => {
+  const summary = summarizeCoverage([
+    { transactionType: 'Purchase', scannedCount: 100, complete: true },
+    { transactionType: 'Transfer', scannedCount: 80, complete: false },
+  ]);
+  assert.equal(summary.completeCoverage, false);
+  assert.equal(summary.failedTypes[0], 'Transfer');
 });
 
 process.stdout.write('All tests passed.\n');
