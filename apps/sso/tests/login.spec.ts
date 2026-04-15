@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test'
+import { encode } from 'next-auth/jwt'
 
-import { portalBaseUrl } from './fixtures/dev-login'
+import { portalBaseUrl, sessionCookieName } from './fixtures/dev-login'
+
+const staleSessionSecret = 'playwright-stale-session-secret-111111111111'
 
 test('portal login only offers Google sign-in', async ({ page }) => {
   await page.goto(`${portalBaseUrl}/login`, { waitUntil: 'domcontentloaded' })
@@ -18,4 +21,57 @@ test('portal login preserves the requested callback target for Google sign-in', 
   )
 
   await expect(page.locator('input[name="callbackUrl"]')).toHaveValue(callbackUrl)
+})
+
+test('portal recovers from a stale encrypted session cookie and still redirects to Google auth', async ({ page }) => {
+  const staleToken = await encode({
+    token: {
+      sub: 'stale-e2e-user',
+      email: 'stale-e2e@targonglobal.com',
+      name: 'Stale E2E User',
+    },
+    secret: staleSessionSecret,
+    salt: sessionCookieName,
+  })
+
+  await page.context().clearCookies()
+  await page.context().addCookies([
+    {
+      name: sessionCookieName,
+      value: staleToken,
+      url: portalBaseUrl,
+      httpOnly: true,
+      secure: false,
+      sameSite: 'Lax',
+    },
+  ])
+
+  const response = await page.request.get(
+    `${portalBaseUrl}/login/google?callbackUrl=${encodeURIComponent('/talos/operations/purchase-orders')}`,
+    {
+      maxRedirects: 0,
+    },
+  )
+
+  expect(response.status()).toBe(307)
+  expect(response.headers().location).toContain('https://accounts.google.com/o/oauth2/v2/auth')
+
+  const setCookieHeader = response.headersArray()
+    .filter((header) => header.name.toLowerCase() === 'set-cookie')
+    .map((header) => header.value)
+    .join('\n')
+
+  expect(setCookieHeader).toContain('authjs.pkce.code_verifier=')
+
+  const sessionResponse = await page.request.get(`${portalBaseUrl}/api/auth/session`)
+
+  expect(sessionResponse.status()).toBe(200)
+  expect(await sessionResponse.json()).toBe(null)
+
+  const sessionSetCookieHeader = sessionResponse.headersArray()
+    .filter((header) => header.name.toLowerCase() === 'set-cookie')
+    .map((header) => header.value)
+    .join('\n')
+
+  expect(sessionSetCookieHeader).toContain(`${sessionCookieName}=;`)
 })
