@@ -4,7 +4,7 @@ import { createLogger } from '@targon/logger';
 import {
   getCashflowSnapshotPayloadById,
   getLatestCashflowSnapshotPayload,
-} from '@/lib/plutus/cashflow/snapshot';
+} from '@/lib/plutus/cashflow/snapshot.server';
 
 const logger = createLogger({ name: 'plutus-cashflow-export-route' });
 
