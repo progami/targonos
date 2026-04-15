@@ -147,7 +147,9 @@ type ParentPreviewResponse = {
 type DetailTab = 'review' | 'analysis';
 
 function readDetailTab(value: string | null): DetailTab {
-  return value === 'analysis' ? 'analysis' : 'review';
+  if (value === 'analysis') return 'analysis';
+  if (value === 'history') return 'analysis';
+  return 'review';
 }
 
 function formatPeriod(start: string | null, end: string | null): string {
