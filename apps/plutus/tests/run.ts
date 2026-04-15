@@ -958,7 +958,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
   assert.equal(csv, expected);
 });
 
-test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement periods', () => {
+test('buildUsSettlementDraftFromSpApiFinances splits cross-month settlement periods by default', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-1',
     eventGroupId: 'GROUP-1',
@@ -980,17 +980,20 @@ test('buildUsSettlementDraftFromSpApiFinances preserves cross-month settlement p
     skuToBrandName: new Map(),
   });
 
-  assert.equal(draft.segments.length, 1);
-  assert.equal(draft.segments[0]?.docNumber, 'US-251219-260102-S1');
+  assert.equal(draft.segments.length, 2);
+  assert.equal(draft.segments[0]?.docNumber, 'US-251219-251231-S1');
+  assert.equal(draft.segments[1]?.docNumber, 'US-260101-260102-S2');
 
-  const cents = draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
+  const cents = draft.segments[1]?.memoTotalsCents.get('Amazon Reserved Balances - Current Reserve Amount');
   assert.equal(cents, -100);
 
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
   assert.equal(draft.segments[0]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
+  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
+  assert.equal(draft.segments[1]?.memoTotalsCents.has('Split month settlement - balance of previous invoice(s) rolled forward'), false);
 });
 
-test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements into monthly segments with rollovers', () => {
+test('buildUsSettlementDraftFromSpApiFinances splits multi-month settlements into monthly segments with rollovers', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-SPLIT-1',
     eventGroupId: 'GROUP-SPLIT-1',
@@ -1015,7 +1018,6 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
       ],
     },
     skuToBrandName: new Map(),
-    splitByMonth: true,
   });
 
   assert.equal(draft.segments.length, 3);
@@ -1046,6 +1048,19 @@ test('buildUsSettlementDraftFromSpApiFinances can split multi-month settlements 
   assert.equal(seg3.memoTotalsCents.get('Split month settlement - balance of previous invoice(s) rolled forward'), -100);
   assert.equal(seg3.memoTotalsCents.has('Split month settlement - balance of this invoice rolled forward'), false);
   assert.equal(sum(seg3.memoTotalsCents), -300);
+});
+
+test('US settlement SP-API paths do not gate month splitting on runtime env', () => {
+  const sourcePaths = [
+    '../lib/amazon-finances/us-settlement-sync.ts',
+    '../scripts/us-settlement-ingest-spapi.ts',
+    '../scripts/us-settlement-reconcile-spapi.ts',
+  ];
+
+  for (const sourcePath of sourcePaths) {
+    const source = readFileSync(new URL(sourcePath, import.meta.url), 'utf8');
+    assert.equal(source.includes('PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH'), false);
+  }
 });
 
 test('buildUkSettlementDraftFromSpApiFinances always splits multi-month settlements into monthly segments with rollovers', () => {
