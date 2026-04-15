@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -129,6 +131,10 @@ function withDatabaseUrl(databaseUrl: string | undefined, fn: () => void) {
   }
 }
 
+function readAppFile(...segments: string[]) {
+  return readFileSync(path.join(process.cwd(), ...segments), 'utf8');
+}
+
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
   assert.equal(normalizeAuditMarketToMarketplaceId('Amazon.com'), 'amazon.com');
   assert.equal(normalizeAuditMarketToMarketplaceId('amazon.co.uk'), 'amazon.co.uk');
@@ -164,6 +170,22 @@ test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
   withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
     assert.throws(() => dbTableIdentifier('AuditDataRow;DROP'), /Invalid database table identifier/);
   });
+});
+
+test('cashflow snapshot server-only guard stays out of standalone worker path', () => {
+  const snapshotModule = readAppFile('lib/plutus/cashflow/snapshot.ts');
+  const snapshotServerModule = readAppFile('lib/plutus/cashflow/snapshot.server.ts');
+  const workerModule = readAppFile('scripts/cashflow-refresh-worker.ts');
+  const snapshotRoute = readAppFile('app/api/plutus/cashflow/snapshot/route.ts');
+  const exportRoute = readAppFile('app/api/plutus/cashflow/export/route.ts');
+  const configRoute = readAppFile('app/api/plutus/cashflow/config/route.ts');
+
+  assert.equal(snapshotModule.includes("import 'server-only';"), false);
+  assert.equal(snapshotServerModule.includes("import 'server-only';"), true);
+  assert.equal(workerModule.includes("@/lib/plutus/cashflow/snapshot';"), true);
+  assert.equal(snapshotRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
+  assert.equal(exportRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
+  assert.equal(configRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
 });
 
 test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {
