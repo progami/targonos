@@ -5,7 +5,7 @@ import {
   CashflowSnapshotError,
   generateAndPersistCashflowSnapshot,
   getLatestCashflowSnapshotPayload,
-} from '@/lib/plutus/cashflow/snapshot';
+} from '@/lib/plutus/cashflow/snapshot.server';
 
 const logger = createLogger({ name: 'plutus-cashflow-snapshot-route' });
 

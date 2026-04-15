@@ -39,7 +39,7 @@ function MyPage() {
 
 ## Complete Pages Inventory
 
-### Implemented (14 pages/components)
+### Implemented (13 pages/components)
 
 | # | Page | File | State Persisted | Status |
 |---|------|------|-----------------|--------|
@@ -50,13 +50,12 @@ function MyPage() {
 | 5 | FBA Discrepancies | `/amazon/fba-fee-discrepancies/page.tsx` | `search`, `statusFilter` | Implemented |
 | 6 | Storage Ledger | `/operations/storage-ledger/page.tsx` | `aggregationView`, `filters` | Implemented |
 | 7 | Warehouses | `/config/warehouses/warehouses-panel.tsx` | `search` | Implemented |
-| 8 | Shipment Planning | `/market/shipment-planning/page.tsx` | `search`, `showOnlyLowStock`, `viewMode`, `showAmazonStatus` | Implemented |
-| 9 | Warehouse Rates | `/config/warehouses/warehouse-rates-panel.tsx` | `activeTab` | Implemented |
-| 10 | Permissions | `/config/permissions/permissions-panel.tsx` | `search` | Implemented |
-| 11 | SKU Batches Panel | `/config/products/sku-batches-modal.tsx` | `search`, `activeTab` | Implemented |
-| 12 | Dashboard | `/dashboard/page.tsx` | `timeRange` | Implemented |
-| 13 | Purchase Orders | `/operations/purchase-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
-| 14 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
+| 8 | Warehouse Rates | `/config/warehouses/warehouse-rates-panel.tsx` | `activeTab` | Implemented |
+| 9 | Permissions | `/config/permissions/permissions-panel.tsx` | `search` | Implemented |
+| 10 | SKU Batches Panel | `/config/products/sku-batches-modal.tsx` | `search`, `activeTab` | Implemented |
+| 11 | Dashboard | `/dashboard/page.tsx` | `timeRange` | Implemented |
+| 12 | Purchase Orders | `/operations/purchase-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
+| 13 | Fulfillment Orders | `/operations/fulfillment-orders/page.tsx` | `activeTab` | Implemented (+ URL params) |
 
 ### Batches List Page
 
@@ -156,14 +155,9 @@ function MyPage() {
   - State: `searchTerm`
   - PAGE_KEY: `/config/warehouses`
 
-- [x] **8. Shipment Planning**
-  - File: `apps/talos/src/app/market/shipment-planning/page.tsx`
-  - State: `searchQuery`, `showOnlyLowStock`, `viewMode`, `showAmazonStatus`
-  - PAGE_KEY: `/market/shipment-planning`
-
 ### Phase 3: Low Priority - COMPLETED
 
-- [x] **9. Warehouse Rates Panel**
+- [x] **8. Warehouse Rates Panel**
   - File: `apps/talos/src/app/config/warehouses/warehouse-rates-panel.tsx`
   - State: `activeTab`
   - PAGE_KEY: `/config/warehouses/${warehouseId}/rates` (dynamic)

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -163,6 +164,12 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
 });
 
+test('cashflow snapshot module remains safe for the Node refresh worker', () => {
+  const snapshotSource = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(snapshotSource, /^import ['"]server-only['"];?$/m);
+});
+
 test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
   withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
     assert.equal(getDatasourceSchema(), 'plutus_dev');
@@ -183,6 +190,22 @@ test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
   withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
     assert.throws(() => dbTableIdentifier('AuditDataRow;DROP'), /Invalid database table identifier/);
   });
+});
+
+test('cashflow snapshot server-only guard stays out of standalone worker path', () => {
+  const snapshotModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
+  const snapshotServerModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.server.ts', import.meta.url), 'utf8');
+  const workerModule = readFileSync(new URL('../scripts/cashflow-refresh-worker.ts', import.meta.url), 'utf8');
+  const snapshotRoute = readFileSync(new URL('../app/api/plutus/cashflow/snapshot/route.ts', import.meta.url), 'utf8');
+  const exportRoute = readFileSync(new URL('../app/api/plutus/cashflow/export/route.ts', import.meta.url), 'utf8');
+  const configRoute = readFileSync(new URL('../app/api/plutus/cashflow/config/route.ts', import.meta.url), 'utf8');
+
+  assert.equal(snapshotModule.includes("import 'server-only';"), false);
+  assert.equal(snapshotServerModule.includes("import 'server-only';"), true);
+  assert.equal(workerModule.includes("@/lib/plutus/cashflow/snapshot';"), true);
+  assert.equal(snapshotRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
+  assert.equal(exportRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
+  assert.equal(configRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
 });
 
 test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {

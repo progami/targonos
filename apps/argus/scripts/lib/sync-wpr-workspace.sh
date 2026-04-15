@@ -34,8 +34,8 @@ load_monitoring_env
 
 WPR_DATA_DIR="$(require_env WPR_DATA_DIR)"
 WPR_WORKSPACE="$(cd "$(dirname "$WPR_DATA_DIR")" && pwd)"
-REBUILD_SCRIPT="$WPR_WORKSPACE/rebuild_wpr.py"
-BUILD_SCRIPT="$WPR_WORKSPACE/build_intent_cluster_dashboard.py"
+REBUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/rebuild_wpr.py"
+BUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/build_intent_cluster_dashboard.py"
 
 if [ ! -f "$REBUILD_SCRIPT" ]; then
   echo "Missing rebuild script: $REBUILD_SCRIPT" >&2

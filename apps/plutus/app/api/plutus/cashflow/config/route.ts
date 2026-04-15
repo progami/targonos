@@ -8,7 +8,7 @@ import {
   buildCashAccountCandidates,
   ensureCashflowConfigWithAccounts,
   updateCashflowConfig,
-} from '@/lib/plutus/cashflow/snapshot';
+} from '@/lib/plutus/cashflow/snapshot.server';
 
 const logger = createLogger({ name: 'plutus-cashflow-config-route' });
 

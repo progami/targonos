@@ -137,3 +137,18 @@ test('pm2 starts scrub workflow-inherited database and hosted runtime env', () =
     assert.match(block, new RegExp(`${key}=\\s*\\\\`))
   }
 })
+
+test('standalone Next deploys copy generated static and public assets before PM2 starts', () => {
+  assert.match(
+    deployScript,
+    /sync_next_standalone_assets\(\)[\s\S]*?rsync -a --delete "\$app_dir\/.next\/static\/" "\$standalone_app_dir\/.next\/static\/"/,
+  )
+  assert.match(
+    deployScript,
+    /sync_next_standalone_assets\(\)[\s\S]*?rsync -a --delete "\$app_dir\/public\/" "\$standalone_app_dir\/public\/"/,
+  )
+  assert.match(
+    deployScript,
+    /log "Build complete"[\s\S]*?sync_next_standalone_assets[\s\S]*?log "Step 7: Starting \$pm2_name"/,
+  )
+})

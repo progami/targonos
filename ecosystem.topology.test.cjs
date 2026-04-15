@@ -79,6 +79,36 @@ test('talos hosted runtimes skip server dotenv loading', () => {
   assert.equal(mainTalos.env.SKIP_DOTENV, '1')
 })
 
+test('hosted Hermes workers load production env files', () => {
+  const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'targonos-hermes-worker-env-'))
+  const hermesDir = path.join(fixtureRoot, 'apps', 'hermes')
+  fs.mkdirSync(hermesDir, { recursive: true })
+
+  fs.writeFileSync(
+    path.join(hermesDir, '.env.production'),
+    [
+      'DATABASE_URL=postgresql://portal_hermes:secret@localhost:5432/portal_db?schema=main_hermes',
+      'HERMES_DB_SCHEMA=main_hermes',
+      '',
+    ].join('\n'),
+  )
+
+  try {
+    const env = ecosystem.createHermesWorkerEnv(fixtureRoot, 'production', {
+      NODE_ENV: 'production',
+    })
+
+    assert.equal(
+      env.DATABASE_URL,
+      'postgresql://portal_hermes:secret@localhost:5432/portal_db?schema=main_hermes',
+    )
+    assert.equal(env.HERMES_DB_SCHEMA, 'main_hermes')
+    assert.equal(env.NODE_ENV, 'production')
+  } finally {
+    fs.rmSync(fixtureRoot, { recursive: true, force: true })
+  }
+})
+
 test('hosted child app env strips local hosted overrides and uses portal-managed values', () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'targonos-hosted-env-'))
   const ssoDir = path.join(fixtureRoot, 'apps', 'sso')
