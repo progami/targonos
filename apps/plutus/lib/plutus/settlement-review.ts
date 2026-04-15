@@ -31,7 +31,6 @@ export type SettlementPostingSectionViewModel = {
   docNumber: string;
   periodStart: string | null;
   periodEnd: string | null;
-  postedDate: string;
   settlementTotal: number | null;
   plutusStatus: PlutusSettlementStatus;
   invoiceId: string | null;
@@ -51,7 +50,6 @@ export type SettlementPostingSectionDetailChildInput = {
   docNumber: string;
   periodStart: string | null;
   periodEnd: string | null;
-  postedDate: string;
   settlementTotal: number | null;
   plutusStatus: PlutusSettlementStatus;
   invoiceResolution: AuditInvoiceResolution;
@@ -159,6 +157,18 @@ function buildBlockMessages(blocks: Array<{ message: string }>): string[] {
   return blocks.map((block) => block.message);
 }
 
+function buildHistoryMessage(entry: SettlementHistoryEventInput): string {
+  const descriptionStartsWithTitle = entry.description.toLowerCase().startsWith(entry.title.toLowerCase());
+  const parts: string[] = [];
+
+  if (!descriptionStartsWithTitle && entry.kind !== 'posted') {
+    parts.push(entry.title);
+  }
+
+  parts.push(entry.description, entry.childDocNumber);
+  return parts.join(' · ');
+}
+
 export function buildSettlementListRowViewModel(input: SettlementListRowViewModelInput): SettlementListRowViewModel {
   const title = getSettlementDisplayId({
     sourceSettlementId: input.sourceSettlementId,
@@ -206,7 +216,6 @@ export function buildSettlementPostingSectionViewModels(
         docNumber: child.docNumber,
         periodStart: child.periodStart,
         periodEnd: child.periodEnd,
-        postedDate: child.postedDate,
         settlementTotal: child.settlementTotal,
         plutusStatus: child.plutusStatus,
         invoiceId: (() => {
@@ -233,7 +242,7 @@ export function buildSettlementHistoryViewModel(
     .map((entry) => ({
       id: entry.id,
       timestampText: formatHistoryTimestamp(entry.timestamp),
-      message: `${entry.description} · ${entry.childDocNumber}`,
+      message: buildHistoryMessage(entry),
       kind: entry.kind,
     }));
 }

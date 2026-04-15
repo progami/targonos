@@ -547,7 +547,10 @@ test('buildSettlementHistoryViewModel orders compact rows newest-first', () => {
   ]);
 
   assert.equal(history[0]?.id, 'h-2');
-  assert.equal(history[0]?.message, 'Previously processed with invoice INV-2. · UK-260406-260410-S1-B');
+  assert.equal(
+    history[0]?.message,
+    'Rolled back in Plutus · Previously processed with invoice INV-2. · UK-260406-260410-S1-B',
+  );
   assert.equal(history[2]?.kind, 'posted');
 });
 
