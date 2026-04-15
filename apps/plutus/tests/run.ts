@@ -9,6 +9,7 @@ import {
   formatAuditInvoiceResolutionMessage,
   resolveAuditInvoiceForSettlementChild,
 } from '../lib/plutus/audit-invoice-resolution';
+import { buildSettlementListRowViewModel } from '../lib/plutus/settlement-review';
 import {
   computeSaleCostFromAverage,
   createEmptyLedgerSnapshot,
@@ -104,6 +105,7 @@ import {
   qboQueryAll,
   summarizeCoverage,
 } from '../lib/qbo/full-history-audit/fetch';
+import { buildAuditCsv, buildAuditMarkdownSummary } from '../lib/qbo/full-history-audit/report';
 import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
@@ -330,6 +332,23 @@ test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the 
     }),
     'UK-260130-260131-S1',
   );
+});
+
+test('buildSettlementListRowViewModel keeps non-split settlements to one secondary label', () => {
+  const row = {
+    sourceSettlementId: 'UK-260213-260227-S1',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-02-13',
+    periodEnd: '2026-02-27',
+    settlementTotal: 4508.25,
+    plutusStatus: 'Processed',
+    splitCount: 1,
+    isSplit: false,
+    children: [{ docNumber: 'UK-260213-260227-S1' }],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.subtitle, 'Amazon.co.uk');
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
@@ -2943,6 +2962,33 @@ test('summarizeCoverage preserves partial coverage failures', () => {
   ]);
   assert.equal(summary.completeCoverage, false);
   assert.equal(summary.failedTypes[0], 'Transfer');
+});
+
+test('audit report builders render severity totals and csv rows', () => {
+  const rows = [
+    {
+      transactionType: 'Bill',
+      transactionId: '10',
+      txnDate: '2026-04-01',
+      amount: 1250,
+      currency: 'USD',
+      counterparty: 'Vendor A',
+      postingAccountSummary: 'Inventory',
+      ruleId: 'ATTACHMENT_REQUIRED_MISSING',
+      ruleGroup: 'attachment_controls',
+      severity: 'High',
+      exceptionMessage: 'Bill has no attachment.',
+      suggestedFix: 'Attach the supporting invoice.',
+      supportStatus: 'missing',
+      reconciledPeriodRisk: 'no',
+    },
+  ] as const;
+
+  const csv = buildAuditCsv(rows);
+  const summary = buildAuditMarkdownSummary(rows, { Purchase: 10, Bill: 1 });
+  assert.equal(csv.includes('ATTACHMENT_REQUIRED_MISSING'), true);
+  assert.equal(summary.includes('High'), true);
+  assert.equal(summary.includes('Bill: 1'), true);
 });
 
 function makeQboResponse(body: Record<string, unknown>, status = 200): Response {
