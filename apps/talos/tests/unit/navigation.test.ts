@@ -10,11 +10,11 @@ test('amazon workspace exposes the live tool surfaces in Talos', () => {
     [
       '/amazon/fba-fee-discrepancies',
       '/amazon/fba-fee-tables',
-      '/market/shipment-planning',
     ]
   )
 
   assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/amazon'), false)
+  assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/market/shipment-planning'), false)
 })
 
 test('main navigation surfaces live Talos pages and keeps super-admin routes gated', () => {
@@ -29,7 +29,6 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
     [
       '/amazon/fba-fee-discrepancies',
       '/amazon/fba-fee-tables',
-      '/market/shipment-planning',
     ]
   )
 
