@@ -75,7 +75,7 @@ test('readCaseReportBundleFromCaseRoot resolves the latest dated report and trac
       '',
       '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
       '|---|---|---|---|---|---|---|---|',
-      '| Watching | Old issue | 19550165441 | 1 day ago | Work in progress | Old evidence. | Old assessment. | Old next step. |',
+      '| Action due | Old issue | 19550165441 | 1 day ago | Answered | Old evidence. | Old assessment. | Old next step. |',
       '',
     ].join('\n'),
   )
@@ -98,6 +98,24 @@ test('readCaseReportBundleFromCaseRoot resolves the latest dated report and trac
 
   assert.equal(bundle.reportDate, '2026-04-08')
   assert.deepEqual(bundle.availableReportDates, ['2026-04-08', '2026-04-07'])
+  assert.deepEqual(bundle.daySummaries, [
+    {
+      reportDate: '2026-04-08',
+      totalRows: 1,
+      actionDueRows: 0,
+      newCaseRows: 0,
+      forumWatchRows: 0,
+      watchingRows: 1,
+    },
+    {
+      reportDate: '2026-04-07',
+      totalRows: 1,
+      actionDueRows: 1,
+      newCaseRows: 0,
+      forumWatchRows: 0,
+      watchingRows: 0,
+    },
+  ])
   assert.deepEqual(bundle.trackedCaseIds, ['19550165441'])
   assert.equal(bundle.sections[0]?.rows[0]?.caseId, '19550165441')
 })
