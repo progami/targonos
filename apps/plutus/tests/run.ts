@@ -90,6 +90,10 @@ import {
   classifyQboRefreshFailure,
   classifyQboVerificationFailure,
 } from '../lib/qbo/connection-feedback';
+import {
+  classifyAuditExceptions,
+  type NormalizedAuditTransaction,
+} from '../lib/qbo/full-history-audit/rules';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
@@ -2521,6 +2525,55 @@ test('historical refund routing keeps multiple dated refunds for the same order 
 
   assert.equal(historicalRefundGroups.size, 2);
   assert.equal(currentSettlementRefundGroups.size, 0);
+});
+
+test('audit flags missing doc number and missing attachment on bills', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Bill',
+    transactionId: 'B1',
+    txnDate: '2026-04-01',
+    amount: 1250,
+    currency: 'USD',
+    counterparty: 'Vendor A',
+    docNumber: null,
+    privateNote: 'April inventory invoice',
+    dueDate: null,
+    postingAccounts: ['Inventory'],
+    lineDescriptions: [''],
+    attachmentFileNames: [],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(
+    findings.map((f) => f.ruleId).sort(),
+    ['ATTACHMENT_REQUIRED_MISSING', 'BILL_DUE_DATE_MISSING', 'DOCNUMBER_MISSING', 'LINE_DESCRIPTION_MISSING'].sort(),
+  );
+});
+
+test('audit flags transfer-like expenses posted to p-and-l accounts', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Purchase',
+    transactionId: 'P1',
+    txnDate: '2026-04-01',
+    amount: 1000,
+    currency: 'USD',
+    counterparty: 'Internal funding move',
+    docNumber: 'INT-001',
+    privateNote: 'Transfer to Wise',
+    dueDate: null,
+    postingAccounts: ['General business expenses:Software & apps'],
+    lineDescriptions: ['Transfer to Wise USD'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-04-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.equal(findings.some((f) => f.ruleId === 'TRANSFER_LIKE_ACTIVITY_MISPOSTED'), true);
 });
 
 process.stdout.write('All tests passed.\n');
