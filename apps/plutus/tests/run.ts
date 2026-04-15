@@ -2636,6 +2636,71 @@ test('audit does not require doc number for transfer transactions', () => {
   assert.equal(findings.some((finding) => finding.ruleId === 'DOCNUMBER_MISSING'), false);
 });
 
+test('audit flags likely duplicates by date amount and counterparty', () => {
+  const input: NormalizedAuditTransaction[] = [
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P100',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X1',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['x.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P101',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X2',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['y.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+  ];
+
+  const findings = classifyAuditExceptions(input);
+  assert.equal(findings.some((f) => f.ruleId === 'LIKELY_DUPLICATE'), true);
+});
+
+test('audit flags unresolved settlement-control usage', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'JournalEntry',
+    transactionId: 'J1',
+    txnDate: '2025-01-10',
+    amount: 11.64,
+    currency: 'USD',
+    counterparty: null,
+    docNumber: 'AMZN-1',
+    privateNote: 'Temporary suspense entry',
+    dueDate: null,
+    postingAccounts: ['Plutus Settlement Control'],
+    lineDescriptions: ['Temporary suspense entry'],
+    attachmentFileNames: ['support.txt'],
+    isInReconciledPeriod: true,
+    lastUpdatedTime: '2025-01-10T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.equal(findings.some((f) => f.ruleId === 'UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY'), true);
+});
+
 test('normalizePurchaseForAudit preserves descriptions, accounts, payee, and attachments', () => {
   const normalized = normalizePurchaseForAudit(
     {
