@@ -1,8 +1,6 @@
 'use client';
 
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -101,18 +99,6 @@ export function SettlementLedgerSection({ section, currency, lines }: Settlement
           <Typography sx={{ fontSize: '0.95rem', fontWeight: 700 }}>
             {section.settlementTotal === null ? '—' : formatMoney(section.settlementTotal, currency)}
           </Typography>
-          <Button
-            component="a"
-            href={`https://app.qbo.intuit.com/app/journal?txnId=${section.qboJournalEntryId}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            variant="text"
-            size="small"
-            endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
-            sx={{ minHeight: 0, px: 0, py: 0, textTransform: 'none' }}
-          >
-            Open in QBO
-          </Button>
         </Box>
       </Box>
 

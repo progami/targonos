@@ -443,7 +443,8 @@ export default function ParentSettlementDetailPage() {
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '78rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'grid', gap: 0.35 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
             <BackButton />
             {data && (
               <>
@@ -454,6 +455,12 @@ export default function ParentSettlementDetailPage() {
                 <PlutusPill status={settlementView ? settlementView.statusText : data.settlement.plutusStatus} />
               </>
             )}
+            </Box>
+            {data ? (
+              <Typography sx={{ pl: { sm: '2.25rem' }, fontSize: '0.8rem', color: 'text.secondary' }}>
+                {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)} · {data.settlement.marketplace.label}
+              </Typography>
+            ) : null}
           </Box>
 
           {data && (
