@@ -1,33 +1,126 @@
-import { test, expect, type Page } from '@playwright/test'
+import { expect, test, type BrowserContext, type Page, type TestInfo } from '@playwright/test'
 
-import { hostedScreenshotPath, loginToHostedPortal } from './fixtures/hosted-auth'
+import {
+  assertHostedVersionBadge,
+  assertNoHostedAuthRedirect,
+  assertNoHostedErrorMarkers,
+  hostedPortalBaseUrl,
+  hostedRoute,
+  hostedScreenshotPath,
+  installHostedResponseTracker,
+  loginToHostedPortal,
+} from './fixtures/hosted-auth'
 
-const portalBaseUrl = process.env.PORTAL_BASE_URL
-if (typeof portalBaseUrl !== 'string' || portalBaseUrl.trim() === '') {
-  throw new Error('PORTAL_BASE_URL must be defined for hosted portal smoke tests.')
+type HostedRouteCheck = {
+  name: string
+  path: string
+  visibleText: string
 }
 
-const routes = [
-  { name: 'portal', url: `${portalBaseUrl}/`, visible: 'TargonOS Portal' },
-  { name: 'talos', url: `${portalBaseUrl}/talos/operations/purchase-orders`, visible: 'Purchase Orders' },
-  { name: 'atlas', url: `${portalBaseUrl}/atlas/employees`, visible: 'Employees' },
-  { name: 'kairos', url: `${portalBaseUrl}/kairos/forecasts`, visible: 'Forecasts' },
-  { name: 'xplan', url: `${portalBaseUrl}/xplan/1-setup`, visible: 'Setup' },
-  { name: 'plutus', url: `${portalBaseUrl}/plutus/settlements`, visible: 'Settlements' },
-  { name: 'hermes', url: `${portalBaseUrl}/hermes/insights`, visible: 'Insights' },
-  { name: 'argus', url: `${portalBaseUrl}/argus/wpr`, visible: 'Weekly performance reporting' },
-] as const
+const hostedRouteChecks: HostedRouteCheck[] = [
+  { name: 'portal', path: '/', visibleText: 'TargonOS Portal' },
+  { name: 'atlas', path: '/atlas/employees', visibleText: 'Employees' },
+  { name: 'kairos', path: '/kairos/forecasts', visibleText: 'Forecasts' },
+  { name: 'xplan', path: '/xplan/1-setup', visibleText: 'Setup' },
+  { name: 'plutus', path: '/plutus/settlements', visibleText: 'Settlements' },
+  { name: 'hermes', path: '/hermes/insights', visibleText: 'Insights' },
+  { name: 'argus', path: '/argus/wpr', visibleText: 'Weekly performance reporting' },
+]
 
-function versionBadge(page: Page) {
-  return page.getByRole('link', { name: /v\d+\.\d+\.\d+/i }).first()
-}
+test.describe('hosted cross-app auth smoke', () => {
+  test.describe.configure({ mode: 'serial' })
 
-for (const route of routes) {
-  test(`${route.name} deep link renders visible screen`, async ({ page }) => {
+  let context: BrowserContext
+  let page: Page
+  let responseTracker: ReturnType<typeof installHostedResponseTracker>
+
+  async function captureFailure(routeName: string, testInfo: TestInfo, run: () => Promise<void>) {
+    try {
+      await run()
+    } catch (error) {
+      await page.screenshot({
+        path: hostedScreenshotPath(`${routeName}-${testInfo.retry}`),
+        fullPage: true,
+      })
+      throw error
+    }
+  }
+
+  async function assertHostedRoute(check: HostedRouteCheck) {
+    const targetUrl = hostedRoute(check.path)
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded' })
+
+    const currentPath = new URL(page.url()).pathname
+    if (check.path === '/') {
+      expect(currentPath).toBe('/')
+    } else {
+      expect(
+        currentPath === check.path || currentPath.startsWith(`${check.path}/`),
+        `Expected hosted path ${check.path}, got ${currentPath}`,
+      ).toBe(true)
+    }
+
+    await expect(page.getByText(check.visibleText, { exact: false }).first()).toBeVisible({ timeout: 20_000 })
+    await assertNoHostedAuthRedirect(page)
+    await assertNoHostedErrorMarkers(page)
+    await assertHostedVersionBadge(page)
+    responseTracker.assertNone()
+  }
+
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext()
+    page = await context.newPage()
+    responseTracker = installHostedResponseTracker(page)
     await loginToHostedPortal(page)
-    await page.goto(route.url, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText(route.visible, { exact: false }).first()).toBeVisible({ timeout: 20_000 })
-    await page.screenshot({ path: hostedScreenshotPath(route.name), fullPage: true })
-    await expect(versionBadge(page)).toBeVisible({ timeout: 20_000 })
   })
-}
+
+  test.beforeEach(async () => {
+    responseTracker.reset()
+  })
+
+  test.afterAll(async () => {
+    responseTracker.dispose()
+    await context.close()
+  })
+
+  for (const check of hostedRouteChecks) {
+    test(`${check.name} deep link renders a real screen`, async ({}, testInfo) => {
+      await captureFailure(check.name, testInfo, async () => {
+        await assertHostedRoute(check)
+      })
+    })
+  }
+
+  test('talos region selection reaches dashboard', async ({}, testInfo) => {
+    await captureFailure('talos-region-selection', testInfo, async () => {
+      await page.goto(hostedRoute('/talos'), { waitUntil: 'domcontentloaded' })
+      await expect(page.getByText('Select your region to continue', { exact: false })).toBeVisible({
+        timeout: 20_000,
+      })
+
+      const tenantSelectResponsePromise = page.waitForResponse((response) => {
+        if (response.request().method() !== 'POST') {
+          return false
+        }
+
+        const responseUrl = new URL(response.url())
+        return responseUrl.origin === new URL(hostedPortalBaseUrl()).origin &&
+          responseUrl.pathname === '/talos/api/tenant/select'
+      })
+
+      await page.getByRole('button', { name: /\bUS\b/i }).first().click()
+
+      const tenantSelectResponse = await tenantSelectResponsePromise
+      expect(tenantSelectResponse.ok()).toBe(true)
+
+      await page.waitForURL(new RegExp(`^${hostedRoute('/talos/dashboard').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), {
+        timeout: 20_000,
+      })
+      await expect(page.getByText('Dashboard', { exact: false }).first()).toBeVisible({ timeout: 20_000 })
+      await assertNoHostedAuthRedirect(page)
+      await assertNoHostedErrorMarkers(page)
+      await assertHostedVersionBadge(page)
+      responseTracker.assertNone()
+    })
+  })
+})
