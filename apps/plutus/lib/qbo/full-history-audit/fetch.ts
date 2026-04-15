@@ -4,7 +4,7 @@ import * as qboApi from '../api';
 import type { QboConnection } from '../api';
 
 export type CoverageRow = {
-  transactionType: 'Purchase' | 'Bill' | 'Transfer' | 'JournalEntry' | 'BillPayment' | 'Invoice';
+  transactionType: 'Purchase' | 'Bill' | 'Transfer' | 'JournalEntry' | 'BillPayment' | 'Invoice' | 'Attachable';
   scannedCount: number;
   complete: boolean;
 };
@@ -31,15 +31,30 @@ function extractArrayKey(queryResponse: Record<string, unknown>): string | null 
 const retryableStatusCodes = new Set([429, 503]);
 const retryMaxAttempts = 3;
 const retryBaseDelayMs = 1000;
+const queryTimeoutMs = 60000;
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number = queryTimeoutMs): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await qboFullHistoryAuditDeps.fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
   for (let attempt = 0; attempt <= retryMaxAttempts; attempt++) {
     try {
-      const response = await qboFullHistoryAuditDeps.fetch(url, init);
+      const response = await fetchWithTimeout(url, init);
       if (response.ok) {
         return response;
       }

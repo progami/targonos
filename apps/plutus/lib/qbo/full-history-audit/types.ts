@@ -30,7 +30,7 @@ export interface NormalizedAuditTransaction {
   postingAccounts: string[];
   lineDescriptions: string[];
   attachmentFileNames: string[];
-  isInReconciledPeriod: boolean;
+  isInReconciledPeriod: boolean | null;
   lastUpdatedTime: string | null;
   sourceTag: string | null;
 }
@@ -49,5 +49,5 @@ export interface AuditException {
   exceptionMessage: string;
   suggestedFix: string;
   supportStatus: 'attached' | 'missing' | 'not_required' | 'unknown';
-  reconciledPeriodRisk: 'yes' | 'no';
+  reconciledPeriodRisk: 'yes' | 'no' | 'unknown';
 }

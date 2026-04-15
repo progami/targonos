@@ -31,6 +31,7 @@ const ACCEPTED_FEE_ACCOUNT_CUES = [
   'card processing fees',
   'credit card processing fees',
 ];
+const DUPLICATE_FINDING_SEVERITY: AuditException['severity'] = 'High';
 
 function pushFinding(
   out: AuditException[],
@@ -56,7 +57,12 @@ function pushFinding(
     exceptionMessage,
     suggestedFix,
     supportStatus,
-    reconciledPeriodRisk: tx.isInReconciledPeriod ? 'yes' : 'no',
+    reconciledPeriodRisk:
+      tx.isInReconciledPeriod === true
+        ? 'yes'
+        : tx.isInReconciledPeriod === false
+          ? 'no'
+          : 'unknown',
   });
 }
 
@@ -71,8 +77,42 @@ function containsControlAccount(tx: NormalizedAuditTransaction): boolean {
   });
 }
 
-function duplicateKey(tx: NormalizedAuditTransaction): string {
-  return [tx.transactionType, tx.txnDate, tx.amount.toFixed(2), tx.counterparty || ''].join('::');
+function normalizeDuplicatePart(value: string | null): string {
+  if (value === null) {
+    return '';
+  }
+
+  return value.trim().toLowerCase();
+}
+
+function normalizeDuplicateList(values: string[]): string {
+  return values.map((value) => value.trim().toLowerCase()).filter(Boolean).join('|');
+}
+
+function duplicateKey(tx: NormalizedAuditTransaction): string | null {
+  const baseParts = [
+    tx.transactionType,
+    tx.txnDate,
+    tx.amount.toFixed(2),
+    normalizeDuplicatePart(tx.counterparty),
+  ];
+  const normalizedDocNumber = normalizeDuplicatePart(tx.docNumber);
+  if (normalizedDocNumber !== '') {
+    return [...baseParts, `doc:${normalizedDocNumber}`].join('::');
+  }
+
+  const evidenceParts = [
+    normalizeDuplicatePart(tx.dueDate),
+    normalizeDuplicateList(tx.postingAccounts),
+    normalizeDuplicateList(tx.lineDescriptions),
+    normalizeDuplicatePart(tx.privateNote),
+  ];
+
+  if (evidenceParts.every((value) => value === '')) {
+    return null;
+  }
+
+  return [...baseParts, ...evidenceParts].join('::');
 }
 
 function isOwnerEquityAccount(account: string): boolean {
@@ -147,7 +187,11 @@ export function classifyAuditExceptions(
 
   for (const tx of transactions) {
     const key = duplicateKey(tx);
-    duplicateCounts.set(key, (duplicateCounts.get(key) || 0) + 1);
+    if (key === null) {
+      continue;
+    }
+
+    duplicateCounts.set(key, (duplicateCounts.get(key) ?? 0) + 1);
   }
 
   for (const tx of transactions) {
@@ -198,15 +242,16 @@ export function classifyAuditExceptions(
       );
     }
 
-    if (duplicateCounts.get(duplicateKey(tx))! > 1) {
+    const candidateDuplicateKey = duplicateKey(tx);
+    if (candidateDuplicateKey !== null && (duplicateCounts.get(candidateDuplicateKey) ?? 0) > 1) {
       pushFinding(
         findings,
         tx,
         'LIKELY_DUPLICATE',
         'transaction_logic',
-        'Critical',
-        'Possible duplicate transaction.',
-        'Review and remove duplicate posting.',
+        DUPLICATE_FINDING_SEVERITY,
+        'Possible duplicate transaction with matching audit fingerprint.',
+        'Review for duplicate posting or document why repeated activity is legitimate.',
         'not_required',
       );
     }

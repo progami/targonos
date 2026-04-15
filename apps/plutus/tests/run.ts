@@ -2576,12 +2576,16 @@ test('audit flags missing doc number and missing attachment on bills', () => {
     postingAccounts: ['Inventory'],
     lineDescriptions: [''],
     attachmentFileNames: [],
-    isInReconciledPeriod: false,
+    isInReconciledPeriod: null,
     lastUpdatedTime: '2026-04-10T10:00:00Z',
     sourceTag: null,
   };
 
   const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(
+    findings.map((finding) => finding.reconciledPeriodRisk),
+    ['unknown', 'unknown'],
+  );
   assert.deepEqual(
     findings.map((finding) => ({
       ruleId: finding.ruleId,
@@ -2721,7 +2725,7 @@ test('audit flags likely duplicates by date amount and counterparty', () => {
       amount: 1015.85,
       currency: 'USD',
       counterparty: 'Internal funding move',
-      docNumber: 'X2',
+      docNumber: 'X1',
       privateNote: 'Transfer to Wise',
       dueDate: null,
       postingAccounts: ['Owner draws'],
@@ -2735,6 +2739,48 @@ test('audit flags likely duplicates by date amount and counterparty', () => {
 
   const findings = classifyAuditExceptions(input);
   assert.deepEqual(ruleIds(findings), ['LIKELY_DUPLICATE', 'LIKELY_DUPLICATE']);
+});
+
+test('audit does not flag duplicates when the doc numbers differ', () => {
+  const input: NormalizedAuditTransaction[] = [
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P200',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X1',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['x.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+    {
+      transactionType: 'Purchase',
+      transactionId: 'P201',
+      txnDate: '2026-03-03',
+      amount: 1015.85,
+      currency: 'USD',
+      counterparty: 'Internal funding move',
+      docNumber: 'X2',
+      privateNote: 'Transfer to Wise',
+      dueDate: null,
+      postingAccounts: ['Owner draws'],
+      lineDescriptions: ['Transfer to Wise USD'],
+      attachmentFileNames: ['y.txt'],
+      isInReconciledPeriod: true,
+      lastUpdatedTime: '2026-04-13T12:00:00Z',
+      sourceTag: null,
+    },
+  ];
+
+  const findings = classifyAuditExceptions(input);
+  assert.deepEqual(ruleIds(findings), []);
 });
 
 test('audit flags unresolved settlement-control usage', () => {
@@ -3043,9 +3089,10 @@ test('audit coverage summary reports failed transaction-type coverage', () => {
     { transactionType: 'Purchase', scannedCount: 10, complete: true },
     { transactionType: 'Bill', scannedCount: 5, complete: true },
     { transactionType: 'Transfer', scannedCount: 3, complete: false },
+    { transactionType: 'Attachable', scannedCount: 2, complete: false },
   ]);
   assert.equal(coverage.completeCoverage, false);
-  assert.deepEqual(coverage.failedTypes, ['Transfer']);
+  assert.deepEqual(coverage.failedTypes, ['Transfer', 'Attachable']);
 });
 
 test('audit report builders render severity totals and csv rows', () => {

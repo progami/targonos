@@ -1,6 +1,26 @@
 import type { QboBill, QboJournalEntry, QboPurchase } from '@/lib/qbo/api';
 import type { NormalizedAuditTransaction } from './types';
 
+type QboTransfer = {
+  Id: string;
+  TxnDate: string;
+  Amount: number;
+  CurrencyRef?: {
+    value?: string;
+  };
+  DocNumber?: string;
+  PrivateNote?: string;
+  FromAccountRef?: {
+    name?: string;
+  };
+  ToAccountRef?: {
+    name?: string;
+  };
+  MetaData?: {
+    LastUpdatedTime?: string;
+  };
+};
+
 function collectPurchasePostingAccounts(purchase: QboPurchase): string[] {
   const accounts: string[] = [];
 
@@ -39,6 +59,15 @@ function collectBillPostingAccounts(bill: QboBill): string[] {
   return accounts;
 }
 
+function collectTransferPostingAccounts(transfer: QboTransfer): string[] {
+  const accountNames = [
+    transfer.FromAccountRef?.name ?? null,
+    transfer.ToAccountRef?.name ?? null,
+  ];
+
+  return accountNames.filter((accountName): accountName is string => accountName !== null);
+}
+
 function collectLineDescriptions(lines: Array<{ Description?: string }>): string[] {
   const descriptions: string[] = [];
 
@@ -68,7 +97,7 @@ export function normalizePurchaseForAudit(
     postingAccounts: collectPurchasePostingAccounts(purchase),
     lineDescriptions: collectLineDescriptions(purchase.Line ?? []),
     attachmentFileNames,
-    isInReconciledPeriod: false,
+    isInReconciledPeriod: null,
     lastUpdatedTime: purchase.MetaData?.LastUpdatedTime ?? null,
     sourceTag: null,
   };
@@ -91,7 +120,7 @@ export function normalizeJournalEntryForAudit(
     postingAccounts: collectJournalEntryPostingAccounts(journalEntry),
     lineDescriptions: collectLineDescriptions(journalEntry.Line),
     attachmentFileNames,
-    isInReconciledPeriod: false,
+    isInReconciledPeriod: null,
     lastUpdatedTime: journalEntry.MetaData?.LastUpdatedTime ?? null,
     sourceTag: null,
   };
@@ -114,14 +143,14 @@ export function normalizeBillForAudit(
     postingAccounts: collectBillPostingAccounts(bill),
     lineDescriptions: collectLineDescriptions(bill.Line ?? []),
     attachmentFileNames,
-    isInReconciledPeriod: false,
+    isInReconciledPeriod: null,
     lastUpdatedTime: bill.MetaData?.LastUpdatedTime ?? null,
     sourceTag: null,
   };
 }
 
 export function normalizeTransferForAudit(
-  transfer: any,
+  transfer: QboTransfer,
   attachmentFileNames: string[],
 ): NormalizedAuditTransaction {
   return {
@@ -129,16 +158,16 @@ export function normalizeTransferForAudit(
     transactionId: transfer.Id,
     txnDate: transfer.TxnDate,
     amount: transfer.Amount,
-    currency: transfer.CurrencyRef?.value || null,
+    currency: transfer.CurrencyRef?.value ?? null,
     counterparty: null,
-    docNumber: transfer.DocNumber || null,
-    privateNote: transfer.PrivateNote || null,
+    docNumber: transfer.DocNumber ?? null,
+    privateNote: transfer.PrivateNote ?? null,
     dueDate: null,
-    postingAccounts: [transfer.FromAccountRef?.name || '', transfer.ToAccountRef?.name || ''].filter(Boolean),
+    postingAccounts: collectTransferPostingAccounts(transfer),
     lineDescriptions: [],
     attachmentFileNames,
-    isInReconciledPeriod: false,
-    lastUpdatedTime: transfer.MetaData?.LastUpdatedTime || null,
+    isInReconciledPeriod: null,
+    lastUpdatedTime: transfer.MetaData?.LastUpdatedTime ?? null,
     sourceTag: null,
   };
 }

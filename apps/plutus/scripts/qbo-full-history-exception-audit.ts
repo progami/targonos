@@ -86,6 +86,11 @@ async function main() {
       scannedCount: sourceData.transfers.rows.length,
       complete: sourceData.transfers.complete,
     },
+    {
+      transactionType: 'Attachable',
+      scannedCount: sourceData.attachables.rows.length,
+      complete: sourceData.attachables.complete,
+    },
   ];
   const coverage = summarizeCoverage(coverageRows);
 
@@ -102,7 +107,7 @@ async function main() {
     }) +
       `\n\n## Coverage\n- completeCoverage: ${coverage.completeCoverage}\n- failedTypes: ${
         coverage.failedTypes.length === 0 ? 'none' : coverage.failedTypes.join(', ')
-      }\n- attachablesComplete: ${sourceData.attachables.complete}\n`,
+      }\n`,
   );
 
   console.log(
@@ -110,11 +115,7 @@ async function main() {
       {
         outDir,
         findings: findings.length,
-        coverage: {
-          ...coverage,
-          attachablesComplete: sourceData.attachables.complete,
-          attachablesScannedCount: sourceData.attachables.rows.length,
-        },
+        coverage,
       },
       null,
       2,
