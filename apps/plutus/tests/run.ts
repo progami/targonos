@@ -2977,8 +2977,8 @@ test('audit report builders render severity totals and csv rows', () => {
       ruleId: 'ATTACHMENT_REQUIRED_MISSING',
       ruleGroup: 'attachment_controls',
       severity: 'High',
-      exceptionMessage: 'Bill has no attachment.',
-      suggestedFix: 'Attach the supporting invoice.',
+      exceptionMessage: 'Bill has no attachment, review "support" docs.',
+      suggestedFix: 'Attach the supporting invoice,\nthen mark "received".',
       supportStatus: 'missing',
       reconciledPeriodRisk: 'no',
     },
@@ -2987,6 +2987,15 @@ test('audit report builders render severity totals and csv rows', () => {
   const csv = buildAuditCsv(rows);
   const summary = buildAuditMarkdownSummary(rows, { Purchase: 10, Bill: 1 });
   assert.equal(csv.includes('ATTACHMENT_REQUIRED_MISSING'), true);
+  assert.equal(
+    csv.includes('"Bill has no attachment, review ""support"" docs."'),
+    true,
+  );
+  assert.equal(
+    csv.includes('"Attach the supporting invoice,\nthen mark ""received""."'),
+    true,
+  );
+  assert.equal(csv.includes('\\"support\\"'), false);
   assert.equal(summary.includes('High'), true);
   assert.equal(summary.includes('Bill: 1'), true);
 });

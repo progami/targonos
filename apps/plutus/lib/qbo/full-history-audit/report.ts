@@ -1,5 +1,13 @@
 import type { AuditException } from './types';
 
+function escapeCsvField(value: string): string {
+  if (!/[",\n\r]/.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
 export function buildAuditCsv(rows: readonly AuditException[]): string {
   const header = [
     'transaction_type',
@@ -35,7 +43,7 @@ export function buildAuditCsv(rows: readonly AuditException[]): string {
       row.supportStatus,
       row.reconciledPeriodRisk,
     ]
-      .map((value) => JSON.stringify(String(value)))
+      .map((value) => escapeCsvField(String(value)))
       .join(','),
   );
 
