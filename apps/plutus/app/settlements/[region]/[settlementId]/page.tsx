@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'notistack';
 import Box from '@mui/material/Box';
@@ -12,6 +12,8 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Skeleton from '@mui/material/Skeleton';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
@@ -142,6 +144,12 @@ type ParentPreviewResponse = {
   }>;
 };
 
+type DetailTab = 'review' | 'analysis';
+
+function readDetailTab(value: string | null): DetailTab {
+  return value === 'analysis' ? 'analysis' : 'review';
+}
+
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
 
@@ -233,6 +241,9 @@ async function rollbackParentSettlement(region: string, settlementId: string) {
 export default function ParentSettlementDetailPage() {
   const { enqueueSnackbar } = useSnackbar();
   const params = useParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const region = typeof params.region === 'string' ? params.region : '';
   const settlementId = typeof params.settlementId === 'string' ? decodeURIComponent(params.settlementId) : '';
@@ -241,6 +252,7 @@ export default function ParentSettlementDetailPage() {
     throw new Error('Settlement route params are required');
   }
 
+  const [tab, setTab] = useState<DetailTab>(() => readDetailTab(searchParams.get('tab')));
   const [preview, setPreview] = useState<ParentPreviewResponse | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -261,6 +273,10 @@ export default function ParentSettlementDetailPage() {
     enabled: connection?.connected !== false,
     staleTime: 5 * 60 * 1000,
   });
+  useEffect(() => {
+    const nextTab = readDetailTab(searchParams.get('tab'));
+    setTab((current) => (current === nextTab ? current : nextTab));
+  }, [searchParams]);
   const settlementView = useMemo(
     () =>
       data
@@ -316,6 +332,19 @@ export default function ParentSettlementDetailPage() {
     () => (data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : []),
     [data],
   );
+
+  function handleTabChange(nextTab: DetailTab) {
+    setTab(nextTab);
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (nextTab === 'analysis') {
+      nextParams.set('tab', 'analysis');
+    } else {
+      nextParams.delete('tab');
+    }
+
+    const query = nextParams.toString();
+    router.replace(query === '' ? pathname : `${pathname}?${query}`, { scroll: false });
+  }
 
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlement Details" canConnect={connection.canConnect} error={connection.error} />;
@@ -467,88 +496,95 @@ export default function ParentSettlementDetailPage() {
 
         {!isLoading && data && (
           <Box sx={{ mt: 3, display: 'grid', gap: 2.5 }}>
-            <Box
-              sx={{
-                display: 'grid',
-                gap: 0.75,
-                pb: 2,
-                borderBottom: '1px solid',
-                borderColor: 'divider',
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
-                <Typography sx={{ fontSize: '1.05rem', fontWeight: 700 }}>
-                  {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)}
-                </Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                  {data.settlement.marketplace.label}
-                </Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                  Posted{' '}
-                  {new Date(`${data.settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', {
-                    timeZone: 'UTC',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
+            <Box sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Tabs
+                value={tab}
+                onChange={(_, value: DetailTab) => handleTabChange(value)}
+                sx={{ minHeight: 42, '& .MuiTab-root': { minHeight: 42, textTransform: 'none' } }}
+              >
+                <Tab value="review" label="Ledger review" />
+                <Tab value="analysis" label="Analysis" />
+              </Tabs>
+            </Box>
+
+            {tab === 'review' ? (
+              <Box sx={{ display: 'grid', gap: 1.5 }}>
+                {data.settlement.isSplit ? (
+                  <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
+                    {data.settlement.splitCount} month-end postings cover this settlement. Review them in order below.
+                  </Typography>
+                ) : null}
+
+                {data.settlement.hasInconsistency ? (
+                  <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
+                    Child posting states disagree. Treat this settlement as inconsistent until the backend state is repaired.
+                  </Typography>
+                ) : null}
+
+                {unresolvedChildren.length > 0 ? (
+                  <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
+                    Preview and processing stay blocked until every posting resolves to one audit invoice.
+                  </Typography>
+                ) : null}
+
+                {actionError === null ? null : (
+                  <Typography color="error.main" sx={{ fontSize: '0.8rem' }}>
+                    {actionError}
+                  </Typography>
+                )}
+
+                <Box component="section" sx={{ display: 'grid', gap: 0 }}>
+                  {ledgerSections.map((section) => {
+                    const child = childByJournalEntryId.get(section.qboJournalEntryId);
+                    if (child === undefined) {
+                      throw new Error(`Missing child posting for ${section.qboJournalEntryId}`);
+                    }
+
+                    return (
+                      <SettlementLedgerSection
+                        key={section.qboJournalEntryId}
+                        section={section}
+                        currency={data.settlement.marketplace.currency}
+                        lines={child.lines}
+                      />
+                    );
                   })}
-                </Typography>
-                <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-                  Total{' '}
-                  {data.settlement.settlementTotal === null
-                    ? '—'
-                    : formatMoney(data.settlement.settlementTotal, data.settlement.marketplace.currency)}
-                </Typography>
+                </Box>
               </Box>
+            ) : (
+              <Box sx={{ display: 'grid', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, flexWrap: 'wrap' }}>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    {data.settlement.marketplace.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    Posted{' '}
+                    {new Date(`${data.settlement.postedDate}T00:00:00Z`).toLocaleDateString('en-US', {
+                      timeZone: 'UTC',
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+                    Total{' '}
+                    {data.settlement.settlementTotal === null
+                      ? '—'
+                      : formatMoney(data.settlement.settlementTotal, data.settlement.marketplace.currency)}
+                  </Typography>
+                </Box>
 
-              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                {data.settlement.isSplit
-                  ? `${data.settlement.splitCount} month-end postings cover this settlement. Review them in order below.`
-                  : 'One month-end posting covers this settlement.'}
-              </Typography>
-
-              {data.settlement.hasInconsistency ? (
-                <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
-                  Child posting states disagree. Treat this settlement as inconsistent until the backend state is repaired.
-                </Typography>
-              ) : null}
-
-              {unresolvedChildren.length > 0 ? (
-                <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
-                  Preview and processing stay blocked until every posting resolves to one audit invoice.
-                </Typography>
-              ) : null}
-
-              {actionError === null ? null : (
-                <Typography color="error.main" sx={{ fontSize: '0.8rem' }}>
-                  {actionError}
-                </Typography>
-              )}
-            </Box>
-
-            <Box component="section" sx={{ display: 'grid', gap: 0 }}>
-              {ledgerSections.map((section) => {
-                const child = childByJournalEntryId.get(section.qboJournalEntryId);
-                if (child === undefined) {
-                  throw new Error(`Missing child posting for ${section.qboJournalEntryId}`);
-                }
-
-                return (
-                  <SettlementLedgerSection
-                    key={section.qboJournalEntryId}
-                    section={section}
-                    currency={data.settlement.marketplace.currency}
-                    lines={child.lines}
-                  />
-                );
-              })}
-            </Box>
-
-            <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
-              <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
-                History
-              </Typography>
-              <SettlementHistoryList rows={historyRows} />
-            </Box>
+                <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+                    History
+                  </Typography>
+                  <SettlementHistoryList rows={historyRows} />
+                </Box>
+              </Box>
+            )}
           </Box>
         )}
 
