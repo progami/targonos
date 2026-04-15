@@ -94,7 +94,10 @@ import {
   classifyAuditExceptions,
 } from '../lib/qbo/full-history-audit/rules';
 import {
+  getActiveQboConnection,
   mergeAttachmentRefs,
+  qboFullHistoryAuditDeps,
+  qboQueryAll,
   summarizeCoverage,
 } from '../lib/qbo/full-history-audit/fetch';
 import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
@@ -102,14 +105,10 @@ import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
 import type { QboAccount, QboBill, QboRecurringTransaction } from '../lib/qbo/api';
 
-function test(name: string, fn: () => void) {
-  try {
-    fn();
-    process.stdout.write(`ok - ${name}\n`);
-  } catch (error) {
-    process.stderr.write(`not ok - ${name}\n`);
-    throw error;
-  }
+const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [];
+
+function test(name: string, fn: () => void | Promise<void>) {
+  tests.push({ name, fn });
 }
 
 test('normalizeAuditMarketToMarketplaceId maps common values', () => {
@@ -2653,4 +2652,206 @@ test('summarizeCoverage preserves partial coverage failures', () => {
   assert.equal(summary.failedTypes[0], 'Transfer');
 });
 
-process.stdout.write('All tests passed.\n');
+function makeQboResponse(body: Record<string, unknown>, status = 200): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+    text: async () => JSON.stringify(body),
+  } as Response;
+}
+
+test('getActiveQboConnection refreshes and persists updated connection state', async () => {
+  const originalDeps = {
+    getQboConnection: qboFullHistoryAuditDeps.getQboConnection,
+    getValidToken: qboFullHistoryAuditDeps.getValidToken,
+    saveServerQboConnection: qboFullHistoryAuditDeps.saveServerQboConnection,
+    fetch: qboFullHistoryAuditDeps.fetch,
+    sleep: qboFullHistoryAuditDeps.sleep,
+  };
+
+  const storedConnection: QboConnection = {
+    realmId: '123',
+    accessToken: 'stale-token',
+    refreshToken: 'refresh-token',
+    expiresAt: '2026-04-14T00:00:00.000Z',
+  };
+  const refreshedConnection: QboConnection = {
+    ...storedConnection,
+    accessToken: 'fresh-token',
+    expiresAt: '2026-04-14T02:00:00.000Z',
+  };
+
+  let savedConnection: QboConnection | null = null;
+
+  qboFullHistoryAuditDeps.getQboConnection = async () => storedConnection;
+  qboFullHistoryAuditDeps.getValidToken = async () => ({
+    accessToken: refreshedConnection.accessToken,
+    updatedConnection: refreshedConnection,
+  });
+  qboFullHistoryAuditDeps.saveServerQboConnection = async (connection) => {
+    savedConnection = connection;
+  };
+
+  try {
+    const active = await getActiveQboConnection();
+    assert.equal(active.accessToken, 'fresh-token');
+    assert.equal(active.connection.accessToken, 'fresh-token');
+    assert.deepEqual(savedConnection, refreshedConnection);
+
+    let observedAuthorization = '';
+    qboFullHistoryAuditDeps.fetch = async (_url, init) => {
+      observedAuthorization = new Headers(init?.headers).get('Authorization') ?? '';
+      return makeQboResponse({ QueryResponse: { Bill: [] } });
+    };
+    qboFullHistoryAuditDeps.sleep = async () => {};
+
+    const queryResult = await qboQueryAll(active, 'SELECT * FROM Bill');
+    assert.equal(queryResult.complete, true);
+    assert.equal(observedAuthorization, 'Bearer fresh-token');
+  } finally {
+    qboFullHistoryAuditDeps.getQboConnection = originalDeps.getQboConnection;
+    qboFullHistoryAuditDeps.getValidToken = originalDeps.getValidToken;
+    qboFullHistoryAuditDeps.saveServerQboConnection = originalDeps.saveServerQboConnection;
+    qboFullHistoryAuditDeps.fetch = originalDeps.fetch;
+    qboFullHistoryAuditDeps.sleep = originalDeps.sleep;
+  }
+});
+
+test('qboQueryAll paginates until the final short page', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requests: string[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async (url) => {
+    requests.push(url);
+    if (requests.length === 1) {
+      return makeQboResponse({
+        QueryResponse: {
+          Bill: Array.from({ length: 1000 }, (_, index) => ({ Id: `B${index + 1}` })),
+        },
+      });
+    }
+
+    if (requests.length === 2) {
+      return makeQboResponse({
+        QueryResponse: {
+          Bill: [{ Id: 'B1001' }],
+        },
+      });
+    }
+
+    throw new Error('unexpected fetch');
+  };
+
+  try {
+    const result = await qboQueryAll(
+      {
+        connection: {
+          realmId: '123',
+          accessToken: 'fresh-token',
+        },
+        accessToken: 'fresh-token',
+      },
+      'SELECT * FROM Bill',
+    );
+
+    assert.equal(result.complete, true);
+    assert.equal(result.rows.length, 1001);
+    assert.equal(requests.length, 2);
+    assert.match(requests[0] ?? '', /STARTPOSITION%201%20MAXRESULTS%201000/);
+    assert.match(requests[1] ?? '', /STARTPOSITION%201001%20MAXRESULTS%201000/);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('qboQueryAll retries retryable qbo responses before succeeding', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  const requests: number[] = [];
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async () => {
+    requests.push(requests.length + 1);
+    if (requests.length < 3) {
+      return makeQboResponse({ QueryResponse: { Bill: [] } }, 503);
+    }
+
+    return makeQboResponse({
+      QueryResponse: {
+        Bill: [{ Id: 'B1' }],
+      },
+    });
+  };
+
+  try {
+    const result = await qboQueryAll(
+      {
+        connection: {
+          realmId: '123',
+          accessToken: 'fresh-token',
+        },
+        accessToken: 'fresh-token',
+      },
+      'SELECT * FROM Bill',
+    );
+
+    assert.equal(result.complete, true);
+    assert.equal(result.rows.length, 1);
+    assert.equal(requests.length, 3);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+test('qboQueryAll throws after bounded network retries', async () => {
+  const originalFetch = qboFullHistoryAuditDeps.fetch;
+  const originalSleep = qboFullHistoryAuditDeps.sleep;
+  let attempts = 0;
+
+  qboFullHistoryAuditDeps.sleep = async () => {};
+  qboFullHistoryAuditDeps.fetch = async () => {
+    attempts++;
+    throw new Error('socket hang up');
+  };
+
+  try {
+    await assert.rejects(
+      qboQueryAll(
+        {
+          connection: {
+            realmId: '123',
+            accessToken: 'fresh-token',
+          },
+          accessToken: 'fresh-token',
+        },
+        'SELECT * FROM Bill',
+      ),
+      /socket hang up/,
+    );
+    assert.equal(attempts, 4);
+  } finally {
+    qboFullHistoryAuditDeps.fetch = originalFetch;
+    qboFullHistoryAuditDeps.sleep = originalSleep;
+  }
+});
+
+void (async () => {
+  for (const { name, fn } of tests) {
+    try {
+      await fn();
+      process.stdout.write(`ok - ${name}\n`);
+    } catch (error) {
+      process.stderr.write(`not ok - ${name}\n`);
+      throw error;
+    }
+  }
+
+  process.stdout.write('All tests passed.\n');
+})().catch(() => {
+  process.exitCode = 1;
+});

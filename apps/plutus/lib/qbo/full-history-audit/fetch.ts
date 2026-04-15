@@ -1,5 +1,6 @@
 import { getApiBaseUrl } from '../client';
-import { getQboConnection } from '../connection-store';
+import { getQboConnection, saveServerQboConnection } from '../connection-store';
+import * as qboApi from '../api';
 import type { QboConnection } from '../api';
 
 export type CoverageRow = {
@@ -26,6 +27,45 @@ function extractArrayKey(queryResponse: Record<string, unknown>): string | null 
   }
   return null;
 }
+
+const retryableStatusCodes = new Set([429, 503]);
+const retryMaxAttempts = 3;
+const retryBaseDelayMs = 1000;
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+  for (let attempt = 0; attempt <= retryMaxAttempts; attempt++) {
+    try {
+      const response = await qboFullHistoryAuditDeps.fetch(url, init);
+      if (response.ok) {
+        return response;
+      }
+
+      if (!retryableStatusCodes.has(response.status) || attempt === retryMaxAttempts) {
+        return response;
+      }
+    } catch (error) {
+      if (attempt === retryMaxAttempts) {
+        throw error;
+      }
+    }
+
+    await qboFullHistoryAuditDeps.sleep(retryBaseDelayMs * Math.pow(2, attempt));
+  }
+
+  throw new Error('fetchWithRetry: unreachable');
+}
+
+export const qboFullHistoryAuditDeps = {
+  fetch: (url: string, init: RequestInit) => fetch(url, init),
+  getQboConnection,
+  getValidToken: qboApi.getValidToken,
+  saveServerQboConnection,
+  sleep,
+};
 
 export function mergeAttachmentRefs(attachables: RawAttachable[]): Map<string, string[]> {
   const merged = new Map<string, string[]>();
@@ -83,16 +123,30 @@ export function summarizeCoverage(rows: CoverageRow[]): CoverageSummary {
   };
 }
 
-export async function getActiveQboConnection(): Promise<QboConnection> {
-  const connection = await getQboConnection();
+export type ActiveQboConnection = {
+  connection: QboConnection;
+  accessToken: string;
+};
+
+export async function getActiveQboConnection(): Promise<ActiveQboConnection> {
+  const connection = await qboFullHistoryAuditDeps.getQboConnection();
   if (connection === null) {
     throw new Error('No active QBO connection');
   }
-  return connection;
+
+  const { accessToken, updatedConnection } = await qboFullHistoryAuditDeps.getValidToken(connection);
+  if (updatedConnection !== undefined) {
+    await qboFullHistoryAuditDeps.saveServerQboConnection(updatedConnection);
+  }
+
+  return {
+    connection: updatedConnection ?? connection,
+    accessToken,
+  };
 }
 
 export async function qboQueryAll(
-  connection: QboConnection,
+  activeConnection: ActiveQboConnection,
   query: string,
 ): Promise<{ rows: Record<string, unknown>[]; complete: boolean }> {
   const baseUrl = getApiBaseUrl();
@@ -102,15 +156,19 @@ export async function qboQueryAll(
 
   while (true) {
     const pageQuery = `${query} STARTPOSITION ${startPosition} MAXRESULTS ${maxResults}`;
-    const response = await fetch(`${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(pageQuery)}`, {
-      headers: {
-        Authorization: `Bearer ${connection.accessToken}`,
-        Accept: 'application/json',
+    const response = await fetchWithRetry(
+      `${baseUrl}/v3/company/${activeConnection.connection.realmId}/query?query=${encodeURIComponent(pageQuery)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${activeConnection.accessToken}`,
+          Accept: 'application/json',
+        },
       },
-    });
+    );
 
     if (!response.ok) {
-      return { rows, complete: false };
+      const errorText = await response.text();
+      throw new Error(`Failed to fetch QBO query page: ${response.status} ${errorText}`);
     }
 
     const data = (await response.json()) as { QueryResponse?: Record<string, unknown> };
