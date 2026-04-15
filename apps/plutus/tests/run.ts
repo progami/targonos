@@ -77,6 +77,10 @@ import {
   groupSettlementChildren,
 } from '../lib/plutus/settlement-parents';
 import { getSettlementDisplayId } from '../lib/plutus/settlement-display';
+import {
+  buildSettlementListRowViewModel,
+  buildSettlementPostingSectionViewModels,
+} from '../lib/plutus/settlement-review';
 import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
 import {
   buildLegacySettlementApiPath,
@@ -315,6 +319,68 @@ test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the 
     }),
     'UK-260130-260131-S1',
   );
+});
+
+test('buildSettlementListRowViewModel keeps split settlements on one row with one muted subline', () => {
+  const row = {
+    sourceSettlementId: 'EG-hidden-source-id',
+    marketplace: { label: 'Amazon.co.uk', currency: 'GBP', region: 'UK' },
+    periodStart: '2026-03-27',
+    periodEnd: '2026-04-10',
+    settlementTotal: 0,
+    plutusStatus: 'Pending',
+    splitCount: 2,
+    isSplit: true,
+    children: [
+      { docNumber: 'UK-260327-260331-S1-A' },
+      { docNumber: 'UK-260327-260331-S1-B' },
+    ],
+  } as const;
+
+  const view = buildSettlementListRowViewModel(row);
+  assert.equal(view.title, 'UK-260327-260331-S1-A');
+  assert.equal(view.subtitle, 'Amazon.co.uk · split across month-end · 2 postings');
+});
+
+test('buildSettlementPostingSectionViewModels orders child postings chronologically and carries inline blocking state', () => {
+  const detail = {
+    settlement: { sourceSettlementId: 'UK-260327-260331-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },
+    children: [
+      {
+        qboJournalEntryId: 'je-b',
+        docNumber: 'UK-260327-260331-S1-B',
+        periodStart: '2026-04-01',
+        periodEnd: '2026-04-10',
+        postedDate: '2026-04-10',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'unresolved', reason: 'none', candidateInvoiceIds: [] },
+        invoiceResolutionMessage: 'No audit invoice matched',
+        processing: null,
+        rollback: null,
+      },
+      {
+        qboJournalEntryId: 'je-a',
+        docNumber: 'UK-260327-260331-S1-A',
+        periodStart: '2026-03-27',
+        periodEnd: '2026-03-31',
+        postedDate: '2026-03-31',
+        settlementTotal: 0,
+        plutusStatus: 'Pending',
+        lines: [],
+        invoiceResolution: { status: 'resolved', invoiceId: 'INV-1', source: 'doc_number' },
+        invoiceResolutionMessage: 'Matched by doc number',
+        processing: null,
+        rollback: null,
+      },
+    ],
+    history: [],
+  } as const;
+
+  const sections = buildSettlementPostingSectionViewModels(detail, null);
+  assert.equal(sections[0]?.docNumber, 'UK-260327-260331-S1-A');
+  assert.equal(sections[1]?.blockMessage, 'No audit invoice matched');
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
