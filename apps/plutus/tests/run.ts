@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -142,6 +143,12 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('cashflow snapshot module remains safe for the Node refresh worker', () => {
+  const snapshotSource = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
+
+  assert.doesNotMatch(snapshotSource, /^import ['"]server-only['"];?$/m);
 });
 
 test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {

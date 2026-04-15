@@ -716,6 +716,29 @@ start_and_verify_pm2_process() {
   log "Runtime verified for $process_name (cwd=$actual_cwd sha=$actual_sha)"
 }
 
+sync_next_standalone_assets() {
+  local standalone_app_dir="$app_dir/.next/standalone/apps/$app_key"
+
+  if [[ ! -d "$standalone_app_dir" ]]; then
+    return 0
+  fi
+
+  if [[ ! -d "$app_dir/.next/static" ]]; then
+    error "Standalone output exists but generated static assets are missing: $app_dir/.next/static"
+    exit 1
+  fi
+
+  mkdir -p "$standalone_app_dir/.next/static"
+  rsync -a --delete "$app_dir/.next/static/" "$standalone_app_dir/.next/static/"
+
+  if [[ -d "$app_dir/public" ]]; then
+    mkdir -p "$standalone_app_dir/public"
+    rsync -a --delete "$app_dir/public/" "$standalone_app_dir/public/"
+  fi
+
+  log "Standalone assets synced for $app_key"
+}
+
 load_env_file() {
   local file="$1"
   if [[ ! -f "$file" ]]; then
@@ -1495,6 +1518,7 @@ if [[ "$build_status" -ne 0 ]]; then
 fi
 
 log "Build complete"
+sync_next_standalone_assets
 
 # Step 7: Restart PM2 app
 if [[ "$app_key" == "kairos" ]]; then
