@@ -1,5 +1,3 @@
-import 'server-only';
-
 import { createLogger } from '@targon/logger';
 import type { Prisma } from '@targon/prisma-plutus';
 
