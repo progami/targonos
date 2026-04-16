@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { withAuthAndParams } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { withBasePath } from '@/lib/utils/base-path'
 import { Prisma } from '@targon/prisma-talos'
 import { getS3Service } from '@/services/s3.service'
 
@@ -112,6 +111,12 @@ function normalizeAttachmentRecord(value: unknown): Record<string, ApiAttachment
  }
 
  return result
+}
+
+export function buildTransactionValidationUrl(requestUrl: string): string {
+ const url = new URL(requestUrl)
+ url.pathname = `${url.pathname}/validate-edit`
+ return url.toString()
 }
 
 async function addPresignedUrls(
@@ -314,11 +319,14 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
 
  const prisma = await getTenantPrisma()
  // First validate if this transaction can be deleted
-  const validationResponse = await fetch(withBasePath(`/api/transactions/${id}/validate-edit`), {
+ const headers = new Headers()
+ const cookieHeader = request.headers.get('cookie')
+ if (cookieHeader !== null) {
+ headers.set('Cookie', cookieHeader)
+ }
+  const validationResponse = await fetch(buildTransactionValidationUrl(request.url), {
   method: 'GET',
-  headers: {
-  'Cookie': request.headers.get('cookie') || ''
-  }
+  headers
   })
 
 

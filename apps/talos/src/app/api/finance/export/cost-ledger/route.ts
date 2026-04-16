@@ -7,25 +7,33 @@ import type { CostLedgerGroupResult, CostLedgerBucketTotals } from '@targon/ledg
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60 seconds for large exports
 
+export function buildCostLedgerRequestUrl(requestUrl: string): string {
+ const url = new URL(requestUrl)
+ url.pathname = url.pathname.replace('/api/finance/export/cost-ledger', '/api/finance/cost-ledger')
+ return url.toString()
+}
+
 export const GET = withAuth(async (request, session) => {
  try {
  // Fetch the cost ledger data using the same logic as the main route
  const searchParams = request.nextUrl.searchParams
- const costLedgerUrl = new URL('/api/finance/cost-ledger', request.url)
- 
- // Pass through all search params
- searchParams.forEach((value, key) => {
- costLedgerUrl.searchParams.set(key, value)
- })
-
- const costLedgerResponse = await fetch(costLedgerUrl.toString(), {
- headers: {
- cookie: request.headers.get('cookie') || ''
+ const headers = new Headers()
+ const cookieHeader = request.headers.get('cookie')
+ if (cookieHeader !== null) {
+ headers.set('cookie', cookieHeader)
  }
+
+ const costLedgerResponse = await fetch(buildCostLedgerRequestUrl(request.url), {
+ headers,
  })
 
  if (!costLedgerResponse.ok) {
  throw new Error('Failed to fetch cost ledger data')
+ }
+
+ const contentType = costLedgerResponse.headers.get('content-type')
+ if (contentType === null || !contentType.includes('application/json')) {
+ throw new Error(`Expected JSON from cost ledger route, received ${contentType}`)
  }
 
  const data = await costLedgerResponse.json()
