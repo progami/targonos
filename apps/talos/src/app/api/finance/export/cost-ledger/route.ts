@@ -4,7 +4,7 @@ import { getTenantPrisma } from '@/lib/tenant/server'
 import * as XLSX from 'xlsx'
 import { getS3Service } from '@/services/s3.service'
 import { formatDateGMT } from '@/lib/date-utils'
-import { loadCostLedgerData, parseCostLedgerQuery } from '../cost-ledger/query'
+import { loadCostLedgerData, parseCostLedgerQuery } from '../../cost-ledger/query'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60 seconds for large exports
 

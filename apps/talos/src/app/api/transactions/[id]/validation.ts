@@ -25,7 +25,7 @@ type TransactionValidationPrisma = {
 
 type ValidationSessionUser = {
   role: string
-  warehouseId: string | null
+  warehouseId?: string | null
 }
 
 export class TransactionValidationError extends Error {
