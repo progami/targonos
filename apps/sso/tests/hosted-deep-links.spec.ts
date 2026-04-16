@@ -38,10 +38,12 @@ test.describe('hosted cross-app auth smoke', () => {
     try {
       await run()
     } catch (error) {
-      await page.screenshot({
-        path: hostedScreenshotPath(`${routeName}-${testInfo.retry}`),
-        fullPage: true,
-      })
+      if (!page.isClosed()) {
+        await page.screenshot({
+          path: hostedScreenshotPath(`${routeName}-${testInfo.retry}`),
+          fullPage: true,
+        })
+      }
       throw error
     }
   }
@@ -93,10 +95,29 @@ test.describe('hosted cross-app auth smoke', () => {
 
   test('talos region selection reaches dashboard', async ({}, testInfo) => {
     await captureFailure('talos-region-selection', testInfo, async () => {
+      const tenantCurrentResponsePromise = page.waitForResponse((response) => {
+        if (response.request().method() !== 'GET') {
+          return false
+        }
+
+        const responseUrl = new URL(response.url())
+        return responseUrl.origin === new URL(hostedPortalBaseUrl()).origin &&
+          responseUrl.pathname === '/talos/api/tenant/current'
+      })
+
       await page.goto(hostedRoute('/talos'), { waitUntil: 'domcontentloaded' })
       await expect(page.getByText('Select your region to continue', { exact: false })).toBeVisible({
         timeout: 20_000,
       })
+
+      const tenantCurrentResponse = await tenantCurrentResponsePromise
+      expect(tenantCurrentResponse.ok()).toBe(true)
+
+      const usRegionCard = page.getByRole('button', {
+        name: /US United States America\/Los Angeles Enter/i,
+      })
+      await expect(usRegionCard).toBeVisible({ timeout: 20_000 })
+      await expect(usRegionCard).toBeEnabled()
 
       const tenantSelectResponsePromise = page.waitForResponse((response) => {
         if (response.request().method() !== 'POST') {
@@ -108,7 +129,7 @@ test.describe('hosted cross-app auth smoke', () => {
           responseUrl.pathname === '/talos/api/tenant/select'
       })
 
-      await page.getByRole('button', { name: /\bUS\b/i }).first().click()
+      await usRegionCard.click()
 
       const tenantSelectResponse = await tenantSelectResponsePromise
       expect(tenantSelectResponse.ok()).toBe(true)

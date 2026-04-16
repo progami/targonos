@@ -1,5 +1,5 @@
 // Helper to get cookie value
-import { withBasePath } from '@/lib/utils/base-path'
+import { buildTalosApiPath } from '@/lib/api/talos-api-path'
 
 function getCookie(name: string): string | null {
  if (typeof document === 'undefined') return null;
@@ -12,7 +12,7 @@ function getCookie(name: string): string | null {
 function normalizeRequestUrl(url: string): string {
  const trimmed = url.trim()
  if (!trimmed) return trimmed
- return trimmed.startsWith('/') ? withBasePath(trimmed) : trimmed
+ return trimmed.startsWith('/') ? buildTalosApiPath(trimmed) : trimmed
 }
 
 // Utility function to make fetch requests with CSRF token
@@ -47,7 +47,7 @@ export async function fetchWithCSRF(url: string, options: RequestInit & { tenant
  const data = await response.clone().json();
  if (data.error === 'Invalid CSRF token') {
   // Get a new CSRF token by making a GET request
-  await fetch(withBasePath('/api/csrf'), { credentials: 'include' });
+  await fetch(buildTalosApiPath('/api/csrf'), { credentials: 'include' });
  
  // Retry the original request with the new token
  const newCsrfToken = getCookie('csrf-token');

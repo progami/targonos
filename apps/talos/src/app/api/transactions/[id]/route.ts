@@ -3,6 +3,7 @@ import { withAuthAndParams } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Prisma } from '@targon/prisma-talos'
 import { getS3Service } from '@/services/s3.service'
+import { TransactionValidationError, validateTransactionDelete } from './validation'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,12 +112,6 @@ function normalizeAttachmentRecord(value: unknown): Record<string, ApiAttachment
  }
 
  return result
-}
-
-export function buildTransactionValidationUrl(requestUrl: string): string {
- const url = new URL(requestUrl)
- url.pathname = `${url.pathname}/validate-edit`
- return url.toString()
 }
 
 async function addPresignedUrls(
@@ -318,27 +313,11 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
  const { id } = params as { id: string }
 
  const prisma = await getTenantPrisma()
- // First validate if this transaction can be deleted
- const headers = new Headers()
- const cookieHeader = request.headers.get('cookie')
- if (cookieHeader !== null) {
- headers.set('Cookie', cookieHeader)
- }
-  const validationResponse = await fetch(buildTransactionValidationUrl(request.url), {
-  method: 'GET',
-  headers
-  })
-
-
- if (!validationResponse.ok) {
- return NextResponse.json({ error: 'Failed to validate transaction' }, { status: 500 })
- }
-
- const validation = await validationResponse.json()
+ const validation = await validateTransactionDelete(prisma, session.user, id)
 
  if (!validation.canDelete) {
  return NextResponse.json({ 
- error: validation.reason || 'Cannot delete this transaction' 
+ error: validation.reason ?? 'Cannot delete this transaction' 
  }, { status: 400 })
  }
 
@@ -382,6 +361,9 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
  }
  })
  } catch (_error) {
+ if (_error instanceof TransactionValidationError) {
+ return NextResponse.json({ error: _error.message }, { status: _error.status })
+ }
  // console.error('Failed to delete transaction:', _error)
  return NextResponse.json({ 
  error: 'Failed to delete transaction'
