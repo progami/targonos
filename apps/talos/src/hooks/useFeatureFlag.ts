@@ -31,7 +31,7 @@ export function useFeatureFlag(flagName: string): FeatureFlagCheck {
  try {
  setState(prev => ({ ...prev, loading: true, error: null }));
 
- const response = await fetch(`/api/feature-flags/${flagName}/check`, {
+ const response = await fetch(buildTalosApiPath(`/api/feature-flags/${flagName}/check`), {
  method: 'GET',
  headers: {
  'Content-Type': 'application/json'
