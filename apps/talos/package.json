@@ -17,7 +17,7 @@
     "start:prod": "NODE_ENV=production node --max-old-space-size=2048 server.js",
     "lint": "eslint src",
     "lint:strict": "pnpm run lint",
-    "test": "pnpm db:generate && tsx --test \"src/**/*.test.ts\" \"tests/**/*.test.ts\"",
+    "test": "pnpm db:generate && find src tests -type f -name '*.test.ts' -print0 2>/dev/null | xargs -0 -n1 tsx",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:migrate:tenant-schema": "tsx scripts/migrations/ensure-talos-tenant-schema.ts",
