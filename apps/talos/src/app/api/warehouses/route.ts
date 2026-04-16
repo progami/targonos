@@ -2,6 +2,7 @@ import { withAuth, withRole, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Prisma, WarehouseKind } from '@targon/prisma-talos'
 import { sanitizeForDisplay, validateAlphanumeric } from '@/lib/security/input-sanitization'
+import { warehouseListSelect } from './list-query'
 export const dynamic = 'force-dynamic'
 
 const optionalEmailSchema = z.preprocess(val => {
@@ -127,14 +128,7 @@ export const GET = withAuth(async (req, _session) => {
   const warehouses = await prisma.warehouse.findMany({
     where,
     orderBy: { name: 'asc' },
-    include: {
-      _count: {
-        select: {
-          users: true,
-          costRates: true,
-        },
-      },
-    },
+    select: warehouseListSelect,
   })
 
   // Get transaction counts for all warehouses in a single query
