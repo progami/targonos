@@ -24,6 +24,7 @@ import { toast } from 'react-hot-toast'
 import type { CostLedgerBucketTotals, CostLedgerGroupResult } from '@targon/ledger'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
+import { parseCostLedgerExportResponse } from './export'
 import { usePageState } from '@/lib/store'
 
 const baseFilterInputClass =
@@ -280,15 +281,13 @@ export default function CostLedgerPage() {
         return
       }
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
+      const { downloadUrl, filename } = await parseCostLedgerExportResponse(response)
       const link = document.createElement('a')
-      link.href = url
-      link.download = `cost-ledger-${filters.startDate}-to-${filters.endDate}.csv`
+      link.href = downloadUrl
+      link.download = filename
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.URL.revokeObjectURL(url)
     } catch (_error) {
       toast.error('Failed to export cost ledger')
     } finally {
