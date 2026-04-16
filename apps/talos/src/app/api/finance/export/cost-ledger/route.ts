@@ -1,51 +1,19 @@
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/auth-wrapper'
+import { getTenantPrisma } from '@/lib/tenant/server'
 import * as XLSX from 'xlsx'
 import { getS3Service } from '@/services/s3.service'
 import { formatDateGMT } from '@/lib/date-utils'
-import type { CostLedgerGroupResult, CostLedgerBucketTotals } from '@targon/ledger'
+import { loadCostLedgerData, parseCostLedgerQuery } from '../cost-ledger/query'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60 // Allow up to 60 seconds for large exports
 
-export function buildCostLedgerRequestUrl(requestUrl: string): string {
- const url = new URL(requestUrl)
- url.pathname = url.pathname.replace('/api/finance/export/cost-ledger', '/api/finance/cost-ledger')
- return url.toString()
-}
-
 export const GET = withAuth(async (request, session) => {
  try {
- // Fetch the cost ledger data using the same logic as the main route
+ const prisma = await getTenantPrisma()
  const searchParams = request.nextUrl.searchParams
- const headers = new Headers()
- const cookieHeader = request.headers.get('cookie')
- if (cookieHeader !== null) {
- headers.set('cookie', cookieHeader)
- }
-
- const costLedgerResponse = await fetch(buildCostLedgerRequestUrl(request.url), {
- headers,
- })
-
- if (!costLedgerResponse.ok) {
- throw new Error('Failed to fetch cost ledger data')
- }
-
- const contentType = costLedgerResponse.headers.get('content-type')
- if (contentType === null || !contentType.includes('application/json')) {
- throw new Error(`Expected JSON from cost ledger route, received ${contentType}`)
- }
-
- const data = await costLedgerResponse.json()
- const {
- groups,
- totals,
- groupBy = searchParams.get('groupBy') || 'week'
- } = data as {
- groups: CostLedgerGroupResult[]
- totals: CostLedgerBucketTotals
- groupBy: string
- }
+ const query = parseCostLedgerQuery(searchParams)
+ const { groups, totals, groupBy } = await loadCostLedgerData(prisma, query)
 
  const safePercent = (value: number = 0) => {
  if (!totals.total) return '0.0%'
