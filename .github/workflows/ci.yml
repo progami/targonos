@@ -94,6 +94,9 @@ jobs:
         run: pnpm test
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
+      - name: Install Playwright browsers
+        if: runner.os == 'Linux'
+        run: pnpm exec playwright install --with-deps chromium
       - name: Run auth topology contract tests
         run: |
           pnpm --filter @targon/auth test
