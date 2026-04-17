@@ -1,6 +1,7 @@
 import { withAuth, ApiResponses } from '@/lib/api'
+import { FINANCIAL_LEDGER_CATEGORIES } from '@/lib/financial/financial-ledger-filters'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { FinancialLedgerCategory, Prisma } from '@targon/prisma-talos'
+import { Prisma, type FinancialLedgerCategory } from '@targon/prisma-talos'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,8 +39,8 @@ export const GET = withAuth(async (request, _session) => {
       : null
 
   const categoryRaw = searchParams.get('category')
-  const category = Object.values(FinancialLedgerCategory).includes(
-    categoryRaw as FinancialLedgerCategory
+  const category = FINANCIAL_LEDGER_CATEGORIES.includes(
+    categoryRaw as (typeof FINANCIAL_LEDGER_CATEGORIES)[number]
   )
     ? (categoryRaw as FinancialLedgerCategory)
     : null
