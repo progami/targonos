@@ -64,7 +64,7 @@ export type FileContext =
       tenantCode?: string;
       /** Optional public order number (e.g., PO-0001) to keep PO uploads human-navigable in S3. */
       purchaseOrderNumber?: string;
-      stage: 'RFQ' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
+      stage: 'DRAFT' | 'RFQ' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
       documentType: string;
     }
   | {
@@ -510,7 +510,7 @@ export function isValidFileContext(context: unknown): context is FileContext {
     case 'purchase-order':
       return (
         typeof c.purchaseOrderId === 'string' &&
-        ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
+        ['DRAFT', 'RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
         typeof c.documentType === 'string'
       );
     case 'fulfillment-order':

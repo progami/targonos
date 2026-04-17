@@ -397,7 +397,7 @@ export function isValidFileContext(context) {
             return typeof c.transactionId === 'string' && typeof c.documentType === 'string';
         case 'purchase-order':
             return (typeof c.purchaseOrderId === 'string' &&
-                ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
+                ['DRAFT', 'RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
                 typeof c.documentType === 'string');
         case 'fulfillment-order':
             return (typeof c.fulfillmentOrderId === 'string' &&
