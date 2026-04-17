@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { NotFoundError } from '@/lib/api'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 import { hasPermission } from '@/lib/services/permission-service'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { auditLog } from '@/lib/security/audit-logger'
@@ -82,6 +83,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   // Only allow editing containers before WAREHOUSE stage
@@ -203,6 +213,15 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   // Only allow deleting containers before WAREHOUSE stage

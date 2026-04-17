@@ -74,9 +74,14 @@ import {
   PURCHASE_ORDER_BASE_CURRENCY,
   type PoCostCurrency,
 } from '@/lib/constants/cost-currency'
+import {
+  getPurchaseOrderDisplayStatus,
+  isPurchaseOrderReadOnlyForUi,
+  normalizePurchaseOrderWorkflowStatus,
+} from '@/lib/purchase-orders/workflow'
 
 // 5-Stage State Machine Types
-type POStageStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED' | 'CLOSED'
+type POStageStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED' | 'CANCELLED'
 
 interface PurchaseOrderLineSummary {
   id: string
@@ -988,7 +993,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean
-    type: 'close' | 'delete-line' | null
+    type: 'cancel' | 'delete-line' | null
     title: string
     message: string
     lineId?: string | null
@@ -1023,7 +1028,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     const loadWarehouses = async () => {
       try {
         setWarehousesLoading(true)
-        const response = await fetch(withBasePath('/api/warehouses'), {
+        const response = await fetch(withBasePath('/api/warehouses?includeAmazon=true'), {
           credentials: 'include',
           headers: tenantFetchHeaders,
         })
@@ -2181,9 +2186,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
   const currentStageIndex = useMemo(() => {
     if (!order) return 0
-    const idx = STAGES.findIndex(s => s.value === order.status)
+    const displayStatus = getPurchaseOrderDisplayStatus(order.status)
+    const idx = STAGES.findIndex(s => s.value === displayStatus)
     if (idx >= 0) return idx
-    if (order.status === 'SHIPPED') return STAGES.length - 1
+    if (displayStatus === 'CANCELLED') return STAGES.length - 1
     return 0
   }, [order])
 
@@ -2191,7 +2197,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const activeViewStage = useMemo(() => {
     if (selectedStageView) return selectedStageView
     if (!order) return 'ISSUED'
-    return order.status
+    return getPurchaseOrderDisplayStatus(order.status)
   }, [selectedStageView, order])
 
   useEffect(() => {
@@ -2395,7 +2401,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   // Can user click on a stage to view it?
   const canViewStage = (stageValue: string) => {
     if (isCreate) return stageValue === 'ISSUED'
-    if (!order || order.status === 'CLOSED') return false
+    if (!order || normalizePurchaseOrderWorkflowStatus(order.status) === 'CANCELLED') return false
     const targetIdx = STAGES.findIndex(s => s.value === stageValue)
     if (targetIdx < 0) return false
     // Can view completed stages and current stage.
@@ -2403,8 +2409,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }
 
   const nextStage = useMemo(() => {
-    if (!order || order.status === 'CLOSED') return null
-    const idx = STAGES.findIndex(s => s.value === order.status)
+    if (!order) return null
+    const normalizedStatus = normalizePurchaseOrderWorkflowStatus(order.status)
+    if (normalizedStatus === 'CANCELLED') return null
+    const idx = STAGES.findIndex(s => s.value === normalizedStatus)
     if (idx >= 0 && idx < STAGES.length - 1) {
       return STAGES[idx + 1]
     }
@@ -2447,12 +2455,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     if (!order || transitioning) return
 
     // Show confirmation dialog for close
-    if (targetStatus === 'CLOSED') {
+    if (targetStatus === 'CANCELLED') {
       setConfirmDialog({
         open: true,
-        type: 'close',
-        title: 'Close Order',
-        message: 'Are you sure you want to close this order? This cannot be undone.',
+        type: 'cancel',
+        title: 'Cancel Order',
+        message: 'Are you sure you want to cancel this order? This cannot be undone.',
       })
       return
     }
@@ -2600,8 +2608,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }
 
   const handleConfirmDialogConfirm = async () => {
-    if (confirmDialog.type === 'close') {
-      await executeTransition('CLOSED')
+    if (confirmDialog.type === 'cancel') {
+      await executeTransition('CANCELLED')
     }
     if (confirmDialog.type === 'delete-line' && confirmDialog.lineId) {
       await handleDeleteLine(confirmDialog.lineId)
@@ -2661,14 +2669,22 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     USD: totalCostSummary,
     GBP: forwardingSubtotalByCurrency.GBP,
   }
-  const isTerminalStatus = order ? order.status === 'SHIPPED' || order.status === 'CLOSED' : false
-  const isReadOnly = isTerminalStatus
+  const isTerminalStatus = order
+    ? normalizePurchaseOrderWorkflowStatus(order.status) === 'CANCELLED' || order.status === 'SHIPPED'
+    : false
+  const isLegacyShipmentOrder = order ? order.status === 'SHIPPED' : false
+  const isReadOnly = order
+    ? isPurchaseOrderReadOnlyForUi({
+        status: order.status,
+        postedAt: order.postedAt,
+      })
+    : false
   const canEdit = isCreate ? true : !isReadOnly
   const canEditDispatchAllocation = !isCreate && !isReadOnly && activeViewStage === 'MANUFACTURING'
   const canEditFreightCost = !isCreate && !isReadOnly && activeViewStage === 'OCEAN'
   const canEditWarehouseCosts = !isCreate && !isReadOnly && activeViewStage === 'WAREHOUSE'
   const showIssuedPiColumn = activeViewStage === 'ISSUED'
-  const showReceivedColumns = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
+  const showReceivedColumns = activeViewStage === 'WAREHOUSE'
   const detailCargoLineColumnCount =
     11 +
     (canEditDispatchAllocation ? 1 : 0) +
@@ -2680,10 +2696,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const showProductCostsStage =
     activeViewStage === 'ISSUED' ||
     activeViewStage === 'MANUFACTURING' ||
-    activeViewStage === 'CLOSED'
+    activeViewStage === 'CANCELLED'
 
   const showCargoCostsStage = activeViewStage === 'OCEAN'
-  const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE' || activeViewStage === 'SHIPPED'
+  const showWarehouseCostsStage = activeViewStage === 'WAREHOUSE'
   const showPoPdfDownload = !isCreate && activeViewStage === 'ISSUED'
   const showShippingMarksDownload = !isCreate && activeViewStage === 'ISSUED' && !isTerminalStatus
   const displayOrderNumber = isCreate ? 'New Purchase Order' : (order.poNumber ?? order.orderNumber)
@@ -2695,15 +2711,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const selectedSku = newLineDraft.skuId
     ? skus.find(sku => sku.id === newLineDraft.skuId)
     : undefined
-  const documentStages: PurchaseOrderDocumentStage[] = [
-    'ISSUED',
-    'MANUFACTURING',
-    'OCEAN',
-    'WAREHOUSE',
-  ]
-  if (documents.some(doc => doc.stage === 'SHIPPED')) {
-    documentStages.push('SHIPPED')
-  }
   const inlineStageMeta = inlinePreviewDocument
     ? DOCUMENT_STAGE_META[inlinePreviewDocument.stage]
     : null
@@ -3119,7 +3126,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => handleTransition('CLOSED')}
+                onClick={() => handleTransition('CANCELLED')}
                 disabled={transitioning}
                 className="text-rose-500 hover:text-rose-600 hover:bg-rose-50"
               >
@@ -3132,7 +3139,10 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
       <PageContent>
         <div className="flex flex-col gap-6">
           {/* Stage Progress Bar */}
-          {(isCreate || (order && !order.isLegacy && order.status !== 'CLOSED')) && (
+          {(isCreate ||
+            (order &&
+              !order.isLegacy &&
+              normalizePurchaseOrderWorkflowStatus(order.status) !== 'CANCELLED')) && (
             <div className="rounded-lg border bg-white dark:bg-slate-800 px-4 py-3 shadow-sm">
               {!isCreate && order?.splitGroupId && (
                 <div className="mb-3 rounded-md border bg-slate-50/50 dark:bg-slate-700/40 px-3 py-1.5">
@@ -3284,11 +3294,15 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
             </div>
           )}
 
-          {/* Closed banner */}
-          {order && order.status === 'CLOSED' && (
+          {/* Read-only banner */}
+          {order && isReadOnly && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4">
               <p className="text-sm text-slate-700 dark:text-slate-300">
-                This order is closed and cannot be modified.
+                {order.postedAt
+                  ? 'This order has been posted and is read-only.'
+                  : isLegacyShipmentOrder
+                    ? 'This legacy shipment order is read-only.'
+                    : 'This order is cancelled and cannot be modified.'}
               </p>
             </div>
           )}
@@ -4958,7 +4972,12 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       const stage = activeViewStage as PurchaseOrderDocumentStage
                       const stageKey = stage as keyof typeof STAGE_DOCUMENTS
                       const canUpload = !isReadOnly
-                      const stageDocs = documents.filter(doc => doc.stage === stage)
+                      const stageDocs = documents.filter(doc => {
+                        if (doc.stage === stage) return true
+                        if (stage !== 'WAREHOUSE') return false
+                        if (!isLegacyShipmentOrder) return false
+                        return doc.stage === 'SHIPPED'
+                      })
                       const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
                       const issuedPiNumbers =
                         stage === 'ISSUED'
@@ -5014,8 +5033,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           ]
                         }
 
-                        const requiredDocs =
-                          stage === 'SHIPPED' ? [] : getStageDocuments(stageKey, order.lines)
+                        const requiredDocs = getStageDocuments(stageKey, order.lines)
                         const requiredIds = new Set(requiredDocs.map(doc => doc.id))
                         const otherDocs = stageDocs.filter(
                           doc => !requiredIds.has(doc.documentType)
@@ -5031,7 +5049,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           })),
                           ...otherDocs.map(doc => ({
                             id: doc.documentType,
-                            label: getDocumentLabel(stage, doc.documentType),
+                            label: getDocumentLabel(doc.stage as PurchaseOrderDocumentStage, doc.documentType),
                             required: false,
                             doc,
                             gateKey: `documents.${doc.documentType}`,
@@ -7669,7 +7687,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
 
                     {/* Shipped Section */}
                     {(() => {
-                      if (activeViewStage !== 'SHIPPED') return null
+                      if (!isLegacyShipmentOrder || activeViewStage !== 'WAREHOUSE') return null
                       const shipped = order.stageData.shipped
                       const hasData =
                         shipped?.shipToName ||
@@ -7680,7 +7698,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                       return (
                         <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
                           <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                            Shipped
+                            Legacy Shipment
                           </h4>
                           <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
                             <div className="space-y-1 col-span-2">
@@ -7916,8 +7934,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
           message={confirmDialog.message}
           type={confirmDialog.type ? 'danger' : 'info'}
           confirmText={
-            confirmDialog.type === 'close'
-              ? 'Close Order'
+            confirmDialog.type === 'cancel'
+              ? 'Cancel Order'
               : confirmDialog.type === 'delete-line'
                 ? 'Remove Line'
                 : 'Confirm'

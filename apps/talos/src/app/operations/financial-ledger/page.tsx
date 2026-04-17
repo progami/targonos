@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSession } from '@/hooks/usePortalSession'
 import { useRouter } from 'next/navigation'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
@@ -9,9 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'react-hot-toast'
-import { formatCurrency } from '@/lib/utils'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
+import {
+  FINANCIAL_LEDGER_CATEGORIES,
+  buildFinancialLedgerQueryString,
+  createDefaultFinancialLedgerFilters,
+} from '@/lib/financial/financial-ledger-filters'
 import { BarChart3, Filter } from '@/lib/lucide-icons'
 
 type FinancialLedgerEntryRow = {
@@ -42,8 +46,12 @@ type WarehouseOption = {
   name: string
 }
 
-const defaultStartDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-const defaultEndDate = new Date().toISOString().slice(0, 10)
+function formatLedgerAmount(amount: number, currency: string): string {
+  return new Intl.NumberFormat('en-GB', {
+    style: 'currency',
+    currency,
+  }).format(amount)
+}
 
 export default function FinancialLedgerPage() {
   const { data: session, status } = useSession()
@@ -51,13 +59,9 @@ export default function FinancialLedgerPage() {
   const [loading, setLoading] = useState(true)
   const [entries, setEntries] = useState<FinancialLedgerEntryRow[]>([])
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([])
+  const hasLoadedInitialLedger = useRef(false)
 
-  const [filters, setFilters] = useState({
-    startDate: defaultStartDate,
-    endDate: defaultEndDate,
-    warehouseCode: '',
-    category: '',
-  })
+  const [filters, setFilters] = useState(createDefaultFinancialLedgerFilters())
 
   useEffect(() => {
     if (status === 'loading') return
@@ -100,20 +104,15 @@ export default function FinancialLedgerPage() {
     }
   }, [])
 
-  const fetchLedger = useCallback(async () => {
+  const fetchLedger = useCallback(async (nextFilters: typeof filters) => {
     try {
       setLoading(true)
 
-      const query = new URLSearchParams()
-      query.set('startDate', filters.startDate)
-      query.set('endDate', filters.endDate)
-      if (filters.warehouseCode.trim()) query.set('warehouseCode', filters.warehouseCode.trim())
-      if (filters.category.trim()) query.set('category', filters.category.trim())
-      query.set('limit', '500')
-
-      const response = await fetch(withBasePath(`/api/finance/financial-ledger?${query.toString()}`), {
-        credentials: 'include',
-      })
+      const queryString = buildFinancialLedgerQueryString(nextFilters)
+      const response = await fetch(
+        withBasePath(`/api/finance/financial-ledger?${queryString}`),
+        { credentials: 'include' }
+      )
       if (!response.ok) {
         toast.error('Failed to load financial ledger')
         setEntries([])
@@ -133,19 +132,20 @@ export default function FinancialLedgerPage() {
     } finally {
       setLoading(false)
     }
-  }, [filters])
+  }, [])
 
   useEffect(() => {
-    if (status === 'authenticated') {
+    if (
+      status === 'authenticated' &&
+      session &&
+      ['staff', 'admin'].includes(session.user.role) &&
+      !hasLoadedInitialLedger.current
+    ) {
+      hasLoadedInitialLedger.current = true
       void loadWarehouses()
-      void fetchLedger()
+      void fetchLedger(createDefaultFinancialLedgerFilters())
     }
-  }, [fetchLedger, loadWarehouses, status])
-
-  const categories = useMemo(() => {
-    const set = new Set(entries.map(row => row.category).filter(Boolean))
-    return Array.from(set).sort((a, b) => a.localeCompare(b))
-  }, [entries])
+  }, [fetchLedger, loadWarehouses, session, status])
 
   if (status === 'loading') {
     return (
@@ -213,7 +213,7 @@ export default function FinancialLedgerPage() {
                       className="w-full h-10 px-3 border rounded-md bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-sm"
                     >
                       <option value="">All categories</option>
-                      {categories.map(category => (
+                      {FINANCIAL_LEDGER_CATEGORIES.map(category => (
                         <option key={category} value={category}>
                           {category}
                         </option>
@@ -221,7 +221,7 @@ export default function FinancialLedgerPage() {
                     </select>
                   </div>
 
-                  <Button type="button" onClick={() => void fetchLedger()} disabled={loading}>
+                  <Button type="button" onClick={() => void fetchLedger(filters)} disabled={loading}>
                     Apply
                   </Button>
                 </div>
@@ -264,7 +264,9 @@ export default function FinancialLedgerPage() {
                           <div className="text-xs text-muted-foreground">{row.skuDescription}</div>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-medium">{formatCurrency(row.amount)}</td>
+                      <td className="px-3 py-2 text-right font-medium">
+                        {formatLedgerAmount(row.amount, row.currency)}
+                      </td>
                     </tr>
                   ))}
                   {!loading && entries.length === 0 && (

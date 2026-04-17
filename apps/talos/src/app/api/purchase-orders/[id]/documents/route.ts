@@ -8,6 +8,8 @@ import { auditLog } from '@/lib/security/audit-logger'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { PurchaseOrderDocumentStage, Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
+import { ApiResponses } from '@/lib/api'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
@@ -159,7 +161,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
     const order = await prisma.purchaseOrder.findUnique({
       where: { id },
-      select: { id: true, isLegacy: true, orderNumber: true, status: true },
+      select: { id: true, isLegacy: true, orderNumber: true, status: true, postedAt: true },
     })
 
     if (!order) {
@@ -179,15 +181,13 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       return NextResponse.json({ error: 'Cannot attach documents to legacy orders' }, { status: 409 })
     }
 
-    if (
-      order.status === PurchaseOrderStatus.CLOSED ||
-      order.status === PurchaseOrderStatus.CANCELLED ||
-      order.status === PurchaseOrderStatus.REJECTED
-    ) {
-      return NextResponse.json(
-        { error: `Cannot modify documents for ${order.status.toLowerCase()} purchase orders` },
-        { status: 409 }
-      )
+    try {
+      assertPurchaseOrderMutable({
+        status: order.status,
+        postedAt: order.postedAt,
+      })
+    } catch (error) {
+      return ApiResponses.handleError(error)
     }
 
     if (!DISABLE_PO_DOCUMENT_STAGE_LOCK) {

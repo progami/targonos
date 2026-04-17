@@ -1,5 +1,6 @@
 import { withAuthAndParams, ApiResponses, z } from '@/lib/api'
 import { hasPermission } from '@/lib/services/permission-service'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import type { NextRequest } from 'next/server'
@@ -94,6 +95,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     select: {
       id: true,
       status: true,
+      postedAt: true,
       proformaInvoiceNumber: true,
     },
   })
@@ -109,6 +111,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const piNumber = parsed.data.piNumber.trim()

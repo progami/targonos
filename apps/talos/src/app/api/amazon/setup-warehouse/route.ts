@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
+import {
+  getAmazonWarehouseCodeForRegion,
+  getAmazonWarehouseNameForRegion,
+} from '@/lib/warehouses/amazon-warehouse'
 import { WarehouseKind } from '@targon/prisma-talos'
 export const dynamic = 'force-dynamic'
 
@@ -16,8 +20,8 @@ export const POST = withAuth(async (_request, session) => {
  // console.log('Setup warehouse: Starting setup for user:', session.user.email)
 
  // Create or update Amazon FBA warehouse for the active tenant
- const amazonWarehouseCode = session.user.region === 'US' ? 'AMZN' : 'AMZN-UK'
- const amazonWarehouseName = session.user.region === 'US' ? 'Amazon FBA US' : 'Amazon FBA UK'
+ const amazonWarehouseCode = getAmazonWarehouseCodeForRegion(session.user.region)
+ const amazonWarehouseName = getAmazonWarehouseNameForRegion(session.user.region)
  const amazonWarehouseAddress =
    session.user.region === 'US' ? 'Amazon Fulfillment Centers US' : 'Amazon Fulfillment Centers UK'
 

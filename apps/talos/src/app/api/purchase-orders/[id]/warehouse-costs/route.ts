@@ -6,6 +6,7 @@ import {
   normalizePoCostCurrency,
 } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { FinancialLedgerSourceType, FinancialLedgerCategory, Prisma } from '@targon/prisma-talos'
@@ -126,7 +127,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, status: true, warehouseCode: true, warehouseName: true },
+    select: { id: true, status: true, postedAt: true, warehouseCode: true, warehouseName: true },
   })
 
   if (!order) {
@@ -140,6 +141,15 @@ export const POST = withAuthAndParams(async (request, params, session) => {
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const warehouseCode =
@@ -202,13 +212,31 @@ export const DELETE = withAuthAndParams(async (request, params, session) => {
   }
 
   const prisma = await getTenantPrisma()
+  const order = await prisma.purchaseOrder.findUnique({
+    where: { id },
+    select: { status: true, postedAt: true },
+  })
+
+  if (!order) {
+    return ApiResponses.notFound('Purchase order not found')
+  }
 
   const crossTenantGuard = await enforceCrossTenantManufacturingOnlyForPurchaseOrder({
     prisma,
     purchaseOrderId: id,
+    purchaseOrderStatus: order.status,
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const entry = await prisma.financialLedgerEntry.findUnique({

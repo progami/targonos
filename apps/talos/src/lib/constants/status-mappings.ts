@@ -3,7 +3,7 @@
  * Centralizes badge classes, labels, and other status-related UI configurations.
  */
 
-// Purchase Order Status Types (5-stage state machine)
+// Purchase order statuses, including legacy values kept for read compatibility.
 export type POStatus =
   | 'ISSUED'
   | 'MANUFACTURING'
@@ -37,14 +37,14 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
   WAREHOUSE: 'bg-purple-50 text-purple-700 border border-purple-200',
-  SHIPPED: 'bg-slate-50 text-slate-600 border border-slate-200',
-  REJECTED: 'bg-slate-50 text-slate-600 border border-slate-200',
-  CANCELLED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  SHIPPED: 'bg-purple-50 text-purple-700 border border-purple-200',
+  REJECTED: 'bg-red-50 text-red-700 border border-red-200',
+  CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
   ARCHIVED: 'bg-slate-50 text-slate-600 border border-slate-200',
   AWAITING_PROOF: 'bg-amber-50 text-amber-700 border border-amber-200',
   REVIEW: 'bg-blue-50 text-blue-700 border border-blue-200',
   POSTED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  CLOSED: 'bg-slate-50 text-slate-600 border border-slate-200',
+  CLOSED: 'bg-red-50 text-red-700 border border-red-200',
 }
 
 /**
@@ -55,14 +55,14 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',
   WAREHOUSE: 'Warehouse',
-  SHIPPED: 'Legacy Closed',
-  REJECTED: 'Closed',
-  CANCELLED: 'Closed',
+  SHIPPED: 'Warehouse',
+  REJECTED: 'Cancelled',
+  CANCELLED: 'Cancelled',
   ARCHIVED: 'Archived',
   AWAITING_PROOF: 'Awaiting Proof',
   REVIEW: 'Review',
   POSTED: 'Posted',
-  CLOSED: 'Closed',
+  CLOSED: 'Cancelled',
 }
 
 /**
