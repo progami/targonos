@@ -21,6 +21,7 @@ import {
   normalizeSkuGroup,
   resolveOrderReferenceSeed,
 } from '@/lib/services/supply-chain-reference-service'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 
 const UpdateLineSchema = z.object({
   skuCode: z.string().trim().min(1).optional(),
@@ -201,8 +202,16 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
   }
 
   const updateData: Prisma.PurchaseOrderLineUpdateInput = {}
-  const allowCommercialEdits =
-    order.status !== 'CLOSED' && order.status !== 'CANCELLED' && order.status !== 'REJECTED'
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
+  }
+
+  const allowCommercialEdits = true
   const allowIssuedPackagingEdits = allowCommercialEdits
   const allowPiNumberEdits = allowCommercialEdits
   const allowShippingMarkEdits = allowCommercialEdits || allowIssuedPackagingEdits
@@ -614,8 +623,13 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, _se
     return crossTenantGuard
   }
 
-  if (order.status === 'CLOSED' || order.status === 'CANCELLED' || order.status === 'REJECTED') {
-    return ApiResponses.badRequest('Cannot delete line items from terminal orders')
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const line = await prisma.purchaseOrderLine.findFirst({

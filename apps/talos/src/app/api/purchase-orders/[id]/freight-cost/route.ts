@@ -10,6 +10,7 @@ import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/servi
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { PurchaseOrderStatus, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -107,6 +108,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
     select: {
       id: true,
       status: true,
+      postedAt: true,
       warehouseCode: true,
       receivedDate: true,
     },
@@ -123,6 +125,15 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, sess
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   if (
@@ -234,6 +245,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     select: {
       id: true,
       status: true,
+      postedAt: true,
       warehouseCode: true,
       receivedDate: true,
     },
@@ -250,6 +262,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   if (
@@ -354,6 +375,7 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, ses
     select: {
       id: true,
       status: true,
+      postedAt: true,
       receivedDate: true,
     },
   })
@@ -369,6 +391,15 @@ export const DELETE = withAuthAndParams(async (request: NextRequest, params, ses
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   if (

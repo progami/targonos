@@ -16,7 +16,7 @@ const TARGET_WAREHOUSES = [
 
 const KEEP_CODES = new Set<string>([
   ...TARGET_WAREHOUSES.map((w) => w.code),
-  'AMZN',
+  'AMZN-US',
   'AMZN-UK',
 ])
 
@@ -61,7 +61,7 @@ Options:
 
 Notes:
   - Requires ${UK_DB_ENV} to be set (including the correct schema).
-  - Amazon warehouses (AMZN, AMZN-UK) are left untouched.
+  - Amazon warehouses (AMZN-US, AMZN-UK) are left untouched.
 `)
 }
 
@@ -174,4 +174,3 @@ async function main() {
 void main()
 
 export {}
-

@@ -6,6 +6,10 @@ import {
   resolvePurchaseOrderUnitCost,
   toPurchaseOrderTotalCostNumberOrNull,
 } from '@/lib/purchase-order-line-costs'
+import {
+  assertPurchaseOrderMutable,
+  normalizePurchaseOrderWorkflowStatus,
+} from '@/lib/purchase-orders/workflow'
 import { toPublicOrderNumber } from './purchase-order-utils'
 
 export interface UserContext {
@@ -40,14 +44,6 @@ export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetP
   }
 }>
 
-function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
-  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
-  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
-    return PurchaseOrderStatus.CLOSED
-  }
-  return status
-}
-
 const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.RFQ,
   PurchaseOrderStatus.ISSUED,
@@ -69,10 +65,12 @@ export function serializePurchaseOrder(
 ) {
   return {
     ...order,
-    status: normalizeWorkflowStatus(order.status),
+    status: normalizePurchaseOrderWorkflowStatus(order.status),
     expectedDate: order.expectedDate?.toISOString() ?? null,
     postedAt: order.postedAt?.toISOString() ?? null,
-    voidedFromStatus: metadata?.voidedFromStatus ? normalizeWorkflowStatus(metadata.voidedFromStatus) : null,
+    voidedFromStatus: metadata?.voidedFromStatus
+      ? normalizePurchaseOrderWorkflowStatus(metadata.voidedFromStatus)
+      : null,
     voidedAt: metadata?.voidedAt
       ? typeof metadata.voidedAt === 'string'
         ? metadata.voidedAt
@@ -201,9 +199,10 @@ export async function updatePurchaseOrderDetails(
     throw new ConflictError('Cannot edit legacy purchase orders')
   }
 
-  if (normalizeWorkflowStatus(order.status) === PurchaseOrderStatus.CLOSED) {
-    throw new ConflictError('Cannot edit closed purchase orders')
-  }
+  assertPurchaseOrderMutable({
+    status: order.status,
+    postedAt: order.postedAt,
+  })
 
   let expectedDate: Date | null | undefined = order.expectedDate
   if (input.expectedDate !== undefined) {

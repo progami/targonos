@@ -10,6 +10,11 @@ import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { sanitizeSearchQuery } from '@/lib/security/input-sanitization'
 import { aggregateInventoryTransactions } from '@targon/ledger'
 import { withAuth } from '@/lib/api/auth-wrapper'
+import {
+  AMAZON_WAREHOUSE_CODES,
+  canRegionUseWarehouseCode,
+  type TalosRegion,
+} from '@/lib/warehouses/amazon-warehouse'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,11 +55,16 @@ export const GET = withAuth(async (req, session) => {
  transactionWhere.warehouseCode = warehouse.code
  }
  } else {
- transactionWhere.NOT = {
- OR: [
- { warehouseCode: 'AMZN' },
- { warehouseCode: 'AMZN-UK' }
- ]
+ const blockedAmazonWarehouseCodes = AMAZON_WAREHOUSE_CODES.filter(
+  warehouseCode => !canRegionUseWarehouseCode(session.user.region as TalosRegion, warehouseCode)
+ )
+
+ if (blockedAmazonWarehouseCodes.length > 0) {
+  transactionWhere.NOT = {
+   warehouseCode: {
+    in: blockedAmazonWarehouseCodes,
+   }
+  }
  }
  }
 

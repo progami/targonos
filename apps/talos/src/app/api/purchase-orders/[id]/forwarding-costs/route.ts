@@ -10,6 +10,7 @@ import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/servi
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { CostCategory, Prisma } from '@targon/prisma-talos'
 import type { NextRequest } from 'next/server'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 
 export const dynamic = 'force-dynamic'
 
@@ -134,6 +135,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     select: {
       id: true,
       status: true,
+      postedAt: true,
     },
   })
 
@@ -148,6 +150,15 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   if (order.status !== 'OCEAN' && order.status !== 'WAREHOUSE') {

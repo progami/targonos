@@ -15,13 +15,8 @@ export {
 } from './auth-wrapper'
 
 // Response utilities
-export {
- ApiResponses,
- ValidationError,
- AuthorizationError,
- NotFoundError,
- ConflictError
-} from './responses'
+export { ApiResponses } from './responses'
+export { ValidationError, AuthorizationError, NotFoundError, ConflictError } from './errors'
 
 // Validation utilities
 export {
