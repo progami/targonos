@@ -1,0 +1,43 @@
+# Targon Global
+
+> Targon Global is an AI-driven manufacturing and design company. Its public website currently centers on Caelum Star extra large drop cloths and dust sheets, with region-specific pages for the United States and United Kingdom.
+
+Important notes:
+- Use region-specific pages, since the United States and United Kingdom assortments differ.
+- Targonglobal.com provides product information, comparisons, and support; checkout, payment, shipping, and returns are handled on Amazon.
+- Prices shown on Targon pages are reference prices and may vary by retailer or marketplace.
+
+## Start Here
+
+- [Targon Home](https://www.targonglobal.com/): Company overview, mission, values, and featured Caelum Star entry points.
+- [Caelum Star Region Selector](https://www.targonglobal.com/cs): Choose the United States or United Kingdom product experience.
+
+## Product Collections
+
+- [US Packs](https://www.targonglobal.com/cs/us/packs): Compare all four US pack options, coverage, durability, and core specifications.
+- [UK Packs](https://www.targonglobal.com/cs/uk/packs): Compare all six UK pack options, coverage, durability, and core specifications.
+- [US Where to Buy](https://www.targonglobal.com/cs/us/where-to-buy): Official buying routes, wholesale enquiry path, and direct pack navigation for US visitors.
+- [UK Where to Buy](https://www.targonglobal.com/cs/uk/where-to-buy): Official buying routes, wholesale enquiry path, and direct pack navigation for UK visitors.
+
+## United States Product Pages
+
+- [US 6 Pack — Light](https://www.targonglobal.com/cs/us/packs/6pk-light): 6-sheet pack with 648 sq ft total coverage and light durability.
+- [US 1 Pack — Strong](https://www.targonglobal.com/cs/us/packs/1pk-strong): 1-sheet pack with 108 sq ft coverage and strong durability.
+- [US 3 Pack — Standard](https://www.targonglobal.com/cs/us/packs/3pk-standard): 3-sheet pack with 324 sq ft total coverage and standard durability.
+- [US 12 Pack — Light](https://www.targonglobal.com/cs/us/packs/12pk-light): 12-sheet pack with 1296 sq ft total coverage and light durability.
+
+## Brand and Support
+
+- [US About](https://www.targonglobal.com/cs/us/about): Brand positioning, mission, materials, and buying model for US visitors.
+- [UK About](https://www.targonglobal.com/cs/uk/about): Brand positioning, mission, materials, and buying model for UK visitors.
+- [US Support](https://www.targonglobal.com/cs/us/support): Contact, usage guide, and FAQ for US visitors.
+- [UK Support](https://www.targonglobal.com/cs/uk/support): Contact, usage guide, and FAQ for UK visitors.
+
+## Legal
+
+- [Privacy](https://www.targonglobal.com/legal/privacy): How Targon handles site analytics, support email, and personal data.
+- [Terms](https://www.targonglobal.com/legal/terms): Website terms and the note that purchases, payments, shipping, and returns are governed by Amazon.
+
+## Optional
+
+- [US Gallery](https://www.targonglobal.com/cs/us/gallery): Official US product imagery and pack visuals.
