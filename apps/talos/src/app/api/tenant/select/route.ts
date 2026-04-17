@@ -2,32 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { auth } from '@/lib/auth'
 import {
-  TenantCode,
+  type TenantCode,
   isValidTenantCode,
   TENANT_COOKIE_NAME,
   TENANT_COOKIE_MAX_AGE,
   getTenantConfig,
 } from '@/lib/tenant/constants'
 import { isTenantAllowedForSession } from '@/lib/tenant/session'
+import { buildPortalActiveTenantRequest } from './portal-request'
 
 export const dynamic = 'force-dynamic'
-
-export function buildPortalActiveTenantRequest(request: Request, tenantCode: TenantCode): {
-  url: URL
-  init: RequestInit
-} {
-  return {
-    url: new URL('/api/v1/session/active-tenant', process.env.PORTAL_AUTH_URL),
-    init: {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/json',
-        cookie: request.headers.get('cookie') ?? '',
-      },
-      body: JSON.stringify({ appId: 'talos', tenantCode }),
-    },
-  }
-}
 
 /**
  * POST /api/tenant/select

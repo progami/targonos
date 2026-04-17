@@ -49,12 +49,6 @@ export const TALOS_PERMISSION_CATALOG: readonly TalosPermissionCatalogEntry[] = 
     category: 'purchase_order',
   },
   {
-    code: 'po.approve.warehouse_to_shipped',
-    name: 'Approve Warehouse To Shipped',
-    description: 'Permission to approve purchase orders from warehouse to shipped.',
-    category: 'purchase_order',
-  },
-  {
     code: 'po.cancel',
     name: 'Cancel Purchase Orders',
     description: 'Permission to cancel purchase orders.',

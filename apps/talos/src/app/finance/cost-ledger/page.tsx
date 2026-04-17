@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 type SearchParams = Record<string, string | string[] | undefined>
+type SearchParamsInput = Promise<SearchParams | undefined>
 
 function getRedirectUrl(pathname: string, searchParams: SearchParams) {
   const urlSearchParams = new URLSearchParams()
@@ -19,11 +20,11 @@ function getRedirectUrl(pathname: string, searchParams: SearchParams) {
   return query ? `${pathname}?${query}` : pathname
 }
 
-export default function CostLedgerRedirectPage({
+export default async function CostLedgerRedirectPage({
   searchParams,
 }: {
-  searchParams: SearchParams
+  searchParams: SearchParamsInput
 }) {
-  redirect(getRedirectUrl('/operations/cost-ledger', searchParams))
+  const resolvedSearchParams = (await Promise.resolve(searchParams)) ?? {}
+  redirect(getRedirectUrl('/operations/cost-ledger', resolvedSearchParams))
 }
-

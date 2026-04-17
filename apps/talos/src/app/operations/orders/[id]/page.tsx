@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation'
 
-export default function OrderRedirectPage({ params }: { params: { id: string } }) {
-  redirect(`/operations/purchase-orders/${params.id}`)
+type ParamsInput = Promise<{ id: string }>
+
+export default async function OrderRedirectPage({ params }: { params: ParamsInput }) {
+  const resolvedParams = await Promise.resolve(params)
+  redirect(`/operations/purchase-orders/${resolvedParams.id}`)
 }

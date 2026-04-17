@@ -50,9 +50,6 @@ const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.MANUFACTURING,
   PurchaseOrderStatus.OCEAN,
   PurchaseOrderStatus.WAREHOUSE,
-  PurchaseOrderStatus.SHIPPED,
-  PurchaseOrderStatus.CLOSED,
-  PurchaseOrderStatus.REJECTED,
   PurchaseOrderStatus.CANCELLED,
 ]
 

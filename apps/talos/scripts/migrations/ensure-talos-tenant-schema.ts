@@ -354,7 +354,10 @@ const baselineChecks: SchemaCheck[] = [
   ]),
   buildRequiredEnumValuesCheck('PurchaseOrderStatus enum values', 'PurchaseOrderStatus', [
     'ISSUED',
-    'REJECTED',
+    'MANUFACTURING',
+    'OCEAN',
+    'WAREHOUSE',
+    'CANCELLED',
   ]),
   buildRequiredColumnsCheck('purchase_orders stage fields', 'purchase_orders', [
     'incoterms',
@@ -701,7 +704,10 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
 
     // Purchase order essentials (stage 1 / issued)
     `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'ISSUED'`,
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'REJECTED'`,
+    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'MANUFACTURING'`,
+    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'OCEAN'`,
+    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'WAREHOUSE'`,
+    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'CANCELLED'`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "incoterms" text`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "payment_terms" text`,
     `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "counterparty_address" text`,

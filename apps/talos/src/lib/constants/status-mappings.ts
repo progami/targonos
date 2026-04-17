@@ -9,14 +9,11 @@ export type POStatus =
   | 'MANUFACTURING'
   | 'OCEAN'
   | 'WAREHOUSE'
-  | 'SHIPPED'
-  | 'REJECTED'
   | 'CANCELLED'
   | 'ARCHIVED'
   | 'AWAITING_PROOF'
   | 'REVIEW'
   | 'POSTED'
-  | 'CLOSED'
 
 export type POType = 'PURCHASE' | 'ADJUSTMENT'
 
@@ -37,14 +34,11 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
   WAREHOUSE: 'bg-purple-50 text-purple-700 border border-purple-200',
-  SHIPPED: 'bg-purple-50 text-purple-700 border border-purple-200',
-  REJECTED: 'bg-red-50 text-red-700 border border-red-200',
   CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
   ARCHIVED: 'bg-slate-50 text-slate-600 border border-slate-200',
   AWAITING_PROOF: 'bg-amber-50 text-amber-700 border border-amber-200',
   REVIEW: 'bg-blue-50 text-blue-700 border border-blue-200',
   POSTED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  CLOSED: 'bg-red-50 text-red-700 border border-red-200',
 }
 
 /**
@@ -55,14 +49,11 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',
   WAREHOUSE: 'Warehouse',
-  SHIPPED: 'Warehouse',
-  REJECTED: 'Cancelled',
   CANCELLED: 'Cancelled',
   ARCHIVED: 'Archived',
   AWAITING_PROOF: 'Awaiting Proof',
   REVIEW: 'Review',
   POSTED: 'Posted',
-  CLOSED: 'Cancelled',
 }
 
 /**
@@ -145,19 +136,15 @@ export const PO_LINE_STATUS_LABELS: Record<POLineStatus, string> = {
  * Helper function to get status badge class with fallback
  */
 export function getStatusBadgeClass(status: string, type: 'po' | 'tx' | 'mn' | 'poLine'): string {
-  const fallback = 'bg-muted text-muted-foreground border border-muted'
-
   switch (type) {
     case 'po':
-      return PO_STATUS_BADGE_CLASSES[status as POStatus] ?? fallback
+      return PO_STATUS_BADGE_CLASSES[status as POStatus]
     case 'tx':
-      return TX_TYPE_BADGE_CLASSES[status as TxType] ?? fallback
+      return TX_TYPE_BADGE_CLASSES[status as TxType]
     case 'mn':
-      return GRN_STATUS_BADGE_CLASSES[status as GRNStatus] ?? fallback
+      return GRN_STATUS_BADGE_CLASSES[status as GRNStatus]
     case 'poLine':
-      return PO_LINE_STATUS_BADGE_CLASSES[status as POLineStatus] ?? fallback
-    default:
-      return fallback
+      return PO_LINE_STATUS_BADGE_CLASSES[status as POLineStatus]
   }
 }
 
@@ -167,14 +154,12 @@ export function getStatusBadgeClass(status: string, type: 'po' | 'tx' | 'mn' | '
 export function getStatusLabel(status: string, type: 'po' | 'tx' | 'mn' | 'poLine'): string {
   switch (type) {
     case 'po':
-      return PO_STATUS_LABELS[status as POStatus] ?? status
+      return PO_STATUS_LABELS[status as POStatus]
     case 'tx':
-      return TX_TYPE_LABELS[status as TxType] ?? status
+      return TX_TYPE_LABELS[status as TxType]
     case 'mn':
-      return GRN_STATUS_LABELS[status as GRNStatus] ?? status
+      return GRN_STATUS_LABELS[status as GRNStatus]
     case 'poLine':
-      return PO_LINE_STATUS_LABELS[status as POLineStatus] ?? status
-    default:
-      return status
+      return PO_LINE_STATUS_LABELS[status as POLineStatus]
   }
 }
