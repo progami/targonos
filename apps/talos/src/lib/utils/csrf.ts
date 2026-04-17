@@ -2,7 +2,8 @@
  * CSRF Token Management Utilities
  */
 
-import { withBasePath } from '@/lib/utils/base-path'
+import { buildTalosApiPath } from '@/lib/api/talos-api-path'
+export { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 
 const CSRF_COOKIE_NAME = 'csrf-token'
 const CSRF_HEADER_NAME = 'x-csrf-token'
@@ -37,20 +38,6 @@ export function addCSRFHeader(headers: HeadersInit = {}): HeadersInit {
 }
 
 /**
- * Wrapper for fetch that automatically includes CSRF token for state-changing methods
- */
-export async function fetchWithCSRF(url: string, options: RequestInit = {}): Promise<Response> {
- const method = options.method?.toUpperCase() || 'GET'
- 
- // Only add CSRF token for state-changing methods
- if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
- options.headers = addCSRFHeader(options.headers)
- }
- 
- return fetch(url, options)
-}
-
-/**
  * Request a new CSRF token from the server
  * This should be called on page load or when a token expires
  */
@@ -58,7 +45,7 @@ export async function refreshCSRFToken(): Promise<void> {
  try {
  // Make a GET request to any API endpoint to get a fresh CSRF token
  // The server will set the token cookie in the response
- await fetch(withBasePath('/api/csrf'), {
+ await fetch(buildTalosApiPath('/api/csrf'), {
  method: 'GET',
  credentials: 'include'
  })
