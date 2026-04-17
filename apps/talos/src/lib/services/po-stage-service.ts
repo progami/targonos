@@ -52,6 +52,7 @@ import {
   toPurchaseOrderTotalCostNumberOrNull,
 } from '@/lib/purchase-order-line-costs'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
+import { resolvePurchaseOrderDestination } from '@/lib/purchase-orders/destination'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import {
   formatDimensionTripletDisplayFromCm,
@@ -3593,12 +3594,23 @@ export async function generatePurchaseOrderShippingMarks(params: {
   })
 
   const poNumber = order.poNumber ? escapeHtml(order.poNumber) : ''
-  const consigneeSource = warehouse?.name ?? order.warehouseName ?? null
+  const destinationDetails = resolvePurchaseOrderDestination(
+    {
+      warehouseName: order.warehouseName,
+      shipToName: order.shipToName,
+      shipToAddress: order.shipToAddress,
+    },
+    warehouse
+  )
+  const consigneeSource = destinationDetails.name
   const consignee =
     typeof consigneeSource === 'string' && consigneeSource.trim().length > 0
       ? escapeHtml(consigneeSource.trim())
       : ''
-  const destination = warehouse?.address ? warehouse.address.replace(/\r?\n/g, ', ') : ''
+  const destination =
+    typeof destinationDetails.address === 'string'
+      ? destinationDetails.address.replace(/\r?\n/g, ', ')
+      : ''
   const portOfDischarge = order.portOfDischarge ? escapeHtml(order.portOfDischarge) : ''
 
   const labels = activeLines.map(line => {

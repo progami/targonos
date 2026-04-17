@@ -5,6 +5,7 @@ import { getPurchaseOrderById } from '@/lib/services/purchase-order-service'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { BUYER_LEGAL_ENTITY, getBuyerVatNumber } from '@/lib/config/legal-entity'
+import { resolvePurchaseOrderDestination } from '@/lib/purchase-orders/destination'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -846,6 +847,14 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
         select: { name: true, address: true },
       })
     : null
+  const destination = resolvePurchaseOrderDestination(
+    {
+      warehouseName: order.warehouseName,
+      shipToName: order.shipToName,
+      shipToAddress: order.shipToAddress,
+    },
+    destinationWarehouse
+  )
 
   const documentNumber = toPublicOrderNumber(order.poNumber ?? order.orderNumber)
 
@@ -920,8 +929,8 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     expectedDate: order.expectedDate,
     incoterms: order.incoterms,
     paymentTerms: order.paymentTerms,
-    destinationName: destinationWarehouse?.name ?? order.warehouseName ?? null,
-    destinationAddress: destinationWarehouse?.address ?? null,
+    destinationName: destination.name,
+    destinationAddress: destination.address,
     notes: order.notes,
     lines,
   })

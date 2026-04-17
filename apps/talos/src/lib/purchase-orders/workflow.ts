@@ -8,6 +8,8 @@ export const ACTIVE_PURCHASE_ORDER_STATUSES = [
   'CANCELLED',
 ] as const
 
+const LEGACY_VISIBLE_PURCHASE_ORDER_STATUSES = ['SHIPPED', 'CLOSED', 'REJECTED'] as const
+
 export const CANCELABLE_PURCHASE_ORDER_STATUSES = [
   'ISSUED',
   'MANUFACTURING',
@@ -38,6 +40,14 @@ export function getValidNextPurchaseOrderStatuses(
 
 export function getRenderablePurchaseOrderStatuses(): ActivePurchaseOrderStatus[] {
   return [...ACTIVE_PURCHASE_ORDER_STATUSES]
+}
+
+export function getVisiblePurchaseOrderStatuses(): string[] {
+  return [
+    'RFQ',
+    ...ACTIVE_PURCHASE_ORDER_STATUSES,
+    ...LEGACY_VISIBLE_PURCHASE_ORDER_STATUSES,
+  ]
 }
 
 export function isCancelablePurchaseOrderStatus(status: string): status is TransitionablePurchaseOrderStatus {

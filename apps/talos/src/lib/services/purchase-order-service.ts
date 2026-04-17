@@ -8,6 +8,7 @@ import {
 } from '@/lib/purchase-order-line-costs'
 import {
   assertPurchaseOrderMutable,
+  getVisiblePurchaseOrderStatuses,
   normalizePurchaseOrderWorkflowStatus,
 } from '@/lib/purchase-orders/workflow'
 import { toPublicOrderNumber } from './purchase-order-utils'
@@ -44,14 +45,7 @@ export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetP
   }
 }>
 
-const VISIBLE_STATUSES: PurchaseOrderStatus[] = [
-  PurchaseOrderStatus.RFQ,
-  PurchaseOrderStatus.ISSUED,
-  PurchaseOrderStatus.MANUFACTURING,
-  PurchaseOrderStatus.OCEAN,
-  PurchaseOrderStatus.WAREHOUSE,
-  PurchaseOrderStatus.CANCELLED,
-]
+const VISIBLE_STATUSES = getVisiblePurchaseOrderStatuses() as PurchaseOrderStatus[]
 
 export function serializePurchaseOrder(
   order: PurchaseOrderWithLines,
