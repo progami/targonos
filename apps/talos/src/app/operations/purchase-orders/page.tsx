@@ -24,16 +24,11 @@ import {
 } from '@/lib/lucide-icons'
 import { PurchaseOrdersPanel } from '../inventory/purchase-orders-panel'
 import { redirectToPortal } from '@/lib/portal'
+import type { ActivePurchaseOrderStatus } from '@/lib/purchase-orders/workflow'
 import { withBasePath } from '@/lib/utils/base-path'
 import type { LucideIcon } from 'lucide-react'
 
-// 5-Stage State Machine Status Types
-type POStageStatus =
-  | 'ISSUED'
-  | 'MANUFACTURING'
-  | 'OCEAN'
-  | 'WAREHOUSE'
-  | 'CLOSED'
+type POStageStatus = ActivePurchaseOrderStatus
 
 type StatusConfig = {
   value: POStageStatus
@@ -73,9 +68,9 @@ const PIPELINE_STAGES: StatusConfig[] = [
 // Terminal statuses
 const TERMINAL_STATUSES: StatusConfig[] = [
   {
-    value: 'CLOSED',
-    label: 'Closed',
-    description: 'Purchase orders closed before completion',
+    value: 'CANCELLED',
+    label: 'Cancelled',
+    description: 'Purchase orders cancelled before completion',
     icon: XCircle,
   },
 ]

@@ -20,6 +20,7 @@ import {
   normalizeSkuGroup,
   resolveOrderReferenceSeed,
 } from '@/lib/services/supply-chain-reference-service'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 
 const CreateLineSchema = z.object({
   skuCode: z.string().trim().min(1),
@@ -157,6 +158,7 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     select: {
       id: true,
       status: true,
+      postedAt: true,
       orderNumber: true,
       poNumber: true,
       skuGroup: true,
@@ -176,8 +178,13 @@ export const POST = withAuthAndParams(async (request: NextRequest, params, sessi
     return crossTenantGuard
   }
 
-  if (order.status === 'CLOSED' || order.status === 'CANCELLED' || order.status === 'REJECTED') {
-    return ApiResponses.badRequest('Cannot add line items to terminal orders')
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const payload = await request.json().catch(() => null)

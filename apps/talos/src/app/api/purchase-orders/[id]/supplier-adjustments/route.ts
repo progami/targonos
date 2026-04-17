@@ -6,6 +6,7 @@ import {
   normalizePoCostCurrency,
 } from '@/lib/constants/cost-currency'
 import { hasPermission } from '@/lib/services/permission-service'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { FinancialLedgerSourceType, FinancialLedgerCategory, Prisma } from '@targon/prisma-talos'
@@ -94,7 +95,7 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
   const prisma = await getTenantPrisma()
   const order = await prisma.purchaseOrder.findUnique({
     where: { id },
-    select: { id: true, status: true, warehouseCode: true, warehouseName: true },
+    select: { id: true, status: true, postedAt: true, warehouseCode: true, warehouseName: true },
   })
 
   if (!order) {
@@ -108,6 +109,15 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
   })
   if (crossTenantGuard) {
     return crossTenantGuard
+  }
+
+  try {
+    assertPurchaseOrderMutable({
+      status: order.status,
+      postedAt: order.postedAt,
+    })
+  } catch (error) {
+    return ApiResponses.handleError(error)
   }
 
   const warehouseCode =

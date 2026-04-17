@@ -382,7 +382,7 @@ model PurchaseOrder {
   actualArrival           DateTime? @map("actual_arrival")
 
   // ===========================================
-  // STAGE 4: WAREHOUSE (warehouse selected here)
+  // STAGE 4: WAREHOUSE (terminal inbound stage)
   // ===========================================
   warehouseCode         String?   @map("warehouse_code")
   warehouseName         String?   @map("warehouse_name")
@@ -395,9 +395,8 @@ model PurchaseOrder {
   receivedDate          DateTime? @map("received_date")
   discrepancyNotes      String?   @map("discrepancy_notes")
 
-  // ===========================================
-  // STAGE 5: SHIPPED
-  // ===========================================
+  // Legacy outbound shipment compatibility fields.
+  // These remain until the reviewed legacy-read cleanup is implemented.
   shipToName         String?   @map("ship_to_name")
   shipToAddress      String?   @map("ship_to_address")
   shipToCity         String?   @map("ship_to_city")
@@ -425,11 +424,14 @@ model PurchaseOrder {
   warehouseApprovedAt         DateTime? @map("warehouse_approved_at")
   warehouseApprovedById       String?   @map("warehouse_approved_by_id")
   warehouseApprovedByName     String?   @map("warehouse_approved_by_name")
+
+  // Legacy shipped approval compatibility fields.
+  // These remain until the reviewed legacy-read cleanup is implemented.
   shippedApprovedAt           DateTime? @map("shipped_approved_at")
   shippedApprovedById         String?   @map("shipped_approved_by_id")
   shippedApprovedByName       String?   @map("shipped_approved_by_name")
 
-  // Legacy fields (for old schema compatibility)
+  // Legacy fields kept for old schema / read compatibility until cleanup applies.
   proformaInvoiceId      String?   @map("proforma_invoice_id")
   proformaInvoiceData    Json?     @map("proforma_invoice_data")
   manufacturingStart     DateTime? @map("manufacturing_start")
@@ -985,22 +987,23 @@ enum PurchaseOrderType {
 }
 
 enum PurchaseOrderStatus {
-  // Workflow statuses (CLOSED is the canonical terminal status)
-  RFQ
+  // Active inbound workflow (WAREHOUSE is the final operational stage)
   ISSUED
   MANUFACTURING
   OCEAN
   WAREHOUSE
-  SHIPPED
-  REJECTED // Legacy alias for terminal state; normalized to CLOSED in app layer
-  CANCELLED // Legacy alias for terminal state; normalized to CLOSED in app layer
+  CANCELLED
   ARCHIVED
 
-  // Legacy statuses (for backward compatibility with existing data)
+  // Legacy status compatibility values retained for current Talos compile/read support.
+  // These cannot be removed until reviewed legacy resolution and broader read cleanup land.
+  RFQ
+  SHIPPED
+  REJECTED
   AWAITING_PROOF
   REVIEW
   POSTED
-  CLOSED // Canonical terminal status for active workflow
+  CLOSED
 
   @@map("PurchaseOrderStatus")
 }
@@ -1068,7 +1071,7 @@ enum PurchaseOrderDocumentStage {
   MANUFACTURING
   OCEAN
   WAREHOUSE
-  SHIPPED
+  SHIPPED // Legacy outbound document-stage compatibility only
 
   @@map("PurchaseOrderDocumentStage")
 }

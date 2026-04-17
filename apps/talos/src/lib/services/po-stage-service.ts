@@ -38,6 +38,12 @@ import { recalculateStorageLedgerForTransactions } from './storage-ledger-sync'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
 import { buildPoForwardingCostLedgerEntries } from '@/lib/costing/po-forwarding-costing'
 import {
+  assertPurchaseOrderMutable,
+  getValidNextPurchaseOrderStatuses,
+  isCancelablePurchaseOrderStatus,
+  normalizePurchaseOrderWorkflowStatus,
+} from '@/lib/purchase-orders/workflow'
+import {
   PURCHASE_ORDER_TOTAL_COST_DECIMALS,
   PURCHASE_ORDER_UNIT_COST_DECIMALS,
   derivePurchaseOrderUnitCost,
@@ -162,20 +168,17 @@ function normalizeAuditValue(value: unknown): unknown {
 
 // Valid stage transitions for current PO workflow (RFQ stage removed; legacy RFQ rows are treated as ISSUED)
 export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrderStatus[]>> = {
-  ISSUED: [PurchaseOrderStatus.MANUFACTURING, PurchaseOrderStatus.CLOSED],
-  MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CLOSED],
-  OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CLOSED],
-  WAREHOUSE: [PurchaseOrderStatus.CLOSED],
+  ISSUED: [PurchaseOrderStatus.MANUFACTURING, PurchaseOrderStatus.CANCELLED],
+  MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CANCELLED],
+  OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CANCELLED],
+  WAREHOUSE: [PurchaseOrderStatus.CANCELLED],
   SHIPPED: [], // Terminal state
+  CANCELLED: [], // Terminal state
   CLOSED: [], // Terminal state
 }
 
 function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
-  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
-  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
-    return PurchaseOrderStatus.CLOSED
-  }
-  return status
+  return normalizePurchaseOrderWorkflowStatus(status) as PurchaseOrderStatus
 }
 
 // Stage-specific required fields for transition
@@ -557,15 +560,33 @@ export function isValidTransition(
   fromStatus: PurchaseOrderStatus,
   toStatus: PurchaseOrderStatus
 ): boolean {
-  const validTargets = VALID_TRANSITIONS[normalizeWorkflowStatus(fromStatus)]
-  return validTargets?.includes(toStatus) ?? false
+  const normalizedStatus = normalizeWorkflowStatus(fromStatus)
+  if (normalizedStatus === PurchaseOrderStatus.CANCELLED) {
+    return false
+  }
+
+  if (!isCancelablePurchaseOrderStatus(normalizedStatus)) {
+    return false
+  }
+
+  const validTargets = getValidNextPurchaseOrderStatuses(normalizedStatus)
+  return validTargets.includes(toStatus as never)
 }
 
 /**
  * Get valid next stages from current status
  */
 export function getValidNextStages(currentStatus: PurchaseOrderStatus): PurchaseOrderStatus[] {
-  return VALID_TRANSITIONS[normalizeWorkflowStatus(currentStatus)] ?? []
+  const normalizedStatus = normalizeWorkflowStatus(currentStatus)
+  if (normalizedStatus === PurchaseOrderStatus.CANCELLED) {
+    return []
+  }
+
+  if (!isCancelablePurchaseOrderStatus(normalizedStatus)) {
+    return []
+  }
+
+  return getValidNextPurchaseOrderStatuses(normalizedStatus) as PurchaseOrderStatus[]
 }
 
 /**
@@ -1839,6 +1860,11 @@ export async function transitionPurchaseOrderStage(
     throw new ConflictError('Cannot transition legacy orders. They are archived.')
   }
 
+  assertPurchaseOrderMutable({
+    status: order.status,
+    postedAt: order.postedAt,
+  })
+
   const rawStatus = order.status as PurchaseOrderStatus
   const currentStatus = normalizeWorkflowStatus(rawStatus)
   const isInPlaceUpdate = targetStatus === currentStatus
@@ -1862,10 +1888,10 @@ export async function transitionPurchaseOrderStage(
     if (!canEdit && !isSuperAdmin(user.email)) {
       throw new ValidationError(`You don't have permission to edit purchase orders`)
     }
-  } else if (targetStatus === PurchaseOrderStatus.CLOSED) {
+  } else if (targetStatus === PurchaseOrderStatus.CANCELLED) {
     const canCancel = await hasPermission(user.id, 'po.cancel')
     if (!canCancel && !isSuperAdmin(user.email)) {
-      throw new ValidationError(`You don't have permission to close purchase orders`)
+      throw new ValidationError(`You don't have permission to cancel purchase orders`)
     }
   } else {
     const canApprove = await canApproveStageTransition(user.id, currentStatus, targetStatus)
@@ -1877,7 +1903,7 @@ export async function transitionPurchaseOrderStage(
     }
   }
 
-  if (!isInPlaceUpdate && targetStatus === PurchaseOrderStatus.CLOSED) {
+  if (!isInPlaceUpdate && targetStatus === PurchaseOrderStatus.CANCELLED) {
     const storageRecalcInputs = await prisma.inventoryTransaction.findMany({
       where: { purchaseOrderId: order.id },
       select: {
@@ -3469,9 +3495,10 @@ export async function generatePurchaseOrderShippingMarks(params: {
     throw new ConflictError('Cannot generate shipping marks for legacy orders. They are archived.')
   }
 
-  if (normalizeWorkflowStatus(order.status as PurchaseOrderStatus) === PurchaseOrderStatus.CLOSED) {
-    throw new ConflictError('Cannot generate shipping marks for closed purchase orders')
-  }
+  assertPurchaseOrderMutable({
+    status: order.status,
+    postedAt: order.postedAt,
+  })
 
   const tenant = await getCurrentTenant()
   const tenantCode = tenant.code
@@ -3764,7 +3791,7 @@ export function getStageApprovalHistory(order: PurchaseOrder): {
 
   if (order.warehouseApprovedAt) {
     history.push({
-      stage: 'WAREHOUSE → SHIPPED',
+      stage: 'WAREHOUSE → CANCELLED',
       approvedAt: order.warehouseApprovedAt,
       approvedBy: order.warehouseApprovedByName,
     })

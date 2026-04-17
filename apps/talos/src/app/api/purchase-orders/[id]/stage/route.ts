@@ -10,6 +10,7 @@ import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/servi
 import type { StageTransitionInput, UserContext } from '@/lib/services/po-stage-service'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
+import { normalizePurchaseOrderWorkflowStatus } from '@/lib/purchase-orders/workflow'
 
 const DateInputSchema = z
   .string()
@@ -53,11 +54,7 @@ const OptionalInt = z.preprocess((value) => {
 }, z.number().int().optional())
 
 function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
-  if (status === PurchaseOrderStatus.RFQ) return PurchaseOrderStatus.ISSUED
-  if (status === PurchaseOrderStatus.REJECTED || status === PurchaseOrderStatus.CANCELLED) {
-    return PurchaseOrderStatus.CLOSED
-  }
-  return status
+  return normalizePurchaseOrderWorkflowStatus(status) as PurchaseOrderStatus
 }
 
 const StageTransitionSchema = z.object({
@@ -66,7 +63,7 @@ const StageTransitionSchema = z.object({
     'MANUFACTURING',
     'OCEAN',
     'WAREHOUSE',
-    'CLOSED',
+    'CANCELLED',
   ] as const),
   stageData: z
     .object({

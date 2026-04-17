@@ -33,16 +33,14 @@ import {
   PO_TYPE_BADGE_CLASSES,
   type POType,
 } from '@/lib/constants/status-mappings'
+import {
+  getPurchaseOrderDisplayStatus,
+  type ActivePurchaseOrderStatus,
+} from '@/lib/purchase-orders/workflow'
 import { withBasePath } from '@/lib/utils/base-path'
 
 export type PurchaseOrderTypeOption = 'PURCHASE' | 'ADJUSTMENT' | 'FULFILLMENT'
-export type PurchaseOrderStatusOption =
-  | 'ISSUED'
-  | 'MANUFACTURING'
-  | 'OCEAN'
-  | 'WAREHOUSE'
-  | 'SHIPPED'
-  | 'CLOSED'
+export type PurchaseOrderStatusOption = ActivePurchaseOrderStatus
 export type PurchaseOrderLineStatusOption = 'PENDING' | 'POSTED' | 'CANCELLED'
 
 export interface PurchaseOrderLineSummary {
@@ -111,7 +109,7 @@ export interface PurchaseOrderSummary {
   tenantCode?: string | null
   matchedSkuCodes?: string[]
   type: PurchaseOrderTypeOption
-  status: PurchaseOrderStatusOption
+  status: string
   counterpartyName: string | null
   incoterms: string | null
   paymentTerms: string | null
@@ -160,6 +158,10 @@ function sumLineCartons(lines: PurchaseOrderLineSummary[]) {
 
 function sumReceivedQuantities(lines: PurchaseOrderLineSummary[]) {
   return lines.reduce((sum, line) => sum + (line.quantityReceived ?? line.postedQuantity ?? 0), 0)
+}
+
+function getDisplayStatus(status: string): PurchaseOrderStatusOption {
+  return getPurchaseOrderDisplayStatus(status)
 }
 
 function formatTextOrDash(value: string | null | undefined) {
@@ -316,11 +318,12 @@ export function PurchaseOrdersPanel({
       : allOrders
     return source.reduce(
       (acc, order) => {
-        if (order.status === 'ISSUED') acc.issuedCount += 1
-        if (order.status === 'MANUFACTURING') acc.manufacturingCount += 1
-        if (order.status === 'OCEAN') acc.oceanCount += 1
-        if (order.status === 'WAREHOUSE') acc.warehouseCount += 1
-        if (order.status === 'CLOSED') acc.closedCount += 1
+        const displayStatus = getDisplayStatus(order.status)
+        if (displayStatus === 'ISSUED') acc.issuedCount += 1
+        if (displayStatus === 'MANUFACTURING') acc.manufacturingCount += 1
+        if (displayStatus === 'OCEAN') acc.oceanCount += 1
+        if (displayStatus === 'WAREHOUSE') acc.warehouseCount += 1
+        if (displayStatus === 'CANCELLED') acc.cancelledCount += 1
         return acc
       },
       {
@@ -328,7 +331,7 @@ export function PurchaseOrdersPanel({
         manufacturingCount: 0,
         oceanCount: 0,
         warehouseCount: 0,
-        closedCount: 0,
+        cancelledCount: 0,
       }
     )
   }, [allOrders, globalSearch, typeFilter])
@@ -339,14 +342,14 @@ export function PurchaseOrdersPanel({
       MANUFACTURING: statusCounts.manufacturingCount,
       OCEAN: statusCounts.oceanCount,
       WAREHOUSE: statusCounts.warehouseCount,
-      CLOSED: statusCounts.closedCount,
+      CANCELLED: statusCounts.cancelledCount,
     })
   }, [statusCounts, onCountsLoaded])
 
   const visibleOrders = useMemo(
     () =>
       orders.filter(order => {
-        const matchesStatus = order.status === statusFilter
+        const matchesStatus = getDisplayStatus(order.status) === statusFilter
         const matchesType = typeFilter ? order.type === typeFilter : true
         return matchesStatus && matchesType
       }),
@@ -939,7 +942,7 @@ export function PurchaseOrdersPanel({
         )
         break
       }
-      case 'CLOSED': {
+      case 'CANCELLED': {
         cols.push(
           {
             key: 'notes',
@@ -1108,14 +1111,14 @@ export function PurchaseOrdersPanel({
 
 /* ---------- Lifecycle tree helpers ---------- */
 
-const STAGE_ORDER: PurchaseOrderStatusOption[] = ['ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'CLOSED']
+const STAGE_ORDER: PurchaseOrderStatusOption[] = ['ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'CANCELLED']
 
 const STAGE_LABEL: Record<string, string> = {
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',
   WAREHOUSE: 'Warehouse',
-  CLOSED: 'Closed',
+  CANCELLED: 'Cancelled',
 }
 
 function stageIndex(status: PurchaseOrderStatusOption) {
@@ -1128,7 +1131,8 @@ function LifecycleTree({ order, members }: { order: PurchaseOrderSummary; member
   const isSplitGroup = members.length > 1
 
   // Build stage progression for the parent PO
-  const currentIdx = stageIndex(order.status)
+  const displayStatus = getDisplayStatus(order.status)
+  const currentIdx = stageIndex(displayStatus)
   const passedStages = STAGE_ORDER.filter((_s, i) => i <= currentIdx && i < STAGE_ORDER.length - 1)
 
   return (
@@ -1140,7 +1144,7 @@ function LifecycleTree({ order, members }: { order: PurchaseOrderSummary; member
             {i > 0 && <ChevronRight className="h-3 w-3 text-muted-foreground" />}
             <Badge
               className={
-                stage === order.status
+                stage === displayStatus
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground'
               }
@@ -1149,10 +1153,10 @@ function LifecycleTree({ order, members }: { order: PurchaseOrderSummary; member
             </Badge>
           </span>
         ))}
-        {order.status === 'CLOSED' && (
+        {displayStatus === 'CANCELLED' && (
           <span className="flex items-center gap-1">
             <ChevronRight className="h-3 w-3 text-muted-foreground" />
-            <Badge className="bg-destructive/10 text-destructive border border-destructive/20">Closed</Badge>
+            <Badge className="bg-destructive/10 text-destructive border border-destructive/20">Cancelled</Badge>
           </span>
         )}
       </div>
@@ -1182,6 +1186,7 @@ function LifecycleNode({ order }: { order: PurchaseOrderSummary }) {
   const ci = order.stageData.ocean.commercialInvoiceNumber
   const grn = order.grnNumber
   const tenant = order.tenantCode
+  const displayStatus = getDisplayStatus(order.status)
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -1201,14 +1206,14 @@ function LifecycleNode({ order }: { order: PurchaseOrderSummary }) {
       )}
       <Badge
         className={
-          order.status === 'CLOSED'
+          displayStatus === 'CANCELLED'
             ? 'bg-destructive/10 text-destructive border border-destructive/20'
-            : order.status === 'WAREHOUSE'
+            : displayStatus === 'WAREHOUSE'
               ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
               : 'bg-muted text-muted-foreground'
         }
       >
-        {STAGE_LABEL[order.status] ?? order.status}
+        {STAGE_LABEL[displayStatus] ?? displayStatus}
       </Badge>
     </div>
   )

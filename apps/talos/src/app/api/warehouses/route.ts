@@ -2,6 +2,11 @@ import { withAuth, withRole, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { Prisma, WarehouseKind } from '@targon/prisma-talos'
 import { sanitizeForDisplay, validateAlphanumeric } from '@/lib/security/input-sanitization'
+import {
+  canRegionUseWarehouseCode,
+  isAmazonWarehouseCode,
+  type TalosRegion,
+} from '@/lib/warehouses/amazon-warehouse'
 import { warehouseListSelect } from './list-query'
 export const dynamic = 'force-dynamic'
 
@@ -107,7 +112,7 @@ const updateWarehouseSchema = z.object({
 })
 
 // GET /api/warehouses - List warehouses
-export const GET = withAuth(async (req, _session) => {
+export const GET = withAuth(async (req, session) => {
   const prisma = await getTenantPrisma()
   const searchParams = req.nextUrl.searchParams
   const includeAmazon = searchParams.get('includeAmazon') === 'true'
@@ -118,17 +123,22 @@ export const GET = withAuth(async (req, _session) => {
     where.id = id
   }
 
-  // Exclude Amazon FBA UK warehouse unless explicitly requested
-  if (!includeAmazon) {
-    where.NOT = {
-      OR: [{ code: 'AMZN' }, { code: 'AMZN-UK' }],
-    }
-  }
-
   const warehouses = await prisma.warehouse.findMany({
     where,
     orderBy: { name: 'asc' },
     select: warehouseListSelect,
+  })
+
+  const regionScopedWarehouses = warehouses.filter(warehouse => {
+    if (!isAmazonWarehouseCode(warehouse.code)) {
+      return true
+    }
+
+    if (!includeAmazon) {
+      return false
+    }
+
+    return canRegionUseWarehouseCode(session.user.region as TalosRegion, warehouse.code)
   })
 
   // Get transaction counts for all warehouses in a single query
@@ -139,14 +149,14 @@ export const GET = withAuth(async (req, _session) => {
     },
     where: {
       warehouseCode: {
-        in: warehouses.map(w => w.code),
+        in: regionScopedWarehouses.map(w => w.code),
       },
     },
   })
 
   const countMap = new Map(transactionCounts.map(tc => [tc.warehouseCode, tc._count.id]))
 
-  const warehousesWithCounts = warehouses.map(warehouse => ({
+  const warehousesWithCounts = regionScopedWarehouses.map(warehouse => ({
     ...warehouse,
     rateListAttachment: parseRateListAttachment(
       warehouse.rateListAttachment as Prisma.JsonValue | null

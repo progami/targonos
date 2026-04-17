@@ -7,7 +7,6 @@ import {
   PurchaseOrderType,
   GrnStatus,
   PurchaseOrderLineStatus,
-  PurchaseOrderStatus,
   TransactionType,
 } from '@targon/prisma-talos'
 import { ValidationError, ConflictError, NotFoundError } from '@/lib/api'
@@ -22,6 +21,7 @@ import {
   resolveOrderReferenceSeed,
 } from '@/lib/services/supply-chain-reference-service'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
+import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
 function toFinancialCategory(costCategory: CostCategory) {
@@ -118,13 +118,10 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
       throw new NotFoundError('Purchase order not found')
     }
 
-    if (
-      purchaseOrder.status === PurchaseOrderStatus.REJECTED ||
-      purchaseOrder.status === PurchaseOrderStatus.CANCELLED ||
-      purchaseOrder.status === PurchaseOrderStatus.CLOSED
-    ) {
-      throw new ConflictError('Cannot record a note against a closed purchase order')
-    }
+    assertPurchaseOrderMutable({
+      status: purchaseOrder.status,
+      postedAt: purchaseOrder.postedAt,
+    })
 
     if (!purchaseOrder.warehouseCode || !purchaseOrder.warehouseName) {
       throw new ValidationError(
@@ -282,13 +279,10 @@ export async function postGrn(id: string, _user: UserContext) {
     if (!po) {
       throw new NotFoundError('Purchase order missing for GRN')
     }
-    if (
-      po.status === PurchaseOrderStatus.REJECTED ||
-      po.status === PurchaseOrderStatus.CANCELLED ||
-      po.status === PurchaseOrderStatus.CLOSED
-    ) {
-      throw new ConflictError('Cannot post a note for a closed purchase order')
-    }
+    assertPurchaseOrderMutable({
+      status: po.status,
+      postedAt: po.postedAt,
+    })
 
     const warehouse = await tx.warehouse.findFirst({
       where: { code: po.warehouseCode },
