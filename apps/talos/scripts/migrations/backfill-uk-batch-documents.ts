@@ -48,6 +48,14 @@ const MIGRATION_USER_NAME = 'Talos Migration'
 const SHARED_DRIVES_ROOT =
   '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives'
 
+type S3PurchaseOrderDocumentStage =
+  | 'RFQ'
+  | 'ISSUED'
+  | 'MANUFACTURING'
+  | 'OCEAN'
+  | 'WAREHOUSE'
+  | 'SHIPPED'
+
 const IGNORE_DIR_NAMES = new Set([
   'inspection',
   'photos',
@@ -368,6 +376,27 @@ function buildOrderNumber(tenant: TenantCode, batchIdRaw: string, variant: strin
   return `INV-${normalizedBatch}-${normalizedVariant}-${tenant}`
 }
 
+function toS3PurchaseOrderDocumentStage(
+  stage: string
+): S3PurchaseOrderDocumentStage {
+  switch (stage) {
+    case 'DRAFT':
+      return 'ISSUED'
+    case 'RFQ':
+      return 'RFQ'
+    case 'ISSUED':
+      return 'ISSUED'
+    case 'MANUFACTURING':
+      return 'MANUFACTURING'
+    case 'OCEAN':
+      return 'OCEAN'
+    case 'WAREHOUSE':
+      return 'WAREHOUSE'
+  }
+
+  throw new Error(`Unsupported purchase-order document stage for S3 upload: ${stage}`)
+}
+
 async function uploadPurchaseOrderDocument(params: {
   prisma: Prisma.TransactionClient
   tenant: TenantCode
@@ -400,13 +429,14 @@ async function uploadPurchaseOrderDocument(params: {
 
   const fileName = path.basename(params.filePath)
   const fileBuffer = fs.readFileSync(params.filePath)
+  const s3Stage = toS3PurchaseOrderDocumentStage(params.stage)
   const s3Key = params.s3.generateKey(
     {
       type: 'purchase-order',
       purchaseOrderId: params.purchaseOrderId,
       tenantCode: params.tenant,
       purchaseOrderNumber: params.purchaseOrderNumber,
-      stage: params.stage,
+      stage: s3Stage,
       documentType: params.documentType,
     },
     fileName
