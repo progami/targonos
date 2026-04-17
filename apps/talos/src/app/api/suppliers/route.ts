@@ -229,11 +229,7 @@ export const DELETE = withAuth(async (request, session) => {
           mode: 'insensitive',
         },
         status: {
-          notIn: [
-            PurchaseOrderStatus.CLOSED,
-            PurchaseOrderStatus.CANCELLED,
-            PurchaseOrderStatus.REJECTED,
-          ],
+          notIn: [PurchaseOrderStatus.CANCELLED],
         },
       },
     }),

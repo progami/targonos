@@ -17,7 +17,6 @@ test('permission catalog covers every live Talos authorization code', () => {
       'po.approve.draft_to_manufacturing',
       'po.approve.manufacturing_to_ocean',
       'po.approve.ocean_to_warehouse',
-      'po.approve.warehouse_to_shipped',
       'po.cancel',
       'po.create',
       'po.edit',

@@ -91,13 +91,6 @@ type PurchaseOrderStageData = {
     dutyAmount: number | null
     dutyCurrency: string | null
   }
-  shipped: {
-    shipToName: string | null
-    shippingCarrier: string | null
-    trackingNumber: string | null
-    shippedDate: string | null
-    deliveredDate: string | null
-  }
 }
 
 export interface PurchaseOrderSummary {
@@ -976,7 +969,7 @@ export function PurchaseOrdersPanel({
         break
       }
       default: {
-        // No stage-specific columns for unknown statuses (ex: legacy / shipped)
+        // No stage-specific columns for unknown statuses.
       }
     }
 

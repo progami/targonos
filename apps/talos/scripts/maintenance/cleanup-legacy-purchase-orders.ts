@@ -25,7 +25,6 @@ const LEGACY_STATUSES: PurchaseOrderStatus[] = [
   PurchaseOrderStatus.AWAITING_PROOF,
   PurchaseOrderStatus.REVIEW,
   PurchaseOrderStatus.POSTED,
-  PurchaseOrderStatus.CLOSED,
   PurchaseOrderStatus.ARCHIVED,
 ]
 
@@ -116,7 +115,7 @@ Usage:
 
 Options:
   --tenant=US|UK|ALL        Which tenant(s) to process (default: ALL)
-  --mode=void               Set legacy orders to CANCELLED/CLOSED (default)
+  --mode=void               Set legacy orders to CANCELLED (default)
   --mode=hard-delete        Delete legacy purchase orders after cleanup
   --limit=N                 Process at most N orders per tenant (default: unlimited)
   --apply                   Apply changes (default: dry-run)
@@ -184,12 +183,10 @@ async function runTenant(tenant: TenantCode, options: ScriptOptions) {
         if (!current) return
 
         const previousStatus = current.status as PurchaseOrderStatus
-        const isPosted = previousStatus === PurchaseOrderStatus.POSTED
-
         if (options.mode === 'void') {
-          const targetStatus = isPosted ? PurchaseOrderStatus.CLOSED : PurchaseOrderStatus.CANCELLED
+          const targetStatus = PurchaseOrderStatus.CANCELLED
 
-          if (!isPosted) {
+          if (previousStatus !== PurchaseOrderStatus.POSTED) {
             await tx.inventoryTransaction.deleteMany({
               where: { purchaseOrderId: order.id },
             })
@@ -206,14 +203,14 @@ async function runTenant(tenant: TenantCode, options: ScriptOptions) {
             where: { id: order.id },
             data: {
               status: targetStatus,
-              postedAt: targetStatus === PurchaseOrderStatus.CLOSED ? current.postedAt : null,
+              postedAt: current.postedAt,
             },
           })
           return
         }
 
         if (options.mode === 'hard-delete') {
-          if (!isPosted) {
+          if (previousStatus !== PurchaseOrderStatus.POSTED) {
             await tx.inventoryTransaction.deleteMany({
               where: { purchaseOrderId: order.id },
             })

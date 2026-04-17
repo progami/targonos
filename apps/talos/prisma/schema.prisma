@@ -995,15 +995,11 @@ enum PurchaseOrderStatus {
   CANCELLED
   ARCHIVED
 
-  // Legacy status compatibility values retained for current Talos compile/read support.
-  // These cannot be removed until reviewed legacy resolution and broader read cleanup land.
+  // Non-terminal compatibility values retained for read normalization and older flows.
   RFQ
-  SHIPPED
-  REJECTED
   AWAITING_PROOF
   REVIEW
   POSTED
-  CLOSED
 
   @@map("PurchaseOrderStatus")
 }
@@ -1066,12 +1062,12 @@ enum OutboundShipMode {
 }
 
 enum PurchaseOrderDocumentStage {
+  DRAFT // Dormant compatibility only. Active Talos uploads start at ISSUED.
   RFQ
   ISSUED
   MANUFACTURING
   OCEAN
   WAREHOUSE
-  SHIPPED // Legacy outbound document-stage compatibility only
 
   @@map("PurchaseOrderDocumentStage")
 }

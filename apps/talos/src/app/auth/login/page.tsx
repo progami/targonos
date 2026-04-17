@@ -4,12 +4,9 @@ import { auth } from '@/lib/auth'
 import { portalOrigin } from '@/lib/portal'
 import { withoutBasePath } from '@/lib/utils/base-path'
 
-type SearchParamsInput =
- | { callbackUrl?: string }
- | Promise<{ callbackUrl?: string } | undefined>
- | undefined
+type SearchParamsInput = Promise<{ callbackUrl?: string } | undefined>
 
-export default async function LoginPage({ searchParams }: { searchParams?: SearchParamsInput }) {
+export default async function LoginPage({ searchParams }: { searchParams: SearchParamsInput }) {
  const resolved = await Promise.resolve(searchParams)
  const desiredRawInput = typeof resolved?.callbackUrl === 'string' ? resolved.callbackUrl.trim() : ''
  const desiredDefault = '/dashboard'

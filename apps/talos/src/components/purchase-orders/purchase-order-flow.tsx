@@ -79,9 +79,10 @@ import {
   isPurchaseOrderReadOnlyForUi,
   normalizePurchaseOrderWorkflowStatus,
 } from '@/lib/purchase-orders/workflow'
+import { type ActivePurchaseOrderDocumentStage } from '@/lib/purchase-orders/document-stages'
 
 // 5-Stage State Machine Types
-type POStageStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED' | 'CANCELLED'
+type POStageStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'CANCELLED'
 
 interface PurchaseOrderLineSummary {
   id: string
@@ -266,23 +267,6 @@ interface StageData {
     transactionCertificate: string | null
     customsDeclaration: string | null
   }
-  shipped: {
-    shipToName: string | null
-    shipToAddress: string | null
-    shipToCity: string | null
-    shipToCountry: string | null
-    shipToPostalCode: string | null
-    shippingCarrier: string | null
-    shippingMethod: string | null
-    trackingNumber: string | null
-    shippedDate: string | null
-    proofOfDeliveryRef: string | null
-    deliveredDate: string | null
-    // Legacy
-    proofOfDelivery: string | null
-    shippedAt: string | null
-    shippedBy: string | null
-  }
 }
 
 interface ProformaInvoiceSummary {
@@ -349,11 +333,9 @@ type SplitGroupOrderSummary = {
   createdAt: string
 }
 
-type PurchaseOrderDocumentStage = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED'
-
 interface PurchaseOrderDocumentSummary {
   id: string
-  stage: PurchaseOrderDocumentStage
+  stage: ActivePurchaseOrderDocumentStage
   documentType: string
   fileName: string
   contentType: string
@@ -439,7 +421,7 @@ function formatCurrencySummary(amounts: Partial<Record<PoCostCurrency, number>>)
 }
 
 const STAGE_DOCUMENTS: Record<
-  Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
+  ActivePurchaseOrderDocumentStage,
   Array<{ id: string; label: string }>
 > = {
   ISSUED: [],
@@ -458,7 +440,7 @@ const STAGE_DOCUMENTS: Record<
 }
 
 function getStageDocuments(
-  stage: Exclude<PurchaseOrderDocumentStage, 'SHIPPED'>,
+  stage: ActivePurchaseOrderDocumentStage,
   lines: PurchaseOrderLineSummary[]
 ): Array<{ id: string; label: string }> {
   if (stage === 'ISSUED') {
@@ -473,14 +455,13 @@ function getStageDocuments(
 }
 
 const DOCUMENT_STAGE_META: Record<
-  PurchaseOrderDocumentStage,
+  ActivePurchaseOrderDocumentStage,
   { label: string; icon: ComponentType<{ className?: string }> }
 > = {
   ISSUED: { label: 'Issued', icon: Send },
   MANUFACTURING: { label: 'Manufacturing', icon: Factory },
   OCEAN: { label: 'Transit', icon: Ship },
   WAREHOUSE: { label: 'Warehouse', icon: Warehouse },
-  SHIPPED: { label: 'Shipped', icon: Package2 },
 }
 
 function formatDocumentTypeFallback(documentType: string) {
@@ -499,17 +480,57 @@ function buildPiDocumentType(piNumber: string): string {
 }
 
 function getDocumentLabel(
-  stage: PurchaseOrderDocumentStage,
+  stage: ActivePurchaseOrderDocumentStage,
   documentType: string,
   lines?: PurchaseOrderLineSummary[]
 ) {
-  if (stage !== 'SHIPPED') {
-    const required = lines ? getStageDocuments(stage, lines) : (STAGE_DOCUMENTS[stage] ?? [])
-    const match = required.find(candidate => candidate.id === documentType)
-    if (match) return match.label
-  }
+  const required = lines ? getStageDocuments(stage, lines) : STAGE_DOCUMENTS[stage]
+  const match = required.find(candidate => candidate.id === documentType)
+  if (match) return match.label
 
   return formatDocumentTypeFallback(documentType)
+}
+
+function getActiveDocumentStage(
+  order: Pick<PurchaseOrderSummary, 'stageData'>,
+  activeViewStage: POStageStatus
+): ActivePurchaseOrderDocumentStage {
+  if (activeViewStage !== 'CANCELLED') {
+    return activeViewStage
+  }
+
+  const warehouse = order.stageData.warehouse
+  if (
+    warehouse.warehouseCode ||
+    warehouse.receivedDate ||
+    warehouse.customsEntryNumber ||
+    warehouse.customsClearedDate
+  ) {
+    return 'WAREHOUSE'
+  }
+
+  const ocean = order.stageData.ocean
+  if (
+    ocean.houseBillOfLading ||
+    ocean.commercialInvoiceNumber ||
+    ocean.packingListRef ||
+    ocean.vesselName ||
+    ocean.portOfLoading ||
+    ocean.portOfDischarge
+  ) {
+    return 'OCEAN'
+  }
+
+  const manufacturing = order.stageData.manufacturing
+  if (
+    manufacturing.proformaInvoiceNumber ||
+    manufacturing.factoryName ||
+    manufacturing.manufacturingStartDate
+  ) {
+    return 'MANUFACTURING'
+  }
+
+  return 'ISSUED'
 }
 
 // Stage configuration
@@ -534,7 +555,7 @@ const INCOTERMS_OPTIONS = [
 ] as const
 
 function formatStatusLabel(status: POStageStatus) {
-  return PO_STATUS_LABELS[status] ?? status
+  return PO_STATUS_LABELS[status]
 }
 
 function formatDate(value: string | null) {
@@ -1000,7 +1021,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   }>({ open: false, type: null, title: '', message: '', lineId: null })
 
   // Stage-based navigation - which stage view is currently selected
-  const [selectedStageView, setSelectedStageView] = useState<string | null>(null)
+  const [selectedStageView, setSelectedStageView] = useState<POStageStatus | null>(null)
   const [inlinePreviewDocument, setInlinePreviewDocument] =
     useState<PurchaseOrderDocumentSummary | null>(null)
   const [previewDocument, setPreviewDocument] = useState<PurchaseOrderDocumentSummary | null>(null)
@@ -1770,7 +1791,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
   const handleDocumentUpload = useCallback(
     async (
       event: ChangeEvent<HTMLInputElement>,
-      stage: PurchaseOrderDocumentStage,
+      stage: ActivePurchaseOrderDocumentStage,
       documentType: string
     ) => {
       const orderId = order?.id
@@ -2670,9 +2691,8 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
     GBP: forwardingSubtotalByCurrency.GBP,
   }
   const isTerminalStatus = order
-    ? normalizePurchaseOrderWorkflowStatus(order.status) === 'CANCELLED' || order.status === 'SHIPPED'
+    ? normalizePurchaseOrderWorkflowStatus(order.status) === 'CANCELLED'
     : false
-  const isLegacyShipmentOrder = order ? order.status === 'SHIPPED' : false
   const isReadOnly = order
     ? isPurchaseOrderReadOnlyForUi({
         status: order.status,
@@ -3172,7 +3192,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                                 </Link>
                               )}
                               <Badge variant="outline" className="text-[10px]">
-                                {formatStatusLabel(member.status)}
+                                {formatStatusLabel(getPurchaseOrderDisplayStatus(member.status))}
                               </Badge>
                             </div>
                           )
@@ -3300,9 +3320,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
               <p className="text-sm text-slate-700 dark:text-slate-300">
                 {order.postedAt
                   ? 'This order has been posted and is read-only.'
-                  : isLegacyShipmentOrder
-                    ? 'This legacy shipment order is read-only.'
-                    : 'This order is cancelled and cannot be modified.'}
+                  : 'This order is cancelled and cannot be modified.'}
               </p>
             </div>
           )}
@@ -4969,15 +4987,9 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                   ) : (
                     (() => {
                       if (!order) return null
-                      const stage = activeViewStage as PurchaseOrderDocumentStage
-                      const stageKey = stage as keyof typeof STAGE_DOCUMENTS
+                      const stage = getActiveDocumentStage(order, activeViewStage)
                       const canUpload = !isReadOnly
-                      const stageDocs = documents.filter(doc => {
-                        if (doc.stage === stage) return true
-                        if (stage !== 'WAREHOUSE') return false
-                        if (!isLegacyShipmentOrder) return false
-                        return doc.stage === 'SHIPPED'
-                      })
+                      const stageDocs = documents.filter(doc => doc.stage === stage)
                       const docsByType = new Map(stageDocs.map(doc => [doc.documentType, doc]))
                       const issuedPiNumbers =
                         stage === 'ISSUED'
@@ -5033,7 +5045,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           ]
                         }
 
-                        const requiredDocs = getStageDocuments(stageKey, order.lines)
+                        const requiredDocs = getStageDocuments(stage, order.lines)
                         const requiredIds = new Set(requiredDocs.map(doc => doc.id))
                         const otherDocs = stageDocs.filter(
                           doc => !requiredIds.has(doc.documentType)
@@ -5049,7 +5061,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                           })),
                           ...otherDocs.map(doc => ({
                             id: doc.documentType,
-                            label: getDocumentLabel(doc.stage as PurchaseOrderDocumentStage, doc.documentType),
+                            label: getDocumentLabel(doc.stage, doc.documentType),
                             required: false,
                             doc,
                             gateKey: `documents.${doc.documentType}`,
@@ -7681,86 +7693,6 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
                               )}
                             </>
                           )}
-                        </div>
-                      )
-                    })()}
-
-                    {/* Shipped Section */}
-                    {(() => {
-                      if (!isLegacyShipmentOrder || activeViewStage !== 'WAREHOUSE') return null
-                      const shipped = order.stageData.shipped
-                      const hasData =
-                        shipped?.shipToName ||
-                        shipped?.shippingCarrier ||
-                        shipped?.trackingNumber ||
-                        shipped?.shippedDate
-                      if (!hasData) return null
-                      return (
-                        <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-                          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                            Legacy Shipment
-                          </h4>
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3 lg:grid-cols-4">
-                            <div className="space-y-1 col-span-2">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Ship To
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(
-                                  [
-                                    shipped?.shipToName,
-                                    shipped?.shipToAddress,
-                                    shipped?.shipToCity,
-                                    shipped?.shipToCountry,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(', ')
-                                )}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Carrier
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(shipped?.shippingCarrier)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Method
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(shipped?.shippingMethod)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Tracking
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(shipped?.trackingNumber)}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Shipped Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(
-                                  formatDateOnly(shipped?.shippedDate ?? shipped?.shippedAt ?? null)
-                                )}
-                              </p>
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                                Delivered Date
-                              </p>
-                              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                                {formatTextOrDash(formatDateOnly(shipped?.deliveredDate ?? null))}
-                              </p>
-                            </div>
-                          </div>
                         </div>
                       )
                     })()}

@@ -52,6 +52,7 @@ import {
   toPurchaseOrderTotalCostNumberOrNull,
 } from '@/lib/purchase-order-line-costs'
 import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
+import { resolvePurchaseOrderDestination } from '@/lib/purchase-orders/destination'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import {
   formatDimensionTripletDisplayFromCm,
@@ -124,28 +125,10 @@ type WarehouseStageData = {
   customsDeclaration: PurchaseOrder['customsDeclaration']
 }
 
-type ShippedStageData = {
-  shipToName: PurchaseOrder['shipToName']
-  shipToAddress: PurchaseOrder['shipToAddress']
-  shipToCity: PurchaseOrder['shipToCity']
-  shipToCountry: PurchaseOrder['shipToCountry']
-  shipToPostalCode: PurchaseOrder['shipToPostalCode']
-  shippingCarrier: PurchaseOrder['shippingCarrier']
-  shippingMethod: PurchaseOrder['shippingMethod']
-  trackingNumber: PurchaseOrder['trackingNumber']
-  shippedDate: PurchaseOrder['shippedDate']
-  proofOfDeliveryRef: PurchaseOrder['proofOfDeliveryRef']
-  deliveredDate: PurchaseOrder['deliveredDate']
-  proofOfDelivery: PurchaseOrder['proofOfDelivery']
-  shippedAt: PurchaseOrder['shippedAt']
-  shippedBy: PurchaseOrder['shippedByName']
-}
-
 type StageData = {
   manufacturing: ManufacturingStageData
   ocean: OceanStageData
   warehouse: WarehouseStageData
-  shipped: ShippedStageData
 }
 
 type SerializedStageSection<T> = {
@@ -172,9 +155,7 @@ export const VALID_TRANSITIONS: Partial<Record<PurchaseOrderStatus, PurchaseOrde
   MANUFACTURING: [PurchaseOrderStatus.OCEAN, PurchaseOrderStatus.CANCELLED],
   OCEAN: [PurchaseOrderStatus.WAREHOUSE, PurchaseOrderStatus.CANCELLED],
   WAREHOUSE: [PurchaseOrderStatus.CANCELLED],
-  SHIPPED: [], // Terminal state
   CANCELLED: [], // Terminal state
-  CLOSED: [], // Terminal state
 }
 
 function normalizeWorkflowStatus(status: PurchaseOrderStatus): PurchaseOrderStatus {
@@ -1869,12 +1850,6 @@ export async function transitionPurchaseOrderStage(
   const currentStatus = normalizeWorkflowStatus(rawStatus)
   const isInPlaceUpdate = targetStatus === currentStatus
 
-  if (!isInPlaceUpdate && targetStatus === PurchaseOrderStatus.SHIPPED) {
-    throw new ValidationError(
-      'Purchase orders no longer ship inventory. Create a fulfillment order to ship stock.'
-    )
-  }
-
   if (!isInPlaceUpdate && !isValidTransition(currentStatus, targetStatus)) {
     const validTargets = getValidNextStages(currentStatus)
     throw new ValidationError(
@@ -3518,6 +3493,13 @@ export async function generatePurchaseOrderShippingMarks(params: {
     supplierCountry = deriveSupplierCountry(supplier ? supplier.address : null)
   }
 
+  const warehouse = order.warehouseCode
+    ? await prisma.warehouse.findUnique({
+        where: { code: order.warehouseCode },
+        select: { name: true, address: true },
+      })
+    : null
+
   if (activeLines.length === 0) {
     recordGateIssue(issues, 'cargo.lines', 'At least one cargo line is required')
   }
@@ -3612,8 +3594,23 @@ export async function generatePurchaseOrderShippingMarks(params: {
   })
 
   const poNumber = order.poNumber ? escapeHtml(order.poNumber) : ''
-  const consignee = order.shipToName ? escapeHtml(order.shipToName) : ''
-  const destination = [order.shipToCity, order.shipToCountry].filter(Boolean).join(', ')
+  const destinationDetails = resolvePurchaseOrderDestination(
+    {
+      warehouseName: order.warehouseName,
+      shipToName: order.shipToName,
+      shipToAddress: order.shipToAddress,
+    },
+    warehouse
+  )
+  const consigneeSource = destinationDetails.name
+  const consignee =
+    typeof consigneeSource === 'string' && consigneeSource.trim().length > 0
+      ? escapeHtml(consigneeSource.trim())
+      : ''
+  const destination =
+    typeof destinationDetails.address === 'string'
+      ? destinationDetails.address.replace(/\r?\n/g, ', ')
+      : ''
   const portOfDischarge = order.portOfDischarge ? escapeHtml(order.portOfDischarge) : ''
 
   const labels = activeLines.map(line => {
@@ -3857,23 +3854,6 @@ export function getStageData(order: PurchaseOrder): StageData {
       transactionCertificate: order.transactionCertificate,
       customsDeclaration: order.customsDeclaration,
     },
-    shipped: {
-      shipToName: order.shipToName,
-      shipToAddress: order.shipToAddress,
-      shipToCity: order.shipToCity,
-      shipToCountry: order.shipToCountry,
-      shipToPostalCode: order.shipToPostalCode,
-      shippingCarrier: order.shippingCarrier,
-      shippingMethod: order.shippingMethod,
-      trackingNumber: order.trackingNumber,
-      shippedDate: order.shippedDate,
-      proofOfDeliveryRef: order.proofOfDeliveryRef,
-      deliveredDate: order.deliveredDate,
-      // Legacy
-      proofOfDelivery: order.proofOfDelivery,
-      shippedAt: order.shippedAt,
-      shippedBy: order.shippedByName,
-    },
   }
 }
 
@@ -3913,13 +3893,6 @@ function serializeStageData(data: StageData): SerializedStageData {
       customsClearedDate: serializeDate(data.warehouse.customsClearedDate),
       surrenderBlDate: serializeDate(data.warehouse.surrenderBlDate),
       receivedDate: serializeDate(data.warehouse.receivedDate),
-    },
-    shipped: {
-      ...data.shipped,
-      shippedDate: serializeDate(data.shipped.shippedDate),
-      deliveredDate: serializeDate(data.shipped.deliveredDate),
-      // Legacy
-      shippedAt: serializeDate(data.shipped.shippedAt),
     },
   }
 }
