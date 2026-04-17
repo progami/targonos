@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 
 type SearchParamValue = string | string[] | undefined
 type SearchParams = Record<string, SearchParamValue>
+type SearchParamsInput = Promise<SearchParams | undefined>
 
 function serializeSearchParams(searchParams: SearchParams) {
   const params = new URLSearchParams()
@@ -17,12 +18,13 @@ function serializeSearchParams(searchParams: SearchParams) {
   return params.toString()
 }
 
-export default function OrdersRedirectPage({
-  searchParams = {},
+export default async function OrdersRedirectPage({
+  searchParams,
 }: {
-  searchParams?: SearchParams
+  searchParams: SearchParamsInput
 }) {
-  const queryString = serializeSearchParams(searchParams)
+  const resolvedSearchParams = (await Promise.resolve(searchParams)) ?? {}
+  const queryString = serializeSearchParams(resolvedSearchParams)
   const target = queryString
     ? `/operations/purchase-orders?${queryString}`
     : '/operations/purchase-orders'

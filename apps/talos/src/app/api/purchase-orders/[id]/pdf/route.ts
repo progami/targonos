@@ -5,6 +5,7 @@ import { getPurchaseOrderById } from '@/lib/services/purchase-order-service'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { getCurrentTenant, getTenantPrisma } from '@/lib/tenant/server'
 import { BUYER_LEGAL_ENTITY, getBuyerVatNumber } from '@/lib/config/legal-entity'
+import { resolvePurchaseOrderDestination } from '@/lib/purchase-orders/destination'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -114,8 +115,8 @@ function renderOrderDocumentHtml(params: {
   inspectionDate?: Date | null
   incoterms?: string | null
   paymentTerms?: string | null
-  shipToName?: string | null
-  shipToAddress?: string | null
+  destinationName?: string | null
+  destinationAddress?: string | null
   notes?: string | null
   lines: Array<{
     skuCode: string
@@ -189,15 +190,15 @@ function renderOrderDocumentHtml(params: {
     return normalizedLines
   }
 
-  const shipToName = params.shipToName && params.shipToName.trim().length > 0
-    ? params.shipToName
+  const destinationName = params.destinationName && params.destinationName.trim().length > 0
+    ? params.destinationName
     : params.buyerName
 
-  const shipToAddressHtml = (() => {
+  const destinationAddressHtml = (() => {
     const lines: string[] = []
 
-    if (params.shipToAddress && params.shipToAddress.trim().length > 0) {
-      lines.push(...normalizeAddressLines(params.shipToAddress, shipToName))
+    if (params.destinationAddress && params.destinationAddress.trim().length > 0) {
+      lines.push(...normalizeAddressLines(params.destinationAddress, destinationName))
     } else {
       const line1 = buyerAddressLines.slice(0, 2).join(', ')
       if (line1) lines.push(line1)
@@ -699,8 +700,8 @@ function renderOrderDocumentHtml(params: {
         </div>
         <div class="party">
           <div class="party-label">Ship To</div>
-          <div class="party-name">${escapeHtml(shipToName)}</div>
-          <div class="party-address">${shipToAddressHtml}</div>
+          <div class="party-name">${escapeHtml(destinationName)}</div>
+          <div class="party-address">${destinationAddressHtml}</div>
         </div>
       </div>
 
@@ -840,6 +841,20 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
 
   const tenant = await getCurrentTenant()
   const buyerVatNumber = getBuyerVatNumber(tenant.code)
+  const destinationWarehouse = order.warehouseCode
+    ? await prisma.warehouse.findUnique({
+        where: { code: order.warehouseCode },
+        select: { name: true, address: true },
+      })
+    : null
+  const destination = resolvePurchaseOrderDestination(
+    {
+      warehouseName: order.warehouseName,
+      shipToName: order.shipToName,
+      shipToAddress: order.shipToAddress,
+    },
+    destinationWarehouse
+  )
 
   const documentNumber = toPublicOrderNumber(order.poNumber ?? order.orderNumber)
 
@@ -914,8 +929,8 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     expectedDate: order.expectedDate,
     incoterms: order.incoterms,
     paymentTerms: order.paymentTerms,
-    shipToName: order.shipToName,
-    shipToAddress: order.shipToAddress ?? null,
+    destinationName: destination.name,
+    destinationAddress: destination.address,
     notes: order.notes,
     lines,
   })

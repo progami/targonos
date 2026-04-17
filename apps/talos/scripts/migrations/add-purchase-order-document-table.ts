@@ -94,7 +94,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           WHERE n.nspname = current_schema()
             AND t.typname = 'PurchaseOrderDocumentStage'
         ) THEN
-          EXECUTE 'CREATE TYPE "PurchaseOrderDocumentStage" AS ENUM (''DRAFT'', ''ISSUED'', ''MANUFACTURING'', ''OCEAN'', ''WAREHOUSE'', ''SHIPPED'')';
+          EXECUTE 'CREATE TYPE "PurchaseOrderDocumentStage" AS ENUM (''DRAFT'', ''ISSUED'', ''MANUFACTURING'', ''OCEAN'', ''WAREHOUSE'')';
         END IF;
       END $$;
     `,

@@ -6,10 +6,17 @@ import { getS3Service } from '@/services/s3.service'
 import { validateFile, scanFileContent } from '@/lib/security/file-upload'
 import { auditLog } from '@/lib/security/audit-logger'
 import { enforceCrossTenantManufacturingOnlyForPurchaseOrder } from '@/lib/services/purchase-order-cross-tenant-access'
-import { PurchaseOrderDocumentStage, Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
+import { Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
 import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
 import { ApiResponses } from '@/lib/api'
 import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
+import {
+  getActivePurchaseOrderDocumentStageFromStoredStage,
+  getPurchaseOrderDocumentStageForStatus,
+  parseActivePurchaseOrderDocumentStage,
+  PURCHASE_ORDER_DOCUMENT_STAGE_ORDER,
+  type ActivePurchaseOrderDocumentStage,
+} from '@/lib/purchase-orders/document-stages'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
@@ -17,48 +24,12 @@ export const maxDuration = 300 // 5 minutes for large file uploads (up to 1GB)
 const MAX_DOCUMENT_SIZE_MB = 1024
 const DISABLE_PO_DOCUMENT_STAGE_LOCK = process.env.TALOS_DISABLE_PO_DOCUMENT_STAGE_LOCK === 'true'
 
-const STAGES: readonly PurchaseOrderDocumentStage[] = [
-  'ISSUED',
-  'MANUFACTURING',
-  'OCEAN',
-  'WAREHOUSE',
-  'SHIPPED',
-]
-
-const DOCUMENT_STAGE_ORDER: Record<PurchaseOrderDocumentStage, number> = {
-  RFQ: 0, // Legacy; treat as ISSUED
-  ISSUED: 0,
-  MANUFACTURING: 1,
-  OCEAN: 2,
-  WAREHOUSE: 3,
-  SHIPPED: 4,
+function statusToDocumentStage(status: PurchaseOrderStatus): ActivePurchaseOrderDocumentStage | null {
+  return getPurchaseOrderDocumentStageForStatus(status)
 }
 
-function statusToDocumentStage(status: PurchaseOrderStatus): PurchaseOrderDocumentStage | null {
-  switch (status) {
-    case PurchaseOrderStatus.RFQ:
-      return PurchaseOrderDocumentStage.ISSUED
-    case PurchaseOrderStatus.ISSUED:
-      return PurchaseOrderDocumentStage.ISSUED
-    case PurchaseOrderStatus.MANUFACTURING:
-      return PurchaseOrderDocumentStage.MANUFACTURING
-    case PurchaseOrderStatus.OCEAN:
-      return PurchaseOrderDocumentStage.OCEAN
-    case PurchaseOrderStatus.WAREHOUSE:
-      return PurchaseOrderDocumentStage.WAREHOUSE
-    case PurchaseOrderStatus.SHIPPED:
-      return PurchaseOrderDocumentStage.SHIPPED
-    default:
-      return null
-  }
-}
-
-function parseStage(value: unknown): PurchaseOrderDocumentStage | null {
-  if (typeof value !== 'string') return null
-  const trimmed = value.trim()
-  return (STAGES as readonly string[]).includes(trimmed)
-    ? (trimmed as PurchaseOrderDocumentStage)
-    : null
+function parseStage(value: unknown): ActivePurchaseOrderDocumentStage | null {
+  return parseActivePurchaseOrderDocumentStage(value)
 }
 
 function parseDocumentType(value: unknown): string | null {
@@ -74,7 +45,7 @@ function parseDocumentType(value: unknown): string | null {
 
 export const POST = withAuthAndParams(async (request, params, session) => {
   let purchaseOrderId: string | null = null
-  let stage: PurchaseOrderDocumentStage | null = null
+  let stage: ActivePurchaseOrderDocumentStage | null = null
   let documentType: string | null = null
   let fileName: string | null = null
   let fileType: string | null = null
@@ -192,7 +163,12 @@ export const POST = withAuthAndParams(async (request, params, session) => {
 
     if (!DISABLE_PO_DOCUMENT_STAGE_LOCK) {
       const currentStage = statusToDocumentStage(order.status as PurchaseOrderStatus)
-      if (currentStage && stage && DOCUMENT_STAGE_ORDER[stage] < DOCUMENT_STAGE_ORDER[currentStage]) {
+      if (
+        currentStage &&
+        stage &&
+        PURCHASE_ORDER_DOCUMENT_STAGE_ORDER[stage] <
+          PURCHASE_ORDER_DOCUMENT_STAGE_ORDER[currentStage]
+      ) {
         return NextResponse.json(
           { error: `Documents for completed stages are locked (current stage: ${order.status})` },
           { status: 409 }
@@ -257,7 +233,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
           purchaseOrderId: id,
           tenantCode,
           purchaseOrderNumber,
-          stage: stage as PurchaseOrderDocumentStage,
+          stage,
           documentType: documentType as string,
         },
         (file as File).name
@@ -269,7 +245,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
           purchaseOrderId: id,
           tenantCode,
           purchaseOrderNumber,
-          stage: stage as PurchaseOrderDocumentStage,
+          stage,
           documentType: documentType as string,
           uploadedBy: session.user.id,
         },
@@ -284,7 +260,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
     const compositeKey = {
       purchaseOrderId_stage_documentType: {
         purchaseOrderId: id,
-        stage: stage as PurchaseOrderDocumentStage,
+        stage,
         documentType: documentType as string,
       },
     }
@@ -316,7 +292,7 @@ export const POST = withAuthAndParams(async (request, params, session) => {
       where: compositeKey,
       create: {
         purchaseOrderId: id,
-        stage: stage as PurchaseOrderDocumentStage,
+        stage,
         documentType: documentType as string,
         fileName: fileName as string,
         contentType: fileType as string,
@@ -445,7 +421,7 @@ export const GET = withAuthAndParams(async (request, params, _session) => {
 
         return {
           id: doc.id,
-          stage: doc.stage === PurchaseOrderDocumentStage.RFQ ? PurchaseOrderDocumentStage.ISSUED : doc.stage,
+          stage: getActivePurchaseOrderDocumentStageFromStoredStage(doc.stage),
           documentType: doc.documentType,
           fileName: doc.fileName,
           contentType: doc.contentType,
