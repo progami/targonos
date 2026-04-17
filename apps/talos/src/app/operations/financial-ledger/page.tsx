@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FinancialLedgerCategory } from '@targon/prisma-talos'
 import { useSession } from '@/hooks/usePortalSession'
 import { useRouter } from 'next/navigation'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
@@ -13,6 +12,7 @@ import { toast } from 'react-hot-toast'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import {
+  FINANCIAL_LEDGER_CATEGORIES,
   buildFinancialLedgerQueryString,
   createDefaultFinancialLedgerFilters,
 } from '@/lib/financial/financial-ledger-filters'
@@ -45,10 +45,6 @@ type WarehouseOption = {
   code: string
   name: string
 }
-
-const FINANCIAL_LEDGER_CATEGORIES = Object.values(FinancialLedgerCategory).sort((left, right) =>
-  left.localeCompare(right)
-)
 
 function formatLedgerAmount(amount: number, currency: string): string {
   return new Intl.NumberFormat('en-GB', {

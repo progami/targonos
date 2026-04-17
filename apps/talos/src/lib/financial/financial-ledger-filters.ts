@@ -5,6 +5,19 @@ export type FinancialLedgerFilters = {
   category: string
 }
 
+export const FINANCIAL_LEDGER_CATEGORIES = [
+  'Adjustment',
+  'Duty',
+  'Forwarding',
+  'Inbound',
+  'Other',
+  'Outbound',
+  'Product',
+  'Storage',
+  'SupplierCredit',
+  'SupplierDebit',
+] as const
+
 export function createDefaultFinancialLedgerFilters(): FinancialLedgerFilters {
   return {
     startDate: '',
