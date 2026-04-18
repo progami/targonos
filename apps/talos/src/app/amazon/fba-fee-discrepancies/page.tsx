@@ -38,9 +38,16 @@ const PAGE_KEY = '/amazon/fba-fee-discrepancies'
 const SKUS_PER_PAGE = 10
 
 const ALLOWED_ROLES = ['admin', 'staff'] as const
-function formatFee(value: number | string | null | undefined, currency: string) {
+function formatFee(value: unknown, currency: string) {
   if (value === null || value === undefined || value === '') return '—'
-  const amount = typeof value === 'number' ? value : Number.parseFloat(value)
+  let amount = Number.NaN
+  if (typeof value === 'number') {
+    amount = value
+  } else if (typeof value === 'string') {
+    amount = Number.parseFloat(value)
+  } else if (typeof value === 'object' && value !== null && 'toString' in value) {
+    amount = Number.parseFloat(String(value))
+  }
   if (!Number.isFinite(amount)) return '—'
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -75,6 +82,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   const [loading, setLoading] = useState(false)
   const [skus, setSkus] = useState<ApiSkuRow[]>([])
   const [currencyCode, setCurrencyCode] = useState<string>('USD')
+  const [totalRows, setTotalRows] = useState(0)
   const search = pageState.search ?? ''
   const setSearch = pageState.setSearch
   const statusFilter = (pageState.custom?.statusFilter as AlertStatus | 'ALL') ?? 'ALL'
@@ -107,6 +115,8 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     try {
       const params = new URLSearchParams()
       if (search.trim()) params.set('search', search.trim())
+      params.set('page', String(currentPage))
+      params.set('pageSize', String(SKUS_PER_PAGE))
 
       const response = await fetch(withBasePath(`/api/amazon/fba-fee-discrepancies?${params.toString()}`), {
         credentials: 'include',
@@ -119,19 +129,31 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       const payload = await response.json()
       setCurrencyCode(payload?.currencyCode ?? 'USD')
       setSkus(Array.isArray(payload?.skus) ? payload.skus : [])
+      setTotalRows(typeof payload?.total === 'number' ? payload.total : 0)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to load fee discrepancies')
       setSkus([])
+      setTotalRows(0)
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [currentPage, search])
 
   useEffect(() => {
     if (status !== 'loading' && session && isAllowed) {
       void fetchRows()
     }
   }, [fetchRows, isAllowed, session, status])
+
+  useEffect(() => {
+    pageState.setPagination(1, SKUS_PER_PAGE)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on search change
+  }, [search])
+
+  useEffect(() => {
+    pageState.setPagination(1, SKUS_PER_PAGE)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on filter change
+  }, [statusFilter])
 
   const computedRows = useMemo(() => {
     return skus.map(sku => ({
@@ -140,22 +162,11 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     }))
   }, [skus, tenantCode])
 
-  const filteredRows = useMemo(() => {
+  const pageRows = useMemo(() => {
     if (statusFilter === 'ALL') return computedRows
     return computedRows.filter(row => row.comparison.status === statusFilter)
   }, [computedRows, statusFilter])
-
-  // Reset to page 1 when filter changes
-  useEffect(() => {
-    pageState.setPagination(1, SKUS_PER_PAGE)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on filter change
-  }, [statusFilter])
-
-  const totalPages = Math.ceil(filteredRows.length / SKUS_PER_PAGE)
-  const paginatedRows = useMemo(() => {
-    const start = (currentPage - 1) * SKUS_PER_PAGE
-    return filteredRows.slice(start, start + SKUS_PER_PAGE)
-  }, [filteredRows, currentPage])
+  const totalPages = Math.max(1, Math.ceil(totalRows / SKUS_PER_PAGE))
 
   const summary = useMemo(() => {
     const counts = { mismatch: 0, match: 0, warning: 0, pending: 0 }
@@ -222,12 +233,12 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
               </select>
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-red-600 dark:text-red-400">{summary.mismatch} discrepancies</span>
+              <span className="text-red-600 dark:text-red-400">{summary.mismatch} discrepancies on this page</span>
               <span className="text-emerald-600 dark:text-emerald-400">{summary.match} matches</span>
               <span className="text-amber-600 dark:text-amber-400">{summary.warning} warnings</span>
               <span>{summary.pending} pending</span>
               <span className="text-slate-400 dark:text-slate-500">·</span>
-              <span>{filteredRows.length} SKUs · Page {currentPage} of {totalPages || 1}</span>
+              <span>{pageRows.length} shown · {totalRows} total SKUs · Page {currentPage} of {totalPages}</span>
             </div>
           </div>
 
@@ -236,9 +247,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
             <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
             </div>
-          ) : paginatedRows.length === 0 ? (
+          ) : pageRows.length === 0 ? (
             <div className="px-6 py-16">
-              <EmptyState title="No SKUs found" description="Try adjusting your search or filter." icon={DollarSign} />
+              <EmptyState title="No SKUs found" description="Try adjusting your search, page, or filter." icon={DollarSign} />
             </div>
           ) : (
             <div className="overflow-x-auto p-4">
@@ -246,7 +257,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     <th className="px-4 py-3 sticky left-0 bg-slate-50/80 dark:bg-slate-900/80 z-10">Attribute</th>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <th key={row.sku.id} className="px-4 py-3 text-center whitespace-nowrap min-w-[140px]">
                         <Link 
                           href={`/config/products?editSkuId=${encodeURIComponent(row.sku.id)}`}
@@ -262,7 +273,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   {/* Reference section header */}
                   <tr>
                     <td
-                      colSpan={paginatedRows.length + 1}
+                      colSpan={pageRows.length + 1}
                       className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-cyan-600 dark:bg-cyan-700 text-white"
                     >
                       Reference Data
@@ -270,7 +281,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">ASIN</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center font-mono text-xs text-slate-600 dark:text-slate-400">
                         {row.sku.asin ?? '—'}
                       </td>
@@ -278,7 +289,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatDimensionTripletDisplayFromCm(row.comparison.reference.triplet, unitSystem)}
                       </td>
@@ -286,7 +297,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.reference.shipping.unitWeightKg, unitSystem, 3)}
                       </td>
@@ -294,7 +305,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.reference.shipping.dimensionalWeightKg, unitSystem, 3)}
                       </td>
@@ -302,7 +313,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.reference.shipping.shippingWeightKg, unitSystem, 2)}
                       </td>
@@ -310,7 +321,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Size Tier</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300 text-xs">
                         {row.comparison.reference.sizeTier ?? '—'}
                       </td>
@@ -318,7 +329,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Expected Fee</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 font-medium">
                         {formatFee(row.comparison.reference.expectedFee, currencyCode)}
                       </td>
@@ -328,7 +339,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   {/* Amazon section header */}
                   <tr>
                     <td
-                      colSpan={paginatedRows.length + 1}
+                      colSpan={pageRows.length + 1}
                       className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-600 dark:bg-slate-700 text-white"
                     >
                       Amazon Data
@@ -336,7 +347,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Listing Price</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatFee(row.sku.amazonListingPrice, currencyCode)}
                       </td>
@@ -344,7 +355,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Dimensions</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatDimensionTripletDisplayFromCm(row.comparison.amazon.triplet, unitSystem)}
                       </td>
@@ -352,7 +363,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Package Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.amazon.shipping.unitWeightKg, unitSystem, 3)}
                       </td>
@@ -360,7 +371,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Dimensional Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.amazon.shipping.dimensionalWeightKg, unitSystem, 3)}
                       </td>
@@ -368,7 +379,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Shipping Weight</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs">
                         {formatWeightDisplayFromKg(row.comparison.amazon.shipping.shippingWeightKg, unitSystem, 2)}
                       </td>
@@ -376,7 +387,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Size Tier</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center text-slate-700 dark:text-slate-300 text-xs">
                         {row.comparison.amazon.sizeTier ?? '—'}
                       </td>
@@ -384,7 +395,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">FBA Fee</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 font-medium">
                         {formatFee(row.comparison.amazon.fee, currencyCode)}
                       </td>
@@ -394,7 +405,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   {/* Comparison section header */}
                   <tr>
                     <td
-                      colSpan={paginatedRows.length + 1}
+                      colSpan={pageRows.length + 1}
                       className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                     >
                       Comparison
@@ -402,7 +413,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Fee Difference</td>
-                    {paginatedRows.map(row => (
+                    {pageRows.map(row => (
                       <td key={row.sku.id} className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300">
                         {row.comparison.feeDifference === null
                           ? '—'
@@ -412,7 +423,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">Status</td>
-                    {paginatedRows.map(row => {
+                    {pageRows.map(row => {
                       const s = row.comparison.status
                       const cellStyle =
                         s === 'MATCH'
@@ -444,7 +455,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3">
               <div className="text-xs text-slate-500 dark:text-slate-400">
-                Showing {((currentPage - 1) * SKUS_PER_PAGE) + 1}–{Math.min(currentPage * SKUS_PER_PAGE, filteredRows.length)} of {filteredRows.length} SKUs
+                Showing {((currentPage - 1) * SKUS_PER_PAGE) + 1}–{Math.min((currentPage - 1) * SKUS_PER_PAGE + pageRows.length, totalRows)} of {totalRows} SKUs
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -476,7 +487,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
         </div>
 
         <p className="text-center text-xs text-slate-400">
-          Currency: {currencyCode} · {skus.length} SKUs loaded
+          Currency: {currencyCode} · {pageRows.length} SKUs loaded on this page
         </p>
       </PageContent>
     </PageContainer>
