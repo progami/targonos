@@ -443,6 +443,7 @@ export function POProfitabilitySection({
     Math.abs(dataset.unattributed.cogs) > 0.01 ||
     Math.abs(dataset.unattributed.netProfit) > 0.01 ||
     Math.abs(dataset.unattributed.fixedCosts) > 0.01;
+  const includeUnattributedInTotals = skuFilter === 'ALL' && statusFilter === 'ALL';
 
   // Summary stats
   const summary = useMemo(() => {
@@ -450,8 +451,10 @@ export function POProfitabilitySection({
       return {
         totalUnits: 0,
         totalRevenue: 0,
+        totalAmazonFees: 0,
         totalGrossProfit: 0,
         totalPpc: 0,
+        totalFixedCosts: 0,
         totalProfit: 0,
         totalCogs: 0,
         netMargin: 0,
@@ -459,14 +462,37 @@ export function POProfitabilitySection({
       };
     const totalUnits = filteredData.reduce((sum, row) => sum + row.units, 0);
     const totalRevenue = filteredData.reduce((sum, row) => sum + row.revenue, 0);
+    const totalAmazonFees = filteredData.reduce((sum, row) => sum + row.amazonFees, 0);
     const totalGrossProfit = filteredData.reduce((sum, row) => sum + row.grossProfit, 0);
     const totalPpc = filteredData.reduce((sum, row) => sum + row.ppcSpend, 0);
+    const totalFixedCosts = filteredData.reduce((sum, row) => sum + row.fixedCosts, 0);
     const totalProfit = filteredData.reduce((sum, row) => sum + row.netProfit, 0);
     const totalCogs = filteredData.reduce((sum, row) => sum + row.cogs, 0);
-    const netMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    const roi = totalCogs > 0 ? (totalProfit / totalCogs) * 100 : 0;
-    return { totalUnits, totalRevenue, totalGrossProfit, totalPpc, totalProfit, totalCogs, netMargin, roi };
-  }, [filteredData]);
+    const totals = includeUnattributedInTotals
+      ? {
+          totalUnits: totalUnits + dataset.unattributed.units,
+          totalRevenue: totalRevenue + dataset.unattributed.revenue,
+          totalAmazonFees: totalAmazonFees + dataset.unattributed.amazonFees,
+          totalGrossProfit: totalGrossProfit + dataset.unattributed.grossProfit,
+          totalPpc: totalPpc + dataset.unattributed.ppcSpend,
+          totalFixedCosts: totalFixedCosts + dataset.unattributed.fixedCosts,
+          totalProfit: totalProfit + dataset.unattributed.netProfit,
+          totalCogs: totalCogs + dataset.unattributed.cogs,
+        }
+      : {
+          totalUnits,
+          totalRevenue,
+          totalAmazonFees,
+          totalGrossProfit,
+          totalPpc,
+          totalFixedCosts,
+          totalProfit,
+          totalCogs,
+        };
+    const netMargin = totals.totalRevenue > 0 ? (totals.totalProfit / totals.totalRevenue) * 100 : 0;
+    const roi = totals.totalCogs > 0 ? (totals.totalProfit / totals.totalCogs) * 100 : 0;
+    return { ...totals, netMargin, roi };
+  }, [dataset.unattributed, filteredData, includeUnattributedInTotals]);
 
   if (data.length === 0) {
     return (
@@ -972,7 +998,7 @@ export function POProfitabilitySection({
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-100/50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-600">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.amazonFees, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalAmazonFees, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -987,7 +1013,7 @@ export function POProfitabilitySection({
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-100/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.ppcSpend, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalPpc, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -1061,7 +1087,7 @@ export function POProfitabilitySection({
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.fixedCosts, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalFixedCosts, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 

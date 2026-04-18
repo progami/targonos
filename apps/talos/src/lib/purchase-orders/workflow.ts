@@ -8,7 +8,15 @@ export const ACTIVE_PURCHASE_ORDER_STATUSES = [
   'CANCELLED',
 ] as const
 
-const LEGACY_VISIBLE_PURCHASE_ORDER_STATUSES = ['SHIPPED', 'CLOSED', 'REJECTED'] as const
+const LEGACY_VISIBLE_PURCHASE_ORDER_STATUSES = [
+  'ARCHIVED',
+  'AWAITING_PROOF',
+  'REVIEW',
+  'POSTED',
+  'SHIPPED',
+  'CLOSED',
+  'REJECTED',
+] as const
 
 export const CANCELABLE_PURCHASE_ORDER_STATUSES = [
   'ISSUED',
@@ -20,7 +28,15 @@ export const CANCELABLE_PURCHASE_ORDER_STATUSES = [
 export type ActivePurchaseOrderStatus = (typeof ACTIVE_PURCHASE_ORDER_STATUSES)[number]
 export type TransitionablePurchaseOrderStatus = (typeof CANCELABLE_PURCHASE_ORDER_STATUSES)[number]
 
-const LEGACY_READ_ONLY_PURCHASE_ORDER_STATUSES = new Set(['SHIPPED', 'CLOSED', 'REJECTED'])
+const LEGACY_READ_ONLY_PURCHASE_ORDER_STATUSES = new Set([
+  'ARCHIVED',
+  'AWAITING_PROOF',
+  'REVIEW',
+  'POSTED',
+  'SHIPPED',
+  'CLOSED',
+  'REJECTED',
+])
 
 const VALID_NEXT_PURCHASE_ORDER_STATUSES: Record<
   TransitionablePurchaseOrderStatus,
@@ -59,7 +75,11 @@ export function normalizePurchaseOrderWorkflowStatus(status: string): string {
     return 'ISSUED'
   }
 
-  if (status === 'REJECTED' || status === 'CLOSED') {
+  if (status === 'AWAITING_PROOF' || status === 'REVIEW' || status === 'POSTED' || status === 'SHIPPED') {
+    return 'WAREHOUSE'
+  }
+
+  if (status === 'ARCHIVED' || status === 'REJECTED' || status === 'CLOSED') {
     return 'CANCELLED'
   }
 
@@ -68,10 +88,6 @@ export function normalizePurchaseOrderWorkflowStatus(status: string): string {
 
 export function getPurchaseOrderDisplayStatus(status: string): ActivePurchaseOrderStatus {
   const normalizedStatus = normalizePurchaseOrderWorkflowStatus(status)
-
-  if (normalizedStatus === 'SHIPPED') {
-    return 'WAREHOUSE'
-  }
 
   if (ACTIVE_PURCHASE_ORDER_STATUSES.includes(normalizedStatus as ActivePurchaseOrderStatus)) {
     return normalizedStatus as ActivePurchaseOrderStatus

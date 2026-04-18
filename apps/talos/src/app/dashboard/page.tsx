@@ -26,6 +26,7 @@ import { DashboardSkeleton } from '@/components/common/loading-state'
 import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import { withBasePath } from '@/lib/utils/base-path'
+import { formatDashboardCurrency } from '@/lib/dashboard/currency'
 
 interface DashboardStats {
   totalInventory: number
@@ -317,6 +318,8 @@ export default function DashboardPage() {
     },
   }
 
+  const tenantCode = session.user.region
+
   return (
     <DashboardLayout>
       <PageContainer>
@@ -354,7 +357,7 @@ export default function DashboardPage() {
             />
             <StatsCard
               title="Monthly Costs"
-              value={`£${(stats?.costBreakdown?.total ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              value={formatDashboardCurrency(stats?.costBreakdown?.total ?? 0, tenantCode)}
               icon={DollarSign}
               variant="default"
             />
@@ -394,6 +397,7 @@ export default function DashboardPage() {
                   total: 0,
                 }
               }
+              tenantCode={tenantCode}
             />
           </div>
 

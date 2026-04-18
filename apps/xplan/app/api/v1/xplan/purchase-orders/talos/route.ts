@@ -53,7 +53,7 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
   const orders = await talos.purchaseOrder.findMany({
     where: {
       type: 'PURCHASE',
-      status: { notIn: ['CANCELLED', 'REJECTED'] },
+      status: { notIn: ['CANCELLED'] },
       ...(query
         ? {
             OR: [
@@ -84,7 +84,8 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
       vesselName: true,
       createdAt: true,
       updatedAt: true,
-      _count: { select: { lines: true, containers: true } },
+      lines: { select: { id: true } },
+      containers: { select: { id: true } },
     },
     orderBy: { updatedAt: 'desc' },
     take: limit,
@@ -110,8 +111,8 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
       vesselName: order.vesselName,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      lineCount: order._count.lines,
-      containerCount: order._count.containers,
+      lineCount: order.lines.length,
+      containerCount: order.containers.length,
     })),
   });
 });
