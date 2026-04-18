@@ -1,4 +1,4 @@
-import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
+import { calculateFbaFeeForTenant, calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import { LB_PER_KG } from '@/lib/measurements'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -11,30 +11,34 @@ export type AlertStatus =
   | 'MISSING_REFERENCE'
   | 'ERROR'
 
+type DecimalLike = { toString(): string }
+type ApiNumberValue = number | string | DecimalLike | null
+
 export type ApiSkuRow = {
   id: string
   skuCode: string
   description: string
   asin: string | null
-  fbaFulfillmentFee: number | string | null
-  amazonFbaFulfillmentFee: number | string | null
-  amazonListingPrice: number | string | null
+  category?: string | null
+  fbaFulfillmentFee: ApiNumberValue
+  amazonFbaFulfillmentFee: ApiNumberValue
+  amazonListingPrice: ApiNumberValue
   amazonSizeTier: string | null
   referenceItemPackageDimensionsCm: string | null
-  referenceItemPackageSide1Cm: number | string | null
-  referenceItemPackageSide2Cm: number | string | null
-  referenceItemPackageSide3Cm: number | string | null
-  referenceItemPackageWeightKg: number | string | null
+  referenceItemPackageSide1Cm: ApiNumberValue
+  referenceItemPackageSide2Cm: ApiNumberValue
+  referenceItemPackageSide3Cm: ApiNumberValue
+  referenceItemPackageWeightKg: ApiNumberValue
   amazonItemPackageDimensionsCm: string | null
-  amazonItemPackageSide1Cm: number | string | null
-  amazonItemPackageSide2Cm: number | string | null
-  amazonItemPackageSide3Cm: number | string | null
-  amazonItemPackageWeightKg: number | string | null
+  amazonItemPackageSide1Cm: ApiNumberValue
+  amazonItemPackageSide2Cm: ApiNumberValue
+  amazonItemPackageSide3Cm: ApiNumberValue
+  amazonItemPackageWeightKg: ApiNumberValue
   itemDimensionsCm: string | null
-  itemSide1Cm: number | string | null
-  itemSide2Cm: number | string | null
-  itemSide3Cm: number | string | null
-  itemWeightKg: number | string | null
+  itemSide1Cm: ApiNumberValue
+  itemSide2Cm: ApiNumberValue
+  itemSide3Cm: ApiNumberValue
+  itemWeightKg: ApiNumberValue
 }
 
 export type DimensionTriplet = { side1Cm: number; side2Cm: number; side3Cm: number }
@@ -63,6 +67,16 @@ export type Comparison = {
   }
   feeDifference: number | null
   hasPhysicalMismatch: boolean
+}
+
+export type LiveAmazonFeeResult = {
+  fbaFees: number | null
+  sizeTier: string | null
+}
+
+export type ComparisonRowHydratorDeps = {
+  loadListingPrice: (asin: string, tenantCode: TenantCode) => Promise<number | null>
+  loadAmazonFees: (sellerSku: string, listingPrice: number, tenantCode: TenantCode) => Promise<LiveAmazonFeeResult>
 }
 
 const DIMENSION_TOLERANCE_CM = 0.05
@@ -220,7 +234,11 @@ function physicalMeasurementsMatch(params: {
   return true
 }
 
-export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
+function resolveReferenceSizeTier(row: ApiSkuRow, tenantCode: TenantCode): {
+  referenceTriplet: DimensionTriplet | null
+  referenceWeightKg: number | null
+  referenceSizeTier: string | null
+} {
   const referenceTriplet = resolveDimensionTripletCm({
     side1Cm: row.referenceItemPackageSide1Cm,
     side2Cm: row.referenceItemPackageSide2Cm,
@@ -238,6 +256,73 @@ export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Compa
           referenceWeightKg
         )
       : null
+
+  return {
+    referenceTriplet,
+    referenceWeightKg,
+    referenceSizeTier,
+  }
+}
+
+function deriveReferenceFee(row: ApiSkuRow, tenantCode: TenantCode, listingPrice: number | null): number | null {
+  if (listingPrice === null) return null
+
+  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceSizeTier(row, tenantCode)
+  if (referenceTriplet === null) return null
+  if (referenceWeightKg === null) return null
+  if (referenceSizeTier === null) return null
+
+  let category: string | undefined
+  if (typeof row.category === 'string') {
+    const trimmed = row.category.trim()
+    if (trimmed) category = trimmed
+  }
+
+  return calculateFbaFeeForTenant(tenantCode, {
+    side1Cm: referenceTriplet.side1Cm,
+    side2Cm: referenceTriplet.side2Cm,
+    side3Cm: referenceTriplet.side3Cm,
+    unitWeightKg: referenceWeightKg,
+    listingPrice,
+    sizeTier: referenceSizeTier,
+    category,
+  })
+}
+
+export async function hydrateComparisonSkuRow(
+  row: ApiSkuRow,
+  tenantCode: TenantCode,
+  deps: ComparisonRowHydratorDeps
+): Promise<ApiSkuRow> {
+  if (typeof row.asin !== 'string') return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+
+  const asin = row.asin.trim()
+  if (!asin) return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+
+  const listingPrice = await deps.loadListingPrice(asin, tenantCode)
+  const expectedFee = deriveReferenceFee(row, tenantCode, listingPrice)
+
+  let amazonFee: number | null = null
+  let amazonSizeTier = row.amazonSizeTier
+  if (listingPrice !== null) {
+    const liveAmazonFees = await deps.loadAmazonFees(row.skuCode, listingPrice, tenantCode)
+    amazonFee = liveAmazonFees.fbaFees
+    if (liveAmazonFees.sizeTier !== null) {
+      amazonSizeTier = liveAmazonFees.sizeTier
+    }
+  }
+
+  return {
+    ...row,
+    fbaFulfillmentFee: expectedFee,
+    amazonFbaFulfillmentFee: amazonFee,
+    amazonListingPrice: listingPrice,
+    amazonSizeTier,
+  }
+}
+
+export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
+  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceSizeTier(row, tenantCode)
   const referenceShipping = computeShippingWeights(referenceTriplet, referenceWeightKg, referenceSizeTier, tenantCode)
 
   const amazonTriplet = resolveDimensionTripletCm({
