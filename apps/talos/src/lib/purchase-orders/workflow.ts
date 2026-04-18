@@ -1,4 +1,5 @@
 import { ConflictError } from '@/lib/api/errors'
+import type { PurchaseOrderStatus } from '@targon/prisma-talos'
 
 export const ACTIVE_PURCHASE_ORDER_STATUSES = [
   'ISSUED',
@@ -63,6 +64,18 @@ export function getVisiblePurchaseOrderStatuses(): string[] {
     'RFQ',
     ...ACTIVE_PURCHASE_ORDER_STATUSES,
     ...LEGACY_VISIBLE_PURCHASE_ORDER_STATUSES,
+  ]
+}
+
+export function getQueryablePurchaseOrderStatuses(): PurchaseOrderStatus[] {
+  // Keep Prisma filters limited to enum members that still exist in the schema.
+  return [
+    'RFQ',
+    ...ACTIVE_PURCHASE_ORDER_STATUSES,
+    'ARCHIVED',
+    'AWAITING_PROOF',
+    'REVIEW',
+    'POSTED',
   ]
 }
 

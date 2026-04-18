@@ -8,7 +8,7 @@ import {
 } from '@/lib/purchase-order-line-costs'
 import {
   assertPurchaseOrderMutable,
-  getVisiblePurchaseOrderStatuses,
+  getQueryablePurchaseOrderStatuses,
   normalizePurchaseOrderWorkflowStatus,
 } from '@/lib/purchase-orders/workflow'
 import { toPublicOrderNumber } from './purchase-order-utils'
@@ -45,7 +45,7 @@ export type PurchaseOrderWithLinesAndProformaInvoices = Prisma.PurchaseOrderGetP
   }
 }>
 
-const VISIBLE_STATUSES = getVisiblePurchaseOrderStatuses() as PurchaseOrderStatus[]
+const QUERYABLE_STATUSES = getQueryablePurchaseOrderStatuses()
 
 export function serializePurchaseOrder(
   order: PurchaseOrderWithLines,
@@ -98,7 +98,7 @@ export async function getPurchaseOrders() {
 
   const where: Prisma.PurchaseOrderWhereInput = {
     isLegacy: false,
-    status: { in: VISIBLE_STATUSES },
+    status: { in: QUERYABLE_STATUSES },
   }
 
   return prisma.purchaseOrder.findMany({
@@ -127,7 +127,7 @@ export async function getPurchaseOrdersBySplitGroup(splitGroupId: string) {
 
   const where: Prisma.PurchaseOrderWhereInput = {
     isLegacy: false,
-    status: { in: VISIBLE_STATUSES },
+    status: { in: QUERYABLE_STATUSES },
     splitGroupId: trimmed,
   }
 
@@ -156,7 +156,7 @@ export async function getPurchaseOrderById(id: string) {
     where: {
       id,
       isLegacy: false,
-      status: { in: VISIBLE_STATUSES },
+      status: { in: QUERYABLE_STATUSES },
     },
     include: {
       lines: true,
