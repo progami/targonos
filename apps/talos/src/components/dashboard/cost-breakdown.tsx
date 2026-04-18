@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { DollarSign } from '@/lib/lucide-icons'
+import { formatDashboardCurrency } from '@/lib/dashboard/currency'
 
 interface CostBreakdownProps {
   costs: {
@@ -12,12 +13,12 @@ interface CostBreakdownProps {
     other: number
     total: number
   }
-  currencySymbol?: string
+  tenantCode: string | null | undefined
 }
 
-export function CostBreakdown({ costs, currencySymbol = '£' }: CostBreakdownProps) {
+export function CostBreakdown({ costs, tenantCode }: CostBreakdownProps) {
   const formatCurrency = (amount: number) => {
-    return `${currencySymbol}${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return formatDashboardCurrency(amount, tenantCode)
   }
 
   const costLines = [

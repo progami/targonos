@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import { getVisiblePurchaseOrderStatuses } from '../../src/lib/purchase-orders/workflow'
 
-test('purchase-order reads keep legacy terminal statuses visible until the enum migration is applied', () => {
+test('purchase-order reads keep legacy compatibility statuses visible until cleanup is complete', () => {
   assert.deepEqual(getVisiblePurchaseOrderStatuses(), [
     'RFQ',
     'ISSUED',
@@ -11,6 +11,10 @@ test('purchase-order reads keep legacy terminal statuses visible until the enum 
     'OCEAN',
     'WAREHOUSE',
     'CANCELLED',
+    'ARCHIVED',
+    'AWAITING_PROOF',
+    'REVIEW',
+    'POSTED',
     'SHIPPED',
     'CLOSED',
     'REJECTED',
