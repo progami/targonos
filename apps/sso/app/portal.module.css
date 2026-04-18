@@ -177,7 +177,8 @@
 
 .categoryCount {
   font-size: 13px;
-  opacity: 0.7;
+  color: rgba(248, 250, 252, 0.82);
+  font-weight: 500;
 }
 
 

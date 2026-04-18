@@ -59,6 +59,10 @@ test('renderable purchase-order statuses stay on the simplified inbound workflow
 
 test('legacy purchase-order statuses collapse into the simplified display workflow', () => {
   assert.equal(getPurchaseOrderDisplayStatus('RFQ'), 'ISSUED')
+  assert.equal(getPurchaseOrderDisplayStatus('AWAITING_PROOF'), 'WAREHOUSE')
+  assert.equal(getPurchaseOrderDisplayStatus('REVIEW'), 'WAREHOUSE')
+  assert.equal(getPurchaseOrderDisplayStatus('POSTED'), 'WAREHOUSE')
+  assert.equal(getPurchaseOrderDisplayStatus('ARCHIVED'), 'CANCELLED')
   assert.equal(getPurchaseOrderDisplayStatus('SHIPPED'), 'WAREHOUSE')
   assert.equal(getPurchaseOrderDisplayStatus('CLOSED'), 'CANCELLED')
   assert.equal(getPurchaseOrderDisplayStatus('REJECTED'), 'CANCELLED')
@@ -69,6 +73,7 @@ test('only active inbound stages remain transitionable after normalization', () 
   assert.equal(isCancelablePurchaseOrderStatus('ISSUED'), true)
   assert.equal(isCancelablePurchaseOrderStatus('WAREHOUSE'), true)
   assert.equal(isCancelablePurchaseOrderStatus('CANCELLED'), false)
+  assert.equal(isCancelablePurchaseOrderStatus('POSTED'), false)
   assert.equal(isCancelablePurchaseOrderStatus('SHIPPED'), false)
   assert.equal(isCancelablePurchaseOrderStatus('CLOSED'), false)
 })
@@ -85,6 +90,9 @@ test('posted purchase orders are read-only and non-posted purchase orders remain
     true
   )
   assert.equal(isPurchaseOrderReadOnlyForUi({ status: 'CANCELLED', postedAt: null }), true)
+  assert.equal(isPurchaseOrderReadOnlyForUi({ status: 'AWAITING_PROOF', postedAt: null }), true)
+  assert.equal(isPurchaseOrderReadOnlyForUi({ status: 'POSTED', postedAt: null }), true)
+  assert.equal(isPurchaseOrderReadOnlyForUi({ status: 'ARCHIVED', postedAt: null }), true)
 
   assert.doesNotThrow(() =>
     assertPurchaseOrderMutable({ status: 'WAREHOUSE', postedAt: null })
@@ -97,6 +105,11 @@ test('posted purchase orders are read-only and non-posted purchase orders remain
       assert.match(error.message, /posted purchase orders are read-only/)
       return true
     }
+  )
+
+  assert.throws(
+    () => assertPurchaseOrderMutable({ status: 'POSTED', postedAt: null }),
+    /legacy purchase orders are read-only/
   )
 
   assert.throws(

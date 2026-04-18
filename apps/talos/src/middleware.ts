@@ -13,7 +13,7 @@ function resolveAppOrigin(request: NextRequest): string {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const basePath = getBasePath()
+  const basePath = getBasePath(pathname)
   if (basePath) {
     const doubleBasePrefix = `${basePath}${basePath}`
     const url = new URL(request.url)
@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const normalizedPath = withoutBasePath(pathname)
+  const normalizedPath = withoutBasePath(pathname, pathname)
 
   // Redirect /operations to /operations/inventory (base-path aware)
   if (normalizedPath === '/operations') {

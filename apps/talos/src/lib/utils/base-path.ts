@@ -33,10 +33,22 @@ function inferBasePathFromPathname(pathname: string): string {
  return ''
 }
 
+function resolveInferencePath(pathname?: string): string {
+ if (typeof pathname === 'string') {
+  return pathname
+ }
+
+ if (typeof window !== 'undefined') {
+  return window.location.pathname ?? ''
+ }
+
+ return ''
+}
+
 /**
- * Get the base path from environment or default to empty string
+ * Get the base path from environment or infer it from the active pathname.
  */
-export function getBasePath(): string {
+export function getBasePath(pathname?: string): string {
  const rawBasePath =
   typeof window === 'undefined'
    ? (process.env.BASE_PATH ?? process.env.NEXT_PUBLIC_BASE_PATH ?? '')
@@ -45,12 +57,8 @@ export function getBasePath(): string {
  const normalized = normalizeBasePath(rawBasePath)
  if (normalized) return normalized
 
- // If Talos is accessed via `/talos/*` but BASE_PATH is not set (rewrite mode),
- // infer it so client-side fetches hit the same origin path.
- if (typeof window !== 'undefined') {
-  const inferred = inferBasePathFromPathname(window.location.pathname ?? '')
-  return normalizeBasePath(inferred)
- }
+ const inferred = inferBasePathFromPathname(resolveInferencePath(pathname))
+ if (inferred) return normalizeBasePath(inferred)
 
  return ''
 }
@@ -60,8 +68,8 @@ export function getBasePath(): string {
  * @param path - The path to prepend base path to
  * @returns The path with base path prepended
  */
-export function withBasePath(path: string): string {
- const basePath = getBasePath()
+export function withBasePath(path: string, pathname?: string): string {
+ const basePath = getBasePath(pathname)
  if (!basePath) return path
  
  // Ensure path starts with /
@@ -80,8 +88,8 @@ export function withBasePath(path: string): string {
  * @param path - The path to remove base path from
  * @returns The path without base path
  */
-export function withoutBasePath(path: string): string {
- const basePath = getBasePath()
+export function withoutBasePath(path: string, pathname?: string): string {
+ const basePath = getBasePath(pathname)
  if (!basePath || !path.startsWith(basePath)) return path
  
  const pathWithoutBase = path.slice(basePath.length)
@@ -91,6 +99,6 @@ export function withoutBasePath(path: string): string {
 /**
  * Check if we're running with a base path
  */
-export function hasBasePath(): boolean {
- return !!getBasePath()
+export function hasBasePath(pathname?: string): boolean {
+ return !!getBasePath(pathname)
 }

@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
+import {
+  type AlertStatus,
+  type ApiSkuRow,
+  computeComparison,
+} from '@/lib/amazon/fba-fee-discrepancies'
 import { redirectToPortal } from '@/lib/portal'
-import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import type { TenantCode } from '@/lib/tenant/constants'
-import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
-import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem, LB_PER_KG } from '@/lib/measurements'
+import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem } from '@/lib/measurements'
 import { usePageState } from '@/lib/store/page-state'
 import { withBasePath } from '@/lib/utils/base-path'
 
@@ -33,84 +36,7 @@ import {
 const PAGE_KEY = '/amazon/fba-fee-discrepancies'
 const SKUS_PER_PAGE = 10
 
-type AlertStatus =
-  | 'UNKNOWN'
-  | 'MATCH'
-  | 'MISMATCH'
-  | 'NO_ASIN'
-  | 'MISSING_REFERENCE'
-  | 'ERROR'
-
-type ApiSkuRow = {
-  id: string
-  skuCode: string
-  description: string
-  asin: string | null
-  fbaFulfillmentFee: number | string | null
-  amazonFbaFulfillmentFee: number | string | null
-  amazonListingPrice: number | string | null
-  amazonSizeTier: string | null
-  referenceItemPackageDimensionsCm: string | null
-  referenceItemPackageSide1Cm: number | string | null
-  referenceItemPackageSide2Cm: number | string | null
-  referenceItemPackageSide3Cm: number | string | null
-  referenceItemPackageWeightKg: number | string | null
-  amazonItemPackageDimensionsCm: string | null
-  amazonItemPackageSide1Cm: number | string | null
-  amazonItemPackageSide2Cm: number | string | null
-  amazonItemPackageSide3Cm: number | string | null
-  amazonItemPackageWeightKg: number | string | null
-  itemDimensionsCm: string | null
-  itemSide1Cm: number | string | null
-  itemSide2Cm: number | string | null
-  itemSide3Cm: number | string | null
-  itemWeightKg: number | string | null
-}
-
 const ALLOWED_ROLES = ['admin', 'staff'] as const
-
-type DimensionTriplet = { side1Cm: number; side2Cm: number; side3Cm: number }
-
-type ShippingWeights = {
-  unitWeightKg: number | null
-  dimensionalWeightKg: number | null
-  shippingWeightKg: number | null
-}
-
-type Comparison = {
-  status: AlertStatus
-  reference: {
-    triplet: DimensionTriplet | null
-    shipping: ShippingWeights
-    sizeTier: string | null
-    expectedFee: number | null
-    missingFields: string[]
-  }
-  amazon: {
-    triplet: DimensionTriplet | null
-    shipping: ShippingWeights
-    sizeTier: string | null
-    fee: number | null
-    missingFields: string[]
-  }
-  feeDifference: number | null
-}
-
-
-function parseDecimalNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  if (typeof value === 'object' && value !== null && 'toString' in value) {
-    const parsed = Number.parseFloat(String(value))
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
 function formatFee(value: number | string | null | undefined, currency: string) {
   if (value === null || value === undefined || value === '') return '—'
   const amount = typeof value === 'number' ? value : Number.parseFloat(value)
@@ -120,196 +46,6 @@ function formatFee(value: number | string | null | undefined, currency: string) 
     currency: currency,
     minimumFractionDigits: 2,
   }).format(amount)
-}
-
-function usesMinWidthHeight(sizeTier: string | null): boolean {
-  if (!sizeTier) return false
-  if (sizeTier === 'Small Bulky') return true
-  if (sizeTier === 'Large Bulky') return true
-  if (sizeTier === 'Overmax 0 to 150 lb') return true
-  if (sizeTier.startsWith('Extra-Large')) return true
-  return false
-}
-
-function computeDimensionalWeightLbWithMinWidthHeight(triplet: DimensionTriplet, applyMinWidthHeightIn: boolean): number {
-  const dimsIn = [triplet.side1Cm / 2.54, triplet.side2Cm / 2.54, triplet.side3Cm / 2.54].sort((a, b) => b - a)
-  const longestIn = dimsIn[0]
-  let medianIn = dimsIn[1]
-  let shortestIn = dimsIn[2]
-
-  if (applyMinWidthHeightIn) {
-    medianIn = Math.max(medianIn, 2)
-    shortestIn = Math.max(shortestIn, 2)
-  }
-
-  const volumeIn3 = longestIn * medianIn * shortestIn
-  return volumeIn3 / 139
-}
-
-function computeShippingWeights(
-  triplet: DimensionTriplet | null,
-  unitWeightKg: number | null,
-  sizeTier: string | null,
-  tenantCode: TenantCode
-): ShippingWeights {
-  if (tenantCode === 'UK') {
-    const dimensionalWeightKg =
-      triplet === null
-        ? null
-        : (() => {
-            const dimsCm = [triplet.side1Cm, triplet.side2Cm, triplet.side3Cm].sort((a, b) => b - a)
-            const longestCm = dimsCm[0]
-            const medianCm = dimsCm[1]
-            const shortestCm = dimsCm[2]
-            return (longestCm * medianCm * shortestCm) / 5000
-          })()
-
-    const shippingWeightKg =
-      unitWeightKg !== null && dimensionalWeightKg !== null
-        ? Math.max(unitWeightKg, dimensionalWeightKg)
-        : unitWeightKg !== null
-          ? unitWeightKg
-          : dimensionalWeightKg
-
-    return { unitWeightKg, dimensionalWeightKg, shippingWeightKg }
-  }
-
-  const unitWeightLb = unitWeightKg === null ? null : unitWeightKg * LB_PER_KG
-  const dimensionalWeightLb =
-    triplet === null ? null : computeDimensionalWeightLbWithMinWidthHeight(triplet, usesMinWidthHeight(sizeTier))
-
-  let chargeableWeightLb: number | null = null
-  let usesUnitOnly = false
-  if (sizeTier === 'Small Standard-Size') usesUnitOnly = true
-  if (sizeTier === 'Extra-Large 150+ lb') usesUnitOnly = true
-
-  if (usesUnitOnly) {
-    if (unitWeightLb !== null) chargeableWeightLb = unitWeightLb
-  } else if (unitWeightLb !== null && dimensionalWeightLb !== null) {
-    chargeableWeightLb = Math.max(unitWeightLb, dimensionalWeightLb)
-  } else if (unitWeightLb !== null) {
-    chargeableWeightLb = unitWeightLb
-  } else if (dimensionalWeightLb !== null) {
-    chargeableWeightLb = dimensionalWeightLb
-  }
-
-  if (chargeableWeightLb === null) {
-    return { unitWeightKg: unitWeightKg, dimensionalWeightKg: null, shippingWeightKg: null }
-  }
-
-  let roundedWeightLb = chargeableWeightLb
-  if (chargeableWeightLb < 1) {
-    const ounces = chargeableWeightLb * 16
-    const roundedOunces = Math.ceil(ounces)
-    roundedWeightLb = roundedOunces / 16
-  } else {
-    let roundToWholePounds = false
-    if (sizeTier === 'Small Bulky') roundToWholePounds = true
-    if (sizeTier === 'Large Bulky') roundToWholePounds = true
-    if (sizeTier === 'Extra-Large 150+ lb') roundToWholePounds = true
-    if (sizeTier === 'Overmax 0 to 150 lb') roundToWholePounds = true
-    if (sizeTier && sizeTier.startsWith('Extra-Large')) roundToWholePounds = true
-
-    if (roundToWholePounds) {
-      roundedWeightLb = Math.ceil(chargeableWeightLb)
-    } else {
-      const quarterPounds = 0.25
-      const roundedSteps = Math.ceil(chargeableWeightLb / quarterPounds)
-      roundedWeightLb = roundedSteps * quarterPounds
-    }
-  }
-
-  const dimensionalWeightKg = dimensionalWeightLb === null ? null : dimensionalWeightLb / LB_PER_KG
-  const shippingWeightKg = roundedWeightLb / LB_PER_KG
-
-  return { unitWeightKg, dimensionalWeightKg, shippingWeightKg }
-}
-
-function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
-  const referenceTriplet = resolveDimensionTripletCm({
-    side1Cm: row.referenceItemPackageSide1Cm,
-    side2Cm: row.referenceItemPackageSide2Cm,
-    side3Cm: row.referenceItemPackageSide3Cm,
-    legacy: row.referenceItemPackageDimensionsCm,
-  })
-  const referenceWeightKg = parseDecimalNumber(row.referenceItemPackageWeightKg)
-  const referenceSizeTier =
-    referenceTriplet && referenceWeightKg !== null
-      ? calculateSizeTierForTenant(
-          tenantCode,
-          referenceTriplet.side1Cm,
-          referenceTriplet.side2Cm,
-          referenceTriplet.side3Cm,
-          referenceWeightKg
-        )
-      : null
-  const referenceShipping = computeShippingWeights(referenceTriplet, referenceWeightKg, referenceSizeTier, tenantCode)
-
-  const amazonTriplet = resolveDimensionTripletCm({
-    side1Cm: row.amazonItemPackageSide1Cm,
-    side2Cm: row.amazonItemPackageSide2Cm,
-    side3Cm: row.amazonItemPackageSide3Cm,
-    legacy: row.amazonItemPackageDimensionsCm,
-  })
-  const amazonWeightKg = parseDecimalNumber(row.amazonItemPackageWeightKg)
-  let amazonSizeTier: string | null = null
-  if (typeof row.amazonSizeTier === 'string') {
-    const trimmed = row.amazonSizeTier.trim()
-    if (trimmed) amazonSizeTier = trimmed
-  }
-  const amazonShipping = computeShippingWeights(amazonTriplet, amazonWeightKg, amazonSizeTier, tenantCode)
-
-  const expectedFee = parseDecimalNumber(row.fbaFulfillmentFee)
-  const amazonFee = parseDecimalNumber(row.amazonFbaFulfillmentFee)
-  const feeDifference =
-    expectedFee === null || amazonFee === null ? null : amazonFee - expectedFee
-
-  const referenceMissingFields: string[] = []
-  if (expectedFee === null) referenceMissingFields.push('Reference FBA fulfillment fee')
-  if (referenceTriplet === null) referenceMissingFields.push('Item package dimensions')
-  if (referenceWeightKg === null) referenceMissingFields.push('Item package weight')
-
-  const amazonMissingFields: string[] = []
-  if (amazonFee === null) amazonMissingFields.push('Amazon FBA fulfillment fee')
-  if (amazonSizeTier === null) amazonMissingFields.push('Amazon size tier')
-  if (amazonTriplet === null) amazonMissingFields.push('Amazon item package dimensions')
-  if (amazonWeightKg === null) amazonMissingFields.push('Amazon item package weight')
-
-  let status: AlertStatus = 'UNKNOWN'
-  if (!row.asin) {
-    status = 'NO_ASIN'
-  } else if (referenceMissingFields.length > 0) {
-    status = 'MISSING_REFERENCE'
-  } else if (amazonFee === null) {
-    status = 'ERROR'
-  } else {
-    const expectedRounded = expectedFee === null ? null : Number(expectedFee.toFixed(2))
-    const amazonRounded = amazonFee === null ? null : Number(amazonFee.toFixed(2))
-    if (expectedRounded !== null && amazonRounded !== null && expectedRounded === amazonRounded) {
-      status = 'MATCH'
-    } else if (expectedRounded !== null && amazonRounded !== null) {
-      status = 'MISMATCH'
-    }
-  }
-
-  return {
-    status,
-    reference: {
-      triplet: referenceTriplet,
-      shipping: referenceShipping,
-      sizeTier: referenceSizeTier,
-      expectedFee,
-      missingFields: referenceMissingFields,
-    },
-    amazon: {
-      triplet: amazonTriplet,
-      shipping: amazonShipping,
-      sizeTier: amazonSizeTier,
-      fee: amazonFee,
-      missingFields: amazonMissingFields,
-    },
-    feeDifference,
-  }
 }
 
 function StatusIcon({ status }: { status: AlertStatus }) {
@@ -690,7 +426,11 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                         s === 'MATCH'
                           ? 'Correct'
                           : s === 'MISMATCH'
-                            ? (row.comparison.feeDifference !== null && row.comparison.feeDifference > 0 ? 'Overcharge' : 'Undercharge')
+                            ? row.comparison.hasPhysicalMismatch || row.comparison.feeDifference === 0
+                              ? 'Mismatch'
+                              : row.comparison.feeDifference !== null && row.comparison.feeDifference > 0
+                                ? 'Overcharge'
+                                : 'Undercharge'
                             : s === 'MISSING_REFERENCE'
                               ? 'No ref'
                               : s === 'NO_ASIN'
