@@ -3,6 +3,10 @@ import type { CaseReportBundle, CaseReportRow } from './reader-core'
 const CASE_APPROVAL_CATEGORY_ORDER = ['Action due', 'New case', 'Forum watch', 'Watching'] as const
 
 export type CaseApprovalDecision = 'pending' | 'approved' | 'rejected'
+export type CaseReportDateOption = {
+  reportDate: string
+  label: string
+}
 
 export type CaseApprovalRow = CaseReportRow & {
   rowKey: string
@@ -33,6 +37,48 @@ function parseCaseAgeInDays(daysAgo: string): number {
 
 function buildCaseApprovalRowKey(entity: string, row: CaseReportRow, index: number): string {
   return `${entity}::${row.caseId}::${row.issue}::${index}`
+}
+
+function buildCaseReportDateLabel(summary: CaseReportBundle['daySummaries'][number]): string {
+  const segments = [`${summary.totalRows} total`]
+
+  if (summary.actionDueRows > 0) {
+    segments.push(`${summary.actionDueRows} action due`)
+  }
+
+  if (summary.newCaseRows > 0) {
+    segments.push(`${summary.newCaseRows} new`)
+  }
+
+  if (summary.forumWatchRows > 0) {
+    segments.push(`${summary.forumWatchRows} forum`)
+  }
+
+  if (summary.watchingRows > 0) {
+    segments.push(`${summary.watchingRows} watching`)
+  }
+
+  return `${summary.reportDate} · ${segments.join(' · ')}`
+}
+
+export function createCaseReportDateOptions(
+  bundle: Pick<CaseReportBundle, 'availableReportDates' | 'daySummaries'>,
+): CaseReportDateOption[] {
+  const summaryByReportDate = new Map(
+    bundle.daySummaries.map((summary) => [summary.reportDate, summary] as const),
+  )
+
+  return bundle.availableReportDates.map((reportDate) => {
+    const summary = summaryByReportDate.get(reportDate)
+    if (summary === undefined) {
+      throw new Error(`Missing day summary for report date: ${reportDate}`)
+    }
+
+    return {
+      reportDate,
+      label: buildCaseReportDateLabel(summary),
+    }
+  })
 }
 
 export function createCaseApprovalRows(bundle: CaseReportBundle): CaseApprovalRow[] {
