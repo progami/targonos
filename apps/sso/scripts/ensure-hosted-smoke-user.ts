@@ -1,5 +1,7 @@
 import { upsertManualUserAppGrant } from '@targon/auth/server'
 
+import { hostedSmokeAppGrants } from '../tests/fixtures/hosted-smoke-config'
+
 function requireEnv(name: string): string {
   const value = process.env[name]
   if (typeof value !== 'string') {
@@ -19,15 +21,22 @@ async function main() {
 
   const userId = requireEnv('E2E_PORTAL_USER_ID')
   const email = requireEnv('E2E_PORTAL_EMAIL').toLowerCase()
+  let updatedUser = null
 
-  const updatedUser = await upsertManualUserAppGrant({
-    userId,
-    appSlug: 'talos',
-    appName: 'Talos',
-    departments: ['Ops'],
-    tenantMemberships: ['US', 'UK'],
-    locked: false,
-  })
+  for (const grant of hostedSmokeAppGrants) {
+    updatedUser = await upsertManualUserAppGrant({
+      userId,
+      appSlug: grant.appSlug,
+      appName: grant.appName,
+      departments: grant.departments,
+      tenantMemberships: grant.tenantMemberships,
+      locked: grant.locked,
+    })
+  }
+
+  if (updatedUser === null) {
+    throw new Error('Hosted smoke user grants were not applied.')
+  }
 
   if (updatedUser.id !== userId) {
     throw new Error(`Hosted smoke user id mismatch: expected ${userId}, received ${updatedUser.id}.`)
@@ -37,20 +46,26 @@ async function main() {
     throw new Error(`Hosted smoke user email mismatch: expected ${email}, received ${updatedUser.email}.`)
   }
 
-  const talosGrant = updatedUser.entitlements.talos
-  if (!talosGrant) {
-    throw new Error('Hosted smoke user is missing Talos entitlements after grant update.')
+  for (const grant of hostedSmokeAppGrants) {
+    const appGrant = updatedUser.entitlements[grant.appSlug]
+    if (!appGrant) {
+      throw new Error(`Hosted smoke user is missing ${grant.appSlug} entitlements after grant update.`)
+    }
+
+    if (JSON.stringify(appGrant.departments) !== JSON.stringify(grant.departments)) {
+      throw new Error(
+        `Hosted smoke user departments mismatch for ${grant.appSlug}: expected ${JSON.stringify(grant.departments)}, received ${JSON.stringify(appGrant.departments)}.`,
+      )
+    }
+
+    if (JSON.stringify(appGrant.tenantMemberships) !== JSON.stringify(grant.tenantMemberships)) {
+      throw new Error(
+        `Hosted smoke user tenant memberships mismatch for ${grant.appSlug}: expected ${JSON.stringify(grant.tenantMemberships)}, received ${JSON.stringify(appGrant.tenantMemberships)}.`,
+      )
+    }
   }
 
-  if (!talosGrant.tenantMemberships.includes('US')) {
-    throw new Error('Hosted smoke user is missing Talos US tenant membership after grant update.')
-  }
-
-  if (!talosGrant.tenantMemberships.includes('UK')) {
-    throw new Error('Hosted smoke user is missing Talos UK tenant membership after grant update.')
-  }
-
-  console.log(`Ensured hosted smoke Talos grant for ${updatedUser.email}.`)
+  console.log(`Ensured hosted smoke grants for ${updatedUser.email}.`)
 }
 
 main().catch((error) => {
