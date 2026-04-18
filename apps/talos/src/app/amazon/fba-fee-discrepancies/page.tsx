@@ -9,6 +9,7 @@ import {
   type AlertStatus,
   type ApiSkuRow,
   computeComparison,
+  getComparisonStatusLabel,
 } from '@/lib/amazon/fba-fee-discrepancies'
 import { redirectToPortal } from '@/lib/portal'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -212,7 +213,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 className="h-9 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900"
               >
                 <option value="ALL">All statuses</option>
-                <option value="MISMATCH">Over/Undercharge</option>
+                <option value="MISMATCH">Any discrepancy</option>
                 <option value="MATCH">Correct</option>
                 <option value="MISSING_REFERENCE">No ref</option>
                 <option value="NO_ASIN">No ASIN</option>
@@ -221,7 +222,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
               </select>
             </div>
             <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-red-600 dark:text-red-400">{summary.mismatch} mismatches</span>
+              <span className="text-red-600 dark:text-red-400">{summary.mismatch} discrepancies</span>
               <span className="text-emerald-600 dark:text-emerald-400">{summary.match} matches</span>
               <span className="text-amber-600 dark:text-amber-400">{summary.warning} warnings</span>
               <span>{summary.pending} pending</span>
@@ -422,22 +423,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                               ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300'
                               : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
 
-                      const label =
-                        s === 'MATCH'
-                          ? 'Correct'
-                          : s === 'MISMATCH'
-                            ? row.comparison.hasPhysicalMismatch || row.comparison.feeDifference === 0
-                              ? 'Mismatch'
-                              : row.comparison.feeDifference !== null && row.comparison.feeDifference > 0
-                                ? 'Overcharge'
-                                : 'Undercharge'
-                            : s === 'MISSING_REFERENCE'
-                              ? 'No ref'
-                              : s === 'NO_ASIN'
-                                ? 'No ASIN'
-                                : s === 'ERROR'
-                                  ? 'Error'
-                                  : 'Pending'
+                      const label = getComparisonStatusLabel(row.comparison)
 
                       return (
                         <td key={row.sku.id} className={`px-4 py-2 text-center text-xs font-medium ${cellStyle}`}>

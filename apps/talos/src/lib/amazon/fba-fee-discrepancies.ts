@@ -318,3 +318,17 @@ export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Compa
     hasPhysicalMismatch,
   }
 }
+
+export function getComparisonStatusLabel(comparison: Comparison): string {
+  if (comparison.status === 'MATCH') return 'Correct'
+  if (comparison.status === 'MISMATCH') {
+    if (comparison.hasPhysicalMismatch) return 'Physical mismatch'
+    if (comparison.feeDifference !== null && comparison.feeDifference > 0) return 'Overcharge'
+    if (comparison.feeDifference !== null && comparison.feeDifference < 0) return 'Undercharge'
+    throw new Error('MISMATCH comparison is missing a physical mismatch or fee delta')
+  }
+  if (comparison.status === 'MISSING_REFERENCE') return 'No ref'
+  if (comparison.status === 'NO_ASIN') return 'No ASIN'
+  if (comparison.status === 'ERROR') return 'Error'
+  return 'Pending'
+}

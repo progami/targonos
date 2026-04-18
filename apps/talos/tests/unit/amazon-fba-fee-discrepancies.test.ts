@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { computeComparison, type ApiSkuRow } from '../../src/lib/amazon/fba-fee-discrepancies'
+import * as discrepancies from '../../src/lib/amazon/fba-fee-discrepancies'
+import type { ApiSkuRow } from '../../src/lib/amazon/fba-fee-discrepancies'
 import { calculateSizeTierForTenant } from '../../src/lib/amazon/fees'
 
 function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
@@ -47,7 +48,7 @@ function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
 }
 
 test('computeComparison marks identical fees with different Amazon package measurements as mismatch', () => {
-  const comparison = computeComparison(
+  const comparison = discrepancies.computeComparison(
     createSkuRow({
       amazonItemPackageSide1Cm: 12,
       amazonItemPackageSide2Cm: 10,
@@ -62,7 +63,7 @@ test('computeComparison marks identical fees with different Amazon package measu
 })
 
 test('computeComparison marks incomplete Amazon comparison data as error', () => {
-  const comparison = computeComparison(
+  const comparison = discrepancies.computeComparison(
     createSkuRow({
       amazonSizeTier: null,
     }),
@@ -71,4 +72,34 @@ test('computeComparison marks incomplete Amazon comparison data as error', () =>
 
   assert.equal(comparison.status, 'ERROR')
   assert.deepEqual(comparison.amazon.missingFields, ['Amazon size tier'])
+})
+
+test('status label shows physical mismatch when fees still align', () => {
+  const comparison = discrepancies.computeComparison(
+    createSkuRow({
+      amazonItemPackageSide1Cm: 12,
+      amazonItemPackageSide2Cm: 10,
+      amazonItemPackageSide3Cm: 10,
+    }),
+    'US'
+  )
+
+  assert.equal(typeof discrepancies.getComparisonStatusLabel, 'function')
+  if (typeof discrepancies.getComparisonStatusLabel !== 'function') return
+
+  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Physical mismatch')
+})
+
+test('status label shows overcharge when only the fee differs', () => {
+  const comparison = discrepancies.computeComparison(
+    createSkuRow({
+      amazonFbaFulfillmentFee: 3.71,
+    }),
+    'US'
+  )
+
+  assert.equal(typeof discrepancies.getComparisonStatusLabel, 'function')
+  if (typeof discrepancies.getComparisonStatusLabel !== 'function') return
+
+  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Overcharge')
 })
