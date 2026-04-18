@@ -2,6 +2,12 @@ name: CI
 
 on:
   pull_request:
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  pull_request_review_thread:
+    types: [resolved, unresolved]
   workflow_dispatch:
 
 concurrency:
@@ -9,8 +15,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  review-thread-policy:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Assert PR review threads are resolved
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/assert-resolved-review-threads.mjs
   build-test-self-hosted:
-    if: vars.USE_SELF_HOSTED == 'true'
+    if: vars.USE_SELF_HOSTED == 'true' && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     runs-on: [self-hosted, macOS, ARM64]
     steps: &build-test-steps
       - uses: actions/checkout@v4
@@ -132,21 +152,33 @@ jobs:
   build-test-github-hosted:
     needs:
       - build-test-self-hosted
-    if: always() && (vars.USE_SELF_HOSTED != 'true' || needs.build-test-self-hosted.result != 'success')
+    if: always() && (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && (vars.USE_SELF_HOSTED != 'true' || needs.build-test-self-hosted.result != 'success')
     runs-on: ubuntu-latest
     steps: *build-test-steps
   build-test:
     needs:
+      - review-thread-policy
       - build-test-self-hosted
       - build-test-github-hosted
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Validate at least one CI path succeeded
+      - name: Validate CI gates
         run: |
-          if [[ "${{ needs.build-test-self-hosted.result }}" == "success" || "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
-            echo "A CI execution path completed successfully."
-          else
-            echo "No CI execution path succeeded."
-            exit 1
+          if [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ "${{ needs.build-test-self-hosted.result }}" == "success" || "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
+              echo "A CI execution path completed successfully."
+            else
+              echo "No CI execution path succeeded."
+              exit 1
+            fi
+          fi
+
+          if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+            if [[ "${{ needs.review-thread-policy.result }}" == "success" ]]; then
+              echo "Review thread policy passed."
+            else
+              echo "Unresolved review threads are blocking this PR."
+              exit 1
+            fi
           fi
