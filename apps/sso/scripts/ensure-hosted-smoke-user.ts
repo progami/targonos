@@ -1,5 +1,6 @@
 import { upsertManualUserAppGrant } from '@targon/auth/server'
 
+import { assertHostedSmokeGrantMatches } from './ensure-hosted-smoke-user-lib'
 import { hostedSmokeAppGrants } from '../tests/fixtures/hosted-smoke-config'
 
 function requireEnv(name: string): string {
@@ -52,17 +53,7 @@ async function main() {
       throw new Error(`Hosted smoke user is missing ${grant.appSlug} entitlements after grant update.`)
     }
 
-    if (JSON.stringify(appGrant.departments) !== JSON.stringify(grant.departments)) {
-      throw new Error(
-        `Hosted smoke user departments mismatch for ${grant.appSlug}: expected ${JSON.stringify(grant.departments)}, received ${JSON.stringify(appGrant.departments)}.`,
-      )
-    }
-
-    if (JSON.stringify(appGrant.tenantMemberships) !== JSON.stringify(grant.tenantMemberships)) {
-      throw new Error(
-        `Hosted smoke user tenant memberships mismatch for ${grant.appSlug}: expected ${JSON.stringify(grant.tenantMemberships)}, received ${JSON.stringify(appGrant.tenantMemberships)}.`,
-      )
-    }
+    assertHostedSmokeGrantMatches({ grant, appGrant })
   }
 
   console.log(`Ensured hosted smoke grants for ${updatedUser.email}.`)
