@@ -4,6 +4,11 @@ import path from 'node:path'
 import { expect, type Page, type Response } from '@playwright/test'
 import { encode } from 'next-auth/jwt'
 
+import {
+  buildHostedSmokeSessionTokenPayload,
+  getHostedAuthSecret,
+} from './hosted-smoke-config'
+
 type CriticalResponseRecord = {
   method: string
   resourceType: string
@@ -41,23 +46,6 @@ function getHostedPortalOrigin() {
   return new URL(getHostedPortalBaseUrl()).origin
 }
 
-function buildPortalAuthz() {
-  return {
-    version: 1,
-    globalRoles: ['platform_admin'],
-    apps: {
-      talos: { departments: ['Ops'], tenantMemberships: ['US', 'UK'] },
-      atlas: { departments: ['People Ops'], tenantMemberships: ['US', 'UK'] },
-      website: { departments: [], tenantMemberships: [] },
-      kairos: { departments: ['Product'], tenantMemberships: [] },
-      xplan: { departments: ['Product'], tenantMemberships: [] },
-      plutus: { departments: ['Finance'], tenantMemberships: [] },
-      hermes: { departments: ['Account / Listing'], tenantMemberships: [] },
-      argus: { departments: ['Account / Listing'], tenantMemberships: [] },
-    },
-  }
-}
-
 function buildScreenshotDirectory(): string {
   const portalHost = new URL(getHostedPortalBaseUrl()).hostname
   const outputDir = path.join(process.cwd(), '.codex-artifacts', 'hosted-smoke', portalHost)
@@ -66,23 +54,11 @@ function buildScreenshotDirectory(): string {
 }
 
 async function buildSessionCookie(portalBaseUrl: string) {
-  const authz = buildPortalAuthz()
   const sessionCookieName = '__Secure-next-auth.session-token'
-  const secret = requireEnv('NEXTAUTH_SECRET')
-  const activeTenant = requireEnv('E2E_ACTIVE_TENANT')
+  const secret = getHostedAuthSecret()
   const domain = new URL(portalBaseUrl).hostname
   const token = await encode({
-    token: {
-      sub: requireEnv('E2E_PORTAL_USER_ID'),
-      email: requireEnv('E2E_PORTAL_EMAIL'),
-      name: requireEnv('E2E_PORTAL_NAME'),
-      authz,
-      roles: authz.apps,
-      globalRoles: authz.globalRoles,
-      authzVersion: authz.version,
-      apps: Object.keys(authz.apps),
-      activeTenant,
-    },
+    token: buildHostedSmokeSessionTokenPayload(),
     secret,
     salt: sessionCookieName,
   })
@@ -101,7 +77,7 @@ async function buildSessionCookie(portalBaseUrl: string) {
 async function buildActiveTenantCookie(portalBaseUrl: string) {
   const appId = 'talos'
   const cookieName = `__Secure-targon.active-tenant.${appId}`
-  const secret = requireEnv('NEXTAUTH_SECRET')
+  const secret = getHostedAuthSecret()
   const domain = new URL(portalBaseUrl).hostname
   const value = await encode({
     token: { activeTenant: requireEnv('E2E_ACTIVE_TENANT') },
