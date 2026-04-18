@@ -3,7 +3,7 @@ import test from 'node:test'
 
 import * as discrepancies from '../../src/lib/amazon/fba-fee-discrepancies'
 import type { ApiSkuRow } from '../../src/lib/amazon/fba-fee-discrepancies'
-import { calculateSizeTierForTenant } from '../../src/lib/amazon/fees'
+import { calculateFbaFeeForTenant, calculateSizeTierForTenant } from '../../src/lib/amazon/fees'
 
 function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
   const referenceTriplet = {
@@ -102,4 +102,59 @@ test('status label shows overcharge when only the fee differs', () => {
   if (typeof discrepancies.getComparisonStatusLabel !== 'function') return
 
   assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Overcharge')
+})
+
+test('hydrateComparisonSkuRow derives the reference fee instead of trusting the stored value', async () => {
+  assert.equal(typeof discrepancies.hydrateComparisonSkuRow, 'function')
+  if (typeof discrepancies.hydrateComparisonSkuRow !== 'function') return
+
+  const listingPrice = 19.99
+  const sizeTier = calculateSizeTierForTenant('US', 10, 10, 10, 0.2)
+  assert.notEqual(sizeTier, null)
+  if (sizeTier === null) return
+
+  const expectedReferenceFee = calculateFbaFeeForTenant('US', {
+    side1Cm: 10,
+    side2Cm: 10,
+    side3Cm: 10,
+    unitWeightKg: 0.2,
+    listingPrice,
+    sizeTier,
+  })
+
+  const hydrated = await discrepancies.hydrateComparisonSkuRow(
+    createSkuRow({
+      fbaFulfillmentFee: 99.99,
+      amazonFbaFulfillmentFee: 88.88,
+    }),
+    'US',
+    {
+      loadListingPrice: async () => listingPrice,
+      loadAmazonFees: async () => ({ fbaFees: 7.77, sizeTier: null }),
+    }
+  )
+
+  assert.equal(hydrated.fbaFulfillmentFee, expectedReferenceFee)
+  assert.equal(hydrated.amazonFbaFulfillmentFee, 7.77)
+})
+
+test('hydrateComparisonSkuRow uses the live Amazon fee even when the stored fee disagrees', async () => {
+  assert.equal(typeof discrepancies.hydrateComparisonSkuRow, 'function')
+  if (typeof discrepancies.hydrateComparisonSkuRow !== 'function') return
+
+  const hydrated = await discrepancies.hydrateComparisonSkuRow(
+    createSkuRow({
+      fbaFulfillmentFee: 2.22,
+      amazonFbaFulfillmentFee: 55.55,
+      amazonSizeTier: 'Large Standard-Size',
+    }),
+    'US',
+    {
+      loadListingPrice: async () => 24.5,
+      loadAmazonFees: async () => ({ fbaFees: 6.66, sizeTier: 'Small Bulky' }),
+    }
+  )
+
+  assert.equal(hydrated.amazonFbaFulfillmentFee, 6.66)
+  assert.equal(hydrated.amazonSizeTier, 'Small Bulky')
 })
