@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import type { CaseReportBundle } from './reader-core'
 import {
   createCaseApprovalRows,
+  createCaseReportDateOptions,
   filterCaseApprovalRows,
   matchesCaseApprovalSearch,
   type CaseApprovalRow,
@@ -154,4 +155,31 @@ test('matchesCaseApprovalSearch checks issue, assessment, next step, case id, an
   assert.equal(matchesCaseApprovalSearch(row, 'A-200'), true)
   assert.equal(matchesCaseApprovalSearch(row, 'targon'), true)
   assert.equal(matchesCaseApprovalSearch(row, 'forum'), false)
+})
+
+test('createCaseReportDateOptions condenses day-over-day counts into top-rail labels', () => {
+  const bundle = buildBundle()
+  bundle.availableReportDates = ['2026-04-15', '2026-04-14']
+  bundle.daySummaries = [
+    {
+      reportDate: '2026-04-15',
+      totalRows: 2,
+      actionDueRows: 0,
+      newCaseRows: 0,
+      forumWatchRows: 1,
+      watchingRows: 1,
+    },
+    bundle.daySummaries[0],
+  ]
+
+  assert.deepEqual(createCaseReportDateOptions(bundle), [
+    {
+      reportDate: '2026-04-15',
+      label: '2026-04-15 · 2 total · 1 forum · 1 watching',
+    },
+    {
+      reportDate: '2026-04-14',
+      label: '2026-04-14 · 4 total · 1 action due · 1 new · 1 forum · 1 watching',
+    },
+  ])
 })
