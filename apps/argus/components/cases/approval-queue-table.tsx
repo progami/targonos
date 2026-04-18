@@ -188,7 +188,7 @@ export function CaseApprovalQueueTable({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        height: 260,
+        maxHeight: 560,
         overflow: 'auto',
       })}
     >
