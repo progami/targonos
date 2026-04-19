@@ -26,8 +26,8 @@ function formatOptionalValue(value: string | null): string {
   return value
 }
 
-function hasValue(value: string | null): value is string {
-  return value !== null && value !== ''
+function hasIssueContext(detail: CaseDetailModel): boolean {
+  return detail.issue !== detail.subject
 }
 
 function SectionLabel({ children }: { children: ReactNode }) {
@@ -257,8 +257,21 @@ export function CaseDetailPanel({
                 lineHeight: 1.2,
               }}
             >
-              {detail.issue}
+              {detail.subject}
             </Typography>
+
+            {hasIssueContext(detail) ? (
+              <Typography
+                sx={(theme) => ({
+                  mt: 0.7,
+                  color: getCaseQueueMutedTextColor(theme.palette.mode),
+                  fontSize: '0.78rem',
+                  lineHeight: 1.45,
+                })}
+              >
+                {detail.issue}
+              </Typography>
+            ) : null}
           </Box>
 
           <Box>
@@ -383,14 +396,6 @@ export function CaseDetailPanel({
               <MetadataChip label="Our status" value={formatOptionalValue(detail.metadata.ourStatus)} />
               <MetadataChip label="Last reply" value={formatOptionalValue(detail.metadata.lastReply)} mono />
               <MetadataChip label="Created" value={formatOptionalValue(detail.metadata.created)} mono />
-
-              {hasValue(detail.metadata.linkedCases) ? (
-                <MetadataChip label="Linked cases" value={detail.metadata.linkedCases} mono />
-              ) : null}
-
-              {hasValue(detail.metadata.primaryEmail) ? (
-                <MetadataChip label="Primary email" value={detail.metadata.primaryEmail} mono />
-              ) : null}
             </Box>
           </Box>
         </Stack>
