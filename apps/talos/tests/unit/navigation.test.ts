@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { existsSync, readFileSync } from 'node:fs'
+import path from 'node:path'
 import test from 'node:test'
 
 import { AMAZON_WORKSPACE_TOOLS } from '../../src/lib/amazon/workspace'
@@ -7,10 +9,7 @@ import { buildMainNavigation, isNavigationItemActive } from '../../src/lib/navig
 test('amazon workspace exposes the live tool surfaces in Talos', () => {
   assert.deepEqual(
     AMAZON_WORKSPACE_TOOLS.map((tool) => tool.href),
-    [
-      '/amazon/fba-fee-discrepancies',
-      '/amazon/fba-fee-tables',
-    ]
+    ['/amazon/fba-fee-discrepancies']
   )
 
   assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/amazon'), false)
@@ -26,10 +25,7 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   assert.ok(amazonSection)
   assert.deepEqual(
     amazonSection.items.map((item) => item.href),
-    [
-      '/amazon/fba-fee-discrepancies',
-      '/amazon/fba-fee-tables',
-    ]
+    ['/amazon/fba-fee-discrepancies']
   )
 
   const operationsSection = staffNavigation.find((section) => section.title === 'Operations')
@@ -58,20 +54,40 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   )
 })
 
-test('navigation matching keeps the live Amazon tools highlighted', () => {
+test('navigation matching keeps the live Amazon tool highlighted', () => {
   assert.equal(
-    isNavigationItemActive('/amazon/fba-fee-tables', {
-      href: '/amazon/fba-fee-tables',
+    isNavigationItemActive('/amazon/fba-fee-discrepancies', {
+      href: '/amazon/fba-fee-discrepancies',
       matchMode: 'prefix',
     }),
     true
   )
 
   assert.equal(
-    isNavigationItemActive('/operations/purchase-orders/123', {
-      href: '/operations/purchase-orders',
+    isNavigationItemActive('/amazon/fba-fee-tables', {
+      href: '/amazon/fba-fee-discrepancies',
       matchMode: 'prefix',
     }),
-    true
+    false
+  )
+})
+
+test('talos no longer ships the FBA fee tables page or SKU link', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const pagePath = path.join(talosRoot, 'src/app/amazon/fba-fee-tables/page.tsx')
+  const skusPanelSource = readFileSync(
+    path.join(talosRoot, 'src/app/config/products/skus-panel.tsx'),
+    'utf8'
+  )
+
+  assert.equal(
+    existsSync(pagePath),
+    false,
+    'FBA fee tables page should be removed from Talos'
+  )
+  assert.equal(
+    skusPanelSource.includes('/amazon/fba-fee-tables'),
+    false,
+    'SKU panel should not link to the removed FBA fee tables page'
   )
 })
