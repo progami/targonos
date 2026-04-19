@@ -4,28 +4,80 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
-  parseCaseReportMarkdown,
+  parseCaseReportSnapshotJson,
   readCaseReportBundleFromCaseRoot,
 } from './reader-core'
 
-test('parseCaseReportMarkdown extracts entity sections and case rows', () => {
-  const report = parseCaseReportMarkdown(
-    [
-      '## Case Report - 2026-04-08 (UK)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Action due | Account verification status / failed verification | 12339319152 | 0 days ago | Answered | Amazon replied on Apr 8. | Seller action is required now. | Reply from the primary inbox. |',
-      '',
-      '### NIGS LTD',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Weights and dimensions review | 12006221712 | 21 days ago | Transferred / locked | No new case reply. | Keep monitoring. | None. |',
-      '',
-    ].join('\n'),
+function writeReportSnapshot(
+  reportsDir: string,
+  reportDate: string,
+  market: string,
+  sections: Array<{
+    entity: string
+    rows: Array<{
+      category: string
+      issue: string
+      case_id: string
+      days_ago: string
+      status: string
+      evidence: string
+      assessment: string
+      next_step: string
+    }>
+  }>,
+) {
+  writeFileSync(
+    path.join(reportsDir, `${reportDate}.json`),
+    JSON.stringify(
+      {
+        report_date: reportDate,
+        market,
+        sections,
+      },
+      null,
+      2,
+    ),
+  )
+}
+
+test('parseCaseReportSnapshotJson extracts entity sections and case rows', () => {
+  const report = parseCaseReportSnapshotJson(
+    JSON.stringify({
+      report_date: '2026-04-08',
+      market: 'UK',
+      sections: [
+        {
+          entity: 'TARGON',
+          rows: [
+            {
+              category: 'Action due',
+              issue: 'Account verification status / failed verification',
+              case_id: '12339319152',
+              days_ago: '0 days ago',
+              status: 'Answered',
+              evidence: 'Amazon replied on Apr 8.',
+              assessment: 'Seller action is required now.',
+              next_step: 'Reply from the primary inbox.',
+            },
+          ],
+        },
+        {
+          entity: 'NIGS LTD',
+          rows: [
+            {
+              category: 'Watching',
+              issue: 'Weights and dimensions review',
+              case_id: '12006221712',
+              days_ago: '21 days ago',
+              status: 'Transferred / locked',
+              evidence: 'No new case reply.',
+              assessment: 'Keep monitoring.',
+              next_step: 'None.',
+            },
+          ],
+        },
+      ],
+    }),
   )
 
   assert.equal(report.reportDate, '2026-04-08')
@@ -80,33 +132,41 @@ test('readCaseReportBundleFromCaseRoot resolves the latest dated report and trac
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-07.md'),
-    [
-      '## Case Report - 2026-04-07 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Action due | Old issue | 19550165441 | 1 day ago | Answered | Old evidence. | Old assessment. | Old next step. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-07', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Action due',
+          issue: 'Old issue',
+          case_id: '19550165441',
+          days_ago: '1 day ago',
+          status: 'Answered',
+          evidence: 'Old evidence.',
+          assessment: 'Old assessment.',
+          next_step: 'Old next step.',
+        },
+      ],
+    },
+  ])
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   const bundle = await readCaseReportBundleFromCaseRoot(caseRoot, 'us')
 
@@ -222,33 +282,41 @@ test('readCaseReportBundleFromCaseRoot loads a historical report date when the h
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-07.md'),
-    [
-      '## Case Report - 2026-04-07 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Action due | Older case no longer in live case.json | 19096712151 | 1 day ago | Answered | Old evidence. | Old assessment. | Old next step. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-07', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Action due',
+          issue: 'Older case no longer in live case.json',
+          case_id: '19096712151',
+          days_ago: '1 day ago',
+          status: 'Answered',
+          evidence: 'Old evidence.',
+          assessment: 'Old assessment.',
+          next_step: 'Old next step.',
+        },
+      ],
+    },
+  ])
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   const bundle = await readCaseReportBundleFromCaseRoot(caseRoot, 'us', '2026-04-07')
 
@@ -291,19 +359,23 @@ test('readCaseReportBundleFromCaseRoot throws when tracked_case_ids is missing',
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -345,19 +417,23 @@ test('readCaseReportBundleFromCaseRoot throws when tracked_case_ids is malformed
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -399,19 +475,23 @@ test('readCaseReportBundleFromCaseRoot throws when a tracked case id is missing 
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -453,19 +533,23 @@ test('readCaseReportBundleFromCaseRoot throws when a case record is missing requ
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -508,19 +592,23 @@ test('readCaseReportBundleFromCaseRoot throws when action_kind is not an allowed
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -562,19 +650,23 @@ test('readCaseReportBundleFromCaseRoot throws when approval is required for a no
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
@@ -617,19 +709,23 @@ test('readCaseReportBundleFromCaseRoot throws when a cases map key does not matc
     ),
   )
 
-  writeFileSync(
-    path.join(reportsDir, '2026-04-08.md'),
-    [
-      '## Case Report - 2026-04-08 (US)',
-      '',
-      '### TARGON',
-      '',
-      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
-      '|---|---|---|---|---|---|---|---|',
-      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
-      '',
-    ].join('\n'),
-  )
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
 
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),

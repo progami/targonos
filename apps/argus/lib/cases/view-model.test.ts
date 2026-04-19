@@ -80,7 +80,7 @@ function buildBundle(): CaseReportBundle {
     marketSlug: 'us',
     marketLabel: 'USA - Dust Sheets',
     caseRoot: '/tmp/cases',
-    reportPath: '/tmp/cases/reports/2026-04-14.md',
+    reportPath: '/tmp/cases/reports/2026-04-14.json',
     caseJsonPath: '/tmp/cases/case.json',
     availableReportDates: ['2026-04-14', '2026-04-13', '2026-04-12'],
     reportSectionsByDate: {
@@ -283,7 +283,7 @@ function selectReportDate(bundle: CaseReportBundle, reportDate: string): CaseRep
   return {
     ...bundle,
     reportDate,
-    reportPath: `/tmp/cases/reports/${reportDate}.md`,
+    reportPath: `/tmp/cases/reports/${reportDate}.json`,
     sections,
   }
 }

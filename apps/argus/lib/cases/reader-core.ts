@@ -1,8 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-const CASE_REPORT_HEADER =
-  '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |';
 const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
 const CASE_REPORT_ACTION_KINDS = [
   'monitor',
@@ -101,26 +99,6 @@ function resolveMarketConfig(marketSlug: CaseReportMarketSlug) {
   return market;
 }
 
-function parseReportHeading(line: string): { reportDate: string; marketCode: string } {
-  const match = /^## Case Report - (\d{4}-\d{2}-\d{2}) \(([A-Z]{2})\)$/u.exec(line.trim());
-  if (match === null) {
-    throw new Error(`Invalid case report heading: ${line}`);
-  }
-  return {
-    reportDate: match[1],
-    marketCode: match[2],
-  };
-}
-
-function parseTableCells(line: string): string[] {
-  return line
-    .trim()
-    .replace(/^\|/u, '')
-    .replace(/\|$/u, '')
-    .split('|')
-    .map((cell) => cell.trim());
-}
-
 function readRequiredObject(
   value: unknown,
   errorMessage: string,
@@ -152,6 +130,19 @@ function readRequiredBoolean(
 ): boolean {
   const value = record[fieldName];
   if (typeof value !== 'boolean') {
+    throw new Error(errorMessage);
+  }
+
+  return value;
+}
+
+function readRequiredArray(
+  record: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+): unknown[] {
+  const value = record[fieldName];
+  if (Array.isArray(value) === false) {
     throw new Error(errorMessage);
   }
 
@@ -312,69 +303,109 @@ function parseCaseRecordsById(
   );
 }
 
-export function parseCaseReportMarkdown(markdown: string): ParsedCaseReport {
-  const lines = markdown.split(/\r?\n/u);
-  const headingLine = lines.find((line) => line.startsWith('## Case Report - '));
-  if (headingLine === undefined) {
-    throw new Error('Case report heading not found.');
+function parseCaseReportSnapshotRow(
+  value: unknown,
+  sectionEntity: string,
+  rowIndex: number,
+): CaseReportRow {
+  const row = readRequiredObject(
+    value,
+    `Invalid case report snapshot row ${rowIndex} for section ${sectionEntity}`,
+  );
+
+  return {
+    category: readRequiredString(
+      row,
+      'category',
+      `Missing required case report snapshot row field category for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    issue: readRequiredString(
+      row,
+      'issue',
+      `Missing required case report snapshot row field issue for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    caseId: readRequiredString(
+      row,
+      'case_id',
+      `Missing required case report snapshot row field case_id for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    daysAgo: readRequiredString(
+      row,
+      'days_ago',
+      `Missing required case report snapshot row field days_ago for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    status: readRequiredString(
+      row,
+      'status',
+      `Missing required case report snapshot row field status for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    evidence: readRequiredString(
+      row,
+      'evidence',
+      `Missing required case report snapshot row field evidence for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    assessment: readRequiredString(
+      row,
+      'assessment',
+      `Missing required case report snapshot row field assessment for section ${sectionEntity} row ${rowIndex}`,
+    ),
+    nextStep: readRequiredString(
+      row,
+      'next_step',
+      `Missing required case report snapshot row field next_step for section ${sectionEntity} row ${rowIndex}`,
+    ),
+  };
+}
+
+function parseCaseReportSnapshotSection(value: unknown, sectionIndex: number): CaseReportSection {
+  const section = readRequiredObject(value, `Invalid case report snapshot section ${sectionIndex}`);
+  const entity = readRequiredString(
+    section,
+    'entity',
+    `Missing required case report snapshot section field entity at index ${sectionIndex}`,
+  );
+  const rows = readRequiredArray(
+    section,
+    'rows',
+    `Missing required case report snapshot section rows at index ${sectionIndex}`,
+  ).map((row, rowIndex) => parseCaseReportSnapshotRow(row, entity, rowIndex));
+
+  if (rows.length === 0) {
+    throw new Error(`Case report snapshot section ${entity} contains no rows`);
   }
 
-  const { reportDate, marketCode } = parseReportHeading(headingLine);
-  const sections: CaseReportSection[] = [];
-  let currentSection: CaseReportSection | null = null;
-  let readingTable = false;
+  return {
+    entity,
+    rows,
+  };
+}
 
-  for (const line of lines) {
-    if (line.startsWith('### ')) {
-      if (currentSection !== null) {
-        sections.push(currentSection);
-      }
-      currentSection = {
-        entity: line.replace(/^### /u, '').trim(),
-        rows: [],
-      };
-      readingTable = false;
-      continue;
-    }
-
-    if (currentSection === null) {
-      continue;
-    }
-
-    if (line.startsWith(CASE_REPORT_HEADER)) {
-      readingTable = true;
-      continue;
-    }
-
-    if (readingTable && line.startsWith('|---')) {
-      continue;
-    }
-
-    if (readingTable && line.trim().startsWith('|')) {
-      const cells = parseTableCells(line);
-      if (cells.length !== 8) {
-        throw new Error(`Unexpected case report row: ${line}`);
-      }
-      currentSection.rows.push({
-        category: cells[0],
-        issue: cells[1],
-        caseId: cells[2],
-        daysAgo: cells[3],
-        status: cells[4],
-        evidence: cells[5],
-        assessment: cells[6],
-        nextStep: cells[7],
-      });
-      continue;
-    }
+export function parseCaseReportSnapshotJson(snapshotJson: string): ParsedCaseReport {
+  const snapshot = readRequiredObject(
+    JSON.parse(snapshotJson),
+    'Invalid case report snapshot root object',
+  );
+  const reportDate = readRequiredString(
+    snapshot,
+    'report_date',
+    'Missing required case report snapshot field report_date',
+  );
+  if (REPORT_DATE_PATTERN.test(reportDate) === false) {
+    throw new Error(`Invalid case report snapshot date: ${reportDate}`);
   }
-
-  if (currentSection !== null) {
-    sections.push(currentSection);
-  }
+  const marketCode = readRequiredString(
+    snapshot,
+    'market',
+    'Missing required case report snapshot field market',
+  );
+  const sections = readRequiredArray(
+    snapshot,
+    'sections',
+    'Missing required case report snapshot field sections',
+  ).map((section, sectionIndex) => parseCaseReportSnapshotSection(section, sectionIndex));
 
   if (sections.length === 0) {
-    throw new Error('Case report contains no entity sections.');
+    throw new Error('Case report snapshot contains no entity sections.');
   }
 
   return {
@@ -390,8 +421,8 @@ async function listAvailableReportDates(caseRoot: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isFile())
     .map((entry) => entry.name)
-    .filter((fileName) => fileName.endsWith('.md'))
-    .map((fileName) => fileName.replace(/\.md$/u, ''))
+    .filter((fileName) => fileName.endsWith('.json'))
+    .map((fileName) => fileName.replace(/\.json$/u, ''))
     .filter((reportDate) => REPORT_DATE_PATTERN.test(reportDate))
     .sort((left, right) => right.localeCompare(left));
 }
@@ -444,9 +475,9 @@ async function readParsedReportsByDate(
 ): Promise<Record<string, ParsedCaseReport>> {
   const reports = await Promise.all(
     availableReportDates.map(async (reportDate) => {
-      const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
-      const markdown = await fs.readFile(reportPath, 'utf8');
-      const parsedReport = parseCaseReportMarkdown(markdown);
+      const reportPath = path.join(caseRoot, 'reports', `${reportDate}.json`);
+      const snapshotJson = await fs.readFile(reportPath, 'utf8');
+      const parsedReport = parseCaseReportSnapshotJson(snapshotJson);
 
       if (parsedReport.reportDate !== reportDate) {
         throw new Error(`Case report date mismatch: expected ${reportDate}, got ${parsedReport.reportDate}`);
@@ -512,7 +543,7 @@ export async function readCaseReportBundleFromCaseRoot(
     throw new Error(`Invalid case report date: ${reportDate}`);
   }
 
-  const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
+  const reportPath = path.join(caseRoot, 'reports', `${reportDate}.json`);
   const caseJsonPath = path.join(caseRoot, 'case.json');
   if (requestedReportDate !== undefined && availableReportDates.includes(reportDate) === false) {
     await fs.readFile(reportPath, 'utf8');
