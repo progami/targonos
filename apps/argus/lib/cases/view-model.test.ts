@@ -10,6 +10,59 @@ import {
 } from './view-model'
 
 function buildBundle(): CaseReportBundle {
+  const sections = [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Legacy issue still waiting on reimbursement',
+          caseId: 'A-100',
+          daysAgo: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new support reply.',
+          assessment: 'Keep monitoring until the thread moves.',
+          nextStep: 'Check again tomorrow.',
+        },
+        {
+          category: 'Action due',
+          issue: 'Refund needs a seller reply',
+          caseId: 'A-200',
+          daysAgo: '0 days ago',
+          status: 'Answered',
+          evidence: 'Amazon asked for an invoice today.',
+          assessment: 'The thread is blocked on our reply.',
+          nextStep: 'Reply with the invoice attachment.',
+        },
+      ],
+    },
+    {
+      entity: 'NIGS LTD',
+      rows: [
+        {
+          category: 'Forum watch',
+          issue: 'Forum escalation mentioned reimbursement lag',
+          caseId: 'A-300',
+          daysAgo: '6 days ago',
+          status: 'Investigating',
+          evidence: 'Forum moderators acknowledged the pattern.',
+          assessment: 'The issue is worth watching for spillover.',
+          nextStep: 'Track whether the forum thread names our ASINs.',
+        },
+        {
+          category: 'New case',
+          issue: 'Fresh case opened for stranded inventory',
+          caseId: 'A-400',
+          daysAgo: '4 days ago',
+          status: 'Opened',
+          evidence: 'A new case appeared in the tracker.',
+          assessment: 'This is a new issue and needs first-pass review.',
+          nextStep: 'Read the opening case thread and summarize it.',
+        },
+      ],
+    },
+  ]
+
   return {
     reportDate: '2026-04-14',
     marketCode: 'US',
@@ -19,7 +72,9 @@ function buildBundle(): CaseReportBundle {
     reportPath: '/tmp/cases/reports/2026-04-14.md',
     caseJsonPath: '/tmp/cases/case.json',
     availableReportDates: ['2026-04-14'],
-    reportSectionsByDate: {},
+    reportSectionsByDate: {
+      '2026-04-14': sections,
+    },
     daySummaries: [
       {
         reportDate: '2026-04-14',
@@ -94,58 +149,7 @@ function buildBundle(): CaseReportBundle {
       },
     },
     generatedAt: '2026-04-14T08:00:00-05:00',
-    sections: [
-      {
-        entity: 'TARGON',
-        rows: [
-          {
-            category: 'Watching',
-            issue: 'Legacy issue still waiting on reimbursement',
-            caseId: 'A-100',
-            daysAgo: '2 days ago',
-            status: 'Work in progress',
-            evidence: 'No new support reply.',
-            assessment: 'Keep monitoring until the thread moves.',
-            nextStep: 'Check again tomorrow.',
-          },
-          {
-            category: 'Action due',
-            issue: 'Refund needs a seller reply',
-            caseId: 'A-200',
-            daysAgo: '0 days ago',
-            status: 'Answered',
-            evidence: 'Amazon asked for an invoice today.',
-            assessment: 'The thread is blocked on our reply.',
-            nextStep: 'Reply with the invoice attachment.',
-          },
-        ],
-      },
-      {
-        entity: 'NIGS LTD',
-        rows: [
-          {
-            category: 'Forum watch',
-            issue: 'Forum escalation mentioned reimbursement lag',
-            caseId: 'A-300',
-            daysAgo: '6 days ago',
-            status: 'Investigating',
-            evidence: 'Forum moderators acknowledged the pattern.',
-            assessment: 'The issue is worth watching for spillover.',
-            nextStep: 'Track whether the forum thread names our ASINs.',
-          },
-          {
-            category: 'New case',
-            issue: 'Fresh case opened for stranded inventory',
-            caseId: 'A-400',
-            daysAgo: '4 days ago',
-            status: 'Opened',
-            evidence: 'A new case appeared in the tracker.',
-            assessment: 'This is a new issue and needs first-pass review.',
-            nextStep: 'Read the opening case thread and summarize it.',
-          },
-        ],
-      },
-    ],
+    sections,
   }
 }
 

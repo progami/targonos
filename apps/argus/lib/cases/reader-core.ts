@@ -158,6 +158,26 @@ function readRequiredBoolean(
   return value;
 }
 
+function readRequiredStringArray(
+  record: Record<string, unknown>,
+  fieldName: string,
+  missingErrorMessage: string,
+  invalidErrorMessage: string,
+): string[] {
+  const value = record[fieldName];
+  if (value === undefined) {
+    throw new Error(missingErrorMessage);
+  }
+  if (Array.isArray(value) === false) {
+    throw new Error(invalidErrorMessage);
+  }
+  if (value.every((entry) => typeof entry === 'string') === false) {
+    throw new Error(invalidErrorMessage);
+  }
+
+  return value;
+}
+
 function readNullableString(
   record: Record<string, unknown>,
   fieldName: string,
@@ -511,7 +531,12 @@ export async function readCaseReportBundleFromCaseRoot(
     throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseMarket}`);
   }
 
-  const trackedCaseIds = Array.isArray(caseState.tracked_case_ids) ? caseState.tracked_case_ids : [];
+  const trackedCaseIds = readRequiredStringArray(
+    caseState,
+    'tracked_case_ids',
+    'Missing required case.json field tracked_case_ids',
+    'Invalid case.json field tracked_case_ids',
+  );
   const caseRecordsById = parseCaseRecordsById(caseState.cases, trackedCaseIds);
   const daySummaries = buildCaseReportDaySummaries(parsedReportsByDate, availableReportDates);
   const reportSectionsByDate = buildReportSectionsByDate(parsedReportsByDate, availableReportDates);
