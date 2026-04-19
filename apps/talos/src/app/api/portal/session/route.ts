@@ -1,10 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { auth } from '@/lib/auth'
+import { buildPortalSessionResponse } from './session-response'
 
 export async function GET(_request: NextRequest) {
-  const session = await auth()
-  if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-  return NextResponse.json(session)
+  return buildPortalSessionResponse(auth)
 }
