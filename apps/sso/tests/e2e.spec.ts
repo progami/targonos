@@ -13,8 +13,8 @@ test('TargonOS home renders the authenticated launcher', async ({ page }) => {
   await page.waitForURL(new RegExp(`^${escapeForRegExp(portalBaseUrl)}/?$`), {
     timeout: 15_000,
   })
-  await expect(page.getByText('TargonOS Portal')).toBeVisible()
-  await expect(page.getByText('Control Center')).toBeVisible()
+  await expect(page.getByText('Portal launcher')).toBeVisible()
+  await expect(page.getByText('Assigned workspaces')).toBeVisible()
   await expect(page.getByText(demoEmail)).toBeVisible()
   await expect(page).not.toHaveURL(/\/login$/)
 })
