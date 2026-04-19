@@ -17,6 +17,7 @@ import {
   getCaseQueueMutedTextColor,
   getCaseQueueSelectedRowBackground,
 } from '@/lib/cases/theme'
+import { CASE_ACTIVITY_TABLE_DESKTOP_HEIGHT } from '@/lib/cases/layout'
 import type { CaseTimelineRow } from '@/lib/cases/view-model'
 
 type CaseActivityTableProps = {
@@ -111,9 +112,9 @@ export function CaseActivityTable({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        maxHeight: {
+        height: {
           xs: 320,
-          lg: 400,
+          lg: CASE_ACTIVITY_TABLE_DESKTOP_HEIGHT,
         },
         overflow: 'auto',
       })}
