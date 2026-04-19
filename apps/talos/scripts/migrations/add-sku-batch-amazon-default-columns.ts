@@ -117,11 +117,10 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
 
   console.log(`[${tenant}] Backfilling sku_batches Amazon defaults from skus`)
 
-  const [hasSkuAmazonSizeTier, hasSkuAmazonFbaFee, hasSkuUnitWeight] = options.dryRun
-    ? [true, true, true]
+  const [hasSkuAmazonSizeTier, hasSkuUnitWeight] = options.dryRun
+    ? [true, true]
     : await Promise.all([
         columnExists(prisma, 'skus', 'amazon_size_tier'),
-        columnExists(prisma, 'skus', 'amazon_fba_fulfillment_fee'),
         columnExists(prisma, 'skus', 'unit_weight_kg'),
       ])
 
@@ -129,13 +128,10 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     hasSkuAmazonSizeTier
       ? `amazon_size_tier = COALESCE(b.amazon_size_tier, s.amazon_size_tier)`
       : null,
-    hasSkuAmazonFbaFee
-      ? `amazon_fba_fulfillment_fee = COALESCE(b.amazon_fba_fulfillment_fee, s.amazon_fba_fulfillment_fee)`
-      : null,
     `amazon_reference_weight_kg = COALESCE(b.amazon_reference_weight_kg, b.unit_weight_kg${hasSkuUnitWeight ? ', s.unit_weight_kg' : ''})`,
   ].filter((clause): clause is string => Boolean(clause))
 
-  const needsSkuJoin = hasSkuAmazonSizeTier || hasSkuAmazonFbaFee || hasSkuUnitWeight
+  const needsSkuJoin = hasSkuAmazonSizeTier || hasSkuUnitWeight
 
   const backfillSql = needsSkuJoin
     ? `

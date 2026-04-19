@@ -510,7 +510,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     unitDimensionsCm?: string | null
     feeDebug?: {
       referralFeePercent: number | null
-      fbaFee: number | null
       sizeTier: string | null
     }
   }> = []
