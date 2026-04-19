@@ -70,6 +70,11 @@ export default function WprDashboardShell() {
     return <Alert severity="error">Unknown WPR week: {selectedWeek}</Alert>;
   }
 
+  const changeEntries = data.changeLogByWeek[selectedWeek]
+  if (changeEntries === undefined) {
+    return <Alert severity="error">Missing WPR change log for {selectedWeek}</Alert>
+  }
+
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WprTopBar
@@ -80,7 +85,7 @@ export default function WprDashboardShell() {
         onSelectWeek={setSelectedWeek}
       />
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 0, py: 1.5 }}>
-        {activeTab === 'sqp' ? <SqpTab bundle={bundle} /> : null}
+        {activeTab === 'sqp' ? <SqpTab bundle={bundle} changeEntries={changeEntries} /> : null}
         {activeTab === 'scp' ? <ScpTab bundle={bundle} /> : null}
         {activeTab === 'br' ? <BusinessReportsTab bundle={bundle} /> : null}
         {activeTab === 'tst' ? <TstTab bundle={bundle} /> : null}

@@ -20,6 +20,9 @@ type WprStore = WprDashboardState & {
   setActiveTab: (activeTab: WprTab) => void;
   setSelectedWeek: (selectedWeek: WeekLabel) => void;
   setSelectedClusterId: (selectedClusterId: string | null) => void;
+  setSelectedSqpRootIds: (rootIds: string[]) => void;
+  setSelectedSqpTermIds: (termIds: string[]) => void;
+  setExpandedSqpRootIds: (rootIds: string[]) => void;
   toggleSelectedSqpRootId: (rootId: string) => void;
   toggleSelectedSqpTermId: (termId: string) => void;
   toggleExpandedSqpRootId: (rootId: string) => void;
@@ -58,6 +61,15 @@ export const useWprStore = create<WprStore>((set) => ({
   },
   setSelectedClusterId: (selectedClusterId) => {
     set({ selectedClusterId });
+  },
+  setSelectedSqpRootIds: (rootIds) => {
+    set({ selectedSqpRootIds: new Set(rootIds) });
+  },
+  setSelectedSqpTermIds: (termIds) => {
+    set({ selectedSqpTermIds: new Set(termIds) });
+  },
+  setExpandedSqpRootIds: (rootIds) => {
+    set({ expandedSqpRootIds: new Set(rootIds) });
   },
   toggleSelectedSqpRootId: (rootId) => {
     set((state) => ({

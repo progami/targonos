@@ -65,9 +65,16 @@ export interface WprCoverageSummary {
   weeks_sqp: number;
   weeks_rank: number;
   weeks_ppc: number;
-  has_sqp: boolean;
-  has_rank: boolean;
-  has_ppc: boolean;
+  has_sqp?: boolean;
+  has_rank?: boolean;
+  has_ppc?: boolean;
+  terms_total?: number;
+  terms_sqp?: number;
+  terms_rank?: number;
+  terms_ppc?: number;
+  excluded_non_sqp_terms?: number;
+  excluded_ppc_only_terms?: number;
+  excluded_rank_only_terms?: number;
 }
 
 export interface WprCoverage extends WprCoverageSummary {
@@ -225,6 +232,7 @@ export interface WprCluster {
   coverage: WprCoverage;
   eligibility: Record<string, boolean | number | string | null>;
   observed: {
+    current_week: WprObservedWindow;
     recent_4w: WprObservedWindow;
     baseline_13w: WprObservedWindow;
   };
@@ -284,10 +292,11 @@ export interface WprSqpTerm {
   weekly: WprWeeklyMetrics[];
   selection_status: string;
   selection_reason: string;
-  selection_volume_recent_4w: number;
+  selection_volume_selected_week: number;
   selection_volume_baseline_13w: number;
   coverage: WprCoverage;
   observed: {
+    current_week: WprObservedWindow;
     recent_4w: WprObservedWindow;
     baseline_13w: WprObservedWindow;
   };
