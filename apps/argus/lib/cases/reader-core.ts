@@ -74,7 +74,7 @@ export type CaseReportCaseRecord = {
   nextAction: string;
   nextActionDate: string;
   linkedCases: string;
-  primaryEmail: string;
+  primaryEmail: string | null;
   actionKind: CaseReportActionKind;
   approvalRequired: boolean;
 };
@@ -158,8 +158,37 @@ function readRequiredBoolean(
   return value;
 }
 
+function readNullableString(
+  record: Record<string, unknown>,
+  fieldName: string,
+): string | null {
+  const value = record[fieldName];
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return value;
+}
+
 function isCaseReportActionKind(value: string): value is CaseReportActionKind {
   return CASE_REPORT_ACTION_KINDS.some((actionKind) => actionKind === value);
+}
+
+function actionKindAllowsApproval(actionKind: CaseReportActionKind): boolean {
+  switch (actionKind) {
+    case 'send_email':
+      return true;
+    case 'send_case_reply':
+      return true;
+    case 'send_forum_post':
+      return true;
+    case 'monitor':
+      return false;
+    case 'checkpoint':
+      return false;
+    case 'collect_evidence':
+      return false;
+  }
 }
 
 function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecord {
@@ -180,6 +209,16 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
   );
   if (isCaseReportActionKind(actionKind) === false) {
     throw new Error(`Invalid case.json action_kind ${actionKind} for case ${rawCaseId}`);
+  }
+  const approvalRequired = readRequiredBoolean(
+    record,
+    'approval_required',
+    `Missing required case.json case field approval_required for case ${rawCaseId}`,
+  );
+  if (approvalRequired === true && actionKindAllowsApproval(actionKind) === false) {
+    throw new Error(
+      `Invalid case.json approval_required true for non-send action_kind ${actionKind} for case ${rawCaseId}`,
+    );
   }
 
   return {
@@ -229,40 +268,20 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
       'linked_cases',
       `Missing required case.json case field linked_cases for case ${rawCaseId}`,
     ),
-    primaryEmail: readRequiredString(
-      record,
-      'primary_email',
-      `Missing required case.json case field primary_email for case ${rawCaseId}`,
-    ),
+    primaryEmail: readNullableString(record, 'primary_email'),
     actionKind,
-    approvalRequired: readRequiredBoolean(
-      record,
-      'approval_required',
-      `Missing required case.json case field approval_required for case ${rawCaseId}`,
-    ),
+    approvalRequired,
   };
-}
-
-function collectCaseIds(sections: CaseReportSection[]): string[] {
-  const caseIds = new Set<string>();
-
-  for (const section of sections) {
-    for (const row of section.rows) {
-      caseIds.add(row.caseId);
-    }
-  }
-
-  return Array.from(caseIds);
 }
 
 function parseCaseRecordsById(
   value: unknown,
-  activeCaseIds: string[],
+  trackedCaseIds: string[],
 ): Record<string, CaseReportCaseRecord> {
   const cases = readRequiredObject(value, 'Missing required case.json cases map');
 
   return Object.fromEntries(
-    activeCaseIds.map((caseId) => {
+    trackedCaseIds.map((caseId) => {
       const caseRecord = cases[caseId];
       if (caseRecord === undefined) {
         throw new Error(`Missing required case.json case record for case ${caseId}`);
@@ -492,7 +511,8 @@ export async function readCaseReportBundleFromCaseRoot(
     throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseMarket}`);
   }
 
-  const caseRecordsById = parseCaseRecordsById(caseState.cases, collectCaseIds(parsedReport.sections));
+  const trackedCaseIds = Array.isArray(caseState.tracked_case_ids) ? caseState.tracked_case_ids : [];
+  const caseRecordsById = parseCaseRecordsById(caseState.cases, trackedCaseIds);
   const daySummaries = buildCaseReportDaySummaries(parsedReportsByDate, availableReportDates);
   const reportSectionsByDate = buildReportSectionsByDate(parsedReportsByDate, availableReportDates);
 
@@ -506,7 +526,7 @@ export async function readCaseReportBundleFromCaseRoot(
     availableReportDates,
     reportSectionsByDate,
     daySummaries,
-    trackedCaseIds: Array.isArray(caseState.tracked_case_ids) ? caseState.tracked_case_ids : [],
+    trackedCaseIds,
     caseRecordsById,
     generatedAt: typeof caseState.generated_at === 'string' ? caseState.generated_at : null,
   };
