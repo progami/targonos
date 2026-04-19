@@ -4,6 +4,14 @@ import path from 'node:path';
 const CASE_REPORT_HEADER =
   '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |';
 const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+const CASE_REPORT_ACTION_KINDS = [
+  'monitor',
+  'checkpoint',
+  'collect_evidence',
+  'send_email',
+  'send_case_reply',
+  'send_forum_post',
+] as const;
 
 const CASE_MARKETS = {
   us: {
@@ -53,13 +61,7 @@ export type CaseReportDaySummary = {
   watchingRows: number;
 };
 
-export type CaseReportActionKind =
-  | 'monitor'
-  | 'checkpoint'
-  | 'collect_evidence'
-  | 'send_email'
-  | 'send_case_reply'
-  | 'send_forum_post';
+export type CaseReportActionKind = (typeof CASE_REPORT_ACTION_KINDS)[number];
 
 export type CaseReportCaseRecord = {
   caseId: string;
@@ -156,6 +158,10 @@ function readRequiredBoolean(
   return value;
 }
 
+function isCaseReportActionKind(value: string): value is CaseReportActionKind {
+  return CASE_REPORT_ACTION_KINDS.some((actionKind) => actionKind === value);
+}
+
 function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecord {
   const record = readRequiredObject(value, `Invalid case.json case record for case ${rawCaseId}`);
   const caseId = readRequiredString(
@@ -163,6 +169,18 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
     'case_id',
     `Missing required case.json case field case_id for case ${rawCaseId}`,
   );
+  if (caseId !== rawCaseId) {
+    throw new Error(`Case.json case key mismatch: expected ${rawCaseId}, got ${caseId}`);
+  }
+
+  const actionKind = readRequiredString(
+    record,
+    'action_kind',
+    `Missing required case.json case field action_kind for case ${rawCaseId}`,
+  );
+  if (isCaseReportActionKind(actionKind) === false) {
+    throw new Error(`Invalid case.json action_kind ${actionKind} for case ${rawCaseId}`);
+  }
 
   return {
     caseId,
@@ -216,11 +234,7 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
       'primary_email',
       `Missing required case.json case field primary_email for case ${rawCaseId}`,
     ),
-    actionKind: readRequiredString(
-      record,
-      'action_kind',
-      `Missing required case.json case field action_kind for case ${rawCaseId}`,
-    ) as CaseReportActionKind,
+    actionKind,
     approvalRequired: readRequiredBoolean(
       record,
       'approval_required',
@@ -229,11 +243,33 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
   };
 }
 
-function parseCaseRecordsById(value: unknown): Record<string, CaseReportCaseRecord> {
+function collectCaseIds(sections: CaseReportSection[]): string[] {
+  const caseIds = new Set<string>();
+
+  for (const section of sections) {
+    for (const row of section.rows) {
+      caseIds.add(row.caseId);
+    }
+  }
+
+  return Array.from(caseIds);
+}
+
+function parseCaseRecordsById(
+  value: unknown,
+  activeCaseIds: string[],
+): Record<string, CaseReportCaseRecord> {
   const cases = readRequiredObject(value, 'Missing required case.json cases map');
 
   return Object.fromEntries(
-    Object.entries(cases).map(([caseId, caseRecord]) => [caseId, parseCaseRecord(caseId, caseRecord)]),
+    activeCaseIds.map((caseId) => {
+      const caseRecord = cases[caseId];
+      if (caseRecord === undefined) {
+        throw new Error(`Missing required case.json case record for case ${caseId}`);
+      }
+
+      return [caseId, parseCaseRecord(caseId, caseRecord)] as const;
+    }),
   );
 }
 
@@ -362,35 +398,11 @@ function countCaseReportRows(parsedReport: ParsedCaseReport): CaseReportDaySumma
   return summary;
 }
 
-async function readCaseReportDaySummaries(
+async function readParsedReportsByDate(
   caseRoot: string,
   availableReportDates: string[],
   marketCode: string,
-): Promise<CaseReportDaySummary[]> {
-  return Promise.all(
-    availableReportDates.map(async (reportDate) => {
-      const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
-      const markdown = await fs.readFile(reportPath, 'utf8');
-      const parsedReport = parseCaseReportMarkdown(markdown);
-
-      if (parsedReport.reportDate !== reportDate) {
-        throw new Error(`Case report date mismatch: expected ${reportDate}, got ${parsedReport.reportDate}`);
-      }
-
-      if (parsedReport.marketCode !== marketCode) {
-        throw new Error(`Case report market mismatch: expected ${marketCode}, got ${parsedReport.marketCode}`);
-      }
-
-      return countCaseReportRows(parsedReport);
-    }),
-  );
-}
-
-async function readReportSectionsByDate(
-  caseRoot: string,
-  availableReportDates: string[],
-  marketCode: string,
-): Promise<Record<string, CaseReportSection[]>> {
+): Promise<Record<string, ParsedCaseReport>> {
   const reports = await Promise.all(
     availableReportDates.map(async (reportDate) => {
       const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
@@ -405,11 +417,44 @@ async function readReportSectionsByDate(
         throw new Error(`Case report market mismatch: expected ${marketCode}, got ${parsedReport.marketCode}`);
       }
 
-      return [reportDate, parsedReport.sections] as const;
+      return [reportDate, parsedReport] as const;
     }),
   );
 
   return Object.fromEntries(reports);
+}
+
+function readParsedReportByDate(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  reportDate: string,
+): ParsedCaseReport {
+  const parsedReport = parsedReportsByDate[reportDate];
+  if (parsedReport === undefined) {
+    throw new Error(`Missing parsed case report for date ${reportDate}`);
+  }
+
+  return parsedReport;
+}
+
+function buildCaseReportDaySummaries(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  availableReportDates: string[],
+): CaseReportDaySummary[] {
+  return availableReportDates.map((reportDate) =>
+    countCaseReportRows(readParsedReportByDate(parsedReportsByDate, reportDate)),
+  );
+}
+
+function buildReportSectionsByDate(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  availableReportDates: string[],
+): Record<string, CaseReportSection[]> {
+  return Object.fromEntries(
+    availableReportDates.map((reportDate) => [
+      reportDate,
+      readParsedReportByDate(parsedReportsByDate, reportDate).sections,
+    ]),
+  );
 }
 
 export async function readCaseReportBundleFromCaseRoot(
@@ -430,20 +475,16 @@ export async function readCaseReportBundleFromCaseRoot(
 
   const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
   const caseJsonPath = path.join(caseRoot, 'case.json');
-  const [markdown, caseJsonRaw, daySummaries, reportSectionsByDate] = await Promise.all([
-    fs.readFile(reportPath, 'utf8'),
-    fs.readFile(caseJsonPath, 'utf8'),
-    readCaseReportDaySummaries(caseRoot, availableReportDates, market.marketCode),
-    readReportSectionsByDate(caseRoot, availableReportDates, market.marketCode),
-  ]);
-
-  const parsedReport = parseCaseReportMarkdown(markdown);
-  if (parsedReport.marketCode !== market.marketCode) {
-    throw new Error(
-      `Case report market mismatch: expected ${market.marketCode}, got ${parsedReport.marketCode}`,
-    );
+  if (requestedReportDate !== undefined && availableReportDates.includes(reportDate) === false) {
+    await fs.readFile(reportPath, 'utf8');
   }
 
+  const [caseJsonRaw, parsedReportsByDate] = await Promise.all([
+    fs.readFile(caseJsonPath, 'utf8'),
+    readParsedReportsByDate(caseRoot, availableReportDates, market.marketCode),
+  ]);
+
+  const parsedReport = readParsedReportByDate(parsedReportsByDate, reportDate);
   const caseState = readRequiredObject(JSON.parse(caseJsonRaw), 'Invalid case.json root object');
   const caseMarket = readRequiredString(caseState, 'market', 'Missing required case.json field market');
 
@@ -451,7 +492,9 @@ export async function readCaseReportBundleFromCaseRoot(
     throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseMarket}`);
   }
 
-  const caseRecordsById = parseCaseRecordsById(caseState.cases);
+  const caseRecordsById = parseCaseRecordsById(caseState.cases, collectCaseIds(parsedReport.sections));
+  const daySummaries = buildCaseReportDaySummaries(parsedReportsByDate, availableReportDates);
+  const reportSectionsByDate = buildReportSectionsByDate(parsedReportsByDate, availableReportDates);
 
   return {
     ...parsedReport,

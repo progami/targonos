@@ -19,6 +19,7 @@ function buildBundle(): CaseReportBundle {
     reportPath: '/tmp/cases/reports/2026-04-14.md',
     caseJsonPath: '/tmp/cases/case.json',
     availableReportDates: ['2026-04-14'],
+    reportSectionsByDate: {},
     daySummaries: [
       {
         reportDate: '2026-04-14',
@@ -30,6 +31,7 @@ function buildBundle(): CaseReportBundle {
       },
     ],
     trackedCaseIds: ['A-100', 'A-200', 'A-300', 'A-400'],
+    caseRecordsById: {},
     generatedAt: '2026-04-14T08:00:00-05:00',
     sections: [
       {
