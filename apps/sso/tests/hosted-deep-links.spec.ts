@@ -18,7 +18,7 @@ type HostedRouteCheck = {
 }
 
 const hostedRouteChecks: HostedRouteCheck[] = [
-  { name: 'portal', path: '/', visibleText: 'TargonOS Portal' },
+  { name: 'portal', path: '/', visibleText: 'Portal launcher' },
   { name: 'atlas', path: '/atlas/employees', visibleText: 'Employees' },
   { name: 'kairos', path: '/kairos/forecasts', visibleText: 'Forecasts' },
   { name: 'xplan', path: '/xplan/1-setup', visibleText: 'Setup' },

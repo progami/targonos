@@ -1,10 +1,18 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 
 const inter = Inter({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
+  variable: '--font-sans',
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  display: 'swap',
+  variable: '--font-mono',
 });
 
 export const metadata: Metadata = {
@@ -20,8 +28,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
-  const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL || undefined;
-  const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
+  const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL
+    ? process.env.NEXT_PUBLIC_RELEASE_URL
+    : undefined;
+  const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA
+    ? process.env.NEXT_PUBLIC_COMMIT_SHA
+    : undefined;
   const commitUrl = commitSha
     ? `https://github.com/progami/targonos/commit/${commitSha}`
     : undefined;
@@ -31,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body
-        className={inter.className}
+        className={`${inter.className} ${inter.variable} ${jetBrainsMono.variable}`}
         style={{
           margin: 0,
           padding: 0,
@@ -51,13 +63,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             zIndex: 50,
             fontSize: 12,
             lineHeight: 1.2,
-            padding: '6px 10px',
+            padding: '8px 12px',
             borderRadius: 9999,
-            border: '1px solid rgba(15, 23, 42, 0.18)',
-            background: 'rgba(255, 255, 255, 0.85)',
-            color: 'rgba(15, 23, 42, 0.75)',
+            border: '1px solid rgba(140, 166, 181, 0.16)',
+            background: 'rgba(4, 16, 26, 0.72)',
+            color: 'rgba(213, 226, 234, 0.82)',
             textDecoration: 'none',
-            backdropFilter: 'blur(8px)',
+            backdropFilter: 'blur(12px)',
+            fontFamily: 'var(--font-mono), "JetBrains Mono", monospace',
+            letterSpacing: '0.04em',
           }}
           aria-label={`TargonOS version v${version}`}
         >
