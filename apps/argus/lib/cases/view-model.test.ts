@@ -2,15 +2,15 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import type { CaseReportBundle } from './reader-core'
 import {
-  createCaseApprovalRows,
+  createCaseDetailModel,
   createCaseReportDateOptions,
-  filterCaseApprovalRows,
-  matchesCaseApprovalSearch,
-  type CaseApprovalRow,
+  createCaseSelectorRows,
+  createCaseTimelineRows,
+  filterCaseSelectorRows,
 } from './view-model'
 
 function buildBundle(): CaseReportBundle {
-  const sections = [
+  const currentSections = [
     {
       entity: 'TARGON',
       rows: [
@@ -71,9 +71,78 @@ function buildBundle(): CaseReportBundle {
     caseRoot: '/tmp/cases',
     reportPath: '/tmp/cases/reports/2026-04-14.md',
     caseJsonPath: '/tmp/cases/case.json',
-    availableReportDates: ['2026-04-14'],
+    availableReportDates: ['2026-04-14', '2026-04-13', '2026-04-12'],
     reportSectionsByDate: {
-      '2026-04-14': sections,
+      '2026-04-14': currentSections,
+      '2026-04-13': [
+        {
+          entity: 'TARGON',
+          rows: [
+            {
+              category: 'Watching',
+              issue: 'Legacy issue still waiting on reimbursement',
+              caseId: 'A-100',
+              daysAgo: '1 day ago',
+              status: 'Work in progress',
+              evidence: 'Still no reply from support.',
+              assessment: 'Continue to monitor until the thread moves.',
+              nextStep: 'Check again tomorrow.',
+            },
+            {
+              category: 'Watching',
+              issue: 'Refund needs a seller reply',
+              caseId: 'A-200',
+              daysAgo: '1 day ago',
+              status: 'Waiting',
+              evidence: 'Support asked us to confirm the invoice file.',
+              assessment: 'The thread is heading toward a reply request.',
+              nextStep: 'Prepare the invoice evidence.',
+            },
+          ],
+        },
+        {
+          entity: 'NIGS LTD',
+          rows: [
+            {
+              category: 'Watching',
+              issue: 'Fresh case opened for stranded inventory',
+              caseId: 'A-400',
+              daysAgo: '3 days ago',
+              status: 'Investigating',
+              evidence: 'The new case is still waiting on Amazon triage.',
+              assessment: 'Keep the new case warm until support replies.',
+              nextStep: 'Check for the first Amazon reply.',
+            },
+          ],
+        },
+      ],
+      '2026-04-12': [
+        {
+          entity: 'TARGON',
+          rows: [
+            {
+              category: 'Watching',
+              issue: 'Legacy issue still waiting on reimbursement',
+              caseId: 'A-100',
+              daysAgo: '0 days ago',
+              status: 'Opened',
+              evidence: 'The reimbursement thread was first logged today.',
+              assessment: 'Start monitoring the case history.',
+              nextStep: 'Confirm the opening case details.',
+            },
+            {
+              category: 'New case',
+              issue: 'Refund needs a seller reply',
+              caseId: 'A-200',
+              daysAgo: '0 days ago',
+              status: 'Opened',
+              evidence: 'Support opened the refund thread today.',
+              assessment: 'This began as a fresh case before the reply ask.',
+              nextStep: 'Read the opening case thread.',
+            },
+          ],
+        },
+      ],
     },
     daySummaries: [
       {
@@ -82,6 +151,22 @@ function buildBundle(): CaseReportBundle {
         actionDueRows: 1,
         newCaseRows: 1,
         forumWatchRows: 1,
+        watchingRows: 1,
+      },
+      {
+        reportDate: '2026-04-13',
+        totalRows: 3,
+        actionDueRows: 0,
+        newCaseRows: 0,
+        forumWatchRows: 0,
+        watchingRows: 3,
+      },
+      {
+        reportDate: '2026-04-12',
+        totalRows: 2,
+        actionDueRows: 0,
+        newCaseRows: 1,
+        forumWatchRows: 0,
         watchingRows: 1,
       },
     ],
@@ -108,11 +193,11 @@ function buildBundle(): CaseReportBundle {
         entity: 'TARGON',
         amazonStatus: 'Answered',
         ourStatus: 'waiting_on_us',
-        created: '2026-04-14',
+        created: '2026-04-12',
         lastReply: '2026-04-14',
         nextAction: 'Reply with the invoice attachment.',
         nextActionDate: '2026-04-14',
-        linkedCases: '',
+        linkedCases: 'A-199',
         primaryEmail: 'ops@targonglobal.com',
         actionKind: 'send_case_reply',
         approvalRequired: true,
@@ -142,111 +227,177 @@ function buildBundle(): CaseReportBundle {
         lastReply: '2026-04-10',
         nextAction: 'Read the opening case thread and summarize it.',
         nextActionDate: '2026-04-14',
-        linkedCases: '',
+        linkedCases: 'A-401',
         primaryEmail: 'support@nigs.example',
         actionKind: 'collect_evidence',
         approvalRequired: false,
       },
     },
     generatedAt: '2026-04-14T08:00:00-05:00',
-    sections,
+    sections: currentSections,
   }
 }
 
-function withDecision(row: CaseApprovalRow, decision: CaseApprovalRow['decision']): CaseApprovalRow {
-  return {
-    ...row,
-    decision,
-  }
-}
+test('createCaseSelectorRows orders the selector by urgency and counts dated activity', () => {
+  const rows = createCaseSelectorRows(buildBundle())
 
-test('createCaseApprovalRows flattens sections into fixed action order', () => {
-  const rows = createCaseApprovalRows(buildBundle())
-
-  assert.equal(rows.length, 4)
   assert.deepEqual(
     rows.map((row) => ({
-      category: row.category,
       caseId: row.caseId,
+      category: row.category,
+      issue: row.issue,
       entity: row.entity,
-      decision: row.decision,
+      amazonStatus: row.amazonStatus,
+      openSince: row.openSince,
+      activityCount: row.activityCount,
     })),
     [
-      { category: 'Action due', caseId: 'A-200', entity: 'TARGON', decision: 'pending' },
-      { category: 'New case', caseId: 'A-400', entity: 'NIGS LTD', decision: 'pending' },
-      { category: 'Forum watch', caseId: 'A-300', entity: 'NIGS LTD', decision: 'pending' },
-      { category: 'Watching', caseId: 'A-100', entity: 'TARGON', decision: 'pending' },
+      {
+        caseId: 'A-200',
+        category: 'Action due',
+        issue: 'Refund needs a seller reply',
+        entity: 'TARGON',
+        amazonStatus: 'Answered',
+        openSince: '2026-04-12',
+        activityCount: 3,
+      },
+      {
+        caseId: 'A-400',
+        category: 'New case',
+        issue: 'Fresh case opened for stranded inventory',
+        entity: 'NIGS LTD',
+        amazonStatus: 'Opened',
+        openSince: '2026-04-10',
+        activityCount: 2,
+      },
+      {
+        caseId: 'A-300',
+        category: 'Forum watch',
+        issue: 'Forum escalation mentioned reimbursement lag',
+        entity: 'NIGS LTD',
+        amazonStatus: 'Investigating',
+        openSince: '2026-04-08',
+        activityCount: 1,
+      },
+      {
+        caseId: 'A-100',
+        category: 'Watching',
+        issue: 'Legacy issue still waiting on reimbursement',
+        entity: 'TARGON',
+        amazonStatus: 'Work in progress',
+        openSince: '2026-04-12',
+        activityCount: 3,
+      },
     ],
   )
 })
 
-test('filterCaseApprovalRows applies decision and text filters together', () => {
-  const rows = createCaseApprovalRows(buildBundle())
-  const decidedRows = [
-    withDecision(rows[0], 'approved'),
-    rows[1],
-    withDecision(rows[2], 'rejected'),
-    rows[3],
-  ]
+test('createCaseSelectorRows throws when the selected report references a missing case record', () => {
+  const bundle = buildBundle()
+  delete bundle.caseRecordsById['A-300']
 
-  assert.deepEqual(
-    filterCaseApprovalRows(decidedRows, {
-      decision: 'pending',
-      query: '',
-    }).map((row) => row.caseId),
-    ['A-400', 'A-100'],
-  )
-
-  assert.deepEqual(
-    filterCaseApprovalRows(decidedRows, {
-      decision: 'approved',
-      query: 'invoice',
-    }).map((row) => row.caseId),
-    ['A-200'],
-  )
-
-  assert.deepEqual(
-    filterCaseApprovalRows(decidedRows, {
-      decision: 'all',
-      query: 'nigs',
-    }).map((row) => row.caseId),
-    ['A-400', 'A-300'],
+  assert.throws(
+    () => createCaseSelectorRows(bundle),
+    new Error('Missing case record for case selector row: A-300'),
   )
 })
 
-test('matchesCaseApprovalSearch checks issue, assessment, next step, case id, and entity', () => {
-  const row = createCaseApprovalRows(buildBundle())[0]
+test('createCaseTimelineRows collects one snapshot per date in newest-first order', () => {
+  const rows = createCaseTimelineRows(buildBundle(), 'A-200')
 
-  assert.equal(matchesCaseApprovalSearch(row, 'refund'), true)
-  assert.equal(matchesCaseApprovalSearch(row, 'invoice attachment'), true)
-  assert.equal(matchesCaseApprovalSearch(row, 'A-200'), true)
-  assert.equal(matchesCaseApprovalSearch(row, 'targon'), true)
-  assert.equal(matchesCaseApprovalSearch(row, 'forum'), false)
+  assert.deepEqual(
+    rows.map((row) => ({
+      reportDate: row.reportDate,
+      category: row.category,
+      status: row.status,
+      signal: row.signal,
+    })),
+    [
+      {
+        reportDate: '2026-04-14',
+        category: 'Action due',
+        status: 'Answered',
+        signal: 'Amazon asked for an invoice today.',
+      },
+      {
+        reportDate: '2026-04-13',
+        category: 'Watching',
+        status: 'Waiting',
+        signal: 'Support asked us to confirm the invoice file.',
+      },
+      {
+        reportDate: '2026-04-12',
+        category: 'New case',
+        status: 'Opened',
+        signal: 'Support opened the refund thread today.',
+      },
+    ],
+  )
+})
+
+test('createCaseDetailModel joins timeline snapshots with case metadata and gates approval', () => {
+  const bundle = buildBundle()
+  const replyDetail = createCaseDetailModel(bundle, createCaseTimelineRows(bundle, 'A-200')[0])
+
+  assert.deepEqual(replyDetail, {
+    reportDate: '2026-04-14',
+    caseId: 'A-200',
+    category: 'Action due',
+    issue: 'Refund needs a seller reply',
+    status: 'Answered',
+    signal: 'Amazon asked for an invoice today.',
+    evidence: 'Amazon asked for an invoice today.',
+    assessment: 'The thread is blocked on our reply.',
+    nextStep: 'Reply with the invoice attachment.',
+    metadata: {
+      entity: 'TARGON',
+      amazonStatus: 'Answered',
+      ourStatus: 'waiting_on_us',
+      lastReply: '2026-04-14',
+      created: '2026-04-12',
+      linkedCases: 'A-199',
+      primaryEmail: 'ops@targonglobal.com',
+      nextAction: 'Reply with the invoice attachment.',
+      nextActionDate: '2026-04-14',
+      actionKind: 'send_case_reply',
+      approvalRequired: true,
+    },
+    approval: {
+      statusLabel: 'Approval required',
+      sourceLabel: 'Case reply',
+      primaryActionLabel: 'Approve send',
+      secondaryActionLabel: 'Hold',
+    },
+  })
+
+  const readOnlyDetail = createCaseDetailModel(bundle, createCaseTimelineRows(bundle, 'A-400')[0])
+  assert.equal(readOnlyDetail.approval, null)
+  assert.equal(readOnlyDetail.metadata.approvalRequired, false)
+  assert.equal(readOnlyDetail.metadata.actionKind, 'collect_evidence')
+})
+
+test('filterCaseSelectorRows searches issue, case id, entity, evidence, assessment, and next step', () => {
+  const rows = createCaseSelectorRows(buildBundle())
+
+  assert.deepEqual(filterCaseSelectorRows(rows, 'invoice').map((row) => row.caseId), ['A-200'])
+  assert.deepEqual(filterCaseSelectorRows(rows, 'nigs').map((row) => row.caseId), ['A-400', 'A-300'])
+  assert.deepEqual(filterCaseSelectorRows(rows, 'spillover').map((row) => row.caseId), ['A-300'])
+  assert.deepEqual(filterCaseSelectorRows(rows, 'track whether').map((row) => row.caseId), ['A-300'])
 })
 
 test('createCaseReportDateOptions condenses day-over-day counts into top-rail labels', () => {
-  const bundle = buildBundle()
-  bundle.availableReportDates = ['2026-04-15', '2026-04-14']
-  bundle.daySummaries = [
-    {
-      reportDate: '2026-04-15',
-      totalRows: 2,
-      actionDueRows: 0,
-      newCaseRows: 0,
-      forumWatchRows: 1,
-      watchingRows: 1,
-    },
-    bundle.daySummaries[0],
-  ]
-
-  assert.deepEqual(createCaseReportDateOptions(bundle), [
-    {
-      reportDate: '2026-04-15',
-      label: '2026-04-15 · 2 total · 1 forum · 1 watching',
-    },
+  assert.deepEqual(createCaseReportDateOptions(buildBundle()), [
     {
       reportDate: '2026-04-14',
       label: '2026-04-14 · 4 total · 1 action due · 1 new · 1 forum · 1 watching',
+    },
+    {
+      reportDate: '2026-04-13',
+      label: '2026-04-13 · 3 total · 3 watching',
+    },
+    {
+      reportDate: '2026-04-12',
+      label: '2026-04-12 · 2 total · 1 new · 1 watching',
     },
   ])
 })
