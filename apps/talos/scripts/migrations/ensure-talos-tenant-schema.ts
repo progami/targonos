@@ -317,7 +317,6 @@ const baselineChecks: SchemaCheck[] = [
     'amazon_category',
     'amazon_size_tier',
     'amazon_referral_fee_percent',
-    'amazon_fba_fulfillment_fee',
   ]),
   buildRequiredIndexesCheck('skus supplier indexes', [
     'skus_default_supplier_id_idx',
@@ -637,7 +636,8 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_category" text`,
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_size_tier" text`,
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_referral_fee_percent" numeric(5, 2)`,
-    `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_fba_fulfillment_fee" numeric(12, 2)`,
+    `ALTER TABLE "skus" DROP COLUMN IF EXISTS "amazon_fba_fulfillment_fee"`,
+    `ALTER TABLE IF EXISTS "sku_batches" DROP COLUMN IF EXISTS "amazon_fba_fulfillment_fee"`,
 
     // Track FBA fee mismatch alerts per SKU (one row per SKU)
     `
