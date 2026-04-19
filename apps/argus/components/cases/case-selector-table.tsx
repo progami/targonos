@@ -123,8 +123,14 @@ export function CaseSelectorTable({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        maxHeight: { xs: 360, xl: 'calc(100vh - 238px)' },
-        minHeight: 320,
+        height: {
+          xs: 'auto',
+          lg: 'calc(100vh - 214px)',
+        },
+        minHeight: {
+          xs: 320,
+          lg: 0,
+        },
         overflow: 'auto',
       })}
     >

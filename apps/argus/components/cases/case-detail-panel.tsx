@@ -202,6 +202,10 @@ export function CaseDetailPanel({
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
         p: 1.5,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
+        height: '100%',
       })}
     >
       {detail === null ? (
@@ -214,7 +218,7 @@ export function CaseDetailPanel({
           No detail
         </Typography>
       ) : (
-        <Stack spacing={2}>
+        <Stack spacing={2} sx={{ flex: 1, minHeight: 0 }}>
           <Box>
             <Stack
               direction={{ xs: 'column', md: 'row' }}

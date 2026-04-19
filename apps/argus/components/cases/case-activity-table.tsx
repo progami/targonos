@@ -111,7 +111,10 @@ export function CaseActivityTable({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        maxHeight: 280,
+        maxHeight: {
+          xs: 320,
+          lg: 248,
+        },
         overflow: 'auto',
       })}
     >
