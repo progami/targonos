@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,7 +25,7 @@ import { convertLengthToCm, convertWeightToKg, formatLengthFromCm, formatWeightF
 import type { TenantCode } from '@/lib/tenant/constants'
 import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
-import { ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 
 const PAGE_KEY = '/config/products'
 
@@ -160,7 +159,6 @@ interface SkuRow {
   amazonSubcategory?: string | null
   amazonSizeTier?: string | null
   amazonReferralFeePercent?: number | string | null
-  amazonFbaFulfillmentFee?: number | string | null
   amazonListingPrice?: number | string | null
   amazonReferenceWeightKg: number | string | null
   amazonItemPackageDimensionsCm: string | null
@@ -207,7 +205,6 @@ interface SkuFormState {
   amazonSubcategory: string
   amazonSizeTier: string
   amazonReferralFeePercent: string
-  amazonFbaFulfillmentFee: string
   unitSide1Cm: string
   unitSide2Cm: string
   unitSide3Cm: string
@@ -316,7 +313,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     amazonSubcategory: sku?.amazonSubcategory ?? '',
     amazonSizeTier: sku?.amazonSizeTier ?? '',
     amazonReferralFeePercent: sku?.amazonReferralFeePercent?.toString?.() ?? '',
-    amazonFbaFulfillmentFee: sku?.amazonFbaFulfillmentFee?.toString?.() ?? '',
     unitSide1Cm: unitTriplet ? formatLengthInput(unitTriplet.side1Cm) : '',
     unitSide2Cm: unitTriplet ? formatLengthInput(unitTriplet.side2Cm) : '',
     unitSide3Cm: unitTriplet ? formatLengthInput(unitTriplet.side3Cm) : '',
@@ -1257,16 +1253,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5">
-                            Amazon Fees
-                            <Link
-                              href="/amazon/fba-fee-tables"
-                              target="_blank"
-                              className="text-slate-400 hover:text-cyan-600 transition-colors"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Link>
-                          </h4>
+                          <h4 className="text-sm font-semibold text-foreground mb-1">Amazon Fees</h4>
                         </div>
                       </div>
                       {modalTab === 'reference' ? (
@@ -1592,15 +1579,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                               <Label>Referral Fee (%)</Label>
                               <Input
                                 value={formState.amazonReferralFeePercent}
-                                disabled
-                                className="bg-slate-100 text-slate-500"
-                                placeholder="—"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label>FBA Fulfillment Fee</Label>
-                              <Input
-                                value={formState.amazonFbaFulfillmentFee}
                                 disabled
                                 className="bg-slate-100 text-slate-500"
                                 placeholder="—"
