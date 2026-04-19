@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
 import { toast } from 'react-hot-toast'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,7 +25,7 @@ import { convertLengthToCm, convertWeightToKg, formatLengthFromCm, formatWeightF
 import type { TenantCode } from '@/lib/tenant/constants'
 import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
-import { ExternalLink, Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
+import { Loader2, Package2, Plus, Search, Trash2 } from '@/lib/lucide-icons'
 
 const PAGE_KEY = '/config/products'
 
@@ -1254,16 +1253,7 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                     <div className="rounded-lg border-2 border-slate-300 bg-white dark:bg-slate-800 p-4">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <h4 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-1.5">
-                            Amazon Fees
-                            <Link
-                              href="/amazon/fba-fee-tables"
-                              target="_blank"
-                              className="text-slate-400 hover:text-cyan-600 transition-colors"
-                            >
-                              <ExternalLink className="h-3.5 w-3.5" />
-                            </Link>
-                          </h4>
+                          <h4 className="text-sm font-semibold text-foreground mb-1">Amazon Fees</h4>
                         </div>
                       </div>
                       {modalTab === 'reference' ? (
