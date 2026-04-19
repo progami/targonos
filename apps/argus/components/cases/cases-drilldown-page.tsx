@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useEffect, useState } from 'react'
+import { useDeferredValue, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box, FormControl, MenuItem, Select, Stack, TextField } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material/Select'
@@ -66,15 +66,6 @@ function filterSelectorRows(
   })
 }
 
-function filterTimelineRows(rows: CaseTimelineRow[], query: string): CaseTimelineRow[] {
-  const normalizedQuery = query.trim().toLowerCase()
-  if (normalizedQuery === '') {
-    return rows
-  }
-
-  return rows.filter((row) => matchesTimelineRowSearch(row, normalizedQuery))
-}
-
 function resolveSelectedCaseId(rows: CaseSelectorRow[], selectedCaseId: string | null): string | null {
   if (rows.length === 0) {
     return null
@@ -121,6 +112,10 @@ function resolveApprovalState(
   return approvalState
 }
 
+function buildBundleScopeKey(bundle: Pick<CaseReportBundle, 'marketSlug' | 'reportDate'>): string {
+  return `${bundle.marketSlug}:${bundle.reportDate}`
+}
+
 export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
@@ -129,15 +124,21 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const [approvalStateByTimelineKey, setApprovalStateByTimelineKey] = useState<
     Record<string, CaseDetailApprovalState | undefined>
   >({})
+  const bundleScopeKey = buildBundleScopeKey(bundle)
+  const activeBundleScopeKeyRef = useRef(bundleScopeKey)
+  const bundleChanged = activeBundleScopeKeyRef.current !== bundleScopeKey
   const deferredSearchQuery = useDeferredValue(searchQuery)
+  const effectiveSearchQuery = bundleChanged || searchQuery === '' ? '' : deferredSearchQuery
+  const effectiveSelectedCaseIdState = bundleChanged ? null : selectedCaseIdState
+  const effectiveSelectedTimelineKeyState = bundleChanged ? null : selectedTimelineKeyState
+  const effectiveApprovalStateByTimelineKey = bundleChanged ? {} : approvalStateByTimelineKey
 
   const reportDateOptions = createCaseReportDateOptions(bundle)
   const selectorRows = createCaseSelectorRows(bundle)
-  const filteredSelectorRows = filterSelectorRows(bundle, selectorRows, deferredSearchQuery)
-  const selectedCaseId = resolveSelectedCaseId(filteredSelectorRows, selectedCaseIdState)
-  const timelineRows =
-    selectedCaseId === null ? [] : filterTimelineRows(createCaseTimelineRows(bundle, selectedCaseId), deferredSearchQuery)
-  const selectedTimelineKey = resolveSelectedTimelineKey(timelineRows, selectedTimelineKeyState)
+  const filteredSelectorRows = filterSelectorRows(bundle, selectorRows, effectiveSearchQuery)
+  const selectedCaseId = resolveSelectedCaseId(filteredSelectorRows, effectiveSelectedCaseIdState)
+  const timelineRows = selectedCaseId === null ? [] : createCaseTimelineRows(bundle, selectedCaseId)
+  const selectedTimelineKey = resolveSelectedTimelineKey(timelineRows, effectiveSelectedTimelineKeyState)
   const selectedTimelineRowMatch =
     selectedTimelineKey === null ? undefined : timelineRows.find((row) => row.timelineKey === selectedTimelineKey)
   const selectedTimelineRow = selectedTimelineRowMatch === undefined ? null : selectedTimelineRowMatch
@@ -145,7 +146,19 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const approvalState =
     detail === null || detail.approval === null || selectedTimelineRow === null
       ? null
-      : resolveApprovalState(selectedTimelineRow.timelineKey, approvalStateByTimelineKey)
+      : resolveApprovalState(selectedTimelineRow.timelineKey, effectiveApprovalStateByTimelineKey)
+
+  useEffect(() => {
+    if (bundleChanged === false) {
+      return
+    }
+
+    activeBundleScopeKeyRef.current = bundleScopeKey
+    setSearchQuery('')
+    setSelectedCaseIdState(null)
+    setSelectedTimelineKeyState(null)
+    setApprovalStateByTimelineKey({})
+  }, [bundleChanged, bundleScopeKey])
 
   useEffect(() => {
     if (selectedCaseId !== selectedCaseIdState) {
