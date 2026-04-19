@@ -317,8 +317,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
   assert.deepEqual(
     rows.map((row) => ({
       caseId: row.caseId,
+      subject: row.subject,
       category: row.category,
-      issue: row.issue,
       entity: row.entity,
       amazonStatus: row.amazonStatus,
       openSince: row.openSince,
@@ -327,8 +327,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
     [
       {
         caseId: 'A-150',
+        subject: 'Appeal needs the shipment timeline',
         category: 'Action due',
-        issue: 'Appeal needs the shipment timeline',
         entity: 'TARGON',
         amazonStatus: 'Waiting on seller',
         openSince: '2026-04-14',
@@ -336,8 +336,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
       },
       {
         caseId: 'A-200',
+        subject: 'Refund needs a seller reply',
         category: 'Action due',
-        issue: 'Refund needs a seller reply',
         entity: 'TARGON',
         amazonStatus: 'Answered',
         openSince: '2026-04-12',
@@ -345,8 +345,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
       },
       {
         caseId: 'A-400',
+        subject: 'Fresh case opened for stranded inventory',
         category: 'New case',
-        issue: 'Fresh case opened for stranded inventory',
         entity: 'NIGS LTD',
         amazonStatus: 'Opened',
         openSince: '2026-04-10',
@@ -354,8 +354,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
       },
       {
         caseId: 'A-300',
+        subject: 'Forum escalation mentioned reimbursement lag',
         category: 'Forum watch',
-        issue: 'Forum escalation mentioned reimbursement lag',
         entity: 'NIGS LTD',
         amazonStatus: 'Investigating',
         openSince: '2026-04-08',
@@ -363,8 +363,8 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
       },
       {
         caseId: 'A-100',
+        subject: 'Legacy issue still waiting on reimbursement',
         category: 'Watching',
-        issue: 'Legacy issue still waiting on reimbursement',
         entity: 'TARGON',
         amazonStatus: 'Work in progress',
         openSince: '2026-04-12',
@@ -380,21 +380,21 @@ test('same-day duplicate case activities stay selectable without duplicating the
   assert.deepEqual(
     createCaseSelectorRows(selectReportDate(bundle, '2026-04-12')).map((row) => ({
       caseId: row.caseId,
+      subject: row.subject,
       category: row.category,
-      issue: row.issue,
       activityCount: row.activityCount,
     })),
     [
       {
         caseId: 'A-200',
+        subject: 'Refund needs a seller reply',
         category: 'Action due',
-        issue: 'Refund follow-up needs the missing invoice page',
         activityCount: 4,
       },
       {
         caseId: 'A-100',
+        subject: 'Legacy issue still waiting on reimbursement',
         category: 'Watching',
-        issue: 'Legacy issue still waiting on reimbursement',
         activityCount: 3,
       },
     ],
@@ -580,6 +580,7 @@ test('createCaseDetailModel joins timeline snapshots with case metadata and gate
   assert.deepEqual(replyDetail, {
     reportDate: '2026-04-14',
     caseId: 'A-200',
+    subject: 'Refund needs a seller reply',
     category: 'Action due',
     issue: 'Refund needs a seller reply',
     status: 'Answered',
@@ -593,8 +594,6 @@ test('createCaseDetailModel joins timeline snapshots with case metadata and gate
       ourStatus: 'waiting_on_us',
       lastReply: '2026-04-14',
       created: '2026-04-12',
-      linkedCases: 'A-199',
-      primaryEmail: 'ops@targonglobal.com',
       nextAction: 'Reply with the invoice attachment.',
       nextActionDate: '2026-04-14',
       actionKind: 'send_case_reply',
@@ -621,6 +620,7 @@ test('createCaseDetailModel returns nullable metadata and no approval for untrac
   assert.deepEqual(detail, {
     reportDate: '2026-04-13',
     caseId: 'A-999',
+    subject: 'Archived reimbursement audit',
     category: 'Watching',
     issue: 'Archived reimbursement audit',
     status: 'Watching',
@@ -634,8 +634,6 @@ test('createCaseDetailModel returns nullable metadata and no approval for untrac
       ourStatus: null,
       lastReply: null,
       created: null,
-      linkedCases: null,
-      primaryEmail: null,
       nextAction: null,
       nextActionDate: null,
       actionKind: null,
@@ -645,13 +643,14 @@ test('createCaseDetailModel returns nullable metadata and no approval for untrac
   })
 })
 
-test('filterCaseSelectorRows searches issue, case id, entity, evidence, assessment, and next step', () => {
+test('filterCaseSelectorRows searches subject, issue, case id, entity, evidence, assessment, and next step', () => {
   const rows = createCaseSelectorRows(buildBundle())
 
   assert.deepEqual(filterCaseSelectorRows(rows, 'invoice').map((row) => row.caseId), ['A-200'])
   assert.deepEqual(filterCaseSelectorRows(rows, 'nigs').map((row) => row.caseId), ['A-400', 'A-300'])
   assert.deepEqual(filterCaseSelectorRows(rows, 'spillover').map((row) => row.caseId), ['A-300'])
   assert.deepEqual(filterCaseSelectorRows(rows, 'track whether').map((row) => row.caseId), ['A-300'])
+  assert.deepEqual(filterCaseSelectorRows(rows, 'shipment timeline').map((row) => row.caseId), ['A-150'])
 })
 
 test('createCaseReportDateOptions condenses day-over-day counts into top-rail labels', () => {

@@ -15,6 +15,7 @@ export type CaseReportDateOption = {
 
 export type CaseSelectorRow = {
   caseId: string
+  subject: string
   category: string
   issue: string
   entity: string
@@ -47,8 +48,6 @@ export type CaseDetailMetadata = {
   ourStatus: string | null
   lastReply: string | null
   created: string | null
-  linkedCases: string | null
-  primaryEmail: string | null
   nextAction: string | null
   nextActionDate: string | null
   actionKind: CaseReportActionKind | null
@@ -58,6 +57,7 @@ export type CaseDetailMetadata = {
 export type CaseDetailModel = {
   reportDate: string
   caseId: string
+  subject: string
   category: string
   issue: string
   status: string
@@ -253,12 +253,14 @@ export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRo
     .map(([caseId, entries]) => {
       const entry = [...entries].sort(compareCaseEntries)[0]
       const caseRecord = getTrackedCaseRecordOrThrow(bundle, caseId, 'case selector row')
+      const subject = caseRecord === undefined ? entry.row.issue : caseRecord.title
       const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
       const openSince = caseRecord === undefined ? null : caseRecord.created
       const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
 
       return {
         caseId,
+        subject,
         category: entry.row.category,
         issue: entry.row.issue,
         entity: entry.entity,
@@ -304,13 +306,12 @@ export function createCaseTimelineRows(bundle: CaseReportBundle, caseId: string)
 
 export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: CaseTimelineRow): CaseDetailModel {
   const caseRecord = getTrackedCaseRecordOrThrow(bundle, timelineRow.caseId, 'case detail')
+  const subject = caseRecord === undefined ? timelineRow.issue : caseRecord.title
   const entity = caseRecord === undefined ? timelineRow.entity : caseRecord.entity
   const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
   const ourStatus = caseRecord === undefined ? null : caseRecord.ourStatus
   const lastReply = caseRecord === undefined ? null : caseRecord.lastReply
   const created = caseRecord === undefined ? null : caseRecord.created
-  const linkedCases = caseRecord === undefined ? null : caseRecord.linkedCases
-  const primaryEmail = caseRecord === undefined ? null : caseRecord.primaryEmail
   const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
   const nextActionDate = caseRecord === undefined ? null : caseRecord.nextActionDate
   const actionKind = caseRecord === undefined ? null : caseRecord.actionKind
@@ -319,6 +320,7 @@ export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: Cas
   return {
     reportDate: timelineRow.reportDate,
     caseId: timelineRow.caseId,
+    subject,
     category: timelineRow.category,
     issue: timelineRow.issue,
     status: timelineRow.status,
@@ -332,8 +334,6 @@ export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: Cas
       ourStatus,
       lastReply,
       created,
-      linkedCases,
-      primaryEmail,
       nextAction,
       nextActionDate,
       actionKind,
@@ -351,6 +351,7 @@ export function filterCaseSelectorRows(rows: CaseSelectorRow[], query: string): 
 
   return rows.filter((row) => {
     const searchableFields = [
+      row.subject,
       row.issue,
       row.caseId,
       row.entity,
