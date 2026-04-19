@@ -17,7 +17,12 @@ import {
   getCaseQueueMutedTextColor,
   getCaseQueueSelectedRowBackground,
 } from '@/lib/cases/theme'
-import { CASE_SELECTOR_DESKTOP_COLUMN_WIDTHS } from '@/lib/cases/layout'
+import {
+  CASE_SELECTOR_DESKTOP_COLUMN_WIDTHS,
+  CASE_SELECTOR_TABLE_DESKTOP_HEIGHT,
+  CASE_SELECTOR_TABLE_MIN_HEIGHT,
+  CASE_SELECTOR_TABLE_OVERFLOW,
+} from '@/lib/cases/layout'
 import type { CaseSelectorRow } from '@/lib/cases/view-model'
 
 type CaseSelectorTableProps = {
@@ -126,16 +131,13 @@ export function CaseSelectorTable({
         borderRadius: 1,
         height: {
           xs: 'auto',
-          lg: 'calc(100vh - 214px)',
+          lg: CASE_SELECTOR_TABLE_DESKTOP_HEIGHT,
         },
-        minHeight: {
-          xs: 320,
-          lg: 0,
-        },
-        overflow: 'auto',
+        minHeight: CASE_SELECTOR_TABLE_MIN_HEIGHT,
+        overflow: CASE_SELECTOR_TABLE_OVERFLOW,
       })}
     >
-      <Table stickyHeader size="small" sx={{ tableLayout: 'fixed' }}>
+      <Table size="small" sx={{ tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: CASE_SELECTOR_DESKTOP_COLUMN_WIDTHS[0] }} />
           <col style={{ width: CASE_SELECTOR_DESKTOP_COLUMN_WIDTHS[1] }} />

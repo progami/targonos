@@ -117,6 +117,10 @@ test('readCaseReportBundleFromCaseRoot resolves the latest dated report and trac
             next_action: 'Confirm the approved reimbursement posts in Payments.',
             next_action_date: '2026-04-09',
             linked_cases: '19096712151',
+            case_url: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=19550165441',
+            forum_post:
+              'https://sellercentral.amazon.com/seller-forums/discussions/t/example-thread (posted Apr 8, 4 replies)',
+            forum_post_url: 'https://sellercentral.amazon.com/seller-forums/discussions/t/example-thread',
             action_kind: 'send_case_reply',
             approval_required: true,
           },
@@ -205,6 +209,9 @@ test('readCaseReportBundleFromCaseRoot resolves the latest dated report and trac
       nextActionDate: '2026-04-09',
       linkedCases: '19096712151',
       primaryEmail: null,
+      caseUrl: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=19550165441',
+      forumPost: 'https://sellercentral.amazon.com/seller-forums/discussions/t/example-thread (posted Apr 8, 4 replies)',
+      forumPostUrl: 'https://sellercentral.amazon.com/seller-forums/discussions/t/example-thread',
       actionKind: 'send_case_reply',
       approvalRequired: true,
     },
@@ -554,6 +561,185 @@ test('readCaseReportBundleFromCaseRoot throws when a case record is missing requ
   await assert.rejects(
     () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
     /Missing required case\.json case field approval_required for case 19550165441/,
+  )
+})
+
+test('readCaseReportBundleFromCaseRoot throws when case_url is blank', async () => {
+  const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
+  const reportsDir = path.join(caseRoot, 'reports')
+  mkdirSync(reportsDir, { recursive: true })
+
+  writeFileSync(
+    path.join(caseRoot, 'case.json'),
+    JSON.stringify(
+      {
+        market: 'US',
+        generated_at: '2026-04-08T04:15:00-05:00',
+        tracked_case_ids: ['19550165441'],
+        cases: {
+          '19550165441': {
+            case_id: '19550165441',
+            title: 'Shipping label refund ($2,583.96)',
+            entity: 'TARGON',
+            amazon_status: 'Work in progress',
+            our_status: 'looping',
+            created: '2026-04-06',
+            last_reply: '2026-04-07',
+            next_action: 'Confirm the approved reimbursement posts in Payments.',
+            next_action_date: '2026-04-09',
+            linked_cases: '19096712151',
+            case_url: '',
+            action_kind: 'send_case_reply',
+            approval_required: true,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  )
+
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
+
+  await assert.rejects(
+    () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
+    /Invalid case\.json case field case_url for case 19550165441/,
+  )
+})
+
+test('readCaseReportBundleFromCaseRoot throws when forum_post_url is malformed', async () => {
+  const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
+  const reportsDir = path.join(caseRoot, 'reports')
+  mkdirSync(reportsDir, { recursive: true })
+
+  writeFileSync(
+    path.join(caseRoot, 'case.json'),
+    JSON.stringify(
+      {
+        market: 'US',
+        generated_at: '2026-04-08T04:15:00-05:00',
+        tracked_case_ids: ['19550165441'],
+        cases: {
+          '19550165441': {
+            case_id: '19550165441',
+            title: 'Shipping label refund ($2,583.96)',
+            entity: 'TARGON',
+            amazon_status: 'Work in progress',
+            our_status: 'looping',
+            created: '2026-04-06',
+            last_reply: '2026-04-07',
+            next_action: 'Confirm the approved reimbursement posts in Payments.',
+            next_action_date: '2026-04-09',
+            linked_cases: '19096712151',
+            case_url: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=19550165441',
+            forum_post: 'https://sellercentral.amazon.com/seller-forums/discussions/t/example-thread (posted Apr 8, 4 replies)',
+            forum_post_url: 'not-a-url',
+            action_kind: 'send_case_reply',
+            approval_required: true,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  )
+
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
+
+  await assert.rejects(
+    () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
+    /Invalid case\.json case field forum_post_url for case 19550165441/,
+  )
+})
+
+test('readCaseReportBundleFromCaseRoot throws when case_url is not a string', async () => {
+  const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
+  const reportsDir = path.join(caseRoot, 'reports')
+  mkdirSync(reportsDir, { recursive: true })
+
+  writeFileSync(
+    path.join(caseRoot, 'case.json'),
+    JSON.stringify(
+      {
+        market: 'US',
+        generated_at: '2026-04-08T04:15:00-05:00',
+        tracked_case_ids: ['19550165441'],
+        cases: {
+          '19550165441': {
+            case_id: '19550165441',
+            title: 'Shipping label refund ($2,583.96)',
+            entity: 'TARGON',
+            amazon_status: 'Work in progress',
+            our_status: 'looping',
+            created: '2026-04-06',
+            last_reply: '2026-04-07',
+            next_action: 'Confirm the approved reimbursement posts in Payments.',
+            next_action_date: '2026-04-09',
+            linked_cases: '19096712151',
+            case_url: { href: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=19550165441' },
+            action_kind: 'send_case_reply',
+            approval_required: true,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  )
+
+  writeReportSnapshot(reportsDir, '2026-04-08', 'US', [
+    {
+      entity: 'TARGON',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Shipping label refund ($2,583.96)',
+          case_id: '19550165441',
+          days_ago: '2 days ago',
+          status: 'Work in progress',
+          evidence: 'No new case-thread activity.',
+          assessment: 'Four shipments are still unresolved.',
+          next_step: 'Confirm the approved reimbursement posts in Payments.',
+        },
+      ],
+    },
+  ])
+
+  await assert.rejects(
+    () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
+    /Invalid case\.json case field case_url for case 19550165441/,
   )
 })
 

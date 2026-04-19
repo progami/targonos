@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
+import { CASE_DETAIL_BODY_FONT_SIZE, CASE_DETAIL_BODY_LINE_HEIGHT } from '@/lib/cases/layout'
 import {
   getCaseApprovalStateTone,
   getCaseQueueBorderColor,
@@ -35,7 +36,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
     <Typography
       sx={(theme) => ({
         color: getCaseQueueMutedTextColor(theme.palette.mode),
-        fontSize: '0.66rem',
+        fontSize: '0.68rem',
         fontWeight: 800,
         letterSpacing: '0.08em',
         textTransform: 'uppercase',
@@ -51,8 +52,10 @@ function SectionValue({ children }: { children: ReactNode }) {
     <Typography
       sx={{
         mt: 0.7,
-        fontSize: '0.86rem',
-        lineHeight: 1.55,
+        color: 'text.primary',
+        fontSize: CASE_DETAIL_BODY_FONT_SIZE,
+        fontWeight: 400,
+        lineHeight: CASE_DETAIL_BODY_LINE_HEIGHT,
         whiteSpace: 'pre-wrap',
       }}
     >
@@ -98,8 +101,8 @@ function MetadataChip({
         sx={{
           mt: 0.5,
           fontFamily: mono ? 'var(--font-mono), "JetBrains Mono", monospace' : 'inherit',
-          fontSize: '0.78rem',
-          lineHeight: 1.25,
+          fontSize: '0.81rem',
+          lineHeight: 1.3,
           overflowWrap: 'anywhere',
         }}
       >
@@ -201,7 +204,7 @@ export function CaseDetailPanel({
         border: '1px solid',
         borderColor: getCaseQueueBorderColor(theme.palette.mode),
         borderRadius: 1,
-        p: 1.5,
+        p: 1.75,
         display: 'flex',
         flexDirection: 'column',
         minHeight: 0,
@@ -231,7 +234,7 @@ export function CaseDetailPanel({
                 sx={(theme) => ({
                   color: getCaseQueueMutedTextColor(theme.palette.mode),
                   fontFamily: 'var(--font-mono), "JetBrains Mono", monospace',
-                  fontSize: '0.72rem',
+                  fontSize: '0.76rem',
                   lineHeight: 1.15,
                 })}
               >
@@ -240,7 +243,7 @@ export function CaseDetailPanel({
               <Typography
                 sx={(theme) => ({
                   color: getCaseQueueMutedTextColor(theme.palette.mode),
-                  fontSize: '0.72rem',
+                  fontSize: '0.76rem',
                   lineHeight: 1.15,
                 })}
               >
@@ -252,9 +255,9 @@ export function CaseDetailPanel({
             <Typography
               sx={{
                 mt: 0.7,
-                fontSize: '1.08rem',
+                fontSize: '1.18rem',
                 fontWeight: 700,
-                lineHeight: 1.2,
+                lineHeight: 1.24,
               }}
             >
               {detail.subject}
@@ -265,8 +268,8 @@ export function CaseDetailPanel({
                 sx={(theme) => ({
                   mt: 0.7,
                   color: getCaseQueueMutedTextColor(theme.palette.mode),
-                  fontSize: '0.78rem',
-                  lineHeight: 1.45,
+                  fontSize: '0.84rem',
+                  lineHeight: 1.55,
                 })}
               >
                 {detail.issue}
@@ -278,6 +281,36 @@ export function CaseDetailPanel({
             <SectionLabel>Next step</SectionLabel>
             <SectionValue>{detail.nextStep}</SectionValue>
           </Box>
+
+          {detail.sourceLinks.length > 0 ? (
+            <Box>
+              <SectionLabel>Sources</SectionLabel>
+              <Stack direction="row" spacing={0.8} flexWrap="wrap" sx={{ mt: 0.8 }}>
+                {detail.sourceLinks.map((sourceLink) => (
+                  <Button
+                    key={sourceLink.label}
+                    component="a"
+                    href={sourceLink.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    size="small"
+                    variant="outlined"
+                    sx={{
+                      minWidth: 0,
+                      px: 1.05,
+                      py: 0.48,
+                      fontSize: '0.76rem',
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                      textTransform: 'none',
+                    }}
+                  >
+                    {sourceLink.label}
+                  </Button>
+                ))}
+              </Stack>
+            </Box>
+          ) : null}
 
           {detail.approval !== null && approvalState !== null ? (
             <Box
