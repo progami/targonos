@@ -113,7 +113,7 @@ export function CaseActivityTable({
         borderRadius: 1,
         maxHeight: {
           xs: 320,
-          lg: 248,
+          lg: 400,
         },
         overflow: 'auto',
       })}
