@@ -119,7 +119,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const hasSkuAmazonSizeTier = options.dryRun ? true : await columnExists(prisma, 'skus', 'amazon_size_tier')
   const hasSkuUnitWeight = options.dryRun ? true : await columnExists(prisma, 'skus', 'unit_weight_kg')
   const hasBatchAmazonSizeTier = options.dryRun ? true : await columnExists(prisma, 'sku_batches', 'amazon_size_tier')
-  const hasBatchAmazonFbaFee = options.dryRun ? true : await columnExists(prisma, 'sku_batches', 'amazon_fba_fulfillment_fee')
   const hasBatchAmazonRefWeight = options.dryRun
     ? true
     : await columnExists(prisma, 'sku_batches', 'amazon_reference_weight_kg')
@@ -145,7 +144,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       SELECT DISTINCT ON (sku_id)
         sku_id
         ${hasBatchAmazonSizeTier ? ', amazon_size_tier' : ''}
-        ${hasBatchAmazonFbaFee ? ', amazon_fba_fulfillment_fee' : ''}
         ${hasBatchAmazonRefWeight ? ', amazon_reference_weight_kg' : ''}
         ${hasBatchUnitWeight ? ', unit_weight_kg' : ''}
       FROM sku_batches

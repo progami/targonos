@@ -11,6 +11,29 @@ test('Talos does not persist Amazon FBA fee snapshots on SKUs', () => {
     'src/app/api/amazon/import-skus/route.ts',
     'src/app/config/products/skus-panel.tsx',
   ]
+  const scriptChecks = [
+    {
+      relativePath: 'scripts/migrations/ensure-talos-tenant-schema.ts',
+      bannedPatterns: [
+        /buildRequiredColumnsCheck\('skus amazon fee columns', 'skus', \[\s*'amazon_category',\s*'amazon_size_tier',\s*'amazon_referral_fee_percent',\s*'amazon_fba_fulfillment_fee',\s*\]\)/m,
+        /ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_fba_fulfillment_fee"/,
+      ],
+    },
+    {
+      relativePath: 'scripts/migrations/add-sku-batch-amazon-default-columns.ts',
+      bannedPatterns: [
+        /columnExists\(prisma, 'skus', 'amazon_fba_fulfillment_fee'\)/,
+        /s\.amazon_fba_fulfillment_fee/,
+      ],
+    },
+    {
+      relativePath: 'scripts/migrations/add-sku-amazon-reference-weight.ts',
+      bannedPatterns: [
+        /columnExists\(prisma, 'skus', 'amazon_fba_fulfillment_fee'\)/,
+        /s\.amazon_fba_fulfillment_fee/,
+      ],
+    },
+  ]
 
   for (const relativePath of sourceFiles) {
     const source = readFileSync(path.join(talosRoot, relativePath), 'utf8')
@@ -19,6 +42,17 @@ test('Talos does not persist Amazon FBA fee snapshots on SKUs', () => {
       false,
       `${relativePath} still persists or exposes amazonFbaFulfillmentFee`
     )
+  }
+
+  for (const scriptCheck of scriptChecks) {
+    const source = readFileSync(path.join(talosRoot, scriptCheck.relativePath), 'utf8')
+    for (const bannedPattern of scriptCheck.bannedPatterns) {
+      assert.equal(
+        bannedPattern.test(source),
+        false,
+        `${scriptCheck.relativePath} still recreates or backfills skus.amazon_fba_fulfillment_fee`
+      )
+    }
   }
 
   const schema = readFileSync(path.join(talosRoot, 'prisma/schema.prisma'), 'utf8')
