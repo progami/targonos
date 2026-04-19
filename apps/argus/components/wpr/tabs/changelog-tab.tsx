@@ -1,6 +1,12 @@
 import ChangeTimeline from '@/components/wpr/change-timeline';
-import type { WprPayload } from '@/lib/wpr/types';
+import type { WprChangeLogEntry, WeekLabel } from '@/lib/wpr/types';
 
-export default function ChangelogTab({ payload }: { payload: WprPayload }) {
-  return <ChangeTimeline entriesByWeek={payload.changeLogByWeek} />;
+export default function ChangelogTab({
+  entries,
+  selectedWeekLabel,
+}: {
+  entries: WprChangeLogEntry[];
+  selectedWeekLabel: WeekLabel;
+}) {
+  return <ChangeTimeline entries={entries} selectedWeekLabel={selectedWeekLabel} />;
 }

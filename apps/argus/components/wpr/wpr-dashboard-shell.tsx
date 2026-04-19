@@ -88,8 +88,8 @@ export default function WprDashboardShell() {
         {activeTab === 'sqp' ? <SqpTab bundle={bundle} changeEntries={changeEntries} /> : null}
         {activeTab === 'scp' ? <ScpTab bundle={bundle} /> : null}
         {activeTab === 'br' ? <BusinessReportsTab bundle={bundle} /> : null}
-        {activeTab === 'tst' ? <TstTab bundle={bundle} /> : null}
-        {activeTab === 'changelog' ? <ChangelogTab payload={data} /> : null}
+        {activeTab === 'tst' ? <TstTab bundle={bundle} changeEntries={changeEntries} /> : null}
+        {activeTab === 'changelog' ? <ChangelogTab entries={changeEntries} selectedWeekLabel={selectedWeek} /> : null}
         {activeTab === 'compare' ? <CompareTab bundle={bundle} /> : null}
         {activeTab === 'sources' ? <SourcesTab payload={data} /> : null}
       </Box>

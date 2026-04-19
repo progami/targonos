@@ -145,20 +145,7 @@ function buildBundle(): WprWeekBundle {
         tstCompare: {
           recent_4w: { source: '', method: '', coverage: { terms_total: 0, terms_covered: 0, weeks_present: 0, term_weeks_covered: 0, avg_click_pool_share: 0, avg_purchase_pool_share: 0 }, observed: { total_click_pool_share: 0, total_purchase_pool_share: 0, our_click_share_points: 0, our_purchase_share_points: 0, competitor_click_share_points: 0, competitor_purchase_share_points: 0, other_click_share_points: 0, other_purchase_share_points: 0, our_click_share: 0, our_purchase_share: 0, competitor_click_share: 0, competitor_purchase_share: 0, other_click_share: 0, other_purchase_share: 0, click_gap: 0, purchase_gap: 0 }, term_rows: [], top_terms: [] },
           baseline_13w: { source: '', method: '', coverage: { terms_total: 0, terms_covered: 0, weeks_present: 0, term_weeks_covered: 0, avg_click_pool_share: 0, avg_purchase_pool_share: 0 }, observed: { total_click_pool_share: 0, total_purchase_pool_share: 0, our_click_share_points: 0, our_purchase_share_points: 0, competitor_click_share_points: 0, competitor_purchase_share_points: 0, other_click_share_points: 0, other_purchase_share_points: 0, our_click_share: 0, our_purchase_share: 0, competitor_click_share: 0, competitor_purchase_share: 0, other_click_share: 0, other_purchase_share: 0, click_gap: 0, purchase_gap: 0 }, term_rows: [], top_terms: [] },
-          competitor: {
-            identity: { brand: 'Competitor', asin: 'B', config_source: 'cfg' },
-            coverage: { weeks_keywords_recent_4w: 0, weeks_keywords_baseline_13w: 0, recent_rank_coverage_strength: 'none', benchmark_available: false },
-            raw_input: {
-              recent_4w: { weeks_present: [], weeks_keywords: 0, avg_rank: null, best_rank: null, visibility_est: null },
-              baseline_13w: { weeks_present: [], weeks_keywords: 0, avg_rank: null, best_rank: null, visibility_est: null },
-            },
-            estimated_output: {
-              recent_4w: { visibility_est: null },
-              baseline_13w: { visibility_est: null },
-            },
-            gap_to_target: { rank_recent_4w: null, rank_best_recent_4w: null, rank_baseline_13w: null },
-            benchmark_available: false,
-          },
+          competitor: { brand: 'Competitor', asin: 'B', config_source: 'cfg' },
           weekly: [],
         },
       },
@@ -238,20 +225,7 @@ function buildBundle(): WprWeekBundle {
         tstCompare: {
           recent_4w: { source: '', method: '', coverage: { terms_total: 0, terms_covered: 0, weeks_present: 0, term_weeks_covered: 0, avg_click_pool_share: 0, avg_purchase_pool_share: 0 }, observed: { total_click_pool_share: 0, total_purchase_pool_share: 0, our_click_share_points: 0, our_purchase_share_points: 0, competitor_click_share_points: 0, competitor_purchase_share_points: 0, other_click_share_points: 0, other_purchase_share_points: 0, our_click_share: 0, our_purchase_share: 0, competitor_click_share: 0, competitor_purchase_share: 0, other_click_share: 0, other_purchase_share: 0, click_gap: 0, purchase_gap: 0 }, term_rows: [], top_terms: [] },
           baseline_13w: { source: '', method: '', coverage: { terms_total: 0, terms_covered: 0, weeks_present: 0, term_weeks_covered: 0, avg_click_pool_share: 0, avg_purchase_pool_share: 0 }, observed: { total_click_pool_share: 0, total_purchase_pool_share: 0, our_click_share_points: 0, our_purchase_share_points: 0, competitor_click_share_points: 0, competitor_purchase_share_points: 0, other_click_share_points: 0, other_purchase_share_points: 0, our_click_share: 0, our_purchase_share: 0, competitor_click_share: 0, competitor_purchase_share: 0, other_click_share: 0, other_purchase_share: 0, click_gap: 0, purchase_gap: 0 }, term_rows: [], top_terms: [] },
-          competitor: {
-            identity: { brand: 'Competitor', asin: 'B', config_source: 'cfg' },
-            coverage: { weeks_keywords_recent_4w: 0, weeks_keywords_baseline_13w: 0, recent_rank_coverage_strength: 'none', benchmark_available: false },
-            raw_input: {
-              recent_4w: { weeks_present: [], weeks_keywords: 0, avg_rank: null, best_rank: null, visibility_est: null },
-              baseline_13w: { weeks_present: [], weeks_keywords: 0, avg_rank: null, best_rank: null, visibility_est: null },
-            },
-            estimated_output: {
-              recent_4w: { visibility_est: null },
-              baseline_13w: { visibility_est: null },
-            },
-            gap_to_target: { rank_recent_4w: null, rank_best_recent_4w: null, rank_baseline_13w: null },
-            benchmark_available: false,
-          },
+          competitor: { brand: 'Competitor', asin: 'B', config_source: 'cfg' },
           weekly: [],
         },
       },

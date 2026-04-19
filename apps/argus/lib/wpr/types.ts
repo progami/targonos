@@ -5,11 +5,7 @@ export interface WprMeta {
   competitorBrand: string;
   competitorAsin: string;
   benchmarkPolicy: string;
-  competitor: {
-    brand: string;
-    asin: string;
-    config_source: string;
-  };
+  competitor: WprCompetitorSummary;
   recentWindow: WeekLabel[];
   baselineWindow: WeekLabel[];
   policy: {
@@ -85,6 +81,12 @@ export interface WprCoverage extends WprCoverageSummary {
 export type WprObservedWindow = WprWeeklyMetrics;
 
 export interface WprBenchmarkIdentity {
+  brand: string;
+  asin: string;
+  config_source: string;
+}
+
+export interface WprCompetitorSummary {
   brand: string;
   asin: string;
   config_source: string;
@@ -242,7 +244,7 @@ export interface WprCluster {
   tstCompare: {
     recent_4w: WprTstWindow;
     baseline_13w: WprTstWindow;
-    competitor: WprBenchmarkCompetitor;
+    competitor: WprCompetitorSummary;
     weekly: WprTstWeeklyWindow[];
   };
 }
@@ -280,7 +282,8 @@ export interface WprChangeLogEntry {
   summary: string;
   category: string;
   asins: string[];
-  field_labels: string[];
+  field_labels?: string[];
+  highlights?: string[];
 }
 
 export interface WprSqpTerm {

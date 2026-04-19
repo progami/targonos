@@ -36,6 +36,9 @@ type WprStore = WprDashboardState & {
   toggleSelectedCompetitorRootId: (rootId: string) => void;
   toggleSelectedCompetitorTermId: (termId: string) => void;
   toggleExpandedCompetitorRootId: (rootId: string) => void;
+  setSelectedCompetitorRootIds: (rootIds: string[]) => void;
+  setSelectedCompetitorTermIds: (termIds: string[]) => void;
+  setExpandedCompetitorRootIds: (rootIds: string[]) => void;
   setHasInitializedCompetitorSelection: (value: boolean) => void;
   setCompareOrganicMode: (compareOrganicMode: WprCompareOrganicMode) => void;
   setSqpTableSort: (sqpTableSort: WprSortState) => void;
@@ -125,6 +128,15 @@ export const useWprStore = create<WprStore>((set) => ({
     set((state) => ({
       expandedCompetitorRootIds: toggleSetMember(state.expandedCompetitorRootIds, rootId),
     }));
+  },
+  setSelectedCompetitorRootIds: (rootIds) => {
+    set({ selectedCompetitorRootIds: new Set(rootIds) });
+  },
+  setSelectedCompetitorTermIds: (termIds) => {
+    set({ selectedCompetitorTermIds: new Set(termIds) });
+  },
+  setExpandedCompetitorRootIds: (rootIds) => {
+    set({ expandedCompetitorRootIds: new Set(rootIds) });
   },
   setHasInitializedCompetitorSelection: (value) => {
     set({ hasInitializedCompetitorSelection: value });
