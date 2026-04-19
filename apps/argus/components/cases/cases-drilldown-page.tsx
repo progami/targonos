@@ -1,6 +1,6 @@
 'use client'
 
-import { useDeferredValue, useEffect, useRef, useState } from 'react'
+import { useDeferredValue, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box, FormControl, MenuItem, Select, Stack, TextField } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material/Select'
@@ -112,10 +112,6 @@ function resolveApprovalState(
   return approvalState
 }
 
-function buildBundleScopeKey(bundle: Pick<CaseReportBundle, 'marketSlug' | 'reportDate'>): string {
-  return `${bundle.marketSlug}:${bundle.reportDate}`
-}
-
 export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState('')
@@ -124,21 +120,14 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const [approvalStateByTimelineKey, setApprovalStateByTimelineKey] = useState<
     Record<string, CaseDetailApprovalState | undefined>
   >({})
-  const bundleScopeKey = buildBundleScopeKey(bundle)
-  const activeBundleScopeKeyRef = useRef(bundleScopeKey)
-  const bundleChanged = activeBundleScopeKeyRef.current !== bundleScopeKey
   const deferredSearchQuery = useDeferredValue(searchQuery)
-  const effectiveSearchQuery = bundleChanged || searchQuery === '' ? '' : deferredSearchQuery
-  const effectiveSelectedCaseIdState = bundleChanged ? null : selectedCaseIdState
-  const effectiveSelectedTimelineKeyState = bundleChanged ? null : selectedTimelineKeyState
-  const effectiveApprovalStateByTimelineKey = bundleChanged ? {} : approvalStateByTimelineKey
 
   const reportDateOptions = createCaseReportDateOptions(bundle)
   const selectorRows = createCaseSelectorRows(bundle)
-  const filteredSelectorRows = filterSelectorRows(bundle, selectorRows, effectiveSearchQuery)
-  const selectedCaseId = resolveSelectedCaseId(filteredSelectorRows, effectiveSelectedCaseIdState)
+  const filteredSelectorRows = filterSelectorRows(bundle, selectorRows, searchQuery === '' ? '' : deferredSearchQuery)
+  const selectedCaseId = resolveSelectedCaseId(filteredSelectorRows, selectedCaseIdState)
   const timelineRows = selectedCaseId === null ? [] : createCaseTimelineRows(bundle, selectedCaseId)
-  const selectedTimelineKey = resolveSelectedTimelineKey(timelineRows, effectiveSelectedTimelineKeyState)
+  const selectedTimelineKey = resolveSelectedTimelineKey(timelineRows, selectedTimelineKeyState)
   const selectedTimelineRowMatch =
     selectedTimelineKey === null ? undefined : timelineRows.find((row) => row.timelineKey === selectedTimelineKey)
   const selectedTimelineRow = selectedTimelineRowMatch === undefined ? null : selectedTimelineRowMatch
@@ -146,19 +135,7 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   const approvalState =
     detail === null || detail.approval === null || selectedTimelineRow === null
       ? null
-      : resolveApprovalState(selectedTimelineRow.timelineKey, effectiveApprovalStateByTimelineKey)
-
-  useEffect(() => {
-    if (bundleChanged === false) {
-      return
-    }
-
-    activeBundleScopeKeyRef.current = bundleScopeKey
-    setSearchQuery('')
-    setSelectedCaseIdState(null)
-    setSelectedTimelineKeyState(null)
-    setApprovalStateByTimelineKey({})
-  }, [bundleChanged, bundleScopeKey])
+      : resolveApprovalState(selectedTimelineRow.timelineKey, approvalStateByTimelineKey)
 
   useEffect(() => {
     if (selectedCaseId !== selectedCaseIdState) {

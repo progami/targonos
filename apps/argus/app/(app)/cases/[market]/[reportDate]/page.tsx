@@ -25,5 +25,5 @@ export default async function DatedCaseReportPage({ params }: CaseReportPageProp
     notFound();
   }
 
-  return <CasesDrilldownPage bundle={bundle} />;
+  return <CasesDrilldownPage key={`${bundle.marketSlug}:${bundle.reportDate}`} bundle={bundle} />;
 }
