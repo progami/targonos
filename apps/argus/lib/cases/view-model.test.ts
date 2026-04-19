@@ -34,6 +34,16 @@ function buildBundle(): CaseReportBundle {
           assessment: 'The thread is blocked on our reply.',
           nextStep: 'Reply with the invoice attachment.',
         },
+        {
+          category: 'Action due',
+          issue: 'Appeal needs the shipment timeline',
+          caseId: 'A-150',
+          daysAgo: '0 days ago',
+          status: 'Waiting on seller',
+          evidence: 'Support wants the shipment timeline before they escalate.',
+          assessment: 'The appeal is blocked until we send the shipment notes.',
+          nextStep: 'Reply with the shipment timeline.',
+        },
       ],
     },
     {
@@ -98,6 +108,16 @@ function buildBundle(): CaseReportBundle {
               assessment: 'The thread is heading toward a reply request.',
               nextStep: 'Prepare the invoice evidence.',
             },
+            {
+              category: 'Watching',
+              issue: 'Archived reimbursement audit',
+              caseId: 'A-999',
+              daysAgo: '8 days ago',
+              status: 'Watching',
+              evidence: 'A historical audit note remains in the old report.',
+              assessment: 'This row is only preserved for historical context.',
+              nextStep: 'No live action required.',
+            },
           ],
         },
         {
@@ -147,19 +167,19 @@ function buildBundle(): CaseReportBundle {
     daySummaries: [
       {
         reportDate: '2026-04-14',
-        totalRows: 4,
-        actionDueRows: 1,
+        totalRows: 5,
+        actionDueRows: 2,
         newCaseRows: 1,
         forumWatchRows: 1,
         watchingRows: 1,
       },
       {
         reportDate: '2026-04-13',
-        totalRows: 3,
+        totalRows: 4,
         actionDueRows: 0,
         newCaseRows: 0,
         forumWatchRows: 0,
-        watchingRows: 3,
+        watchingRows: 4,
       },
       {
         reportDate: '2026-04-12',
@@ -170,7 +190,7 @@ function buildBundle(): CaseReportBundle {
         watchingRows: 1,
       },
     ],
-    trackedCaseIds: ['A-100', 'A-200', 'A-300', 'A-400'],
+    trackedCaseIds: ['A-100', 'A-150', 'A-200', 'A-300', 'A-400'],
     caseRecordsById: {
       'A-100': {
         caseId: 'A-100',
@@ -186,6 +206,21 @@ function buildBundle(): CaseReportBundle {
         primaryEmail: null,
         actionKind: 'monitor',
         approvalRequired: false,
+      },
+      'A-150': {
+        caseId: 'A-150',
+        title: 'Appeal needs the shipment timeline',
+        entity: 'TARGON',
+        amazonStatus: 'Waiting on seller',
+        ourStatus: 'waiting_on_us',
+        created: '2026-04-14',
+        lastReply: '2026-04-14',
+        nextAction: 'Reply with the shipment timeline.',
+        nextActionDate: '2026-04-14',
+        linkedCases: '',
+        primaryEmail: 'ops@targonglobal.com',
+        actionKind: 'send_case_reply',
+        approvalRequired: true,
       },
       'A-200': {
         caseId: 'A-200',
@@ -238,7 +273,7 @@ function buildBundle(): CaseReportBundle {
   }
 }
 
-test('createCaseSelectorRows orders the selector by urgency and counts dated activity', () => {
+test('createCaseSelectorRows orders the selector by urgency, then caseId, and counts dated activity', () => {
   const rows = createCaseSelectorRows(buildBundle())
 
   assert.deepEqual(
@@ -252,6 +287,15 @@ test('createCaseSelectorRows orders the selector by urgency and counts dated act
       activityCount: row.activityCount,
     })),
     [
+      {
+        caseId: 'A-150',
+        category: 'Action due',
+        issue: 'Appeal needs the shipment timeline',
+        entity: 'TARGON',
+        amazonStatus: 'Waiting on seller',
+        openSince: '2026-04-14',
+        activityCount: 1,
+      },
       {
         caseId: 'A-200',
         category: 'Action due',
@@ -292,7 +336,7 @@ test('createCaseSelectorRows orders the selector by urgency and counts dated act
   )
 })
 
-test('createCaseSelectorRows throws when the selected report references a missing case record', () => {
+test('createCaseSelectorRows still throws when a tracked live case is missing its case record', () => {
   const bundle = buildBundle()
   delete bundle.caseRecordsById['A-300']
 
@@ -330,6 +374,27 @@ test('createCaseTimelineRows collects one snapshot per date in newest-first orde
         category: 'New case',
         status: 'Opened',
         signal: 'Support opened the refund thread today.',
+      },
+    ],
+  )
+})
+
+test('createCaseTimelineRows allows an untracked historical case without a case record', () => {
+  const rows = createCaseTimelineRows(buildBundle(), 'A-999')
+
+  assert.deepEqual(
+    rows.map((row) => ({
+      reportDate: row.reportDate,
+      caseId: row.caseId,
+      entity: row.entity,
+      signal: row.signal,
+    })),
+    [
+      {
+        reportDate: '2026-04-13',
+        caseId: 'A-999',
+        entity: 'TARGON',
+        signal: 'A historical audit note remains in the old report.',
       },
     ],
   )
@@ -389,11 +454,11 @@ test('createCaseReportDateOptions condenses day-over-day counts into top-rail la
   assert.deepEqual(createCaseReportDateOptions(buildBundle()), [
     {
       reportDate: '2026-04-14',
-      label: '2026-04-14 · 4 total · 1 action due · 1 new · 1 forum · 1 watching',
+      label: '2026-04-14 · 5 total · 2 action due · 1 new · 1 forum · 1 watching',
     },
     {
       reportDate: '2026-04-13',
-      label: '2026-04-13 · 3 total · 3 watching',
+      label: '2026-04-13 · 4 total · 4 watching',
     },
     {
       reportDate: '2026-04-12',

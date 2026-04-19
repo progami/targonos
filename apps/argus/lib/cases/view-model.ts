@@ -99,9 +99,25 @@ function buildCaseReportDateLabel(summary: CaseReportBundle['daySummaries'][numb
   return `${summary.reportDate} · ${segments.join(' · ')}`
 }
 
+function isTrackedCaseId(bundle: CaseReportBundle, caseId: string): boolean {
+  return bundle.trackedCaseIds.includes(caseId)
+}
+
 function getCaseRecordOrThrow(bundle: CaseReportBundle, caseId: string, context: string): CaseReportCaseRecord {
   const caseRecord = bundle.caseRecordsById[caseId]
   if (caseRecord === undefined) {
+    throw new Error(`Missing case record for ${context}: ${caseId}`)
+  }
+  return caseRecord
+}
+
+function getTrackedCaseRecordOrThrow(
+  bundle: CaseReportBundle,
+  caseId: string,
+  context: string,
+): CaseReportCaseRecord | undefined {
+  const caseRecord = bundle.caseRecordsById[caseId]
+  if (caseRecord === undefined && isTrackedCaseId(bundle, caseId)) {
     throw new Error(`Missing case record for ${context}: ${caseId}`)
   }
   return caseRecord
@@ -210,8 +226,11 @@ export function createCaseReportDateOptions(
 export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRow[] {
   return bundle.sections
     .flatMap((section) =>
-      section.rows.map((row) => {
-        const caseRecord = getCaseRecordOrThrow(bundle, row.caseId, 'case selector row')
+      section.rows.flatMap((row) => {
+        const caseRecord = getTrackedCaseRecordOrThrow(bundle, row.caseId, 'case selector row')
+        if (caseRecord === undefined) {
+          return []
+        }
 
         return {
           caseId: row.caseId,
@@ -228,14 +247,17 @@ export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRo
         }
       }),
     )
-    .sort(
-      (left, right) => getCaseSelectorCategoryRank(left.category) - getCaseSelectorCategoryRank(right.category),
-    )
+    .sort((left, right) => {
+      const categoryRank = getCaseSelectorCategoryRank(left.category) - getCaseSelectorCategoryRank(right.category)
+      if (categoryRank !== 0) {
+        return categoryRank
+      }
+
+      return left.caseId.localeCompare(right.caseId)
+    })
 }
 
 export function createCaseTimelineRows(bundle: CaseReportBundle, caseId: string): CaseTimelineRow[] {
-  getCaseRecordOrThrow(bundle, caseId, 'case timeline')
-
   const rows = [...bundle.availableReportDates]
     .sort((left, right) => right.localeCompare(left))
     .flatMap((reportDate) => {
