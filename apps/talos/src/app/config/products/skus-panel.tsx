@@ -160,7 +160,6 @@ interface SkuRow {
   amazonSubcategory?: string | null
   amazonSizeTier?: string | null
   amazonReferralFeePercent?: number | string | null
-  amazonFbaFulfillmentFee?: number | string | null
   amazonListingPrice?: number | string | null
   amazonReferenceWeightKg: number | string | null
   amazonItemPackageDimensionsCm: string | null
@@ -207,7 +206,6 @@ interface SkuFormState {
   amazonSubcategory: string
   amazonSizeTier: string
   amazonReferralFeePercent: string
-  amazonFbaFulfillmentFee: string
   unitSide1Cm: string
   unitSide2Cm: string
   unitSide3Cm: string
@@ -316,7 +314,6 @@ function buildFormState(sku: SkuRow | null | undefined, unitSystem: UnitSystem):
     amazonSubcategory: sku?.amazonSubcategory ?? '',
     amazonSizeTier: sku?.amazonSizeTier ?? '',
     amazonReferralFeePercent: sku?.amazonReferralFeePercent?.toString?.() ?? '',
-    amazonFbaFulfillmentFee: sku?.amazonFbaFulfillmentFee?.toString?.() ?? '',
     unitSide1Cm: unitTriplet ? formatLengthInput(unitTriplet.side1Cm) : '',
     unitSide2Cm: unitTriplet ? formatLengthInput(unitTriplet.side2Cm) : '',
     unitSide3Cm: unitTriplet ? formatLengthInput(unitTriplet.side3Cm) : '',
@@ -1592,15 +1589,6 @@ export default function SkusPanel({ externalModalOpen, externalEditSkuId, onExte
                               <Label>Referral Fee (%)</Label>
                               <Input
                                 value={formState.amazonReferralFeePercent}
-                                disabled
-                                className="bg-slate-100 text-slate-500"
-                                placeholder="—"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label>FBA Fulfillment Fee</Label>
-                              <Input
-                                value={formState.amazonFbaFulfillmentFee}
                                 disabled
                                 className="bg-slate-100 text-slate-500"
                                 placeholder="—"

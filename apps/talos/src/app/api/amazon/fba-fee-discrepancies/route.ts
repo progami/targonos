@@ -1,6 +1,6 @@
 import { ApiResponses, withRole, z } from '@/lib/api'
 import { parseAmazonProductFees } from '@/lib/amazon/fees'
-import { hydrateComparisonSkuRow } from '@/lib/amazon/fba-fee-discrepancies'
+import { buildComparisonSkuRow, hydrateComparisonSkuRow } from '@/lib/amazon/fba-fee-discrepancies'
 import { getListingPrice, getProductFeesForSku } from '@/lib/amazon/client'
 import { getMarketplaceCurrencyCode } from '@/lib/amazon/fees'
 import { escapeRegex, sanitizeSearchQuery } from '@/lib/security/input-sanitization'
@@ -57,6 +57,7 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
       description: true,
       asin: true,
       category: true,
+      fbaFulfillmentFee: true,
       amazonSizeTier: true,
       // Reference dimensions (user-entered)
       unitDimensionsCm: true,
@@ -81,24 +82,7 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
 
   const feeHydratedSkus = await Promise.all(
     skus.map(async sku => {
-      const resolvedSku = {
-        ...sku,
-        fbaFulfillmentFee: null,
-        amazonListingPrice: null,
-        amazonFbaFulfillmentFee: null,
-        // Reference dimensions are now on SKU
-        referenceItemPackageDimensionsCm: sku.unitDimensionsCm,
-        referenceItemPackageSide1Cm: sku.unitSide1Cm,
-        referenceItemPackageSide2Cm: sku.unitSide2Cm,
-        referenceItemPackageSide3Cm: sku.unitSide3Cm,
-        referenceItemPackageWeightKg: sku.unitWeightKg,
-        // Amazon item package dimensions are now on SKU
-        amazonItemPackageDimensionsCm: sku.amazonItemPackageDimensionsCm,
-        amazonItemPackageSide1Cm: sku.amazonItemPackageSide1Cm,
-        amazonItemPackageSide2Cm: sku.amazonItemPackageSide2Cm,
-        amazonItemPackageSide3Cm: sku.amazonItemPackageSide3Cm,
-        amazonItemPackageWeightKg: sku.amazonReferenceWeightKg,
-      }
+      const resolvedSku = buildComparisonSkuRow(sku)
       return hydrateComparisonSkuRow(resolvedSku, tenantCode, {
         loadListingPrice: getListingPrice,
         loadAmazonFees: async (sellerSku, listingPriceToEstimate, currentTenantCode) => {

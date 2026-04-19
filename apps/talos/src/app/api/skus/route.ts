@@ -124,7 +124,6 @@ const skuSchemaBase = z.object({
       return sanitized ? sanitized : null
     }),
   amazonReferralFeePercent: z.number().min(0).max(100).optional().nullable(),
-  amazonFbaFulfillmentFee: z.number().min(0).optional().nullable(),
   amazonReferenceWeightKg: z.number().positive().optional().nullable(),
   defaultSupplierId: supplierIdSchema,
   secondarySupplierId: supplierIdSchema,
@@ -342,7 +341,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         amazonCategory: validatedData.amazonCategory ?? null,
         amazonSizeTier: validatedData.amazonSizeTier ?? null,
         amazonReferralFeePercent: validatedData.amazonReferralFeePercent ?? null,
-        amazonFbaFulfillmentFee: validatedData.amazonFbaFulfillmentFee ?? null,
         amazonReferenceWeightKg: validatedData.amazonReferenceWeightKg ?? null,
         description: validatedData.description,
         defaultSupplierId: validatedData.defaultSupplierId ?? null,
