@@ -2,7 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import * as discrepancies from '../../src/lib/amazon/fba-fee-discrepancies'
-import type { ApiSkuRow } from '../../src/lib/amazon/fba-fee-discrepancies'
+import type {
+  ApiSkuRow,
+  ComparisonSkuSourceRow,
+} from '../../src/lib/amazon/fba-fee-discrepancies'
 import { calculateSizeTierForTenant } from '../../src/lib/amazon/fees'
 
 function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
@@ -43,6 +46,49 @@ function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
     itemSide2Cm: null,
     itemSide3Cm: null,
     itemWeightKg: null,
+    ...overrides,
+  }
+}
+
+function createComparisonSkuSourceRow(
+  overrides: Partial<ComparisonSkuSourceRow> = {}
+): ComparisonSkuSourceRow {
+  const referenceTriplet = {
+    side1Cm: 10,
+    side2Cm: 10,
+    side3Cm: 10,
+  }
+  const referenceWeightKg = 0.2
+
+  return {
+    id: 'sku_1',
+    skuCode: 'CS-010',
+    description: 'Test SKU',
+    asin: 'B000TEST01',
+    category: 'Toys',
+    fbaFulfillmentFee: 3.21,
+    amazonSizeTier: calculateSizeTierForTenant(
+      'US',
+      referenceTriplet.side1Cm,
+      referenceTriplet.side2Cm,
+      referenceTriplet.side3Cm,
+      referenceWeightKg
+    ),
+    unitDimensionsCm: null,
+    unitSide1Cm: referenceTriplet.side1Cm,
+    unitSide2Cm: referenceTriplet.side2Cm,
+    unitSide3Cm: referenceTriplet.side3Cm,
+    unitWeightKg: referenceWeightKg,
+    itemDimensionsCm: null,
+    itemSide1Cm: null,
+    itemSide2Cm: null,
+    itemSide3Cm: null,
+    itemWeightKg: null,
+    amazonItemPackageDimensionsCm: null,
+    amazonItemPackageSide1Cm: referenceTriplet.side1Cm,
+    amazonItemPackageSide2Cm: referenceTriplet.side2Cm,
+    amazonItemPackageSide3Cm: referenceTriplet.side3Cm,
+    amazonReferenceWeightKg: referenceWeightKg,
     ...overrides,
   }
 }
@@ -104,16 +150,32 @@ test('status label shows overcharge when only the fee differs', () => {
   assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Overcharge')
 })
 
+test('buildComparisonSkuRow keeps the stored reference fee from the API selection', () => {
+  assert.equal(typeof discrepancies.buildComparisonSkuRow, 'function')
+  if (typeof discrepancies.buildComparisonSkuRow !== 'function') return
+
+  const resolved = discrepancies.buildComparisonSkuRow(
+    createComparisonSkuSourceRow({
+      fbaFulfillmentFee: 9.87,
+    })
+  )
+
+  assert.equal(resolved.fbaFulfillmentFee, 9.87)
+  assert.equal(resolved.amazonFbaFulfillmentFee, null)
+  assert.equal(resolved.referenceItemPackageWeightKg, 0.2)
+})
+
 test('hydrateComparisonSkuRow keeps the stored reference fee and refreshes only Amazon fee data', async () => {
   assert.equal(typeof discrepancies.hydrateComparisonSkuRow, 'function')
   if (typeof discrepancies.hydrateComparisonSkuRow !== 'function') return
 
   const hydrated = await discrepancies.hydrateComparisonSkuRow(
-    createSkuRow({
+    discrepancies.buildComparisonSkuRow(
+      createComparisonSkuSourceRow({
       fbaFulfillmentFee: 99.99,
-      amazonFbaFulfillmentFee: 55.55,
       amazonSizeTier: 'Large Standard-Size',
-    }),
+      })
+    ),
     'US',
     {
       loadListingPrice: async () => 24.5,

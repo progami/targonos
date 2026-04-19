@@ -102,7 +102,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
 
   const ddlStatements = [
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "amazon_size_tier" text`,
-    `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "amazon_fba_fulfillment_fee" DECIMAL(12,2)`,
     `ALTER TABLE "sku_batches" ADD COLUMN IF NOT EXISTS "amazon_reference_weight_kg" DECIMAL(8,3)`,
   ]
 

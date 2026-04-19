@@ -22,8 +22,7 @@ test('Talos does not persist Amazon FBA fee snapshots on SKUs', () => {
     {
       relativePath: 'scripts/migrations/add-sku-batch-amazon-default-columns.ts',
       bannedPatterns: [
-        /columnExists\(prisma, 'skus', 'amazon_fba_fulfillment_fee'\)/,
-        /s\.amazon_fba_fulfillment_fee/,
+        /amazon_fba_fulfillment_fee/,
       ],
     },
     {

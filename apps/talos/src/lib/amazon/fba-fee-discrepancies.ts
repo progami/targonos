@@ -41,6 +41,31 @@ export type ApiSkuRow = {
   itemWeightKg: ApiNumberValue
 }
 
+export type ComparisonSkuSourceRow = {
+  id: string
+  skuCode: string
+  description: string
+  asin: string | null
+  category?: string | null
+  fbaFulfillmentFee: ApiNumberValue
+  amazonSizeTier: string | null
+  unitDimensionsCm: string | null
+  unitSide1Cm: ApiNumberValue
+  unitSide2Cm: ApiNumberValue
+  unitSide3Cm: ApiNumberValue
+  unitWeightKg: ApiNumberValue
+  itemDimensionsCm: string | null
+  itemSide1Cm: ApiNumberValue
+  itemSide2Cm: ApiNumberValue
+  itemSide3Cm: ApiNumberValue
+  itemWeightKg: ApiNumberValue
+  amazonItemPackageDimensionsCm: string | null
+  amazonItemPackageSide1Cm: ApiNumberValue
+  amazonItemPackageSide2Cm: ApiNumberValue
+  amazonItemPackageSide3Cm: ApiNumberValue
+  amazonReferenceWeightKg: ApiNumberValue
+}
+
 export type DimensionTriplet = { side1Cm: number; side2Cm: number; side3Cm: number }
 
 export type ShippingWeights = {
@@ -81,6 +106,24 @@ export type ComparisonRowHydratorDeps = {
 
 const DIMENSION_TOLERANCE_CM = 0.05
 const WEIGHT_TOLERANCE_KG = 0.005
+
+export function buildComparisonSkuRow(row: ComparisonSkuSourceRow): ApiSkuRow {
+  return {
+    ...row,
+    amazonListingPrice: null,
+    amazonFbaFulfillmentFee: null,
+    referenceItemPackageDimensionsCm: row.unitDimensionsCm,
+    referenceItemPackageSide1Cm: row.unitSide1Cm,
+    referenceItemPackageSide2Cm: row.unitSide2Cm,
+    referenceItemPackageSide3Cm: row.unitSide3Cm,
+    referenceItemPackageWeightKg: row.unitWeightKg,
+    amazonItemPackageDimensionsCm: row.amazonItemPackageDimensionsCm,
+    amazonItemPackageSide1Cm: row.amazonItemPackageSide1Cm,
+    amazonItemPackageSide2Cm: row.amazonItemPackageSide2Cm,
+    amazonItemPackageSide3Cm: row.amazonItemPackageSide3Cm,
+    amazonItemPackageWeightKg: row.amazonReferenceWeightKg,
+  }
+}
 
 export function parseDecimalNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
