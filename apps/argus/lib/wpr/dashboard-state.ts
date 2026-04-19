@@ -4,6 +4,10 @@ export type WprTab = 'sqp' | 'scp' | 'br' | 'tst' | 'changelog' | 'compare' | 's
 export type WprCompareOrganicMode = 'map' | 'trend'
 export type WprSortDirection = 'asc' | 'desc'
 
+type SearchParamLike = {
+  get: (key: string) => string | null
+}
+
 export interface WprSortState {
   key: string
   dir: WprSortDirection
@@ -33,6 +37,16 @@ export interface WprCompWowVisible {
   click: boolean
   purch: boolean
 }
+
+export const WPR_TABS = [
+  { id: 'sqp', label: 'SQP' },
+  { id: 'scp', label: 'SCP' },
+  { id: 'br', label: 'BR' },
+  { id: 'tst', label: 'TST' },
+  { id: 'changelog', label: 'Change Log' },
+  { id: 'compare', label: 'Compare' },
+  { id: 'sources', label: 'Sources' },
+] as const satisfies ReadonlyArray<{ id: WprTab; label: string }>
 
 export interface WprDashboardState {
   activeTab: WprTab
@@ -88,6 +102,39 @@ export function createInitialDashboardState(defaultWeek: WeekLabel | null): WprD
     brWowVisible: { sessions: true, order_items: true, unit_session: true },
     compWowVisible: { click: true, purch: true },
   }
+}
+
+export function isWprTab(value: string | null): value is WprTab {
+  return WPR_TABS.some((tab) => tab.id === value)
+}
+
+export function getInitialWprTab(searchParams: SearchParamLike): WprTab {
+  const tab = searchParams.get('tab')
+  if (isWprTab(tab)) {
+    return tab
+  }
+
+  return 'sqp'
+}
+
+export function getLegacyWprRedirect(pathname: string): string {
+  if (pathname === '/wpr/compare') {
+    return '/wpr?tab=compare'
+  }
+
+  if (pathname === '/wpr/competitor') {
+    return '/wpr?tab=tst'
+  }
+
+  if (pathname === '/wpr/changelog') {
+    return '/wpr?tab=changelog'
+  }
+
+  if (pathname === '/wpr/sources') {
+    return '/wpr?tab=sources'
+  }
+
+  return '/wpr'
 }
 
 export function toggleSetMember(current: Set<string>, member: string): Set<string> {

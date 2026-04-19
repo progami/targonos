@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   createInitialDashboardState,
+  getInitialWprTab,
+  getLegacyWprRedirect,
   toggleSetMember,
   type WprTab,
 } from './dashboard-state'
@@ -28,4 +30,12 @@ test('toggleSetMember adds then removes a selected id', () => {
 
   assert.deepEqual([...first], ['cluster-a'])
   assert.deepEqual([...second], [])
+})
+
+test('legacy competitor route maps to the TST tab', () => {
+  assert.equal(getLegacyWprRedirect('/wpr/competitor'), '/wpr?tab=tst')
+})
+
+test('missing query params default the shell to SQP', () => {
+  assert.equal(getInitialWprTab(new URLSearchParams()), 'sqp')
 })
