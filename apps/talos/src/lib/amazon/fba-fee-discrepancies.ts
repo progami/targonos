@@ -1,4 +1,4 @@
-import { calculateFbaFeeForTenant, calculateSizeTierForTenant } from '@/lib/amazon/fees'
+import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import { LB_PER_KG } from '@/lib/measurements'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -264,43 +264,17 @@ function resolveReferenceSizeTier(row: ApiSkuRow, tenantCode: TenantCode): {
   }
 }
 
-function deriveReferenceFee(row: ApiSkuRow, tenantCode: TenantCode, listingPrice: number | null): number | null {
-  if (listingPrice === null) return null
-
-  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceSizeTier(row, tenantCode)
-  if (referenceTriplet === null) return null
-  if (referenceWeightKg === null) return null
-  if (referenceSizeTier === null) return null
-
-  let category: string | undefined
-  if (typeof row.category === 'string') {
-    const trimmed = row.category.trim()
-    if (trimmed) category = trimmed
-  }
-
-  return calculateFbaFeeForTenant(tenantCode, {
-    side1Cm: referenceTriplet.side1Cm,
-    side2Cm: referenceTriplet.side2Cm,
-    side3Cm: referenceTriplet.side3Cm,
-    unitWeightKg: referenceWeightKg,
-    listingPrice,
-    sizeTier: referenceSizeTier,
-    category,
-  })
-}
-
 export async function hydrateComparisonSkuRow(
   row: ApiSkuRow,
   tenantCode: TenantCode,
   deps: ComparisonRowHydratorDeps
 ): Promise<ApiSkuRow> {
-  if (typeof row.asin !== 'string') return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+  if (typeof row.asin !== 'string') return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
 
   const asin = row.asin.trim()
-  if (!asin) return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+  if (!asin) return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
 
   const listingPrice = await deps.loadListingPrice(asin, tenantCode)
-  const expectedFee = deriveReferenceFee(row, tenantCode, listingPrice)
 
   let amazonFee: number | null = null
   let amazonSizeTier = row.amazonSizeTier
@@ -314,7 +288,6 @@ export async function hydrateComparisonSkuRow(
 
   return {
     ...row,
-    fbaFulfillmentFee: expectedFee,
     amazonFbaFulfillmentFee: amazonFee,
     amazonListingPrice: listingPrice,
     amazonSizeTier,
