@@ -144,25 +144,40 @@ function getCaseRowsForDate(
   )
 }
 
-function getSingleCaseRowForDate(
+function compareCaseEntries(
+  left: { row: CaseReportRow },
+  right: { row: CaseReportRow },
+): number {
+  const categoryRank = getCaseSelectorCategoryRank(left.row.category) - getCaseSelectorCategoryRank(right.row.category)
+  if (categoryRank !== 0) {
+    return categoryRank
+  }
+
+  const issueRank = left.row.issue.localeCompare(right.row.issue)
+  if (issueRank !== 0) {
+    return issueRank
+  }
+
+  return left.row.status.localeCompare(right.row.status)
+}
+
+function getSortedCaseRowsForDate(
   bundle: CaseReportBundle,
   reportDate: string,
   caseId: string,
-): { entity: string; row: CaseReportRow } | null {
-  const matches = getCaseRowsForDate(bundle, reportDate, caseId)
-  if (matches.length === 0) {
-    return null
-  }
-  if (matches.length > 1) {
-    throw new Error(`Multiple report rows found for case ${caseId} on ${reportDate}`)
-  }
-  return matches[0]
+): Array<{ entity: string; row: CaseReportRow }> {
+  return getCaseRowsForDate(bundle, reportDate, caseId).sort(compareCaseEntries)
 }
 
-function buildCaseTimelineRow(caseId: string, reportDate: string, entry: { entity: string; row: CaseReportRow }): CaseTimelineRow {
+function buildCaseTimelineRow(
+  caseId: string,
+  reportDate: string,
+  entryIndex: number,
+  entry: { entity: string; row: CaseReportRow },
+): CaseTimelineRow {
   return {
     ...entry.row,
-    timelineKey: `${reportDate}::${caseId}`,
+    timelineKey: `${reportDate}::${caseId}::${entryIndex}`,
     reportDate,
     entity: entry.entity,
     signal: entry.row.evidence,
@@ -220,29 +235,42 @@ export function createCaseReportDateOptions(
 }
 
 export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRow[] {
-  return bundle.sections
-    .flatMap((section) =>
-      section.rows.map((row) => {
-        const caseRecord = getTrackedCaseRecordOrThrow(bundle, row.caseId, 'case selector row')
-        const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
-        const openSince = caseRecord === undefined ? null : caseRecord.created
-        const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
+  const selectorEntriesByCaseId = new Map<string, Array<{ entity: string; row: CaseReportRow }>>()
 
-        return {
-          caseId: row.caseId,
-          category: row.category,
-          issue: row.issue,
-          entity: section.entity,
-          amazonStatus,
-          openSince,
-          activityCount: createCaseTimelineRows(bundle, row.caseId).length,
-          evidence: row.evidence,
-          assessment: row.assessment,
-          nextStep: row.nextStep,
-          nextAction,
-        }
-      }),
-    )
+  bundle.sections.forEach((section) => {
+    section.rows.forEach((row) => {
+      const existingEntries = selectorEntriesByCaseId.get(row.caseId)
+      if (existingEntries === undefined) {
+        selectorEntriesByCaseId.set(row.caseId, [{ entity: section.entity, row }])
+        return
+      }
+
+      existingEntries.push({ entity: section.entity, row })
+    })
+  })
+
+  return [...selectorEntriesByCaseId.entries()]
+    .map(([caseId, entries]) => {
+      const entry = [...entries].sort(compareCaseEntries)[0]
+      const caseRecord = getTrackedCaseRecordOrThrow(bundle, caseId, 'case selector row')
+      const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
+      const openSince = caseRecord === undefined ? null : caseRecord.created
+      const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
+
+      return {
+        caseId,
+        category: entry.row.category,
+        issue: entry.row.issue,
+        entity: entry.entity,
+        amazonStatus,
+        openSince,
+        activityCount: createCaseTimelineRows(bundle, caseId).length,
+        evidence: entry.row.evidence,
+        assessment: entry.row.assessment,
+        nextStep: entry.row.nextStep,
+        nextAction,
+      }
+    })
     .sort((left, right) => {
       const categoryRank = getCaseSelectorCategoryRank(left.category) - getCaseSelectorCategoryRank(right.category)
       if (categoryRank !== 0) {
@@ -259,12 +287,12 @@ export function createCaseTimelineRows(bundle: CaseReportBundle, caseId: string)
   const rows = [...bundle.availableReportDates]
     .sort((left, right) => right.localeCompare(left))
     .flatMap((reportDate) => {
-      const entry = getSingleCaseRowForDate(bundle, reportDate, caseId)
-      if (entry === null) {
+      const entries = getSortedCaseRowsForDate(bundle, reportDate, caseId)
+      if (entries.length === 0) {
         return []
       }
 
-      return buildCaseTimelineRow(caseId, reportDate, entry)
+      return entries.map((entry, entryIndex) => buildCaseTimelineRow(caseId, reportDate, entryIndex, entry))
     })
 
   if (rows.length === 0) {

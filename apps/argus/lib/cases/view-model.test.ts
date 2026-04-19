@@ -288,6 +288,29 @@ function selectReportDate(bundle: CaseReportBundle, reportDate: string): CaseRep
   }
 }
 
+function buildBundleWithDuplicateSameDayActivity(): CaseReportBundle {
+  const bundle = buildBundle()
+  const duplicateRow = {
+    category: 'Action due',
+    issue: 'Refund follow-up needs the missing invoice page',
+    caseId: 'A-200',
+    daysAgo: '0 days ago',
+    status: 'Checkpoint overdue',
+    evidence: 'Support still needs the missing invoice page.',
+    assessment: 'The follow-up is now overdue on the same day.',
+    nextStep: 'Send the missing invoice page today.',
+  }
+
+  bundle.reportSectionsByDate['2026-04-12'] = [
+    {
+      entity: 'TARGON',
+      rows: [...bundle.reportSectionsByDate['2026-04-12'][0].rows, duplicateRow],
+    },
+  ]
+
+  return bundle
+}
+
 test('createCaseSelectorRows orders the selector by urgency, then caseId, and counts dated activity', () => {
   const rows = createCaseSelectorRows(buildBundle())
 
@@ -346,6 +369,68 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
         amazonStatus: 'Work in progress',
         openSince: '2026-04-12',
         activityCount: 3,
+      },
+    ],
+  )
+})
+
+test('same-day duplicate case activities stay selectable without duplicating the case selector', () => {
+  const bundle = buildBundleWithDuplicateSameDayActivity()
+
+  assert.deepEqual(
+    createCaseSelectorRows(selectReportDate(bundle, '2026-04-12')).map((row) => ({
+      caseId: row.caseId,
+      category: row.category,
+      issue: row.issue,
+      activityCount: row.activityCount,
+    })),
+    [
+      {
+        caseId: 'A-200',
+        category: 'Action due',
+        issue: 'Refund follow-up needs the missing invoice page',
+        activityCount: 4,
+      },
+      {
+        caseId: 'A-100',
+        category: 'Watching',
+        issue: 'Legacy issue still waiting on reimbursement',
+        activityCount: 3,
+      },
+    ],
+  )
+
+  assert.deepEqual(
+    createCaseTimelineRows(bundle, 'A-200').map((row) => ({
+      timelineKey: row.timelineKey,
+      reportDate: row.reportDate,
+      category: row.category,
+      issue: row.issue,
+    })),
+    [
+      {
+        timelineKey: '2026-04-14::A-200::0',
+        reportDate: '2026-04-14',
+        category: 'Action due',
+        issue: 'Refund needs a seller reply',
+      },
+      {
+        timelineKey: '2026-04-13::A-200::0',
+        reportDate: '2026-04-13',
+        category: 'Watching',
+        issue: 'Refund needs a seller reply',
+      },
+      {
+        timelineKey: '2026-04-12::A-200::0',
+        reportDate: '2026-04-12',
+        category: 'Action due',
+        issue: 'Refund follow-up needs the missing invoice page',
+      },
+      {
+        timelineKey: '2026-04-12::A-200::1',
+        reportDate: '2026-04-12',
+        category: 'New case',
+        issue: 'Refund needs a seller reply',
       },
     ],
   )
