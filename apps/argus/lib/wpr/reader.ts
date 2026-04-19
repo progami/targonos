@@ -1,5 +1,6 @@
 import { stat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { assertWprPayloadContract } from './payload-contract';
 import type {
   WeekLabel,
   WprChangeLogEntry,
@@ -44,7 +45,8 @@ async function loadPayload(): Promise<WprPayload> {
   }
 
   const raw = await readFile(path, 'utf8');
-  const payload = JSON.parse(raw) as WprPayload;
+  const payload = JSON.parse(raw) as unknown;
+  assertWprPayloadContract(payload);
   cacheState = {
     path,
     mtimeMs: fileStats.mtimeMs,
