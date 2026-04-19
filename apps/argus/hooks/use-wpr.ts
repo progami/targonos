@@ -5,6 +5,7 @@ import { getPublicBasePath } from '@/lib/base-path';
 import type {
   WprChangeLogEntry,
   WeekLabel,
+  WprPayload,
   WprSourceOverview,
   WprWeekBundle,
   WprWeekSummaryResponse,
@@ -29,6 +30,13 @@ export function useWprWeeksQuery() {
   return useQuery({
     queryKey: ['wpr', 'weeks'],
     queryFn: () => getJson<WprWeekSummaryResponse>('/api/wpr/weeks'),
+  });
+}
+
+export function useWprPayloadQuery() {
+  return useQuery({
+    queryKey: ['wpr', 'payload'],
+    queryFn: () => getJson<WprPayload>('/api/wpr/payload'),
   });
 }
 
