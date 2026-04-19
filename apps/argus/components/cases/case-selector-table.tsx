@@ -137,7 +137,7 @@ export function CaseSelectorTable({
       <Table stickyHeader size="small" sx={{ tableLayout: 'fixed' }}>
         <TableHead>
           <TableRow>
-            <HeaderCell label="Case" />
+            <HeaderCell label="Subject" />
             <HeaderCell label="Entity" />
             <HeaderCell label="Status" />
             <HeaderCell label="Open since" />
@@ -199,7 +199,7 @@ export function CaseSelectorTable({
                       overflow: 'hidden',
                     }}
                   >
-                    {row.issue}
+                    {row.subject}
                   </Typography>
                   <Typography
                     sx={(theme) => ({
