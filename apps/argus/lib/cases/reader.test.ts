@@ -365,6 +365,60 @@ test('readCaseReportBundleFromCaseRoot throws when tracked_case_ids is malformed
   )
 })
 
+test('readCaseReportBundleFromCaseRoot throws when a tracked case id is missing from cases', async () => {
+  const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
+  const reportsDir = path.join(caseRoot, 'reports')
+  mkdirSync(reportsDir, { recursive: true })
+
+  writeFileSync(
+    path.join(caseRoot, 'case.json'),
+    JSON.stringify(
+      {
+        market: 'US',
+        generated_at: '2026-04-08T04:15:00-05:00',
+        tracked_case_ids: ['19550165441', '19096712151'],
+        cases: {
+          '19550165441': {
+            case_id: '19550165441',
+            title: 'Shipping label refund ($2,583.96)',
+            entity: 'TARGON',
+            amazon_status: 'Work in progress',
+            our_status: 'looping',
+            created: '2026-04-06',
+            last_reply: '2026-04-07',
+            next_action: 'Confirm the approved reimbursement posts in Payments.',
+            next_action_date: '2026-04-09',
+            linked_cases: '19096712151',
+            action_kind: 'send_case_reply',
+            approval_required: true,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  )
+
+  writeFileSync(
+    path.join(reportsDir, '2026-04-08.md'),
+    [
+      '## Case Report - 2026-04-08 (US)',
+      '',
+      '### TARGON',
+      '',
+      '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |',
+      '|---|---|---|---|---|---|---|---|',
+      '| Watching | Shipping label refund ($2,583.96) | 19550165441 | 2 days ago | Work in progress | No new case-thread activity. | Four shipments are still unresolved. | Confirm the approved reimbursement posts in Payments. |',
+      '',
+    ].join('\n'),
+  )
+
+  await assert.rejects(
+    () => readCaseReportBundleFromCaseRoot(caseRoot, 'us'),
+    /Missing required case\.json case record for case 19096712151/,
+  )
+})
+
 test('readCaseReportBundleFromCaseRoot throws when a case record is missing required machine-readable fields', async () => {
   const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
   const reportsDir = path.join(caseRoot, 'reports')
