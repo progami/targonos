@@ -18,13 +18,13 @@ export type CaseSelectorRow = {
   category: string
   issue: string
   entity: string
-  amazonStatus: string
-  openSince: string
+  amazonStatus: string | null
+  openSince: string | null
   activityCount: number
   evidence: string
   assessment: string
   nextStep: string
-  nextAction: string
+  nextAction: string | null
 }
 
 export type CaseTimelineRow = CaseReportRow & {
@@ -43,16 +43,16 @@ export type CaseDetailApprovalModel = {
 
 export type CaseDetailMetadata = {
   entity: string
-  amazonStatus: string
-  ourStatus: string
-  lastReply: string
-  created: string
-  linkedCases: string
+  amazonStatus: string | null
+  ourStatus: string | null
+  lastReply: string | null
+  created: string | null
+  linkedCases: string | null
   primaryEmail: string | null
-  nextAction: string
-  nextActionDate: string
-  actionKind: CaseReportActionKind
-  approvalRequired: boolean
+  nextAction: string | null
+  nextActionDate: string | null
+  actionKind: CaseReportActionKind | null
+  approvalRequired: boolean | null
 }
 
 export type CaseDetailModel = {
@@ -103,14 +103,6 @@ function isTrackedCaseId(bundle: CaseReportBundle, caseId: string): boolean {
   return bundle.trackedCaseIds.includes(caseId)
 }
 
-function getCaseRecordOrThrow(bundle: CaseReportBundle, caseId: string, context: string): CaseReportCaseRecord {
-  const caseRecord = bundle.caseRecordsById[caseId]
-  if (caseRecord === undefined) {
-    throw new Error(`Missing case record for ${context}: ${caseId}`)
-  }
-  return caseRecord
-}
-
 function getTrackedCaseRecordOrThrow(
   bundle: CaseReportBundle,
   caseId: string,
@@ -121,6 +113,10 @@ function getTrackedCaseRecordOrThrow(
     throw new Error(`Missing case record for ${context}: ${caseId}`)
   }
   return caseRecord
+}
+
+function assertTrackedCaseRecordInvariant(bundle: CaseReportBundle, caseId: string, context: string): void {
+  getTrackedCaseRecordOrThrow(bundle, caseId, context)
 }
 
 function getReportSectionsForDate(bundle: CaseReportBundle, reportDate: string): CaseReportSection[] {
@@ -226,24 +222,24 @@ export function createCaseReportDateOptions(
 export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRow[] {
   return bundle.sections
     .flatMap((section) =>
-      section.rows.flatMap((row) => {
+      section.rows.map((row) => {
         const caseRecord = getTrackedCaseRecordOrThrow(bundle, row.caseId, 'case selector row')
-        if (caseRecord === undefined) {
-          return []
-        }
+        const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
+        const openSince = caseRecord === undefined ? null : caseRecord.created
+        const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
 
         return {
           caseId: row.caseId,
           category: row.category,
           issue: row.issue,
-          entity: caseRecord.entity,
-          amazonStatus: caseRecord.amazonStatus,
-          openSince: caseRecord.created,
+          entity: section.entity,
+          amazonStatus,
+          openSince,
           activityCount: createCaseTimelineRows(bundle, row.caseId).length,
           evidence: row.evidence,
           assessment: row.assessment,
           nextStep: row.nextStep,
-          nextAction: caseRecord.nextAction,
+          nextAction,
         }
       }),
     )
@@ -258,6 +254,8 @@ export function createCaseSelectorRows(bundle: CaseReportBundle): CaseSelectorRo
 }
 
 export function createCaseTimelineRows(bundle: CaseReportBundle, caseId: string): CaseTimelineRow[] {
+  assertTrackedCaseRecordInvariant(bundle, caseId, 'case timeline')
+
   const rows = [...bundle.availableReportDates]
     .sort((left, right) => right.localeCompare(left))
     .flatMap((reportDate) => {
@@ -277,7 +275,18 @@ export function createCaseTimelineRows(bundle: CaseReportBundle, caseId: string)
 }
 
 export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: CaseTimelineRow): CaseDetailModel {
-  const caseRecord = getCaseRecordOrThrow(bundle, timelineRow.caseId, 'case detail')
+  const caseRecord = getTrackedCaseRecordOrThrow(bundle, timelineRow.caseId, 'case detail')
+  const entity = caseRecord === undefined ? timelineRow.entity : caseRecord.entity
+  const amazonStatus = caseRecord === undefined ? null : caseRecord.amazonStatus
+  const ourStatus = caseRecord === undefined ? null : caseRecord.ourStatus
+  const lastReply = caseRecord === undefined ? null : caseRecord.lastReply
+  const created = caseRecord === undefined ? null : caseRecord.created
+  const linkedCases = caseRecord === undefined ? null : caseRecord.linkedCases
+  const primaryEmail = caseRecord === undefined ? null : caseRecord.primaryEmail
+  const nextAction = caseRecord === undefined ? null : caseRecord.nextAction
+  const nextActionDate = caseRecord === undefined ? null : caseRecord.nextActionDate
+  const actionKind = caseRecord === undefined ? null : caseRecord.actionKind
+  const approvalRequired = caseRecord === undefined ? null : caseRecord.approvalRequired
 
   return {
     reportDate: timelineRow.reportDate,
@@ -290,19 +299,19 @@ export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: Cas
     assessment: timelineRow.assessment,
     nextStep: timelineRow.nextStep,
     metadata: {
-      entity: caseRecord.entity,
-      amazonStatus: caseRecord.amazonStatus,
-      ourStatus: caseRecord.ourStatus,
-      lastReply: caseRecord.lastReply,
-      created: caseRecord.created,
-      linkedCases: caseRecord.linkedCases,
-      primaryEmail: caseRecord.primaryEmail,
-      nextAction: caseRecord.nextAction,
-      nextActionDate: caseRecord.nextActionDate,
-      actionKind: caseRecord.actionKind,
-      approvalRequired: caseRecord.approvalRequired,
+      entity,
+      amazonStatus,
+      ourStatus,
+      lastReply,
+      created,
+      linkedCases,
+      primaryEmail,
+      nextAction,
+      nextActionDate,
+      actionKind,
+      approvalRequired,
     },
-    approval: createCaseDetailApprovalModel(caseRecord),
+    approval: caseRecord === undefined ? null : createCaseDetailApprovalModel(caseRecord),
   }
 }
 
@@ -312,15 +321,20 @@ export function filterCaseSelectorRows(rows: CaseSelectorRow[], query: string): 
     return rows
   }
 
-  return rows.filter((row) =>
-    [
+  return rows.filter((row) => {
+    const searchableFields = [
       row.issue,
       row.caseId,
       row.entity,
       row.evidence,
       row.assessment,
       row.nextStep,
-      row.nextAction,
-    ].some((field) => field.toLowerCase().includes(normalizedQuery)),
-  )
+    ]
+
+    if (row.nextAction !== null) {
+      searchableFields.push(row.nextAction)
+    }
+
+    return searchableFields.some((field) => field.toLowerCase().includes(normalizedQuery))
+  })
 }

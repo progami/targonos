@@ -6,6 +6,7 @@ import {
   createCaseReportDateOptions,
   createCaseSelectorRows,
   createCaseTimelineRows,
+  type CaseTimelineRow,
   filterCaseSelectorRows,
 } from './view-model'
 
@@ -273,6 +274,20 @@ function buildBundle(): CaseReportBundle {
   }
 }
 
+function selectReportDate(bundle: CaseReportBundle, reportDate: string): CaseReportBundle {
+  const sections = bundle.reportSectionsByDate[reportDate]
+  if (sections === undefined) {
+    throw new Error(`Missing report sections for test report date: ${reportDate}`)
+  }
+
+  return {
+    ...bundle,
+    reportDate,
+    reportPath: `/tmp/cases/reports/${reportDate}.md`,
+    sections,
+  }
+}
+
 test('createCaseSelectorRows orders the selector by urgency, then caseId, and counts dated activity', () => {
   const rows = createCaseSelectorRows(buildBundle())
 
@@ -336,13 +351,86 @@ test('createCaseSelectorRows orders the selector by urgency, then caseId, and co
   )
 })
 
-test('createCaseSelectorRows still throws when a tracked live case is missing its case record', () => {
+test('createCaseSelectorRows includes an untracked historical selected-date row without active metadata', () => {
+  const rows = createCaseSelectorRows(selectReportDate(buildBundle(), '2026-04-13'))
+
+  assert.deepEqual(
+    rows.map((row) => ({
+      caseId: row.caseId,
+      entity: row.entity,
+      amazonStatus: row.amazonStatus,
+      openSince: row.openSince,
+      nextAction: row.nextAction,
+      activityCount: row.activityCount,
+    })),
+    [
+      {
+        caseId: 'A-100',
+        entity: 'TARGON',
+        amazonStatus: 'Work in progress',
+        openSince: '2026-04-12',
+        nextAction: 'Check again tomorrow.',
+        activityCount: 3,
+      },
+      {
+        caseId: 'A-200',
+        entity: 'TARGON',
+        amazonStatus: 'Answered',
+        openSince: '2026-04-12',
+        nextAction: 'Reply with the invoice attachment.',
+        activityCount: 3,
+      },
+      {
+        caseId: 'A-400',
+        entity: 'NIGS LTD',
+        amazonStatus: 'Opened',
+        openSince: '2026-04-10',
+        nextAction: 'Read the opening case thread and summarize it.',
+        activityCount: 2,
+      },
+      {
+        caseId: 'A-999',
+        entity: 'TARGON',
+        amazonStatus: null,
+        openSince: null,
+        nextAction: null,
+        activityCount: 1,
+      },
+    ],
+  )
+})
+
+test('tracked live missing case records fail loudly in selector, timeline, and detail', () => {
   const bundle = buildBundle()
   delete bundle.caseRecordsById['A-300']
+  const trackedTimelineRow: CaseTimelineRow = {
+    timelineKey: '2026-04-14::A-300',
+    reportDate: '2026-04-14',
+    entity: 'NIGS LTD',
+    category: 'Forum watch',
+    issue: 'Forum escalation mentioned reimbursement lag',
+    caseId: 'A-300',
+    daysAgo: '6 days ago',
+    status: 'Investigating',
+    evidence: 'Forum moderators acknowledged the pattern.',
+    assessment: 'The issue is worth watching for spillover.',
+    nextStep: 'Track whether the forum thread names our ASINs.',
+    signal: 'Forum moderators acknowledged the pattern.',
+  }
 
   assert.throws(
     () => createCaseSelectorRows(bundle),
     new Error('Missing case record for case selector row: A-300'),
+  )
+
+  assert.throws(
+    () => createCaseTimelineRows(bundle, 'A-300'),
+    new Error('Missing case record for case timeline: A-300'),
+  )
+
+  assert.throws(
+    () => createCaseDetailModel(bundle, trackedTimelineRow),
+    new Error('Missing case record for case detail: A-300'),
   )
 })
 
@@ -439,6 +527,37 @@ test('createCaseDetailModel joins timeline snapshots with case metadata and gate
   assert.equal(readOnlyDetail.approval, null)
   assert.equal(readOnlyDetail.metadata.approvalRequired, false)
   assert.equal(readOnlyDetail.metadata.actionKind, 'collect_evidence')
+})
+
+test('createCaseDetailModel returns nullable metadata and no approval for untracked historical rows', () => {
+  const bundle = buildBundle()
+  const detail = createCaseDetailModel(bundle, createCaseTimelineRows(bundle, 'A-999')[0])
+
+  assert.deepEqual(detail, {
+    reportDate: '2026-04-13',
+    caseId: 'A-999',
+    category: 'Watching',
+    issue: 'Archived reimbursement audit',
+    status: 'Watching',
+    signal: 'A historical audit note remains in the old report.',
+    evidence: 'A historical audit note remains in the old report.',
+    assessment: 'This row is only preserved for historical context.',
+    nextStep: 'No live action required.',
+    metadata: {
+      entity: 'TARGON',
+      amazonStatus: null,
+      ourStatus: null,
+      lastReply: null,
+      created: null,
+      linkedCases: null,
+      primaryEmail: null,
+      nextAction: null,
+      nextActionDate: null,
+      actionKind: null,
+      approvalRequired: null,
+    },
+    approval: null,
+  })
 })
 
 test('filterCaseSelectorRows searches issue, case id, entity, evidence, assessment, and next step', () => {
