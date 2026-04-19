@@ -4,6 +4,14 @@ import path from 'node:path';
 const CASE_REPORT_HEADER =
   '| Category | Issue | Case ID | Days Ago | Status | Evidence / What Changed | Assessment | Next Step |';
 const REPORT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/u;
+const CASE_REPORT_ACTION_KINDS = [
+  'monitor',
+  'checkpoint',
+  'collect_evidence',
+  'send_email',
+  'send_case_reply',
+  'send_forum_post',
+] as const;
 
 const CASE_MARKETS = {
   us: {
@@ -53,6 +61,24 @@ export type CaseReportDaySummary = {
   watchingRows: number;
 };
 
+export type CaseReportActionKind = (typeof CASE_REPORT_ACTION_KINDS)[number];
+
+export type CaseReportCaseRecord = {
+  caseId: string;
+  title: string;
+  entity: string;
+  amazonStatus: string;
+  ourStatus: string;
+  created: string;
+  lastReply: string;
+  nextAction: string;
+  nextActionDate: string;
+  linkedCases: string;
+  primaryEmail: string | null;
+  actionKind: CaseReportActionKind;
+  approvalRequired: boolean;
+};
+
 export type CaseReportBundle = ParsedCaseReport & {
   marketSlug: CaseReportMarketSlug;
   marketLabel: string;
@@ -60,8 +86,10 @@ export type CaseReportBundle = ParsedCaseReport & {
   reportPath: string;
   caseJsonPath: string;
   availableReportDates: string[];
+  reportSectionsByDate: Record<string, CaseReportSection[]>;
   daySummaries: CaseReportDaySummary[];
   trackedCaseIds: string[];
+  caseRecordsById: Record<string, CaseReportCaseRecord>;
   generatedAt: string | null;
 };
 
@@ -91,6 +119,197 @@ function parseTableCells(line: string): string[] {
     .replace(/\|$/u, '')
     .split('|')
     .map((cell) => cell.trim());
+}
+
+function readRequiredObject(
+  value: unknown,
+  errorMessage: string,
+): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(errorMessage);
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readRequiredString(
+  record: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+): string {
+  const value = record[fieldName];
+  if (typeof value !== 'string') {
+    throw new Error(errorMessage);
+  }
+
+  return value;
+}
+
+function readRequiredBoolean(
+  record: Record<string, unknown>,
+  fieldName: string,
+  errorMessage: string,
+): boolean {
+  const value = record[fieldName];
+  if (typeof value !== 'boolean') {
+    throw new Error(errorMessage);
+  }
+
+  return value;
+}
+
+function readRequiredStringArray(
+  record: Record<string, unknown>,
+  fieldName: string,
+  missingErrorMessage: string,
+  invalidErrorMessage: string,
+): string[] {
+  const value = record[fieldName];
+  if (value === undefined) {
+    throw new Error(missingErrorMessage);
+  }
+  if (Array.isArray(value) === false) {
+    throw new Error(invalidErrorMessage);
+  }
+  if (value.every((entry) => typeof entry === 'string') === false) {
+    throw new Error(invalidErrorMessage);
+  }
+
+  return value;
+}
+
+function readNullableString(
+  record: Record<string, unknown>,
+  fieldName: string,
+): string | null {
+  const value = record[fieldName];
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  return value;
+}
+
+function isCaseReportActionKind(value: string): value is CaseReportActionKind {
+  return CASE_REPORT_ACTION_KINDS.some((actionKind) => actionKind === value);
+}
+
+function actionKindAllowsApproval(actionKind: CaseReportActionKind): boolean {
+  switch (actionKind) {
+    case 'send_email':
+      return true;
+    case 'send_case_reply':
+      return true;
+    case 'send_forum_post':
+      return true;
+    case 'monitor':
+      return false;
+    case 'checkpoint':
+      return false;
+    case 'collect_evidence':
+      return false;
+  }
+}
+
+function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecord {
+  const record = readRequiredObject(value, `Invalid case.json case record for case ${rawCaseId}`);
+  const caseId = readRequiredString(
+    record,
+    'case_id',
+    `Missing required case.json case field case_id for case ${rawCaseId}`,
+  );
+  if (caseId !== rawCaseId) {
+    throw new Error(`Case.json case key mismatch: expected ${rawCaseId}, got ${caseId}`);
+  }
+
+  const actionKind = readRequiredString(
+    record,
+    'action_kind',
+    `Missing required case.json case field action_kind for case ${rawCaseId}`,
+  );
+  if (isCaseReportActionKind(actionKind) === false) {
+    throw new Error(`Invalid case.json action_kind ${actionKind} for case ${rawCaseId}`);
+  }
+  const approvalRequired = readRequiredBoolean(
+    record,
+    'approval_required',
+    `Missing required case.json case field approval_required for case ${rawCaseId}`,
+  );
+  if (approvalRequired === true && actionKindAllowsApproval(actionKind) === false) {
+    throw new Error(
+      `Invalid case.json approval_required true for non-send action_kind ${actionKind} for case ${rawCaseId}`,
+    );
+  }
+
+  return {
+    caseId,
+    title: readRequiredString(
+      record,
+      'title',
+      `Missing required case.json case field title for case ${rawCaseId}`,
+    ),
+    entity: readRequiredString(
+      record,
+      'entity',
+      `Missing required case.json case field entity for case ${rawCaseId}`,
+    ),
+    amazonStatus: readRequiredString(
+      record,
+      'amazon_status',
+      `Missing required case.json case field amazon_status for case ${rawCaseId}`,
+    ),
+    ourStatus: readRequiredString(
+      record,
+      'our_status',
+      `Missing required case.json case field our_status for case ${rawCaseId}`,
+    ),
+    created: readRequiredString(
+      record,
+      'created',
+      `Missing required case.json case field created for case ${rawCaseId}`,
+    ),
+    lastReply: readRequiredString(
+      record,
+      'last_reply',
+      `Missing required case.json case field last_reply for case ${rawCaseId}`,
+    ),
+    nextAction: readRequiredString(
+      record,
+      'next_action',
+      `Missing required case.json case field next_action for case ${rawCaseId}`,
+    ),
+    nextActionDate: readRequiredString(
+      record,
+      'next_action_date',
+      `Missing required case.json case field next_action_date for case ${rawCaseId}`,
+    ),
+    linkedCases: readRequiredString(
+      record,
+      'linked_cases',
+      `Missing required case.json case field linked_cases for case ${rawCaseId}`,
+    ),
+    primaryEmail: readNullableString(record, 'primary_email'),
+    actionKind,
+    approvalRequired,
+  };
+}
+
+function parseCaseRecordsById(
+  value: unknown,
+  trackedCaseIds: string[],
+): Record<string, CaseReportCaseRecord> {
+  const cases = readRequiredObject(value, 'Missing required case.json cases map');
+
+  return Object.fromEntries(
+    trackedCaseIds.map((caseId) => {
+      const caseRecord = cases[caseId];
+      if (caseRecord === undefined) {
+        throw new Error(`Missing required case.json case record for case ${caseId}`);
+      }
+
+      return [caseId, parseCaseRecord(caseId, caseRecord)] as const;
+    }),
+  );
 }
 
 export function parseCaseReportMarkdown(markdown: string): ParsedCaseReport {
@@ -218,12 +437,12 @@ function countCaseReportRows(parsedReport: ParsedCaseReport): CaseReportDaySumma
   return summary;
 }
 
-async function readCaseReportDaySummaries(
+async function readParsedReportsByDate(
   caseRoot: string,
   availableReportDates: string[],
   marketCode: string,
-): Promise<CaseReportDaySummary[]> {
-  return Promise.all(
+): Promise<Record<string, ParsedCaseReport>> {
+  const reports = await Promise.all(
     availableReportDates.map(async (reportDate) => {
       const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
       const markdown = await fs.readFile(reportPath, 'utf8');
@@ -237,8 +456,43 @@ async function readCaseReportDaySummaries(
         throw new Error(`Case report market mismatch: expected ${marketCode}, got ${parsedReport.marketCode}`);
       }
 
-      return countCaseReportRows(parsedReport);
+      return [reportDate, parsedReport] as const;
     }),
+  );
+
+  return Object.fromEntries(reports);
+}
+
+function readParsedReportByDate(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  reportDate: string,
+): ParsedCaseReport {
+  const parsedReport = parsedReportsByDate[reportDate];
+  if (parsedReport === undefined) {
+    throw new Error(`Missing parsed case report for date ${reportDate}`);
+  }
+
+  return parsedReport;
+}
+
+function buildCaseReportDaySummaries(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  availableReportDates: string[],
+): CaseReportDaySummary[] {
+  return availableReportDates.map((reportDate) =>
+    countCaseReportRows(readParsedReportByDate(parsedReportsByDate, reportDate)),
+  );
+}
+
+function buildReportSectionsByDate(
+  parsedReportsByDate: Record<string, ParsedCaseReport>,
+  availableReportDates: string[],
+): Record<string, CaseReportSection[]> {
+  return Object.fromEntries(
+    availableReportDates.map((reportDate) => [
+      reportDate,
+      readParsedReportByDate(parsedReportsByDate, reportDate).sections,
+    ]),
   );
 }
 
@@ -260,29 +514,32 @@ export async function readCaseReportBundleFromCaseRoot(
 
   const reportPath = path.join(caseRoot, 'reports', `${reportDate}.md`);
   const caseJsonPath = path.join(caseRoot, 'case.json');
-  const [markdown, caseJsonRaw] = await Promise.all([
-    fs.readFile(reportPath, 'utf8'),
+  if (requestedReportDate !== undefined && availableReportDates.includes(reportDate) === false) {
+    await fs.readFile(reportPath, 'utf8');
+  }
+
+  const [caseJsonRaw, parsedReportsByDate] = await Promise.all([
     fs.readFile(caseJsonPath, 'utf8'),
+    readParsedReportsByDate(caseRoot, availableReportDates, market.marketCode),
   ]);
 
-  const parsedReport = parseCaseReportMarkdown(markdown);
-  if (parsedReport.marketCode !== market.marketCode) {
-    throw new Error(
-      `Case report market mismatch: expected ${market.marketCode}, got ${parsedReport.marketCode}`,
-    );
+  const parsedReport = readParsedReportByDate(parsedReportsByDate, reportDate);
+  const caseState = readRequiredObject(JSON.parse(caseJsonRaw), 'Invalid case.json root object');
+  const caseMarket = readRequiredString(caseState, 'market', 'Missing required case.json field market');
+
+  if (caseMarket !== market.marketCode) {
+    throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseMarket}`);
   }
 
-  const caseState = JSON.parse(caseJsonRaw) as {
-    market: string;
-    generated_at?: string;
-    tracked_case_ids?: string[];
-  };
-
-  if (caseState.market !== market.marketCode) {
-    throw new Error(`case.json market mismatch: expected ${market.marketCode}, got ${caseState.market}`);
-  }
-
-  const daySummaries = await readCaseReportDaySummaries(caseRoot, availableReportDates, market.marketCode);
+  const trackedCaseIds = readRequiredStringArray(
+    caseState,
+    'tracked_case_ids',
+    'Missing required case.json field tracked_case_ids',
+    'Invalid case.json field tracked_case_ids',
+  );
+  const caseRecordsById = parseCaseRecordsById(caseState.cases, trackedCaseIds);
+  const daySummaries = buildCaseReportDaySummaries(parsedReportsByDate, availableReportDates);
+  const reportSectionsByDate = buildReportSectionsByDate(parsedReportsByDate, availableReportDates);
 
   return {
     ...parsedReport,
@@ -292,8 +549,10 @@ export async function readCaseReportBundleFromCaseRoot(
     reportPath,
     caseJsonPath,
     availableReportDates,
+    reportSectionsByDate,
     daySummaries,
-    trackedCaseIds: Array.isArray(caseState.tracked_case_ids) ? caseState.tracked_case_ids : [],
+    trackedCaseIds,
+    caseRecordsById,
     generatedAt: typeof caseState.generated_at === 'string' ? caseState.generated_at : null,
   };
 }
