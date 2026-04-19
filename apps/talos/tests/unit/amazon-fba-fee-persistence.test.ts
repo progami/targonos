@@ -18,6 +18,10 @@ test('Talos does not persist Amazon FBA fee snapshots on SKUs', () => {
         /buildRequiredColumnsCheck\('skus amazon fee columns', 'skus', \[\s*'amazon_category',\s*'amazon_size_tier',\s*'amazon_referral_fee_percent',\s*'amazon_fba_fulfillment_fee',\s*\]\)/m,
         /ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "amazon_fba_fulfillment_fee"/,
       ],
+      requiredPatterns: [
+        /ALTER TABLE "skus" DROP COLUMN IF EXISTS "amazon_fba_fulfillment_fee"/,
+        /ALTER TABLE IF EXISTS "sku_batches" DROP COLUMN IF EXISTS "amazon_fba_fulfillment_fee"/,
+      ],
     },
     {
       relativePath: 'scripts/migrations/add-sku-batch-amazon-default-columns.ts',
@@ -50,6 +54,13 @@ test('Talos does not persist Amazon FBA fee snapshots on SKUs', () => {
         bannedPattern.test(source),
         false,
         `${scriptCheck.relativePath} still recreates or backfills skus.amazon_fba_fulfillment_fee`
+      )
+    }
+    for (const requiredPattern of scriptCheck.requiredPatterns ?? []) {
+      assert.equal(
+        requiredPattern.test(source),
+        true,
+        `${scriptCheck.relativePath} no longer drops stale amazon_fba_fulfillment_fee columns during tenant-schema rollout`
       )
     }
   }
