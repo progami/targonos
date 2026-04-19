@@ -13,6 +13,11 @@ import {
   type CaseSelectorRow,
   type CaseTimelineRow,
 } from '@/lib/cases/view-model'
+import {
+  CASES_DRILLDOWN_DESKTOP_GRID_COLUMNS,
+  CASES_DRILLDOWN_RIGHT_RAIL_DESKTOP_ROWS,
+  CASE_DETAIL_PANEL_DESKTOP_MIN_HEIGHT,
+} from '@/lib/cases/layout'
 import { getCaseQueueBorderColor } from '@/lib/cases/theme'
 import { CaseActivityTable } from './case-activity-table'
 import { CaseDetailPanel, type CaseDetailApprovalState } from './case-detail-panel'
@@ -203,14 +208,10 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            lg: 'minmax(360px, 0.92fr) minmax(0, 1.68fr)',
+            lg: CASES_DRILLDOWN_DESKTOP_GRID_COLUMNS,
           },
           gap: 1.5,
-          alignItems: 'stretch',
-          minHeight: {
-            xs: 'auto',
-            lg: 'calc(100vh - 214px)',
-          },
+          alignItems: 'start',
         }}
       >
         <CaseSelectorTable
@@ -219,12 +220,17 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
           onSelectCase={setSelectedCaseIdState}
         />
 
-        <Stack
-          spacing={1.5}
+        <Box
           sx={{
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateRows: {
+              xs: 'auto auto',
+              lg: CASES_DRILLDOWN_RIGHT_RAIL_DESKTOP_ROWS,
+            },
             minHeight: {
               xs: 'auto',
-              lg: 'calc(100vh - 214px)',
+              lg: CASE_DETAIL_PANEL_DESKTOP_MIN_HEIGHT,
             },
           }}
         >
@@ -234,14 +240,22 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
             onSelectTimeline={setSelectedTimelineKeyState}
           />
 
-          <Box sx={{ flex: 1, minHeight: { xs: 'auto', lg: 0 }, display: 'flex' }}>
+          <Box
+            sx={{
+              minHeight: {
+                xs: 280,
+                lg: CASE_DETAIL_PANEL_DESKTOP_MIN_HEIGHT,
+              },
+              display: 'flex',
+            }}
+          >
             <CaseDetailPanel
               detail={detail}
               approvalState={approvalState}
               onApprovalStateChange={handleApprovalStateChange}
             />
           </Box>
-        </Stack>
+        </Box>
       </Box>
     </Stack>
   )
