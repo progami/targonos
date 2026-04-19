@@ -7,7 +7,6 @@ import type { SelectChangeEvent } from '@mui/material/Select'
 import type { CaseReportBundle } from '@/lib/cases/reader'
 import {
   createCaseDetailModel,
-  createCaseReportDateOptions,
   createCaseSelectorRows,
   createCaseTimelineRows,
   filterCaseSelectorRows,
@@ -122,7 +121,6 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
   >({})
   const deferredSearchQuery = useDeferredValue(searchQuery)
 
-  const reportDateOptions = createCaseReportDateOptions(bundle)
   const selectorRows = createCaseSelectorRows(bundle)
   const filteredSelectorRows = filterSelectorRows(bundle, selectorRows, searchQuery === '' ? '' : deferredSearchQuery)
   const selectedCaseId = resolveSelectedCaseId(filteredSelectorRows, selectedCaseIdState)
@@ -153,10 +151,6 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
     router.push(`/cases/${event.target.value}`)
   }
 
-  function handleReportDateChange(event: SelectChangeEvent<string>) {
-    router.push(`/cases/${bundle.marketSlug}/${event.target.value}`)
-  }
-
   function handleApprovalStateChange(state: 'approved' | 'hold') {
     if (selectedTimelineRow === null) {
       throw new Error('Cannot update case approval state without a selected activity row')
@@ -178,25 +172,15 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
         })}
       >
         <Stack
-          direction={{ xs: 'column', xl: 'row' }}
+          direction={{ xs: 'column', lg: 'row' }}
           spacing={1}
-          alignItems={{ xs: 'stretch', xl: 'center' }}
+          alignItems={{ xs: 'stretch', lg: 'center' }}
         >
           <FormControl size="small" sx={{ minWidth: 190 }}>
             <Select value={bundle.marketSlug} onChange={handleMarketChange}>
               {MARKET_OPTIONS.map((market) => (
                 <MenuItem key={market.slug} value={market.slug}>
                   {market.label}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 320 }}>
-            <Select value={bundle.reportDate} onChange={handleReportDateChange}>
-              {reportDateOptions.map((option) => (
-                <MenuItem key={option.reportDate} value={option.reportDate}>
-                  {option.label}
                 </MenuItem>
               ))}
             </Select>
@@ -209,7 +193,7 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
             onChange={(event) => {
               setSearchQuery(event.target.value)
             }}
-            sx={{ flex: 1, minWidth: 220 }}
+            sx={{ flex: 1, minWidth: 280 }}
           />
         </Stack>
       </Box>
@@ -219,10 +203,14 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
           display: 'grid',
           gridTemplateColumns: {
             xs: '1fr',
-            xl: 'minmax(360px, 0.95fr) minmax(0, 1.65fr)',
+            lg: 'minmax(360px, 0.92fr) minmax(0, 1.68fr)',
           },
           gap: 1.5,
-          alignItems: 'start',
+          alignItems: 'stretch',
+          minHeight: {
+            xs: 'auto',
+            lg: 'calc(100vh - 214px)',
+          },
         }}
       >
         <CaseSelectorTable
@@ -231,18 +219,28 @@ export function CasesDrilldownPage({ bundle }: { bundle: CaseReportBundle }) {
           onSelectCase={setSelectedCaseIdState}
         />
 
-        <Stack spacing={1.5}>
+        <Stack
+          spacing={1.5}
+          sx={{
+            minHeight: {
+              xs: 'auto',
+              lg: 'calc(100vh - 214px)',
+            },
+          }}
+        >
           <CaseActivityTable
             rows={timelineRows}
             selectedTimelineKey={selectedTimelineKey}
             onSelectTimeline={setSelectedTimelineKeyState}
           />
 
-          <CaseDetailPanel
-            detail={detail}
-            approvalState={approvalState}
-            onApprovalStateChange={handleApprovalStateChange}
-          />
+          <Box sx={{ flex: 1, minHeight: { xs: 'auto', lg: 0 }, display: 'flex' }}>
+            <CaseDetailPanel
+              detail={detail}
+              approvalState={approvalState}
+              onApprovalStateChange={handleApprovalStateChange}
+            />
+          </Box>
         </Stack>
       </Box>
     </Stack>
