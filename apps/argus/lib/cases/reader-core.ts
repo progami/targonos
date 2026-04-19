@@ -73,6 +73,9 @@ export type CaseReportCaseRecord = {
   nextActionDate: string;
   linkedCases: string;
   primaryEmail: string | null;
+  caseUrl: string | null;
+  forumPost: string | null;
+  forumPostUrl: string | null;
   actionKind: CaseReportActionKind;
   approvalRequired: boolean;
 };
@@ -181,6 +184,31 @@ function readNullableString(
   return value;
 }
 
+function readOptionalUrl(
+  record: Record<string, unknown>,
+  fieldName: string,
+  invalidErrorMessage: string,
+): string | null {
+  const value = record[fieldName];
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new Error(invalidErrorMessage);
+  }
+
+  const trimmedValue = value.trim();
+  if (trimmedValue === '') {
+    throw new Error(invalidErrorMessage);
+  }
+
+  try {
+    return new URL(trimmedValue).toString();
+  } catch {
+    throw new Error(invalidErrorMessage);
+  }
+}
+
 function isCaseReportActionKind(value: string): value is CaseReportActionKind {
   return CASE_REPORT_ACTION_KINDS.some((actionKind) => actionKind === value);
 }
@@ -280,6 +308,17 @@ function parseCaseRecord(rawCaseId: string, value: unknown): CaseReportCaseRecor
       `Missing required case.json case field linked_cases for case ${rawCaseId}`,
     ),
     primaryEmail: readNullableString(record, 'primary_email'),
+    caseUrl: readOptionalUrl(
+      record,
+      'case_url',
+      `Invalid case.json case field case_url for case ${rawCaseId}`,
+    ),
+    forumPost: readNullableString(record, 'forum_post'),
+    forumPostUrl: readOptionalUrl(
+      record,
+      'forum_post_url',
+      `Invalid case.json case field forum_post_url for case ${rawCaseId}`,
+    ),
     actionKind,
     approvalRequired,
   };

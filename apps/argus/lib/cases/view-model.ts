@@ -42,6 +42,11 @@ export type CaseDetailApprovalModel = {
   secondaryActionLabel: 'Hold'
 }
 
+export type CaseDetailSourceLink = {
+  label: 'Case thread' | 'Forum thread'
+  href: string
+}
+
 export type CaseDetailMetadata = {
   entity: string
   amazonStatus: string | null
@@ -66,6 +71,7 @@ export type CaseDetailModel = {
   assessment: string
   nextStep: string
   metadata: CaseDetailMetadata
+  sourceLinks: CaseDetailSourceLink[]
   approval: CaseDetailApprovalModel | null
 }
 
@@ -214,6 +220,30 @@ function createCaseDetailApprovalModel(caseRecord: CaseReportCaseRecord): CaseDe
   }
 }
 
+function createCaseDetailSourceLinks(caseRecord: CaseReportCaseRecord | undefined): CaseDetailSourceLink[] {
+  if (caseRecord === undefined) {
+    return []
+  }
+
+  const sourceLinks: CaseDetailSourceLink[] = []
+
+  if (caseRecord.caseUrl !== null) {
+    sourceLinks.push({
+      label: 'Case thread',
+      href: caseRecord.caseUrl,
+    })
+  }
+
+  if (caseRecord.forumPostUrl !== null) {
+    sourceLinks.push({
+      label: 'Forum thread',
+      href: caseRecord.forumPostUrl,
+    })
+  }
+
+  return sourceLinks
+}
+
 export function createCaseReportDateOptions(
   bundle: Pick<CaseReportBundle, 'availableReportDates' | 'daySummaries'>,
 ): CaseReportDateOption[] {
@@ -339,6 +369,7 @@ export function createCaseDetailModel(bundle: CaseReportBundle, timelineRow: Cas
       actionKind,
       approvalRequired,
     },
+    sourceLinks: createCaseDetailSourceLinks(caseRecord),
     approval: caseRecord === undefined ? null : createCaseDetailApprovalModel(caseRecord),
   }
 }

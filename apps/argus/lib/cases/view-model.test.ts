@@ -205,6 +205,9 @@ function buildBundle(): CaseReportBundle {
         nextActionDate: '2026-04-15',
         linkedCases: '',
         primaryEmail: null,
+        caseUrl: null,
+        forumPost: null,
+        forumPostUrl: null,
         actionKind: 'monitor',
         approvalRequired: false,
       },
@@ -220,6 +223,9 @@ function buildBundle(): CaseReportBundle {
         nextActionDate: '2026-04-14',
         linkedCases: '',
         primaryEmail: 'ops@targonglobal.com',
+        caseUrl: null,
+        forumPost: null,
+        forumPostUrl: null,
         actionKind: 'send_case_reply',
         approvalRequired: true,
       },
@@ -235,6 +241,9 @@ function buildBundle(): CaseReportBundle {
         nextActionDate: '2026-04-14',
         linkedCases: 'A-199',
         primaryEmail: 'ops@targonglobal.com',
+        caseUrl: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=A-200',
+        forumPost: 'https://sellercentral.amazon.com/seller-forums/discussions/t/a-200 (posted Apr 14)',
+        forumPostUrl: 'https://sellercentral.amazon.com/seller-forums/discussions/t/a-200',
         actionKind: 'send_case_reply',
         approvalRequired: true,
       },
@@ -250,6 +259,9 @@ function buildBundle(): CaseReportBundle {
         nextActionDate: '2026-04-15',
         linkedCases: '',
         primaryEmail: null,
+        caseUrl: null,
+        forumPost: null,
+        forumPostUrl: null,
         actionKind: 'send_forum_post',
         approvalRequired: true,
       },
@@ -265,6 +277,9 @@ function buildBundle(): CaseReportBundle {
         nextActionDate: '2026-04-14',
         linkedCases: 'A-401',
         primaryEmail: 'support@nigs.example',
+        caseUrl: null,
+        forumPost: null,
+        forumPostUrl: null,
         actionKind: 'collect_evidence',
         approvalRequired: false,
       },
@@ -599,6 +614,16 @@ test('createCaseDetailModel joins timeline snapshots with case metadata and gate
       actionKind: 'send_case_reply',
       approvalRequired: true,
     },
+    sourceLinks: [
+      {
+        label: 'Case thread',
+        href: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=A-200',
+      },
+      {
+        label: 'Forum thread',
+        href: 'https://sellercentral.amazon.com/seller-forums/discussions/t/a-200',
+      },
+    ],
     approval: {
       statusLabel: 'Approval required',
       sourceLabel: 'Case reply',
@@ -611,6 +636,24 @@ test('createCaseDetailModel joins timeline snapshots with case metadata and gate
   assert.equal(readOnlyDetail.approval, null)
   assert.equal(readOnlyDetail.metadata.approvalRequired, false)
   assert.equal(readOnlyDetail.metadata.actionKind, 'collect_evidence')
+  assert.deepEqual(readOnlyDetail.sourceLinks, [])
+})
+
+test('createCaseDetailModel does not infer a forum link from forum_post text alone', () => {
+  const bundle = buildBundle()
+  bundle.caseRecordsById['A-200'] = {
+    ...bundle.caseRecordsById['A-200'],
+    forumPostUrl: null,
+  }
+
+  const detail = createCaseDetailModel(bundle, createCaseTimelineRows(bundle, 'A-200')[0])
+
+  assert.deepEqual(detail.sourceLinks, [
+    {
+      label: 'Case thread',
+      href: 'https://sellercentral.amazon.com/cu/case-dashboard/view-case?ie=UTF8&caseID=A-200',
+    },
+  ])
 })
 
 test('createCaseDetailModel returns nullable metadata and no approval for untracked historical rows', () => {
@@ -639,6 +682,7 @@ test('createCaseDetailModel returns nullable metadata and no approval for untrac
       actionKind: null,
       approvalRequired: null,
     },
+    sourceLinks: [],
     approval: null,
   })
 })
