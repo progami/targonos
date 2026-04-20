@@ -117,10 +117,8 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   console.log(`[${tenant}] Backfilling skus Amazon reference fields from latest active sku_batches`)
 
   const hasSkuAmazonSizeTier = options.dryRun ? true : await columnExists(prisma, 'skus', 'amazon_size_tier')
-  const hasSkuAmazonFbaFee = options.dryRun ? true : await columnExists(prisma, 'skus', 'amazon_fba_fulfillment_fee')
   const hasSkuUnitWeight = options.dryRun ? true : await columnExists(prisma, 'skus', 'unit_weight_kg')
   const hasBatchAmazonSizeTier = options.dryRun ? true : await columnExists(prisma, 'sku_batches', 'amazon_size_tier')
-  const hasBatchAmazonFbaFee = options.dryRun ? true : await columnExists(prisma, 'sku_batches', 'amazon_fba_fulfillment_fee')
   const hasBatchAmazonRefWeight = options.dryRun
     ? true
     : await columnExists(prisma, 'sku_batches', 'amazon_reference_weight_kg')
@@ -129,9 +127,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   const setClauses = [
     hasSkuAmazonSizeTier && hasBatchAmazonSizeTier
       ? `amazon_size_tier = COALESCE(s.amazon_size_tier, b.amazon_size_tier)`
-      : null,
-    hasSkuAmazonFbaFee && hasBatchAmazonFbaFee
-      ? `amazon_fba_fulfillment_fee = COALESCE(s.amazon_fba_fulfillment_fee, b.amazon_fba_fulfillment_fee)`
       : null,
     `amazon_reference_weight_kg = COALESCE(
       s.amazon_reference_weight_kg,
@@ -149,7 +144,6 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       SELECT DISTINCT ON (sku_id)
         sku_id
         ${hasBatchAmazonSizeTier ? ', amazon_size_tier' : ''}
-        ${hasBatchAmazonFbaFee ? ', amazon_fba_fulfillment_fee' : ''}
         ${hasBatchAmazonRefWeight ? ', amazon_reference_weight_kg' : ''}
         ${hasBatchUnitWeight ? ', unit_weight_kg' : ''}
       FROM sku_batches
@@ -185,4 +179,3 @@ main().catch(error => {
   console.error(error)
   process.exitCode = 1
 })
-

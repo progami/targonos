@@ -1,4 +1,4 @@
-import { calculateFbaFeeForTenant, calculateSizeTierForTenant } from '@/lib/amazon/fees'
+import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import { LB_PER_KG } from '@/lib/measurements'
 import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -41,6 +41,31 @@ export type ApiSkuRow = {
   itemWeightKg: ApiNumberValue
 }
 
+export type ComparisonSkuSourceRow = {
+  id: string
+  skuCode: string
+  description: string
+  asin: string | null
+  category?: string | null
+  fbaFulfillmentFee: ApiNumberValue
+  amazonSizeTier: string | null
+  unitDimensionsCm: string | null
+  unitSide1Cm: ApiNumberValue
+  unitSide2Cm: ApiNumberValue
+  unitSide3Cm: ApiNumberValue
+  unitWeightKg: ApiNumberValue
+  itemDimensionsCm: string | null
+  itemSide1Cm: ApiNumberValue
+  itemSide2Cm: ApiNumberValue
+  itemSide3Cm: ApiNumberValue
+  itemWeightKg: ApiNumberValue
+  amazonItemPackageDimensionsCm: string | null
+  amazonItemPackageSide1Cm: ApiNumberValue
+  amazonItemPackageSide2Cm: ApiNumberValue
+  amazonItemPackageSide3Cm: ApiNumberValue
+  amazonReferenceWeightKg: ApiNumberValue
+}
+
 export type DimensionTriplet = { side1Cm: number; side2Cm: number; side3Cm: number }
 
 export type ShippingWeights = {
@@ -81,6 +106,24 @@ export type ComparisonRowHydratorDeps = {
 
 const DIMENSION_TOLERANCE_CM = 0.05
 const WEIGHT_TOLERANCE_KG = 0.005
+
+export function buildComparisonSkuRow(row: ComparisonSkuSourceRow): ApiSkuRow {
+  return {
+    ...row,
+    amazonListingPrice: null,
+    amazonFbaFulfillmentFee: null,
+    referenceItemPackageDimensionsCm: row.unitDimensionsCm,
+    referenceItemPackageSide1Cm: row.unitSide1Cm,
+    referenceItemPackageSide2Cm: row.unitSide2Cm,
+    referenceItemPackageSide3Cm: row.unitSide3Cm,
+    referenceItemPackageWeightKg: row.unitWeightKg,
+    amazonItemPackageDimensionsCm: row.amazonItemPackageDimensionsCm,
+    amazonItemPackageSide1Cm: row.amazonItemPackageSide1Cm,
+    amazonItemPackageSide2Cm: row.amazonItemPackageSide2Cm,
+    amazonItemPackageSide3Cm: row.amazonItemPackageSide3Cm,
+    amazonItemPackageWeightKg: row.amazonReferenceWeightKg,
+  }
+}
 
 export function parseDecimalNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
@@ -264,43 +307,17 @@ function resolveReferenceSizeTier(row: ApiSkuRow, tenantCode: TenantCode): {
   }
 }
 
-function deriveReferenceFee(row: ApiSkuRow, tenantCode: TenantCode, listingPrice: number | null): number | null {
-  if (listingPrice === null) return null
-
-  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceSizeTier(row, tenantCode)
-  if (referenceTriplet === null) return null
-  if (referenceWeightKg === null) return null
-  if (referenceSizeTier === null) return null
-
-  let category: string | undefined
-  if (typeof row.category === 'string') {
-    const trimmed = row.category.trim()
-    if (trimmed) category = trimmed
-  }
-
-  return calculateFbaFeeForTenant(tenantCode, {
-    side1Cm: referenceTriplet.side1Cm,
-    side2Cm: referenceTriplet.side2Cm,
-    side3Cm: referenceTriplet.side3Cm,
-    unitWeightKg: referenceWeightKg,
-    listingPrice,
-    sizeTier: referenceSizeTier,
-    category,
-  })
-}
-
 export async function hydrateComparisonSkuRow(
   row: ApiSkuRow,
   tenantCode: TenantCode,
   deps: ComparisonRowHydratorDeps
 ): Promise<ApiSkuRow> {
-  if (typeof row.asin !== 'string') return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+  if (typeof row.asin !== 'string') return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
 
   const asin = row.asin.trim()
-  if (!asin) return { ...row, fbaFulfillmentFee: null, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
+  if (!asin) return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
 
   const listingPrice = await deps.loadListingPrice(asin, tenantCode)
-  const expectedFee = deriveReferenceFee(row, tenantCode, listingPrice)
 
   let amazonFee: number | null = null
   let amazonSizeTier = row.amazonSizeTier
@@ -314,7 +331,6 @@ export async function hydrateComparisonSkuRow(
 
   return {
     ...row,
-    fbaFulfillmentFee: expectedFee,
     amazonFbaFulfillmentFee: amazonFee,
     amazonListingPrice: listingPrice,
     amazonSizeTier,

@@ -1,0 +1,25 @@
+export const CASE_SELECTOR_DESKTOP_COLUMN_WIDTHS = [
+  '46%',
+  '14%',
+  '18%',
+  '14%',
+  '8%',
+] as const
+
+export const CASE_SELECTOR_TABLE_MIN_HEIGHT = 320
+
+export const CASE_SELECTOR_TABLE_DESKTOP_HEIGHT = 'auto'
+
+export const CASE_SELECTOR_TABLE_OVERFLOW = 'hidden'
+
+export const CASES_DRILLDOWN_DESKTOP_GRID_COLUMNS = 'minmax(420px, 1.04fr) minmax(0, 1.72fr)'
+
+export const CASE_ACTIVITY_TABLE_DESKTOP_HEIGHT = 440
+
+export const CASE_DETAIL_PANEL_DESKTOP_MIN_HEIGHT = 368
+
+export const CASES_DRILLDOWN_RIGHT_RAIL_DESKTOP_ROWS = `${CASE_ACTIVITY_TABLE_DESKTOP_HEIGHT}px minmax(${CASE_DETAIL_PANEL_DESKTOP_MIN_HEIGHT}px, auto)`
+
+export const CASE_DETAIL_BODY_FONT_SIZE = '0.98rem'
+
+export const CASE_DETAIL_BODY_LINE_HEIGHT = 1.72
