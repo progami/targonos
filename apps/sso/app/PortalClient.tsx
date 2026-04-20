@@ -45,14 +45,14 @@ const CATEGORY_ORDER = [
 ]
 
 const CATEGORY_COPY: Record<string, string> = {
-  Ops: 'Execution surfaces for warehouse, inventory, and order movement.',
-  Product: 'Planning, forecasting, and system workspaces for active decision making.',
-  'Sales / Marketing': 'Commercial surfaces that support demand shaping and campaign work.',
-  'Account / Listing': 'Marketplace control points for catalog, account, and listing operations.',
-  'HR / Admin': 'People, payroll, and administrative workflows.',
-  Finance: 'Cash, accounting, and financial control surfaces.',
-  Legal: 'Restricted legal and compliance tools.',
-  Other: 'Supporting tools grouped outside the core operating functions.',
+  Ops: 'Warehouse flow, inventory control, and order execution.',
+  Product: 'Forecasting, planning, and operational decision support.',
+  'Sales / Marketing': 'Demand, campaigns, and commercial reporting.',
+  'Account / Listing': 'Marketplace health, listings, and seller account operations.',
+  'HR / Admin': 'People records, reviews, leave, and internal administration.',
+  Finance: 'Settlements, bills, reconciliation, and cash visibility.',
+  Legal: 'Controlled legal and compliance work.',
+  Other: 'Shared tools outside the primary operating lanes.',
 }
 
 const OTHER_CATEGORY = 'Other'
@@ -66,15 +66,6 @@ type PortalClientProps = {
   isPlatformAdmin?: boolean
   roles?: PortalRoleMap
   session: Session
-}
-
-function getGreetingIdentity(session: Session): string | undefined {
-  const name = session.user?.name?.trim()
-  if (name) {
-    return name.split(/\s+/)[0]
-  }
-
-  return session.user?.email?.trim()
 }
 
 export default function PortalClient({
@@ -198,13 +189,8 @@ export default function PortalClient({
     }
   })
 
-  const readyNowCount = accessSummaryApps.filter((app) => Boolean(app.launchUrl)).length
-  const publicToolCount = apps.filter((app) => app.entryPolicy === 'public').length
-  const functionalGroupCount = categorySections.length
   const previewApps = accessSummaryApps.slice(0, 8)
   const hiddenPreviewCount = accessSummaryApps.length - previewApps.length
-  const greetingIdentity = getGreetingIdentity(session)
-  const heroTitle = greetingIdentity ? `Welcome back, ${greetingIdentity}` : 'Welcome back'
   const signedInEmail = session.user?.email?.trim()
   const accessModeLabel = isPlatformAdmin ? 'Platform admin access' : 'Role-scoped access'
 
@@ -278,88 +264,44 @@ export default function PortalClient({
           </div>
         ) : null}
 
-        <section className={styles.heroGrid}>
-          <div className={styles.heroPanel}>
-            <div className={styles.heroEyebrowRow}>
-              <span className={styles.heroEyebrow}>Launcher control surface</span>
-              {isPlatformAdmin ? <span className={styles.heroChip}>Platform admin</span> : null}
-            </div>
-
-            <h1 className={styles.heroTitle}>{heroTitle}</h1>
-            <p className={styles.heroCopy}>
-              Launch the workspaces you are cleared to use from one signed-in entry point.
-              Public tools stay visible, restricted apps stay explicit, and every destination
-              opens in a new tab.
-            </p>
-
-            <div className={styles.metricsGrid}>
-              <div className={styles.metricCard}>
-                <span className={styles.metricLabel}>Ready now</span>
-                <strong className={styles.metricValue}>{readyNowCount}</strong>
-                <span className={styles.metricHint}>launch targets currently available</span>
-              </div>
-              <div className={styles.metricCard}>
-                <span className={styles.metricLabel}>Functions</span>
-                <strong className={styles.metricValue}>{functionalGroupCount}</strong>
-                <span className={styles.metricHint}>launcher groups on this page</span>
-              </div>
-              <div className={styles.metricCard}>
-                <span className={styles.metricLabel}>Public tools</span>
-                <strong className={styles.metricValue}>{publicToolCount}</strong>
-                <span className={styles.metricHint}>visible without role assignment</span>
+        <section className={styles.overviewBar} aria-label="Assigned workspaces">
+          <div className={styles.overviewHeader}>
+            <div className={styles.overviewIntro}>
+              <p className={styles.overviewEyebrow}>Assigned workspaces</p>
+              <div className={styles.overviewMeta}>
+                <span className={styles.overviewCount}>{accessSummaryApps.length}</span>
+                <span className={styles.overviewHint}>
+                  {isPlatformAdmin ? 'Platform-wide access' : 'Current role access'}
+                </span>
               </div>
             </div>
+            {isPlatformAdmin ? <span className={styles.overviewFlag}>Platform admin</span> : null}
           </div>
 
-          <aside className={styles.summaryPanel} aria-label="Current access summary">
-            <div className={styles.summaryHeader}>
-              <div>
-                <p className={styles.summaryEyebrow}>Current access</p>
-                <h2 className={styles.summaryTitle}>Assigned workspaces</h2>
-              </div>
-              <span className={styles.summaryCount}>{accessSummaryApps.length}</span>
-            </div>
-
-            {hasAccessSummaryApps ? (
-              <>
-                <ul className={styles.accessList}>
-                  {previewApps.map((app) => (
-                    <li key={app.id} className={styles.accessItem}>
-                      <span className={styles.accessItemIcon}>{getAppIcon(app.id)}</span>
-                      <div className={styles.accessItemBody}>
-                        <span className={styles.accessItemName}>{app.name}</span>
-                        <span className={styles.accessItemState}>
-                          {app.launchUrl ? 'Ready to open' : 'Missing launch target'}
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                {hiddenPreviewCount > 0 ? (
-                  <p className={styles.summaryFootnote}>
-                    Plus {hiddenPreviewCount} more assigned workspace
-                    {hiddenPreviewCount === 1 ? '' : 's'}.
-                  </p>
-                ) : null}
-              </>
-            ) : (
-              <p className={styles.summaryEmpty}>
-                No workspace assignments were found for this account.
-              </p>
-            )}
-          </aside>
+          {hasAccessSummaryApps ? (
+            <ul className={styles.overviewList}>
+              {previewApps.map((app) => (
+                <li key={app.id} className={styles.overviewItem}>
+                  <span className={styles.overviewItemIcon}>{getAppIcon(app.id)}</span>
+                  <span className={styles.overviewItemName}>{app.name}</span>
+                </li>
+              ))}
+              {hiddenPreviewCount > 0 ? (
+                <li className={`${styles.overviewItem} ${styles.overviewItemMuted}`}>
+                  <span className={styles.overviewItemName}>
+                    +{hiddenPreviewCount} more
+                  </span>
+                </li>
+              ) : null}
+            </ul>
+          ) : (
+            <p className={styles.summaryEmpty}>
+              No workspace assignments were found for this account.
+            </p>
+          )}
         </section>
 
         <section aria-label="Available applications" className={styles.categoriesSection}>
-          <div className={styles.sectionHeader}>
-            <p className={styles.sectionEyebrow}>Workspace groups</p>
-            <h2 className={styles.sectionTitle}>Scan by function, then launch</h2>
-            <p className={styles.sectionCopy}>
-              Apps are grouped by operating area so the launcher stays fast to parse even as the
-              suite grows.
-            </p>
-          </div>
-
           {categorySections.map((section) => (
             <section key={section.category} className={styles.categoryBlock}>
               <div className={styles.categoryIntro}>

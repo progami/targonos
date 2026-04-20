@@ -117,14 +117,14 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'talos',
     name: 'Talos',
-    description: 'Inbound, outbound, inventory and reporting.',
+    description: 'Inventory, warehouse workflow, billing, and order operations.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/talos'),
     category: 'Ops',
   },
   {
     id: 'atlas',
     name: 'Atlas',
-    description: 'HR, payroll and people operations.',
+    description: 'Employee records, reviews, leave, and people operations.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/atlas'),
     devPath: '/atlas',
     category: 'HR / Admin',
@@ -132,7 +132,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'website',
     name: 'Website',
-    description: 'Marketing website and CMS.',
+    description: 'Marketing site, CMS, and public brand presence.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/'),
     entryPolicy: 'public',
     category: 'Product',
@@ -140,7 +140,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'kairos',
     name: 'Kairos',
-    description: 'Forecasting workspace for marketplace signals and statistical models.',
+    description: 'Time-series forecasting and model-driven demand planning.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/kairos'),
     category: 'Product',
     devPath: '/kairos',
@@ -149,7 +149,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'xplan',
     name: 'xPlan',
-    description: 'Collaborative planning workspace for sales, operations, and finance.',
+    description: 'Collaborative planning across sales, supply, and finance.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-setup'),
     category: 'Product',
     devPath: '/xplan',
@@ -158,7 +158,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'plutus',
     name: 'Plutus',
-    description: 'Finance workspace (FCC rebrand).',
+    description: 'Amazon settlements, QBO workflows, and finance control.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
     category: 'Finance',
     devPath: '/plutus',
@@ -167,7 +167,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'hermes',
     name: 'Hermes',
-    description: 'Amazon Seller Central automations (messaging + solicitations).',
+    description: 'Amazon outreach, review requests, and buyer messaging.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/hermes'),
     category: 'Account / Listing',
     devPath: '/hermes',
@@ -176,7 +176,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'argus',
     name: 'Argus',
-    description: 'Amazon listing version control and monitoring.',
+    description: 'Listing monitoring, weekly reporting, and marketplace changes.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
     entryPolicy: 'public',
     category: 'Account / Listing',
