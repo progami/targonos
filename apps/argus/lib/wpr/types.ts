@@ -5,11 +5,7 @@ export interface WprMeta {
   competitorBrand: string;
   competitorAsin: string;
   benchmarkPolicy: string;
-  competitor: {
-    brand: string;
-    asin: string;
-    config_source: string;
-  };
+  competitor: WprCompetitorSummary;
   recentWindow: WeekLabel[];
   baselineWindow: WeekLabel[];
   policy: {
@@ -65,9 +61,16 @@ export interface WprCoverageSummary {
   weeks_sqp: number;
   weeks_rank: number;
   weeks_ppc: number;
-  has_sqp: boolean;
-  has_rank: boolean;
-  has_ppc: boolean;
+  has_sqp?: boolean;
+  has_rank?: boolean;
+  has_ppc?: boolean;
+  terms_total?: number;
+  terms_sqp?: number;
+  terms_rank?: number;
+  terms_ppc?: number;
+  excluded_non_sqp_terms?: number;
+  excluded_ppc_only_terms?: number;
+  excluded_rank_only_terms?: number;
 }
 
 export interface WprCoverage extends WprCoverageSummary {
@@ -78,6 +81,12 @@ export interface WprCoverage extends WprCoverageSummary {
 export type WprObservedWindow = WprWeeklyMetrics;
 
 export interface WprBenchmarkIdentity {
+  brand: string;
+  asin: string;
+  config_source: string;
+}
+
+export interface WprCompetitorSummary {
   brand: string;
   asin: string;
   config_source: string;
@@ -225,6 +234,7 @@ export interface WprCluster {
   coverage: WprCoverage;
   eligibility: Record<string, boolean | number | string | null>;
   observed: {
+    current_week: WprObservedWindow;
     recent_4w: WprObservedWindow;
     baseline_13w: WprObservedWindow;
   };
@@ -234,7 +244,7 @@ export interface WprCluster {
   tstCompare: {
     recent_4w: WprTstWindow;
     baseline_13w: WprTstWindow;
-    competitor: WprBenchmarkCompetitor;
+    competitor: WprCompetitorSummary;
     weekly: WprTstWeeklyWindow[];
   };
 }
@@ -272,7 +282,8 @@ export interface WprChangeLogEntry {
   summary: string;
   category: string;
   asins: string[];
-  field_labels: string[];
+  field_labels?: string[];
+  highlights?: string[];
 }
 
 export interface WprSqpTerm {
@@ -284,10 +295,11 @@ export interface WprSqpTerm {
   weekly: WprWeeklyMetrics[];
   selection_status: string;
   selection_reason: string;
-  selection_volume_recent_4w: number;
+  selection_volume_selected_week: number;
   selection_volume_baseline_13w: number;
   coverage: WprCoverage;
   observed: {
+    current_week: WprObservedWindow;
     recent_4w: WprObservedWindow;
     baseline_13w: WprObservedWindow;
   };
@@ -321,7 +333,117 @@ export interface WprCompetitorWeeklyPoint {
   listing_juice: number | null;
 }
 
-export interface WprWeekBundle {
+export interface WprBrandMetricsPoint {
+  awareness: number;
+  consideration: number;
+  purchase: number;
+}
+
+export interface WprScpMetrics {
+  asin_count: number;
+  impressions: number;
+  clicks: number;
+  cart_adds: number;
+  purchases: number;
+  sales: number;
+  ctr: number;
+  atc_rate: number;
+  purchase_rate: number;
+  cvr: number;
+}
+
+export interface WprScpWeekMetrics extends WprScpMetrics {
+  week_label: WeekLabel;
+  week_number: number;
+  start_date: string;
+}
+
+export interface WprScpMeta {
+  targetAsin: string;
+  recentWindow: WeekLabel[];
+  baselineWindow: WeekLabel[];
+}
+
+export interface WprScpAsinRow extends WprScpMetrics {
+  id: string;
+  asin: string;
+  is_target: boolean;
+  impression_share: number;
+  click_share: number;
+  cart_add_share: number;
+  purchase_share: number;
+  sales_share: number;
+  weeks_present_selected_week: number;
+  weeks_present_baseline: number;
+  current_week: WprScpMetrics;
+  recent_4w: WprScpMetrics;
+  baseline_to_anchor: WprScpMetrics;
+  weekly: WprScpWeekMetrics[];
+}
+
+export interface WprScpWindow {
+  meta: WprScpMeta;
+  current_week: WprScpMetrics;
+  recent_4w: WprScpMetrics;
+  baseline_to_anchor: WprScpMetrics;
+  weekly: WprScpWeekMetrics[];
+  asins: WprScpAsinRow[];
+}
+
+export interface WprBusinessMetrics {
+  asin_count: number;
+  sessions: number;
+  page_views: number;
+  order_items: number;
+  units_ordered: number;
+  sales: number;
+  order_item_session_percentage: number;
+  unit_session_percentage: number;
+  buy_box_percentage: number;
+}
+
+export interface WprBusinessWeekMetrics extends WprBusinessMetrics {
+  week_label: WeekLabel;
+  week_number: number;
+  start_date: string;
+}
+
+export interface WprBusinessDailyPoint extends WprBusinessMetrics {
+  date: string;
+  date_label: string;
+  day_label: string;
+  weekday_label: string;
+  change_count: number;
+  change_titles: string[];
+}
+
+export interface WprBusinessMeta {
+  targetAsin: string;
+  selectedWeek: WeekLabel;
+  availableWeeks: WeekLabel[];
+}
+
+export interface WprBusinessAsinRow extends WprBusinessMetrics {
+  id: string;
+  asin: string;
+  is_target: boolean;
+  weeks_present_selected_week: number;
+  weeks_present_baseline: number;
+  current_week: WprBusinessMetrics;
+  baseline_to_anchor: WprBusinessMetrics;
+  weekly: WprBusinessWeekMetrics[];
+}
+
+export interface WprBusinessReportsWindow {
+  meta: WprBusinessMeta;
+  current_week: WprBusinessMetrics;
+  baseline_to_anchor: WprBusinessMetrics;
+  weekly: WprBusinessWeekMetrics[];
+  dailyByWeek: Record<WeekLabel, WprBusinessDailyPoint[]>;
+  asins: WprBusinessAsinRow[];
+}
+
+export interface WprWeekBundleBase {
   meta: WprMeta;
   weeks: WeekLabel[];
   clusters: WprCluster[];
@@ -337,18 +459,17 @@ export interface WprWeekBundle {
     slope: number;
     intercept: number;
   };
-  brandMetricsWindow: Record<WeekLabel, WprBrandMetricsPoint>;
   brandMetrics: Record<WeekLabel, WprBrandMetricsPoint>;
   competitorWeekly: WprCompetitorWeeklyPoint[];
+  scp: WprScpWindow;
+  businessReports: WprBusinessReportsWindow;
 }
 
-export interface WprBrandMetricsPoint {
-  awareness: number;
-  consideration: number;
-  purchase: number;
+export interface WprWeekBundle extends WprWeekBundleBase {
+  brandMetricsWindow: Record<WeekLabel, WprBrandMetricsPoint>;
 }
 
-export interface WprPayload extends WprWeekBundle {
+export interface WprPayload extends WprWeekBundleBase {
   defaultWeek: WeekLabel;
   weekStartDates: Record<WeekLabel, string>;
   sourceOverview: WprSourceOverview;
