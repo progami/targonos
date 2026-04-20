@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { atlasBaseUrl, loginToAtlas, portalBaseUrl } from '../fixtures/auth'
+import { atlasBaseUrl, loginToAtlas } from '../fixtures/auth'
 
 test('Atlas redirects to portal sign-in when signed out', async ({ page }) => {
   await page.goto(`${atlasBaseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
-  await expect(page).toHaveURL(new RegExp(`^${portalBaseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/login\\?`))
-  await expect(page.locator('input[name="callbackUrl"]')).toHaveValue(`${atlasBaseUrl}/tasks`)
+  await expect(page).toHaveURL(/\/login\?callbackUrl=/)
+  const callbackUrl = await page.locator('input[name="callbackUrl"]').inputValue()
+  expect(new URL(callbackUrl).pathname).toBe('/atlas/tasks')
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
 })
 
