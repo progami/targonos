@@ -32,6 +32,23 @@
   position: absolute;
   inset: 0;
   background:
+    linear-gradient(180deg, rgba(4, 16, 26, 0.56), rgba(4, 16, 26, 0.88)),
+    radial-gradient(circle at 20% 20%, rgba(0, 194, 185, 0.12), transparent 42%),
+    url('/brand/targon-once-in-a-lifetime.jpg');
+  background-size: auto, auto, cover;
+  background-position: center, left top, center top;
+  background-repeat: no-repeat;
+  opacity: 0.2;
+  transform: scale(1.02);
+  filter: saturate(0.78);
+  pointer-events: none;
+}
+
+.login-shell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
     linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px);
   background-size: 56px 56px;
@@ -42,7 +59,7 @@
 
 .login-grid {
   position: relative;
-  z-index: 1;
+  z-index: 2;
   width: min(1180px, 100%);
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(360px, 440px);
@@ -63,8 +80,9 @@
 .login-story {
   padding: clamp(28px, 4vw, 40px);
   display: grid;
-  gap: 30px;
-  align-content: start;
+  grid-template-rows: auto 1fr;
+  gap: clamp(28px, 5vh, 56px);
+  align-content: stretch;
 }
 
 .login-brand {
@@ -101,19 +119,12 @@
 }
 
 .login-kicker,
-.login-story-eyebrow,
-.login-panel-eyebrow,
-.login-point-index {
+.login-panel-eyebrow {
   font-family: var(--font-mono), "JetBrains Mono", monospace;
   font-size: 11px;
   line-height: 1;
   letter-spacing: 0.13em;
   text-transform: uppercase;
-}
-
-.login-kicker,
-.login-story-eyebrow,
-.login-panel-eyebrow {
   color: var(--login-text-muted);
 }
 
@@ -125,83 +136,54 @@
   letter-spacing: -0.03em;
 }
 
+.login-story-brandmark {
+  align-self: center;
+  display: grid;
+  gap: clamp(18px, 2.6vh, 26px);
+  max-width: min(420px, 100%);
+}
+
+.login-story-wordmark {
+  width: min(100%, 360px);
+  height: auto;
+  display: block;
+}
+
 .login-story-copy {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   max-width: 60ch;
 }
 
 .login-title {
   margin: 0;
   color: var(--login-text-primary);
-  font-size: clamp(2.5rem, 5vw, 4.75rem);
-  line-height: 0.95;
-  letter-spacing: -0.06em;
-  max-width: 11ch;
+  max-width: 15ch;
+  display: grid;
+  gap: 8px;
 }
 
-.login-body,
-.login-subtitle,
-.login-point-copy p,
-.login-support p {
+.login-title--compact {
+  max-width: 18ch;
+}
+
+.login-title span {
+  display: block;
+}
+
+.login-title-primary {
+  font-size: clamp(1.9rem, 2.9vw, 2.9rem);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  font-weight: 700;
+}
+
+.login-title-secondary {
+  font-size: clamp(1.15rem, 1.45vw, 1.45rem);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
   color: var(--login-text-secondary);
-  font-size: 15px;
-  line-height: 1.65;
-}
-
-.login-body,
-.login-subtitle {
-  margin: 0;
-}
-
-.login-points {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 14px;
-}
-
-.login-point {
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-  padding: 16px 18px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.025);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.login-point-index {
-  min-height: 38px;
-  border-radius: 999px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 194, 185, 0.12);
-  border: 1px solid rgba(0, 194, 185, 0.22);
-  color: rgba(204, 255, 252, 0.96);
-}
-
-.login-point-copy {
-  display: grid;
-  gap: 6px;
-}
-
-.login-point-copy strong,
-.login-panel-title {
-  color: var(--login-text-primary);
-}
-
-.login-point-copy strong {
-  font-size: 16px;
-  line-height: 1.25;
-  font-weight: 600;
-}
-
-.login-point-copy p {
-  margin: 0;
+  font-weight: 520;
 }
 
 .login-panel {
@@ -218,9 +200,21 @@
 
 .login-panel-title {
   margin: 0;
+  color: var(--login-text-primary);
   font-size: clamp(2rem, 3vw, 2.9rem);
   line-height: 0.96;
   letter-spacing: -0.05em;
+}
+
+.login-subtitle,
+.login-support p {
+  color: var(--login-text-secondary);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.login-subtitle {
+  margin: 0;
 }
 
 .form-global-error {
@@ -290,8 +284,20 @@
     grid-template-columns: 1fr;
   }
 
+  .login-story {
+    gap: 32px;
+  }
+
+  .login-story-brandmark {
+    max-width: 100%;
+  }
+
+  .login-story-wordmark {
+    width: min(100%, 340px);
+  }
+
   .login-title {
-    max-width: 12ch;
+    max-width: 18ch;
   }
 }
 
@@ -303,15 +309,28 @@
   .login-story,
   .login-panel {
     border-radius: 22px;
-  }
-
-  .login-story,
-  .login-panel {
     padding: 22px;
   }
 
-  .login-point {
-    grid-template-columns: 1fr;
+  .login-story {
+    gap: 36px;
+  }
+
+  .login-story-wordmark {
+    width: min(100%, 280px);
+  }
+
+  .login-title {
+    max-width: 16ch;
+    gap: 6px;
+  }
+
+  .login-title-primary {
+    font-size: clamp(1.8rem, 8.5vw, 2.35rem);
+  }
+
+  .login-title-secondary {
+    font-size: clamp(1rem, 4.8vw, 1.2rem);
   }
 }
 
