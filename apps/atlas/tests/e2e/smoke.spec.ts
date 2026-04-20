@@ -1,10 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { loginToAtlas } from '../fixtures/auth'
-
-const atlasBaseUrl = process.env.ATLAS_BASE_URL
-if (!atlasBaseUrl) {
-  throw new Error('ATLAS_BASE_URL must be defined for Atlas e2e tests.')
-}
+import { atlasBaseUrl, loginToAtlas } from '../fixtures/auth'
 
 test('Atlas redirects to portal sign-in when signed out', async ({ page }) => {
   await page.goto(`${atlasBaseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
