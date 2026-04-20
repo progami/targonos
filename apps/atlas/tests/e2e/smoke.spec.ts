@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test'
-import { atlasBaseUrl, loginToAtlas } from '../fixtures/auth'
+import { atlasBaseUrl, loginToAtlas, portalBaseUrl } from '../fixtures/auth'
 
 test('Atlas redirects to portal sign-in when signed out', async ({ page }) => {
   await page.goto(`${atlasBaseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('TargonOS Portal')).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`^${portalBaseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/login\\?`))
+  await expect(page.locator('input[name="callbackUrl"]')).toHaveValue(`${atlasBaseUrl}/tasks`)
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
 })
 
