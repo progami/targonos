@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { isTenantAllowedForSession } from '@/lib/tenant/session'
-import { buildPortalActiveTenantRequest } from './portal-request'
+import { buildPortalActiveTenantRequest, shouldPersistPortalActiveTenant } from './portal-request'
 
 process.env.NEXT_PUBLIC_APP_URL = 'https://os.targonglobal.com/talos'
 process.env.PORTAL_AUTH_URL = 'https://os.targonglobal.com'
@@ -43,4 +43,10 @@ test('tenant select forwards portal active-tenant persistence through the portal
     cookie: '__Secure-next-auth.session-token=token-value',
   })
   assert.equal(portalRequest.init.body, JSON.stringify({ appId: 'talos', tenantCode: 'UK' }))
+})
+
+test('tenant select skips portal active-tenant persistence in worktree dev auth mode', () => {
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  assert.equal(shouldPersistPortalActiveTenant(), false)
+  delete process.env.TARGON_WORKTREE_DEV_AUTH
 })

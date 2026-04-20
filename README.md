@@ -1,504 +1,97 @@
 # TargonOS
 
-TargonOS is a pnpm + Turborepo monorepo that powers Targon Global’s internal products and public-facing web properties. The codebase runs multiple independent Next.js apps (Portal, Talos, X‑Plan, Atlas, Plutus, Website) with shared authentication and shared libraries.
-
-This repo is currently hosted from a macOS laptop for development and “live” environments (main + dev). The hosting setup is documented here so it’s reproducible and debuggable.
-
-## Architecture (End-to-end)
-
-```text
-User Browser
-  ↓
-Cloudflare (DNS + Edge)
-  ↓
-cloudflared (Tunnel on laptop)
-  ↓
-nginx (local reverse proxy; hostname + path routing)
-  ↓
-PM2 (process manager)
-  ↓
-Next.js apps (ports 30xx main / 31xx dev / 32xx standalone local dev)
-  ↓
-PostgreSQL (5432) + Redis (6379) + external APIs (S3, etc.)
-```
-
-### Public hostnames (via Cloudflare Tunnel)
-
-Cloudflared routes hostnames to local nginx listener ports (`~/.cloudflared/config.yml`):
-
-| Hostname | Purpose | Origin |
-| --- | --- | --- |
-| `os.targonglobal.com` | Main Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8080` |
-| `dev-os.targonglobal.com` | Dev Portal (+ `/talos`, `/xplan`, `/atlas`) | `http://localhost:8081` |
-| `www.targonglobal.com` / `targonglobal.com` | Main Website | `http://localhost:8082` |
-| `dev.targonglobal.com` | Dev Website | `http://localhost:8083` |
-| `db.targonglobal.com` | PostgreSQL (TCP) | `tcp://localhost:5432` |
-
-nginx then routes paths to the correct app ports (macOS/Homebrew default path: `/opt/homebrew/etc/nginx/servers/targonos.conf`):
-
-- Main: `3000` (portal), `3001` (talos), `3005` (website), `3006` (atlas), `3008` (xplan), `3010` (kairos), `3012` (plutus)
-- Dev: `3100` (portal), `3101` (talos), `3105` (website), `3106` (atlas), `3108` (xplan), `3110` (kairos), `3112` (plutus)
-
-### “Two environments” on one host
-
-The laptop keeps two long-lived working directories (“worktrees”) so `dev` and `main` can be running at the same time:
-
-| Directory | Branch | Environment | App ports |
-| --- | --- | --- | --- |
-| `$TARGONOS_DEV_DIR` | `dev` | Dev | `31xx` |
-| `$TARGONOS_MAIN_DIR` | `main` | Main | `30xx` |
-
-PM2 process definitions live in `ecosystem.config.js` and reference these directories via `TARGONOS_DEV_DIR` / `TARGONOS_MAIN_DIR`.
-Set both env vars to absolute paths (example: `/path/to/targonos-dev` and `/path/to/targonos-main`).
-
-## Monorepo layout
-
-```text
-apps/
-  sso/          # Portal (auth + navigation hub)
-  talos/        # Warehouse Management (custom server.js)
-  xplan/        # xplan (Next.js app)
-  atlas/        # Atlas (Next.js app)
-  plutus/       # Plutus (Next.js app)
-  website/      # Marketing site
-  archived/     # Historical apps (excluded from pnpm workspace)
-packages/
-  auth/         # Shared NextAuth + session helpers
-  theme/        # Design tokens + Tailwind theme helpers
-  ui/           # Shared UI primitives
-  prisma-*/     # Generated Prisma clients per app
-scripts/        # CI/CD + operational helpers
-```
-
-`apps/archived/*` is excluded from the pnpm workspace (`pnpm-workspace.yaml`). App “lifecycles” are tracked in `app-manifest.json` for tooling and portal navigation.
+TargonOS is a pnpm + Turborepo monorepo for Targon Global's internal apps and website.
 
 ## Apps
 
-All product apps are Next.js 16 + React 19 and are designed to run either standalone (local dev) or behind nginx under a base path.
+| App | Workspace | Base path |
+| --- | --- | --- |
+| Portal / SSO | `@targon/sso` | `/` |
+| Talos | `@targon/talos` | `/talos` |
+| Website | `@targon/website` | `/` |
+| Atlas | `@targon/atlas` | `/atlas` |
+| xPlan | `@targon/xplan` | `/xplan` |
+| Kairos | `@targon/kairos` | `/kairos` |
+| Plutus | `@targon/plutus` | `/plutus` |
+| Hermes | `@targon/hermes` | `/hermes` |
+| Argus | `@targon/argus` | `/argus` |
 
-| App | Workspace | Base path | Notes |
-| --- | --- | --- | --- |
-| Portal | `@targon/sso` | `/` | Central auth (NextAuth v5) + app navigation |
-| Talos | `@targon/talos` | `/talos` | Uses `apps/talos/server.js`, Redis, and S3 presigned uploads |
-| xplan | `@targon/xplan` | `/xplan` | Prisma schema `xplan`; vitest tests |
-| Atlas | `@targon/atlas` | `/atlas` | Prisma schema `atlas`; Playwright tests |
-| Plutus | `@targon/plutus` | `/plutus` | Amazon + QBO finance workspace (settlements, bills, analytics) |
-| Website | `@targon/website` | `/` | Separate hostname (`targonglobal.com`) |
+## Local development
 
-## Authentication model (Portal as the source of truth)
+You need:
 
-- The portal (`apps/sso`) is the canonical NextAuth app; other apps validate the portal session.
-- Cookie domain is shared **per environment** so a user signs in once and can use multiple apps:
-  - Main: `COOKIE_DOMAIN=.os.targonglobal.com`
-  - Dev: `COOKIE_DOMAIN=.dev-os.targonglobal.com`
-  - Avoid `.targonglobal.com` here or dev/main will overwrite each other’s sessions in the same browser.
-- Shared secret: `PORTAL_AUTH_SECRET` (and/or `NEXTAUTH_SECRET`) must match across apps.
-- Reverse proxy support: nginx forwards `X-Forwarded-Host` / `X-Forwarded-Proto`; NextAuth v5 requires `AUTH_TRUST_HOST=true` behind a proxy.
-- The shared library `@targon/auth` includes helpers for consistent cookie naming and session checks (JWT decode + portal `/api/auth/session` probe).
+- Node 20+
+- `pnpm`
+- Redis for Talos
+- dev DB access on `localhost:6432`
+- app `.env.local` files
 
-## Data/services
-
-- PostgreSQL runs locally (Homebrew `postgresql@14`), exposed on `localhost:5432` and optionally via `db.targonglobal.com` through the tunnel.
-- Main and dev use separate databases:
-  - Main: `portal_db`
-  - Dev: `portal_db_dev`
-- Schemas are per-app (and sometimes per-tenant): `auth`, `main_talos_us`, `main_talos_uk`, `xplan`, `atlas`, `plutus`, etc. Dev schemas are typically prefixed `dev_*` or suffixed `*_dev`.
-- Prisma clients are generated into `packages/prisma-*` and imported by apps (e.g., `@targon/prisma-talos`).
-- Redis runs locally (Homebrew `redis`) and is used by Talos.
-
-## Environment configuration (high level)
-
-`.env*` files are gitignored; CI uses committed `*.env.dev.ci` templates for builds. In hosted mode (PM2), apps run with `NODE_ENV=production` and rely on `.env.local` / `.env.production` being present per app.
-
-Common variables across apps:
-
-- `PORT`, `HOST`
-- `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH` (for path-based apps like `/talos`, `/xplan`, `/atlas`)
-- `NEXTAUTH_URL`, `NEXTAUTH_SECRET`
-- `PORTAL_AUTH_URL`, `NEXT_PUBLIC_PORTAL_AUTH_URL`, `PORTAL_AUTH_SECRET`
-- `COOKIE_DOMAIN`
-- `DATABASE_URL` (Postgres)
-- `REDIS_URL` (Talos)
-
-Portal app-link configuration:
-
-- `PORTAL_APPS_CONFIG` points at a JSON file (example: `dev.local.apps.json`) that tells the portal where each child app lives in dev.
-
-## Local development (new developer setup)
-
-This section covers how to set up the repo on your own machine for local development, connecting to the shared dev database.
-
-Local standalone convention: use `32xx` ports (`3200` portal, `3201` talos, `3205` website, `3206` atlas, `3208` xplan, `3210` kairos, `3212` plutus, `3214` hermes).
-
-### Prerequisites
-
-- **Node.js >= 20** (repo uses Node 20 in CI)
-- **pnpm** via Corepack:
-  ```bash
-  corepack enable
-  corepack prepare pnpm@latest --activate
-  ```
-- **Redis** (required by Talos for CSRF + rate limiting):
-  ```bash
-  brew install redis
-  brew services start redis
-  ```
-- **Cloudflare Tunnel client** (for shared dev database access):
-  ```bash
-  brew install cloudflared
-  ```
-
-You do **not** need PostgreSQL installed locally — you'll connect to the shared dev database via tunnel.
-
-### 1. Clone and install
+Install once:
 
 ```bash
-git clone <repo-url> targonos-dev
-cd targonos-dev
-git checkout dev
+corepack enable
 pnpm install
 ```
 
-### 2. Start the database tunnel
-
-The shared dev database is exposed via a Cloudflare TCP tunnel. Run this in a **separate terminal** and keep it running:
+Run only what you need:
 
 ```bash
-cloudflared access tcp --hostname db.targonglobal.com --url localhost:6432
+pnpm --filter @targon/sso dev
+pnpm --filter @targon/talos dev
+pnpm --filter @targon/website dev
+pnpm --filter @targon/atlas dev
+pnpm --filter @targon/xplan dev
+pnpm --filter @targon/kairos dev
+pnpm --filter @targon/plutus dev
+pnpm --filter @targon/hermes dev
+pnpm --filter @targon/argus dev
 ```
 
-This proxies the shared PostgreSQL instance to your `localhost:6432`. All `DATABASE_URL` values in your `.env.local` files should use port `6432`.
+Local apps read `PORT` from their env file. If `PORT` is missing, the app script falls back to its legacy default.
 
-### 3. Create `.env.local` files
+Local development uses dev data, not main data. Most apps use `portal_db_dev` on `localhost:6432`. Talos uses `dev_talos_us` and `dev_talos_uk`.
 
-Each app needs its own `.env.local` file (gitignored). Ask a team member for the required secrets — specifically:
+## Codex worktrees
 
-- `NEXTAUTH_SECRET` / `PORTAL_AUTH_SECRET` — shared auth secret (must match across SSO and all apps)
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — Google OAuth credentials for SSO
-- Database credentials — username and password for the shared dev DB user
+Use the Codex environment `worktree app (dev-os sso)` when creating a worktree.
 
-Local port profile in this guide is strictly `32xx`:
-- SSO `3200`
-- Talos `3201`
-- Website `3205`
-- Atlas `3206`
-- XPlan `3208`
-- Kairos `3210`
-- Plutus `3212`
-- Hermes `3214`
-- Argus `3216`
+Worktree setup automatically:
 
-#### `apps/sso/.env.local`
+- assigns a unique `41xxx` port block
+- writes `.codex/generated/dev.worktree.apps.json`
+- materializes worktree-local env files
+- runs install and Prisma generation
+- seeds the worktree dev user
+- starts Portal / SSO and all apps in the background
 
-```env
-NODE_ENV=development
-PORT=3200
-HOST=0.0.0.0
-AUTH_TRUST_HOST=true
-NEXTAUTH_URL=http://localhost:3200
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-PORTAL_APPS_CONFIG=dev.local.apps.json
-PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=auth_dev
-GOOGLE_CLIENT_ID=<ask team for Google OAuth client ID>
-GOOGLE_CLIENT_SECRET=<ask team for Google OAuth client secret>
-GOOGLE_ALLOWED_EMAILS=@targonglobal.com
-ALLOW_CALLBACK_REDIRECT=true
-```
+After setup, the worktree is already running. Worktree URLs come from `.codex/generated/dev.worktree.apps.json`.
 
-#### Google OAuth checklist (prevents `Error 400: redirect_uri_mismatch`)
+## Git flow
 
-Your `GOOGLE_CLIENT_ID` in `apps/sso/.env.local` must come from an OAuth client that has an authorized redirect URI matching your `NEXTAUTH_URL` (32xx profile).
+- do not push directly to `dev` or `main`
+- create a feature branch for the work
+- open a PR from the feature branch into `dev`
+- wait for CI on the `dev` PR
+- merge into `dev`
+- open a release PR from `dev` into `main`
+- wait for CI on the `main` PR
+- merge into `main`
 
-- Required redirect URI format: `<NEXTAUTH_URL>/api/auth/callback/google`
-- Required local callbacks:
-  - `http://localhost:3200/api/auth/callback/google`
-  - `http://127.0.0.1:3200/api/auth/callback/google`
-- If you run SSO on a different port/host, add that exact callback URI in Google Cloud Console.
+The repo enforces PRs for protected branches, and PRs into `main` must come from `dev`.
 
-If this is not configured, Google sign-in will fail before callback with `redirect_uri_mismatch`.
-
-#### `apps/talos/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3201
-HOST=0.0.0.0
-NEXTAUTH_URL=http://localhost:3201
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-NEXT_PUBLIC_APP_URL=http://localhost:3201
-CSRF_ALLOWED_ORIGINS=http://localhost:3201
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev
-REDIS_URL=redis://localhost:6379
-S3_BUCKET_NAME=ci-talos-bucket
-S3_BUCKET_REGION=us-east-1
-DATABASE_URL_US=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_talos_us
-DATABASE_URL_UK=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_talos_uk
-```
-
-> **Do NOT set `BASE_PATH`, `NEXT_PUBLIC_BASE_PATH`, or `PRISMA_SCHEMA`** in local dev.
-> `BASE_PATH` causes double-path issues with `next dev`. `PRISMA_SCHEMA` overrides all tenant schemas globally and breaks multi-tenant routing.
-
-#### `apps/atlas/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3206
-HOST=0.0.0.0
-BASE_PATH=/atlas
-NEXT_PUBLIC_BASE_PATH=/atlas
-NEXT_PUBLIC_APP_URL=http://localhost:3206/atlas
-NEXTAUTH_URL=http://localhost:3206/atlas
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-COOKIE_DOMAIN=localhost
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_atlas
-```
-
-#### `apps/xplan/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3208
-HOST=0.0.0.0
-BASE_PATH=/xplan
-NEXT_PUBLIC_BASE_PATH=/xplan
-NEXT_PUBLIC_APP_URL=http://localhost:3208/xplan
-NEXTAUTH_URL=http://localhost:3208/xplan
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-COOKIE_DOMAIN=localhost
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_xplan
-
-# Optional (for strategy assignee directory)
-# PORTAL_DB_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=auth_dev
-```
-
-#### `apps/kairos/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3210
-HOST=0.0.0.0
-BASE_PATH=/kairos
-NEXT_PUBLIC_BASE_PATH=/kairos
-NEXT_PUBLIC_APP_URL=http://localhost:3210/kairos
-NEXTAUTH_URL=http://localhost:3210/kairos
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-COOKIE_DOMAIN=localhost
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=kairos
-```
-
-#### `apps/plutus/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3212
-HOST=0.0.0.0
-BASE_PATH=/plutus
-NEXT_PUBLIC_BASE_PATH=/plutus
-NEXT_PUBLIC_APP_URL=http://localhost:3212/plutus
-NEXTAUTH_URL=http://localhost:3212/plutus
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-COOKIE_DOMAIN=localhost
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=plutus_dev
-
-# Required only for QBO connect/sync features
-# QBO_CLIENT_ID=
-# QBO_CLIENT_SECRET=
-# QBO_REDIRECT_URI=http://localhost:3212/plutus/api/qbo/callback
-# QBO_SANDBOX=true
-```
-
-#### `apps/hermes/.env.local`
-
-```env
-NODE_ENV=development
-PORT=3214
-HOST=0.0.0.0
-BASE_PATH=/hermes
-NEXT_PUBLIC_BASE_PATH=/hermes
-NEXT_PUBLIC_APP_URL=http://localhost:3214/hermes
-NEXTAUTH_URL=http://localhost:3214/hermes
-NEXTAUTH_SECRET=<ask team for shared secret>
-PORTAL_AUTH_URL=http://localhost:3200
-NEXT_PUBLIC_PORTAL_AUTH_URL=http://localhost:3200
-PORTAL_AUTH_SECRET=<ask team for shared secret>
-COOKIE_DOMAIN=localhost
-DATABASE_URL=postgresql://<db_user>:<db_password>@localhost:6432/portal_db_dev?schema=dev_hermes
-```
-
-#### App summary
-
-Use the same pattern across apps: keep shared auth secrets aligned with SSO, and point `DATABASE_URL` to `localhost:6432` with the correct schema.
-
-| App | Workspace | Port | DB Schema |
-|-----|-----------|------|-----------|
-| SSO (Portal) | `@targon/sso` | 3200 | `auth_dev` |
-| Talos | `@targon/talos` | 3201 | `dev_talos_us` / `dev_talos_uk` |
-| Website | `@targon/website` | 3205 | — |
-| Atlas | `@targon/atlas` | 3206 | `dev_atlas` |
-| X-Plan | `@targon/xplan` | 3208 | `dev_xplan` |
-| Kairos | `@targon/kairos` | 3210 | `kairos` |
-| Plutus | `@targon/plutus` | 3212 | `plutus_dev` |
-| Hermes | `@targon/hermes` | 3214 | `dev_hermes` |
-| Argus | `@targon/argus` | 3216 | `argus_dev` |
-
-For local-only UI/API work (without SSO login), set one of these in each app's `.env.local`:
-
-```env
-ALLOW_DEV_AUTH_SESSION_BYPASS=1
-# or
-ALLOW_DEV_AUTH_DEFAULTS=true
-```
-
-### 4. Generate Prisma clients
-
-Before running any app, generate its Prisma client:
+## Common commands
 
 ```bash
-# Generate for specific apps
-pnpm --filter @targon/sso exec prisma generate
-pnpm --filter @targon/talos exec prisma generate
-pnpm --filter @targon/atlas exec prisma generate
-pnpm --filter @targon/xplan exec prisma generate
-pnpm --filter @targon/kairos exec prisma generate
-pnpm --filter @targon/plutus exec prisma generate
-pnpm --filter @targon/argus exec prisma generate
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm codex:env
 ```
 
-### 5. Run the apps
+## Troubleshooting
 
-SSO must be running for authentication to work. Start it first, then any app you're working on:
-
-```bash
-# Terminal 1 — SSO (must start first, on 3200)
-pnpm --filter @targon/sso exec next dev -p 3200
-
-# Terminal 2 — whichever app you're working on
-pnpm --filter @targon/talos exec next dev -p 3201
-pnpm --filter @targon/website exec next dev -p 3205
-pnpm --filter @targon/atlas exec next dev --webpack -p 3206
-pnpm --filter @targon/xplan exec next dev -p 3208
-pnpm --filter @targon/kairos exec next dev -p 3210
-pnpm --filter @targon/plutus exec next dev -p 3212
-pnpm --filter @targon/hermes exec next dev -p 3214
-pnpm --filter @targon/argus exec next dev -p 3216
-```
-
-### 6. Access
-
-1. Open `http://localhost:3200` — SSO login page
-2. Sign in with your `@targonglobal.com` Google account
-3. Navigate to the app you're working on (e.g., `http://localhost:3201/talos` for Talos)
-
-### 7. Optional local auth bypass (localhost only)
-
-When you want to work on an app UI/API flow without logging in through SSO each time, set one of these in that app's `.env.local`:
-
-```env
-ALLOW_DEV_AUTH_SESSION_BYPASS=1
-# or
-ALLOW_DEV_AUTH_DEFAULTS=true
-```
-
-Then restart the app's dev server. In non-production, app middleware will skip portal entry checks when either flag is enabled.
-This only affects local development because the bypass is gated by `NODE_ENV !== 'production'`.
-
-### Troubleshooting
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `cloudflared` connection drops | Tunnel host machine may be offline | Confirm with team that the host is running, then restart `cloudflared access tcp ...` |
-| `/talos/talos` double path | `BASE_PATH` is set in `.env.local` | Remove `BASE_PATH` and `NEXT_PUBLIC_BASE_PATH` from your Talos `.env.local` |
-| "no matching decryption secret" | Auth secret mismatch between SSO and app | Ensure `NEXTAUTH_SECRET` and `PORTAL_AUTH_SECRET` are identical across all `.env.local` files |
-| "User region US does not match tenant UK" | `PRISMA_SCHEMA` is set | Remove `PRISMA_SCHEMA` from your Talos `.env.local` — it overrides all tenant schemas |
-| "Your account is not allowed to sign in" | DB connection limit hit or missing permissions | Ask team to check `portal_dev_external` connection limit and `auth_dev` schema grants |
-| Redis connection error | Redis not running | `brew services start redis` |
-| Prisma errors on startup | Prisma client not generated | Run `pnpm --filter <workspace> exec prisma generate` |
-
-## CI/CD (GitHub Actions)
-
-### CI (PR checks)
-
-Workflow: `.github/workflows/ci.yml`
-
-- Runs on `pull_request`
-- Installs via pnpm and populates `.env.dev`/`.env.local` from `*.env.dev.ci` templates
-- Verifies workspace `package.json` versions are kept in sync (root is the source of truth)
-- Generates Prisma clients
-- Lints / type-checks / builds only the workspaces changed in the PR (via `APP_CHANGED_SINCE` + turbo filters)
-
-### CD (deploy to the laptop)
-
-Workflow: `.github/workflows/cd.yml`
-
-- Triggers on `push` to `dev` or `main` and runs deploy steps on a `self-hosted` GitHub Actions runner on the laptop (`~/actions-runner`).
-- Detects which apps/packages changed and deploys only what’s necessary.
-- Uses `scripts/deploy-app.sh` to:
-  - sync the correct worktree (`$TARGONOS_DEV_DIR` or `$TARGONOS_MAIN_DIR`)
-  - run `pnpm install` (once per deploy run)
-  - build the app(s)
-  - restart the matching PM2 process(es)
-  - run `pm2 save` once at the end
-- On `main`, computes a semver tag from commit messages and creates a GitHub Release (tags the exact `main` commit SHA even though the repo default branch is `dev`).
-
-### Branch / PR policy
-
-- All work merges into `dev` via PR.
-- Production releases are PRs from `dev` → `main` (enforced by `.github/workflows/pr-policy-main-from-dev.yml`).
-- Direct pushes to `dev`/`main` are blocked (`.github/workflows/block-direct-push.yml`).
-- After merging *non-release* PRs to `main` (i.e., head branch is not `dev`), an automation opens a sync PR `main → dev` (`.github/workflows/auto-sync-dev.yml`).
-
-## Operations (laptop hosting)
-
-### PM2
-
-```bash
-pm2 status
-pm2 logs main-targonos --lines 100
-pm2 restart dev-targonos dev-talos dev-xplan dev-atlas dev-website --update-env
-pm2 restart main-targonos main-talos main-xplan main-atlas main-website --update-env
-pm2 save
-```
-
-### Tunnel health (Cloudflare Error 1033)
-
-`cloudflared` exports a readiness endpoint on `127.0.0.1:20241`:
-
-```bash
-curl -fsS http://127.0.0.1:20241/ready
-```
-
-If it’s unhealthy:
-
-```bash
-launchctl kickstart -k gui/$UID/homebrew.mxcl.cloudflared
-```
-
-Optional watchdog (macOS LaunchAgent) for auto-recovery:
-
-```bash
-scripts/install-cloudflared-watchdog-macos.sh
-```
-
-### Common failure modes
-
-- `502 Bad Gateway`: check nginx (`brew services list`) and the target PM2 process (`pm2 status`, `pm2 logs <name>`).
-- NextAuth `UntrustedHost`: set `AUTH_TRUST_HOST=true` and ensure nginx forwards `X-Forwarded-*` headers.
-- Cookies not shared across apps: ensure `COOKIE_DOMAIN` matches the portal environment scope (`.os.targonglobal.com` for main, `.dev-os.targonglobal.com` for dev) and that all apps share `PORTAL_AUTH_SECRET`.
+- If `localhost:6432` is down, fix the dev DB tunnel/access first.
+- If Talos fails on CSRF or session setup, check Redis.
+- If Prisma fails, generate the client for the affected workspace.
+- Worktree logs are in `.codex/generated/runtime/`.

@@ -29,6 +29,17 @@ function createTempWorkspace(config?: object) {
   return dir
 }
 
+function createTempWorkspaceWithWorktreeConfig(config: object) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sso-apps-worktree-test-'))
+  const generatedDir = path.join(dir, '.codex', 'generated')
+  fs.mkdirSync(generatedDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(generatedDir, 'dev.worktree.apps.json'),
+    JSON.stringify(config, null, 2),
+  )
+  return dir
+}
+
 test.afterEach(() => {
   process.chdir(ORIGINAL_CWD)
   resetEnv()
@@ -52,6 +63,42 @@ test('resolveAppUrl preserves the xplan base path when using the local dev app m
   assert.equal(mod.resolveAppUrl(app), 'http://localhost:3008/xplan')
 })
 
+test('resolveAppUrl preserves the talos base path when using the local dev app map', async () => {
+  Object.assign(process.env, { NODE_ENV: 'development' })
+  process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
+
+  const cwd = createTempWorkspace({
+    host: 'http://localhost',
+    apps: {
+      talos: 3001,
+    },
+  })
+
+  const mod = await importFreshAppsModule(cwd)
+  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'talos')
+
+  assert.ok(app)
+  assert.equal(mod.resolveAppUrl(app), 'http://localhost:3001/talos')
+})
+
+test('resolveAppUrl prefers the codex worktree app map when present', async () => {
+  Object.assign(process.env, { NODE_ENV: 'development' })
+  process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
+
+  const cwd = createTempWorkspaceWithWorktreeConfig({
+    host: 'http://localhost',
+    apps: {
+      xplan: 41208,
+    },
+  })
+
+  const mod = await importFreshAppsModule(cwd)
+  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'xplan')
+
+  assert.ok(app)
+  assert.equal(mod.resolveAppUrl(app), 'http://localhost:41208/xplan')
+})
+
 test('resolveAppUrl fails loudly in development when no local app mapping exists', async () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
   process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
@@ -65,4 +112,33 @@ test('resolveAppUrl fails loudly in development when no local app mapping exists
     () => mod.resolveAppUrl(app),
     /Talos local development URL is not configured/,
   )
+})
+
+test('ALL_APPS does not expose legacy hardcoded devUrl fields', async () => {
+  Object.assign(process.env, { NODE_ENV: 'development' })
+  process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
+
+  const cwd = createTempWorkspace({
+    host: 'http://localhost',
+    apps: {
+      talos: 3001,
+      atlas: 3006,
+      website: 3005,
+      xplan: 3008,
+      kairos: 3010,
+      plutus: 3012,
+      hermes: 3014,
+      argus: 3016,
+    },
+  })
+
+  const mod = await importFreshAppsModule(cwd)
+
+  for (const app of mod.ALL_APPS) {
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(app, 'devUrl'),
+      false,
+      `${app.id} should resolve dev URLs from the app map, not a hardcoded devUrl field`,
+    )
+  }
 })
