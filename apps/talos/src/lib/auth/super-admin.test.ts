@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import path from 'node:path'
-import { pathToFileURL } from 'node:url'
 
-const MODULE_URL = pathToFileURL(path.resolve(process.cwd(), 'apps/talos/src/lib/auth/super-admin.ts')).href
+const MODULE_URL = new URL('./super-admin.ts', import.meta.url).href
 
 test.afterEach(() => {
   delete process.env.TALOS_SUPER_ADMIN_EMAILS
