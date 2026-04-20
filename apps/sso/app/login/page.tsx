@@ -17,14 +17,19 @@ function getErrorMessage(error: string): string {
     Configuration: 'There was a problem with the authentication configuration. Please try again.',
   }
 
-  return messages[error] ?? 'Unable to sign in right now. Please try again or reach out to support.'
+  const resolvedMessage = messages[error]
+  return typeof resolvedMessage === 'string'
+    ? resolvedMessage
+    : 'Unable to sign in right now. Please try again or reach out to support.'
 }
 
 export default async function LoginPage({ searchParams }: { searchParams?: SearchParams } = {}) {
   const params = (await searchParams) ?? {}
-  const callbackUrl = asString(params.callbackUrl) ?? '/'
-  const error = asString(params.error) ?? ''
-  const errorMessage = error ? getErrorMessage(error) : ''
+  const callbackUrlParam = asString(params.callbackUrl)
+  const callbackUrl = typeof callbackUrlParam === 'string' ? callbackUrlParam : '/'
+  const errorParam = asString(params.error)
+  const error = typeof errorParam === 'string' ? errorParam : ''
+  const errorMessage = error === '' ? '' : getErrorMessage(error)
   const loginSubtitle = 'Use your targonglobal.com Google account to enter the launcher.'
 
   return (
@@ -34,9 +39,29 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
           <div className="login-brand">
             <div className="login-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 12L12 17L22 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.72" />
-                <path d="M2 17L12 22L22 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.44" />
+                <path
+                  d="M12 2L2 7L12 12L22 7L12 2Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M2 12L12 17L22 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.72"
+                />
+                <path
+                  d="M2 17L12 22L22 17"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity="0.44"
+                />
               </svg>
             </div>
             <div className="login-brand-copy">
@@ -45,40 +70,19 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
             </div>
           </div>
 
-          <div className="login-story-copy">
-            <p className="login-story-eyebrow">Secure entry point</p>
-            <h1 className="login-title">
-              One launcher for operations, planning, finance, and people systems.
-            </h1>
-            <p className="login-body">
-              Sign in once, open the workspaces you are entitled to use, and move across the
-              TargonOS suite without re-authenticating into each app.
-            </p>
+          <div className="login-story-brandmark">
+            <img
+              className="login-story-wordmark"
+              src="/brand/targon-wordmark-inverted.svg"
+              alt="Targon"
+            />
+            <div className="login-story-copy login-story-copy--compact">
+              <h1 className="login-title login-title--compact">
+                <span className="login-title-primary">Private Label Engine</span>
+                <span className="login-title-secondary">for Targon Products.</span>
+              </h1>
+            </div>
           </div>
-
-          <ul className="login-points" aria-label="Portal capabilities">
-            <li className="login-point">
-              <span className="login-point-index">01</span>
-              <div className="login-point-copy">
-                <strong>Single sign-on</strong>
-                <p>One authenticated session across the tools that share this environment.</p>
-              </div>
-            </li>
-            <li className="login-point">
-              <span className="login-point-index">02</span>
-              <div className="login-point-copy">
-                <strong>Role-aware launcher</strong>
-                <p>Public utilities stay visible and restricted apps stay explicit.</p>
-              </div>
-            </li>
-            <li className="login-point">
-              <span className="login-point-index">03</span>
-              <div className="login-point-copy">
-                <strong>Controlled access</strong>
-                <p>Only verified @targonglobal.com accounts can enter the portal.</p>
-              </div>
-            </li>
-          </ul>
         </section>
 
         <section className="login-panel" aria-label="Sign-in panel">
