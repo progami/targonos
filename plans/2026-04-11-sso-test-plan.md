@@ -5,7 +5,7 @@ Define the CI smoke suite for the `sso` app so portal auth, callback routing, an
 This app is the suite entrypoint: it owns sign-in, sign-out, callback preservation, and the launcher that hands users off to the other apps.
 
 ## Standard Gate
-- Run this app in the repo-standard Playwright smoke harness described in `plans/2026-04-11-cross-app-ci-smoke-spec.md`.
+- Run this app in the repo-standard Playwright smoke harness described in `plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md`.
 - Fail the run on `pageerror`, `console.error`, unhandled promise rejection, redirect loop, hydration error, and failed JS chunk/request needed for the current route.
 - Treat unexpected `401`, `403`, `404`, and `500` as failures unless the test explicitly targets an access-denied state.
 

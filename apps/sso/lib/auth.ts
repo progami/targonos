@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth'
-import type { NextAuthConfig } from 'next-auth'
+import type { NextAuthConfig, Session } from 'next-auth'
 import Google from 'next-auth/providers/google'
-import { type PortalAuthz, withSharedAuth } from '@targon/auth'
+import { getWorktreeDevSession, type PortalAuthz, withSharedAuth } from '@targon/auth'
 import {
   getOrCreatePortalUserByEmail,
   getUserAuthz,
@@ -197,4 +197,16 @@ export const authOptions: NextAuthConfig = withSharedAuth(baseAuthOptions, {
 })
 
 // Initialize NextAuth with config and export handlers + auth function
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions)
+const nextAuth = NextAuth(authOptions)
+
+export const handlers = nextAuth.handlers
+export const signIn = nextAuth.signIn
+export const signOut = nextAuth.signOut
+
+export async function auth(): Promise<Session | null> {
+  const worktreeSession = await getWorktreeDevSession('targon')
+  if (worktreeSession) {
+    return worktreeSession as unknown as Session
+  }
+  return nextAuth.auth() as Promise<Session | null>
+}

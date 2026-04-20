@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
-import type { NextAuthConfig } from 'next-auth';
+import type { NextAuthConfig, Session } from 'next-auth';
 import type { NextRequest } from 'next/server';
-import { withSharedAuth } from '@targon/auth';
+import { getWorktreeDevSession, withSharedAuth } from '@targon/auth';
 
 type NextAuthResult = ReturnType<typeof NextAuth>;
 
@@ -69,6 +69,10 @@ export const handlers = {
   POST: (request: NextRequest) => getNextAuth().handlers.POST(request),
 } satisfies NextAuthResult['handlers'];
 
-export async function auth() {
-  return getNextAuth().auth();
+export async function auth(): Promise<Session | null> {
+  const worktreeSession = await getWorktreeDevSession('kairos');
+  if (worktreeSession) {
+    return worktreeSession as unknown as Session;
+  }
+  return getNextAuth().auth() as Promise<Session | null>;
 }
