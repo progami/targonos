@@ -9,7 +9,10 @@ import {
   getTenantConfig,
 } from '@/lib/tenant/constants'
 import { isTenantAllowedForSession } from '@/lib/tenant/session'
-import { buildPortalActiveTenantRequest } from './portal-request'
+import {
+  buildPortalActiveTenantRequest,
+  shouldPersistPortalActiveTenant,
+} from './portal-request'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,10 +48,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const portalRequest = buildPortalActiveTenantRequest(request, tenantCode)
-    const portalResponse = await fetch(portalRequest.url, portalRequest.init)
-    if (!portalResponse.ok) {
-      return NextResponse.json({ error: 'Failed to persist active tenant' }, { status: 502 })
+    let portalResponse: Response | null = null
+    if (shouldPersistPortalActiveTenant()) {
+      const portalRequest = buildPortalActiveTenantRequest(request, tenantCode)
+      portalResponse = await fetch(portalRequest.url, portalRequest.init)
+      if (!portalResponse.ok) {
+        return NextResponse.json({ error: 'Failed to persist active tenant' }, { status: 502 })
+      }
     }
 
     const cookieStore = await cookies()
@@ -71,8 +77,10 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    for (const setCookieHeader of portalResponse.headers.getSetCookie()) {
-      response.headers.append('set-cookie', setCookieHeader)
+    if (portalResponse) {
+      for (const setCookieHeader of portalResponse.headers.getSetCookie()) {
+        response.headers.append('set-cookie', setCookieHeader)
+      }
     }
 
     return response

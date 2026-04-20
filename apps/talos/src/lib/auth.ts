@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth'
 import type { NextAuthConfig, Session } from 'next-auth'
 import type { JWT } from 'next-auth/jwt'
-import { withSharedAuth } from '@targon/auth'
+import { getWorktreeDevSession, withSharedAuth } from '@targon/auth'
 import { getCurrentTenantCode } from '@/lib/tenant/server'
 import { getPrismaForTenant } from '@/lib/tenant/access'
 import type { TenantCode } from '@/lib/tenant/constants'
@@ -41,6 +41,110 @@ function getCachedUser(email: string, tenant: TenantCode) {
 function setCachedUser(email: string, tenant: TenantCode, data: { id: string; role: string; region: TenantCode; warehouseId?: string }) {
   const key = `${email}:${tenant}`
   userCache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS })
+}
+
+function applyPortalClaimsToSession(
+  session: SessionWithAuthz,
+  claims: {
+    authz?: unknown
+    roles?: unknown
+    globalRoles?: unknown
+    authzVersion?: unknown
+    activeTenant?: unknown
+    sub?: unknown
+  }
+) {
+  session.authz = claims.authz
+  session.roles = claims.roles
+  session.globalRoles = claims.globalRoles
+  session.authzVersion = claims.authzVersion
+  if (typeof claims.activeTenant === 'string') {
+    session.activeTenant = claims.activeTenant
+  } else {
+    session.activeTenant = null
+  }
+
+  if (
+    (!session.user.id || typeof session.user.id !== 'string') &&
+    typeof claims.sub === 'string' &&
+    claims.sub.trim()
+  ) {
+    session.user.id = claims.sub.trim()
+  }
+}
+
+async function enrichTalosSessionUser(
+  session: SessionWithAuthz,
+  email: string,
+  tenantCode: TenantCode
+) {
+  const cached = getCachedUser(email, tenantCode)
+  if (cached) {
+    session.user.id = cached.id
+    session.user.role = cached.role as Session['user']['role']
+    session.user.region = cached.region
+    if (cached.warehouseId) {
+      session.user.warehouseId = cached.warehouseId
+    }
+    return
+  }
+
+  const prisma = await getPrismaForTenant(tenantCode)
+  const user = await prisma.user.findFirst({
+    where: { email, isActive: true },
+    select: { id: true, role: true, region: true, warehouseId: true },
+  })
+
+  if (!user) {
+    throw new Error(`Talos worktree dev user is missing in tenant ${tenantCode}.`)
+  }
+
+  session.user.id = user.id
+  session.user.role = user.role
+  session.user.region = user.region
+  if (user.warehouseId) {
+    session.user.warehouseId = user.warehouseId
+  }
+
+  setCachedUser(email, tenantCode, {
+    id: user.id,
+    role: user.role,
+    region: user.region,
+    warehouseId: user.warehouseId ?? undefined,
+  })
+}
+
+async function buildWorktreeTalosSession(): Promise<Session | null> {
+  const worktreeSession = await getWorktreeDevSession('talos')
+  if (!worktreeSession) {
+    return null
+  }
+
+  const session: SessionWithAuthz = {
+    expires: worktreeSession.expires,
+    user: {
+      id: worktreeSession.user.id,
+      email: worktreeSession.user.email,
+      name: worktreeSession.user.name,
+      role: 'admin' as Session['user']['role'],
+      region: 'US' as TenantCode,
+    },
+  }
+
+  applyPortalClaimsToSession(session, {
+    sub: worktreeSession.user.id,
+    authz: worktreeSession.authz,
+    roles: worktreeSession.roles,
+    globalRoles: worktreeSession.globalRoles,
+    authzVersion: worktreeSession.authzVersion,
+    activeTenant: worktreeSession.activeTenant,
+  })
+
+  const tenantCode = await getCurrentTenantCode()
+  session.activeTenant = tenantCode
+
+  await enrichTalosSessionUser(session, worktreeSession.user.email, tenantCode)
+  return session
 }
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
@@ -87,75 +191,24 @@ const baseAuthOptions: NextAuthConfig = {
       const sessionWithAuthz = session as SessionWithAuthz
       const tokenWithAuthz = token as TokenWithAuthz
 
-      sessionWithAuthz.authz = tokenWithAuthz.authz
-      sessionWithAuthz.roles = tokenWithAuthz.roles
-      sessionWithAuthz.globalRoles = tokenWithAuthz.globalRoles
-      sessionWithAuthz.authzVersion = tokenWithAuthz.authzVersion
-      if (typeof tokenWithAuthz.activeTenant === 'string') {
-        sessionWithAuthz.activeTenant = tokenWithAuthz.activeTenant
-      } else {
-        sessionWithAuthz.activeTenant = null
-      }
+      applyPortalClaimsToSession(sessionWithAuthz, {
+        sub: token.sub,
+        authz: tokenWithAuthz.authz,
+        roles: tokenWithAuthz.roles,
+        globalRoles: tokenWithAuthz.globalRoles,
+        authzVersion: tokenWithAuthz.authzVersion,
+        activeTenant: tokenWithAuthz.activeTenant,
+      })
 
-      // Always hydrate a stable user id (portal-issued) so API routes don't crash
-      // when a Talos user record doesn't exist yet in the tenant schema.
-      if (
-        (!session.user.id || typeof session.user.id !== 'string') &&
-        typeof token.sub === 'string' &&
-        token.sub.trim()
-      ) {
-        session.user.id = token.sub.trim()
-      }
-
-      // Get current tenant - if no tenant selected yet, skip user enrichment
-      let currentTenant: TenantCode
-      try {
-        currentTenant = await getCurrentTenantCode(sessionWithAuthz)
-      } catch {
-        // No tenant context available (e.g., on world map page)
-        return session
-      }
+      const currentTenant = await getCurrentTenantCode(sessionWithAuthz)
+      sessionWithAuthz.activeTenant = currentTenant
 
       const email = (token.email ?? session.user?.email) as string | undefined
       if (!email) {
         return session
       }
 
-      // Check in-memory cache first
-      const cached = getCachedUser(email, currentTenant)
-      if (cached) {
-        session.user.id = cached.id
-        session.user.role = cached.role as Session['user']['role']
-        session.user.region = cached.region
-        if (cached.warehouseId) {
-          session.user.warehouseId = cached.warehouseId
-        }
-        return session
-      }
-
-      // Cache miss - fetch from DB
-      const prisma = await getPrismaForTenant(currentTenant)
-      const user = await prisma.user.findFirst({
-        where: { email, isActive: true },
-        select: { id: true, role: true, region: true, warehouseId: true },
-      })
-
-      if (user) {
-        session.user.id = user.id
-        session.user.role = user.role
-        session.user.region = user.region
-        if (user.warehouseId) {
-          session.user.warehouseId = user.warehouseId
-        }
-
-        // Cache for subsequent requests
-        setCachedUser(email, currentTenant, {
-          id: user.id,
-          role: user.role,
-          region: user.region,
-          warehouseId: user.warehouseId ?? undefined,
-        })
-      }
+      await enrichTalosSessionUser(sessionWithAuthz, email, currentTenant)
 
       return session
     },
@@ -176,4 +229,16 @@ export const authOptions: NextAuthConfig = withSharedAuth(
 )
 
 // Initialize NextAuth with config and export handlers + auth function
-export const { handlers, auth, signIn, signOut } = NextAuth(authOptions)
+const nextAuth = NextAuth(authOptions)
+
+export const handlers = nextAuth.handlers
+export const signIn = nextAuth.signIn
+export const signOut = nextAuth.signOut
+
+export async function auth() {
+  const worktreeSession = await buildWorktreeTalosSession()
+  if (worktreeSession) {
+    return worktreeSession
+  }
+  return nextAuth.auth()
+}

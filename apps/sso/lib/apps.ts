@@ -117,14 +117,15 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'talos',
     name: 'Talos',
-    description: 'Inventory, warehouse workflow, billing, and order operations.',
+    description: 'Inbound, outbound, inventory and reporting.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/talos'),
+    devPath: '/talos',
     category: 'Ops',
   },
   {
     id: 'atlas',
     name: 'Atlas',
-    description: 'Employee records, reviews, leave, and people operations.',
+    description: 'HR, payroll and people operations.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/atlas'),
     devPath: '/atlas',
     category: 'HR / Admin',
@@ -132,7 +133,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'website',
     name: 'Website',
-    description: 'Marketing site, CMS, and public brand presence.',
+    description: 'Marketing website and CMS.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/'),
     entryPolicy: 'public',
     category: 'Product',
@@ -140,7 +141,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'kairos',
     name: 'Kairos',
-    description: 'Time-series forecasting and model-driven demand planning.',
+    description: 'Forecasting workspace for marketplace signals and statistical models.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/kairos'),
     category: 'Product',
     devPath: '/kairos',
@@ -149,7 +150,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'xplan',
     name: 'xPlan',
-    description: 'Collaborative planning across sales, supply, and finance.',
+    description: 'Collaborative planning workspace for sales, operations, and finance.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-setup'),
     category: 'Product',
     devPath: '/xplan',
@@ -158,7 +159,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'plutus',
     name: 'Plutus',
-    description: 'Amazon settlements, QBO workflows, and finance control.',
+    description: 'Finance workspace (FCC rebrand).',
     url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
     category: 'Finance',
     devPath: '/plutus',
@@ -167,7 +168,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'hermes',
     name: 'Hermes',
-    description: 'Amazon outreach, review requests, and buyer messaging.',
+    description: 'Amazon Seller Central automations (messaging + solicitations).',
     url: joinBaseUrl(PORTAL_BASE_URL, '/hermes'),
     category: 'Account / Listing',
     devPath: '/hermes',
@@ -176,7 +177,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'argus',
     name: 'Argus',
-    description: 'Listing monitoring, weekly reporting, and marketplace changes.',
+    description: 'Amazon listing version control and monitoring.',
     url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
     entryPolicy: 'public',
     category: 'Account / Listing',
@@ -309,6 +310,9 @@ function tryLoadRootDevConfig(): DevConfig | null {
   try {
     // Prefer local-port mapping for standalone dev, then fallback to legacy dev.apps.json
     const candidates = [
+      path.resolve(process.cwd(), '../../.codex/generated/dev.worktree.apps.json'),
+      path.resolve(process.cwd(), '../.codex/generated/dev.worktree.apps.json'),
+      path.resolve(process.cwd(), '.codex/generated/dev.worktree.apps.json'),
       path.resolve(process.cwd(), '../../dev.local.apps.json'),
       path.resolve(process.cwd(), '../dev.local.apps.json'),
       path.resolve(process.cwd(), 'dev.local.apps.json'),
