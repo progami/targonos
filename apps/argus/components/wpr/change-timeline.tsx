@@ -12,31 +12,16 @@ import {
 } from '@/lib/wpr/panel-tokens';
 
 const CATEGORY_COLORS: Record<string, string> = {
-  'LISTING ATTRIBUTES': 'rgba(0, 194, 185, 0.7)',
-  IMAGES: 'rgba(168, 130, 255, 0.7)',
-  PRICING: 'rgba(255, 183, 77, 0.7)',
-  INVENTORY: 'rgba(100, 181, 246, 0.7)',
-  RANKING: 'rgba(129, 199, 132, 0.7)',
-  ADVERTISING: 'rgba(255, 138, 128, 0.7)',
+  MANUAL: 'rgba(168, 130, 255, 0.75)',
+  CONTENT: 'rgba(0, 194, 185, 0.75)',
+  PRICING: 'rgba(255, 183, 77, 0.75)',
+  IMAGES: 'rgba(129, 199, 132, 0.75)',
+  OFFER: 'rgba(100, 181, 246, 0.75)',
+  CATALOG: 'rgba(255, 138, 128, 0.75)',
 };
 
 function getCategoryColor(category: string): string {
   return CATEGORY_COLORS[category.toUpperCase()] ?? 'rgba(255,255,255,0.6)';
-}
-
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function formatDate(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
-function formatDay(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return '';
-  return DAYS[d.getUTCDay()];
 }
 
 const cellSx = {
@@ -44,7 +29,6 @@ const cellSx = {
   py: 1,
   fontSize: '0.8125rem',
   lineHeight: 1.4,
-  whiteSpace: 'nowrap' as const,
   borderBottom: '1px solid rgba(255,255,255,0.04)',
   verticalAlign: 'top' as const,
 };
@@ -69,7 +53,7 @@ const tagSx = {
   px: '7px',
   py: '3px',
   borderRadius: '4px',
-  fontSize: '0.75rem',
+  fontSize: '0.72rem',
   fontWeight: 600,
   letterSpacing: '0.04em',
   textTransform: 'uppercase' as const,
@@ -90,79 +74,117 @@ const chipSx = {
   whiteSpace: 'nowrap' as const,
 };
 
+function compactList(values: string[]): string {
+  if (values.length === 0) {
+    return '—';
+  }
+
+  return values.join(', ');
+}
+
+function summaryText(entry: WprChangeLogEntry): string {
+  if (entry.summary.trim() !== '') {
+    return entry.summary;
+  }
+
+  if (entry.highlights !== undefined && entry.highlights.length > 0) {
+    return entry.highlights.join(' | ');
+  }
+
+  return '—';
+}
+
+function fieldLabels(entry: WprChangeLogEntry): string[] {
+  if (entry.field_labels === undefined) {
+    return [];
+  }
+
+  return entry.field_labels;
+}
+
 export default function ChangeTimeline({
-  entriesByWeek,
+  entries,
+  selectedWeekLabel,
 }: {
-  entriesByWeek: Record<WeekLabel, WprChangeLogEntry[]>;
+  entries: WprChangeLogEntry[];
+  selectedWeekLabel: WeekLabel;
 }) {
-  const weeks = Object.keys(entriesByWeek).sort().reverse();
-  const totalChanges = weeks.reduce((sum, w) => sum + entriesByWeek[w].length, 0);
-  const latestWeek = weeks[0];
+  if (entries.length === 0) {
+    return (
+      <Box sx={panelSx}>
+        <Box
+          sx={{
+            minHeight: 240,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(255,255,255,0.54)',
+            fontSize: '0.78rem',
+            letterSpacing: '0.03em',
+          }}
+        >
+          No tracked changes in the available history.
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={panelSx}>
-      {/* Panel header */}
       <Box sx={panelHeadSx}>
         <Typography sx={panelTitleSx}>Change Log</Typography>
-        <Typography sx={panelBadgeSx}>
-          {totalChanges} tracked change{totalChanges !== 1 ? 's' : ''} &middot; through{' '}
-          {latestWeek}
-        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Typography sx={panelBadgeSx}>
+            {entries.length} tracked change{entries.length !== 1 ? 's' : ''}
+          </Typography>
+          <Typography sx={panelBadgeSx}>Through {selectedWeekLabel}</Typography>
+        </Box>
       </Box>
 
-      {/* Table */}
       <Box sx={{ overflow: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '5%' }}>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '72px' }}>
                 Week
               </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '11%' }}>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '156px' }}>
                 Date
               </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '9%' }}>
-                Day
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '10%' }}>
-                Category
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '8%' }}>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '92px' }}>
                 Source
               </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '28%' }}>
-                Change
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '92px' }}>
+                Type
               </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '15%' }}>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '280px' }}>
+                Title
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left' }}>
+                Summary
+              </Box>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '180px' }}>
                 ASINs
               </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '14%' }}>
+              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '180px' }}>
                 Fields
               </Box>
             </tr>
           </thead>
           <tbody>
-            {weeks.map((week, weekIdx) => {
-              const entries = entriesByWeek[week];
-              const showWeekSeparator = weekIdx > 0;
-
-              return entries.map((entry, entryIdx) => (
+            {entries.map((entry) => {
+              const summary = summaryText(entry);
+              const categoryColor = getCategoryColor(entry.category);
+              const fields = fieldLabels(entry);
+              return (
                 <Box
                   component="tr"
                   key={entry.id}
                   sx={{
-                    cursor: 'pointer',
                     '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
                     transition: 'background-color 0.1s',
-                    ...(showWeekSeparator &&
-                      entryIdx === 0 && {
-                        '& > td, & > th': {
-                          borderTop: '1px solid rgba(255,255,255,0.08)',
-                        },
-                      }),
                   }}
                 >
-                  {/* Week */}
                   <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
                     <Box
                       component="span"
@@ -182,38 +204,10 @@ export default function ChangeTimeline({
                     </Box>
                   </Box>
 
-                  {/* Date */}
-                  <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}
-                  >
-                    {formatDate(entry.timestamp ?? entry.date_label)}
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}>
+                    {entry.date_label}
                   </Box>
 
-                  {/* Day */}
-                  <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', color: textMuted }}
-                  >
-                    {formatDay(entry.timestamp ?? entry.date_label)}
-                  </Box>
-
-                  {/* Category */}
-                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
-                    <Box
-                      component="span"
-                      sx={{
-                        ...tagSx,
-                        bgcolor: `${getCategoryColor(entry.category)}15`,
-                        border: `1px solid ${getCategoryColor(entry.category)}40`,
-                        color: getCategoryColor(entry.category),
-                      }}
-                    >
-                      {entry.category}
-                    </Box>
-                  </Box>
-
-                  {/* Source */}
                   <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
                     <Box
                       component="span"
@@ -228,68 +222,66 @@ export default function ChangeTimeline({
                     </Box>
                   </Box>
 
-                  {/* Change (title + summary) */}
-                  <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', whiteSpace: 'normal' }}
-                  >
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                    <Box
+                      component="span"
+                      sx={{
+                        ...tagSx,
+                        bgcolor: `${categoryColor}15`,
+                        border: `1px solid ${categoryColor}40`,
+                        color: categoryColor,
+                      }}
+                    >
+                      {entry.category}
+                    </Box>
+                  </Box>
+
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: 'rgba(255,255,255,0.85)' }}>
                     <Typography
                       sx={{
                         fontSize: '0.8125rem',
                         fontWeight: 700,
-                        color: 'rgba(255,255,255,0.85)',
-                        lineHeight: 1.4,
+                        color: 'inherit',
+                        lineHeight: 1.35,
                       }}
                     >
                       {entry.title}
                     </Typography>
-                    {entry.summary && (
-                      <Typography
-                        sx={{
-                          fontSize: '0.75rem',
-                          color: textMuted,
-                          lineHeight: 1.5,
-                          mt: '2px',
-                        }}
-                      >
-                        {entry.summary}
-                      </Typography>
-                    )}
                   </Box>
 
-                  {/* ASINs */}
-                  <Box
-                    component="td"
-                    sx={{
-                      ...cellSx,
-                      textAlign: 'left',
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    {(entry.asins?.length ?? 0) > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {(entry.asins ?? []).map((asin) => (
-                          <Box key={asin} component="span" sx={chipSx}>
-                            {asin}
-                          </Box>
-                        ))}
-                      </Box>
-                    )}
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}>
+                    <Typography
+                      sx={{
+                        fontSize: '0.78rem',
+                        color: 'inherit',
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                      }}
+                    >
+                      {summary}
+                    </Typography>
                   </Box>
 
-                  {/* Fields */}
-                  <Box
-                    component="td"
-                    sx={{
-                      ...cellSx,
-                      textAlign: 'left',
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    {(entry.field_labels?.length ?? 0) > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {(entry.field_labels ?? []).map((field) => (
-                          <Box key={field} component="span" sx={chipSx}>
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                    <Typography
+                      sx={{
+                        fontSize: '0.76rem',
+                        color: textSecondary,
+                        lineHeight: 1.45,
+                        whiteSpace: 'normal',
+                      }}
+                    >
+                      {compactList(entry.asins)}
+                    </Typography>
+                  </Box>
+
+                  <Box component="td" sx={{ ...cellSx, textAlign: 'left', whiteSpace: 'normal' }}>
+                    {fields.length === 0 ? (
+                      <Typography sx={{ fontSize: '0.76rem', color: textMuted }}>—</Typography>
+                    ) : (
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {fields.map((field) => (
+                          <Box component="span" key={`${entry.id}-${field}`} sx={chipSx}>
                             {field}
                           </Box>
                         ))}
@@ -297,7 +289,7 @@ export default function ChangeTimeline({
                     )}
                   </Box>
                 </Box>
-              ));
+              );
             })}
           </tbody>
         </table>
