@@ -9,6 +9,7 @@ import { parseCsvRows } from './csv'
 import { formatMonitoringLabel } from './labels'
 import type {
   MonitoringAsinDetail,
+  MonitoringBootstrap,
   MonitoringCategory,
   MonitoringChangeEvent,
   MonitoringFieldChange,
@@ -508,26 +509,27 @@ export interface MonitoringChangeFilters {
   query?: string
 }
 
+interface MonitoringModel {
+  snapshotTimestamp: string
+  snapshotFile: string
+  currentItems: MonitoringStateRecord[]
+  currentByAsin: Map<string, MonitoringStateRecord>
+  snapshotsByAsin: Map<string, MonitoringSnapshotRecord[]>
+  changes: MonitoringChangeEvent[]
+}
+
+type CacheState = {
+  key: string
+  model: MonitoringModel
+}
+
+let cacheState: CacheState | null = null
+let pendingCacheKey: string | null = null
+let pendingModelPromise: Promise<MonitoringModel> | null = null
+
 export async function getMonitoringOverview(): Promise<MonitoringOverview> {
   const model = await loadMonitoringModel()
-  const changes24h = filterByWindow(model.changes, '24h')
-  const changes7d = filterByWindow(model.changes, '7d')
-  const topCategories = countCategories(changes24h)
-
-  return {
-    snapshotTimestamp: model.snapshotTimestamp,
-    snapshotFile: model.snapshotFile,
-    trackedAsins: model.currentByAsin.size,
-    ourAsins: model.currentItems.filter((item) => item.owner === 'OURS').length,
-    competitorAsins: model.currentItems.filter((item) => item.owner === 'COMPETITOR').length,
-    changes24h: changes24h.length,
-    changes7d: changes7d.length,
-    ourChanges24h: changes24h.filter((item) => item.owner === 'OURS').length,
-    competitorChanges24h: changes24h.filter((item) => item.owner === 'COMPETITOR').length,
-    critical24h: changes24h.filter((item) => item.severity === 'critical').length,
-    topCategories24h: topCategories.slice(0, 4),
-    topChanges: model.changes.slice(0, 6),
-  }
+  return buildMonitoringOverview(model)
 }
 
 export async function getMonitoringChanges(
@@ -535,6 +537,17 @@ export async function getMonitoringChanges(
 ): Promise<MonitoringChangeEvent[]> {
   const model = await loadMonitoringModel()
   return applyFilters(model.changes, filters)
+}
+
+export async function getMonitoringBootstrap(
+  filters: MonitoringChangeFilters = {},
+): Promise<MonitoringBootstrap> {
+  const model = await loadMonitoringModel()
+
+  return {
+    overview: buildMonitoringOverview(model),
+    changes: applyFilters(model.changes, filters),
+  }
 }
 
 export async function getMonitoringAsinDetail(asin: string): Promise<MonitoringAsinDetail> {
@@ -633,7 +646,79 @@ function countCategories(
     .sort((left, right) => right.count - left.count)
 }
 
-async function loadMonitoringModel() {
+function buildMonitoringOverview(model: MonitoringModel): MonitoringOverview {
+  const changes24h = filterByWindow(model.changes, '24h')
+  const changes7d = filterByWindow(model.changes, '7d')
+  const topCategories = countCategories(changes24h)
+
+  return {
+    snapshotTimestamp: model.snapshotTimestamp,
+    snapshotFile: model.snapshotFile,
+    trackedAsins: model.currentByAsin.size,
+    ourAsins: model.currentItems.filter((item) => item.owner === 'OURS').length,
+    competitorAsins: model.currentItems.filter((item) => item.owner === 'COMPETITOR').length,
+    changes24h: changes24h.length,
+    changes7d: changes7d.length,
+    ourChanges24h: changes24h.filter((item) => item.owner === 'OURS').length,
+    competitorChanges24h: changes24h.filter((item) => item.owner === 'COMPETITOR').length,
+    critical24h: changes24h.filter((item) => item.severity === 'critical').length,
+    topCategories24h: topCategories.slice(0, 4),
+    topChanges: model.changes.slice(0, 6),
+  }
+}
+
+async function loadMonitoringModel(): Promise<MonitoringModel> {
+  const cacheKey = await getMonitoringCacheKey()
+
+  if (cacheState !== null && cacheState.key === cacheKey) {
+    return cacheState.model
+  }
+
+  if (pendingCacheKey === cacheKey && pendingModelPromise !== null) {
+    return pendingModelPromise
+  }
+
+  const modelPromise = buildMonitoringModel()
+  pendingCacheKey = cacheKey
+  pendingModelPromise = modelPromise
+
+  try {
+    const model = await modelPromise
+    if (pendingCacheKey === cacheKey && pendingModelPromise === modelPromise) {
+      cacheState = { key: cacheKey, model }
+    }
+    return model
+  } finally {
+    if (pendingModelPromise === modelPromise) {
+      pendingCacheKey = null
+      pendingModelPromise = null
+    }
+  }
+}
+
+async function getMonitoringCacheKey(): Promise<string> {
+  const [latestStateStats, changeHistoryStats, snapshotHistoryStats, trackedAsinCount, latestTrackedAsin] =
+    await Promise.all([
+      fs.stat(LATEST_STATE_PATH),
+      fs.stat(CHANGE_HISTORY_PATH),
+      fs.stat(SNAPSHOT_HISTORY_PATH),
+      prisma.trackedAsin.count(),
+      prisma.trackedAsin.findFirst({
+        orderBy: { updatedAt: 'desc' },
+        select: { updatedAt: true },
+      }),
+    ])
+
+  return [
+    latestStateStats.mtimeMs.toString(),
+    changeHistoryStats.mtimeMs.toString(),
+    snapshotHistoryStats.mtimeMs.toString(),
+    trackedAsinCount.toString(),
+    latestTrackedAsin?.updatedAt.toISOString() ?? '',
+  ].join(':')
+}
+
+async function buildMonitoringModel(): Promise<MonitoringModel> {
   const latestState = await readLatestState()
   const [changeRows, snapshotRows, trackedAsins] = await Promise.all([
     readChangeHistory(),

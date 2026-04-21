@@ -1,37 +1,20 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { ThemeProvider as NextThemeProvider, useTheme } from 'next-themes';
+import { ThemeProvider as NextThemeProvider } from 'next-themes';
 import { SnackbarProvider } from 'notistack';
-import { argusDarkTheme, argusLightTheme } from '@targon/theme';
-
-function MuiThemeSync({ children }: { children: ReactNode }) {
-  const { resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const theme = mounted && resolvedTheme === 'dark' ? argusDarkTheme : argusLightTheme;
-
-  return (
-    <MuiThemeProvider theme={theme}>
-      <CssBaseline enableColorScheme />
-      {children}
-    </MuiThemeProvider>
-  );
-}
+import { argusDarkTheme } from '@targon/theme';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
-    <NextThemeProvider attribute="class" defaultTheme="light" enableSystem>
-      <MuiThemeSync>
+    <NextThemeProvider attribute="class" forcedTheme="dark">
+      <MuiThemeProvider theme={argusDarkTheme}>
+        <CssBaseline enableColorScheme />
         <SnackbarProvider
           maxSnack={3}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
@@ -39,7 +22,7 @@ export default function Providers({ children }: { children: ReactNode }) {
         >
           <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
         </SnackbarProvider>
-      </MuiThemeSync>
+      </MuiThemeProvider>
     </NextThemeProvider>
   );
 }

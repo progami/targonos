@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createSqpSelectionViewModel, sortSqpRootRows, sortSqpTermRows } from './sqp-view-model'
+import { allSelectableSqpTermIds, createSqpSelectionViewModel, sortSqpRootRows, sortSqpTermRows } from './sqp-view-model'
 import type { WprWeekBundle } from './types'
 
 function buildObserved(queryVolume: number, purchases: number) {
@@ -454,6 +454,17 @@ test('createSqpSelectionViewModel aggregates selected term rows by root and curr
   assert.equal(vm.termRowsByRoot['cluster-1']?.[0]?.selectionVolumeSelectedWeek, 10)
   assert.equal(vm.metrics?.asin_purchases, 2)
   assert.equal(vm.weekly[1]?.week_label, 'W16')
+})
+
+test('allSelectableSqpTermIds returns every term shown in the selection table', () => {
+  const bundle = buildBundle()
+  bundle.sqpGlobalTermIds = ['cluster-1::term-1']
+
+  assert.deepEqual(allSelectableSqpTermIds(bundle), [
+    'cluster-1::term-1',
+    'cluster-1::term-2',
+    'cluster-2::term-1',
+  ])
 })
 
 test('createSqpSelectionViewModel preserves root weekly context when a single root has no terms selected', () => {

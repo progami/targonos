@@ -20,6 +20,7 @@ import ArrowOutwardIcon from '@mui/icons-material/ArrowOutward'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import type {
+  MonitoringBootstrap,
   MonitoringCategory,
   MonitoringChangeEvent,
   MonitoringHealthReport,
@@ -72,6 +73,20 @@ function TrackingDashboardContent() {
     readSnapshotParam(searchParams.get('snapshot')),
   )
   const deferredQuery = useDeferredValue(query)
+  const changeRequestQuery = useMemo(
+    () =>
+      buildUrlSearchParams({
+        windowValue,
+        owner,
+        category,
+        severity,
+        query: deferredQuery,
+        snapshotTimestamp,
+      }).toString(),
+    [category, deferredQuery, owner, severity, snapshotTimestamp, windowValue],
+  )
+  const [initialChangeRequestQuery] = useState(changeRequestQuery)
+  const [loadedChangeRequestQuery, setLoadedChangeRequestQuery] = useState<string | null>(null)
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
@@ -130,46 +145,55 @@ function TrackingDashboardContent() {
   useEffect(() => {
     let cancelled = false
 
-    async function loadOverview() {
+    async function loadBootstrap() {
       try {
+        setLoading(true)
         setError(null)
-        const response = await fetch(`${basePath}/api/monitoring/overview`)
+        const requestPath =
+          initialChangeRequestQuery === ''
+            ? `${basePath}/api/monitoring/bootstrap`
+            : `${basePath}/api/monitoring/bootstrap?${initialChangeRequestQuery}`
+        const response = await fetch(requestPath)
         const payload = await response.json()
         if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring overview.')
+          throw new Error(payload.error ?? 'Failed to load monitoring bootstrap.')
         }
         if (!cancelled) {
-          setOverview(payload)
+          const bootstrap = payload as MonitoringBootstrap
+          setOverview(bootstrap.overview)
+          setChanges(bootstrap.changes)
+          setLoadedChangeRequestQuery(initialChangeRequestQuery)
+          setLoading(false)
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring overview.')
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring bootstrap.')
+          setLoading(false)
         }
       }
     }
 
-    void loadOverview()
+    void loadBootstrap()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [initialChangeRequestQuery])
 
   useEffect(() => {
+    if (loadedChangeRequestQuery === null) return
+    if (loadedChangeRequestQuery === changeRequestQuery) return
+
     let cancelled = false
 
     async function loadChanges() {
       try {
         setLoading(true)
         setError(null)
-        const searchParams = new URLSearchParams()
-        searchParams.set('window', windowValue)
-        searchParams.set('owner', owner)
-        searchParams.set('category', category)
-        searchParams.set('severity', severity)
-        if (deferredQuery.trim() !== '') searchParams.set('query', deferredQuery.trim())
-        if (snapshotTimestamp) searchParams.set('snapshot', snapshotTimestamp)
-
-        const response = await fetch(`${basePath}/api/monitoring/changes?${searchParams.toString()}`)
+        const requestPath =
+          changeRequestQuery === ''
+            ? `${basePath}/api/monitoring/changes`
+            : `${basePath}/api/monitoring/changes?${changeRequestQuery}`
+        const response = await fetch(requestPath)
         const payload = await response.json()
         if (!response.ok) {
           throw new Error(payload.error ?? 'Failed to load monitoring changes.')
@@ -177,6 +201,7 @@ function TrackingDashboardContent() {
 
         if (!cancelled) {
           setChanges(payload)
+          setLoadedChangeRequestQuery(changeRequestQuery)
           setLoading(false)
         }
       } catch (loadError) {
@@ -191,7 +216,7 @@ function TrackingDashboardContent() {
     return () => {
       cancelled = true
     }
-  }, [windowValue, owner, category, severity, deferredQuery, snapshotTimestamp])
+  }, [changeRequestQuery, loadedChangeRequestQuery])
 
   useEffect(() => {
     if (activeTab !== 'sources') return
@@ -266,32 +291,21 @@ function TrackingDashboardContent() {
     setError(null)
     setHealthError(null)
     try {
-      const [overviewResponse, changesResponse] = await Promise.all([
-        fetch(`${basePath}/api/monitoring/overview`),
-        fetch(
-          `${basePath}/api/monitoring/changes?${buildUrlSearchParams({
-            windowValue,
-            owner,
-            category,
-            severity,
-            query: deferredQuery,
-            snapshotTimestamp,
-          }).toString()}`,
-        ),
-      ])
+      const bootstrapPath =
+        changeRequestQuery === ''
+          ? `${basePath}/api/monitoring/bootstrap`
+          : `${basePath}/api/monitoring/bootstrap?${changeRequestQuery}`
+      const bootstrapResponse = await fetch(bootstrapPath)
+      const bootstrapPayload = await bootstrapResponse.json()
 
-      const overviewPayload = await overviewResponse.json()
-      const changesPayload = await changesResponse.json()
-
-      if (!overviewResponse.ok) {
-        throw new Error(overviewPayload.error ?? 'Failed to refresh overview.')
-      }
-      if (!changesResponse.ok) {
-        throw new Error(changesPayload.error ?? 'Failed to refresh change feed.')
+      if (!bootstrapResponse.ok) {
+        throw new Error(bootstrapPayload.error ?? 'Failed to refresh monitoring feed.')
       }
 
-      setOverview(overviewPayload)
-      setChanges(changesPayload)
+      const bootstrap = bootstrapPayload as MonitoringBootstrap
+      setOverview(bootstrap.overview)
+      setChanges(bootstrap.changes)
+      setLoadedChangeRequestQuery(changeRequestQuery)
 
       if (activeTab === 'sources') {
         const healthResponse = await fetch(`${basePath}/api/monitoring/health`)

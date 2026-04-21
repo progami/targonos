@@ -1,5 +1,6 @@
 'use client'
 
+import type { JSX } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import {
   CartesianGrid,
@@ -11,10 +12,24 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import {
+  buildChangeMarkerLookup,
+  buildWeeklyChangeMarkers,
+  formatChangeMarkerLabel,
+  RechartsChangeMarkers,
+} from '@/components/wpr/chart-change-markers'
 import type { WprCompWowVisible } from '@/lib/wpr/dashboard-state'
+import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import type { TstSelectionViewModel } from '@/lib/wpr/tst-view-model'
-import type { WprCompetitorSummary } from '@/lib/wpr/types'
-import { panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
+import type { WprChangeLogEntry, WprCompetitorSummary } from '@/lib/wpr/types'
+import {
+  chartControlRailSx,
+  chartToggleButtonSx,
+  panelSx,
+  subtleBorder,
+  textMuted,
+  textSecondary,
+} from '@/lib/wpr/panel-tokens'
 import { formatPercent } from '@/lib/wpr/format'
 
 type TstHeroContent = {
@@ -98,11 +113,13 @@ function Footer({
 function WeeklyGapChart({
   competitor,
   weekly,
+  changeEntries,
   wowVisible,
   setWowVisible,
 }: {
   competitor: WprCompetitorSummary
   weekly: TstSelectionViewModel['weekly']
+  changeEntries: WprChangeLogEntry[]
   wowVisible: WprCompWowVisible
   setWowVisible: (nextState: WprCompWowVisible) => void
 }) {
@@ -110,12 +127,12 @@ function WeeklyGapChart({
     wowVisible.click ? { key: 'clickGap', label: 'Click Gap', color: '#77dfd0' } : null,
     wowVisible.purch ? { key: 'purchaseGap', label: 'Purch Gap', color: '#d5ff62' } : null,
   ].filter((value): value is { key: 'clickGap' | 'purchaseGap'; label: string; color: string } => value !== null)
-
+  let chartBody: JSX.Element
   if (weekly.length === 0) {
-    return (
+    chartBody = (
       <Box
         sx={{
-          minHeight: 260,
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -127,13 +144,11 @@ function WeeklyGapChart({
         No weekly TST history for this selection.
       </Box>
     )
-  }
-
-  if (visibleSeries.length === 0) {
-    return (
+  } else if (visibleSeries.length === 0) {
+    chartBody = (
       <Box
         sx={{
-          minHeight: 260,
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -145,66 +160,20 @@ function WeeklyGapChart({
         Turn on at least one series to view the TST history chart.
       </Box>
     )
-  }
+  } else {
+    const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
+    const changeMarkersByLabel = buildChangeMarkerLookup(changeMarkers)
+    const chartRows = weekly.map((week) => ({
+      weekLabel: week.week_label,
+      clickGap: week.observed.click_gap * 100,
+      purchaseGap: week.observed.purchase_gap * 100,
+    }))
 
-  const chartRows = weekly.map((week) => ({
-    weekLabel: week.week_label,
-    clickGap: week.observed.click_gap * 100,
-    purchaseGap: week.observed.purchase_gap * 100,
-  }))
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.35}>
-          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-            Week over week
-          </Typography>
-          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-            {`${competitor.brand} share gap shown in pts`}
-          </Typography>
-        </Stack>
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button
-            size="small"
-            variant={wowVisible.click ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                click: !wowVisible.click,
-              })
-            }}
-          >
-            Click Gap
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.purch ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                purch: !wowVisible.purch,
-              })
-            }}
-          >
-            Purch Gap
-          </Button>
-        </Box>
-      </Box>
-
-      <Box sx={{ height: 320 }}>
+    chartBody = (
+      <Box sx={{ height: WPR_CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
             <YAxis
               tick={{ fontSize: 10 }}
@@ -216,12 +185,14 @@ function WeeklyGapChart({
                 const label = key === 'clickGap' ? 'Click Gap' : 'Purch Gap'
                 return [`${value.toFixed(1)} pts`, label]
               }}
+              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
               contentStyle={{
                 background: 'rgba(0,20,35,0.96)',
                 border: '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 8,
               }}
             />
+            <RechartsChangeMarkers markers={changeMarkers} />
             {visibleSeries.map((series) => (
               <Line
                 key={series.key}
@@ -236,6 +207,57 @@ function WeeklyGapChart({
           </LineChart>
         </ResponsiveContainer>
       </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box
+        sx={{
+          ...chartControlRailSx,
+          alignItems: 'flex-start',
+        }}
+      >
+        <Stack spacing={0.35}>
+          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+            Week over week
+          </Typography>
+          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
+            {`${competitor.brand} share gap shown in pts`}
+          </Typography>
+        </Stack>
+
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                click: !wowVisible.click,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.click, '#77dfd0')}
+          >
+            Click Gap
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                purch: !wowVisible.purch,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.purch, '#d5ff62')}
+          >
+            Purch Gap
+          </Button>
+        </Box>
+      </Box>
+
+      {chartBody}
     </Box>
   )
 }
@@ -244,6 +266,7 @@ export default function TstWeeklyPanel({
   competitor,
   heroContent,
   viewModel,
+  changeEntries,
   selectedWeekLabel,
   historyLabel,
   wowVisible,
@@ -252,12 +275,13 @@ export default function TstWeeklyPanel({
   competitor: WprCompetitorSummary
   heroContent: TstHeroContent
   viewModel: TstSelectionViewModel
+  changeEntries: WprChangeLogEntry[]
   selectedWeekLabel: string
   historyLabel: string
   wowVisible: WprCompWowVisible
   setWowVisible: (nextState: WprCompWowVisible) => void
 }) {
-  const blankTopValues = viewModel.scopeType === 'no-terms'
+  const blankTopValues = viewModel.scopeType === 'empty'
   const current = viewModel.current
 
   let footerItems = [
@@ -332,44 +356,15 @@ export default function TstWeeklyPanel({
         />
       </Box>
 
-      <Box sx={{ p: 2.5 }}>
-        {viewModel.scopeType === 'empty' ? (
-          <Box
-            sx={{
-              minHeight: 260,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'rgba(255,255,255,0.54)',
-              fontSize: '0.78rem',
-              letterSpacing: '0.03em',
-            }}
-          >
-            Use the table below to select roots and TST terms for the TST view.
-          </Box>
-        ) : viewModel.scopeType === 'no-terms' ? (
-          <Box
-            sx={{
-              minHeight: 260,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'rgba(255,255,255,0.54)',
-              fontSize: '0.78rem',
-              letterSpacing: '0.03em',
-            }}
-          >
-            No terms selected. Use the table below to reselect TST terms.
-          </Box>
-        ) : (
+        <Box sx={{ p: 2.5 }}>
           <WeeklyGapChart
             competitor={competitor}
             weekly={viewModel.weekly}
+            changeEntries={changeEntries}
             wowVisible={wowVisible}
             setWowVisible={setWowVisible}
           />
-        )}
-      </Box>
+        </Box>
 
       <Footer items={footerItems} />
     </Box>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, type JSX } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import {
   CartesianGrid,
@@ -11,11 +11,25 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import {
+  buildChangeMarkerLookup,
+  buildWeeklyChangeMarkers,
+  formatChangeMarkerLabel,
+  RechartsChangeMarkers,
+} from '@/components/wpr/chart-change-markers'
 import type { WprScpWowVisible } from '@/lib/wpr/dashboard-state'
+import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { formatCount, formatMoney } from '@/lib/wpr/format'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
-import { panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
-import type { WprWeekBundle } from '@/lib/wpr/types'
+import {
+  chartControlRailSx,
+  chartToggleButtonSx,
+  panelSx,
+  subtleBorder,
+  textMuted,
+  textSecondary,
+} from '@/lib/wpr/panel-tokens'
+import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
 
@@ -111,10 +125,12 @@ function Footer({
 
 function ScpWeeklyChart({
   weekly,
+  changeEntries,
   wowVisible,
   setWowVisible,
 }: {
   weekly: ScpSelectionViewModel['weekly']
+  changeEntries: WprChangeLogEntry[]
   wowVisible: WprScpWowVisible
   setWowVisible: (nextState: WprScpWowVisible) => void
 }) {
@@ -124,12 +140,12 @@ function ScpWeeklyChart({
     wowVisible.purch ? { key: 'purch', label: 'Purch Rate', color: '#77dfd0' } : null,
     wowVisible.cvr ? { key: 'cvr', label: 'CVR', color: '#d5ff62' } : null,
   ].filter((value): value is { key: 'ctr' | 'atc' | 'purch' | 'cvr'; label: string; color: string } => value !== null)
-
+  let chartBody: JSX.Element
   if (weekly.length === 0) {
-    return (
+    chartBody = (
       <Box
         sx={{
-          minHeight: 260,
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -141,13 +157,11 @@ function ScpWeeklyChart({
         No SCP rows selected. Use the table below to filter SCP rows.
       </Box>
     )
-  }
-
-  if (visibleSeries.length === 0) {
-    return (
+  } else if (visibleSeries.length === 0) {
+    chartBody = (
       <Box
         sx={{
-          minHeight: 260,
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -159,92 +173,22 @@ function ScpWeeklyChart({
         Turn on at least one series to view the SCP history chart.
       </Box>
     )
-  }
+  } else {
+    const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
+    const changeMarkersByLabel = buildChangeMarkerLookup(changeMarkers)
+    const chartRows = weekly.map((week) => ({
+      weekLabel: week.week_label,
+      ctr: week.ctr * 100,
+      atc: week.atc_rate * 100,
+      purch: week.purchase_rate * 100,
+      cvr: week.cvr * 100,
+    }))
 
-  const chartRows = weekly.map((week) => ({
-    weekLabel: week.week_label,
-    ctr: week.ctr * 100,
-    atc: week.atc_rate * 100,
-    purch: week.purchase_rate * 100,
-    cvr: week.cvr * 100,
-  }))
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.35}>
-          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-            Week over week
-          </Typography>
-          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-            Search funnel rates
-          </Typography>
-        </Stack>
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button
-            size="small"
-            variant={wowVisible.ctr ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                ctr: !wowVisible.ctr,
-              })
-            }}
-          >
-            CTR
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.atc ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                atc: !wowVisible.atc,
-              })
-            }}
-          >
-            ATC Rate
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.purch ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                purch: !wowVisible.purch,
-              })
-            }}
-          >
-            Purch Rate
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.cvr ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                cvr: !wowVisible.cvr,
-              })
-            }}
-          >
-            CVR
-          </Button>
-        </Box>
-      </Box>
-
-      <Box sx={{ height: 320 }}>
+    chartBody = (
+      <Box sx={{ height: WPR_CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
             <YAxis tick={{ fontSize: 10 }} tickFormatter={(value: number) => `${value.toFixed(0)}%`} />
             <Tooltip
@@ -255,12 +199,14 @@ function ScpWeeklyChart({
                 if (key === 'purch') label = 'Purch Rate'
                 return [`${value.toFixed(1)}%`, label]
               }}
+              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
               contentStyle={{
                 background: 'rgba(0,20,35,0.96)',
                 border: '1px solid rgba(255,255,255,0.08)',
                 borderRadius: 8,
               }}
             />
+            <RechartsChangeMarkers markers={changeMarkers} />
             {visibleSeries.map((series) => (
               <Line
                 key={series.key}
@@ -275,6 +221,83 @@ function ScpWeeklyChart({
           </LineChart>
         </ResponsiveContainer>
       </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box
+        sx={{
+          ...chartControlRailSx,
+          alignItems: 'flex-start',
+        }}
+      >
+        <Stack spacing={0.35}>
+          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+            Week over week
+          </Typography>
+          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
+            Search funnel rates
+          </Typography>
+        </Stack>
+
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                ctr: !wowVisible.ctr,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.ctr, '#8fc7ff')}
+          >
+            CTR
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                atc: !wowVisible.atc,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.atc, '#f5a623')}
+          >
+            ATC Rate
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                purch: !wowVisible.purch,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.purch, '#77dfd0')}
+          >
+            Purch Rate
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                cvr: !wowVisible.cvr,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.cvr, '#d5ff62')}
+          >
+            CVR
+          </Button>
+        </Box>
+      </Box>
+
+      {chartBody}
     </Box>
   )
 }
@@ -286,7 +309,13 @@ function buildHeroContent(selectedWeekLabel: string): ScpHeroContent {
   }
 }
 
-export default function ScpTab({ bundle }: { bundle: WprWeekBundle }) {
+export default function ScpTab({
+  bundle,
+  changeEntries,
+}: {
+  bundle: WprWeekBundle
+  changeEntries: WprChangeLogEntry[]
+}) {
   const selectedScpAsinIds = useWprStore((state) => state.selectedScpAsinIds)
   const setSelectedScpAsinIds = useWprStore((state) => state.setSelectedScpAsinIds)
   const hasInitializedScpSelection = useWprStore((state) => state.hasInitializedScpSelection)
@@ -418,6 +447,7 @@ export default function ScpTab({ bundle }: { bundle: WprWeekBundle }) {
         <Box sx={{ p: 2.5 }}>
           <ScpWeeklyChart
             weekly={viewModel.weekly}
+            changeEntries={changeEntries}
             wowVisible={scpWowVisible}
             setWowVisible={setScpWowVisible}
           />

@@ -2,8 +2,11 @@
 
 import type { JSX } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
+import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
+import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
+import { chartControlRailSx, chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import {
   rateRatio,
   type SqpAggregatedMetrics,
@@ -237,61 +240,38 @@ function buildRatioFillPolygons(
   return polygons
 }
 
-function SqpWeeklyChart({
+function SqpWeeklySvg({
   weekly,
   changeEntries,
-  wowVisible,
-  setWowVisible,
+  visibleSeries,
+  width,
+  height,
 }: {
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
-  wowVisible: WprSqpWowVisible
-  setWowVisible: (nextState: WprSqpWowVisible) => void
+  visibleSeries: ChartSeriesMeta[]
+  width?: number
+  height?: number
 }) {
-  const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
-  const changeMarkers = buildChangeMarkerMap(changeEntries)
-
-  if (weekly.length === 0) {
-    return (
-      <Box
-        sx={{
-          minHeight: 260,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        No weekly SQP history for this selection.
-      </Box>
-    )
+  if (width === undefined || height === undefined) {
+    throw new Error('Missing SQP weekly chart frame size')
   }
 
-  if (visibleSeries.length === 0) {
-    return (
-      <Box
-        sx={{
-          minHeight: 260,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        Turn on at least one series to view the SQP history chart.
-      </Box>
-    )
+  const compactLayout = width < 640
+  const crampedLayout = width < 480
+  const margin = {
+    top: 18,
+    right: crampedLayout ? 44 : compactLayout ? 56 : 72,
+    bottom: 24,
+    left: crampedLayout ? 20 : compactLayout ? 28 : 38,
   }
-
-  const width = 900
-  const height = 320
-  const margin = { top: 18, right: 72, bottom: 24, left: 38 }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
+  if (plotWidth <= 0 || plotHeight <= 0) {
+    throw new Error(`Invalid SQP weekly chart frame dimensions ${width}x${height}`)
+  }
+
+  const changeMarkers = buildChangeMarkerMap(changeEntries)
   const points: ChartPoint[] = weekly.map((week) => {
     const ctrRatio = rateRatio(week.metrics.asin_ctr, week.metrics.market_ctr)
     const atcRatio = rateRatio(week.metrics.asin_cart_add_rate, week.metrics.cart_add_rate)
@@ -342,151 +322,202 @@ function SqpWeeklyChart({
     return margin.top + plotHeight - progress * plotHeight
   }
 
+  const markerFontSize = crampedLayout ? 7 : 8
+  const valueFontSize = crampedLayout ? 8 : 9
+  const weekFontSize = crampedLayout ? 8 : 9
+  const valueLabelX = width - margin.right + (crampedLayout ? 4 : 8)
+
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" role="img" aria-label="SQP weekly performance chart">
+      {minValue < 0 ? (
+        <line
+          x1={margin.left}
+          x2={width - margin.right}
+          y1={yPosition(0)}
+          y2={yPosition(0)}
+          stroke="rgba(255,255,255,0.12)"
+          strokeWidth="1"
+          strokeDasharray="4 3"
+        />
+      ) : null}
+      <line
+        x1={margin.left}
+        x2={width - margin.right}
+        y1={height - margin.bottom}
+        y2={height - margin.bottom}
+        stroke="rgba(255,255,255,0.08)"
+        strokeWidth="1"
+      />
+
+      {visibleSeries.flatMap((series) => buildRatioFillPolygons(points, series, xPosition, yPosition))}
+
+      {points.map((point, index) => {
+        const marker = changeMarkers.get(point.week_label)
+        if (marker === undefined) {
+          return null
+        }
+
+        return (
+          <g key={point.week_label}>
+            <line
+              x1={xPosition(index)}
+              x2={xPosition(index)}
+              y1={margin.top}
+              y2={height - margin.bottom}
+              stroke="rgba(241,235,222,0.34)"
+              strokeWidth="1.2"
+              strokeDasharray="3 5"
+            />
+            {marker.count > 1 ? (
+              <text
+                x={xPosition(index)}
+                y={margin.top + 10}
+                fill="rgba(241,235,222,0.82)"
+                fontSize={markerFontSize}
+                textAnchor="middle"
+              >
+                {marker.count}
+              </text>
+            ) : null}
+          </g>
+        )
+      })}
+
+      {visibleSeries.map((series) => {
+        const path = points
+          .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xPosition(index).toFixed(1)} ${yPosition(point[series.valueField]).toFixed(1)}`)
+          .join(' ')
+        const lastPoint = points[points.length - 1]
+        if (lastPoint === undefined) {
+          throw new Error('Missing SQP weekly chart endpoint')
+        }
+
+        return (
+          <g key={series.key}>
+            <path
+              d={path}
+              fill="none"
+              stroke={series.color}
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {points.map((point, index) => (
+              <circle
+                key={`${series.key}-${point.week_label}`}
+                cx={xPosition(index)}
+                cy={yPosition(point[series.valueField])}
+                r={2.6}
+                fill={series.color}
+                stroke="#09100f"
+                strokeWidth="1"
+              />
+            ))}
+            <text
+              x={valueLabelX}
+              y={yPosition(lastPoint[series.valueField]) + 4}
+              fill={series.color}
+              fontSize={valueFontSize}
+            >
+              {series.kind === 'points'
+                ? formatPoints(lastPoint[series.valueField])
+                : formatRatio(lastPoint[series.ratioField ?? 'ctr_ratio'])}
+            </text>
+          </g>
+        )
+      })}
+
+      {weekly.map((week, index) => (
+        <text
+          key={week.week_label}
+          x={xPosition(index)}
+          y={height - 6}
+          fill="#93a399"
+          fontSize={weekFontSize}
+          textAnchor="middle"
+        >
+          {week.week_label}
+        </text>
+      ))}
+    </svg>
+  )
+}
+
+function SqpWeeklyChart({
+  weekly,
+  changeEntries,
+  wowVisible,
+  setWowVisible,
+}: {
+  weekly: SqpWeeklyPoint[]
+  changeEntries: WprChangeLogEntry[]
+  wowVisible: WprSqpWowVisible
+  setWowVisible: (nextState: WprSqpWowVisible) => void
+}) {
+  const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
+  let chartBody: JSX.Element
+  if (weekly.length === 0) {
+    chartBody = (
+      <Box
+        sx={{
+          height: WPR_CHART_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255,255,255,0.54)',
+          fontSize: '0.78rem',
+          letterSpacing: '0.03em',
+        }}
+      >
+        No weekly SQP history for this selection.
+      </Box>
+    )
+  } else if (visibleSeries.length === 0) {
+    chartBody = (
+      <Box
+        sx={{
+          height: WPR_CHART_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255,255,255,0.54)',
+          fontSize: '0.78rem',
+          letterSpacing: '0.03em',
+        }}
+      >
+        Turn on at least one series to view the SQP history chart.
+      </Box>
+    )
+  } else {
+    chartBody = (
+      <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
+        <SqpWeeklySvg weekly={weekly} changeEntries={changeEntries} visibleSeries={visibleSeries} />
+      </ResponsiveChartFrame>
+    )
+  }
+
   return (
     <Stack spacing={1.5}>
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+      <Box sx={chartControlRailSx}>
         {SQP_WOW_SERIES.map((series) => (
           <Button
             key={series.key}
             size="small"
-            variant={wowVisible[series.key] ? 'contained' : 'outlined'}
+            variant="outlined"
             onClick={() => {
               setWowVisible({
                 ...wowVisible,
                 [series.key]: !wowVisible[series.key],
               })
             }}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 700,
-              letterSpacing: '0.01em',
-              bgcolor: wowVisible[series.key] ? 'rgba(255,255,255,0.08)' : 'transparent',
-              borderColor: `${series.color}55`,
-              color: series.color,
-              '&:hover': {
-                bgcolor: wowVisible[series.key] ? 'rgba(255,255,255,0.12)' : `${series.color}11`,
-              },
-            }}
+            sx={chartToggleButtonSx(wowVisible[series.key], series.color)}
           >
             {series.label}
           </Button>
         ))}
       </Box>
 
-      <Box sx={{ minHeight: 320 }}>
-        <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="320" role="img" aria-label="SQP weekly performance chart">
-          {minValue < 0 ? (
-            <line
-              x1={margin.left}
-              x2={width - margin.right}
-              y1={yPosition(0)}
-              y2={yPosition(0)}
-              stroke="rgba(255,255,255,0.12)"
-              strokeWidth="1"
-              strokeDasharray="4 3"
-            />
-          ) : null}
-          <line
-            x1={margin.left}
-            x2={width - margin.right}
-            y1={height - margin.bottom}
-            y2={height - margin.bottom}
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth="1"
-          />
-
-          {visibleSeries.flatMap((series) => buildRatioFillPolygons(points, series, xPosition, yPosition))}
-
-          {points.map((point, index) => {
-            const marker = changeMarkers.get(point.week_label)
-            if (marker === undefined) {
-              return null
-            }
-
-            return (
-              <g key={point.week_label}>
-                <line
-                  x1={xPosition(index)}
-                  x2={xPosition(index)}
-                  y1={margin.top}
-                  y2={height - margin.bottom}
-                  stroke="rgba(241,235,222,0.34)"
-                  strokeWidth="1.2"
-                  strokeDasharray="3 5"
-                />
-                {marker.count > 1 ? (
-                  <text
-                    x={xPosition(index)}
-                    y={margin.top + 10}
-                    fill="rgba(241,235,222,0.82)"
-                    fontSize="8"
-                    textAnchor="middle"
-                  >
-                    {marker.count}
-                  </text>
-                ) : null}
-              </g>
-            )
-          })}
-
-          {visibleSeries.map((series) => {
-            const path = points
-              .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xPosition(index).toFixed(1)} ${yPosition(point[series.valueField]).toFixed(1)}`)
-              .join(' ')
-            const lastPoint = points[points.length - 1]
-            if (lastPoint === undefined) {
-              throw new Error('Missing SQP weekly chart endpoint')
-            }
-
-            return (
-              <g key={series.key}>
-                <path
-                  d={path}
-                  fill="none"
-                  stroke={series.color}
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {points.map((point, index) => (
-                  <circle
-                    key={`${series.key}-${point.week_label}`}
-                    cx={xPosition(index)}
-                    cy={yPosition(point[series.valueField])}
-                    r={2.6}
-                    fill={series.color}
-                    stroke="#09100f"
-                    strokeWidth="1"
-                  />
-                ))}
-                <text
-                  x={width - margin.right + 8}
-                  y={yPosition(lastPoint[series.valueField]) + 4}
-                  fill={series.color}
-                  fontSize="9"
-                >
-                  {series.kind === 'points'
-                    ? formatPoints(lastPoint[series.valueField])
-                    : formatRatio(lastPoint[series.ratioField ?? 'ctr_ratio'])}
-                </text>
-              </g>
-            )
-          })}
-
-          {weekly.map((week, index) => (
-            <text
-              key={week.week_label}
-              x={xPosition(index)}
-              y={height - 6}
-              fill="#93a399"
-              fontSize="9"
-              textAnchor="middle"
-            >
-              {week.week_label}
-            </text>
-          ))}
-        </svg>
-      </Box>
+      {chartBody}
     </Stack>
   )
 }
@@ -522,13 +553,22 @@ export default function SqpWeeklyPanel({
 }) {
   return (
     <Box sx={PANEL_SX}>
-      <Box sx={{ px: 2.5, pt: 2.2, pb: 1.4 }}>
+      <Box
+        sx={{
+          px: 2.5,
+          pt: 2.2,
+          pb: 1.4,
+        }}
+      >
         <Typography
           sx={{
             fontSize: '1.35rem',
             fontWeight: 800,
             letterSpacing: '-0.04em',
             color: 'rgba(255,255,255,0.95)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {heroContent.name}
@@ -538,12 +578,24 @@ export default function SqpWeeklyPanel({
             fontSize: '0.72rem',
             color: 'rgba(255,255,255,0.6)',
             mt: 0.4,
+            minHeight: '1.1rem',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
         >
           {heroContent.meta.join(' · ')}
         </Typography>
 
-        <Box sx={{ display: 'flex', gap: 4, mt: 1.8, flexWrap: 'wrap' }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+            gap: { xs: 1.5, sm: 4 },
+            mt: 1.8,
+            minHeight: '3.1rem',
+          }}
+        >
           <MetricChip
             label="Query Volume"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCompactNumber(currentMetrics.query_volume)}
