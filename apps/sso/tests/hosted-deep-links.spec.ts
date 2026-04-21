@@ -106,7 +106,8 @@ test.describe('hosted cross-app auth smoke', () => {
       })
 
       await page.goto(hostedRoute('/talos'), { waitUntil: 'domcontentloaded' })
-      await expect(page.getByText('Select your region to continue', { exact: false })).toBeVisible({
+      await expect(page.getByRole('heading', { name: 'TALOS' })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByText('Select your region', { exact: false })).toBeVisible({
         timeout: 20_000,
       })
 
@@ -114,7 +115,7 @@ test.describe('hosted cross-app auth smoke', () => {
       expect(tenantCurrentResponse.ok()).toBe(true)
 
       const usRegionCard = page.getByRole('button', {
-        name: /US United States America\/Los Angeles Enter/i,
+        name: /US.*United States.*America\s*\/\s*Los Angeles.*Enter region/i,
       })
       await expect(usRegionCard).toBeVisible({ timeout: 20_000 })
       await expect(usRegionCard).toBeEnabled()
