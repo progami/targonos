@@ -1,7 +1,12 @@
 'use client'
 
 import type { JSX } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button } from '@mui/material'
+import {
+  WprAnalyticsFooter,
+  WprAnalyticsMetric,
+  WprAnalyticsPanel,
+} from '@/components/wpr/wpr-analytics-panel'
 import {
   CartesianGrid,
   Line,
@@ -25,10 +30,6 @@ import type { TstSelectionViewModel } from '@/lib/wpr/tst-view-model'
 import type { WprChangeLogEntry, WprCompetitorSummary } from '@/lib/wpr/types'
 import {
   chartToggleButtonSx,
-  panelSx,
-  subtleBorder,
-  textMuted,
-  textSecondary,
 } from '@/lib/wpr/panel-tokens'
 import { formatPercent } from '@/lib/wpr/format'
 
@@ -39,75 +40,6 @@ type TstHeroContent = {
 
 function blankMetricValue(): string {
   return '---'
-}
-
-function MetricChip({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <Box>
-      <Typography
-        sx={{
-          fontSize: '0.58rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.12em',
-          color: textMuted,
-          mb: 0.35,
-        }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          fontSize: '1.18rem',
-          fontWeight: 700,
-          letterSpacing: '-0.04em',
-          color: 'rgba(255,255,255,0.92)',
-        }}
-      >
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
-function Footer({
-  items,
-}: {
-  items: string[]
-}) {
-  return (
-    <Box
-      sx={{
-        px: 2.5,
-        py: 1.2,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 2,
-        borderTop: subtleBorder,
-        color: textMuted,
-      }}
-    >
-      {items.map((item) => (
-        <Typography
-          key={item}
-          sx={{
-            fontSize: '0.64rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {item}
-        </Typography>
-      ))}
-    </Box>
-  )
 }
 
 function WeeklyGapChart({
@@ -286,68 +218,39 @@ export default function TstWeeklyPanel({
   }
 
   return (
-    <Box sx={panelSx}>
-      <Box
-        sx={{
-          px: 2.5,
-          pt: 2,
-          pb: 1.25,
-          borderBottom: subtleBorder,
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.45}>
-          <Typography sx={{ fontSize: '1.2rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
-            {heroContent.name}
-          </Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: textSecondary }}>
-            {heroContent.meta.join(' · ')}
-          </Typography>
-        </Stack>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' },
-          gap: 1.5,
-          px: 2.5,
-          py: 1.75,
-          borderBottom: subtleBorder,
-        }}
-      >
-        <MetricChip
-          label="Terms Covered"
-          value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.terms_covered)}
-        />
-        <MetricChip
-          label="Term-Weeks"
-          value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.term_weeks_covered)}
-        />
-        <MetricChip
-          label="Our Click Share"
-          value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.our_click_share, 1)}
-        />
-        <MetricChip
-          label={`${competitor.brand} Click Share`}
-          value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.competitor_click_share, 1)}
-        />
-      </Box>
-
-        <Box sx={{ p: 2.5 }}>
-          <WeeklyGapChart
-            competitor={competitor}
-            weekly={viewModel.weekly}
-            changeEntries={changeEntries}
-            wowVisible={wowVisible}
-            setWowVisible={setWowVisible}
+    <WprAnalyticsPanel
+      title={heroContent.name}
+      meta={heroContent.meta}
+      metricColumns={{ xs: 2, md: 4 }}
+      metrics={
+        <>
+          <WprAnalyticsMetric
+            label="Terms Covered"
+            value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.terms_covered)}
           />
-        </Box>
-
-      <Footer items={footerItems} />
-    </Box>
+          <WprAnalyticsMetric
+            label="Term-Weeks"
+            value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.term_weeks_covered)}
+          />
+          <WprAnalyticsMetric
+            label="Our Click Share"
+            value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.our_click_share, 1)}
+          />
+          <WprAnalyticsMetric
+            label={`${competitor.brand} Click Share`}
+            value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.competitor_click_share, 1)}
+          />
+        </>
+      }
+      footer={<WprAnalyticsFooter items={footerItems} />}
+    >
+      <WeeklyGapChart
+        competitor={competitor}
+        weekly={viewModel.weekly}
+        changeEntries={changeEntries}
+        wowVisible={wowVisible}
+        setWowVisible={setWowVisible}
+      />
+    </WprAnalyticsPanel>
   )
 }

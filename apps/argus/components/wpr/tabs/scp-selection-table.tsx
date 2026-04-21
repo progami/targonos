@@ -1,18 +1,19 @@
 'use client'
 
 import {
-  Box,
   Checkbox,
-  Stack,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TableSortLabel,
-  Typography,
 } from '@mui/material'
+import {
+  WprSelectionPanel,
+  wprSelectionHeaderCellSx,
+  wprSelectionMetricCellSx,
+} from '@/components/wpr/wpr-selection-panel'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -25,7 +26,6 @@ import {
   sortScpRows,
 } from '@/lib/wpr/scp-view-model'
 import { formatCount, formatMoney, formatPercent } from '@/lib/wpr/format'
-import { panelSx } from '@/lib/wpr/panel-tokens'
 
 const SCP_COLUMNS: Array<{ key: ScpSortKey; label: string }> = [
   { key: 'asin', label: 'ASIN' },
@@ -71,9 +71,7 @@ function MetricCell({
     <TableCell
       align={align}
       sx={{
-        fontSize: '0.72rem',
-        color: 'rgba(255,255,255,0.76)',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        ...wprSelectionMetricCellSx,
         whiteSpace: 'pre-line',
       }}
     >
@@ -105,47 +103,16 @@ export default function ScpSelectionTable({
   const rows = sortScpRows(viewModel.rows, sortState, selectedWeekLabel, viewModel.current)
 
   return (
-    <Box sx={panelSx}>
-      <Box
-        sx={{
-          px: 2,
-          py: 1.3,
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.3}>
-          <Typography
-            sx={{
-              fontSize: '0.64rem',
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.54)',
-            }}
-          >
-            SCP Selection
-          </Typography>
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'rgba(255,255,255,0.88)' }}>
-            {`Selected week · ${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
-          </Typography>
-        </Stack>
-      </Box>
-
-      <TableContainer sx={{ maxHeight: 640 }}>
+    <WprSelectionPanel
+      title="SCP Selection"
+      summary={`Selected week · ${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
+    >
         <Table stickyHeader size="small" sx={{ minWidth: 1280 }}>
           <TableHead>
             <TableRow>
               <TableCell
                 padding="checkbox"
-                sx={{
-                  bgcolor: 'rgba(0, 20, 35, 0.96)',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                }}
+                sx={wprSelectionHeaderCellSx}
               >
                 <Checkbox
                   size="small"
@@ -165,10 +132,7 @@ export default function ScpSelectionTable({
                 <TableCell
                   key={column.key}
                   align={column.key === 'asin' ? 'left' : 'right'}
-                  sx={{
-                    bgcolor: 'rgba(0, 20, 35, 0.96)',
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  }}
+                  sx={wprSelectionHeaderCellSx}
                 >
                   <TableSortLabel
                     active={sortState.key === column.key}
@@ -246,7 +210,6 @@ export default function ScpSelectionTable({
             })}
           </TableBody>
         </Table>
-      </TableContainer>
-    </Box>
+    </WprSelectionPanel>
   )
 }
