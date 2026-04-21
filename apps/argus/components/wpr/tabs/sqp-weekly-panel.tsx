@@ -12,7 +12,6 @@ import {
   buildChangeMarkerLabelParts,
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
-  summarizeChangeMarkers,
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
@@ -561,7 +560,6 @@ function SqpWeeklyChart({
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
-  const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
   let chartBody: JSX.Element
   if (weekly.length === 0) {
     chartBody = <WprChartEmptyState>No weekly SQP history for this selection.</WprChartEmptyState>
@@ -583,9 +581,6 @@ function SqpWeeklyChart({
 
   return (
     <WprChartShell
-      title="Week over week"
-      description="Query-share and conversion deltas"
-      changeSummary={summarizeChangeMarkers(changeMarkers, 'week')}
       secondaryControls={
         <WprChartControlGroup label="Metrics">
           {SQP_WOW_SERIES.map((series) => (
