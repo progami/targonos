@@ -14,8 +14,8 @@ import {
 import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
-  formatChangeMarkerLabel,
   RechartsChangeMarkers,
+  WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import type { WprScpWowVisible } from '@/lib/wpr/dashboard-state'
 import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
@@ -192,19 +192,41 @@ function ScpWeeklyChart({
             <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
             <YAxis tick={{ fontSize: 10 }} tickFormatter={(value: number) => `${value.toFixed(0)}%`} />
             <Tooltip
-              formatter={(value: number, key: string) => {
-                let label = 'CVR'
-                if (key === 'ctr') label = 'CTR'
-                if (key === 'atc') label = 'ATC Rate'
-                if (key === 'purch') label = 'Purch Rate'
-                return [`${value.toFixed(1)}%`, label]
-              }}
-              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
-              contentStyle={{
-                background: 'rgba(0,20,35,0.96)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8,
-              }}
+              content={({ active, payload, label }) => (
+                <WprChangeTooltipContent
+                  active={active}
+                  payload={payload}
+                  label={label}
+                  changeMarker={changeMarkersByLabel.get(String(label))}
+                  formatRow={(entry) => {
+                    const key = entry.dataKey
+                    if (key === undefined) {
+                      throw new Error('Missing SCP tooltip data key')
+                    }
+
+                    const value = entry.value
+                    if (typeof value !== 'number') {
+                      throw new Error(`Invalid SCP tooltip value for ${String(key)}`)
+                    }
+
+                    const color = entry.color
+                    if (color === undefined) {
+                      throw new Error(`Missing SCP tooltip color for ${String(key)}`)
+                    }
+
+                    let rowLabel = 'CVR'
+                    if (key === 'ctr') rowLabel = 'CTR'
+                    if (key === 'atc') rowLabel = 'ATC Rate'
+                    if (key === 'purch') rowLabel = 'Purch Rate'
+
+                    return {
+                      label: rowLabel,
+                      value: `${value.toFixed(1)}%`,
+                      color,
+                    }
+                  }}
+                />
+              )}
             />
             <RechartsChangeMarkers markers={changeMarkers} />
             {visibleSeries.map((series) => (

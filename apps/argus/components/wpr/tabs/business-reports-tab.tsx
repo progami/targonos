@@ -17,7 +17,7 @@ import {
   buildChangeMarkerLookup,
   buildDailyChangeMarkers,
   buildWeeklyChangeMarkers,
-  formatChangeMarkerLabel,
+  WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import type { WprBrWowVisible } from '@/lib/wpr/dashboard-state'
 import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
@@ -407,21 +407,52 @@ function BusinessReportsChart({
               tickFormatter={(value: number) => `${value.toFixed(0)}%`}
             />
             <Tooltip
-              formatter={(value: number, key: string) => {
-                if (key === 'sessions') {
-                  return [formatCount(value), 'Sessions']
-                }
-                if (key === 'order_items') {
-                  return [`${value.toFixed(1)}%`, 'Order Item %']
-                }
-                return [`${value.toFixed(1)}%`, 'Unit Session %']
-              }}
-              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
-              contentStyle={{
-                background: 'rgba(0,20,35,0.96)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8,
-              }}
+              content={({ active, payload, label }) => (
+                <WprChangeTooltipContent
+                  active={active}
+                  payload={payload}
+                  label={label}
+                  changeMarker={changeMarkersByLabel.get(String(label))}
+                  formatRow={(entry) => {
+                    const key = entry.dataKey
+                    if (key === undefined) {
+                      throw new Error('Missing Business Reports tooltip data key')
+                    }
+
+                    const value = entry.value
+                    if (typeof value !== 'number') {
+                      throw new Error(`Invalid Business Reports tooltip value for ${String(key)}`)
+                    }
+
+                    const color = entry.color
+                    if (color === undefined) {
+                      throw new Error(`Missing Business Reports tooltip color for ${String(key)}`)
+                    }
+
+                    if (key === 'sessions') {
+                      return {
+                        label: 'Sessions',
+                        value: formatCount(value),
+                        color,
+                      }
+                    }
+
+                    if (key === 'order_items') {
+                      return {
+                        label: 'Order Item %',
+                        value: `${value.toFixed(1)}%`,
+                        color,
+                      }
+                    }
+
+                    return {
+                      label: 'Unit Session %',
+                      value: `${value.toFixed(1)}%`,
+                      color,
+                    }
+                  }}
+                />
+              )}
             />
             {wowVisible.sessions ? (
               <Bar yAxisId="counts" dataKey="sessions" fill="rgba(143,199,255,0.34)" stroke="#8fc7ff" />
