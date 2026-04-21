@@ -1,9 +1,15 @@
 'use client';
 
 import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import {
+  applyWeekScopedPatch,
+  captureWeekScopedState,
   createInitialDashboardState,
+  switchDashboardWeek,
   toggleSetMember,
+  wprStateReplacer,
+  wprStateReviver,
   type WprBrWowVisible,
   type WprCompWowVisible,
   type WprCompareOrganicMode,
@@ -51,121 +57,159 @@ type WprStore = WprDashboardState & {
   setCompWowVisible: (compWowVisible: WprCompWowVisible) => void;
 };
 
-export const useWprStore = create<WprStore>((set) => ({
-  ...createInitialDashboardState(null),
-  replaceState: (nextState) => {
-    set(nextState);
-  },
-  setActiveTab: (activeTab) => {
-    set({ activeTab });
-  },
-  setSelectedWeek: (selectedWeek) => {
-    set({ selectedWeek });
-  },
-  setSelectedClusterId: (selectedClusterId) => {
-    set({ selectedClusterId });
-  },
-  setSelectedSqpRootIds: (rootIds) => {
-    set({ selectedSqpRootIds: new Set(rootIds) });
-  },
-  setSelectedSqpTermIds: (termIds) => {
-    set({ selectedSqpTermIds: new Set(termIds) });
-  },
-  setExpandedSqpRootIds: (rootIds) => {
-    set({ expandedSqpRootIds: new Set(rootIds) });
-  },
-  toggleSelectedSqpRootId: (rootId) => {
-    set((state) => ({
-      selectedSqpRootIds: toggleSetMember(state.selectedSqpRootIds, rootId),
-    }));
-  },
-  toggleSelectedSqpTermId: (termId) => {
-    set((state) => ({
-      selectedSqpTermIds: toggleSetMember(state.selectedSqpTermIds, termId),
-    }));
-  },
-  toggleExpandedSqpRootId: (rootId) => {
-    set((state) => ({
-      expandedSqpRootIds: toggleSetMember(state.expandedSqpRootIds, rootId),
-    }));
-  },
-  setHasInitializedSqpSelection: (value) => {
-    set({ hasInitializedSqpSelection: value });
-  },
-  toggleSelectedScpAsinId: (asinId) => {
-    set((state) => ({
-      selectedScpAsinIds: toggleSetMember(state.selectedScpAsinIds, asinId),
-    }));
-  },
-  setSelectedScpAsinIds: (asinIds) => {
-    set({ selectedScpAsinIds: new Set(asinIds) });
-  },
-  setHasInitializedScpSelection: (value) => {
-    set({ hasInitializedScpSelection: value });
-  },
-  toggleSelectedBusinessReportAsinId: (asinId) => {
-    set((state) => ({
-      selectedBusinessReportAsinIds: toggleSetMember(state.selectedBusinessReportAsinIds, asinId),
-    }));
-  },
-  setSelectedBusinessReportAsinIds: (asinIds) => {
-    set({ selectedBusinessReportAsinIds: new Set(asinIds) });
-  },
-  setHasInitializedBusinessReportSelection: (value) => {
-    set({ hasInitializedBusinessReportSelection: value });
-  },
-  toggleSelectedCompetitorRootId: (rootId) => {
-    set((state) => ({
-      selectedCompetitorRootIds: toggleSetMember(state.selectedCompetitorRootIds, rootId),
-    }));
-  },
-  toggleSelectedCompetitorTermId: (termId) => {
-    set((state) => ({
-      selectedCompetitorTermIds: toggleSetMember(state.selectedCompetitorTermIds, termId),
-    }));
-  },
-  toggleExpandedCompetitorRootId: (rootId) => {
-    set((state) => ({
-      expandedCompetitorRootIds: toggleSetMember(state.expandedCompetitorRootIds, rootId),
-    }));
-  },
-  setSelectedCompetitorRootIds: (rootIds) => {
-    set({ selectedCompetitorRootIds: new Set(rootIds) });
-  },
-  setSelectedCompetitorTermIds: (termIds) => {
-    set({ selectedCompetitorTermIds: new Set(termIds) });
-  },
-  setExpandedCompetitorRootIds: (rootIds) => {
-    set({ expandedCompetitorRootIds: new Set(rootIds) });
-  },
-  setHasInitializedCompetitorSelection: (value) => {
-    set({ hasInitializedCompetitorSelection: value });
-  },
-  setCompareOrganicMode: (compareOrganicMode) => {
-    set({ compareOrganicMode });
-  },
-  setSqpTableSort: (sqpTableSort) => {
-    set({ sqpTableSort });
-  },
-  setScpTableSort: (scpTableSort) => {
-    set({ scpTableSort });
-  },
-  setBrTableSort: (brTableSort) => {
-    set({ brTableSort });
-  },
-  setCompetitorTableSort: (competitorTableSort) => {
-    set({ competitorTableSort });
-  },
-  setSqpWowVisible: (sqpWowVisible) => {
-    set({ sqpWowVisible });
-  },
-  setScpWowVisible: (scpWowVisible) => {
-    set({ scpWowVisible });
-  },
-  setBrWowVisible: (brWowVisible) => {
-    set({ brWowVisible });
-  },
-  setCompWowVisible: (compWowVisible) => {
-    set({ compWowVisible });
-  },
-}));
+export const useWprStore = create<WprStore>()(
+  persist(
+    (set) => {
+      const setDashboardState = (
+        patch: Partial<WprDashboardState> | ((state: WprStore) => Partial<WprDashboardState>),
+      ) => {
+        set((state) => {
+          const nextPatch = typeof patch === 'function' ? patch(state) : patch;
+          return applyWeekScopedPatch(state, nextPatch);
+        });
+      };
+
+      return {
+        ...createInitialDashboardState(null),
+        replaceState: (nextState) => {
+          setDashboardState(nextState);
+        },
+        setActiveTab: (activeTab) => {
+          setDashboardState({ activeTab });
+        },
+        setSelectedWeek: (selectedWeek) => {
+          set((state) => switchDashboardWeek(state, selectedWeek));
+        },
+        setSelectedClusterId: (selectedClusterId) => {
+          setDashboardState({ selectedClusterId });
+        },
+        setSelectedSqpRootIds: (rootIds) => {
+          setDashboardState({ selectedSqpRootIds: new Set(rootIds) });
+        },
+        setSelectedSqpTermIds: (termIds) => {
+          setDashboardState({ selectedSqpTermIds: new Set(termIds) });
+        },
+        setExpandedSqpRootIds: (rootIds) => {
+          setDashboardState({ expandedSqpRootIds: new Set(rootIds) });
+        },
+        toggleSelectedSqpRootId: (rootId) => {
+          setDashboardState((state) => ({
+            selectedSqpRootIds: toggleSetMember(state.selectedSqpRootIds, rootId),
+          }));
+        },
+        toggleSelectedSqpTermId: (termId) => {
+          setDashboardState((state) => ({
+            selectedSqpTermIds: toggleSetMember(state.selectedSqpTermIds, termId),
+          }));
+        },
+        toggleExpandedSqpRootId: (rootId) => {
+          setDashboardState((state) => ({
+            expandedSqpRootIds: toggleSetMember(state.expandedSqpRootIds, rootId),
+          }));
+        },
+        setHasInitializedSqpSelection: (value) => {
+          setDashboardState({ hasInitializedSqpSelection: value });
+        },
+        toggleSelectedScpAsinId: (asinId) => {
+          setDashboardState((state) => ({
+            selectedScpAsinIds: toggleSetMember(state.selectedScpAsinIds, asinId),
+          }));
+        },
+        setSelectedScpAsinIds: (asinIds) => {
+          setDashboardState({ selectedScpAsinIds: new Set(asinIds) });
+        },
+        setHasInitializedScpSelection: (value) => {
+          setDashboardState({ hasInitializedScpSelection: value });
+        },
+        toggleSelectedBusinessReportAsinId: (asinId) => {
+          setDashboardState((state) => ({
+            selectedBusinessReportAsinIds: toggleSetMember(state.selectedBusinessReportAsinIds, asinId),
+          }));
+        },
+        setSelectedBusinessReportAsinIds: (asinIds) => {
+          setDashboardState({ selectedBusinessReportAsinIds: new Set(asinIds) });
+        },
+        setHasInitializedBusinessReportSelection: (value) => {
+          setDashboardState({ hasInitializedBusinessReportSelection: value });
+        },
+        toggleSelectedCompetitorRootId: (rootId) => {
+          setDashboardState((state) => ({
+            selectedCompetitorRootIds: toggleSetMember(state.selectedCompetitorRootIds, rootId),
+          }));
+        },
+        toggleSelectedCompetitorTermId: (termId) => {
+          setDashboardState((state) => ({
+            selectedCompetitorTermIds: toggleSetMember(state.selectedCompetitorTermIds, termId),
+          }));
+        },
+        toggleExpandedCompetitorRootId: (rootId) => {
+          setDashboardState((state) => ({
+            expandedCompetitorRootIds: toggleSetMember(state.expandedCompetitorRootIds, rootId),
+          }));
+        },
+        setSelectedCompetitorRootIds: (rootIds) => {
+          setDashboardState({ selectedCompetitorRootIds: new Set(rootIds) });
+        },
+        setSelectedCompetitorTermIds: (termIds) => {
+          setDashboardState({ selectedCompetitorTermIds: new Set(termIds) });
+        },
+        setExpandedCompetitorRootIds: (rootIds) => {
+          setDashboardState({ expandedCompetitorRootIds: new Set(rootIds) });
+        },
+        setHasInitializedCompetitorSelection: (value) => {
+          setDashboardState({ hasInitializedCompetitorSelection: value });
+        },
+        setCompareOrganicMode: (compareOrganicMode) => {
+          setDashboardState({ compareOrganicMode });
+        },
+        setSqpTableSort: (sqpTableSort) => {
+          setDashboardState({ sqpTableSort });
+        },
+        setScpTableSort: (scpTableSort) => {
+          setDashboardState({ scpTableSort });
+        },
+        setBrTableSort: (brTableSort) => {
+          setDashboardState({ brTableSort });
+        },
+        setCompetitorTableSort: (competitorTableSort) => {
+          setDashboardState({ competitorTableSort });
+        },
+        setSqpWowVisible: (sqpWowVisible) => {
+          setDashboardState({ sqpWowVisible });
+        },
+        setScpWowVisible: (scpWowVisible) => {
+          setDashboardState({ scpWowVisible });
+        },
+        setBrWowVisible: (brWowVisible) => {
+          setDashboardState({ brWowVisible });
+        },
+        setCompWowVisible: (compWowVisible) => {
+          setDashboardState({ compWowVisible });
+        },
+      };
+    },
+    {
+      name: 'argus-wpr-dashboard',
+      version: 1,
+      storage: createJSONStorage(() => localStorage, {
+        replacer: wprStateReplacer,
+        reviver: wprStateReviver,
+      }),
+      partialize: (state) => ({
+        activeTab: state.activeTab,
+        selectedWeek: state.selectedWeek,
+        weekStateByWeek: state.weekStateByWeek,
+        ...captureWeekScopedState(state),
+        compareOrganicMode: state.compareOrganicMode,
+        sqpTableSort: state.sqpTableSort,
+        scpTableSort: state.scpTableSort,
+        brTableSort: state.brTableSort,
+        competitorTableSort: state.competitorTableSort,
+        sqpWowVisible: state.sqpWowVisible,
+        scpWowVisible: state.scpWowVisible,
+        brWowVisible: state.brWowVisible,
+        compWowVisible: state.compWowVisible,
+      }),
+    },
+  ),
+);
