@@ -19,8 +19,8 @@ import {
 import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
-  formatChangeMarkerLabel,
   RechartsChangeMarkers,
+  WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
@@ -215,14 +215,6 @@ export default function CompareTab({
     return formatCount(value)
   }
 
-  const rankTooltipFormatter = (value: number | string) => {
-    if (typeof value !== 'number') {
-      return String(value)
-    }
-
-    return formatDecimal(value, 1)
-  }
-
   const ppcTooltipFormatter = (value: number | string, key: string) => {
     if (typeof value !== 'number') {
       return String(value)
@@ -267,8 +259,36 @@ export default function CompareTab({
                   <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                   <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
                   <Tooltip
-                    {...compareTooltipProps}
-                    labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))}
+                    content={({ active, payload, label }) => (
+                      <WprChangeTooltipContent
+                        active={active}
+                        payload={payload}
+                        label={label}
+                        changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
+                        formatRow={(entry) => {
+                          const value = entry.value
+                          if (typeof value !== 'number') {
+                            throw new Error(`Invalid Compare brand-metrics tooltip value for ${String(entry.dataKey)}`)
+                          }
+
+                          const color = entry.color
+                          if (color === undefined) {
+                            throw new Error(`Missing Compare brand-metrics tooltip color for ${String(entry.dataKey)}`)
+                          }
+
+                          const name = entry.name
+                          if (name === undefined) {
+                            throw new Error(`Missing Compare brand-metrics tooltip label for ${String(entry.dataKey)}`)
+                          }
+
+                          return {
+                            label: String(name),
+                            value: formatCompactNumber(value),
+                            color,
+                          }
+                        }}
+                      />
+                    )}
                   />
                   <RechartsChangeMarkers markers={weeklyChangeMarkers} />
                   <Legend content={<CompareChartLegend />} />
@@ -396,9 +416,37 @@ export default function CompareTab({
                       <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                       <YAxis reversed tickFormatter={(value) => formatDecimal(value, 1)} tick={{ fontSize: 10 }} />
                       <Tooltip
-                        {...compareTooltipProps}
-                        formatter={rankTooltipFormatter}
-                        labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))}
+                        content={({ active, payload, label }) => (
+                          <WprChangeTooltipContent
+                            active={active}
+                            payload={payload}
+                            label={label}
+                            changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
+                            formatRow={(entry) => {
+                              const key = entry.dataKey
+                              if (key === undefined) {
+                                throw new Error('Missing Compare rank-trend tooltip data key')
+                              }
+
+                              const value = entry.value
+                              if (typeof value !== 'number') {
+                                throw new Error(`Invalid Compare rank-trend tooltip value for ${String(key)}`)
+                              }
+
+                              const color = entry.color
+                              if (color === undefined) {
+                                throw new Error(`Missing Compare rank-trend tooltip color for ${String(key)}`)
+                              }
+
+                              const name = entry.name
+                              return {
+                                label: String(name ?? key),
+                                value: formatDecimal(value, 1),
+                                color,
+                              }
+                            }}
+                          />
+                        )}
                       />
                       <ReferenceLine y={10} stroke="rgba(255,255,255,0.08)" />
                       <RechartsChangeMarkers markers={weeklyChangeMarkers} />

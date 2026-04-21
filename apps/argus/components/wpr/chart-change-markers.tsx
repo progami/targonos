@@ -1,3 +1,4 @@
+import React from 'react'
 import { ReferenceLine } from 'recharts'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
 
@@ -5,6 +6,19 @@ export type ChartChangeMarker = {
   label: string
   count: number
   titles: string[]
+}
+
+export type WprTooltipPayloadEntry = {
+  color?: string
+  dataKey?: string | number
+  name?: string | number
+  value?: unknown
+}
+
+export type WprTooltipRow = {
+  color: string
+  label: string
+  value: string
 }
 
 type DailyChangePoint = {
@@ -62,20 +76,163 @@ export function buildDailyChangeMarkers(points: DailyChangePoint[]): ChartChange
   return markers
 }
 
-export function formatChangeMarkerLabel(label: string | number, marker: ChartChangeMarker | undefined): string {
+export function formatChangeMarkerCount(count: number): string {
+  const noun = count === 1 ? 'change' : 'changes'
+  return `${count} ${noun}`
+}
+
+export function buildChangeMarkerLabelParts(
+  label: string | number,
+  marker: ChartChangeMarker | undefined,
+): string[] {
   const baseLabel = String(label)
   if (marker === undefined) {
-    return baseLabel
+    return [baseLabel]
   }
 
-  const noun = marker.count === 1 ? 'change' : 'changes'
-  let summary = `${baseLabel} · ${marker.count} ${noun}`
-  if (marker.titles.length === 0) {
-    return summary
+  return [`${baseLabel} · ${formatChangeMarkerCount(marker.count)}`, ...marker.titles]
+}
+
+export function formatChangeMarkerLabel(label: string | number, marker: ChartChangeMarker | undefined): string {
+  return buildChangeMarkerLabelParts(label, marker).join(' · ')
+}
+
+export function WprChangeTooltipContent({
+  active,
+  label,
+  payload,
+  changeMarker,
+  formatRow,
+}: {
+  active?: boolean
+  label?: string | number
+  payload?: readonly WprTooltipPayloadEntry[]
+  changeMarker?: ChartChangeMarker
+  formatRow: (entry: WprTooltipPayloadEntry) => WprTooltipRow
+}) {
+  if (active !== true || label === undefined || payload === undefined || payload.length === 0) {
+    return null
   }
 
-  summary += ` · ${marker.titles.join(' · ')}`
-  return summary
+  const labelParts = buildChangeMarkerLabelParts(label, changeMarker)
+  const header = labelParts[0]
+  if (header === undefined) {
+    throw new Error(`Missing tooltip header for ${String(label)}`)
+  }
+
+  const changeLines = labelParts.slice(1)
+  const rows = payload.map((entry) => formatRow(entry))
+
+  return (
+    <div
+      style={{
+        minWidth: 184,
+        maxWidth: 320,
+        padding: '10px 12px',
+        background: 'rgba(0,20,35,0.96)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 8,
+        boxShadow: '0 10px 28px rgba(0,0,0,0.28)',
+      }}
+    >
+      <div
+        style={{
+          color: 'rgba(255,255,255,0.92)',
+          fontSize: 12,
+          fontWeight: 700,
+          lineHeight: 1.3,
+        }}
+      >
+        {header}
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gap: 6,
+          marginTop: 8,
+        }}
+      >
+        {rows.map((row) => (
+          <div
+            key={`${row.label}-${row.value}`}
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+                flex: 1,
+              }}
+            >
+              <span
+                style={{
+                  width: 8,
+                  height: 8,
+                  marginTop: 3,
+                  borderRadius: '50%',
+                  background: row.color,
+                  flex: '0 0 auto',
+                }}
+              />
+              <span
+                style={{
+                  color: 'rgba(255,255,255,0.74)',
+                  fontSize: 12,
+                  lineHeight: 1.35,
+                }}
+              >
+                {row.label}
+              </span>
+            </div>
+            <span
+              style={{
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: 12,
+                fontWeight: 700,
+                lineHeight: 1.35,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {row.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {changeLines.length > 0 ? (
+        <div
+          style={{
+            display: 'grid',
+            gap: 4,
+            marginTop: 8,
+            paddingTop: 8,
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          {changeLines.map((line, lineIndex) => (
+            <div
+              key={`${header}-change-${lineIndex}`}
+              style={{
+                color: 'rgba(255,255,255,0.58)',
+                fontSize: 11,
+                lineHeight: 1.35,
+              }}
+            >
+              {line}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function RechartsChangeMarkers({

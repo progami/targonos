@@ -15,8 +15,8 @@ import {
 import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
-  formatChangeMarkerLabel,
   RechartsChangeMarkers,
+  WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import type { WprCompWowVisible } from '@/lib/wpr/dashboard-state'
 import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
@@ -181,16 +181,36 @@ function WeeklyGapChart({
             />
             <ReferenceLine y={0} stroke="rgba(255,255,255,0.18)" strokeDasharray="4 4" />
             <Tooltip
-              formatter={(value: number, key: string) => {
-                const label = key === 'clickGap' ? 'Click Gap' : 'Purch Gap'
-                return [`${value.toFixed(1)} pts`, label]
-              }}
-              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
-              contentStyle={{
-                background: 'rgba(0,20,35,0.96)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8,
-              }}
+              content={({ active, payload, label }) => (
+                <WprChangeTooltipContent
+                  active={active}
+                  payload={payload}
+                  label={label}
+                  changeMarker={changeMarkersByLabel.get(String(label))}
+                  formatRow={(entry) => {
+                    const key = entry.dataKey
+                    if (key === undefined) {
+                      throw new Error('Missing TST tooltip data key')
+                    }
+
+                    const value = entry.value
+                    if (typeof value !== 'number') {
+                      throw new Error(`Invalid TST tooltip value for ${String(key)}`)
+                    }
+
+                    const color = entry.color
+                    if (color === undefined) {
+                      throw new Error(`Missing TST tooltip color for ${String(key)}`)
+                    }
+
+                    return {
+                      label: key === 'clickGap' ? 'Click Gap' : 'Purch Gap',
+                      value: `${value.toFixed(1)} pts`,
+                      color,
+                    }
+                  }}
+                />
+              )}
             />
             <RechartsChangeMarkers markers={changeMarkers} />
             {visibleSeries.map((series) => (
