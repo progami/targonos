@@ -209,6 +209,21 @@ export interface PortalJwtPayload extends Record<string, unknown> {
   exp?: number;
 }
 
+export type WorktreeDevSession = {
+  expires: string;
+  user: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  authz: PortalAuthz;
+  roles: RolesClaim;
+  globalRoles: string[];
+  authzVersion: number;
+  activeTenant: string | null;
+  apps: string[];
+};
+
 export interface DecodePortalSessionOptions {
   cookieHeader?: string | null;
   cookieNames?: string[];
@@ -216,6 +231,109 @@ export interface DecodePortalSessionOptions {
   secret?: string;
   debug?: boolean;
   request?: PortalUrlRequestLike;
+}
+
+export function isWorktreeDevAuthEnabled(): boolean {
+  const raw = process.env.TARGON_WORKTREE_DEV_AUTH;
+  if (!raw) {
+    return false;
+  }
+  return truthyValues.has(raw.trim().toLowerCase());
+}
+
+function requireWorktreeDevAuthEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim() === '') {
+    throw new Error(`${name} must be defined when TARGON_WORKTREE_DEV_AUTH is enabled.`);
+  }
+  return value.trim();
+}
+
+function buildRolesClaimFromAuthz(authz: PortalAuthz): RolesClaim {
+  const roles: RolesClaim = {};
+  for (const [appId, grant] of Object.entries(authz.apps)) {
+    roles[appId] = {
+      departments: grant.departments,
+      depts: grant.departments,
+      tenantMemberships: grant.tenantMemberships,
+    };
+  }
+  return roles;
+}
+
+function getWorktreeDevAuthz(): PortalAuthz {
+  const raw = requireWorktreeDevAuthEnv('TARGON_WORKTREE_DEV_AUTHZ_JSON');
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`TARGON_WORKTREE_DEV_AUTHZ_JSON is invalid JSON: ${message}`);
+  }
+
+  const authz = normalizePortalAuthz(parsed);
+  if (!authz) {
+    throw new Error('TARGON_WORKTREE_DEV_AUTHZ_JSON must define a valid authz payload.');
+  }
+  return authz;
+}
+
+async function resolveWorktreeDevPortalPayload(
+  appId: string | undefined,
+  cookieHeader: string | null | undefined,
+): Promise<PortalJwtPayload | null> {
+  if (!isWorktreeDevAuthEnabled()) {
+    return null;
+  }
+
+  const authz = getWorktreeDevAuthz();
+  const payload: PortalJwtPayload = {
+    sub: requireWorktreeDevAuthEnv('TARGON_WORKTREE_DEV_USER_ID'),
+    email: requireWorktreeDevAuthEnv('TARGON_WORKTREE_DEV_USER_EMAIL'),
+    name: requireWorktreeDevAuthEnv('TARGON_WORKTREE_DEV_USER_NAME'),
+    authz,
+    globalRoles: authz.globalRoles,
+    authzVersion: authz.version,
+    roles: buildRolesClaimFromAuthz(authz),
+    apps: Object.keys(authz.apps),
+  };
+
+  if (!appId) {
+    return payload;
+  }
+
+  const activeTenant = await resolveActiveTenantFromCookies({
+    appId,
+    cookieHeader,
+  });
+  return applyActiveTenantOverride(payload, appId, activeTenant);
+}
+
+export async function getWorktreeDevSession(appId?: string): Promise<WorktreeDevSession | null> {
+  const payload = await resolveWorktreeDevPortalPayload(appId, null);
+  if (!payload) {
+    return null;
+  }
+
+  const authz = normalizeAuthzFromClaims(payload);
+  if (!authz || !payload.sub || !payload.email) {
+    throw new Error('Worktree dev auth payload is incomplete.');
+  }
+
+  return {
+    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    user: {
+      id: payload.sub,
+      email: payload.email,
+      name: typeof payload.name === 'string' && payload.name.trim() !== '' ? payload.name : payload.email,
+    },
+    authz,
+    roles: buildRolesClaimFromAuthz(authz),
+    globalRoles: authz.globalRoles,
+    authzVersion: authz.version,
+    activeTenant: typeof payload.activeTenant === 'string' ? payload.activeTenant : null,
+    apps: Object.keys(authz.apps),
+  };
 }
 
 export async function decodePortalSession(options: DecodePortalSessionOptions = {}): Promise<PortalJwtPayload | null> {
@@ -226,6 +344,11 @@ export async function decodePortalSession(options: DecodePortalSessionOptions = 
     secret,
     debug = truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase()),
   } = options;
+
+  const worktreePayload = await resolveWorktreeDevPortalPayload(appId, cookieHeader);
+  if (worktreePayload) {
+    return worktreePayload;
+  }
 
   const header = cookieHeader ?? '';
   if (!header) {

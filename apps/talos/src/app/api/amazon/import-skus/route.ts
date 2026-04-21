@@ -510,7 +510,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     unitDimensionsCm?: string | null
     feeDebug?: {
       referralFeePercent: number | null
-      fbaFee: number | null
       sizeTier: string | null
     }
   }> = []
@@ -610,7 +609,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
     let amazonCategory: string | null = null
     let amazonSubcategory: string | null = null
     let amazonReferralFeePercent: number | null = null
-    let amazonFbaFulfillmentFee: number | null = null
     let amazonSizeTier: string | null = null
     let amazonListingPrice: number | null = null
 
@@ -667,7 +665,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
 
       const fees = await getProductFeesForSku(skuCode, fetchedListingPrice, tenantCode)
       const parsedFees = parseAmazonProductFees(fees)
-      amazonFbaFulfillmentFee = roundToTwoDecimals(parsedFees.fbaFees ?? Number.NaN)
       if (amazonSizeTier === null && parsedFees.sizeTier) {
         amazonSizeTier = parsedFees.sizeTier
       }
@@ -734,7 +731,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         if (amazonSubcategory !== null) skuUpdateData.amazonSubcategory = amazonSubcategory
         if (amazonSizeTier !== null) skuUpdateData.amazonSizeTier = amazonSizeTier
         if (amazonReferralFeePercent !== null) skuUpdateData.amazonReferralFeePercent = amazonReferralFeePercent
-        if (amazonFbaFulfillmentFee !== null) skuUpdateData.amazonFbaFulfillmentFee = amazonFbaFulfillmentFee
         if (amazonListingPrice !== null) skuUpdateData.amazonListingPrice = amazonListingPrice
 
         if (shouldSetItemDimensions && itemTriplet) {
@@ -789,7 +785,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           unitDimensionsCm,
           feeDebug: {
             referralFeePercent: amazonReferralFeePercent,
-            fbaFee: amazonFbaFulfillmentFee,
             sizeTier: amazonSizeTier,
           },
         })
@@ -805,7 +800,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
               amazonSubcategory,
               amazonSizeTier,
               amazonReferralFeePercent,
-              amazonFbaFulfillmentFee,
               amazonListingPrice,
               amazonReferenceWeightKg: null,
               packSize: DEFAULT_PACK_SIZE,
@@ -848,7 +842,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
           unitDimensionsCm,
           feeDebug: {
             referralFeePercent: amazonReferralFeePercent,
-            fbaFee: amazonFbaFulfillmentFee,
             sizeTier: amazonSizeTier,
           },
         })

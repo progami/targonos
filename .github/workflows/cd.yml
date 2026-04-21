@@ -357,6 +357,26 @@ jobs:
           echo "Saving PM2 state once"
           pm2 save
 
+  hosted-auth-health:
+    needs: [detect-changes, deploy]
+    if: github.event_name == 'push' && github.ref_name == 'dev' && needs.detect-changes.outputs.any_app == 'true'
+    continue-on-error: true
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - name: Setup pnpm
+        shell: bash
+        run: corepack enable && corepack prepare pnpm@10.21.0 --activate
+
+      - name: Run hosted auth health smoke against deployed dev
+        shell: bash
+        env:
+          TARGONOS_DEV_DIR: ${{ vars.TARGONOS_DEV_DIR }}
+        run: |
+          set -euo pipefail
+          : "${TARGONOS_DEV_DIR:?Set TARGONOS_DEV_DIR on the self-hosted runner (or as a GitHub Actions repo variable)}"
+          cd "$TARGONOS_DEV_DIR"
+          bash scripts/run-hosted-auth-health.sh dev
+
   # ===========================================
   # MANUAL DEPLOY - For workflow_dispatch
   # ===========================================

@@ -395,3 +395,99 @@ test('hasCapability returns false without authz even when dev bypass env is set'
     false,
   )
 })
+
+test('decodePortalSession returns the dedicated worktree dev session without cookies', async () => {
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 7,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+      xplan: {
+        departments: ['Admin'],
+        tenantMemberships: [],
+      },
+    },
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: null,
+    appId: 'talos',
+  })
+
+  assert.deepEqual(payload, {
+    sub: '11111111-1111-4111-8111-111111111111',
+    email: 'worktree.dev@targonglobal.com',
+    name: 'Worktree Dev',
+    authz: {
+      version: 7,
+      globalRoles: ['platform_admin'],
+      apps: {
+        talos: {
+          departments: ['Ops'],
+          tenantMemberships: ['US', 'UK'],
+        },
+        xplan: {
+          departments: ['Admin'],
+          tenantMemberships: [],
+        },
+      },
+    },
+    globalRoles: ['platform_admin'],
+    authzVersion: 7,
+    roles: {
+      talos: {
+        departments: ['Ops'],
+        depts: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+      xplan: {
+        departments: ['Admin'],
+        depts: ['Admin'],
+        tenantMemberships: [],
+      },
+    },
+    apps: ['talos', 'xplan'],
+  })
+})
+
+test('getCurrentAuthz resolves authz from the dedicated worktree dev session', async () => {
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      argus: {
+        departments: ['Account / Listing'],
+        tenantMemberships: [],
+      },
+    },
+  })
+
+  const authz = await getCurrentAuthz(
+    new Request('http://localhost:41216/argus'),
+    {
+      appId: 'argus',
+    },
+  )
+
+  assert.deepEqual(authz, {
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      argus: {
+        departments: ['Account / Listing'],
+        tenantMemberships: [],
+      },
+    },
+  })
+})

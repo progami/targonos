@@ -93,6 +93,7 @@ LMB.zip
 
 # Claude Code
 .claude/
+.codex/generated/
 
 # Local git worktrees
 .worktrees/

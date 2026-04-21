@@ -4,7 +4,7 @@ import {
   type CaseReportBundle,
   type CaseReportMarketSlug,
 } from '@/lib/cases/reader';
-import { CaseApprovalQueuePage } from '@/components/cases/approval-queue-page';
+import { CasesDrilldownPage } from '@/components/cases/cases-drilldown-page';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,5 +25,5 @@ export default async function DatedCaseReportPage({ params }: CaseReportPageProp
     notFound();
   }
 
-  return <CaseApprovalQueuePage bundle={bundle} />;
+  return <CasesDrilldownPage key={`${bundle.marketSlug}:${bundle.reportDate}`} bundle={bundle} />;
 }

@@ -2,17 +2,62 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches:
+      - dev
   workflow_dispatch:
+    inputs:
+      run_self_hosted_live_auth:
+        description: Run live hosted auth smoke on the self-hosted macOS runner
+        required: false
+        default: false
+        type: boolean
+      hosted_environment:
+        description: Hosted environment for live auth smoke
+        required: false
+        default: dev
+        type: choice
+        options:
+          - dev
+          - main
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build-test-self-hosted:
-    if: vars.USE_SELF_HOSTED == 'true'
+    if: vars.USE_SELF_HOSTED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.run_self_hosted_live_auth == 'true'
     runs-on: [self-hosted, macOS, ARM64]
-    steps: &build-test-steps
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.21.0
+          dest: ${{ runner.temp }}/setup-pnpm-${{ github.job }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc.ci
+        run: |
+          cat > "$NPM_CONFIG_USERCONFIG" <<'EOF'
+          registry=https://registry.npmjs.org/
+          @jsr:registry=https://npm.jsr.io/
+          always-auth=false
+          EOF
+          pnpm install --frozen-lockfile
+      - name: Run live hosted auth smoke
+        shell: bash
+        run: bash scripts/run-hosted-auth-health.sh "${{ github.event.inputs.hosted_environment }}"
+
+  build-test-github-hosted:
+    if: github.event_name != 'pull_request' || github.base_ref != 'main'
+    runs-on: ubuntu-latest
+    steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -61,6 +106,8 @@ jobs:
           cp apps/plutus/.env.dev.ci apps/plutus/.env.local
           cp apps/argus/.env.dev.ci apps/argus/.env.dev
           cp apps/argus/.env.dev.ci apps/argus/.env.local
+      - name: Verify CI env contracts
+        run: node scripts/verify-ci-env-contracts.mjs
       - name: Verify dev environment configuration
         run: bash scripts/verify-dev-env.sh
       - name: Generate Prisma clients (parallel)
@@ -90,36 +137,23 @@ jobs:
         run: pnpm build
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
       - name: Run changed workspace tests
         run: pnpm test
         env:
           APP_CHANGED_SINCE: ${{ steps.changes.outputs.sha }}
-      - name: Install Playwright browsers
-        if: runner.os == 'Linux'
-        run: pnpm exec playwright install --with-deps chromium
-      - name: Run auth topology contract tests
+      - name: Run CI contract tests
+        run: |
+          pnpm run test:auth-topology
+          node --test scripts/verify-ci-env-contracts.test.mjs
+          node --test scripts/verify-promotion-ready.test.mjs
+      - name: Run auth contract tests
         run: |
           pnpm --filter @targon/auth test
           node --test ecosystem.topology.test.cjs
-          pnpm run test:auth-topology
       - name: Run SSO auth smoke tests
         run: pnpm --filter @targon/sso test:auth-smoke
-      - name: Run hosted cross-app auth smoke
-        if: runner.os == 'macOS' && vars.USE_SELF_HOSTED == 'true'
-        env:
-          PORTAL_BASE_URL: https://dev-os.targonglobal.com
-          E2E_PORTAL_USER_ID: user-jarrar
-          E2E_PORTAL_EMAIL: jarrar@targonglobal.com
-          E2E_PORTAL_NAME: Jarrar Amjad
-          E2E_ACTIVE_TENANT: US
-        run: |
-          PM2_RUNTIME_JSON="$(pm2 jlist)"
-          NEXTAUTH_SECRET="$(printf '%s' "$PM2_RUNTIME_JSON" | node -e "const fs=require('fs'); const processes=JSON.parse(fs.readFileSync(0,'utf8')); const app=processes.find((entry)=>entry.name==='dev-targonos'); if (!app) { throw new Error('dev-targonos pm2 process not found'); } const secret=app.pm2_env?.NEXTAUTH_SECRET; if (typeof secret !== 'string' || secret.trim() === '') { throw new Error('dev-targonos NEXTAUTH_SECRET is missing'); } process.stdout.write(secret.trim());")"
-          PORTAL_DB_URL="$(printf '%s' "$PM2_RUNTIME_JSON" | node -e "const fs=require('fs'); const processes=JSON.parse(fs.readFileSync(0,'utf8')); const app=processes.find((entry)=>entry.name==='dev-targonos'); if (!app) { throw new Error('dev-targonos pm2 process not found'); } const value=app.pm2_env?.PORTAL_DB_URL; if (typeof value !== 'string' || value.trim() === '') { throw new Error('dev-targonos PORTAL_DB_URL is missing'); } process.stdout.write(value.trim());")"
-          export NEXTAUTH_SECRET
-          export PORTAL_DB_URL
-          pnpm exec tsx apps/sso/scripts/ensure-hosted-smoke-user.ts
-          pnpm --filter @targon/sso test:hosted-smoke
       - name: Assert portal build/runtime topology
         run: |
           pnpm --filter @targon/sso build
@@ -129,24 +163,54 @@ jobs:
           BUILD_PUBLIC_URL="$build_public_url" \
           RUNTIME_PUBLIC_URL="$runtime_public_url" \
           pnpm run assert:auth-topology
-  build-test-github-hosted:
-    needs:
-      - build-test-self-hosted
-    if: always() && (vars.USE_SELF_HOSTED != 'true' || needs.build-test-self-hosted.result != 'success')
+
+  promotion-ready:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
-    steps: *build-test-steps
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require promotion PR to come from dev
+        shell: bash
+        run: |
+          if [[ "${{ github.head_ref }}" != "dev" ]]; then
+            echo "::error::Promotion PRs to main must come from dev."
+            exit 1
+          fi
+      - name: Require the exact dev SHA to have passed push CI
+        env:
+          GITHUB_API_URL: ${{ github.api_url }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PROMOTION_BRANCH: dev
+          PROMOTION_WORKFLOW_ID: ci.yml
+        run: node scripts/verify-promotion-ready.mjs
+
   build-test:
     needs:
-      - build-test-self-hosted
       - build-test-github-hosted
+      - promotion-ready
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Validate at least one CI path succeeded
+      - name: Validate the required CI path succeeded
         run: |
-          if [[ "${{ needs.build-test-self-hosted.result }}" == "success" || "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
-            echo "A CI execution path completed successfully."
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.base_ref }}" == "main" ]]; then
+            if [[ "${{ needs.promotion-ready.result }}" == "success" ]]; then
+              echo "The promotion gate completed successfully."
+            else
+              echo "The promotion gate did not succeed."
+              exit 1
+            fi
+          elif [[ "${{ needs.build-test-github-hosted.result }}" == "success" ]]; then
+            echo "The required CI path completed successfully."
           else
-            echo "No CI execution path succeeded."
+            echo "The required CI path did not succeed."
             exit 1
           fi

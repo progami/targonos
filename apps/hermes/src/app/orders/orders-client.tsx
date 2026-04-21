@@ -19,6 +19,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { isReviewRequestMarketplaceEnabled } from "@/lib/amazon/policy";
 import { hermesApiUrl } from "@/lib/base-path";
+import { getBackfillReviewRequestSupport } from "./backfill-marketplaces";
 import { useConnectionsStore } from "@/stores/connections-store";
 import { useHermesUiPreferencesStore, type OrdersPreferences } from "@/stores/ui-preferences-store";
 
@@ -235,9 +236,9 @@ export function OrdersClient() {
   const cancelRef = React.useRef(false);
   const [syncNote, setSyncNote] = React.useState<string | null>(null);
 
-  const backfillMarketplaceId = connection?.marketplaceIds[0] ?? "";
-  const backfillReviewRequestsEnabled =
-    backfillMarketplaceId.length > 0 && isReviewRequestMarketplaceEnabled(backfillMarketplaceId);
+  const backfillSupport = getBackfillReviewRequestSupport(connection);
+  const backfillMarketplaceIds = backfillSupport.marketplaceIds;
+  const backfillReviewRequestsEnabled = backfillSupport.reviewRequestsEnabled;
   const detailsReviewRequestsEnabled = detailsOrder ? isReviewRequestMarketplaceEnabled(detailsOrder.marketplaceId) : false;
   let detailsRequeueTitle: string | undefined;
   if (!detailsReviewRequestsEnabled) {
@@ -490,7 +491,7 @@ export function OrdersClient() {
   }
 
   async function runBackfill() {
-    if (!connectionId || !connection?.marketplaceIds?.[0]) {
+    if (!connectionId || backfillMarketplaceIds.length === 0) {
       toast.error("Select an account");
       return;
     }
@@ -540,59 +541,84 @@ export function OrdersClient() {
     setSkippedExpired(0);
     setSyncNote(null);
 
-    const marketplaceId = connection.marketplaceIds[0];
-
-    let nextToken: string | null = null;
     let page = 0;
     let importedTotal = 0;
     let enqueuedTotal = 0;
     let alreadyTotal = 0;
     let expiredTotal = 0;
     try {
-      // eslint-disable-next-line no-constant-condition
-      while (true) {
-        if (cancelRef.current) break;
+      for (const marketplaceId of backfillMarketplaceIds) {
+        let nextToken: string | null = null;
 
-        const body: any = {
-          connectionId,
-          marketplaceId,
-          enqueueReviewRequests: enqueue && backfillReviewRequestsEnabled,
-          schedule: {
-            delayDays,
-            windowEnabled,
-            startHour,
-            endHour,
-            spreadEnabled,
-            spreadMaxMinutes,
-          },
-        };
-
-        if (nextToken) body.nextToken = nextToken;
-        else {
-          body.createdAfter = createdAfter;
-          body.createdBefore = clampCreatedBefore(createdBefore);
-          body.orderStatuses = ["Shipped", "PartiallyShipped", "Unshipped"]; // pragmatic default
-          body.maxResultsPerPage = 100;
-        }
-
-        let attempt = 0;
         // eslint-disable-next-line no-constant-condition
         while (true) {
           if (cancelRef.current) break;
-          attempt += 1;
 
-          setSyncNote(`Fetching page ${page + 1}…`);
-          const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
-          });
+          const body: any = {
+            connectionId,
+            marketplaceId,
+            enqueueReviewRequests: enqueue && isReviewRequestMarketplaceEnabled(marketplaceId),
+            schedule: {
+              delayDays,
+              windowEnabled,
+              startHour,
+              endHour,
+              spreadEnabled,
+              spreadMaxMinutes,
+            },
+          };
 
-          const text = await res.text();
-          let json: any = null;
-          try {
-            json = text ? JSON.parse(text) : null;
-          } catch {
+          if (nextToken) body.nextToken = nextToken;
+          else {
+            body.createdAfter = createdAfter;
+            body.createdBefore = clampCreatedBefore(createdBefore);
+            body.orderStatuses = ["Shipped", "PartiallyShipped", "Unshipped"]; // pragmatic default
+            body.maxResultsPerPage = 100;
+          }
+
+          let attempt = 0;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            if (cancelRef.current) break;
+            attempt += 1;
+
+            setSyncNote(`Fetching ${marketplaceDisplay(marketplaceId)} page ${page + 1}…`);
+            const res = await fetch(hermesApiUrl("/api/orders/backfill"), {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            });
+
+            const text = await res.text();
+            let json: any = null;
+            try {
+              json = text ? JSON.parse(text) : null;
+            } catch {
+              if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
+                const waitMs = gatewayRetryDelayMs(attempt);
+                await waitWithCancel(waitMs, (remainingMs) => {
+                  const remainingSec = Math.ceil(remainingMs / 1000);
+                  return `Gateway error (${res.status}) — retrying in ${remainingSec}s (${attempt}/${maxGatewayAttempts})…`;
+                });
+                continue;
+              }
+
+              throw new Error(`HTTP ${res.status} (non-JSON)`);
+            }
+
+            if (res.status === 429) {
+              const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
+              if (retryAfterMs && retryAfterMs > 0) {
+                const waitMs = retryAfterMs + Math.floor(Math.random() * 250);
+                await waitWithCancel(waitMs, (remainingMs) => {
+                  const remainingSec = Math.ceil(remainingMs / 1000);
+                  return `Rate limited — retrying in ${remainingSec}s…`;
+                });
+                continue;
+              }
+              throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
+            }
+
             if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
               const waitMs = gatewayRetryDelayMs(attempt);
               await waitWithCancel(waitMs, (remainingMs) => {
@@ -602,54 +628,32 @@ export function OrdersClient() {
               continue;
             }
 
-            throw new Error(`HTTP ${res.status} (non-JSON)`);
-          }
-
-          if (res.status === 429) {
-            const retryAfterMs = typeof json?.retryAfterMs === "number" ? json.retryAfterMs : null;
-            if (retryAfterMs && retryAfterMs > 0) {
-              const waitMs = retryAfterMs + Math.floor(Math.random() * 250);
-              await waitWithCancel(waitMs, (remainingMs) => {
-                const remainingSec = Math.ceil(remainingMs / 1000);
-                return `Rate limited — retrying in ${remainingSec}s…`;
-              });
-              continue;
+            if (!res.ok || !json?.ok) {
+              throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
             }
-            throw new Error(typeof json?.error === "string" ? json.error : "Rate limited");
+
+            page += 1;
+            setPages(page);
+
+            importedTotal += json.imported ?? 0;
+            enqueuedTotal += json.enqueue?.enqueued ?? 0;
+            alreadyTotal += json.enqueue?.alreadyExists ?? 0;
+            expiredTotal += json.enqueue?.skippedExpired ?? 0;
+
+            setImported(importedTotal);
+            setEnqueued(enqueuedTotal);
+            setAlreadyExists(alreadyTotal);
+            setSkippedExpired(expiredTotal);
+
+            nextToken = json.nextToken ?? null;
+            break;
           }
 
-          if (isRetryableGatewayStatus(res.status) && attempt <= maxGatewayAttempts) {
-            const waitMs = gatewayRetryDelayMs(attempt);
-            await waitWithCancel(waitMs, (remainingMs) => {
-              const remainingSec = Math.ceil(remainingMs / 1000);
-              return `Gateway error (${res.status}) — retrying in ${remainingSec}s (${attempt}/${maxGatewayAttempts})…`;
-            });
-            continue;
-          }
-
-          if (!res.ok || !json?.ok) {
-            throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`);
-          }
-
-          page += 1;
-          setPages(page);
-
-          importedTotal += json.imported ?? 0;
-          enqueuedTotal += json.enqueue?.enqueued ?? 0;
-          alreadyTotal += json.enqueue?.alreadyExists ?? 0;
-          expiredTotal += json.enqueue?.skippedExpired ?? 0;
-
-          setImported(importedTotal);
-          setEnqueued(enqueuedTotal);
-          setAlreadyExists(alreadyTotal);
-          setSkippedExpired(expiredTotal);
-
-          nextToken = json.nextToken ?? null;
-          break;
+          if (cancelRef.current) break;
+          if (!nextToken) break;
         }
 
         if (cancelRef.current) break;
-        if (!nextToken) break;
       }
 
       if (cancelRef.current) {
@@ -777,8 +781,13 @@ export function OrdersClient() {
                         <Send className="h-4 w-4" />
                         <div>
                           <div className="text-sm font-medium">Queue eligible orders</div>
-                          {!backfillReviewRequestsEnabled && backfillMarketplaceId ? (
+                          {!backfillReviewRequestsEnabled && backfillMarketplaceIds.length > 0 ? (
                             <div className="text-xs text-muted-foreground">US review requests are disabled.</div>
+                          ) : null}
+                          {backfillReviewRequestsEnabled && backfillSupport.disabledMarketplaceIds.length > 0 ? (
+                            <div className="text-xs text-muted-foreground">
+                              Queueing stays enabled for supported marketplaces. US remains disabled.
+                            </div>
                           ) : null}
                         </div>
                       </div>
