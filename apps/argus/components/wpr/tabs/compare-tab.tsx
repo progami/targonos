@@ -19,8 +19,8 @@ import {
 import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
-  formatChangeMarkerLabel,
   RechartsChangeMarkers,
+  WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
@@ -33,6 +33,7 @@ import {
   panelSx,
   panelTitleSx,
   textMuted,
+  textPrimary,
   textSecondary,
 } from '@/lib/wpr/panel-tokens'
 import {
@@ -45,6 +46,20 @@ import {
 import { CompareChartLegend } from './compare-chart-legend'
 
 const LINE_COLORS = ['#00C2B9', '#f5a623', '#8fc7ff', '#a78bfa', '#d5ff62', '#ff8a80']
+
+const compareTooltipProps = {
+  contentStyle: {
+    background: 'rgba(0,20,35,0.96)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 8,
+  },
+  labelStyle: {
+    color: textPrimary,
+  },
+  itemStyle: {
+    color: textSecondary,
+  },
+}
 
 function colorForRank(rank: number | null): string {
   if (rank === null) {
@@ -200,14 +215,6 @@ export default function CompareTab({
     return formatCount(value)
   }
 
-  const rankTooltipFormatter = (value: number | string) => {
-    if (typeof value !== 'number') {
-      return String(value)
-    }
-
-    return formatDecimal(value, 1)
-  }
-
   const ppcTooltipFormatter = (value: number | string, key: string) => {
     if (typeof value !== 'number') {
       return String(value)
@@ -251,7 +258,38 @@ export default function CompareTab({
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                   <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
-                  <Tooltip labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))} />
+                  <Tooltip
+                    content={({ active, payload, label }) => (
+                      <WprChangeTooltipContent
+                        active={active}
+                        payload={payload}
+                        label={label}
+                        changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
+                        formatRow={(entry) => {
+                          const value = entry.value
+                          if (typeof value !== 'number') {
+                            throw new Error(`Invalid Compare brand-metrics tooltip value for ${String(entry.dataKey)}`)
+                          }
+
+                          const color = entry.color
+                          if (color === undefined) {
+                            throw new Error(`Missing Compare brand-metrics tooltip color for ${String(entry.dataKey)}`)
+                          }
+
+                          const name = entry.name
+                          if (name === undefined) {
+                            throw new Error(`Missing Compare brand-metrics tooltip label for ${String(entry.dataKey)}`)
+                          }
+
+                          return {
+                            label: String(name),
+                            value: formatCompactNumber(value),
+                            color,
+                          }
+                        }}
+                      />
+                    )}
+                  />
                   <RechartsChangeMarkers markers={weeklyChangeMarkers} />
                   <Legend content={<CompareChartLegend />} />
                   <Line type="monotone" dataKey="awareness" name="Awareness" stroke="#8fc7ff" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#8fc7ff' }} activeDot={{ r: 3.5 }} />
@@ -337,7 +375,7 @@ export default function CompareTab({
                       tick={{ fontSize: 10 }}
                     />
                     <ZAxis dataKey="market_purchases" range={[90, 360]} name="Root demand" />
-                    <Tooltip cursor={{ strokeDasharray: '3 3' }} formatter={scatterTooltipFormatter} />
+                    <Tooltip {...compareTooltipProps} cursor={{ strokeDasharray: '3 3' }} formatter={scatterTooltipFormatter} />
                     <Scatter data={scatterRows} fill="#00C2B9" stroke="#0E3A60" strokeOpacity={0.18} />
                   </ScatterChart>
                 </ResponsiveChartFrame>
@@ -378,8 +416,37 @@ export default function CompareTab({
                       <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                       <YAxis reversed tickFormatter={(value) => formatDecimal(value, 1)} tick={{ fontSize: 10 }} />
                       <Tooltip
-                        formatter={rankTooltipFormatter}
-                        labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))}
+                        content={({ active, payload, label }) => (
+                          <WprChangeTooltipContent
+                            active={active}
+                            payload={payload}
+                            label={label}
+                            changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
+                            formatRow={(entry) => {
+                              const key = entry.dataKey
+                              if (key === undefined) {
+                                throw new Error('Missing Compare rank-trend tooltip data key')
+                              }
+
+                              const value = entry.value
+                              if (typeof value !== 'number') {
+                                throw new Error(`Invalid Compare rank-trend tooltip value for ${String(key)}`)
+                              }
+
+                              const color = entry.color
+                              if (color === undefined) {
+                                throw new Error(`Missing Compare rank-trend tooltip color for ${String(key)}`)
+                              }
+
+                              const name = entry.name
+                              return {
+                                label: String(name ?? key),
+                                value: formatDecimal(value, 1),
+                                color,
+                              }
+                            }}
+                          />
+                        )}
                       />
                       <ReferenceLine y={10} stroke="rgba(255,255,255,0.08)" />
                       <RechartsChangeMarkers markers={weeklyChangeMarkers} />
@@ -441,7 +508,7 @@ export default function CompareTab({
                     tick={{ fontSize: 10 }}
                     tickFormatter={(value: string) => (value.length > 18 ? `${value.slice(0, 18)}...` : value)}
                   />
-                  <Tooltip formatter={ppcTooltipFormatter} />
+                  <Tooltip {...compareTooltipProps} formatter={ppcTooltipFormatter} />
                   <Legend content={<CompareChartLegend />} />
                   <Bar dataKey="ppc_spend" fill="#0E3A60" radius={[0, 6, 6, 0]} name="PPC spend" />
                   <Bar dataKey="ppc_sales" fill="#00C2B9" radius={[0, 6, 6, 0]} name="PPC sales" />
