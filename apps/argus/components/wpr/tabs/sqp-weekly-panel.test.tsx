@@ -90,7 +90,7 @@ test('SQP weekly chart renders hover tooltip content for the active week', () =>
   )
 
   assert.match(markup, /data-hover-tooltip=\"sqp\"/)
-  assert.match(markup, /W02 · 2 changes/)
+  assert.match(markup, /W02 · 08 Jan - 14 Jan 26 · 2 changes/)
   assert.match(markup, /Content update across 4 ASINs/)
   assert.match(markup, /Price update across 4 ASINs/)
   assert.doesNotMatch(markup, /tracked changes/)
@@ -113,7 +113,7 @@ test('SQP weekly chart omits hover tooltip markup when no week is active', () =>
   )
 
   assert.doesNotMatch(markup, /data-hover-tooltip=\"sqp\"/)
-  assert.doesNotMatch(markup, /W02 · 2 changes/)
+  assert.doesNotMatch(markup, /W02 · 08 Jan - 14 Jan 26 · 2 changes/)
   assert.doesNotMatch(markup, /Impr Share/)
 })
 

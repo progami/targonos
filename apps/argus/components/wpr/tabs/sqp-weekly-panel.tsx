@@ -17,6 +17,7 @@ import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/compo
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
 import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
+import { formatWeekLabelWithDateRange } from '@/lib/wpr/week-display'
 import {
   rateRatio,
   type SqpAggregatedMetrics,
@@ -32,6 +33,7 @@ type SqpHeroContent = {
 
 type ChartPoint = {
   week_label: string
+  start_date: string
   impr_points: number
   ctr_adv: number
   atc_adv: number
@@ -220,6 +222,7 @@ export function SqpWeeklySvg({
 
     return {
       week_label: week.week_label,
+      start_date: week.start_date,
       impr_points: week.metrics.impression_share * 100,
       ctr_ratio: ctrRatio,
       atc_ratio: atcRatio,
@@ -286,7 +289,10 @@ export function SqpWeeklySvg({
       color: series.color,
       value: formatSeriesTooltipValue(hoveredPoint, series),
     }))
-    const tooltipLabelParts = buildChangeMarkerLabelParts(hoveredPoint.week_label, hoveredMarker)
+    const tooltipLabelParts = buildChangeMarkerLabelParts(
+      formatWeekLabelWithDateRange(hoveredPoint.week_label, hoveredPoint.start_date),
+      hoveredMarker,
+    )
     const tooltipHeader = tooltipLabelParts[0]
     if (tooltipHeader === undefined) {
       throw new Error(`Missing SQP tooltip header for ${hoveredPoint.week_label}`)

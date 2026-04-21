@@ -34,6 +34,7 @@ import {
 import { formatCount, formatPercent } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
+import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
 
@@ -75,18 +76,6 @@ const businessReportsViewToggleGroupSx = {
 
 function blankMetricValue(): string {
   return '---'
-}
-
-function windowRangeLabel(weeks: string[]): string {
-  if (weeks.length === 0) {
-    return ''
-  }
-
-  if (weeks.length === 1) {
-    return weeks[0]
-  }
-
-  return `${weeks[0]} - ${weeks[weeks.length - 1]}`
 }
 
 function dailyWindowLabel(dailySeries: WprBusinessDailyPoint[]): string {
@@ -247,6 +236,7 @@ function BusinessReportsChangeOverlay({
 function BusinessReportsChart({
   viewMode,
   weekly,
+  weekStartDates,
   dailySeries,
   changeEntries,
   wowVisible,
@@ -255,6 +245,7 @@ function BusinessReportsChart({
 }: {
   viewMode: BusinessReportsViewMode
   weekly: BusinessReportsSelectionViewModel['weekly']
+  weekStartDates: Record<string, string>
   dailySeries: WprBusinessDailyPoint[]
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprBrWowVisible
@@ -328,6 +319,7 @@ function BusinessReportsChart({
                   active={active}
                   payload={payload}
                   label={label}
+                  labelText={viewMode === 'weekly' ? formatWeekLabelFromLookup(String(label), weekStartDates) : undefined}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey
@@ -553,7 +545,9 @@ export default function BusinessReportsTab({
     )
   }
 
-  const heroContent = buildHeroContent(selectedWeekLabel)
+  const weekStartDates = buildBundleWeekStartDateLookup(bundle)
+  const formattedSelectedWeekLabel = formatWeekLabelFromLookup(selectedWeekLabel, weekStartDates)
+  const heroContent = buildHeroContent(formattedSelectedWeekLabel)
   const selectedRecord = selectedWeekBusinessRecord(viewModel.weekly, selectedWeekLabel)
   const blankTopValues = viewModel.scopeType === 'empty' || selectedRecord === null || viewModel.current === null
   const currentMetrics = viewModel.current
@@ -564,13 +558,13 @@ export default function BusinessReportsTab({
   }
   const chartWindowLabel = viewMode === 'daily'
     ? dailyWindowLabel(dailyChartSeries)
-    : windowRangeLabel(bundle.meta.baselineWindow)
+    : formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const footerItems = [
     `Source: Business Reports`,
     `Scope: detail page retail`,
     `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
     `Target ASIN: ${bundle.businessReports.meta.targetAsin}`,
-    `Table week: ${selectedWeekLabel}`,
+    `Table week: ${formattedSelectedWeekLabel}`,
     `Chart window: ${chartWindowLabel}`,
   ]
 
@@ -601,6 +595,7 @@ export default function BusinessReportsTab({
         <BusinessReportsChart
           viewMode={viewMode}
           weekly={viewModel.weekly}
+          weekStartDates={weekStartDates}
           dailySeries={dailyChartSeries}
           changeEntries={changeEntries}
           wowVisible={brWowVisible}

@@ -119,6 +119,7 @@ export default function WprDashboardShell() {
         activeTab={activeTab}
         selectedWeek={selectedWeek}
         weeks={weeksQuery.data.weeks}
+        weekStartDates={weeksQuery.data.weekStartDates}
         onSelectTab={handleSelectTab}
         onSelectWeek={setSelectedWeek}
       />

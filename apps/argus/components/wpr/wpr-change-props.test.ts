@@ -18,6 +18,7 @@ test('dashboard shell loads weeks and the selected week bundle instead of the fu
   assert.match(shellSource, /useWprWeekBundleQuery/)
   assert.match(shellSource, /useWprChangeLogWeekQuery/)
   assert.match(shellSource, /useWprSourcesQuery\(activeTab === 'sources'\)/)
+  assert.match(shellSource, /weekStartDates=\{weeksQuery\.data\.weekStartDates\}/)
 })
 
 test('tst tab forwards change entries into the weekly panel', () => {
