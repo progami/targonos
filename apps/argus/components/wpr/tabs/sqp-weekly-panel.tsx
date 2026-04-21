@@ -3,6 +3,11 @@
 import React, { useState, type JSX } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
+import {
+  buildChangeMarkerLabelParts,
+  buildChangeMarkerLookup,
+  buildWeeklyChangeMarkers,
+} from '@/components/wpr/chart-change-markers'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
 import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
@@ -72,24 +77,6 @@ function formatPoints(value: number): string {
 
 function blankMetricValue(): string {
   return '---'
-}
-
-function buildChangeMarkerMap(changeEntries: WprChangeLogEntry[]): Map<string, { count: number; titles: string[] }> {
-  const info = new Map<string, { count: number; titles: string[] }>()
-  for (const entry of changeEntries) {
-    const existing = info.get(entry.week_label)
-    if (existing === undefined) {
-      info.set(entry.week_label, { count: 1, titles: [entry.title] })
-      continue
-    }
-
-    existing.count += 1
-    if (existing.titles.length < 3) {
-      existing.titles.push(entry.title)
-    }
-  }
-
-  return info
 }
 
 function SqpFooter({
@@ -240,15 +227,6 @@ function buildRatioFillPolygons(
   return polygons
 }
 
-function formatTooltipHeader(weekLabel: string, changeMarker: { count: number } | undefined): string {
-  if (changeMarker === undefined) {
-    return weekLabel
-  }
-
-  const changeNoun = changeMarker.count === 1 ? 'change' : 'changes'
-  return `${weekLabel} · ${changeMarker.count} ${changeNoun}`
-}
-
 function formatSeriesTooltipValue(point: ChartPoint, series: ChartSeriesMeta): string {
   if (series.kind === 'points') {
     return formatPoints(point[series.valueField])
@@ -297,7 +275,7 @@ export function SqpWeeklySvg({
     throw new Error(`Invalid SQP weekly chart frame dimensions ${width}x${height}`)
   }
 
-  const changeMarkers = buildChangeMarkerMap(changeEntries)
+  const changeMarkers = buildChangeMarkerLookup(buildWeeklyChangeMarkers(changeEntries))
   const points: ChartPoint[] = weekly.map((week) => {
     const ctrRatio = rateRatio(week.metrics.asin_ctr, week.metrics.market_ctr)
     const atcRatio = rateRatio(week.metrics.asin_cart_add_rate, week.metrics.cart_add_rate)
@@ -371,13 +349,20 @@ export function SqpWeeklySvg({
       color: series.color,
       value: formatSeriesTooltipValue(hoveredPoint, series),
     }))
-    const tooltipWidth = crampedLayout ? 138 : compactLayout ? 154 : 170
+    const tooltipLabelParts = buildChangeMarkerLabelParts(hoveredPoint.week_label, hoveredMarker)
+    const tooltipHeader = tooltipLabelParts[0]
+    if (tooltipHeader === undefined) {
+      throw new Error(`Missing SQP tooltip header for ${hoveredPoint.week_label}`)
+    }
+
+    const changeDetailLines = tooltipLabelParts.slice(1)
+    const tooltipWidth = crampedLayout ? 146 : compactLayout ? 170 : 188
     const tooltipHeaderFontSize = crampedLayout ? 8 : 9
     const tooltipRowFontSize = crampedLayout ? 7 : 8
     const tooltipRowHeight = crampedLayout ? 13 : 15
     const tooltipPaddingX = crampedLayout ? 8 : 10
     const tooltipTop = margin.top + 8
-    const changeLineCount = hoveredMarker === undefined ? 0 : 1
+    const changeLineCount = changeDetailLines.length
     const tooltipHeight = 22 + tooltipRows.length * tooltipRowHeight + changeLineCount * tooltipRowHeight + 8
     const tooltipMinX = margin.left + 4
     let tooltipMaxX = width - margin.right - tooltipWidth
@@ -391,8 +376,6 @@ export function SqpWeeklySvg({
     if (tooltipX > tooltipMaxX) {
       tooltipX = tooltipMaxX
     }
-
-    const tooltipHeader = formatTooltipHeader(hoveredPoint.week_label, hoveredMarker)
     const activeX = xPosition(activeHoverIndex)
 
     hoverTooltip = (
@@ -449,16 +432,17 @@ export function SqpWeeklySvg({
               </g>
             )
           })}
-          {hoveredMarker !== undefined ? (
+          {changeDetailLines.map((line, lineIndex) => (
             <text
+              key={`${hoveredPoint.week_label}-change-${lineIndex}`}
               x={tooltipPaddingX}
-              y={30 + tooltipRows.length * tooltipRowHeight}
+              y={30 + tooltipRows.length * tooltipRowHeight + lineIndex * tooltipRowHeight}
               fill="rgba(255,255,255,0.58)"
               fontSize={tooltipRowFontSize}
             >
-              {`${hoveredMarker.count} tracked changes`}
+              {line}
             </text>
-          ) : null}
+          ))}
         </g>
         {visibleSeries.map((series) => (
           <circle

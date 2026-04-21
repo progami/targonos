@@ -1,11 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
 import {
+  buildChangeMarkerLabelParts,
   buildDailyChangeMarkers,
   buildWeeklyChangeMarkers,
   formatChangeMarkerLabel,
+  WprChangeTooltipContent,
 } from './chart-change-markers'
 
 const weeklyEntries: WprChangeLogEntry[] = [
@@ -96,6 +100,51 @@ test('formatChangeMarkerLabel includes tracked changes in hover labels', () => {
     'W14 · 2 changes · Content update across 4 ASINs · Price update across 4 ASINs',
   )
   assert.equal(formatChangeMarkerLabel('W16', undefined), 'W16')
+})
+
+test('buildChangeMarkerLabelParts keeps standardized change copy split into display lines', () => {
+  const marker = buildWeeklyChangeMarkers(weeklyEntries)[0]
+  if (marker === undefined) {
+    throw new Error('Missing weekly change marker')
+  }
+
+  assert.deepEqual(buildChangeMarkerLabelParts('W14', marker), [
+    'W14 · 2 changes',
+    'Content update across 4 ASINs',
+    'Price update across 4 ASINs',
+  ])
+  assert.deepEqual(buildChangeMarkerLabelParts('W16', undefined), ['W16'])
+})
+
+test('WprChangeTooltipContent renders every change title on its own line', () => {
+  const marker = buildWeeklyChangeMarkers(weeklyEntries)[0]
+  if (marker === undefined) {
+    throw new Error('Missing weekly change marker')
+  }
+
+  const markup = renderToStaticMarkup(
+    React.createElement(WprChangeTooltipContent, {
+      active: true,
+      label: 'W14',
+      changeMarker: marker,
+      payload: [
+        {
+          name: 'CTR',
+          value: '12.4%',
+          color: '#8fc7ff',
+        },
+      ],
+      formatRow: (entry) => ({
+        label: String(entry.name),
+        value: String(entry.value),
+        color: String(entry.color),
+      }),
+    }),
+  )
+
+  assert.match(markup, /W14 · 2 changes/)
+  assert.match(markup, /Content update across 4 ASINs/)
+  assert.match(markup, /Price update across 4 ASINs/)
 })
 
 test('RechartsChangeMarkers renders the reference lines on a front z-index layer', () => {
