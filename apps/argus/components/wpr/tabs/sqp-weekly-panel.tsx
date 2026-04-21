@@ -1,6 +1,6 @@
 'use client'
 
-import type { JSX } from 'react'
+import React, { useState, type JSX } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
@@ -47,7 +47,7 @@ type ChartSeriesMeta = {
   ratioField?: keyof Pick<ChartPoint, 'ctr_ratio' | 'atc_ratio' | 'cvr_ratio'>
 }
 
-const SQP_WOW_SERIES: ChartSeriesMeta[] = [
+export const SQP_WOW_SERIES: ChartSeriesMeta[] = [
   { key: 'impr', label: 'Impr Share', color: '#8fc7ff', kind: 'points', valueField: 'impr_points' },
   { key: 'ctr', label: 'CTR x', color: '#e0a4ff', kind: 'ratio', valueField: 'ctr_adv', ratioField: 'ctr_ratio' },
   { key: 'atc', label: 'ATC x', color: '#f5a623', kind: 'ratio', valueField: 'atc_adv', ratioField: 'atc_ratio' },
@@ -240,18 +240,44 @@ function buildRatioFillPolygons(
   return polygons
 }
 
-function SqpWeeklySvg({
+function formatTooltipHeader(weekLabel: string, changeMarker: { count: number } | undefined): string {
+  if (changeMarker === undefined) {
+    return weekLabel
+  }
+
+  const changeNoun = changeMarker.count === 1 ? 'change' : 'changes'
+  return `${weekLabel} · ${changeMarker.count} ${changeNoun}`
+}
+
+function formatSeriesTooltipValue(point: ChartPoint, series: ChartSeriesMeta): string {
+  if (series.kind === 'points') {
+    return formatPoints(point[series.valueField])
+  }
+
+  const ratioField = series.ratioField
+  if (ratioField === undefined) {
+    throw new Error(`Missing SQP ratio field for ${series.key}`)
+  }
+
+  return formatRatio(point[ratioField])
+}
+
+export function SqpWeeklySvg({
   weekly,
   changeEntries,
   visibleSeries,
   width,
   height,
+  hoveredIndex,
+  onHoverIndexChange,
 }: {
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   visibleSeries: ChartSeriesMeta[]
   width?: number
   height?: number
+  hoveredIndex: number | null
+  onHoverIndexChange: (index: number | null) => void
 }) {
   if (width === undefined || height === undefined) {
     throw new Error('Missing SQP weekly chart frame size')
@@ -326,9 +352,140 @@ function SqpWeeklySvg({
   const valueFontSize = crampedLayout ? 8 : 9
   const weekFontSize = crampedLayout ? 8 : 9
   const valueLabelX = width - margin.right + (crampedLayout ? 4 : 8)
+  let activeHoverIndex: number | null = null
+  if (hoveredIndex !== null && hoveredIndex >= 0 && hoveredIndex < points.length) {
+    activeHoverIndex = hoveredIndex
+  }
+
+  let hoverTooltip: JSX.Element | null = null
+  if (activeHoverIndex !== null) {
+    const hoveredPoint = points[activeHoverIndex]
+    if (hoveredPoint === undefined) {
+      throw new Error(`Missing SQP hover point at index ${activeHoverIndex}`)
+    }
+
+    const hoveredMarker = changeMarkers.get(hoveredPoint.week_label)
+    const tooltipRows = visibleSeries.map((series) => ({
+      key: series.key,
+      label: series.label,
+      color: series.color,
+      value: formatSeriesTooltipValue(hoveredPoint, series),
+    }))
+    const tooltipWidth = crampedLayout ? 138 : compactLayout ? 154 : 170
+    const tooltipHeaderFontSize = crampedLayout ? 8 : 9
+    const tooltipRowFontSize = crampedLayout ? 7 : 8
+    const tooltipRowHeight = crampedLayout ? 13 : 15
+    const tooltipPaddingX = crampedLayout ? 8 : 10
+    const tooltipTop = margin.top + 8
+    const changeLineCount = hoveredMarker === undefined ? 0 : 1
+    const tooltipHeight = 22 + tooltipRows.length * tooltipRowHeight + changeLineCount * tooltipRowHeight + 8
+    const tooltipMinX = margin.left + 4
+    let tooltipMaxX = width - margin.right - tooltipWidth
+    if (tooltipMaxX < tooltipMinX) {
+      tooltipMaxX = tooltipMinX
+    }
+    let tooltipX = xPosition(activeHoverIndex) + 12
+    if (tooltipX < tooltipMinX) {
+      tooltipX = tooltipMinX
+    }
+    if (tooltipX > tooltipMaxX) {
+      tooltipX = tooltipMaxX
+    }
+
+    const tooltipHeader = formatTooltipHeader(hoveredPoint.week_label, hoveredMarker)
+    const activeX = xPosition(activeHoverIndex)
+
+    hoverTooltip = (
+      <g data-hover-tooltip="sqp" pointerEvents="none">
+        <line
+          x1={activeX}
+          x2={activeX}
+          y1={margin.top}
+          y2={height - margin.bottom}
+          stroke="rgba(255,255,255,0.22)"
+          strokeWidth="1.2"
+          strokeDasharray="4 4"
+        />
+        <g transform={`translate(${tooltipX}, ${tooltipTop})`}>
+          <rect
+            width={tooltipWidth}
+            height={tooltipHeight}
+            rx="9"
+            fill="rgba(0,20,35,0.96)"
+            stroke="rgba(255,255,255,0.08)"
+          />
+          <text
+            x={tooltipPaddingX}
+            y={15}
+            fill="rgba(255,255,255,0.92)"
+            fontSize={tooltipHeaderFontSize}
+            fontWeight="700"
+          >
+            {tooltipHeader}
+          </text>
+          {tooltipRows.map((row, rowIndex) => {
+            const rowY = 30 + rowIndex * tooltipRowHeight
+            return (
+              <g key={row.key}>
+                <circle cx={tooltipPaddingX + 3} cy={rowY - 3} r="2.6" fill={row.color} />
+                <text
+                  x={tooltipPaddingX + 10}
+                  y={rowY}
+                  fill="rgba(255,255,255,0.74)"
+                  fontSize={tooltipRowFontSize}
+                >
+                  {row.label}
+                </text>
+                <text
+                  x={tooltipWidth - tooltipPaddingX}
+                  y={rowY}
+                  fill="rgba(255,255,255,0.9)"
+                  fontSize={tooltipRowFontSize}
+                  fontWeight="700"
+                  textAnchor="end"
+                >
+                  {row.value}
+                </text>
+              </g>
+            )
+          })}
+          {hoveredMarker !== undefined ? (
+            <text
+              x={tooltipPaddingX}
+              y={30 + tooltipRows.length * tooltipRowHeight}
+              fill="rgba(255,255,255,0.58)"
+              fontSize={tooltipRowFontSize}
+            >
+              {`${hoveredMarker.count} tracked changes`}
+            </text>
+          ) : null}
+        </g>
+        {visibleSeries.map((series) => (
+          <circle
+            key={`active-${series.key}`}
+            cx={activeX}
+            cy={yPosition(hoveredPoint[series.valueField])}
+            r={4.2}
+            fill={series.color}
+            stroke="#09100f"
+            strokeWidth="1.8"
+          />
+        ))}
+      </g>
+    )
+  }
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" role="img" aria-label="SQP weekly performance chart">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      width="100%"
+      height="100%"
+      role="img"
+      aria-label="SQP weekly performance chart"
+      onMouseLeave={() => {
+        onHoverIndexChange(null)
+      }}
+    >
       {minValue < 0 ? (
         <line
           x1={margin.left}
@@ -427,18 +584,44 @@ function SqpWeeklySvg({
         )
       })}
 
+      {hoverTooltip}
+
       {weekly.map((week, index) => (
         <text
           key={week.week_label}
           x={xPosition(index)}
           y={height - 6}
-          fill="#93a399"
+          fill={activeHoverIndex === index ? 'rgba(255,255,255,0.86)' : '#93a399'}
           fontSize={weekFontSize}
+          fontWeight={activeHoverIndex === index ? '700' : '500'}
           textAnchor="middle"
         >
           {week.week_label}
         </text>
       ))}
+
+      {points.map((point, index) => {
+        const currentX = xPosition(index)
+        const previousX = index === 0 ? margin.left : (xPosition(index - 1) + currentX) / 2
+        const nextX = index === points.length - 1 ? width - margin.right : (currentX + xPosition(index + 1)) / 2
+        return (
+          <rect
+            key={`hover-zone-${point.week_label}`}
+            x={previousX}
+            y={margin.top}
+            width={nextX - previousX}
+            height={plotHeight}
+            fill="transparent"
+            pointerEvents="all"
+            onMouseEnter={() => {
+              onHoverIndexChange(index)
+            }}
+            onMouseMove={() => {
+              onHoverIndexChange(index)
+            }}
+          />
+        )
+      })}
     </svg>
   )
 }
@@ -454,6 +637,7 @@ function SqpWeeklyChart({
   wowVisible: WprSqpWowVisible
   setWowVisible: (nextState: WprSqpWowVisible) => void
 }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
   let chartBody: JSX.Element
   if (weekly.length === 0) {
@@ -491,30 +675,43 @@ function SqpWeeklyChart({
   } else {
     chartBody = (
       <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
-        <SqpWeeklySvg weekly={weekly} changeEntries={changeEntries} visibleSeries={visibleSeries} />
+        <SqpWeeklySvg
+          weekly={weekly}
+          changeEntries={changeEntries}
+          visibleSeries={visibleSeries}
+          hoveredIndex={hoveredIndex}
+          onHoverIndexChange={setHoveredIndex}
+        />
       </ResponsiveChartFrame>
     )
   }
 
   return (
     <Stack spacing={1.5}>
-      <Box sx={chartControlRailSx}>
-        {SQP_WOW_SERIES.map((series) => (
-          <Button
-            key={series.key}
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                [series.key]: !wowVisible[series.key],
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible[series.key], series.color)}
-          >
-            {series.label}
-          </Button>
-        ))}
+      <Box
+        sx={{
+          ...chartControlRailSx,
+          justifyContent: 'flex-start',
+        }}
+      >
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {SQP_WOW_SERIES.map((series) => (
+            <Button
+              key={series.key}
+              size="small"
+              variant="outlined"
+              onClick={() => {
+                setWowVisible({
+                  ...wowVisible,
+                  [series.key]: !wowVisible[series.key],
+                })
+              }}
+              sx={chartToggleButtonSx(wowVisible[series.key], series.color)}
+            >
+              {series.label}
+            </Button>
+          ))}
+        </Box>
       </Box>
 
       {chartBody}

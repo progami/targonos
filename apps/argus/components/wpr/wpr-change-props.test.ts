@@ -10,6 +10,16 @@ test('dashboard shell passes change entries into all week-based WPR tabs', () =>
   assert.match(shellSource, /<CompareTab bundle=\{bundle\} changeEntries=\{changeEntries\} \/>/)
 })
 
+test('dashboard shell loads weeks and the selected week bundle instead of the full WPR payload', () => {
+  const shellSource = readFileSync(new URL('./wpr-dashboard-shell.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(shellSource, /useWprPayloadQuery/)
+  assert.match(shellSource, /useWprWeeksQuery/)
+  assert.match(shellSource, /useWprWeekBundleQuery/)
+  assert.match(shellSource, /useWprChangeLogWeekQuery/)
+  assert.match(shellSource, /useWprSourcesQuery\(activeTab === 'sources'\)/)
+})
+
 test('tst tab forwards change entries into the weekly panel', () => {
   const tabSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
 
