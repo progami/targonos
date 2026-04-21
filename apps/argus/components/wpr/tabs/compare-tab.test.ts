@@ -10,3 +10,13 @@ test('compare tab uses custom legend content for chart legends', () => {
   assert.equal(legendUsages.length, 3)
   assert.equal(customLegendUsages.length, 3)
 })
+
+test('compare tab applies shared dark tooltip styling to all chart tooltips', () => {
+  const source = readFileSync(new URL('./compare-tab.tsx', import.meta.url), 'utf8')
+  const tooltipUsages = source.match(/<Tooltip\b[\s\S]*?\/>/g) ?? []
+  const sharedTooltipUsages = tooltipUsages.filter((usage) => usage.includes('{...compareTooltipProps}'))
+
+  assert.match(source, /const compareTooltipProps = \{/)
+  assert.equal(tooltipUsages.length, 4)
+  assert.equal(sharedTooltipUsages.length, 4)
+})

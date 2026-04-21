@@ -87,3 +87,13 @@ export async function getWprChangeLog(): Promise<Record<WeekLabel, WprChangeLogE
   const payload = await loadPayload();
   return payload.changeLogByWeek;
 }
+
+export async function getWprChangeLogWeek(week: WeekLabel): Promise<WprChangeLogEntry[]> {
+  const payload = await loadPayload();
+  const entries = payload.changeLogByWeek[week];
+  if (entries === undefined) {
+    throw new Error(`Unknown WPR week: ${week}`);
+  }
+
+  return entries;
+}
