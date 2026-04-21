@@ -258,7 +258,7 @@ function canQueryDatabase(databaseUrl) {
   return false;
 }
 
-function resolveWorktreeRoot() {
+export function resolveWorktreeRoot() {
   const worktreeRoot = process.env.CODEX_WORKTREE_PATH;
   if (worktreeRoot === undefined) {
     fail('CODEX_WORKTREE_PATH is required for Prisma readiness checks');
@@ -269,7 +269,19 @@ function resolveWorktreeRoot() {
   return worktreeRoot.trim();
 }
 
-function buildPrismaProbeScript(clientPath, databaseUrl) {
+export function buildPrismaClientPath(worktreeRoot) {
+  return path.join(
+    worktreeRoot,
+    'packages',
+    'auth',
+    'node_modules',
+    '.prisma',
+    'client-auth',
+    'index.js',
+  );
+}
+
+export function buildPrismaProbeScript(clientPath, databaseUrl) {
   return `
 const { PrismaClient } = require(${JSON.stringify(clientPath)});
 const prisma = new PrismaClient({ datasources: { db: { url: ${JSON.stringify(databaseUrl)} } } });
@@ -292,15 +304,7 @@ const prisma = new PrismaClient({ datasources: { db: { url: ${JSON.stringify(dat
 
 function canQueryPrisma(databaseUrl) {
   const worktreeRoot = resolveWorktreeRoot();
-  const clientPath = path.join(
-    worktreeRoot,
-    'packages',
-    'auth',
-    'node_modules',
-    '.prisma',
-    'client-auth',
-    'index.js',
-  );
+  const clientPath = buildPrismaClientPath(worktreeRoot);
 
   const result = tryRunCommand(
     'node',

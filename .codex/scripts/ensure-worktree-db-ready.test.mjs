@@ -1,8 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 
 import {
+  buildPrismaClientPath,
+  buildPrismaProbeScript,
   parsePostmasterPid,
+  resolveWorktreeRoot,
   shouldRemoveStalePostmasterPid,
 } from './ensure-worktree-db-ready.mjs';
 
@@ -94,4 +98,65 @@ test('shouldRemoveStalePostmasterPid returns true when the process is gone', () 
     }),
     true,
   );
+});
+
+test('resolveWorktreeRoot trims CODEX_WORKTREE_PATH', () => {
+  const previous = process.env.CODEX_WORKTREE_PATH;
+
+  process.env.CODEX_WORKTREE_PATH = '  /tmp/worktree-root  ';
+
+  try {
+    assert.equal(resolveWorktreeRoot(), '/tmp/worktree-root');
+  } finally {
+    if (previous === undefined) {
+      delete process.env.CODEX_WORKTREE_PATH;
+    } else {
+      process.env.CODEX_WORKTREE_PATH = previous;
+    }
+  }
+});
+
+test('resolveWorktreeRoot fails when CODEX_WORKTREE_PATH is missing', () => {
+  const previous = process.env.CODEX_WORKTREE_PATH;
+  delete process.env.CODEX_WORKTREE_PATH;
+
+  try {
+    assert.throws(
+      () => resolveWorktreeRoot(),
+      /CODEX_WORKTREE_PATH is required for Prisma readiness checks/,
+    );
+  } finally {
+    if (previous !== undefined) {
+      process.env.CODEX_WORKTREE_PATH = previous;
+    }
+  }
+});
+
+test('buildPrismaClientPath points at the worktree auth client', () => {
+  assert.equal(
+    buildPrismaClientPath('/tmp/worktree-root'),
+    path.join(
+      '/tmp/worktree-root',
+      'packages',
+      'auth',
+      'node_modules',
+      '.prisma',
+      'client-auth',
+      'index.js',
+    ),
+  );
+});
+
+test('buildPrismaProbeScript wires the client path and db url into the Prisma probe', () => {
+  const clientPath = '/tmp/worktree-root/packages/auth/node_modules/.prisma/client-auth/index.js';
+  const databaseUrl = 'postgresql://user:pass@localhost:6432/portal_db_dev?pgbouncer=true&schema=auth_dev';
+
+  const script = buildPrismaProbeScript(clientPath, databaseUrl);
+
+  assert.match(script, /const \{ PrismaClient \} = require\("/);
+  assert.match(script, /\$queryRawUnsafe\('select 1'\)/);
+  assert.match(script, /process\.stdout\.write\('1'\)/);
+  assert.match(script, /await prisma\.\$disconnect\(\)\.catch\(\(\) => \{\}\);/);
+  assert.match(script, new RegExp(clientPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(script, new RegExp(databaseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
