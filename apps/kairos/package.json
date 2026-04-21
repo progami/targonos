@@ -3,10 +3,10 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3210",
+    "dev": "node ../../scripts/run-next-port.js dev 3210",
     "clean": "rm -rf .next out dist",
     "build": "next build",
-    "start": "next start -p 3210",
+    "start": "node ../../scripts/run-next-port.js start 3210",
     "lint": "eslint app components lib",
     "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit",
     "format": "prettier --check \"{app,components,lib,styles}/**/*.{ts,tsx,mdx}\"",

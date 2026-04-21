@@ -3,9 +3,9 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js argus -- next dev -p 3216",
+    "dev": "node ../../scripts/run-dev-with-logs.js argus -- node ../../scripts/run-next-port.js dev 3216",
     "build": "next build",
-    "start": "next start -p 3216",
+    "start": "node ../../scripts/run-next-port.js start 3216",
     "lint": "eslint app components lib middleware.ts",
     "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },
