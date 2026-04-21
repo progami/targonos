@@ -8,6 +8,7 @@ import {
   createTstViewModel,
   type TstSelectionViewModel,
 } from '@/lib/wpr/tst-view-model'
+import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import TstSelectionTable from './tst-selection-table'
 import TstWeeklyPanel from './tst-weekly-panel'
@@ -30,20 +31,11 @@ function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
   return Array.from(ids).filter((id) => allowedIds.has(id))
 }
 
-function windowRangeLabel(weeks: string[]): string {
-  if (weeks.length === 0) {
-    return ''
-  }
-
-  if (weeks.length === 1) {
-    return weeks[0]
-  }
-
-  return `${weeks[0]} - ${weeks[weeks.length - 1]}`
-}
-
-function buildHeroContent(bundle: WprWeekBundle, viewModel: TstSelectionViewModel): { name: string; meta: string[] } {
-  const selectedWeekLabel = bundle.meta.anchorWeek
+function buildHeroContent(
+  bundle: WprWeekBundle,
+  viewModel: TstSelectionViewModel,
+  selectedWeekLabel: string,
+): { name: string; meta: string[] } {
   if (viewModel.scopeType === 'empty') {
     return {
       name: 'TST Selection',
@@ -168,8 +160,10 @@ export default function TstTab({
     }
   }
 
-  const heroContent = buildHeroContent(bundle, viewModel)
-  const historyLabel = windowRangeLabel(bundle.meta.baselineWindow)
+  const weekStartDates = buildBundleWeekStartDateLookup(bundle)
+  const selectedWeekLabel = formatWeekLabelFromLookup(bundle.meta.anchorWeek, weekStartDates)
+  const heroContent = buildHeroContent(bundle, viewModel, selectedWeekLabel)
+  const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const competitor = bundle.meta.competitor
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
@@ -248,8 +242,9 @@ export default function TstTab({
         heroContent={heroContent}
         viewModel={viewModel}
         changeEntries={changeEntries}
-        selectedWeekLabel={bundle.meta.anchorWeek}
+        selectedWeekLabel={selectedWeekLabel}
         historyLabel={historyLabel}
+        weekStartDates={weekStartDates}
         wowVisible={compWowVisible}
         setWowVisible={setCompWowVisible}
       />

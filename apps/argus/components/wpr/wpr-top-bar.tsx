@@ -4,17 +4,20 @@ import { Box, MenuItem, Select, Stack, Typography } from '@mui/material';
 import { WPR_TABS, type WprTab } from '@/lib/wpr/dashboard-state';
 import { panelBgDarker, subtleBorder, teal, textMuted, textPrimary, textSecondary } from '@/lib/wpr/panel-tokens';
 import type { WeekLabel } from '@/lib/wpr/types';
+import { formatWeekLabelFromLookup } from '@/lib/wpr/week-display';
 
 export default function WprTopBar({
   activeTab,
   selectedWeek,
   weeks,
+  weekStartDates,
   onSelectTab,
   onSelectWeek,
 }: {
   activeTab: WprTab;
   selectedWeek: WeekLabel | null;
   weeks: WeekLabel[];
+  weekStartDates: Record<WeekLabel, string>;
   onSelectTab: (tab: WprTab) => void;
   onSelectWeek: (week: WeekLabel) => void;
 }) {
@@ -85,7 +88,7 @@ export default function WprTopBar({
           value={selectedWeek ?? ''}
           onChange={(event) => onSelectWeek(event.target.value)}
           sx={{
-            minWidth: 150,
+            minWidth: 228,
             fontSize: '0.75rem',
             color: textPrimary,
             bgcolor: 'rgba(255,255,255,0.03)',
@@ -105,7 +108,7 @@ export default function WprTopBar({
         >
           {weeks.map((week) => (
             <MenuItem key={week} value={week} sx={{ fontSize: '0.75rem' }}>
-              {week}
+              {formatWeekLabelFromLookup(week, weekStartDates)}
             </MenuItem>
           ))}
         </Select>

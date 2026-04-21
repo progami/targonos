@@ -27,6 +27,7 @@ import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/compo
 import type { WprCompWowVisible } from '@/lib/wpr/dashboard-state'
 import type { TstSelectionViewModel } from '@/lib/wpr/tst-view-model'
 import type { WprChangeLogEntry, WprCompetitorSummary } from '@/lib/wpr/types'
+import { formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   chartToggleButtonSx,
 } from '@/lib/wpr/panel-tokens'
@@ -43,11 +44,13 @@ function blankMetricValue(): string {
 
 function WeeklyGapChart({
   weekly,
+  weekStartDates,
   changeEntries,
   wowVisible,
   setWowVisible,
 }: {
   weekly: TstSelectionViewModel['weekly']
+  weekStartDates: Record<string, string>
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprCompWowVisible
   setWowVisible: (nextState: WprCompWowVisible) => void
@@ -87,6 +90,7 @@ function WeeklyGapChart({
                   active={active}
                   payload={payload}
                   label={label}
+                  labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey
@@ -176,6 +180,7 @@ export default function TstWeeklyPanel({
   changeEntries,
   selectedWeekLabel,
   historyLabel,
+  weekStartDates,
   wowVisible,
   setWowVisible,
 }: {
@@ -185,6 +190,7 @@ export default function TstWeeklyPanel({
   changeEntries: WprChangeLogEntry[]
   selectedWeekLabel: string
   historyLabel: string
+  weekStartDates: Record<string, string>
   wowVisible: WprCompWowVisible
   setWowVisible: (nextState: WprCompWowVisible) => void
 }) {
@@ -240,6 +246,7 @@ export default function TstWeeklyPanel({
     >
       <WeeklyGapChart
         weekly={viewModel.weekly}
+        weekStartDates={weekStartDates}
         changeEntries={changeEntries}
         wowVisible={wowVisible}
         setWowVisible={setWowVisible}

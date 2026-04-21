@@ -28,6 +28,7 @@ import { formatCount, formatMoney } from '@/lib/wpr/format'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
+import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
 
@@ -40,25 +41,15 @@ function blankMetricValue(): string {
   return '---'
 }
 
-function windowRangeLabel(weeks: string[]): string {
-  if (weeks.length === 0) {
-    return ''
-  }
-
-  if (weeks.length === 1) {
-    return weeks[0]
-  }
-
-  return `${weeks[0]} - ${weeks[weeks.length - 1]}`
-}
-
 function ScpWeeklyChart({
   weekly,
+  weekStartDates,
   changeEntries,
   wowVisible,
   setWowVisible,
 }: {
   weekly: ScpSelectionViewModel['weekly']
+  weekStartDates: Record<string, string>
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprScpWowVisible
   setWowVisible: (nextState: WprScpWowVisible) => void
@@ -98,6 +89,7 @@ function ScpWeeklyChart({
                   active={active}
                   payload={payload}
                   label={label}
+                  labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey
@@ -291,16 +283,18 @@ export default function ScpTab({
     )
   }
 
-  const heroContent = buildHeroContent(selectedWeekLabel)
+  const weekStartDates = buildBundleWeekStartDateLookup(bundle)
+  const formattedSelectedWeekLabel = formatWeekLabelFromLookup(selectedWeekLabel, weekStartDates)
+  const heroContent = buildHeroContent(formattedSelectedWeekLabel)
   const blankTopValues = viewModel.scopeType === 'empty' || viewModel.current === null
   const currentMetrics = viewModel.current
-  const historyLabel = windowRangeLabel(bundle.scp.meta.baselineWindow)
+  const historyLabel = formatWeekWindowLabel(bundle.scp.meta.baselineWindow, weekStartDates)
   const footerItems = [
     `Source: SCP`,
     `Scope: catalog search`,
     `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
     `Target ASIN: ${bundle.scp.meta.targetAsin}`,
-    `Table week: ${selectedWeekLabel}`,
+    `Table week: ${formattedSelectedWeekLabel}`,
     `Chart history: ${historyLabel}`,
   ]
 
@@ -330,6 +324,7 @@ export default function ScpTab({
       >
         <ScpWeeklyChart
           weekly={viewModel.weekly}
+          weekStartDates={weekStartDates}
           changeEntries={changeEntries}
           wowVisible={scpWowVisible}
           setWowVisible={setScpWowVisible}
