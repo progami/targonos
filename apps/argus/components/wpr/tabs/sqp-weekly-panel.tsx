@@ -1,8 +1,13 @@
 'use client'
 
 import React, { useState, type JSX } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Button } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
+import {
+  WprAnalyticsFooter,
+  WprAnalyticsMetric,
+  WprAnalyticsPanel,
+} from '@/components/wpr/wpr-analytics-panel'
 import {
   buildChangeMarkerLabelParts,
   buildChangeMarkerLookup,
@@ -12,7 +17,7 @@ import {
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
 import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
-import { chartToggleButtonSx, panelSx, subtleBorder, textSecondary } from '@/lib/wpr/panel-tokens'
+import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import {
   rateRatio,
   type SqpAggregatedMetrics,
@@ -73,7 +78,7 @@ function blankMetricValue(): string {
   return '---'
 }
 
-function SqpFooter({
+function buildFooterItems({
   scopeType,
   rootCount,
   termCount,
@@ -97,68 +102,7 @@ function SqpFooter({
     `Chart history: ${historyLabel}`,
   ]
 
-  return (
-    <Box
-      sx={{
-        px: 2.5,
-        py: 1.2,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 2,
-        borderTop: '1px solid rgba(255,255,255,0.06)',
-        color: 'rgba(255,255,255,0.62)',
-      }}
-    >
-      {footerItems.map((item) => (
-        <Typography
-          key={item}
-          sx={{
-            fontSize: '0.64rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {item}
-        </Typography>
-      ))}
-    </Box>
-  )
-}
-
-function MetricChip({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <Box>
-      <Typography
-        sx={{
-          fontSize: '0.58rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.12em',
-          color: 'rgba(255,255,255,0.54)',
-          mb: 0.35,
-        }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          fontSize: '1.18rem',
-          fontWeight: 700,
-          letterSpacing: '-0.04em',
-          color: 'rgba(255,255,255,0.92)',
-        }}
-      >
-        {value}
-      </Typography>
-    </Box>
-  )
+  return footerItems
 }
 
 function buildRatioFillPolygons(
@@ -697,71 +641,44 @@ export default function SqpWeeklyPanel({
   selectedWeekLabel: string
   historyLabel: string
 }) {
-  return (
-    <Box sx={panelSx}>
-      <Box
-        sx={{
-          px: 2.5,
-          pt: 2,
-          pb: 1.25,
-          borderBottom: subtleBorder,
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.45}>
-          <Typography sx={{ fontSize: '1.2rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
-            {heroContent.name}
-          </Typography>
-          <Typography sx={{ fontSize: '0.72rem', color: textSecondary }}>
-            {heroContent.meta.join(' · ')}
-          </Typography>
-        </Stack>
-      </Box>
+  const footerItems = buildFooterItems({
+    scopeType,
+    rootCount: selectedRootCount,
+    termCount: selectedTermCount,
+    totalTermCount,
+    selectedWeekLabel,
+    historyLabel,
+  })
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-          gap: 1.5,
-          px: 2.5,
-          py: 1.75,
-          borderBottom: subtleBorder,
-        }}
-      >
-          <MetricChip
+  return (
+    <WprAnalyticsPanel
+      title={heroContent.name}
+      meta={heroContent.meta}
+      metricColumns={{ xs: 2, md: 3 }}
+      metrics={
+        <>
+          <WprAnalyticsMetric
             label="Query Volume"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCompactNumber(currentMetrics.query_volume)}
           />
-          <MetricChip
+          <WprAnalyticsMetric
             label="Market Purchases"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.market_purchases)}
           />
-          <MetricChip
+          <WprAnalyticsMetric
             label="Our Purchases"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.asin_purchases)}
           />
-      </Box>
-
-      <Box sx={{ px: 2.5, pb: 2.2 }}>
-        <SqpWeeklyChart
-          weekly={weekly}
-          changeEntries={changeEntries}
-          wowVisible={wowVisible}
-          setWowVisible={setWowVisible}
-        />
-      </Box>
-
-      <SqpFooter
-        scopeType={scopeType}
-        rootCount={selectedRootCount}
-        termCount={selectedTermCount}
-        totalTermCount={totalTermCount}
-        selectedWeekLabel={selectedWeekLabel}
-        historyLabel={historyLabel}
+        </>
+      }
+      footer={<WprAnalyticsFooter items={footerItems} />}
+    >
+      <SqpWeeklyChart
+        weekly={weekly}
+        changeEntries={changeEntries}
+        wowVisible={wowVisible}
+        setWowVisible={setWowVisible}
       />
-    </Box>
+    </WprAnalyticsPanel>
   )
 }

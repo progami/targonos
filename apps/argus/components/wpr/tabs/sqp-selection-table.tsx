@@ -8,12 +8,16 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TableSortLabel,
   Typography,
 } from '@mui/material'
+import {
+  WprSelectionPanel,
+  wprSelectionHeaderCellSx,
+  wprSelectionMetricCellSx,
+} from '@/components/wpr/wpr-selection-panel'
 import type { WprSortState } from '@/lib/wpr/dashboard-state'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import {
@@ -25,13 +29,6 @@ import {
   type SqpSortKey,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprSortDirection } from '@/lib/wpr/dashboard-state'
-
-const PANEL_SX = {
-  bgcolor: 'rgba(0, 20, 35, 0.85)',
-  border: '1px solid rgba(255,255,255,0.07)',
-  borderRadius: '12px',
-  overflow: 'hidden',
-} as const
 
 const SQP_COLUMNS: Array<{ key: SqpSortKey; label: string }> = [
   { key: 'term', label: 'Term' },
@@ -110,9 +107,7 @@ function MetricCell({
     <TableCell
       align={align}
       sx={{
-        fontSize: '0.72rem',
-        color: 'rgba(255,255,255,0.76)',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        ...wprSelectionMetricCellSx,
       }}
     >
       {children}
@@ -160,47 +155,16 @@ export default function SqpSelectionTable({
   const sortKey = toSqpSortKey(sortState.key)
 
   return (
-    <Box sx={PANEL_SX}>
-      <Box
-        sx={{
-          px: 2,
-          py: 1.3,
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.3}>
-          <Typography
-            sx={{
-              fontSize: '0.64rem',
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: 'rgba(255,255,255,0.54)',
-            }}
-          >
-            SQP Selection
-          </Typography>
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'rgba(255,255,255,0.88)' }}>
-            {`Selected week · ${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
-          </Typography>
-        </Stack>
-      </Box>
-
-      <TableContainer sx={{ maxHeight: 640 }}>
+    <WprSelectionPanel
+      title="SQP Selection"
+      summary={`Selected week · ${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+    >
         <Table stickyHeader size="small" sx={{ minWidth: 960 }}>
           <TableHead>
             <TableRow>
               <TableCell
                 padding="checkbox"
-                sx={{
-                  bgcolor: 'rgba(0, 20, 35, 0.96)',
-                  borderBottom: '1px solid rgba(255,255,255,0.08)',
-                }}
+                sx={wprSelectionHeaderCellSx}
               >
                 <Checkbox
                   size="small"
@@ -219,10 +183,7 @@ export default function SqpSelectionTable({
               {SQP_COLUMNS.map((column) => (
                 <TableCell
                   key={column.key}
-                  sx={{
-                    bgcolor: 'rgba(0, 20, 35, 0.96)',
-                    borderBottom: '1px solid rgba(255,255,255,0.08)',
-                  }}
+                  sx={wprSelectionHeaderCellSx}
                   align={column.key === 'term' ? 'left' : 'right'}
                 >
                   <TableSortLabel
@@ -415,7 +376,6 @@ export default function SqpSelectionTable({
             })}
           </TableBody>
         </Table>
-      </TableContainer>
-    </Box>
+    </WprSelectionPanel>
   )
 }
