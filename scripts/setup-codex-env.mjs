@@ -240,7 +240,7 @@ function buildManagedEntries(context) {
       entries.set('DATABASE_URL_US', withSchema(baseDevDbUrl, 'dev_talos_us'))
       entries.set('DATABASE_URL_UK', withSchema(baseDevDbUrl, 'dev_talos_uk'))
       entries.set('REDIS_URL', sharedValue(sourceValues, appName, 'REDIS_URL', 'redis://localhost:6379'))
-      entries.set('S3_BUCKET_NAME', sharedValue(sourceValues, appName, 'S3_BUCKET_NAME', 'ci-talos-bucket'))
+      entries.set('S3_BUCKET_NAME', sharedValue(sourceValues, appName, 'S3_BUCKET_NAME', 'wms-development-459288913318'))
       entries.set('S3_BUCKET_REGION', sharedValue(sourceValues, appName, 'S3_BUCKET_REGION', 'us-east-1'))
       return entries
     case 'atlas':
