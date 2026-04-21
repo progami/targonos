@@ -117,10 +117,12 @@ test('SQP weekly chart omits hover tooltip markup when no week is active', () =>
   assert.doesNotMatch(markup, /Impr Share/)
 })
 
-test('SQP weekly chart uses the shared shell with grouped metrics and visible change summary', () => {
+test('SQP weekly chart uses the shared shell with grouped metric controls only', () => {
   const source = readFileSync(new URL('./sqp-weekly-panel.tsx', import.meta.url), 'utf8')
 
   assert.match(source, /<WprChartShell/)
-  assert.match(source, /changeSummary=\{summarizeChangeMarkers\(changeMarkers, 'week'\)\}/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*title=/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*description=/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*changeSummary=/)
   assert.match(source, /<WprChartControlGroup label="Metrics">/)
 })

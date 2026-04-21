@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react'
 import { Box, Stack, Typography } from '@mui/material'
 import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
-import { chartControlRailSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
+import { chartControlRailSx, subtleBorder, textMuted } from '@/lib/wpr/panel-tokens'
 
 const chartViewportSx = {
   height: WPR_CHART_HEIGHT,
@@ -62,16 +62,10 @@ export function WprChartEmptyState({
 }
 
 export function WprChartShell({
-  title,
-  description,
-  changeSummary,
   primaryControls,
   secondaryControls,
   children,
 }: {
-  title: string
-  description: string
-  changeSummary: string
   primaryControls?: ReactNode
   secondaryControls?: ReactNode
   children: ReactNode
@@ -84,35 +78,7 @@ export function WprChartShell({
           alignItems: 'flex-start',
         }}
       >
-        <Stack direction="row" spacing={1.5} useFlexGap flexWrap="wrap" alignItems="flex-start">
-          <Stack spacing={0.35}>
-            <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-              {title}
-            </Typography>
-            <Typography sx={{ fontSize: '0.68rem', color: textSecondary }}>
-              {description}
-            </Typography>
-          </Stack>
-
-          <Box
-            data-change-visibility="wpr"
-            sx={{
-              px: 1.1,
-              py: 0.75,
-              border: subtleBorder,
-              borderRadius: '10px',
-              bgcolor: 'rgba(255,255,255,0.03)',
-            }}
-          >
-            <Typography sx={controlGroupLabelSx}>Change log</Typography>
-            <Typography sx={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.82)', mt: 0.25 }}>
-              {changeSummary}
-            </Typography>
-          </Box>
-
-          {primaryControls}
-        </Stack>
-
+        {primaryControls}
         {secondaryControls}
       </Box>
 

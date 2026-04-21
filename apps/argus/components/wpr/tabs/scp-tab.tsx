@@ -20,7 +20,6 @@ import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
   RechartsChangeMarkers,
-  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
@@ -150,9 +149,6 @@ function ScpWeeklyChart({
 
   return (
     <WprChartShell
-      title="Week over week"
-      description="Catalog search funnel rates"
-      changeSummary={summarizeChangeMarkers(changeMarkers, 'week')}
       secondaryControls={
         <WprChartControlGroup label="Metrics">
           <Button

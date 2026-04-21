@@ -28,12 +28,11 @@ import type {
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
 import { formatMonitoringLabel } from '@/lib/monitoring/labels'
+import { readAppJsonOrThrow } from '@/lib/fetch-json'
 import { formatDateTime } from '@/components/monitoring/ui'
 import FeedRail from '@/components/monitoring/FeedRail'
 import ChangeDetail from '@/components/monitoring/ChangeDetail'
 import SourceHealthGrid from '@/components/monitoring/SourceHealthGrid'
-
-const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
 type OwnerFilter = 'ALL' | 'OURS' | 'COMPETITOR'
 
@@ -151,15 +150,10 @@ function TrackingDashboardContent() {
         setError(null)
         const requestPath =
           initialChangeRequestQuery === ''
-            ? `${basePath}/api/monitoring/bootstrap`
-            : `${basePath}/api/monitoring/bootstrap?${initialChangeRequestQuery}`
-        const response = await fetch(requestPath)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring bootstrap.')
-        }
+            ? '/api/monitoring/bootstrap'
+            : `/api/monitoring/bootstrap?${initialChangeRequestQuery}`
+        const bootstrap = await readAppJsonOrThrow<MonitoringBootstrap>(requestPath)
         if (!cancelled) {
-          const bootstrap = payload as MonitoringBootstrap
           setOverview(bootstrap.overview)
           setChanges(bootstrap.changes)
           setLoadedChangeRequestQuery(initialChangeRequestQuery)
@@ -191,13 +185,9 @@ function TrackingDashboardContent() {
         setError(null)
         const requestPath =
           changeRequestQuery === ''
-            ? `${basePath}/api/monitoring/changes`
-            : `${basePath}/api/monitoring/changes?${changeRequestQuery}`
-        const response = await fetch(requestPath)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring changes.')
-        }
+            ? '/api/monitoring/changes'
+            : `/api/monitoring/changes?${changeRequestQuery}`
+        const payload = await readAppJsonOrThrow<MonitoringChangeEvent[]>(requestPath)
 
         if (!cancelled) {
           setChanges(payload)
@@ -225,11 +215,7 @@ function TrackingDashboardContent() {
     async function loadHealth() {
       try {
         setHealthError(null)
-        const response = await fetch(`${basePath}/api/monitoring/health`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring health.')
-        }
+        const payload = await readAppJsonOrThrow<MonitoringHealthReport>('/api/monitoring/health')
         if (!cancelled) {
           setHealth(payload)
         }
@@ -293,26 +279,15 @@ function TrackingDashboardContent() {
     try {
       const bootstrapPath =
         changeRequestQuery === ''
-          ? `${basePath}/api/monitoring/bootstrap`
-          : `${basePath}/api/monitoring/bootstrap?${changeRequestQuery}`
-      const bootstrapResponse = await fetch(bootstrapPath)
-      const bootstrapPayload = await bootstrapResponse.json()
-
-      if (!bootstrapResponse.ok) {
-        throw new Error(bootstrapPayload.error ?? 'Failed to refresh monitoring feed.')
-      }
-
-      const bootstrap = bootstrapPayload as MonitoringBootstrap
+          ? '/api/monitoring/bootstrap'
+          : `/api/monitoring/bootstrap?${changeRequestQuery}`
+      const bootstrap = await readAppJsonOrThrow<MonitoringBootstrap>(bootstrapPath)
       setOverview(bootstrap.overview)
       setChanges(bootstrap.changes)
       setLoadedChangeRequestQuery(changeRequestQuery)
 
       if (activeTab === 'sources') {
-        const healthResponse = await fetch(`${basePath}/api/monitoring/health`)
-        const healthPayload = await healthResponse.json()
-        if (!healthResponse.ok) {
-          throw new Error(healthPayload.error ?? 'Failed to refresh source health.')
-        }
+        const healthPayload = await readAppJsonOrThrow<MonitoringHealthReport>('/api/monitoring/health')
         setHealth(healthPayload)
       }
     } catch (refreshError) {

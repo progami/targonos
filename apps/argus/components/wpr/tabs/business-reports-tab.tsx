@@ -22,7 +22,6 @@ import {
   buildChangeMarkerLookup,
   buildDailyChangeMarkers,
   buildWeeklyChangeMarkers,
-  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
@@ -405,9 +404,6 @@ function BusinessReportsChart({
 
   return (
     <WprChartShell
-      title={viewMode === 'weekly' ? 'Week over week' : 'Day by day'}
-      description={viewMode === 'weekly' ? 'Counts + retail conversion rates' : 'Selected-week daily trend'}
-      changeSummary={summarizeChangeMarkers(changeMarkers, viewMode === 'weekly' ? 'week' : 'day')}
       primaryControls={
         <WprChartControlGroup label="View">
           <ToggleButtonGroup
