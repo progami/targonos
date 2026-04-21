@@ -996,9 +996,9 @@ export function PurchaseOrdersPanel({
       },
       {
         key: 'lifecycle',
-        header: buildColumnHeader(''),
+        header: buildColumnHeader('Flow'),
         fit: true,
-        thClassName: 'w-[40px]',
+        thClassName: 'w-[56px]',
         tdClassName: 'px-1 py-2',
         render: order => (
           <Button

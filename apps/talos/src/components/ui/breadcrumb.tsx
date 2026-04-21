@@ -47,7 +47,7 @@ export function Breadcrumb() {
  label = 'Transactions'
  break
  case 'inventory':
- label = 'Inventory Ledger'
+ label = 'Inventory'
  break
  default:
  // For IDs and other segments, format them nicely
