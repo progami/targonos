@@ -105,6 +105,7 @@
     "express-winston": "^4.2.0",
     "ioredis": "^5.8.2",
     "isomorphic-dompurify": "^2.25.0",
+    "jsdom": "^26.1.0",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.559.0",
