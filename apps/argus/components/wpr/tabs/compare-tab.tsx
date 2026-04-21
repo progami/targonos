@@ -16,9 +16,16 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts'
+import {
+  buildChangeMarkerLookup,
+  buildWeeklyChangeMarkers,
+  formatChangeMarkerLabel,
+  RechartsChangeMarkers,
+} from '@/components/wpr/chart-change-markers'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
+import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { createCompareViewModel } from '@/lib/wpr/compare-view-model'
-import type { WprWeekBundle } from '@/lib/wpr/types'
+import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import {
   panelBadgeSx,
@@ -35,6 +42,7 @@ import {
   formatMoney,
   formatPercent,
 } from '@/lib/wpr/format'
+import { CompareChartLegend } from './compare-chart-legend'
 
 const LINE_COLORS = ['#00C2B9', '#f5a623', '#8fc7ff', '#a78bfa', '#d5ff62', '#ff8a80']
 
@@ -163,10 +171,18 @@ function RankHeatmap({
   )
 }
 
-export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
+export default function CompareTab({
+  bundle,
+  changeEntries,
+}: {
+  bundle: WprWeekBundle
+  changeEntries: WprChangeLogEntry[]
+}) {
   const compareOrganicMode = useWprStore((state) => state.compareOrganicMode)
   const setCompareOrganicMode = useWprStore((state) => state.setCompareOrganicMode)
   const viewModel = createCompareViewModel(bundle)
+  const weeklyChangeMarkers = buildWeeklyChangeMarkers(changeEntries)
+  const weeklyChangeMarkersByLabel = buildChangeMarkerLookup(weeklyChangeMarkers)
 
   const scatterRows = viewModel.scatterRows.filter((cluster) => {
     return cluster.avg_rank !== null && cluster.eligibility.rank_eligible === true
@@ -230,16 +246,17 @@ export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
             </Box>
           ) : (
             <Box role="img" aria-label="Brand metrics trend over weeks showing awareness, consideration, and purchase">
-              <ResponsiveChartFrame height={280}>
+              <ResponsiveChartFrame height={WPR_COMPACT_CHART_HEIGHT}>
                 <LineChart data={viewModel.brandRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                   <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                   <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
-                  <Line type="monotone" dataKey="awareness" stroke="#8fc7ff" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#8fc7ff' }} activeDot={{ r: 3.5 }} />
-                  <Line type="monotone" dataKey="consideration" stroke="#77dfd0" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#77dfd0' }} activeDot={{ r: 3.5 }} />
-                  <Line type="monotone" dataKey="purchase" stroke="#d5ff62" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#d5ff62' }} activeDot={{ r: 3.5 }} />
+                  <Tooltip labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))} />
+                  <RechartsChangeMarkers markers={weeklyChangeMarkers} />
+                  <Legend content={<CompareChartLegend />} />
+                  <Line type="monotone" dataKey="awareness" name="Awareness" stroke="#8fc7ff" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#8fc7ff' }} activeDot={{ r: 3.5 }} />
+                  <Line type="monotone" dataKey="consideration" name="Consideration" stroke="#77dfd0" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#77dfd0' }} activeDot={{ r: 3.5 }} />
+                  <Line type="monotone" dataKey="purchase" name="Purchase" stroke="#d5ff62" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#d5ff62' }} activeDot={{ r: 3.5 }} />
                 </LineChart>
               </ResponsiveChartFrame>
             </Box>
@@ -301,7 +318,7 @@ export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
               </Box>
             ) : (
               <Box role="img" aria-label="Demand versus rank scatter plot comparing purchase share to organic rank across clusters">
-                <ResponsiveChartFrame height={340}>
+                <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
                   <ScatterChart margin={{ top: 12, right: 16, bottom: 4, left: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
                     <XAxis
@@ -355,14 +372,18 @@ export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
                 </Box>
               ) : (
                 <Box role="img" aria-label="Organic rank trend over weeks for tracked clusters">
-                  <ResponsiveChartFrame height={320}>
+                  <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
                     <LineChart data={viewModel.rankRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                       <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
                       <YAxis reversed tickFormatter={(value) => formatDecimal(value, 1)} tick={{ fontSize: 10 }} />
-                      <Tooltip formatter={rankTooltipFormatter} />
+                      <Tooltip
+                        formatter={rankTooltipFormatter}
+                        labelFormatter={(label) => formatChangeMarkerLabel(label, weeklyChangeMarkersByLabel.get(String(label)))}
+                      />
                       <ReferenceLine y={10} stroke="rgba(255,255,255,0.08)" />
-                      <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
+                      <RechartsChangeMarkers markers={weeklyChangeMarkers} />
+                      <Legend content={<CompareChartLegend />} />
                       {viewModel.lineClusters.map((cluster, index) => (
                         <Line
                           key={cluster.id}
@@ -409,7 +430,7 @@ export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
             </Box>
           ) : (
             <Box role="img" aria-label="Paid support horizontal bar chart comparing PPC spend and PPC sales by cluster">
-              <ResponsiveChartFrame height={320}>
+              <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
                 <BarChart data={viewModel.ppcRows} layout="vertical" margin={{ top: 8, right: 16, left: 24, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" horizontal={false} />
                   <XAxis type="number" tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
@@ -421,7 +442,7 @@ export default function CompareTab({ bundle }: { bundle: WprWeekBundle }) {
                     tickFormatter={(value: string) => (value.length > 18 ? `${value.slice(0, 18)}...` : value)}
                   />
                   <Tooltip formatter={ppcTooltipFormatter} />
-                  <Legend wrapperStyle={{ paddingTop: 6, fontSize: 10 }} />
+                  <Legend content={<CompareChartLegend />} />
                   <Bar dataKey="ppc_spend" fill="#0E3A60" radius={[0, 6, 6, 0]} name="PPC spend" />
                   <Bar dataKey="ppc_sales" fill="#00C2B9" radius={[0, 6, 6, 0]} name="PPC sales" />
                 </BarChart>

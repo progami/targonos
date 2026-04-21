@@ -23,7 +23,6 @@ import InsightsIcon from '@mui/icons-material/Insights';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
-import ThemeToggle from './theme-toggle';
 
 const DRAWER_WIDTH = 220;
 
@@ -240,7 +239,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
             Argus
           </Typography>
-          <ThemeToggle />
         </Toolbar>
       </AppBar>
 
@@ -308,9 +306,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 {sectionCopy.title}
               </Typography>
-            </Box>
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-              <ThemeToggle />
             </Box>
           </Stack>
         </Box>

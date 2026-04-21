@@ -100,5 +100,64 @@ class ListingChangeAggregationTest(unittest.TestCase):
             self.assertEqual(entries[0]["summary"], "Listing price")
 
 
+class ManualChangeLogParsingTest(unittest.TestCase):
+    def test_parses_standardized_plan_log_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            week_dir = sales_root / "WPR" / "Week 16 - 2026-04-12 (Sun)" / "output" / "Plans"
+            week_dir.mkdir(parents=True, exist_ok=True)
+            log_path = week_dir / "W16_Content_update_across_2_ASINs_Log_2026-04-20.md"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "# Content update across 2 ASINs",
+                        "",
+                        "Entry date: 2026-04-20",
+                        "Source: Plan Log",
+                        "Type: CONTENT",
+                        "ASINs: B09HXC3NL8, B0CR1GSBQ9",
+                        "Fields: Backend terms, Bullet points",
+                        "",
+                        "## Change Summary",
+                        "Backend terms and bullets refreshed.",
+                        "",
+                        "## What Changed (Observed)",
+                        "- Rewrote backend terms for root coverage.",
+                        "- Tightened bullet hierarchy for mobile.",
+                        "",
+                        "## Status",
+                        "- Submitted in Seller Central.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            module = load_module(data_dir)
+            entries = module.load_manual_change_logs(
+                {
+                    "W16": {
+                        "week_number": 16,
+                        "start_date": "2026-04-12",
+                    }
+                }
+            )
+
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["source"], "Plan Log")
+            self.assertEqual(entries[0]["category"], "CONTENT")
+            self.assertEqual(entries[0]["asins"], ["B09HXC3NL8", "B0CR1GSBQ9"])
+            self.assertEqual(entries[0]["field_labels"], ["Backend terms", "Bullet points"])
+            self.assertEqual(
+                entries[0]["highlights"],
+                [
+                    "Rewrote backend terms for root coverage.",
+                    "Tightened bullet hierarchy for mobile.",
+                ],
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
