@@ -39,6 +39,24 @@ function firstSetMember(ids: Set<string>): string | null {
   return first
 }
 
+function allSelectableTermIds(bundle: WprWeekBundle): string[] {
+  const termIds: string[] = []
+  const seenTermIds = new Set<string>()
+
+  for (const cluster of bundle.clusters) {
+    for (const termId of rootTermIds(bundle, cluster.id)) {
+      if (seenTermIds.has(termId)) {
+        continue
+      }
+
+      seenTermIds.add(termId)
+      termIds.push(termId)
+    }
+  }
+
+  return termIds
+}
+
 function windowRangeLabel(weeks: string[]): string {
   if (weeks.length === 0) {
     return ''
@@ -148,20 +166,39 @@ export default function SqpTab({
   bundle: WprWeekBundle
   changeEntries: WprChangeLogEntry[]
 }) {
+  const replaceState = useWprStore((state) => state.replaceState)
   const selectedClusterId = useWprStore((state) => state.selectedClusterId)
-  const setSelectedClusterId = useWprStore((state) => state.setSelectedClusterId)
   const selectedSqpRootIds = useWprStore((state) => state.selectedSqpRootIds)
-  const setSelectedSqpRootIds = useWprStore((state) => state.setSelectedSqpRootIds)
   const selectedSqpTermIds = useWprStore((state) => state.selectedSqpTermIds)
-  const setSelectedSqpTermIds = useWprStore((state) => state.setSelectedSqpTermIds)
   const expandedSqpRootIds = useWprStore((state) => state.expandedSqpRootIds)
   const setExpandedSqpRootIds = useWprStore((state) => state.setExpandedSqpRootIds)
   const hasInitializedSqpSelection = useWprStore((state) => state.hasInitializedSqpSelection)
-  const setHasInitializedSqpSelection = useWprStore((state) => state.setHasInitializedSqpSelection)
   const sqpTableSort = useWprStore((state) => state.sqpTableSort)
   const setSqpTableSort = useWprStore((state) => state.setSqpTableSort)
   const sqpWowVisible = useWprStore((state) => state.sqpWowVisible)
   const setSqpWowVisible = useWprStore((state) => state.setSqpWowVisible)
+
+  const replaceSqpSelection = ({
+    rootIds,
+    termIds,
+    clusterId,
+    expandedIds,
+    hasInitialized,
+  }: {
+    rootIds: string[]
+    termIds: string[]
+    clusterId: string | null
+    expandedIds?: string[]
+    hasInitialized: boolean
+  }) => {
+    replaceState({
+      selectedClusterId: clusterId,
+      selectedSqpRootIds: new Set(rootIds),
+      selectedSqpTermIds: new Set(termIds),
+      expandedSqpRootIds: new Set(expandedIds ?? Array.from(expandedSqpRootIds)),
+      hasInitializedSqpSelection: hasInitialized,
+    })
+  }
 
   useEffect(() => {
     const rootIdSet = new Set(bundle.clusters.map((cluster) => cluster.id))
@@ -173,71 +210,96 @@ export default function SqpTab({
     if (!hasInitializedSqpSelection) {
       const defaultRootId = getDefaultRootId(bundle)
       if (defaultRootId === null) {
-        setHasInitializedSqpSelection(true)
-        setSelectedClusterId(null)
+        replaceState({
+          selectedClusterId: null,
+          selectedSqpRootIds: new Set<string>(),
+          selectedSqpTermIds: new Set<string>(),
+          expandedSqpRootIds: new Set<string>(),
+          hasInitializedSqpSelection: true,
+        })
         return
       }
 
-      setSelectedSqpRootIds([defaultRootId])
-      setSelectedSqpTermIds(rootTermIds(bundle, defaultRootId))
-      setExpandedSqpRootIds([])
-      setSelectedClusterId(defaultRootId)
-      setHasInitializedSqpSelection(true)
+      replaceState({
+        selectedClusterId: defaultRootId,
+        selectedSqpRootIds: new Set([defaultRootId]),
+        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        expandedSqpRootIds: new Set<string>(),
+        hasInitializedSqpSelection: true,
+      })
       return
     }
 
     if (selectedSqpRootIds.size > 0 && filteredRootIds.length === 0) {
       const defaultRootId = getDefaultRootId(bundle)
       if (defaultRootId === null) {
-        setSelectedSqpRootIds([])
-        setSelectedSqpTermIds([])
-        setExpandedSqpRootIds([])
-        setSelectedClusterId(null)
+        replaceState({
+          selectedClusterId: null,
+          selectedSqpRootIds: new Set<string>(),
+          selectedSqpTermIds: new Set<string>(),
+          expandedSqpRootIds: new Set<string>(),
+          hasInitializedSqpSelection: true,
+        })
         return
       }
 
-      setSelectedSqpRootIds([defaultRootId])
-      setSelectedSqpTermIds(rootTermIds(bundle, defaultRootId))
-      setExpandedSqpRootIds([])
-      setSelectedClusterId(defaultRootId)
+      replaceState({
+        selectedClusterId: defaultRootId,
+        selectedSqpRootIds: new Set([defaultRootId]),
+        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        expandedSqpRootIds: new Set<string>(),
+        hasInitializedSqpSelection: true,
+      })
       return
     }
 
+    const nextSelectedClusterId = filteredRootIds[0]
+    let needsStateReplacement = false
+    const nextState: Parameters<typeof replaceState>[0] = {}
+
     if (filteredRootIds.length !== selectedSqpRootIds.size) {
-      setSelectedSqpRootIds(filteredRootIds)
+      nextState.selectedSqpRootIds = new Set(filteredRootIds)
+      needsStateReplacement = true
     }
 
     if (filteredTermIds.length !== selectedSqpTermIds.size) {
-      setSelectedSqpTermIds(filteredTermIds)
+      nextState.selectedSqpTermIds = new Set(filteredTermIds)
+      needsStateReplacement = true
     }
 
     if (filteredExpandedIds.length !== expandedSqpRootIds.size) {
-      setExpandedSqpRootIds(filteredExpandedIds)
+      nextState.expandedSqpRootIds = new Set(filteredExpandedIds)
+      needsStateReplacement = true
     }
 
-    const nextSelectedClusterId = filteredRootIds[0]
     if (nextSelectedClusterId === undefined) {
       if (selectedClusterId !== null) {
-        setSelectedClusterId(null)
+        nextState.selectedClusterId = null
+        needsStateReplacement = true
+      }
+
+      if (needsStateReplacement) {
+        replaceState(nextState)
       }
       return
     }
 
     if (selectedClusterId !== nextSelectedClusterId) {
-      setSelectedClusterId(nextSelectedClusterId)
+      nextState.selectedClusterId = nextSelectedClusterId
+      needsStateReplacement = true
+    }
+
+    if (needsStateReplacement) {
+      replaceState(nextState)
     }
   }, [
     bundle,
     expandedSqpRootIds,
     hasInitializedSqpSelection,
+    replaceState,
     selectedClusterId,
     selectedSqpRootIds,
     selectedSqpTermIds,
-    setExpandedSqpRootIds,
-    setHasInitializedSqpSelection,
-    setSelectedClusterId,
-    setSelectedSqpRootIds,
-    setSelectedSqpTermIds,
   ])
 
   const viewModel = createSqpSelectionViewModel({
@@ -255,7 +317,7 @@ export default function SqpTab({
 
   const heroContent = buildHeroContent(bundle, viewModel)
   const historyLabel = windowRangeLabel(bundle.meta.baselineWindow)
-  const blankTopValues = viewModel.scopeType === 'no-terms'
+  const blankTopValues = viewModel.scopeType === 'empty'
   const currentMetrics = viewModel.metrics
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
@@ -275,10 +337,12 @@ export default function SqpTab({
       }
     }
 
-    setSelectedSqpRootIds(Array.from(nextRootIds))
-    setSelectedSqpTermIds(Array.from(nextTermIds))
-    setSelectedClusterId(firstSetMember(nextRootIds))
-    setHasInitializedSqpSelection(true)
+    replaceSqpSelection({
+      rootIds: Array.from(nextRootIds),
+      termIds: Array.from(nextTermIds),
+      clusterId: firstSetMember(nextRootIds),
+      hasInitialized: true,
+    })
   }
 
   const handleToggleTerm = (rootId: string, termId: string) => {
@@ -306,24 +370,30 @@ export default function SqpTab({
       nextRootIds.delete(rootId)
     }
 
-    setSelectedSqpRootIds(Array.from(nextRootIds))
-    setSelectedSqpTermIds(Array.from(nextTermIds))
-    setSelectedClusterId(firstSetMember(nextRootIds))
-    setHasInitializedSqpSelection(true)
+    replaceSqpSelection({
+      rootIds: Array.from(nextRootIds),
+      termIds: Array.from(nextTermIds),
+      clusterId: firstSetMember(nextRootIds),
+      hasInitialized: true,
+    })
   }
 
   const handleSelectAll = () => {
-    setSelectedSqpRootIds(bundle.clusters.map((cluster) => cluster.id))
-    setSelectedSqpTermIds(bundle.sqpGlobalTermIds.slice())
-    setSelectedClusterId(getDefaultRootId(bundle))
-    setHasInitializedSqpSelection(true)
+    replaceSqpSelection({
+      rootIds: bundle.clusters.map((cluster) => cluster.id),
+      termIds: allSelectableTermIds(bundle),
+      clusterId: getDefaultRootId(bundle),
+      hasInitialized: true,
+    })
   }
 
   const handleClearAll = () => {
-    setSelectedSqpRootIds([])
-    setSelectedSqpTermIds([])
-    setSelectedClusterId(null)
-    setHasInitializedSqpSelection(true)
+    replaceSqpSelection({
+      rootIds: [],
+      termIds: [],
+      clusterId: null,
+      hasInitialized: true,
+    })
   }
 
   const handleToggleExpanded = (rootId: string) => {
@@ -335,14 +405,6 @@ export default function SqpTab({
     }
 
     setExpandedSqpRootIds(Array.from(nextExpandedIds))
-  }
-
-  const handleExpandAll = () => {
-    setExpandedSqpRootIds(bundle.clusters.map((cluster) => cluster.id))
-  }
-
-  const handleCollapseAll = () => {
-    setExpandedSqpRootIds([])
   }
 
   if (bundle.clusters.length === 0) {
@@ -389,8 +451,6 @@ export default function SqpTab({
         setSortState={setSqpTableSort}
         onSelectAll={handleSelectAll}
         onClearAll={handleClearAll}
-        onExpandAll={handleExpandAll}
-        onCollapseAll={handleCollapseAll}
         onSetRootSelection={handleSetRootSelection}
         onToggleTerm={handleToggleTerm}
         onToggleExpanded={handleToggleExpanded}

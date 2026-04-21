@@ -3,7 +3,6 @@
 import { Fragment, type ReactNode } from 'react'
 import {
   Box,
-  Button,
   Checkbox,
   Stack,
   Table,
@@ -16,6 +15,7 @@ import {
   Typography,
 } from '@mui/material'
 import type { WprSortState } from '@/lib/wpr/dashboard-state'
+import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import {
   rateRatio,
   safeDiv,
@@ -140,8 +140,6 @@ export default function SqpSelectionTable({
   setSortState,
   onSelectAll,
   onClearAll,
-  onExpandAll,
-  onCollapseAll,
   onSetRootSelection,
   onToggleTerm,
   onToggleExpanded,
@@ -153,8 +151,6 @@ export default function SqpSelectionTable({
   setSortState: (nextState: WprSortState) => void
   onSelectAll: () => void
   onClearAll: () => void
-  onExpandAll: () => void
-  onCollapseAll: () => void
   onSetRootSelection: (rootId: string, shouldSelect: boolean) => void
   onToggleTerm: (rootId: string, termId: string) => void
   onToggleExpanded: (rootId: string) => void
@@ -193,21 +189,6 @@ export default function SqpSelectionTable({
             {`Selected week · ${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
           </Typography>
         </Stack>
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" onClick={onSelectAll}>
-            Select all
-          </Button>
-          <Button size="small" variant="outlined" onClick={onClearAll}>
-            Clear all
-          </Button>
-          <Button size="small" variant="outlined" onClick={onExpandAll}>
-            Expand all
-          </Button>
-          <Button size="small" variant="outlined" onClick={onCollapseAll}>
-            Collapse all
-          </Button>
-        </Box>
       </Box>
 
       <TableContainer sx={{ maxHeight: 640 }}>
@@ -225,13 +206,13 @@ export default function SqpSelectionTable({
                   size="small"
                   checked={allTermsChecked}
                   indeterminate={allTermsIndeterminate}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      onSelectAll()
+                  onChange={() => {
+                    if (getBulkSelectionAction(viewModel.allTermIds.length, viewModel.selectedTermIds.length) === 'clear-all') {
+                      onClearAll()
                       return
                     }
 
-                    onClearAll()
+                    onSelectAll()
                   }}
                 />
               </TableCell>

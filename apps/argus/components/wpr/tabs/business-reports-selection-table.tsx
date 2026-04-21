@@ -2,7 +2,6 @@
 
 import {
   Box,
-  Button,
   Checkbox,
   Stack,
   Table,
@@ -14,6 +13,7 @@ import {
   TableSortLabel,
   Typography,
 } from '@mui/material'
+import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
   selectedWeekBusinessMetrics,
@@ -127,15 +127,6 @@ export default function BusinessReportsSelectionTable({
             {`Selected week · ${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
           </Typography>
         </Stack>
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="outlined" onClick={onSelectAll}>
-            Select all
-          </Button>
-          <Button size="small" variant="outlined" onClick={onClearAll}>
-            Clear all
-          </Button>
-        </Box>
       </Box>
 
       <TableContainer sx={{ maxHeight: 640 }}>
@@ -153,13 +144,13 @@ export default function BusinessReportsSelectionTable({
                   size="small"
                   checked={allChecked}
                   indeterminate={indeterminate}
-                  onChange={(event) => {
-                    if (event.target.checked) {
-                      onSelectAll()
+                  onChange={() => {
+                    if (getBulkSelectionAction(viewModel.allIds.length, viewModel.selectedIds.length) === 'clear-all') {
+                      onClearAll()
                       return
                     }
 
-                    onClearAll()
+                    onSelectAll()
                   }}
                 />
               </TableCell>

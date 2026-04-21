@@ -205,6 +205,24 @@ export function rootTermIds(bundle: WprWeekBundle, rootId: string): string[] {
   return ids
 }
 
+export function allSelectableSqpTermIds(bundle: WprWeekBundle): string[] {
+  const allIds: string[] = []
+  const seenIds = new Set<string>()
+
+  for (const cluster of bundle.clusters) {
+    for (const termId of rootTermIds(bundle, cluster.id)) {
+      if (seenIds.has(termId)) {
+        continue
+      }
+
+      seenIds.add(termId)
+      allIds.push(termId)
+    }
+  }
+
+  return allIds
+}
+
 function selectedRootIdsList(bundle: WprWeekBundle, selectedRootIds: Set<string>): string[] {
   return allRootIds(bundle).filter((rootId) => selectedRootIds.has(rootId))
 }
