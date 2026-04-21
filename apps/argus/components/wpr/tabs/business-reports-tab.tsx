@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import {
   Bar,
   CartesianGrid,
@@ -17,24 +17,18 @@ import {
   buildChangeMarkerLookup,
   buildDailyChangeMarkers,
   buildWeeklyChangeMarkers,
+  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
+import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprBrWowVisible } from '@/lib/wpr/dashboard-state'
-import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import {
   createBusinessReportsSelectionViewModel,
   selectedWeekBusinessRecord,
   type BusinessReportsSelectionViewModel,
 } from '@/lib/wpr/business-reports-view-model'
 import { formatCount, formatPercent } from '@/lib/wpr/format'
-import {
-  chartControlRailSx,
-  chartToggleButtonSx,
-  panelSx,
-  subtleBorder,
-  textMuted,
-  textSecondary,
-} from '@/lib/wpr/panel-tokens'
+import { chartToggleButtonSx, panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
@@ -44,6 +38,35 @@ type BusinessReportsViewMode = 'weekly' | 'daily'
 type BusinessReportsHeroContent = {
   name: string
   meta: string[]
+}
+
+const businessReportsViewToggleGroupSx = {
+  '& .MuiToggleButtonGroup-grouped': {
+    minWidth: 76,
+    px: 1.5,
+    py: 0.65,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: '10px',
+    textTransform: 'none' as const,
+    fontSize: '0.78rem',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    color: 'rgba(255,255,255,0.76)',
+    bgcolor: 'rgba(255,255,255,0.045)',
+    '&.Mui-selected': {
+      borderColor: '#00C2B988',
+      bgcolor: 'rgba(0, 194, 185, 0.14)',
+      color: 'rgba(255,255,255,0.95)',
+    },
+    '&.Mui-selected:hover': {
+      borderColor: '#00C2B9aa',
+      bgcolor: 'rgba(0, 194, 185, 0.18)',
+    },
+    '&:hover': {
+      borderColor: 'rgba(255,255,255,0.28)',
+      bgcolor: 'rgba(255,255,255,0.07)',
+    },
+  },
 }
 
 function blankMetricValue(): string {
@@ -312,60 +335,18 @@ function BusinessReportsChart({
     (value): value is { key: 'sessions' | 'order_items' | 'unit_session'; label: string; color: string } =>
       value !== null,
   )
+  const changeMarkers =
+    viewMode === 'weekly'
+      ? buildWeeklyChangeMarkers(changeEntries)
+      : buildDailyChangeMarkers(dailySeries)
   let chartBody: JSX.Element
   if (visibleSeries.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        Turn on at least one series to view the Business Reports chart.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>Turn on at least one series to view the Business Reports chart.</WprChartEmptyState>
   } else if (viewMode === 'daily' && dailySeries.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        No Business Reports ByDate data is available for the selected week.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>No Business Reports ByDate data is available for the selected week.</WprChartEmptyState>
   } else if (viewMode === 'weekly' && weekly.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        No ASINs selected. Use the table below to filter Business Reports rows.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>No ASINs selected. Use the table below to filter Business Reports rows.</WprChartEmptyState>
   } else {
-    const changeMarkers =
-      viewMode === 'weekly'
-        ? buildWeeklyChangeMarkers(changeEntries)
-        : buildDailyChangeMarkers(dailySeries)
     const changeMarkersByLabel = buildChangeMarkerLookup(changeMarkers)
     let chartRows: Array<{
       label: string
@@ -394,7 +375,7 @@ function BusinessReportsChart({
     }
 
     chartBody = (
-      <Box ref={chartRootRef} sx={{ position: 'relative', height: WPR_CHART_HEIGHT }}>
+      <Box ref={chartRootRef} sx={{ position: 'relative', height: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
@@ -487,43 +468,31 @@ function BusinessReportsChart({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box
-        sx={{
-          ...chartControlRailSx,
-          alignItems: 'flex-start',
-        }}
-      >
-        <Stack spacing={0.35}>
-          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-            {viewMode === 'weekly' ? 'Week over week' : 'Day by day'}
-          </Typography>
-          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-            {viewMode === 'weekly' ? 'Counts + retail conversion rates' : 'Selected-week daily trend'}
-          </Typography>
-        </Stack>
-
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-          <Button
+    <WprChartShell
+      title={viewMode === 'weekly' ? 'Week over week' : 'Day by day'}
+      description={viewMode === 'weekly' ? 'Counts + retail conversion rates' : 'Selected-week daily trend'}
+      changeSummary={summarizeChangeMarkers(changeMarkers, viewMode === 'weekly' ? 'week' : 'day')}
+      primaryControls={
+        <WprChartControlGroup label="View">
+          <ToggleButtonGroup
+            value={viewMode}
+            exclusive
             size="small"
-            variant="outlined"
-            onClick={() => {
-              setViewMode('weekly')
+            aria-label="Business Reports view mode"
+            onChange={(_event, nextMode: BusinessReportsViewMode | null) => {
+              if (nextMode !== null) {
+                setViewMode(nextMode)
+              }
             }}
-            sx={chartToggleButtonSx(viewMode === 'weekly', '#00C2B9')}
+            sx={businessReportsViewToggleGroupSx}
           >
-            Weekly
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setViewMode('daily')
-            }}
-            sx={chartToggleButtonSx(viewMode === 'daily', '#00C2B9')}
-          >
-            Daily
-          </Button>
+            <ToggleButton value="weekly">Weekly</ToggleButton>
+            <ToggleButton value="daily">Daily</ToggleButton>
+          </ToggleButtonGroup>
+        </WprChartControlGroup>
+      }
+      secondaryControls={
+        <WprChartControlGroup label="Metrics">
           <Button
             size="small"
             variant="outlined"
@@ -563,11 +532,11 @@ function BusinessReportsChart({
           >
             Unit Session %
           </Button>
-        </Stack>
-      </Box>
-
+        </WprChartControlGroup>
+      }
+    >
       {chartBody}
-    </Box>
+    </WprChartShell>
   )
 }
 

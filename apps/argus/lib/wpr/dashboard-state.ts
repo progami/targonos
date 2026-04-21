@@ -38,19 +38,7 @@ export interface WprCompWowVisible {
   purch: boolean
 }
 
-export const WPR_TABS = [
-  { id: 'sqp', label: 'SQP' },
-  { id: 'scp', label: 'SCP' },
-  { id: 'br', label: 'BR' },
-  { id: 'tst', label: 'TST' },
-  { id: 'changelog', label: 'Change Log' },
-  { id: 'compare', label: 'Compare' },
-  { id: 'sources', label: 'Sources' },
-] as const satisfies ReadonlyArray<{ id: WprTab; label: string }>
-
-export interface WprDashboardState {
-  activeTab: WprTab
-  selectedWeek: WeekLabel | null
+export interface WprWeekScopedState {
   selectedClusterId: string | null
   selectedSqpRootIds: Set<string>
   selectedSqpTermIds: Set<string>
@@ -64,6 +52,22 @@ export interface WprDashboardState {
   selectedCompetitorTermIds: Set<string>
   expandedCompetitorRootIds: Set<string>
   hasInitializedCompetitorSelection: boolean
+}
+
+export const WPR_TABS = [
+  { id: 'sqp', label: 'SQP' },
+  { id: 'scp', label: 'SCP' },
+  { id: 'br', label: 'BR' },
+  { id: 'tst', label: 'TST' },
+  { id: 'changelog', label: 'Change Log' },
+  { id: 'compare', label: 'Compare' },
+  { id: 'sources', label: 'Sources' },
+] as const satisfies ReadonlyArray<{ id: WprTab; label: string }>
+
+export interface WprDashboardState extends WprWeekScopedState {
+  activeTab: WprTab
+  selectedWeek: WeekLabel | null
+  weekStateByWeek: Partial<Record<WeekLabel, WprWeekScopedState>>
   compareOrganicMode: WprCompareOrganicMode
   sqpTableSort: WprSortState
   scpTableSort: WprSortState
@@ -75,10 +79,26 @@ export interface WprDashboardState {
   compWowVisible: WprCompWowVisible
 }
 
-export function createInitialDashboardState(defaultWeek: WeekLabel | null): WprDashboardState {
+const WPR_SET_TAG = '__wprSetValues'
+
+type SerializedWprSet = {
+  [WPR_SET_TAG]: string[]
+}
+
+function cloneSet(ids: Set<string>): Set<string> {
+  return new Set(ids)
+}
+
+function isSerializedWprSet(value: unknown): value is SerializedWprSet {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+
+  return WPR_SET_TAG in value && Array.isArray((value as SerializedWprSet)[WPR_SET_TAG])
+}
+
+export function createEmptyWeekScopedState(): WprWeekScopedState {
   return {
-    activeTab: 'sqp',
-    selectedWeek: defaultWeek,
     selectedClusterId: null,
     selectedSqpRootIds: new Set<string>(),
     selectedSqpTermIds: new Set<string>(),
@@ -92,6 +112,101 @@ export function createInitialDashboardState(defaultWeek: WeekLabel | null): WprD
     selectedCompetitorTermIds: new Set<string>(),
     expandedCompetitorRootIds: new Set<string>(),
     hasInitializedCompetitorSelection: false,
+  }
+}
+
+export function captureWeekScopedState(state: WprWeekScopedState): WprWeekScopedState {
+  return {
+    selectedClusterId: state.selectedClusterId,
+    selectedSqpRootIds: cloneSet(state.selectedSqpRootIds),
+    selectedSqpTermIds: cloneSet(state.selectedSqpTermIds),
+    expandedSqpRootIds: cloneSet(state.expandedSqpRootIds),
+    hasInitializedSqpSelection: state.hasInitializedSqpSelection,
+    selectedScpAsinIds: cloneSet(state.selectedScpAsinIds),
+    hasInitializedScpSelection: state.hasInitializedScpSelection,
+    selectedBusinessReportAsinIds: cloneSet(state.selectedBusinessReportAsinIds),
+    hasInitializedBusinessReportSelection: state.hasInitializedBusinessReportSelection,
+    selectedCompetitorRootIds: cloneSet(state.selectedCompetitorRootIds),
+    selectedCompetitorTermIds: cloneSet(state.selectedCompetitorTermIds),
+    expandedCompetitorRootIds: cloneSet(state.expandedCompetitorRootIds),
+    hasInitializedCompetitorSelection: state.hasInitializedCompetitorSelection,
+  }
+}
+
+export function applyWeekScopedPatch(
+  state: WprDashboardState,
+  patch: Partial<WprDashboardState>,
+): Partial<WprDashboardState> {
+  const mergedState = {
+    ...state,
+    ...patch,
+  } satisfies WprDashboardState
+
+  if (mergedState.selectedWeek === null) {
+    return patch
+  }
+
+  return {
+    ...patch,
+    weekStateByWeek: {
+      ...mergedState.weekStateByWeek,
+      [mergedState.selectedWeek]: captureWeekScopedState(mergedState),
+    },
+  }
+}
+
+export function switchDashboardWeek(
+  state: WprDashboardState,
+  nextWeek: WeekLabel,
+): Pick<WprDashboardState, 'selectedWeek' | 'weekStateByWeek'> & WprWeekScopedState {
+  if (state.selectedWeek === nextWeek) {
+    return {
+      selectedWeek: nextWeek,
+      weekStateByWeek: state.weekStateByWeek,
+      ...captureWeekScopedState(state),
+    }
+  }
+
+  const weekStateByWeek: Partial<Record<WeekLabel, WprWeekScopedState>> = {
+    ...state.weekStateByWeek,
+  }
+  if (state.selectedWeek !== null) {
+    weekStateByWeek[state.selectedWeek] = captureWeekScopedState(state)
+  }
+
+  const nextWeekState = weekStateByWeek[nextWeek]
+
+  return {
+    selectedWeek: nextWeek,
+    weekStateByWeek,
+    ...(nextWeekState === undefined ? createEmptyWeekScopedState() : captureWeekScopedState(nextWeekState)),
+  }
+}
+
+export function wprStateReplacer(_key: string, value: unknown): unknown {
+  if (value instanceof Set) {
+    return {
+      [WPR_SET_TAG]: Array.from(value),
+    }
+  }
+
+  return value
+}
+
+export function wprStateReviver(_key: string, value: unknown): unknown {
+  if (isSerializedWprSet(value)) {
+    return new Set(value[WPR_SET_TAG])
+  }
+
+  return value
+}
+
+export function createInitialDashboardState(defaultWeek: WeekLabel | null): WprDashboardState {
+  return {
+    activeTab: 'sqp',
+    selectedWeek: defaultWeek,
+    weekStateByWeek: {},
+    ...createEmptyWeekScopedState(),
     compareOrganicMode: 'map',
     sqpTableSort: { key: 'query_volume', dir: 'desc' },
     scpTableSort: { key: 'purchases', dir: 'desc' },

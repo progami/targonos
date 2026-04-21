@@ -7,11 +7,12 @@ import {
   buildChangeMarkerLabelParts,
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
+  summarizeChangeMarkers,
 } from '@/components/wpr/chart-change-markers'
+import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
-import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
-import { chartControlRailSx, chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
+import { chartToggleButtonSx, panelSx, subtleBorder, textSecondary } from '@/lib/wpr/panel-tokens'
 import {
   rateRatio,
   type SqpAggregatedMetrics,
@@ -19,13 +20,6 @@ import {
   type SqpWeeklyPoint,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
-
-const PANEL_SX = {
-  bgcolor: 'rgba(0, 20, 35, 0.85)',
-  border: '1px solid rgba(255,255,255,0.07)',
-  borderRadius: '12px',
-  overflow: 'hidden',
-} as const
 
 type SqpHeroContent = {
   name: string
@@ -623,42 +617,15 @@ function SqpWeeklyChart({
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
   const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
+  const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
   let chartBody: JSX.Element
   if (weekly.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        No weekly SQP history for this selection.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>No weekly SQP history for this selection.</WprChartEmptyState>
   } else if (visibleSeries.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        Turn on at least one series to view the SQP history chart.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>Turn on at least one series to view the SQP history chart.</WprChartEmptyState>
   } else {
     chartBody = (
-      <ResponsiveChartFrame height={WPR_CHART_HEIGHT}>
+      <ResponsiveChartFrame height="100%">
         <SqpWeeklySvg
           weekly={weekly}
           changeEntries={changeEntries}
@@ -671,14 +638,12 @@ function SqpWeeklyChart({
   }
 
   return (
-    <Stack spacing={1.5}>
-      <Box
-        sx={{
-          ...chartControlRailSx,
-          justifyContent: 'flex-start',
-        }}
-      >
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+    <WprChartShell
+      title="Week over week"
+      description="Query-share and conversion deltas"
+      changeSummary={summarizeChangeMarkers(changeMarkers, 'week')}
+      secondaryControls={
+        <WprChartControlGroup label="Metrics">
           {SQP_WOW_SERIES.map((series) => (
             <Button
               key={series.key}
@@ -695,11 +660,11 @@ function SqpWeeklyChart({
               {series.label}
             </Button>
           ))}
-        </Box>
-      </Box>
-
+        </WprChartControlGroup>
+      }
+    >
       {chartBody}
-    </Stack>
+    </WprChartShell>
   )
 }
 
@@ -733,50 +698,39 @@ export default function SqpWeeklyPanel({
   historyLabel: string
 }) {
   return (
-    <Box sx={PANEL_SX}>
+    <Box sx={panelSx}>
       <Box
         sx={{
           px: 2.5,
-          pt: 2.2,
-          pb: 1.4,
+          pt: 2,
+          pb: 1.25,
+          borderBottom: subtleBorder,
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: 'wrap',
         }}
       >
-        <Typography
-          sx={{
-            fontSize: '1.35rem',
-            fontWeight: 800,
-            letterSpacing: '-0.04em',
-            color: 'rgba(255,255,255,0.95)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {heroContent.name}
-        </Typography>
-        <Typography
-          sx={{
-            fontSize: '0.72rem',
-            color: 'rgba(255,255,255,0.6)',
-            mt: 0.4,
-            minHeight: '1.1rem',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {heroContent.meta.join(' · ')}
-        </Typography>
+        <Stack spacing={0.45}>
+          <Typography sx={{ fontSize: '1.2rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
+            {heroContent.name}
+          </Typography>
+          <Typography sx={{ fontSize: '0.72rem', color: textSecondary }}>
+            {heroContent.meta.join(' · ')}
+          </Typography>
+        </Stack>
+      </Box>
 
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: { xs: 1.5, sm: 4 },
-            mt: 1.8,
-            minHeight: '3.1rem',
-          }}
-        >
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+          gap: 1.5,
+          px: 2.5,
+          py: 1.75,
+          borderBottom: subtleBorder,
+        }}
+      >
           <MetricChip
             label="Query Volume"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCompactNumber(currentMetrics.query_volume)}
@@ -789,7 +743,6 @@ export default function SqpWeeklyPanel({
             label="Our Purchases"
             value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.asin_purchases)}
           />
-        </Box>
       </Box>
 
       <Box sx={{ px: 2.5, pb: 2.2 }}>
