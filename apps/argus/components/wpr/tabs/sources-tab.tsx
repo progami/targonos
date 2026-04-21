@@ -1,6 +1,6 @@
 import SourceHeatmap from '@/components/wpr/source-heatmap';
-import type { WprPayload } from '@/lib/wpr/types';
+import type { WprSourceOverview } from '@/lib/wpr/types';
 
-export default function SourcesTab({ payload }: { payload: WprPayload }) {
-  return <SourceHeatmap overview={payload.sourceOverview} />;
+export default function SourcesTab({ overview }: { overview: WprSourceOverview }) {
+  return <SourceHeatmap overview={overview} />;
 }

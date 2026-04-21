@@ -117,9 +117,10 @@ test('SQP weekly chart omits hover tooltip markup when no week is active', () =>
   assert.doesNotMatch(markup, /Impr Share/)
 })
 
-test('SQP weekly chart keeps the toggle rail grouped on the left', () => {
+test('SQP weekly chart uses the shared shell with grouped metrics and visible change summary', () => {
   const source = readFileSync(new URL('./sqp-weekly-panel.tsx', import.meta.url), 'utf8')
 
-  assert.match(source, /\.\.\.chartControlRailSx,\s+justifyContent: 'flex-start'/)
-  assert.match(source, /<Box sx=\{\{ display: 'flex', gap: 1, flexWrap: 'wrap' \}\}>/)
+  assert.match(source, /<WprChartShell/)
+  assert.match(source, /changeSummary=\{summarizeChangeMarkers\(changeMarkers, 'week'\)\}/)
+  assert.match(source, /<WprChartControlGroup label="Metrics">/)
 })

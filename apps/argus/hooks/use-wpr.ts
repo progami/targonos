@@ -5,7 +5,6 @@ import { getPublicBasePath } from '@/lib/base-path';
 import type {
   WprChangeLogEntry,
   WeekLabel,
-  WprPayload,
   WprSourceOverview,
   WprWeekBundle,
   WprWeekSummaryResponse,
@@ -33,24 +32,18 @@ export function useWprWeeksQuery() {
   });
 }
 
-export function useWprPayloadQuery() {
-  return useQuery({
-    queryKey: ['wpr', 'payload'],
-    queryFn: () => getJson<WprPayload>('/api/wpr/payload'),
-  });
-}
-
-export function useWprWeekBundleQuery(week: WeekLabel | null) {
+export function useWprWeekBundleQuery(week: WeekLabel | null, enabled = true) {
   return useQuery({
     queryKey: ['wpr', 'weeks', week],
-    enabled: week !== null,
+    enabled: enabled && week !== null,
     queryFn: () => getJson<WprWeekBundle>(`/api/wpr/weeks/${week}`),
   });
 }
 
-export function useWprSourcesQuery() {
+export function useWprSourcesQuery(enabled = true) {
   return useQuery({
     queryKey: ['wpr', 'sources'],
+    enabled,
     queryFn: () => getJson<WprSourceOverview>('/api/wpr/sources'),
   });
 }
@@ -59,5 +52,13 @@ export function useWprChangeLogQuery() {
   return useQuery({
     queryKey: ['wpr', 'changelog'],
     queryFn: () => getJson<Record<WeekLabel, WprChangeLogEntry[]>>('/api/wpr/changelog'),
+  });
+}
+
+export function useWprChangeLogWeekQuery(week: WeekLabel | null, enabled = true) {
+  return useQuery({
+    queryKey: ['wpr', 'changelog', week],
+    enabled: enabled && week !== null,
+    queryFn: () => getJson<WprChangeLogEntry[]>(`/api/wpr/changelog/${week}`),
   });
 }

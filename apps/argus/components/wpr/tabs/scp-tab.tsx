@@ -15,20 +15,14 @@ import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
   RechartsChangeMarkers,
+  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
+import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprScpWowVisible } from '@/lib/wpr/dashboard-state'
-import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { formatCount, formatMoney } from '@/lib/wpr/format'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
-import {
-  chartControlRailSx,
-  chartToggleButtonSx,
-  panelSx,
-  subtleBorder,
-  textMuted,
-  textSecondary,
-} from '@/lib/wpr/panel-tokens'
+import { chartToggleButtonSx, panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
@@ -140,41 +134,13 @@ function ScpWeeklyChart({
     wowVisible.purch ? { key: 'purch', label: 'Purch Rate', color: '#77dfd0' } : null,
     wowVisible.cvr ? { key: 'cvr', label: 'CVR', color: '#d5ff62' } : null,
   ].filter((value): value is { key: 'ctr' | 'atc' | 'purch' | 'cvr'; label: string; color: string } => value !== null)
+  const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
   let chartBody: JSX.Element
   if (weekly.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        No SCP rows selected. Use the table below to filter SCP rows.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>No SCP rows selected. Use the table below to filter SCP rows.</WprChartEmptyState>
   } else if (visibleSeries.length === 0) {
-    chartBody = (
-      <Box
-        sx={{
-          height: WPR_CHART_HEIGHT,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'rgba(255,255,255,0.54)',
-          fontSize: '0.78rem',
-          letterSpacing: '0.03em',
-        }}
-      >
-        Turn on at least one series to view the SCP history chart.
-      </Box>
-    )
+    chartBody = <WprChartEmptyState>Turn on at least one series to view the SCP history chart.</WprChartEmptyState>
   } else {
-    const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
     const changeMarkersByLabel = buildChangeMarkerLookup(changeMarkers)
     const chartRows = weekly.map((week) => ({
       weekLabel: week.week_label,
@@ -185,7 +151,7 @@ function ScpWeeklyChart({
     }))
 
     chartBody = (
-      <Box sx={{ height: WPR_CHART_HEIGHT }}>
+      <Box sx={{ height: '100%' }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
@@ -247,23 +213,12 @@ function ScpWeeklyChart({
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box
-        sx={{
-          ...chartControlRailSx,
-          alignItems: 'flex-start',
-        }}
-      >
-        <Stack spacing={0.35}>
-          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-            Week over week
-          </Typography>
-          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-            Search funnel rates
-          </Typography>
-        </Stack>
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+    <WprChartShell
+      title="Week over week"
+      description="Catalog search funnel rates"
+      changeSummary={summarizeChangeMarkers(changeMarkers, 'week')}
+      secondaryControls={
+        <WprChartControlGroup label="Metrics">
           <Button
             size="small"
             variant="outlined"
@@ -316,11 +271,11 @@ function ScpWeeklyChart({
           >
             CVR
           </Button>
-        </Box>
-      </Box>
-
+        </WprChartControlGroup>
+      }
+    >
       {chartBody}
-    </Box>
+    </WprChartShell>
   )
 }
 

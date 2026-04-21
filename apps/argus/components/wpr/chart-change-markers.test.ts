@@ -9,6 +9,7 @@ import {
   buildDailyChangeMarkers,
   buildWeeklyChangeMarkers,
   formatChangeMarkerLabel,
+  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from './chart-change-markers'
 
@@ -100,6 +101,13 @@ test('formatChangeMarkerLabel includes tracked changes in hover labels', () => {
     'W14 · 2 changes · Content update across 4 ASINs · Price update across 4 ASINs',
   )
   assert.equal(formatChangeMarkerLabel('W16', undefined), 'W16')
+})
+
+test('summarizeChangeMarkers reports all tracked changes and marked buckets', () => {
+  const weeklyMarkers = buildWeeklyChangeMarkers(weeklyEntries)
+
+  assert.equal(summarizeChangeMarkers(weeklyMarkers, 'week'), '3 changes · 2 marked weeks')
+  assert.equal(summarizeChangeMarkers([], 'day'), 'No marked days')
 })
 
 test('buildChangeMarkerLabelParts keeps standardized change copy split into display lines', () => {

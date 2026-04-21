@@ -81,6 +81,21 @@ export function formatChangeMarkerCount(count: number): string {
   return `${count} ${noun}`
 }
 
+export function summarizeChangeMarkers(
+  markers: ChartChangeMarker[],
+  markerUnit: 'week' | 'day',
+): string {
+  const markerCount = markers.length
+  if (markerCount === 0) {
+    return `No marked ${markerUnit}s`
+  }
+
+  const totalChangeCount = markers.reduce((sum, marker) => sum + marker.count, 0)
+  const markerLabel = markerCount === 1 ? `${markerCount} marked ${markerUnit}` : `${markerCount} marked ${markerUnit}s`
+
+  return `${formatChangeMarkerCount(totalChangeCount)} · ${markerLabel}`
+}
+
 export function buildChangeMarkerLabelParts(
   label: string | number,
   marker: ChartChangeMarker | undefined,
