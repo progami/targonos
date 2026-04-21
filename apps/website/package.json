@@ -4,10 +4,10 @@
   "private": true,
   "description": "Targon – Company site and product catalog",
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js website -- next dev -p 3205",
+    "dev": "node ../../scripts/run-dev-with-logs.js website -- node ../../scripts/run-next-port.js dev 3205",
     "clean": "rm -rf .next out dist",
     "build": "next build",
-    "start": "next start -p 3205",
+    "start": "node ../../scripts/run-next-port.js start 3205",
     "lint": "next lint",
     "type-check": "node -e \"require('fs').rmSync('.next/types', { recursive: true, force: true })\" && tsc --noEmit --skipLibCheck",
     "format": "prettier --write \"src/**/*.{ts,tsx}\""

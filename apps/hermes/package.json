@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3214",
+    "dev": "node ../../scripts/run-next-port.js dev 3214",
     "build": "next build",
-    "start": "next start -p 3214",
+    "start": "node ../../scripts/run-next-port.js start 3214",
     "worker:request-review": "tsx src/server/jobs/request-review-dispatcher.ts",
     "worker:buyer-message": "tsx src/server/jobs/buyer-message-dispatcher.ts",
     "lint": "next lint",

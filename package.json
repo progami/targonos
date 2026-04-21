@@ -5,6 +5,7 @@
   "packageManager": "pnpm@10.21.0",
   "scripts": {
     "predev": "node scripts/prepare-dev-logs.js",
+    "codex:env": "node scripts/setup-codex-env.mjs",
     "dev": "turbo run dev --parallel",
     "build": "node scripts/run-turbo-task.js build",
     "test": "node scripts/run-turbo-task.js test",
