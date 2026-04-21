@@ -16,11 +16,21 @@ export function normalizeBasePath(value: string | undefined): string {
     return '';
   }
 
-  if (trimmed.startsWith('/')) {
-    return trimmed;
+  const segments = trimmed.split('/').filter(Boolean);
+  const halfLen = Math.floor(segments.length / 2);
+  const hasDuplicatedBasePath =
+    segments.length > 0 &&
+    segments.length % 2 === 0 &&
+    segments.slice(0, halfLen).join('/') === segments.slice(halfLen).join('/');
+  const deduped = hasDuplicatedBasePath
+    ? `/${segments.slice(0, halfLen).join('/')}`
+    : trimmed;
+
+  if (deduped.startsWith('/')) {
+    return deduped;
   }
 
-  return `/${trimmed}`;
+  return `/${deduped}`;
 }
 
 export function getPublicBasePath(): string {

@@ -31,6 +31,7 @@ import type {
   MonitoringChangeEvent,
   MonitoringSnapshotRecord,
 } from '@/lib/monitoring/types'
+import { readAppJsonOrThrow } from '@/lib/fetch-json'
 import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
@@ -44,8 +45,6 @@ import {
   formatMoney,
   humanizeFieldName,
 } from '@/components/monitoring/ui'
-
-const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
 type RangeValue = '24h' | '7d' | '30d' | 'all'
 
@@ -64,11 +63,7 @@ export default function TrackingDetailPage() {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch(`${basePath}/api/monitoring/asins/${asin}`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load ASIN monitoring detail.')
-        }
+        const payload = await readAppJsonOrThrow<MonitoringAsinDetail>(`/api/monitoring/asins/${asin}`)
         if (!cancelled) {
           setDetail(payload)
           setLoading(false)

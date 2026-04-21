@@ -21,7 +21,6 @@ import {
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
   RechartsChangeMarkers,
-  summarizeChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
@@ -43,13 +42,11 @@ function blankMetricValue(): string {
 }
 
 function WeeklyGapChart({
-  competitor,
   weekly,
   changeEntries,
   wowVisible,
   setWowVisible,
 }: {
-  competitor: WprCompetitorSummary
   weekly: TstSelectionViewModel['weekly']
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprCompWowVisible
@@ -136,9 +133,6 @@ function WeeklyGapChart({
 
   return (
     <WprChartShell
-      title="Week over week"
-      description={`${competitor.brand} share gap shown in pts`}
-      changeSummary={summarizeChangeMarkers(changeMarkers, 'week')}
       secondaryControls={
         <WprChartControlGroup label="Metrics">
           <Button
@@ -245,7 +239,6 @@ export default function TstWeeklyPanel({
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <WeeklyGapChart
-        competitor={competitor}
         weekly={viewModel.weekly}
         changeEntries={changeEntries}
         wowVisible={wowVisible}
