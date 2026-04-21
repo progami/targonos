@@ -49,7 +49,7 @@ export default function PermissionsPage() {
   return (
     <DashboardLayout>
       <PageContainer>
-        <PageHeaderSection title="Permissions" />
+        <PageHeaderSection title="Permissions" description="Configuration" />
         <PageContent>
           <PermissionsPanel />
         </PageContent>

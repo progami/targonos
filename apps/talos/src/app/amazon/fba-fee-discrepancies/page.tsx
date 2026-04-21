@@ -207,8 +207,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       <PageContent className="space-y-6">
         <div className="rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden">
           {/* Header with search and filter */}
-          <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col gap-3 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                 <Input
@@ -231,14 +232,24 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
                 <option value="ERROR">Error</option>
                 <option value="UNKNOWN">Pending</option>
               </select>
+              </div>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {pageRows.length} shown · {totalRows} total SKUs · Page {currentPage} of {totalPages}
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-              <span className="text-red-600 dark:text-red-400">{summary.mismatch} discrepancies on this page</span>
-              <span className="text-emerald-600 dark:text-emerald-400">{summary.match} matches</span>
-              <span className="text-amber-600 dark:text-amber-400">{summary.warning} warnings</span>
-              <span>{summary.pending} pending</span>
-              <span className="text-slate-400 dark:text-slate-500">·</span>
-              <span>{pageRows.length} shown · {totalRows} total SKUs · Page {currentPage} of {totalPages}</span>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-medium text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300">
+                {summary.mismatch} discrepancies
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {summary.match} matches
+              </span>
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300">
+                {summary.warning} warnings
+              </span>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                {summary.pending} pending
+              </span>
             </div>
           </div>
 
