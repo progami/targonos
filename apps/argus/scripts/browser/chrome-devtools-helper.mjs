@@ -3,9 +3,10 @@
 import { execFileSync } from 'node:child_process'
 import { setTimeout as delay } from 'node:timers/promises'
 import process from 'node:process'
+import { defaultChromeBrowserUrl, defaultChromeStartScriptPath } from './browser-automation-config.mjs'
 
-const BROWSER_URL = process.env.ARGUS_CHROME_BROWSER_URL ?? 'http://127.0.0.1:9223'
-const START_SCRIPT = process.env.ARGUS_CHROME_START_SCRIPT ?? '/Users/jarraramjad/bin/start-codex-chrome.sh'
+const BROWSER_URL = defaultChromeBrowserUrl(process.env)
+const START_SCRIPT = defaultChromeStartScriptPath(process.env)
 const WAIT_TIMEOUT_MS = 60_000
 
 export function parseHosts(hostListText) {
