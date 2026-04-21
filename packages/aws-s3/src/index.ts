@@ -93,7 +93,8 @@ export class S3Service {
     this.region = process.env.AWS_REGION || process.env.S3_BUCKET_REGION || 'us-east-1';
 
     const environment = process.env.NODE_ENV || 'development';
-    const defaultBucket = environment === 'production' ? 'targon-production' : 'targon-development';
+    const defaultBucket =
+      environment === 'production' ? 'wms-production-459288913318' : 'wms-development-459288913318';
 
     this.bucket = process.env.S3_BUCKET_NAME || defaultBucket;
     this.urlExpiry = parseInt(process.env.S3_PRESIGNED_URL_EXPIRY || '3600', 10);
