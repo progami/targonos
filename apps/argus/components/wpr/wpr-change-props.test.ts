@@ -73,3 +73,31 @@ test('all week-based WPR charts use the shared change tooltip renderer', () => {
   assert.match(brSource, /<WprChangeTooltipContent/)
   assert.equal(compareSource.match(/<WprChangeTooltipContent/g)?.length, 2)
 })
+
+test('SQP, SCP, BR, and TST use one shared analytics panel shell', () => {
+  const analyticsPanelSource = readFileSync(new URL('./wpr-analytics-panel.tsx', import.meta.url), 'utf8')
+  const sqpSource = readFileSync(new URL('./tabs/sqp-weekly-panel.tsx', import.meta.url), 'utf8')
+  const scpSource = readFileSync(new URL('./tabs/scp-tab.tsx', import.meta.url), 'utf8')
+  const brSource = readFileSync(new URL('./tabs/business-reports-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-weekly-panel.tsx', import.meta.url), 'utf8')
+
+  assert.match(analyticsPanelSource, /export function WprAnalyticsPanel/)
+  assert.match(sqpSource, /<WprAnalyticsPanel/)
+  assert.match(scpSource, /<WprAnalyticsPanel/)
+  assert.match(brSource, /<WprAnalyticsPanel/)
+  assert.match(tstSource, /<WprAnalyticsPanel/)
+})
+
+test('SQP, SCP, BR, and TST use one shared selection panel shell', () => {
+  const selectionPanelSource = readFileSync(new URL('./wpr-selection-panel.tsx', import.meta.url), 'utf8')
+  const sqpSource = readFileSync(new URL('./tabs/sqp-selection-table.tsx', import.meta.url), 'utf8')
+  const scpSource = readFileSync(new URL('./tabs/scp-selection-table.tsx', import.meta.url), 'utf8')
+  const brSource = readFileSync(new URL('./tabs/business-reports-selection-table.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-selection-table.tsx', import.meta.url), 'utf8')
+
+  assert.match(selectionPanelSource, /export function WprSelectionPanel/)
+  assert.match(sqpSource, /<WprSelectionPanel/)
+  assert.match(scpSource, /<WprSelectionPanel/)
+  assert.match(brSource, /<WprSelectionPanel/)
+  assert.match(tstSource, /<WprSelectionPanel/)
+})

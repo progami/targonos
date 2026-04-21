@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
-import { Box, Button, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { Box, Button, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
+import {
+  WprAnalyticsFooter,
+  WprAnalyticsMetric,
+  WprAnalyticsPanel,
+} from '@/components/wpr/wpr-analytics-panel'
 import {
   Bar,
   CartesianGrid,
@@ -28,7 +33,7 @@ import {
   type BusinessReportsSelectionViewModel,
 } from '@/lib/wpr/business-reports-view-model'
 import { formatCount, formatPercent } from '@/lib/wpr/format'
-import { chartToggleButtonSx, panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
+import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
@@ -97,75 +102,6 @@ function dailyWindowLabel(dailySeries: WprBusinessDailyPoint[]): string {
   }
 
   return `${first.day_label} to ${last.day_label}`
-}
-
-function MetricChip({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <Box>
-      <Typography
-        sx={{
-          fontSize: '0.58rem',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          letterSpacing: '0.12em',
-          color: textMuted,
-          mb: 0.35,
-        }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          fontSize: '1.18rem',
-          fontWeight: 700,
-          letterSpacing: '-0.04em',
-          color: 'rgba(255,255,255,0.92)',
-        }}
-      >
-        {value}
-      </Typography>
-    </Box>
-  )
-}
-
-function Footer({
-  items,
-}: {
-  items: string[]
-}) {
-  return (
-    <Box
-      sx={{
-        px: 2.5,
-        py: 1.2,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 2,
-        borderTop: subtleBorder,
-        color: textMuted,
-      }}
-    >
-      {items.map((item) => (
-        <Typography
-          key={item}
-          sx={{
-            fontSize: '0.64rem',
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {item}
-        </Typography>
-      ))}
-    </Box>
-  )
 }
 
 type OverlayLayout = {
@@ -644,67 +580,38 @@ export default function BusinessReportsTab({
 
   return (
     <Stack spacing={2}>
-      <Box sx={panelSx}>
-        <Box
-          sx={{
-            px: 2.5,
-            pt: 2,
-            pb: 1.25,
-            borderBottom: subtleBorder,
-            display: 'flex',
-            justifyContent: 'space-between',
-            gap: 2,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Stack spacing={0.45}>
-            <Typography sx={{ fontSize: '1.2rem', fontWeight: 700, color: 'rgba(255,255,255,0.92)' }}>
-              {heroContent.name}
-            </Typography>
-            <Typography sx={{ fontSize: '0.72rem', color: textSecondary }}>
-              {heroContent.meta.join(' · ')}
-            </Typography>
-          </Stack>
-        </Box>
-
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
-            gap: 1.5,
-            px: 2.5,
-            py: 1.75,
-            borderBottom: subtleBorder,
-          }}
-        >
-          <MetricChip
-            label="Sessions"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.sessions)}
-          />
-          <MetricChip
-            label="Order Item %"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.order_item_session_percentage)}
-          />
-          <MetricChip
-            label="Unit Session %"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.unit_session_percentage)}
-          />
-        </Box>
-
-        <Box sx={{ p: 2.5 }}>
-          <BusinessReportsChart
-            viewMode={viewMode}
-            weekly={viewModel.weekly}
-            dailySeries={dailyChartSeries}
-            changeEntries={changeEntries}
-            wowVisible={brWowVisible}
-            setWowVisible={setBrWowVisible}
-            setViewMode={setViewMode}
-          />
-        </Box>
-
-        <Footer items={footerItems} />
-      </Box>
+      <WprAnalyticsPanel
+        title={heroContent.name}
+        meta={heroContent.meta}
+        metricColumns={{ xs: 2, md: 3 }}
+        metrics={
+          <>
+            <WprAnalyticsMetric
+              label="Sessions"
+              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.sessions)}
+            />
+            <WprAnalyticsMetric
+              label="Order Item %"
+              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.order_item_session_percentage)}
+            />
+            <WprAnalyticsMetric
+              label="Unit Session %"
+              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.unit_session_percentage)}
+            />
+          </>
+        }
+        footer={<WprAnalyticsFooter items={footerItems} />}
+      >
+        <BusinessReportsChart
+          viewMode={viewMode}
+          weekly={viewModel.weekly}
+          dailySeries={dailyChartSeries}
+          changeEntries={changeEntries}
+          wowVisible={brWowVisible}
+          setWowVisible={setBrWowVisible}
+          setViewMode={setViewMode}
+        />
+      </WprAnalyticsPanel>
 
       <BusinessReportsSelectionTable
         selectedWeekLabel={selectedWeekLabel}
