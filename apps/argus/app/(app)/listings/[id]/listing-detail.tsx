@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   formatAmazonPdpReplicaContractError,
   getReplicaSlotElement,
+  sanitizeAmazonPdpReplicaDocument,
   validateAmazonPdpReplicaContract,
   type AmazonPdpReplicaContractError,
 } from './amazon-pdp-replica'
@@ -676,6 +677,8 @@ export function ListingDetail({
       iframeDocRef.current = doc
       setIframeEpoch((current) => current + 1)
 
+      sanitizeAmazonPdpReplicaDocument(doc)
+
       const height = doc.documentElement.scrollHeight
       if (height > 0) {
         setIframeHeight(height)
@@ -1079,8 +1082,7 @@ export function ListingDetail({
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
-        className="w-full border-0"
-        style={{ height: iframeHeight }}
+        style={{ height: iframeHeight, width: '100%', display: 'block', border: 0 }}
         title={listing ? listing.label : listingId}
         sandbox="allow-same-origin allow-scripts"
       />
