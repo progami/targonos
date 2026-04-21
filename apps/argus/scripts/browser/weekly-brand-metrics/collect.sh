@@ -249,6 +249,19 @@ print("true" if (end - start).days == 6 else "false")
 PY
 }
 
+url_date_range() {
+  "$PYTHON_BIN" - "$1" <<'PY'
+from urllib.parse import parse_qs, urlparse
+import sys
+
+parsed = urlparse(sys.argv[1])
+params = parse_qs(parsed.query)
+start = params.get("startDate", [""])[0]
+end = params.get("endDate", [""])[0]
+print(f"{start}|{end}")
+PY
+}
+
 download_export() {
   local expected_start="${1:-}"
   local expected_end="${2:-}"
@@ -264,6 +277,8 @@ download_export() {
   local end_iso=""
   local is_full_week=""
   local row_count=""
+
+  delete_matching_files "$DOWNLOAD_PATTERN"
 
   for attempt in $(seq 1 3); do
     baseline_info="$(latest_matching_file "$DOWNLOAD_PATTERN")"
@@ -366,6 +381,21 @@ actual_url="$(json_field "$settled_state" href)"
 current_period="$(json_field "$settled_state" currentPeriod)"
 date_button_text="$(json_field "$settled_state" dateButtonText)"
 log "Settled Brand Metrics page: ${date_button_text:-unknown} | ${current_period:-unknown} | ${actual_url:-unknown}"
+
+if [ "$REQUEST_MODE" = "last-available-week" ]; then
+  IFS='|' read -r published_start_date published_end_date <<<"$(url_date_range "$actual_url")"
+  if [ -n "$published_end_date" ]; then
+    IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(week_context_for_end_date "$published_end_date")"
+    TARGET_FILE="$DEST/${PREFIX}_BrandMetrics.csv"
+    if [ -f "$TARGET_FILE" ]; then
+      log "Saved: ${PREFIX}_BrandMetrics.csv already current for published range ${published_start_date}..${published_end_date}"
+      log "NOTE: $(brand_metrics_availability_lag_detail "$published_end_date" "$REFERENCE_DATE")"
+      log "Done"
+      tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+      exit 0
+    fi
+  fi
+fi
 
 if ! download_result="$(download_export "$REQUESTED_START_DATE" "$REQUESTED_END_DATE")"; then
   log "FAILED: Brand Metrics export validation failed"

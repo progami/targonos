@@ -32,6 +32,7 @@ cleanup_legacy_daily_account_health_agent() {
 
 # Make all scripts executable
 chmod +x "$SCRIPT_DIR/chrome-devtools-helper.mjs"
+chmod +x "$SCRIPT_DIR/start-devtools-chrome.sh"
 chmod +x "$SCRIPT_DIR/relogin.sh"
 chmod +x "$SCRIPT_DIR/run-weekly.sh"
 chmod +x "$SCRIPT_DIR/common.sh"
