@@ -792,6 +792,30 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
     week_number, week_label, start_date_text = detect_week_folder(path)
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
+
+    def match_metadata(label: str) -> str | None:
+        pattern = rf"^{re.escape(label)}:\s*(.+)$"
+        for line in lines:
+            stripped = line.strip()
+            match = re.match(pattern, stripped, flags=re.IGNORECASE)
+            if match is not None:
+                return match.group(1).strip()
+        return None
+
+    def extract_section(name: str) -> list[str]:
+        inside = False
+        section_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped == f"## {name}":
+                inside = True
+                continue
+            if inside and stripped.startswith("## "):
+                break
+            if inside:
+                section_lines.append(line.rstrip())
+        return section_lines
+
     title = path.stem.replace("_", " ")
     for line in lines:
         stripped = line.strip()
@@ -800,36 +824,35 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
             break
 
     date_label = start_date_text
-    match = re.search(r"Entry date:\s*(\d{4}-\d{2}-\d{2})", text)
-    if match is not None:
-        date_label = match.group(1)
+    entry_date = match_metadata("Entry date")
+    if entry_date is not None and re.match(r"^\d{4}-\d{2}-\d{2}$", entry_date):
+        date_label = entry_date
     else:
-        match = re.search(r"Week ending:\s*(\d{4}-\d{2}-\d{2})", text)
-        if match is not None:
-            date_label = match.group(1)
+        week_ending = match_metadata("Week ending")
+        if week_ending is not None and re.match(r"^\d{4}-\d{2}-\d{2}$", week_ending):
+            date_label = week_ending
 
     summary = ""
-    if "## Change Summary" in text:
-        after = text.split("## Change Summary", 1)[1].strip().splitlines()
-        for line in after:
-            stripped = line.strip()
-            if stripped == "":
-                if summary != "":
-                    break
-                continue
-            if stripped.startswith("#"):
+    change_summary_lines = extract_section("Change Summary")
+    for line in change_summary_lines:
+        stripped = line.strip()
+        if stripped == "":
+            if summary != "":
                 break
-            summary += (" " if summary != "" else "") + stripped
-    if summary == "" and "## What Changed (Observed)" in text:
-        after = text.split("## What Changed (Observed)", 1)[1].strip().splitlines()
-        bullet_lines = []
-        for line in after:
-            stripped = line.strip()
-            if stripped.startswith("## "):
-                break
-            if stripped.startswith("- "):
-                bullet_lines.append(stripped[2:].strip())
-        summary = " | ".join(bullet_lines[:2])
+            continue
+        summary += (" " if summary != "" else "") + stripped
+
+    observed_lines = extract_section("What Changed (Observed)")
+    observed_bullets = []
+    for line in observed_lines:
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            observed_bullets.append(stripped[2:].strip())
+        elif re.match(r"^\d+\.\s+", stripped):
+            observed_bullets.append(re.sub(r"^\d+\.\s+", "", stripped))
+
+    if summary == "" and observed_bullets:
+        summary = " | ".join(observed_bullets[:2])
     if summary == "":
         for line in lines:
             stripped = line.strip()
@@ -841,31 +864,50 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
                 summary = stripped[2:].strip()
                 break
 
-    highlights = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- ["):
-            continue
-        if stripped.startswith("- "):
-            highlights.append(stripped[2:].strip())
-        elif re.match(r"^\d+\.\s+", stripped):
-            highlights.append(re.sub(r"^\d+\.\s+", "", stripped))
-        if len(highlights) >= 4:
-            break
+    highlights = observed_bullets[:4]
+    if not highlights:
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("- ["):
+                continue
+            if stripped.startswith("- "):
+                highlights.append(stripped[2:].strip())
+            elif re.match(r"^\d+\.\s+", stripped):
+                highlights.append(re.sub(r"^\d+\.\s+", "", stripped))
+            if len(highlights) >= 4:
+                break
 
-    asins = sorted(set(re.findall(r"B0[A-Z0-9]{8}", text, flags=re.IGNORECASE)))
+    asin_metadata = match_metadata("ASINs")
+    if asin_metadata is not None:
+        asins = [asin.strip().upper() for asin in asin_metadata.split(",") if asin.strip()]
+    else:
+        asins = sorted(set(re.findall(r"B0[A-Z0-9]{8}", text, flags=re.IGNORECASE)))
+
+    field_labels = []
+    field_metadata = match_metadata("Fields")
+    if field_metadata is not None and field_metadata != "—":
+        field_labels = [field.strip() for field in field_metadata.split(",") if field.strip()]
+
+    source = match_metadata("Source")
+    if source is None:
+        source = "Plan Log"
+
+    category = match_metadata("Type")
+    if category is None:
+        category = "Manual"
     return {
         "id": slugify(f"manual-{week_label}-{title}"),
         "kind": "manual",
-        "source": "Plan Log",
+        "source": source,
         "week_label": week_label,
         "week_number": week_number,
         "timestamp": date_label,
         "date_label": format_change_log_date_label(date_label),
         "title": title,
         "summary": summary,
-        "category": "Manual",
+        "category": category,
         "asins": asins,
+        "field_labels": field_labels,
         "highlights": highlights,
     }
 

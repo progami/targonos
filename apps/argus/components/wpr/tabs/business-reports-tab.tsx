@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
 import { Box, Button, Stack, Typography } from '@mui/material'
 import {
   Bar,
@@ -12,15 +12,30 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import {
+  type ChartChangeMarker,
+  buildChangeMarkerLookup,
+  buildDailyChangeMarkers,
+  buildWeeklyChangeMarkers,
+  formatChangeMarkerLabel,
+} from '@/components/wpr/chart-change-markers'
 import type { WprBrWowVisible } from '@/lib/wpr/dashboard-state'
+import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import {
   createBusinessReportsSelectionViewModel,
   selectedWeekBusinessRecord,
   type BusinessReportsSelectionViewModel,
 } from '@/lib/wpr/business-reports-view-model'
 import { formatCount, formatPercent } from '@/lib/wpr/format'
-import { panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
-import type { WprBusinessDailyPoint, WprWeekBundle } from '@/lib/wpr/types'
+import {
+  chartControlRailSx,
+  chartToggleButtonSx,
+  panelSx,
+  subtleBorder,
+  textMuted,
+  textSecondary,
+} from '@/lib/wpr/panel-tokens'
+import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
 
@@ -130,10 +145,152 @@ function Footer({
   )
 }
 
+type OverlayLayout = {
+  width: number
+  height: number
+  top: number
+  bottom: number
+  positions: Map<string, number>
+}
+
+function BusinessReportsChangeOverlay({
+  chartRootRef,
+  markers,
+}: {
+  chartRootRef: RefObject<HTMLDivElement | null>
+  markers: ChartChangeMarker[]
+}) {
+  const [layout, setLayout] = useState<OverlayLayout | null>(null)
+
+  useEffect(() => {
+    const node = chartRootRef.current
+    if (node === null) {
+      return
+    }
+
+    const measure = () => {
+      const surface = node.querySelector('.recharts-surface')
+      if (!(surface instanceof SVGSVGElement)) {
+        setLayout(null)
+        return
+      }
+
+      const xTickNodes = node.querySelectorAll('.recharts-cartesian-axis-tick-value')
+      const yGridNodes = node.querySelectorAll('.recharts-cartesian-grid-horizontal line')
+      const viewBox = surface.viewBox.baseVal
+      const positions = new Map<string, number>()
+
+      for (const tickNode of xTickNodes) {
+        const label = tickNode.textContent
+        if (label === null) {
+          continue
+        }
+
+        if (markers.some((marker) => marker.label === label) === false) {
+          continue
+        }
+
+        const x = Number(tickNode.getAttribute('x'))
+        if (Number.isNaN(x)) {
+          continue
+        }
+
+        positions.set(label, x)
+      }
+
+      const yCoordinates: number[] = []
+      for (const gridNode of yGridNodes) {
+        const y = Number(gridNode.getAttribute('y1'))
+        if (Number.isNaN(y)) {
+          continue
+        }
+
+        yCoordinates.push(y)
+      }
+
+      if (positions.size === 0 || yCoordinates.length === 0 || viewBox.width === 0 || viewBox.height === 0) {
+        setLayout(null)
+        return
+      }
+
+      setLayout({
+        width: viewBox.width,
+        height: viewBox.height,
+        top: Math.min(...yCoordinates),
+        bottom: Math.max(...yCoordinates),
+        positions,
+      })
+    }
+
+    measure()
+    const frameId = window.requestAnimationFrame(measure)
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      observer.disconnect()
+    }
+  }, [chartRootRef, markers])
+
+  if (layout === null) {
+    return null
+  }
+
+  return (
+    <Box
+      component="svg"
+      data-change-overlay="business-reports"
+      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'visible',
+        pointerEvents: 'none',
+      }}
+    >
+      {markers.map((marker) => {
+        const x = layout.positions.get(marker.label)
+        if (x === undefined) {
+          return null
+        }
+
+        return (
+          <g key={marker.label}>
+            <line
+              x1={x}
+              x2={x}
+              y1={layout.top}
+              y2={layout.bottom}
+              stroke="rgba(241,235,222,0.54)"
+              strokeWidth="1.4"
+              strokeDasharray="4 4"
+            />
+            {marker.count > 1 ? (
+              <text
+                x={x}
+                y={layout.top + 10}
+                fill="rgba(241,235,222,0.82)"
+                fontSize="8"
+                textAnchor="middle"
+              >
+                {marker.count}
+              </text>
+            ) : null}
+          </g>
+        )
+      })}
+    </Box>
+  )
+}
+
 function BusinessReportsChart({
   viewMode,
   weekly,
   dailySeries,
+  changeEntries,
   wowVisible,
   setWowVisible,
   setViewMode,
@@ -141,10 +298,12 @@ function BusinessReportsChart({
   viewMode: BusinessReportsViewMode
   weekly: BusinessReportsSelectionViewModel['weekly']
   dailySeries: WprBusinessDailyPoint[]
+  changeEntries: WprChangeLogEntry[]
   wowVisible: WprBrWowVisible
   setWowVisible: (nextState: WprBrWowVisible) => void
   setViewMode: (nextMode: BusinessReportsViewMode) => void
 }) {
+  const chartRootRef = useRef<HTMLDivElement | null>(null)
   const visibleSeries = [
     wowVisible.sessions ? { key: 'sessions', label: 'Sessions', color: '#8fc7ff' } : null,
     wowVisible.order_items ? { key: 'order_items', label: 'Order Item %', color: '#f5a623' } : null,
@@ -153,12 +312,12 @@ function BusinessReportsChart({
     (value): value is { key: 'sessions' | 'order_items' | 'unit_session'; label: string; color: string } =>
       value !== null,
   )
-
+  let chartBody: JSX.Element
   if (visibleSeries.length === 0) {
-    return (
+    chartBody = (
       <Box
         sx={{
-          minHeight: 260,
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -170,116 +329,75 @@ function BusinessReportsChart({
         Turn on at least one series to view the Business Reports chart.
       </Box>
     )
-  }
-
-  let chartRows: Array<{
-    label: string
-    sessions: number
-    order_items: number
-    unit_session: number
-    changeCount: number
-  }> = []
-
-  if (viewMode === 'weekly') {
-    chartRows = weekly.map((week) => ({
-      label: week.week_label,
-      sessions: week.sessions,
-      order_items: week.order_item_session_percentage * 100,
-      unit_session: week.unit_session_percentage * 100,
-      changeCount: 0,
-    }))
-  } else {
-    chartRows = dailySeries.map((day) => ({
-      label: day.day_label,
-      sessions: day.sessions,
-      order_items: day.order_item_session_percentage * 100,
-      unit_session: day.unit_session_percentage * 100,
-      changeCount: day.change_count,
-    }))
-  }
-
-  return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+  } else if (viewMode === 'daily' && dailySeries.length === 0) {
+    chartBody = (
       <Box
         sx={{
+          height: WPR_CHART_HEIGHT,
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 2,
-          flexWrap: 'wrap',
+          justifyContent: 'center',
+          color: 'rgba(255,255,255,0.54)',
+          fontSize: '0.78rem',
+          letterSpacing: '0.03em',
         }}
       >
-        <Stack spacing={0.35}>
-          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
-            {viewMode === 'weekly' ? 'Week over week' : 'Day by day'}
-          </Typography>
-          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-            {viewMode === 'weekly' ? 'Counts + retail conversion rates' : 'Selected-week daily trend'}
-          </Typography>
-        </Stack>
-
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
-          <Button
-            size="small"
-            variant={viewMode === 'weekly' ? 'contained' : 'outlined'}
-            onClick={() => {
-              setViewMode('weekly')
-            }}
-          >
-            Weekly
-          </Button>
-          <Button
-            size="small"
-            variant={viewMode === 'daily' ? 'contained' : 'outlined'}
-            onClick={() => {
-              setViewMode('daily')
-            }}
-          >
-            Daily
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.sessions ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                sessions: !wowVisible.sessions,
-              })
-            }}
-          >
-            Sessions
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.order_items ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                order_items: !wowVisible.order_items,
-              })
-            }}
-          >
-            Order Item %
-          </Button>
-          <Button
-            size="small"
-            variant={wowVisible.unit_session ? 'contained' : 'outlined'}
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                unit_session: !wowVisible.unit_session,
-              })
-            }}
-          >
-            Unit Session %
-          </Button>
-        </Stack>
+        No Business Reports ByDate data is available for the selected week.
       </Box>
+    )
+  } else if (viewMode === 'weekly' && weekly.length === 0) {
+    chartBody = (
+      <Box
+        sx={{
+          height: WPR_CHART_HEIGHT,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'rgba(255,255,255,0.54)',
+          fontSize: '0.78rem',
+          letterSpacing: '0.03em',
+        }}
+      >
+        No ASINs selected. Use the table below to filter Business Reports rows.
+      </Box>
+    )
+  } else {
+    const changeMarkers =
+      viewMode === 'weekly'
+        ? buildWeeklyChangeMarkers(changeEntries)
+        : buildDailyChangeMarkers(dailySeries)
+    const changeMarkersByLabel = buildChangeMarkerLookup(changeMarkers)
+    let chartRows: Array<{
+      label: string
+      sessions: number
+      order_items: number
+      unit_session: number
+      changeCount: number
+    }> = []
 
-      <Box sx={{ height: 320 }}>
+    if (viewMode === 'weekly') {
+      chartRows = weekly.map((week) => ({
+        label: week.week_label,
+        sessions: week.sessions,
+        order_items: week.order_item_session_percentage * 100,
+        unit_session: week.unit_session_percentage * 100,
+        changeCount: 0,
+      }))
+    } else {
+      chartRows = dailySeries.map((day) => ({
+        label: day.day_label,
+        sessions: day.sessions,
+        order_items: day.order_item_session_percentage * 100,
+        unit_session: day.unit_session_percentage * 100,
+        changeCount: day.change_count,
+      }))
+    }
+
+    chartBody = (
+      <Box ref={chartRootRef} sx={{ position: 'relative', height: WPR_CHART_HEIGHT }}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} />
             <YAxis yAxisId="counts" tick={{ fontSize: 10 }} />
             <YAxis
@@ -298,14 +416,7 @@ function BusinessReportsChart({
                 }
                 return [`${value.toFixed(1)}%`, 'Unit Session %']
               }}
-              labelFormatter={(label, payload) => {
-                const row = payload[0]?.payload
-                if (row === undefined || row.changeCount === 0) {
-                  return label
-                }
-
-                return `${label} · ${row.changeCount} changes`
-              }}
+              labelFormatter={(label) => formatChangeMarkerLabel(label, changeMarkersByLabel.get(String(label)))}
               contentStyle={{
                 background: 'rgba(0,20,35,0.96)',
                 border: '1px solid rgba(255,255,255,0.08)',
@@ -339,7 +450,92 @@ function BusinessReportsChart({
             ) : null}
           </ComposedChart>
         </ResponsiveContainer>
+        <BusinessReportsChangeOverlay chartRootRef={chartRootRef} markers={changeMarkers} />
       </Box>
+    )
+  }
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <Box
+        sx={{
+          ...chartControlRailSx,
+          alignItems: 'flex-start',
+        }}
+      >
+        <Stack spacing={0.35}>
+          <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+            {viewMode === 'weekly' ? 'Week over week' : 'Day by day'}
+          </Typography>
+          <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
+            {viewMode === 'weekly' ? 'Counts + retail conversion rates' : 'Selected-week daily trend'}
+          </Typography>
+        </Stack>
+
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setViewMode('weekly')
+            }}
+            sx={chartToggleButtonSx(viewMode === 'weekly', '#00C2B9')}
+          >
+            Weekly
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setViewMode('daily')
+            }}
+            sx={chartToggleButtonSx(viewMode === 'daily', '#00C2B9')}
+          >
+            Daily
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                sessions: !wowVisible.sessions,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.sessions, '#8fc7ff')}
+          >
+            Sessions
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                order_items: !wowVisible.order_items,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.order_items, '#f5a623')}
+          >
+            Order Item %
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => {
+              setWowVisible({
+                ...wowVisible,
+                unit_session: !wowVisible.unit_session,
+              })
+            }}
+            sx={chartToggleButtonSx(wowVisible.unit_session, '#d5ff62')}
+          >
+            Unit Session %
+          </Button>
+        </Stack>
+      </Box>
+
+      {chartBody}
     </Box>
   )
 }
@@ -351,7 +547,13 @@ function buildHeroContent(selectedWeekLabel: string): BusinessReportsHeroContent
   }
 }
 
-export default function BusinessReportsTab({ bundle }: { bundle: WprWeekBundle }) {
+export default function BusinessReportsTab({
+  bundle,
+  changeEntries,
+}: {
+  bundle: WprWeekBundle
+  changeEntries: WprChangeLogEntry[]
+}) {
   const [viewMode, setViewMode] = useState<BusinessReportsViewMode>('weekly')
   const selectedBusinessReportAsinIds = useWprStore((state) => state.selectedBusinessReportAsinIds)
   const setSelectedBusinessReportAsinIds = useWprStore((state) => state.setSelectedBusinessReportAsinIds)
@@ -490,44 +692,15 @@ export default function BusinessReportsTab({ bundle }: { bundle: WprWeekBundle }
         </Box>
 
         <Box sx={{ p: 2.5 }}>
-          {viewModel.scopeType === 'empty' ? (
-            <Box
-              sx={{
-                minHeight: 260,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'rgba(255,255,255,0.54)',
-                fontSize: '0.78rem',
-                letterSpacing: '0.03em',
-              }}
-            >
-              No ASINs selected. Use the table below to filter Business Reports rows.
-            </Box>
-          ) : viewMode === 'daily' && dailyChartSeries.length === 0 ? (
-            <Box
-              sx={{
-                minHeight: 260,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'rgba(255,255,255,0.54)',
-                fontSize: '0.78rem',
-                letterSpacing: '0.03em',
-              }}
-            >
-              No Business Reports ByDate data is available for {selectedWeekLabel}.
-            </Box>
-          ) : (
-            <BusinessReportsChart
-              viewMode={viewMode}
-              weekly={viewModel.weekly}
-              dailySeries={dailyChartSeries}
-              wowVisible={brWowVisible}
-              setWowVisible={setBrWowVisible}
-              setViewMode={setViewMode}
-            />
-          )}
+          <BusinessReportsChart
+            viewMode={viewMode}
+            weekly={viewModel.weekly}
+            dailySeries={dailyChartSeries}
+            changeEntries={changeEntries}
+            wowVisible={brWowVisible}
+            setWowVisible={setBrWowVisible}
+            setViewMode={setViewMode}
+          />
         </Box>
 
         <Footer items={footerItems} />

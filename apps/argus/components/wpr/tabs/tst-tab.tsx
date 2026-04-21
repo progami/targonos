@@ -71,7 +71,7 @@ function buildHeroContent(bundle: WprWeekBundle, viewModel: TstSelectionViewMode
 
 export default function TstTab({
   bundle,
-  changeEntries: _changeEntries,
+  changeEntries,
 }: {
   bundle: WprWeekBundle
   changeEntries: WprChangeLogEntry[]
@@ -247,6 +247,7 @@ export default function TstTab({
         competitor={competitor}
         heroContent={heroContent}
         viewModel={viewModel}
+        changeEntries={changeEntries}
         selectedWeekLabel={bundle.meta.anchorWeek}
         historyLabel={historyLabel}
         wowVisible={compWowVisible}
@@ -272,12 +273,6 @@ export default function TstTab({
           setSelectedCompetitorRootIds([])
           setSelectedCompetitorTermIds([])
           setHasInitializedCompetitorSelection(true)
-        }}
-        onExpandAll={() => {
-          setExpandedCompetitorRootIds(bundle.clusters.map((cluster) => cluster.id))
-        }}
-        onCollapseAll={() => {
-          setExpandedCompetitorRootIds([])
         }}
         onSetRootSelection={handleSetRootSelection}
         onToggleTerm={handleToggleTerm}

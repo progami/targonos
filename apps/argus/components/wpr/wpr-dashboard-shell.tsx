@@ -86,11 +86,11 @@ export default function WprDashboardShell() {
       />
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 0, py: 1.5 }}>
         {activeTab === 'sqp' ? <SqpTab bundle={bundle} changeEntries={changeEntries} /> : null}
-        {activeTab === 'scp' ? <ScpTab bundle={bundle} /> : null}
-        {activeTab === 'br' ? <BusinessReportsTab bundle={bundle} /> : null}
+        {activeTab === 'scp' ? <ScpTab bundle={bundle} changeEntries={changeEntries} /> : null}
+        {activeTab === 'br' ? <BusinessReportsTab bundle={bundle} changeEntries={changeEntries} /> : null}
         {activeTab === 'tst' ? <TstTab bundle={bundle} changeEntries={changeEntries} /> : null}
         {activeTab === 'changelog' ? <ChangelogTab entries={changeEntries} selectedWeekLabel={selectedWeek} /> : null}
-        {activeTab === 'compare' ? <CompareTab bundle={bundle} /> : null}
+        {activeTab === 'compare' ? <CompareTab bundle={bundle} changeEntries={changeEntries} /> : null}
         {activeTab === 'sources' ? <SourcesTab payload={data} /> : null}
       </Box>
     </Box>
