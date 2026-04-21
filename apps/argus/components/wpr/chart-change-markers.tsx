@@ -115,12 +115,14 @@ export function formatChangeMarkerLabel(label: string | number, marker: ChartCha
 export function WprChangeTooltipContent({
   active,
   label,
+  labelText,
   payload,
   changeMarker,
   formatRow,
 }: {
   active?: boolean
   label?: string | number
+  labelText?: string | number
   payload?: readonly WprTooltipPayloadEntry[]
   changeMarker?: ChartChangeMarker
   formatRow: (entry: WprTooltipPayloadEntry) => WprTooltipRow
@@ -129,7 +131,12 @@ export function WprChangeTooltipContent({
     return null
   }
 
-  const labelParts = buildChangeMarkerLabelParts(label, changeMarker)
+  let displayLabel: string | number = label
+  if (labelText !== undefined) {
+    displayLabel = labelText
+  }
+
+  const labelParts = buildChangeMarkerLabelParts(displayLabel, changeMarker)
   const header = labelParts[0]
   if (header === undefined) {
     throw new Error(`Missing tooltip header for ${String(label)}`)

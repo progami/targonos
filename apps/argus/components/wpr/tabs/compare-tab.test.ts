@@ -21,4 +21,5 @@ test('compare tab uses shared change tooltips for weekly charts and shared dark 
   assert.equal(tooltipUsages.length, 4)
   assert.equal(sharedTooltipUsages.length, 2)
   assert.equal(changeTooltipUsages.length, 2)
+  assert.equal(source.match(/labelText=\{/g)?.length, 2)
 })

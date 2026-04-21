@@ -27,6 +27,7 @@ import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layo
 import { createCompareViewModel } from '@/lib/wpr/compare-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
+import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   panelBadgeSx,
   panelHeadSx,
@@ -97,9 +98,11 @@ function PanelTitle({
 function RankHeatmap({
   bundle,
   clusterIds,
+  weekStartDates,
 }: {
   bundle: WprWeekBundle
   clusterIds: string[]
+  weekStartDates: Record<string, string>
 }) {
   const clusters = clusterIds
     .map((clusterId) => bundle.clusters.find((cluster) => cluster.id === clusterId))
@@ -168,7 +171,7 @@ function RankHeatmap({
               return (
                 <Box
                   key={`${cluster.id}-${week}`}
-                  title={`${cluster.cluster} · ${week} · Avg rank ${point?.avg_rank ?? '—'} · Purchase share ${formatPercent(point?.purchase_share ?? null, 1)}`}
+                  title={`${cluster.cluster} · ${formatWeekLabelFromLookup(week, weekStartDates)} · Avg rank ${point?.avg_rank ?? '—'} · Purchase share ${formatPercent(point?.purchase_share ?? null, 1)}`}
                   sx={{
                     height: 26,
                     borderRadius: '6px',
@@ -196,6 +199,7 @@ export default function CompareTab({
   const compareOrganicMode = useWprStore((state) => state.compareOrganicMode)
   const setCompareOrganicMode = useWprStore((state) => state.setCompareOrganicMode)
   const viewModel = createCompareViewModel(bundle)
+  const weekStartDates = buildBundleWeekStartDateLookup(bundle)
   const weeklyChangeMarkers = buildWeeklyChangeMarkers(changeEntries)
   const weeklyChangeMarkersByLabel = buildChangeMarkerLookup(weeklyChangeMarkers)
 
@@ -264,6 +268,7 @@ export default function CompareTab({
                         active={active}
                         payload={payload}
                         label={label}
+                        labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
                         changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
                         formatRow={(entry) => {
                           const value = entry.value
@@ -421,6 +426,7 @@ export default function CompareTab({
                             active={active}
                             payload={payload}
                             label={label}
+                            labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
                             changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
                             formatRow={(entry) => {
                               const key = entry.dataKey
@@ -473,7 +479,7 @@ export default function CompareTab({
               <Typography sx={{ fontSize: '0.74rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', mb: 1 }}>
                 Rank Heatmap
               </Typography>
-              <RankHeatmap bundle={bundle} clusterIds={bundle.lineClusterIds} />
+              <RankHeatmap bundle={bundle} clusterIds={bundle.lineClusterIds} weekStartDates={weekStartDates} />
             </Box>
           </Box>
         )}

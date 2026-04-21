@@ -8,6 +8,7 @@ import {
   type SqpSelectionViewModel,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
+import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import SqpSelectionTable from './sqp-selection-table'
 import SqpWeeklyPanel from './sqp-weekly-panel'
@@ -57,20 +58,11 @@ function allSelectableTermIds(bundle: WprWeekBundle): string[] {
   return termIds
 }
 
-function windowRangeLabel(weeks: string[]): string {
-  if (weeks.length === 0) {
-    return ''
-  }
-
-  if (weeks.length === 1) {
-    return weeks[0]
-  }
-
-  return `${weeks[0]} - ${weeks[weeks.length - 1]}`
-}
-
-function buildHeroContent(bundle: WprWeekBundle, viewModel: SqpSelectionViewModel): { name: string; meta: string[] } {
-  const selectedWeekLabel = bundle.meta.anchorWeek
+function buildHeroContent(
+  bundle: WprWeekBundle,
+  viewModel: SqpSelectionViewModel,
+  selectedWeekLabel: string,
+): { name: string; meta: string[] } {
   if (viewModel.scopeType === 'empty') {
     return {
       name: 'SQP Selection',
@@ -315,8 +307,10 @@ export default function SqpTab({
     }
   }
 
-  const heroContent = buildHeroContent(bundle, viewModel)
-  const historyLabel = windowRangeLabel(bundle.meta.baselineWindow)
+  const weekStartDates = buildBundleWeekStartDateLookup(bundle)
+  const selectedWeekLabel = formatWeekLabelFromLookup(bundle.meta.anchorWeek, weekStartDates)
+  const heroContent = buildHeroContent(bundle, viewModel, selectedWeekLabel)
+  const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const blankTopValues = viewModel.scopeType === 'empty'
   const currentMetrics = viewModel.metrics
 
@@ -439,7 +433,7 @@ export default function SqpTab({
         selectedRootCount={viewModel.selectedRootIds.length}
         selectedTermCount={viewModel.selectedTermIds.length}
         totalTermCount={viewModel.allTermIds.length}
-        selectedWeekLabel={bundle.meta.anchorWeek}
+        selectedWeekLabel={selectedWeekLabel}
         historyLabel={historyLabel}
       />
 
