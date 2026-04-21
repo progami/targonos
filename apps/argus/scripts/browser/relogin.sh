@@ -8,10 +8,11 @@ source "$SCRIPT_DIR/common.sh"
 
 TARGET_URL="${1:-https://sellercentral.amazon.com/home}"
 SELLER_CENTRAL_LOGIN_USERNAME="shoaibgondal@targonglobal.com"
+SELLER_CENTRAL_LOGIN_QUERY="${ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY:-sellercentral.amazon.com}"
 SELLER_CENTRAL_ACCOUNT_LABEL="Targon LLC"
 SELLER_CENTRAL_MARKETPLACE_LABEL="United States"
-SC_EMAIL="$(bitwarden_login_username "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
-SC_PASSWORD="$(bitwarden_login_password "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"
+SC_EMAIL="$(bitwarden_login_username "$SELLER_CENTRAL_LOGIN_QUERY" "$SELLER_CENTRAL_LOGIN_USERNAME")"
+SC_PASSWORD="$(bitwarden_login_password "$SELLER_CENTRAL_LOGIN_QUERY" "$SELLER_CENTRAL_LOGIN_USERNAME")"
 LOG="/tmp/sc-relogin.log"
 SELLER_TAB_ID=""
 
@@ -239,7 +240,7 @@ for _ in $(seq 1 60); do
       ;;
     AUTH_APP_OTP)
       log "Submitting authenticator OTP"
-      if ! otp_code="$(bitwarden_login_totp "sellercentral.amazon.com" "$SELLER_CENTRAL_LOGIN_USERNAME")"; then
+      if ! otp_code="$(bitwarden_login_totp "$SELLER_CENTRAL_LOGIN_QUERY" "$SELLER_CENTRAL_LOGIN_USERNAME")"; then
         log "FAILED: Seller Central Bitwarden TOTP unavailable"
         exit 1
       fi
