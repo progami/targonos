@@ -575,8 +575,6 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
                 matrix.append(entry)
             entry["weeks"][week_label] = {
                 "present": len(files) > 0,
-                "file_count": len(files),
-                "files": [f.name for f in files[:3]],
             }
             if files:
                 has_any = True
@@ -10074,9 +10072,8 @@ def build_html(data: dict[str, object]) -> str:
         }
         if (recentWindowSet.has(w)) cls += " source-window";
         if (w === anchorWeek) cls += " source-anchor";
-        var count = cell ? cell.file_count : 0;
-        var title = present ? count + " file" + (count !== 1 ? "s" : "") + ": " + (cell.files ? cell.files.join(", ") : "") : "Missing";
-        html += '<div class="source-cell ' + cls + '" title="' + escapeHtml(title) + '"></div>';
+        var title = present ? "Present" : "Missing";
+        html += '<div class="source-cell ' + cls + '" title="' + title + '"></div>';
       });
       html += '</div>';
     });

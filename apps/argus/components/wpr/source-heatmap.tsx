@@ -258,20 +258,7 @@ export default function SourceHeatmap({ overview }: { overview: WprSourceOvervie
                             opacity: 0.8,
                           },
                         }}
-                      >
-                        {isPresent && cell.file_count > 1 && (
-                          <Typography
-                            sx={{
-                              fontSize: '0.5rem',
-                              fontWeight: 600,
-                              color: 'rgba(255,255,255,0.6)',
-                              lineHeight: 1,
-                            }}
-                          >
-                            {cell.file_count}
-                          </Typography>
-                        )}
-                      </Box>
+                      />
                     );
                   })}
                 </Box>

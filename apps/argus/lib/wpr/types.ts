@@ -251,8 +251,6 @@ export interface WprCluster {
 
 export interface WprSourceMatrixCell {
   present: boolean;
-  file_count: number;
-  files: string[];
 }
 
 export interface WprSourceMatrixRow {

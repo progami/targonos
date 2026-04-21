@@ -159,5 +159,41 @@ class ManualChangeLogParsingTest(unittest.TestCase):
             )
 
 
+class SourceOverviewTest(unittest.TestCase):
+    def test_scan_sources_emits_presence_only_cells(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            week_input_dir = (
+                sales_root
+                / "WPR"
+                / "Week 16 - 2026-04-12 (Sun)"
+                / "input"
+                / "Business Reports (API)"
+                / "Sales & Traffic (API)"
+            )
+            week_input_dir.mkdir(parents=True, exist_ok=True)
+            (week_input_dir / "W16_2026-04-18_SalesTraffic-ByAsin.csv").write_text("asin\nB000000001\n", encoding="utf-8")
+            (week_input_dir / "W16_2026-04-18_SalesTraffic-ByDate.csv").write_text("date\n2026-04-18\n", encoding="utf-8")
+
+            module = load_module(data_dir)
+            overview = module.scan_sources(
+                {
+                    "W16": {
+                        "week_number": 16,
+                        "start_date": "2026-04-12",
+                    }
+                }
+            )
+
+            sales_and_traffic = next(
+                row for row in overview["matrix"]
+                if row["name"] == "Sales & Traffic"
+            )
+            self.assertEqual(sales_and_traffic["weeks"]["W16"], {"present": True})
+
+
 if __name__ == "__main__":
     unittest.main()
