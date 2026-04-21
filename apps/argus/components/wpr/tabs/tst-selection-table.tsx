@@ -8,12 +8,16 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   TableSortLabel,
   Typography,
 } from '@mui/material'
+import {
+  WprSelectionPanel,
+  wprSelectionHeaderCellSx,
+  wprSelectionMetricCellSx,
+} from '@/components/wpr/wpr-selection-panel'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -22,7 +26,7 @@ import {
   type TstSelectionTermRow,
   type TstSelectionViewModel,
 } from '@/lib/wpr/tst-view-model'
-import { panelSx, subtleBorder, teal, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
+import { teal, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
 import { formatPercent } from '@/lib/wpr/format'
 
 type TstSortKey =
@@ -434,9 +438,8 @@ function MetricCell({
     <TableCell
       align={align}
       sx={{
-        fontSize: '0.72rem',
+        ...wprSelectionMetricCellSx,
         color: textSecondary,
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
       }}
     >
       {children}
@@ -488,42 +491,14 @@ export default function TstSelectionTable({
   })
 
   return (
-    <Box sx={panelSx}>
-      <Box
-        sx={{
-          px: 2,
-          py: 1.3,
-          borderBottom: subtleBorder,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
-          flexWrap: 'wrap',
-        }}
-      >
-        <Stack spacing={0.3}>
-          <Typography
-            sx={{
-              fontSize: '0.64rem',
-              fontWeight: 700,
-              letterSpacing: '0.12em',
-              textTransform: 'uppercase',
-              color: textMuted,
-            }}
-          >
-            TST Selection
-          </Typography>
-          <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, color: 'rgba(255,255,255,0.88)' }}>
-            {`TST selected week · ${viewModel.rootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
-          </Typography>
-        </Stack>
-      </Box>
-
-      <TableContainer sx={{ maxHeight: 640 }}>
+    <WprSelectionPanel
+      title="TST Selection"
+      summary={`TST selected week · ${viewModel.rootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+    >
         <Table stickyHeader size="small" sx={{ minWidth: 1320 }}>
           <TableHead>
             <TableRow>
-              <TableCell padding="checkbox" sx={{ bgcolor: 'rgba(0, 20, 35, 0.96)', borderBottom: subtleBorder }}>
+              <TableCell padding="checkbox" sx={wprSelectionHeaderCellSx}>
                 <Checkbox
                   size="small"
                   checked={allTermsChecked}
@@ -542,7 +517,7 @@ export default function TstSelectionTable({
                 <TableCell
                   key={column.key}
                   align={column.key === 'term' ? 'left' : 'right'}
-                  sx={{ bgcolor: 'rgba(0, 20, 35, 0.96)', borderBottom: subtleBorder }}
+                  sx={wprSelectionHeaderCellSx}
                 >
                   <TableSortLabel
                     active={sortState.key === column.key}
@@ -749,7 +724,6 @@ export default function TstSelectionTable({
             })}
           </TableBody>
         </Table>
-      </TableContainer>
-    </Box>
+    </WprSelectionPanel>
   )
 }
