@@ -1,59 +1,81 @@
-import { headers } from 'next/headers';
-import type { Session } from 'next-auth';
-import type { PortalConsumerSession } from '@targon/auth';
-import { readPortalConsumerSession } from '@targon/auth';
+import NextAuth from 'next-auth';
+import type { NextAuthConfig, Session } from 'next-auth';
+import type { NextRequest } from 'next/server';
+import { getWorktreeDevSession, withSharedAuth } from '@targon/auth';
 
-type XPlanSession = Session & {
-  authz?: unknown;
-  roles?: unknown;
-  globalRoles?: unknown;
-  authzVersion?: unknown;
-  activeTenant?: string | null;
-};
+type NextAuthResult = ReturnType<typeof NextAuth>;
 
-function requireSharedSecret(): string {
-  const value = process.env.PORTAL_AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+function requireEnv(name: string): string {
+  const value = process.env[name];
   if (!value || value.trim() === '') {
-    throw new Error('PORTAL_AUTH_SECRET or NEXTAUTH_SECRET must be defined for X-Plan auth.');
+    throw new Error(`${name} must be defined for X-Plan auth configuration.`);
   }
   return value;
 }
 
-function buildSession(session: PortalConsumerSession): Session {
-  const result: XPlanSession = {
-    expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    user: {
-      name: typeof session.payload.name === 'string' ? session.payload.name : undefined,
-      email: typeof session.payload.email === 'string' ? session.payload.email : undefined,
+function resolveAuthOptions(): NextAuthConfig {
+  requireEnv('COOKIE_DOMAIN');
+  requireEnv('NEXTAUTH_URL');
+  requireEnv('NEXT_PUBLIC_APP_URL');
+  requireEnv('PORTAL_AUTH_URL');
+  requireEnv('NEXT_PUBLIC_PORTAL_AUTH_URL');
+
+  const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  if (!sharedSecret) {
+    throw new Error(
+      'PORTAL_AUTH_SECRET or NEXTAUTH_SECRET must be defined for X-Plan auth configuration.',
+    );
+  }
+  process.env.NEXTAUTH_SECRET = sharedSecret;
+
+  const baseAuthOptions: NextAuthConfig = {
+    trustHost: true,
+    providers: [],
+    session: { strategy: 'jwt' },
+    secret: sharedSecret,
+    callbacks: {
+      async jwt({ token, user }) {
+        if (user && (user as any).id) {
+          token.sub = (user as any).id;
+        }
+        return token;
+      },
+      async session({ session, token }) {
+        (session as { authz?: unknown }).authz = (token as { authz?: unknown }).authz;
+        (session as { roles?: unknown }).roles = (token as { roles?: unknown }).roles;
+        (session as { globalRoles?: unknown }).globalRoles = (token as { globalRoles?: unknown }).globalRoles;
+        (session as { authzVersion?: unknown }).authzVersion =
+          (token as { authzVersion?: unknown }).authzVersion;
+        session.user.id = (token.sub as string) || session.user.id;
+        return session;
+      },
     },
-    authz: session.authz,
-    roles: session.payload.roles ?? session.authz.apps,
-    globalRoles: session.payload.globalRoles ?? session.authz.globalRoles,
-    authzVersion:
-      typeof session.payload.authzVersion === 'number'
-        ? session.payload.authzVersion
-        : session.authz.version,
-    activeTenant: session.activeTenant,
   };
 
-  if (typeof session.payload.sub === 'string' && session.payload.sub.trim() !== '') {
-    (result.user as { id?: string }).id = session.payload.sub;
-  }
-
-  return result;
+  return withSharedAuth(baseAuthOptions, {
+    cookieDomain: requireEnv('COOKIE_DOMAIN'),
+    // Read portal cookie in dev
+    appId: 'targon',
+  });
 }
 
+let cached: NextAuthResult | null = null;
+
+function getNextAuth(): NextAuthResult {
+  if (cached) return cached;
+  cached = NextAuth(resolveAuthOptions());
+  return cached;
+}
+
+export const handlers = {
+  GET: (request: NextRequest) => getNextAuth().handlers.GET(request),
+  POST: (request: NextRequest) => getNextAuth().handlers.POST(request),
+} satisfies NextAuthResult['handlers'];
+
 export async function auth(): Promise<Session | null> {
-  const headerList = await headers();
-  const session = await readPortalConsumerSession({
-    request: { headers: headerList },
-    appId: 'xplan',
-    secret: requireSharedSecret(),
-  });
-
-  if (!session) {
-    return null;
+  const worktreeSession = await getWorktreeDevSession('xplan');
+  if (worktreeSession) {
+    return worktreeSession as unknown as Session;
   }
-
-  return buildSession(session);
+  return getNextAuth().auth() as Promise<Session | null>;
 }
