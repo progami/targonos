@@ -1,6 +1,7 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import { ValidationError, NotFoundError, ConflictError } from '@/lib/api'
+import { assertValidFulfillmentSourceWarehouse } from '@/lib/services/fulfillment-source-warehouse'
 import {
   FulfillmentDestinationType,
   FulfillmentOrderLineStatus,
@@ -169,12 +170,14 @@ export async function createFulfillmentOrder(
 
   const warehouse = await prisma.warehouse.findFirst({
     where: { code: sanitizeForDisplay(input.warehouseCode.trim()) },
-    select: { code: true, name: true, address: true },
+    select: { code: true, name: true, address: true, kind: true },
   })
 
   if (!warehouse) {
     throw new ValidationError(`Warehouse not found: ${input.warehouseCode}`)
   }
+
+  assertValidFulfillmentSourceWarehouse(warehouse)
 
   const skuCodes = Array.from(new Set(normalizedLines.map(line => line.skuCode)))
   const skus = await prisma.sku.findMany({

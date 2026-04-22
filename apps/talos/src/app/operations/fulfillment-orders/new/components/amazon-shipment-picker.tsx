@@ -91,26 +91,6 @@ export function AmazonShipmentPicker({
     })
   }, [shipments, searchTerm])
 
-  // Try to find a warehouse matching the FC code
-  const findWarehouseForFC = useCallback(
-    (fcCode: string) => {
-      // Try exact match first, then partial match
-      const exactMatch = warehouses.find(
-        w => w.code.toUpperCase() === fcCode.toUpperCase()
-      )
-      if (exactMatch) return exactMatch
-
-      // Try partial match (FC code might be part of warehouse code or name)
-      const partialMatch = warehouses.find(
-        w =>
-          w.code.toUpperCase().includes(fcCode.toUpperCase()) ||
-          w.name.toUpperCase().includes(fcCode.toUpperCase())
-      )
-      return partialMatch
-    },
-    [warehouses]
-  )
-
   const handleImport = async (shipmentId: string) => {
     if (!shipmentId.trim()) {
       toast.error('Amazon shipment ID is required')
@@ -179,13 +159,9 @@ export function AmazonShipmentPicker({
 
       const destinationAddress = shipToAddress ? formatAmazonAddress(shipToAddress) : ''
 
-      // Try to auto-select warehouse based on FC code
-      const matchedWarehouse = findWarehouseForFC(destinationFC)
-
       setFormData(prev => ({
         ...prev,
         destinationType: 'AMAZON_FBA',
-        warehouseCode: matchedWarehouse?.code ?? prev.warehouseCode,
         destinationName: destinationFC || prev.destinationName,
         destinationAddress: destinationAddress || prev.destinationAddress,
         externalReference: resolvedShipmentId || prev.externalReference,
