@@ -1,7 +1,6 @@
 'use client'
 
 import { Badge } from '@/components/ui/badge'
-import { cn } from '@/lib/utils'
 import { Factory, Ship, Warehouse } from '@/lib/lucide-icons'
 import type { LucideIcon } from '@/lib/lucide-icons'
 import type { DashboardOverviewSnapshot } from '@/lib/dashboard/dashboard-overview'
@@ -29,10 +28,7 @@ function MetricCard({
     <section className="rounded-[24px] border border-slate-800 bg-slate-950/95 p-4 shadow-soft">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Summary
-          </div>
-          <h2 className="mt-1 text-lg font-semibold text-slate-100">{title}</h2>
+          <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-200">
           <Icon className="h-5 w-5" />
@@ -84,7 +80,7 @@ function SupportCard({
       <div className="flex items-center justify-between gap-4 border-b border-slate-800 pb-3">
         <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
         <Badge variant="neutral" className="border-slate-800 bg-slate-900/80 text-slate-300">
-          Support
+          {formatNumber(summary.poCount)} open
         </Badge>
       </div>
 
@@ -134,12 +130,7 @@ function WarehouseTable({
   return (
     <section className="rounded-[28px] border border-slate-800 bg-slate-950 p-5 shadow-soft">
       <div className="flex flex-col gap-2 border-b border-slate-800 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Main view
-          </div>
-          <h2 className="mt-1 text-xl font-semibold text-slate-100">Warehouses</h2>
-        </div>
+        <h2 className="text-xl font-semibold text-slate-100">Warehouses</h2>
         <div className="text-sm text-slate-500">Sorted by cartons</div>
       </div>
 
@@ -155,6 +146,13 @@ function WarehouseTable({
             </tr>
           </thead>
           <tbody>
+            {warehouses.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-3 py-10 text-center text-sm text-slate-500">
+                  No warehouse stock posted yet.
+                </td>
+              </tr>
+            ) : null}
             {warehouses.map(row => (
               <tr key={row.warehouseCode} className="border-b border-slate-900 text-slate-300">
                 <td className="px-3 py-3">
@@ -182,7 +180,7 @@ export function DashboardOverviewBoard({
   snapshot: DashboardOverviewSnapshot
 }) {
   return (
-    <div className={cn('space-y-5 text-slate-100')}>
+    <div className="space-y-5 text-slate-100">
       <section className="grid gap-4 xl:grid-cols-3">
         <MetricCard
           title="In Factory"
