@@ -140,11 +140,22 @@ async function buildWorktreeTalosSession(): Promise<Session | null> {
     activeTenant: worktreeSession.activeTenant,
   })
 
-  const tenantCode = await getCurrentTenantCode()
-  session.activeTenant = tenantCode
+  const tenantCode = await tryGetCurrentTenantCode()
+  if (!tenantCode) {
+    return session
+  }
 
+  session.activeTenant = tenantCode
   await enrichTalosSessionUser(session, worktreeSession.user.email, tenantCode)
   return session
+}
+
+async function tryGetCurrentTenantCode(session?: unknown): Promise<TenantCode | null> {
+  try {
+    return await getCurrentTenantCode(session)
+  } catch {
+    return null
+  }
 }
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
@@ -200,7 +211,11 @@ const baseAuthOptions: NextAuthConfig = {
         activeTenant: tokenWithAuthz.activeTenant,
       })
 
-      const currentTenant = await getCurrentTenantCode(sessionWithAuthz)
+      const currentTenant = await tryGetCurrentTenantCode(sessionWithAuthz)
+      if (!currentTenant) {
+        return session
+      }
+
       sessionWithAuthz.activeTenant = currentTenant
 
       const email = (token.email ?? session.user?.email) as string | undefined

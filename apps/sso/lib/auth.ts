@@ -8,7 +8,6 @@ import {
   getUserByEmail,
 } from '@targon/auth/server'
 import { resolvePortalCallbackTarget } from './callback-target'
-import { authLogger } from './auth-logger'
 import { requireAuthEnv } from './required-auth-env'
 
 const ORG_EMAIL_DOMAIN = 'targonglobal.com'
@@ -53,7 +52,6 @@ const baseAuthOptions: NextAuthConfig = {
   trustHost: true,
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   secret: sharedSecret,
-  logger: authLogger,
   pages: {
     signIn: '/login',
     signOut: '/logout',

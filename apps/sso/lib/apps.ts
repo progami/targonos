@@ -89,6 +89,7 @@ type AppBase = {
   category: string
   icon?: string
   devPath?: string
+  devUrl?: string
 }
 
 type AppManifestEntry = {
@@ -144,6 +145,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/kairos'),
     category: 'Product',
     devPath: '/kairos',
+    devUrl: 'http://localhost:3210',
   },
   {
     id: 'xplan',
@@ -152,6 +154,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-setup'),
     category: 'Product',
     devPath: '/xplan',
+    devUrl: 'http://localhost:3208',
   },
   {
     id: 'plutus',
@@ -160,6 +163,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
     category: 'Finance',
     devPath: '/plutus',
+    devUrl: 'http://localhost:3212',
   },
   {
     id: 'hermes',
@@ -168,6 +172,7 @@ const BASE_APPS: AppBase[] = [
     url: joinBaseUrl(PORTAL_BASE_URL, '/hermes'),
     category: 'Account / Listing',
     devPath: '/hermes',
+    devUrl: 'http://localhost:3214',
   },
   {
     id: 'argus',
@@ -177,6 +182,7 @@ const BASE_APPS: AppBase[] = [
     entryPolicy: 'public',
     category: 'Account / Listing',
     devPath: '/argus',
+    devUrl: 'http://localhost:3216',
   },
 ]
 
