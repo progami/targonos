@@ -75,7 +75,7 @@ export default function TstTab({
     const rootIdSet = new Set(bundle.clusters.map((cluster) => cluster.id))
     const allowedTermIds = new Set<string>()
     for (const cluster of bundle.clusters) {
-      for (const termId of competitorRootTermIds(bundle, cluster.id)) {
+      for (const termId of competitorRootTermIds(bundle, cluster.id, selectedWeek)) {
         allowedTermIds.add(termId)
       }
     }
@@ -120,6 +120,7 @@ export default function TstTab({
     setHasInitializedCompetitorSelection,
     setSelectedCompetitorRootIds,
     setSelectedCompetitorTermIds,
+    selectedWeek,
   ])
 
   const viewModel = createTstViewModel({
@@ -144,7 +145,7 @@ export default function TstTab({
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
     const nextRootIds = new Set(selectedCompetitorRootIds)
     const nextTermIds = new Set(selectedCompetitorTermIds)
-    const termIds = competitorRootTermIds(bundle, rootId)
+    const termIds = competitorRootTermIds(bundle, rootId, selectedWeek)
 
     if (shouldSelect) {
       nextRootIds.add(rootId)
@@ -174,7 +175,7 @@ export default function TstTab({
     }
 
     let rootStillSelected = false
-    for (const candidateTermId of competitorRootTermIds(bundle, rootId)) {
+    for (const candidateTermId of competitorRootTermIds(bundle, rootId, selectedWeek)) {
       if (nextTermIds.has(candidateTermId)) {
         rootStillSelected = true
         break
@@ -236,7 +237,7 @@ export default function TstTab({
           setSelectedCompetitorRootIds(bundle.clusters.map((cluster) => cluster.id))
           const allTermIds: string[] = []
           for (const cluster of bundle.clusters) {
-            allTermIds.push(...competitorRootTermIds(bundle, cluster.id))
+            allTermIds.push(...competitorRootTermIds(bundle, cluster.id, selectedWeek))
           }
           setSelectedCompetitorTermIds(allTermIds)
           setHasInitializedCompetitorSelection(true)
