@@ -69,13 +69,27 @@ function sumRequiredPallets(orders: DashboardOverviewPurchaseOrderInput[]) {
   return total
 }
 
+function parseDashboardOverviewStatus(
+  status: string
+): DashboardOverviewPurchaseOrderInput['status'] {
+  if (status === 'MANUFACTURING') {
+    return status
+  }
+
+  if (status === 'OCEAN') {
+    return status
+  }
+
+  throw new Error(`Unsupported purchase order status: ${status}`)
+}
+
 export function mapPurchaseOrderToDashboardOverviewInput(
   order: DashboardOverviewPurchaseOrderRow
 ): DashboardOverviewPurchaseOrderInput {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
-    status: order.status as 'MANUFACTURING' | 'OCEAN',
+    status: parseDashboardOverviewStatus(order.status),
     counterpartyName: order.counterpartyName,
     warehouseCode: order.warehouseCode,
     warehouseName: order.warehouseName,
@@ -114,7 +128,7 @@ export function buildDashboardOverviewSnapshot({
 
     if (existing === undefined) {
       warehouseMap.set(key, {
-        warehouseCode: balance.warehouseCode,
+        warehouseCode: key,
         warehouseName: balance.warehouseName,
         cartons: balance.currentCartons,
         pallets: balance.currentPallets,

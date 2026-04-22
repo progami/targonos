@@ -217,6 +217,41 @@ test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible',
   })
 })
 
+test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed grouping key', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [
+      {
+        warehouseCode: '  FMC-UK  ',
+        warehouseName: 'FMC Logistics (UK) Ltd',
+        skuCode: 'SKU-1',
+        currentCartons: 10,
+        currentPallets: 1,
+        currentUnits: 100,
+      },
+      {
+        warehouseCode: 'FMC-UK',
+        warehouseName: 'FMC Logistics (UK) Ltd',
+        skuCode: 'SKU-2',
+        currentCartons: 15,
+        currentPallets: 2,
+        currentUnits: 150,
+      },
+    ],
+  })
+
+  assert.deepEqual(snapshot.warehouses, [
+    {
+      warehouseCode: 'FMC-UK',
+      warehouseName: 'FMC Logistics (UK) Ltd',
+      cartons: 25,
+      pallets: 3,
+      units: 250,
+      skuCount: 2,
+    },
+  ])
+})
+
 test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', () => {
   const mapped = mapPurchaseOrderToDashboardOverviewInput({
     id: 'po-null-pallets',
@@ -232,6 +267,24 @@ test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', (
 
   assert.equal(mapped.totalPallets, null)
   assert.equal(mapped.totalUnits, 420)
+})
+
+test('mapPurchaseOrderToDashboardOverviewInput throws on unsupported purchase order status', () => {
+  assert.throws(
+    () =>
+      mapPurchaseOrderToDashboardOverviewInput({
+        id: 'po-invalid-status',
+        orderNumber: 'PO-2002',
+        status: 'CLOSED',
+        counterpartyName: null,
+        warehouseCode: 'TCL-CHINO',
+        warehouseName: 'Tactical Warehouse Solutions',
+        totalCartons: 42,
+        totalPallets: 4,
+        lines: [{ unitsOrdered: 420 }],
+      }),
+    /Unsupported purchase order status: CLOSED/
+  )
 })
 
 test('buildDashboardOverviewSnapshot throws when warehouseCode is blank even on zero balances', () => {
