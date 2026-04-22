@@ -15,15 +15,49 @@ test('buildAppPath uses the normalized public base path', () => {
 
 test('readJsonOrThrow parses a successful JSON response', async () => {
   const previousFetch = globalThis.fetch
-  globalThis.fetch = async () =>
-    new Response(JSON.stringify({ ok: true }), {
+  let receivedInit: RequestInit | undefined
+  globalThis.fetch = async (_input, init) => {
+    receivedInit = init
+
+    return new Response(JSON.stringify({ ok: true }), {
       status: 200,
       headers: { 'content-type': 'application/json; charset=utf-8' },
     })
+  }
 
   try {
     const payload = await readJsonOrThrow<{ ok: boolean }>('/api/test')
     assert.deepEqual(payload, { ok: true })
+    assert.equal(receivedInit?.cache, 'no-store')
+    assert.equal(new Headers(receivedInit?.headers).get('accept'), 'application/json')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('readJsonOrThrow preserves caller headers while forcing JSON no-store requests', async () => {
+  const previousFetch = globalThis.fetch
+  let receivedInit: RequestInit | undefined
+  globalThis.fetch = async (_input, init) => {
+    receivedInit = init
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    })
+  }
+
+  try {
+    await readJsonOrThrow<{ ok: boolean }>('/api/test', {
+      headers: { 'x-argus-test': '1' },
+      credentials: 'same-origin',
+    })
+
+    const headers = new Headers(receivedInit?.headers)
+    assert.equal(headers.get('accept'), 'application/json')
+    assert.equal(headers.get('x-argus-test'), '1')
+    assert.equal(receivedInit?.cache, 'no-store')
+    assert.equal(receivedInit?.credentials, 'same-origin')
   } finally {
     globalThis.fetch = previousFetch
   }
