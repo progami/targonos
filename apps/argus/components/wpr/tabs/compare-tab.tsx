@@ -27,7 +27,7 @@ import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layo
 import { createCompareViewModel } from '@/lib/wpr/compare-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup, formatTooltipWeekLabelFromLookup, formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   panelBadgeSx,
   panelHeadSx,
@@ -268,7 +268,7 @@ export default function CompareTab({
                         active={active}
                         payload={payload}
                         label={label}
-                        labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
+                        labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
                         changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
                         formatRow={(entry) => {
                           const value = entry.value
@@ -426,7 +426,7 @@ export default function CompareTab({
                             active={active}
                             payload={payload}
                             label={label}
-                            labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
+                            labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
                             changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
                             formatRow={(entry) => {
                               const key = entry.dataKey

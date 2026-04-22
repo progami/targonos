@@ -34,7 +34,12 @@ import {
 import { formatCount, formatPercent } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import {
+  buildBundleWeekStartDateLookup,
+  formatTooltipWeekLabelFromLookup,
+  formatWeekLabelFromLookup,
+  formatWeekWindowLabel,
+} from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
 
@@ -319,7 +324,7 @@ function BusinessReportsChart({
                   active={active}
                   payload={payload}
                   label={label}
-                  labelText={viewMode === 'weekly' ? formatWeekLabelFromLookup(String(label), weekStartDates) : undefined}
+                  labelText={viewMode === 'weekly' ? formatTooltipWeekLabelFromLookup(label, weekStartDates) : undefined}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey

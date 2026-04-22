@@ -27,7 +27,7 @@ import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/compo
 import type { WprCompWowVisible } from '@/lib/wpr/dashboard-state'
 import type { TstSelectionViewModel } from '@/lib/wpr/tst-view-model'
 import type { WprChangeLogEntry, WprCompetitorSummary } from '@/lib/wpr/types'
-import { formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
+import { formatTooltipWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   chartToggleButtonSx,
 } from '@/lib/wpr/panel-tokens'
@@ -90,7 +90,7 @@ function WeeklyGapChart({
                   active={active}
                   payload={payload}
                   label={label}
-                  labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
+                  labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey

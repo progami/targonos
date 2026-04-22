@@ -139,6 +139,14 @@ function readRequiredBoolean(
   return value;
 }
 
+function normalizeCaseReportCategory(category: string): string {
+  if (category === 'looping') {
+    return 'Watching';
+  }
+
+  return category;
+}
+
 function readRequiredArray(
   record: Record<string, unknown>,
   fieldName: string,
@@ -353,10 +361,12 @@ function parseCaseReportSnapshotRow(
   );
 
   return {
-    category: readRequiredString(
-      row,
-      'category',
-      `Missing required case report snapshot row field category for section ${sectionEntity} row ${rowIndex}`,
+    category: normalizeCaseReportCategory(
+      readRequiredString(
+        row,
+        'category',
+        `Missing required case report snapshot row field category for section ${sectionEntity} row ${rowIndex}`,
+      ),
     ),
     issue: readRequiredString(
       row,
