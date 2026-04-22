@@ -168,3 +168,49 @@ test('changelog owns its week selector once the top bar stops rendering one', ()
   assert.match(changelogTabSource, /weekStartDates=\{weekStartDates\}/)
   assert.match(changelogTabSource, /onSelectWeek=\{onSelectWeek\}/)
 })
+
+test('SQP and TST do not auto-select the default cluster on first load', () => {
+  const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    sqpSource,
+    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: null,[\s\S]*selectedSqpRootIds: new Set<string>\(\),[\s\S]*selectedSqpTermIds: new Set<string>\(\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    sqpSource,
+    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: defaultRootId,[\s\S]*selectedSqpRootIds: new Set\(\[defaultRootId\]\),[\s\S]*selectedSqpTermIds: new Set\(rootTermIds\(bundle, defaultRootId\)\)/,
+  )
+
+  assert.match(
+    tstSource,
+    /if \(!hasInitializedCompetitorSelection\) \{[\s\S]*setSelectedCompetitorRootIds\(\[\]\)[\s\S]*setSelectedCompetitorTermIds\(\[\]\)[\s\S]*setExpandedCompetitorRootIds\(\[\]\)[\s\S]*setHasInitializedCompetitorSelection\(true\)[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    tstSource,
+    /if \(!hasInitializedCompetitorSelection\) \{[\s\S]*setSelectedCompetitorRootIds\(\[defaultRootId\]\)[\s\S]*setSelectedCompetitorTermIds\(competitorRootTermIds\(bundle, defaultRootId\)\)/,
+  )
+})
+
+test('SQP and TST clear invalid persisted root selections instead of picking a fallback cluster', () => {
+  const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    sqpSource,
+    /if \(selectedSqpRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*selectedClusterId: null,[\s\S]*selectedSqpRootIds: new Set<string>\(\),[\s\S]*selectedSqpTermIds: new Set<string>\(\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    sqpSource,
+    /if \(selectedSqpRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*selectedClusterId: defaultRootId,[\s\S]*selectedSqpRootIds: new Set\(\[defaultRootId\]\),[\s\S]*selectedSqpTermIds: new Set\(rootTermIds\(bundle, defaultRootId\)\)/,
+  )
+
+  assert.match(
+    tstSource,
+    /if \(selectedCompetitorRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*setSelectedCompetitorRootIds\(\[\]\)[\s\S]*setSelectedCompetitorTermIds\(\[\]\)[\s\S]*setExpandedCompetitorRootIds\(\[\]\)[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    tstSource,
+    /if \(selectedCompetitorRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*setSelectedCompetitorRootIds\(\[defaultRootId\]\)[\s\S]*setSelectedCompetitorTermIds\(competitorRootTermIds\(bundle, defaultRootId\)\)/,
+  )
+})

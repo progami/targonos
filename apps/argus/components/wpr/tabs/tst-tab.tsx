@@ -13,20 +13,6 @@ import { useWprStore } from '@/stores/wpr-store'
 import TstSelectionTable from './tst-selection-table'
 import TstWeeklyPanel from './tst-weekly-panel'
 
-function getDefaultRootId(bundle: WprWeekBundle): string | null {
-  const defaultRootId = bundle.defaultClusterIds[0]
-  if (defaultRootId !== undefined) {
-    return defaultRootId
-  }
-
-  const firstCluster = bundle.clusters[0]
-  if (firstCluster !== undefined) {
-    return firstCluster.id
-  }
-
-  return null
-}
-
 function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
   return Array.from(ids).filter((id) => allowedIds.has(id))
 }
@@ -99,30 +85,16 @@ export default function TstTab({
     const filteredExpandedIds = filterIds(expandedCompetitorRootIds, rootIdSet)
 
     if (!hasInitializedCompetitorSelection) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        setHasInitializedCompetitorSelection(true)
-        return
-      }
-
-      setSelectedCompetitorRootIds([defaultRootId])
-      setSelectedCompetitorTermIds(competitorRootTermIds(bundle, defaultRootId))
+      setSelectedCompetitorRootIds([])
+      setSelectedCompetitorTermIds([])
       setExpandedCompetitorRootIds([])
       setHasInitializedCompetitorSelection(true)
       return
     }
 
     if (selectedCompetitorRootIds.size > 0 && filteredRootIds.length === 0) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        setSelectedCompetitorRootIds([])
-        setSelectedCompetitorTermIds([])
-        setExpandedCompetitorRootIds([])
-        return
-      }
-
-      setSelectedCompetitorRootIds([defaultRootId])
-      setSelectedCompetitorTermIds(competitorRootTermIds(bundle, defaultRootId))
+      setSelectedCompetitorRootIds([])
+      setSelectedCompetitorTermIds([])
       setExpandedCompetitorRootIds([])
       return
     }

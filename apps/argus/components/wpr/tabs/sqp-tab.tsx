@@ -200,22 +200,10 @@ export default function SqpTab({
     const filteredExpandedIds = filterIds(expandedSqpRootIds, rootIdSet)
 
     if (!hasInitializedSqpSelection) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        replaceState({
-          selectedClusterId: null,
-          selectedSqpRootIds: new Set<string>(),
-          selectedSqpTermIds: new Set<string>(),
-          expandedSqpRootIds: new Set<string>(),
-          hasInitializedSqpSelection: true,
-        })
-        return
-      }
-
       replaceState({
-        selectedClusterId: defaultRootId,
-        selectedSqpRootIds: new Set([defaultRootId]),
-        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        selectedClusterId: null,
+        selectedSqpRootIds: new Set<string>(),
+        selectedSqpTermIds: new Set<string>(),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
@@ -223,22 +211,10 @@ export default function SqpTab({
     }
 
     if (selectedSqpRootIds.size > 0 && filteredRootIds.length === 0) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        replaceState({
-          selectedClusterId: null,
-          selectedSqpRootIds: new Set<string>(),
-          selectedSqpTermIds: new Set<string>(),
-          expandedSqpRootIds: new Set<string>(),
-          hasInitializedSqpSelection: true,
-        })
-        return
-      }
-
       replaceState({
-        selectedClusterId: defaultRootId,
-        selectedSqpRootIds: new Set([defaultRootId]),
-        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        selectedClusterId: null,
+        selectedSqpRootIds: new Set<string>(),
+        selectedSqpTermIds: new Set<string>(),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
