@@ -25,9 +25,11 @@ export const GET = withAuth(async (_request, session) => {
       select: { code: true },
     })
 
-    if (staffWarehouse !== null) {
-      warehouseCodeFilter = staffWarehouse.code
+    if (staffWarehouse === null) {
+      return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 })
     }
+
+    warehouseCodeFilter = staffWarehouse.code
   }
 
   const blockedAmazonWarehouseCodes =

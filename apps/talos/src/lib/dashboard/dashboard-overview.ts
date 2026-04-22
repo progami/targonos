@@ -55,15 +55,15 @@ function hasOnHandInventory(balance: DashboardOverviewBalanceInput) {
   )
 }
 
-function sumNullablePallets(
-  orders: DashboardOverviewPurchaseOrderInput[]
-) {
+function sumRequiredPallets(orders: DashboardOverviewPurchaseOrderInput[]) {
   let total = 0
 
   for (const order of orders) {
-    if (order.totalPallets !== null) {
-      total += order.totalPallets
+    if (order.totalPallets === null) {
+      throw new Error('totalPallets is required')
     }
+
+    total += order.totalPallets
   }
 
   return total
@@ -101,13 +101,13 @@ export function buildDashboardOverviewSnapshot({
   >()
 
   for (const balance of balances) {
-    if (!hasOnHandInventory(balance)) {
-      continue
-    }
-
     const key = balance.warehouseCode.trim()
     if (key.length === 0) {
       throw new Error('warehouseCode is required')
+    }
+
+    if (!hasOnHandInventory(balance)) {
+      continue
     }
 
     const existing = warehouseMap.get(key)
@@ -140,13 +140,13 @@ export function buildDashboardOverviewSnapshot({
     summary: {
       factory: {
         cartons: factoryOrders.reduce((sum, order) => sum + order.totalCartons, 0),
-        pallets: sumNullablePallets(factoryOrders),
+        pallets: sumRequiredPallets(factoryOrders),
         units: factoryOrders.reduce((sum, order) => sum + order.totalUnits, 0),
         poCount: factoryOrders.length,
       },
       transit: {
         cartons: transitOrders.reduce((sum, order) => sum + order.totalCartons, 0),
-        pallets: sumNullablePallets(transitOrders),
+        pallets: sumRequiredPallets(transitOrders),
         units: transitOrders.reduce((sum, order) => sum + order.totalUnits, 0),
         poCount: transitOrders.length,
       },

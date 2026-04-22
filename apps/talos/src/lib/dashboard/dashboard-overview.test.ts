@@ -214,7 +214,7 @@ test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', (
   assert.equal(mapped.totalUnits, 420)
 })
 
-test('buildDashboardOverviewSnapshot throws when warehouseCode is blank', () => {
+test('buildDashboardOverviewSnapshot throws when warehouseCode is blank even on zero balances', () => {
   assert.throws(
     () =>
       buildDashboardOverviewSnapshot({
@@ -224,12 +224,35 @@ test('buildDashboardOverviewSnapshot throws when warehouseCode is blank', () => 
             warehouseCode: '   ',
             warehouseName: 'Blank Warehouse',
             skuCode: 'CS-000',
-            currentCartons: 1,
-            currentPallets: 1,
-            currentUnits: 1,
+            currentCartons: 0,
+            currentPallets: 0,
+            currentUnits: 0,
           },
         ],
       }),
     /warehouseCode is required/
+  )
+})
+
+test('buildDashboardOverviewSnapshot throws when pallet data is missing', () => {
+  assert.throws(
+    () =>
+      buildDashboardOverviewSnapshot({
+        purchaseOrders: [
+          {
+            id: 'po-null-pallets',
+            orderNumber: 'PO-2001',
+            status: 'MANUFACTURING',
+            counterpartyName: null,
+            warehouseCode: 'TCL-CHINO',
+            warehouseName: 'Tactical Warehouse Solutions',
+            totalCartons: 42,
+            totalPallets: null,
+            totalUnits: 420,
+          },
+        ],
+        balances: [],
+      }),
+    /totalPallets is required/
   )
 })
