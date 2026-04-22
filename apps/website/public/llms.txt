@@ -1,6 +1,6 @@
-# Targon Global
+# Targon
 
-> Targon Global is an AI-driven manufacturing and design company. Its public website currently centers on Caelum Star extra large drop cloths and dust sheets, with region-specific pages for the United States and United Kingdom.
+> Targon is an AI-driven manufacturing and design company. Its public website currently centers on Caelum Star extra large drop cloths and dust sheets, with region-specific pages for the United States and United Kingdom.
 
 Important notes:
 - Use region-specific pages, since the United States and United Kingdom assortments differ.

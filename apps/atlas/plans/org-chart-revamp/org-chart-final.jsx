@@ -474,7 +474,7 @@ export default function OrgChart() {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={COLORS.white} strokeWidth="2.5" strokeLinecap="round"><circle cx="12" cy="6" r="2.5" /><circle cx="6" cy="17" r="2.5" /><circle cx="18" cy="17" r="2.5" /><path d="M12 8.5V12M12 12L6 14.5M12 12L18 14.5" /></svg>
             </div>
             <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Targon Global</h1>
+              <h1 style={{ fontSize: 18, fontWeight: 700, color: COLORS.navy, margin: 0, lineHeight: 1.2 }}>Targon</h1>
               <p style={{ fontSize: 12, color: COLORS.slate, margin: 0 }}>{employees.length} people · {departments.length} teams</p>
             </div>
           </div>
