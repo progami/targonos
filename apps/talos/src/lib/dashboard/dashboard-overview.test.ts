@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildDashboardOverviewSnapshot,
+  mapPurchaseOrderToDashboardOverviewInput,
   type DashboardOverviewBalanceInput,
   type DashboardOverviewSnapshot,
   type DashboardOverviewPurchaseOrderInput,
@@ -162,6 +163,55 @@ test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () =>
     units: 50,
     warehouseCount: 1,
   })
+})
+
+test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [
+      {
+        warehouseCode: 'NEG',
+        warehouseName: 'Negative Warehouse',
+        skuCode: 'SKU-NEG',
+        currentCartons: -3,
+        currentPallets: -1,
+        currentUnits: -30,
+      },
+      {
+        warehouseCode: 'ZERO',
+        warehouseName: 'Zero Warehouse',
+        skuCode: 'SKU-ZERO',
+        currentCartons: 0,
+        currentPallets: 0,
+        currentUnits: 0,
+      },
+    ],
+  })
+
+  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['NEG'])
+  assert.deepEqual(snapshot.summary.warehouses, {
+    cartons: -3,
+    pallets: -1,
+    units: -30,
+    warehouseCount: 1,
+  })
+})
+
+test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', () => {
+  const mapped = mapPurchaseOrderToDashboardOverviewInput({
+    id: 'po-null-pallets',
+    orderNumber: 'PO-2001',
+    status: 'MANUFACTURING',
+    counterpartyName: null,
+    warehouseCode: 'TCL-CHINO',
+    warehouseName: 'Tactical Warehouse Solutions',
+    totalCartons: 42,
+    totalPallets: null,
+    lines: [{ unitsOrdered: 420 }],
+  })
+
+  assert.equal(mapped.totalPallets, null)
+  assert.equal(mapped.totalUnits, 420)
 })
 
 test('buildDashboardOverviewSnapshot throws when warehouseCode is blank', () => {

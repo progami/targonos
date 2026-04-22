@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@targon/prisma-talos'
 import { aggregateInventoryTransactions } from '@targon/ledger'
 import { withAuth } from '@/lib/api/auth-wrapper'
-import { buildDashboardOverviewSnapshot } from '@/lib/dashboard/dashboard-overview'
+import {
+  buildDashboardOverviewSnapshot,
+  mapPurchaseOrderToDashboardOverviewInput,
+} from '@/lib/dashboard/dashboard-overview'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
   AMAZON_WAREHOUSE_CODES,
@@ -87,17 +90,7 @@ export const GET = withAuth(async (_request, session) => {
 
   return NextResponse.json(
     buildDashboardOverviewSnapshot({
-      purchaseOrders: purchaseOrders.map(order => ({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status as 'MANUFACTURING' | 'OCEAN',
-        counterpartyName: order.counterpartyName,
-        warehouseCode: order.warehouseCode,
-        warehouseName: order.warehouseName,
-        totalCartons: order.totalCartons,
-        totalPallets: order.totalPallets ?? 0,
-        totalUnits: order.lines.reduce((sum, line) => sum + line.unitsOrdered, 0),
-      })),
+      purchaseOrders: purchaseOrders.map(mapPurchaseOrderToDashboardOverviewInput),
       balances: aggregated.balances.map(balance => ({
         warehouseCode: balance.warehouseCode,
         warehouseName: balance.warehouseName,

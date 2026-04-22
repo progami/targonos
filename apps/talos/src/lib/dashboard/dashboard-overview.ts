@@ -6,8 +6,20 @@ export interface DashboardOverviewPurchaseOrderInput {
   warehouseCode: string | null
   warehouseName: string | null
   totalCartons: number
-  totalPallets: number
+  totalPallets: number | null
   totalUnits: number
+}
+
+export type DashboardOverviewPurchaseOrderRow = {
+  id: string
+  orderNumber: string
+  status: string
+  counterpartyName: string | null
+  warehouseCode: string | null
+  warehouseName: string | null
+  totalCartons: number
+  totalPallets: number | null
+  lines: Array<{ unitsOrdered: number }>
 }
 
 export interface DashboardOverviewBalanceInput {
@@ -36,13 +48,41 @@ export interface DashboardOverviewSnapshot {
 }
 
 function hasOnHandInventory(balance: DashboardOverviewBalanceInput) {
-  if (balance.currentCartons > 0) {
-    return true
+  return !(
+    balance.currentCartons === 0 &&
+    balance.currentPallets === 0 &&
+    balance.currentUnits === 0
+  )
+}
+
+function sumNullablePallets(
+  orders: DashboardOverviewPurchaseOrderInput[]
+) {
+  let total = 0
+
+  for (const order of orders) {
+    if (order.totalPallets !== null) {
+      total += order.totalPallets
+    }
   }
-  if (balance.currentPallets > 0) {
-    return true
+
+  return total
+}
+
+export function mapPurchaseOrderToDashboardOverviewInput(
+  order: DashboardOverviewPurchaseOrderRow
+): DashboardOverviewPurchaseOrderInput {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status as 'MANUFACTURING' | 'OCEAN',
+    counterpartyName: order.counterpartyName,
+    warehouseCode: order.warehouseCode,
+    warehouseName: order.warehouseName,
+    totalCartons: order.totalCartons,
+    totalPallets: order.totalPallets,
+    totalUnits: order.lines.reduce((sum, line) => sum + line.unitsOrdered, 0),
   }
-  return balance.currentUnits > 0
 }
 
 export function buildDashboardOverviewSnapshot({
@@ -100,13 +140,13 @@ export function buildDashboardOverviewSnapshot({
     summary: {
       factory: {
         cartons: factoryOrders.reduce((sum, order) => sum + order.totalCartons, 0),
-        pallets: factoryOrders.reduce((sum, order) => sum + order.totalPallets, 0),
+        pallets: sumNullablePallets(factoryOrders),
         units: factoryOrders.reduce((sum, order) => sum + order.totalUnits, 0),
         poCount: factoryOrders.length,
       },
       transit: {
         cartons: transitOrders.reduce((sum, order) => sum + order.totalCartons, 0),
-        pallets: transitOrders.reduce((sum, order) => sum + order.totalPallets, 0),
+        pallets: sumNullablePallets(transitOrders),
         units: transitOrders.reduce((sum, order) => sum + order.totalUnits, 0),
         poCount: transitOrders.length,
       },
