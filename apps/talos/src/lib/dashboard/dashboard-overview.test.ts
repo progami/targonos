@@ -105,3 +105,23 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
 
   assert.deepEqual(snapshot, expectedSnapshot)
 })
+
+test('buildDashboardOverviewSnapshot throws when warehouseCode is blank', () => {
+  assert.throws(
+    () =>
+      buildDashboardOverviewSnapshot({
+        purchaseOrders: [],
+        balances: [
+          {
+            warehouseCode: '   ',
+            warehouseName: 'Blank Warehouse',
+            skuCode: 'CS-000',
+            currentCartons: 1,
+            currentPallets: 1,
+            currentUnits: 1,
+          },
+        ],
+      }),
+    /warehouseCode is required/
+  )
+})
