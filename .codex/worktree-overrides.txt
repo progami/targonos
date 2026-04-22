@@ -1,0 +1,12 @@
+apps/kairos/lib/auth.ts
+apps/sso/lib/apps.ts
+apps/sso/lib/auth.ts
+apps/talos/src/app/api/tenant/select/portal-request.ts
+apps/talos/src/app/api/tenant/select/route.ts
+apps/talos/src/lib/auth.ts
+apps/talos/src/lib/auth/super-admin.ts
+apps/xplan/lib/auth.ts
+packages/auth/src/index.ts
+scripts/ensure-worktree-dev-user.mjs
+scripts/setup-codex-env.mjs
+scripts/worktree-dev-auth-config.mjs
