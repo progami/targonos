@@ -4,9 +4,9 @@ import { Prisma, WarehouseKind } from '@targon/prisma-talos'
 import { sanitizeForDisplay, validateAlphanumeric } from '@/lib/security/input-sanitization'
 import {
   canRegionUseWarehouseCode,
-  isAmazonWarehouseCode,
   type TalosRegion,
 } from '@/lib/warehouses/amazon-warehouse'
+import { isAmazonVirtualWarehouse } from '@/lib/services/fulfillment-source-warehouse'
 import { warehouseListSelect } from './list-query'
 export const dynamic = 'force-dynamic'
 
@@ -130,7 +130,7 @@ export const GET = withAuth(async (req, session) => {
   })
 
   const regionScopedWarehouses = warehouses.filter(warehouse => {
-    if (!isAmazonWarehouseCode(warehouse.code)) {
+    if (!isAmazonVirtualWarehouse(warehouse)) {
       return true
     }
 
