@@ -463,6 +463,30 @@ function resolveCookieNames(appId, provided) {
         ...getCandidateSessionCookieNames('targon'),
     ]));
 }
+export async function readPortalConsumerSession(options) {
+    const debug = options.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
+    const cookieNames = resolveCookieNames(options.appId, options.cookieNames);
+    const cookieHeader = options.request.headers.get('cookie');
+    const payload = await decodePortalSession({
+        cookieHeader,
+        cookieNames,
+        appId: options.appId,
+        secret: options.secret,
+        debug,
+    });
+    if (!payload) {
+        return null;
+    }
+    const authz = normalizeAuthzFromClaims(payload);
+    if (!authz) {
+        return null;
+    }
+    return {
+        payload,
+        authz,
+        activeTenant: typeof payload.activeTenant === 'string' ? payload.activeTenant : null,
+    };
+}
 export async function getCurrentAuthz(request, options) {
     const debug = options?.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
     const cookieNames = resolveCookieNames(options?.appId, options?.cookieNames);

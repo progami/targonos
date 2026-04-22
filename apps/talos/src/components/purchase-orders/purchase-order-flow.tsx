@@ -45,7 +45,7 @@ import {
   X,
   XCircle,
 } from '@/lib/lucide-icons'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { getCSRFToken } from '@/lib/utils/csrf'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
@@ -1038,7 +1038,7 @@ export function PurchaseOrderFlow(props: PurchaseOrderFlowProps) {
         !isCreate && tenantOverride
           ? `${returnPath}?tenant=${encodeURIComponent(tenantOverride)}`
           : returnPath
-      redirectToPortal('/login', `${window.location.origin}${withBasePath(returnPathWithTenant)}`)
+      redirectToPortal('/login', buildAppCallbackUrl(returnPathWithTenant))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

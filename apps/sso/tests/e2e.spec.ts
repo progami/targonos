@@ -20,5 +20,6 @@ test('TargonOS home renders the authenticated launcher', async ({ page }) => {
   await expect(page.getByText('Ops', { exact: true })).toBeVisible()
   await expect(page.getByText('Welcome back', { exact: false })).toHaveCount(0)
   await expect(page.getByText(demoEmail)).toBeVisible()
+  await expect(page.getByText('worktree.dev@targonglobal.com')).toHaveCount(0)
   await expect(page).not.toHaveURL(/\/login$/)
 })
