@@ -106,6 +106,64 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
   assert.deepEqual(snapshot, expectedSnapshot)
 })
 
+test('buildDashboardOverviewSnapshot sorts warehouses by cartons descending', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [
+      {
+        warehouseCode: 'B',
+        warehouseName: 'Warehouse B',
+        skuCode: 'SKU-2',
+        currentCartons: 10,
+        currentPallets: 1,
+        currentUnits: 100,
+      },
+      {
+        warehouseCode: 'A',
+        warehouseName: 'Warehouse A',
+        skuCode: 'SKU-1',
+        currentCartons: 40,
+        currentPallets: 4,
+        currentUnits: 400,
+      },
+    ],
+  })
+
+  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['A', 'B'])
+})
+
+test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [
+      {
+        warehouseCode: 'A',
+        warehouseName: 'Warehouse A',
+        skuCode: 'SKU-1',
+        currentCartons: 0,
+        currentPallets: 0,
+        currentUnits: 0,
+      },
+      {
+        warehouseCode: 'B',
+        warehouseName: 'Warehouse B',
+        skuCode: 'SKU-2',
+        currentCartons: 5,
+        currentPallets: 0,
+        currentUnits: 50,
+      },
+    ],
+  })
+
+  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['B'])
+  assert.deepEqual(snapshot.summary.warehouses, {
+    cartons: 5,
+    pallets: 0,
+    units: 50,
+    warehouseCount: 1,
+  })
+})
+
 test('buildDashboardOverviewSnapshot throws when warehouseCode is blank', () => {
   assert.throws(
     () =>

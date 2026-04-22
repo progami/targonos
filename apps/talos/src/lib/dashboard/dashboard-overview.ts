@@ -35,6 +35,16 @@ export interface DashboardOverviewSnapshot {
   }>
 }
 
+function hasOnHandInventory(balance: DashboardOverviewBalanceInput) {
+  if (balance.currentCartons > 0) {
+    return true
+  }
+  if (balance.currentPallets > 0) {
+    return true
+  }
+  return balance.currentUnits > 0
+}
+
 export function buildDashboardOverviewSnapshot({
   purchaseOrders,
   balances,
@@ -51,6 +61,10 @@ export function buildDashboardOverviewSnapshot({
   >()
 
   for (const balance of balances) {
+    if (!hasOnHandInventory(balance)) {
+      continue
+    }
+
     const key = balance.warehouseCode.trim()
     if (key.length === 0) {
       throw new Error('warehouseCode is required')
