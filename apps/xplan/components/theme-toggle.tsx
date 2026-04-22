@@ -17,7 +17,7 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <div className="h-9 w-9 rounded-xl border border-slate-200 bg-white dark:border-slate-600 dark:bg-slate-800" />
+      <div className="h-10 w-10 rounded-[14px] border border-slate-200/80 bg-white/70 dark:border-[#163f59] dark:bg-[#0b2236]/80" />
     );
   }
 
@@ -30,16 +30,19 @@ export function ThemeToggle() {
         aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
         size="small"
         sx={{
-          width: 36,
-          height: 36,
-          borderRadius: '12px',
+          width: 40,
+          height: 40,
+          borderRadius: '14px',
           border: 1,
           borderColor: 'divider',
-          bgcolor: 'background.paper',
+          bgcolor: 'rgba(255,255,255,0.72)',
           color: 'text.secondary',
-          boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+          boxShadow: '0 14px 24px -22px rgba(15, 23, 42, 0.42)',
+          '.dark &': {
+            bgcolor: 'rgba(10, 26, 42, 0.84)',
+          },
           '&:hover': {
-            bgcolor: 'action.hover',
+            bgcolor: 'rgba(236, 242, 248, 0.96)',
             color: 'text.primary',
           },
         }}

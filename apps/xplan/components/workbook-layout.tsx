@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import Image from 'next/image';
 import { SheetTabs } from '@/components/sheet-tabs';
 import { getSheetConfig } from '@/lib/sheets';
 import type { YearSegment } from '@/lib/calculations/calendar';
@@ -26,14 +27,18 @@ const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 function TargonWordmark({ className }: { className?: string }) {
   return (
     <div className={className}>
-      <img
+      <Image
         src={`${assetBasePath}/brand/logo.svg`}
         alt="Targon"
+        width={112}
+        height={24}
         className="h-6 w-auto dark:hidden"
       />
-      <img
+      <Image
         src={`${assetBasePath}/brand/logo-inverted.svg`}
         alt="Targon"
+        width={112}
+        height={24}
         className="hidden h-6 w-auto dark:block"
       />
     </div>
@@ -441,8 +446,26 @@ export function WorkbookLayout({
   }, [meta]);
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', bgcolor: 'background.default' }}>
-      <Box component="main" sx={{ display: 'flex', flex: 1, overflow: 'hidden' }} role="main" aria-label="Main content">
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100vh',
+        bgcolor: 'background.default',
+        backgroundImage:
+          'linear-gradient(180deg, rgba(226, 244, 247, 0.38) 0%, rgba(244, 247, 251, 0) 260px)',
+        '.dark &': {
+          backgroundImage:
+            'linear-gradient(180deg, rgba(7, 42, 56, 0.42) 0%, rgba(7, 21, 36, 0) 280px)',
+        },
+      }}
+    >
+      <Box
+        component="main"
+        sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}
+        role="main"
+        aria-label="Main content"
+      >
         <Box component="section" sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           <Box ref={scrollContainerRef} sx={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
             <AppBar
@@ -454,61 +477,65 @@ export function WorkbookLayout({
                 zIndex: 10,
                 borderBottom: 1,
                 borderColor: 'divider',
-                bgcolor: 'rgba(255,255,255,0.95)',
+                bgcolor: 'rgba(248, 250, 252, 0.86)',
                 backdropFilter: 'blur(16px)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                boxShadow: '0 20px 40px -34px rgba(15, 23, 42, 0.38)',
                 '.dark &': {
-                  bgcolor: 'rgba(4,19,36,0.95)',
-                  borderColor: '#0b3a52',
-                  boxShadow: '0 1px 4px rgba(1,12,24,0.3)',
+                  bgcolor: 'rgba(7, 21, 36, 0.84)',
+                  borderColor: 'rgba(20, 63, 88, 0.9)',
+                  boxShadow: '0 20px 40px -34px rgba(0, 0, 0, 0.72)',
                 },
               }}
               role="banner"
             >
               <Toolbar
                 variant="dense"
-                sx={{ px: { xs: 1.5, sm: 2, lg: 2.5 }, py: 1, gap: 1, minHeight: 'auto' }}
+                sx={{ px: { xs: 1.5, sm: 2, lg: 2.5 }, py: 1.25, gap: 1.5, minHeight: 'auto' }}
               >
-                {/* App branding - LEFT */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    flexShrink: 0,
+                    pr: { sm: 1.5 },
+                    mr: { sm: 0.5 },
+                    borderRight: { sm: 1 },
+                    borderColor: { sm: 'divider' },
+                  }}
+                >
+                  <TargonWordmark className="shrink-0" />
                   <Box
                     sx={{
-                      display: 'flex',
-                      height: 36,
-                      width: 36,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: '12px',
-                      bgcolor: '#002C51',
-                      boxShadow: 2,
+                      display: { xs: 'none', md: 'flex' },
+                      flexDirection: 'column',
+                      gap: 0.125,
                     }}
                   >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="20"
-                      height="20"
-                      fill="none"
-                      aria-hidden="true"
-                      style={{ color: 'white' }}
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 700,
+                        letterSpacing: '0.14em',
+                        textTransform: 'uppercase',
+                        color: 'text.secondary',
+                      }}
                     >
-                      <path d="M7 7L17 17" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-                      <path d="M17 7L7 17" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
-                    </svg>
+                      Planning Workspace
+                    </Typography>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 700,
+                        letterSpacing: '-0.02em',
+                        color: 'text.primary',
+                      }}
+                    >
+                      xplan
+                    </Typography>
                   </Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{
-                      display: { xs: 'none', sm: 'block' },
-                      fontWeight: 600,
-                      letterSpacing: '-0.01em',
-                      color: 'text.primary',
-                    }}
-                  >
-                    xplan
-                  </Typography>
                 </Box>
 
-                {/* Sheet tabs - CENTER */}
                 <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden' }}>
                   <SheetTabs
                     sheets={sheetTabs}
@@ -518,16 +545,35 @@ export function WorkbookLayout({
                   />
                 </Box>
 
-                {/* Right controls */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
                   {ribbon}
 
                   {showLoadingIndicator && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.75,
+                        borderRadius: '9999px',
+                        border: 1,
+                        borderColor: 'rgba(0, 194, 185, 0.22)',
+                        bgcolor: 'rgba(240, 253, 250, 0.86)',
+                        px: 1.1,
+                        py: 0.55,
+                        '.dark &': {
+                          bgcolor: 'rgba(8, 47, 58, 0.8)',
+                        },
+                      }}
+                    >
                       <CircularProgress size={14} sx={{ color: 'secondary.main' }} />
                       <Typography
                         variant="caption"
-                        sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'secondary.main' }}
+                        sx={{
+                          fontWeight: 700,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.08em',
+                          color: 'secondary.main',
+                        }}
                       >
                         Loading
                       </Typography>
@@ -537,8 +583,6 @@ export function WorkbookLayout({
                   {reportTimeZone ? <TimeZoneClocks reportTimeZone={reportTimeZone} /> : null}
 
                   <ThemeToggle />
-
-                  <TargonWordmark className="shrink-0" />
                 </Box>
               </Toolbar>
 
@@ -553,7 +597,11 @@ export function WorkbookLayout({
                     borderTop: 1,
                     borderColor: 'divider',
                     px: { xs: 1.5, sm: 2, lg: 2.5 },
-                    py: 0.75,
+                    py: 0.9,
+                    bgcolor: 'rgba(255,255,255,0.56)',
+                    '.dark &': {
+                      bgcolor: 'rgba(8, 20, 34, 0.56)',
+                    },
                   }}
                 >
                   {headerControls}
@@ -561,7 +609,7 @@ export function WorkbookLayout({
                 </Box>
               )}
             </AppBar>
-            <Box sx={{ px: { xs: 2, sm: 3, lg: 4 }, py: 2 }}>{children}</Box>
+            <Box sx={{ px: { xs: 2, sm: 3, lg: 4 }, py: { xs: 2, sm: 2.5, lg: 3 } }}>{children}</Box>
           </Box>
           {hasContextPane && (
             <Box
@@ -572,9 +620,12 @@ export function WorkbookLayout({
                 flexShrink: 0,
                 borderLeft: 1,
                 borderColor: 'divider',
-                bgcolor: 'background.paper',
-                backdropFilter: 'blur(4px)',
+                bgcolor: 'rgba(248, 250, 252, 0.8)',
+                backdropFilter: 'blur(10px)',
                 width: contextWidth,
+                '.dark &': {
+                  bgcolor: 'rgba(8, 20, 34, 0.86)',
+                },
               }}
             >
               <Box
@@ -588,9 +639,9 @@ export function WorkbookLayout({
                   height: '100%',
                   width: 6,
                   cursor: 'ew-resize',
-                  bgcolor: 'rgba(0,194,185,0.3)',
+                  bgcolor: 'rgba(0,194,185,0.22)',
                   transition: 'background-color 0.15s',
-                  '&:hover': { bgcolor: 'rgba(0,194,185,0.5)' },
+                  '&:hover': { bgcolor: 'rgba(0,194,185,0.4)' },
                 }}
               />
               <Box sx={{ height: '100%', overflow: 'auto', px: 2.5, py: 3 }}>{contextPane}</Box>
@@ -605,15 +656,15 @@ export function WorkbookLayout({
         sx={{
           borderTop: 1,
           borderColor: 'divider',
-          bgcolor: 'rgba(255,255,255,0.95)',
+          bgcolor: 'rgba(248, 250, 252, 0.88)',
           backdropFilter: 'blur(16px)',
           px: 1.5,
           py: 1.25,
-          boxShadow: '0 -1px 3px rgba(0,0,0,0.06)',
+          boxShadow: '0 -18px 36px -32px rgba(15, 23, 42, 0.45)',
           '.dark &': {
-            bgcolor: 'rgba(4,19,36,0.95)',
-            borderColor: '#0b3a52',
-            boxShadow: '0 -1px 4px rgba(1,12,24,0.3)',
+            bgcolor: 'rgba(7, 21, 36, 0.9)',
+            borderColor: 'rgba(20, 63, 88, 0.9)',
+            boxShadow: '0 -18px 36px -28px rgba(0, 0, 0, 0.75)',
           },
         }}
         role="navigation"
