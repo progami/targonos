@@ -23,7 +23,7 @@ import {
   X,
 } from '@/lib/lucide-icons'
 import { PurchaseOrdersPanel } from '../inventory/purchase-orders-panel'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import type { ActivePurchaseOrderStatus } from '@/lib/purchase-orders/workflow'
 import { withBasePath } from '@/lib/utils/base-path'
 import type { LucideIcon } from 'lucide-react'
@@ -97,7 +97,7 @@ function OrdersPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/purchase-orders')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/purchase-orders'))
       return
     }
 

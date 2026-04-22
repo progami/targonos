@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import PermissionsPanel from './permissions-panel'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { isPortalPlatformAdmin } from '@/lib/tenant/session'
 
@@ -19,7 +19,7 @@ export default function PermissionsPage() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/permissions')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/config/permissions'))
       return
     }
 

@@ -45,7 +45,6 @@ export async function middleware(request: NextRequest) {
   ]
 
   const publicPrefixes = [
-    '/api/auth/',
     '/api/tenant/',
   ]
 

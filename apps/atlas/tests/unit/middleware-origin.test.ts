@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 
 import { resolveAppOrigin } from '../../lib/request-origin'
 
-test('resolveAppOrigin prefers the loopback request origin over hosted env values', () => {
+test('resolveAppOrigin prefers configured app origins over loopback request origins', () => {
   const previous = process.env.NEXT_PUBLIC_APP_URL
   process.env.NEXT_PUBLIC_APP_URL = 'https://atlas.targonglobal.com/atlas'
 
@@ -18,7 +18,7 @@ test('resolveAppOrigin prefers the loopback request origin over hosted env value
       url: 'http://localhost:3106/atlas/dashboard',
     } as any
 
-    assert.equal(resolveAppOrigin(request), 'http://localhost:3106')
+    assert.equal(resolveAppOrigin(request), 'https://atlas.targonglobal.com')
   } finally {
     if (previous === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL
@@ -28,7 +28,7 @@ test('resolveAppOrigin prefers the loopback request origin over hosted env value
   }
 })
 
-test('resolveAppOrigin uses forwarded host and proto when env is not configured', () => {
+test('resolveAppOrigin throws when app auth env is not configured', () => {
   const prevPublic = process.env.NEXT_PUBLIC_APP_URL
   const prevBase = process.env.BASE_URL
   const prevNextAuth = process.env.NEXTAUTH_URL
@@ -49,7 +49,10 @@ test('resolveAppOrigin uses forwarded host and proto when env is not configured'
       },
     } as any
 
-    assert.equal(resolveAppOrigin(request), 'https://example.com')
+    assert.throws(
+      () => resolveAppOrigin(request),
+      /Application origin is not configured/,
+    )
   } finally {
     if (prevPublic === undefined) {
       delete process.env.NEXT_PUBLIC_APP_URL

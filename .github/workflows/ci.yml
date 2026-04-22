@@ -151,6 +151,8 @@ jobs:
       - name: Run auth contract tests
         run: |
           pnpm --filter @targon/auth test
+          pnpm --filter @targon/sso test:auth-contracts
+          pnpm --filter @targon/atlas test:unit
           node --test ecosystem.topology.test.cjs
       - name: Run SSO auth smoke tests
         run: pnpm --filter @targon/sso test:auth-smoke
