@@ -98,4 +98,66 @@ describe('xplan auth', () => {
     expect(nextAuthMock).toHaveBeenCalledTimes(1)
     expect(nextAuthAuthMock).toHaveBeenCalledTimes(1)
   })
+
+  it('maps authz apps into session roles when the token omits roles', async () => {
+    vi.stubEnv('COOKIE_DOMAIN', '.targonglobal.com')
+    vi.stubEnv('NEXTAUTH_URL', 'https://os.targonglobal.com/xplan')
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://os.targonglobal.com/xplan')
+    vi.stubEnv('PORTAL_AUTH_URL', 'https://os.targonglobal.com')
+    vi.stubEnv('NEXT_PUBLIC_PORTAL_AUTH_URL', 'https://os.targonglobal.com')
+    vi.stubEnv('PORTAL_AUTH_SECRET', 'test-portal-auth-secret-000000000000')
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-portal-auth-secret-000000000000')
+
+    const tokenAuthz = {
+      apps: {
+        xplan: {
+          departments: ['Admin'],
+          tenantMemberships: [],
+        },
+      },
+      globalRoles: ['platform_admin'],
+      version: 7,
+    }
+
+    getWorktreeDevSessionMock.mockResolvedValue(null)
+    withSharedAuthMock.mockImplementation((baseConfig) => baseConfig)
+    nextAuthAuthMock.mockResolvedValue(null)
+    nextAuthMock.mockReturnValue({
+      auth: nextAuthAuthMock,
+      handlers: {
+        GET: vi.fn(),
+        POST: vi.fn(),
+      },
+    })
+
+    const { auth } = await import('@/lib/auth')
+    await auth()
+
+    const baseConfig = withSharedAuthMock.mock.calls[0]?.[0]
+    expect(baseConfig).toBeDefined()
+
+    const sessionCallback = baseConfig.callbacks?.session
+    expect(sessionCallback).toBeTypeOf('function')
+
+    const session = await sessionCallback({
+      session: {
+        expires: '2026-04-22T00:00:00.000Z',
+        user: {
+          id: '',
+          email: 'planner@targonglobal.com',
+          name: 'Planner User',
+        },
+      },
+      token: {
+        sub: 'xplan-user-1',
+        authz: tokenAuthz,
+      },
+    })
+
+    expect(session.user.id).toBe('xplan-user-1')
+    expect((session as { authz?: unknown }).authz).toEqual(tokenAuthz)
+    expect((session as { roles?: unknown }).roles).toEqual(tokenAuthz.apps)
+    expect((session as { globalRoles?: unknown }).globalRoles).toEqual(tokenAuthz.globalRoles)
+    expect((session as { authzVersion?: unknown }).authzVersion).toBe(tokenAuthz.version)
+  })
 })
