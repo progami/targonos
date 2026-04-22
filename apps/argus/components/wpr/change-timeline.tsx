@@ -16,6 +16,11 @@ import {
   Typography,
 } from '@mui/material';
 import { getPublicBasePath } from '@/lib/base-path';
+import {
+  formatWprChangeCategory,
+  getWprChangeCategoryColor,
+  WPR_CHANGE_CATEGORY_OPTIONS,
+} from '@/lib/wpr/change-log-categories';
 import type { WprChangeLogEntry, WeekLabel } from '@/lib/wpr/types';
 import {
   panelSx,
@@ -32,24 +37,6 @@ import {
 import WprWeekSelect from '@/components/wpr/wpr-week-select';
 
 const basePath = getPublicBasePath();
-
-const CATEGORY_COLORS: Record<string, string> = {
-  MANUAL: 'rgba(168, 130, 255, 0.75)',
-  CONTENT: 'rgba(0, 194, 185, 0.75)',
-  PRICING: 'rgba(255, 183, 77, 0.75)',
-  IMAGES: 'rgba(129, 199, 132, 0.75)',
-  OFFER: 'rgba(100, 181, 246, 0.75)',
-  CATALOG: 'rgba(255, 138, 128, 0.75)',
-};
-
-const CHANGE_TYPE_OPTIONS = [
-  { value: 'MANUAL', label: 'Manual' },
-  { value: 'CONTENT', label: 'Content' },
-  { value: 'PRICING', label: 'Pricing' },
-  { value: 'IMAGES', label: 'Images' },
-  { value: 'OFFER', label: 'Offer' },
-  { value: 'CATALOG', label: 'Catalog' },
-] as const;
 
 const dialogSlotProps = {
   paper: {
@@ -130,10 +117,6 @@ const chipSx = {
   whiteSpace: 'nowrap' as const,
 };
 
-function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category.toUpperCase()] ?? 'rgba(255,255,255,0.6)';
-}
-
 function compactList(values: string[]): string {
   if (values.length === 0) {
     return '—';
@@ -173,7 +156,7 @@ function todayIsoDate(): string {
 function buildInitialDraft(): ChangeDraft {
   return {
     entryDate: todayIsoDate(),
-    category: 'MANUAL',
+    category: 'CONTENT',
     title: '',
     summary: '',
     asins: '',
@@ -352,7 +335,7 @@ export default function ChangeTimeline({
                   Source
                 </Box>
                 <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '92px' }}>
-                  Type
+                  Category
                 </Box>
                 <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '280px' }}>
                   Title
@@ -371,7 +354,7 @@ export default function ChangeTimeline({
             <tbody>
               {entries.map((entry) => {
                 const summary = summaryText(entry);
-                const categoryColor = getCategoryColor(entry.category);
+                const categoryColor = getWprChangeCategoryColor(entry.category);
                 const fields = fieldLabels(entry);
                 return (
                   <Box
@@ -429,7 +412,7 @@ export default function ChangeTimeline({
                           color: categoryColor,
                         }}
                       >
-                        {entry.category}
+                        {formatWprChangeCategory(entry.category)}
                       </Box>
                     </Box>
 
@@ -531,12 +514,12 @@ export default function ChangeTimeline({
               />
               <TextField
                 select
-                label="Type"
+                label="Category"
                 value={draft.category}
                 onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
                 fullWidth
               >
-                {CHANGE_TYPE_OPTIONS.map((option) => (
+                {WPR_CHANGE_CATEGORY_OPTIONS.map((option) => (
                   <MenuItem key={option.value} value={option.value}>
                     {option.label}
                   </MenuItem>

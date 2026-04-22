@@ -66,7 +66,7 @@ test('createWprChangeLogEntry fails when the target week folder does not exist',
         {
           weekLabel: 'W16',
           entryDate: '2026-04-20',
-          category: 'MANUAL',
+          category: 'CONTENT',
           title: 'Missing target week',
           summary: 'Summary',
           asins: ['B09HXC3NL8'],
@@ -77,5 +77,32 @@ test('createWprChangeLogEntry fails when the target week folder does not exist',
         async () => undefined,
       ),
     /Missing WPR week folder for W16/,
+  )
+})
+
+test('createWprChangeLogEntry rejects the removed manual category for new entries', async () => {
+  const { wprRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.WPR_DATA_DIR = dataDir
+
+  const weekDir = path.join(wprRoot, 'Week 16 - 2026-04-12 (Sun)')
+  await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(weekDir, 'output', 'Plans'), { recursive: true }))
+
+  await assert.rejects(
+    () =>
+      createWprChangeLogEntry(
+        {
+          weekLabel: 'W16',
+          entryDate: '2026-04-20',
+          category: 'MANUAL',
+          title: 'Removed category',
+          summary: 'Summary',
+          asins: ['B09HXC3NL8'],
+          fieldLabels: [],
+          highlights: ['Logged the change.'],
+          statusLines: ['Queued.'],
+        },
+        async () => undefined,
+      ),
+    /Invalid WPR change category: MANUAL/,
   )
 })
