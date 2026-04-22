@@ -50,6 +50,14 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
       currentPallets: 10,
       currentUnits: 1600,
     },
+    {
+      warehouseCode: 'FMC-UK',
+      warehouseName: 'FMC Logistics (UK) Ltd',
+      skuCode: 'CS-12LD-8M',
+      currentCartons: 150,
+      currentPallets: 7,
+      currentUnits: 1200,
+    },
   ]
 
   const snapshot = buildDashboardOverviewSnapshot({ purchaseOrders, balances })
@@ -69,27 +77,27 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
         poCount: 1,
       },
       warehouses: {
-        cartons: 500,
-        pallets: 30,
-        units: 4000,
+        cartons: 650,
+        pallets: 37,
+        units: 5200,
         warehouseCount: 2,
       },
     },
     warehouses: [
+      {
+        warehouseCode: 'FMC-UK',
+        warehouseName: 'FMC Logistics (UK) Ltd',
+        cartons: 350,
+        pallets: 17,
+        units: 2800,
+        skuCount: 2,
+      },
       {
         warehouseCode: 'TCL-CHINO',
         warehouseName: 'Tactical Warehouse Solutions',
         cartons: 300,
         pallets: 20,
         units: 2400,
-        skuCount: 1,
-      },
-      {
-        warehouseCode: 'FMC-UK',
-        warehouseName: 'FMC Logistics (UK) Ltd',
-        cartons: 200,
-        pallets: 10,
-        units: 1600,
         skuCount: 1,
       },
     ],
