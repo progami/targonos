@@ -18,6 +18,7 @@ import {
   wprSelectionHeaderCellSx,
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
+import WprWeekSelect from '@/components/wpr/wpr-week-select'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -28,6 +29,7 @@ import {
 } from '@/lib/wpr/tst-view-model'
 import { teal, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
 import { formatPercent } from '@/lib/wpr/format'
+import type { WeekLabel } from '@/lib/wpr/types'
 
 type TstSortKey =
   | 'term'
@@ -448,24 +450,32 @@ function MetricCell({
 }
 
 export default function TstSelectionTable({
+  selectedWeek,
+  weeks,
+  weekStartDates,
   competitorBrand,
   familyOrder,
   viewModel,
   expandedRootIds,
   sortState,
   setSortState,
+  onSelectWeek,
   onSelectAll,
   onClearAll,
   onSetRootSelection,
   onToggleTerm,
   onToggleExpanded,
 }: {
+  selectedWeek: WeekLabel
+  weeks: WeekLabel[]
+  weekStartDates: Record<WeekLabel, string>
   competitorBrand: string
   familyOrder: string[]
   viewModel: TstSelectionViewModel
   expandedRootIds: Set<string>
   sortState: WprSortState
   setSortState: (nextState: WprSortState) => void
+  onSelectWeek: (week: WeekLabel) => void
   onSelectAll: () => void
   onClearAll: () => void
   onSetRootSelection: (rootId: string, shouldSelect: boolean) => void
@@ -493,7 +503,16 @@ export default function TstSelectionTable({
   return (
     <WprSelectionPanel
       title="TST Selection"
-      summary={`TST selected week · ${viewModel.rootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      summary={`${viewModel.rootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      toolbar={(
+        <WprWeekSelect
+          label="Table week"
+          selectedWeek={selectedWeek}
+          weeks={weeks}
+          weekStartDates={weekStartDates}
+          onSelectWeek={onSelectWeek}
+        />
+      )}
     >
         <Table stickyHeader size="small" sx={{ minWidth: 1320 }}>
           <TableHead>

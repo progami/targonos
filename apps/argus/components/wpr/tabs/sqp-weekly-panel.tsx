@@ -5,7 +5,6 @@ import { Button } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import {
   WprAnalyticsFooter,
-  WprAnalyticsMetric,
   WprAnalyticsPanel,
 } from '@/components/wpr/wpr-analytics-panel'
 import {
@@ -15,12 +14,10 @@ import {
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
-import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import { formatWeekLabelWithDateRange } from '@/lib/wpr/week-display'
 import {
   rateRatio,
-  type SqpAggregatedMetrics,
   type SqpSelectionScope,
   type SqpWeeklyPoint,
 } from '@/lib/wpr/sqp-view-model'
@@ -75,23 +72,17 @@ function formatPoints(value: number): string {
   return `${value.toFixed(1)} pts`
 }
 
-function blankMetricValue(): string {
-  return '---'
-}
-
 function buildFooterItems({
   scopeType,
   rootCount,
   termCount,
   totalTermCount,
-  selectedWeekLabel,
   historyLabel,
 }: {
   scopeType: SqpSelectionScope
   rootCount: number
   termCount: number
   totalTermCount: number
-  selectedWeekLabel: string
   historyLabel: string
 }) {
   const footerItems = [
@@ -99,7 +90,6 @@ function buildFooterItems({
     `Scope: ${scopeType}`,
     `Roots: ${rootCount}`,
     `SQP terms: ${termCount} / ${totalTermCount}`,
-    `Table week: ${selectedWeekLabel}`,
     `Chart history: ${historyLabel}`,
   ]
 
@@ -615,8 +605,6 @@ function SqpWeeklyChart({
 
 export default function SqpWeeklyPanel({
   heroContent,
-  blankTopValues,
-  currentMetrics,
   weekly,
   changeEntries,
   wowVisible,
@@ -625,12 +613,9 @@ export default function SqpWeeklyPanel({
   selectedRootCount,
   selectedTermCount,
   totalTermCount,
-  selectedWeekLabel,
   historyLabel,
 }: {
   heroContent: SqpHeroContent
-  blankTopValues: boolean
-  currentMetrics: SqpAggregatedMetrics | null
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprSqpWowVisible
@@ -639,7 +624,6 @@ export default function SqpWeeklyPanel({
   selectedRootCount: number
   selectedTermCount: number
   totalTermCount: number
-  selectedWeekLabel: string
   historyLabel: string
 }) {
   const footerItems = buildFooterItems({
@@ -647,7 +631,6 @@ export default function SqpWeeklyPanel({
     rootCount: selectedRootCount,
     termCount: selectedTermCount,
     totalTermCount,
-    selectedWeekLabel,
     historyLabel,
   })
 
@@ -655,23 +638,6 @@ export default function SqpWeeklyPanel({
     <WprAnalyticsPanel
       title={heroContent.name}
       meta={heroContent.meta}
-      metricColumns={{ xs: 2, md: 3 }}
-      metrics={
-        <>
-          <WprAnalyticsMetric
-            label="Query Volume"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCompactNumber(currentMetrics.query_volume)}
-          />
-          <WprAnalyticsMetric
-            label="Market Purchases"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.market_purchases)}
-          />
-          <WprAnalyticsMetric
-            label="Our Purchases"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.asin_purchases)}
-          />
-        </>
-      }
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <SqpWeeklyChart

@@ -1,25 +1,15 @@
 'use client';
 
-import { Box, MenuItem, Select, Stack, Typography } from '@mui/material';
+import { Box, Stack } from '@mui/material';
 import { WPR_TABS, type WprTab } from '@/lib/wpr/dashboard-state';
-import { panelBgDarker, subtleBorder, teal, textMuted, textPrimary, textSecondary } from '@/lib/wpr/panel-tokens';
-import type { WeekLabel } from '@/lib/wpr/types';
-import { formatWeekLabelFromLookup } from '@/lib/wpr/week-display';
+import { panelBgDarker, subtleBorder, teal, textPrimary, textSecondary } from '@/lib/wpr/panel-tokens';
 
 export default function WprTopBar({
   activeTab,
-  selectedWeek,
-  weeks,
-  weekStartDates,
   onSelectTab,
-  onSelectWeek,
 }: {
   activeTab: WprTab;
-  selectedWeek: WeekLabel | null;
-  weeks: WeekLabel[];
-  weekStartDates: Record<WeekLabel, string>;
   onSelectTab: (tab: WprTab) => void;
-  onSelectWeek: (week: WeekLabel) => void;
 }) {
   return (
     <Stack
@@ -69,49 +59,6 @@ export default function WprTopBar({
             </Box>
           );
         })}
-      </Stack>
-
-      <Stack direction="row" spacing={1} alignItems="center">
-        <Typography
-          sx={{
-            fontSize: '0.65rem',
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: textMuted,
-            fontWeight: 600,
-          }}
-        >
-          Week
-        </Typography>
-        <Select
-          size="small"
-          value={selectedWeek ?? ''}
-          onChange={(event) => onSelectWeek(event.target.value)}
-          sx={{
-            minWidth: 228,
-            fontSize: '0.75rem',
-            color: textPrimary,
-            bgcolor: 'rgba(255,255,255,0.03)',
-            '& .MuiSelect-icon': {
-              color: textMuted,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'rgba(255,255,255,0.08)',
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: 'rgba(255,255,255,0.16)',
-            },
-            '& .MuiSelect-select': {
-              py: 0.75,
-            },
-          }}
-        >
-          {weeks.map((week) => (
-            <MenuItem key={week} value={week} sx={{ fontSize: '0.75rem' }}>
-              {formatWeekLabelFromLookup(week, weekStartDates)}
-            </MenuItem>
-          ))}
-        </Select>
       </Stack>
     </Stack>
   );

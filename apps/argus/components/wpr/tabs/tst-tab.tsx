@@ -8,7 +8,7 @@ import {
   createTstViewModel,
   type TstSelectionViewModel,
 } from '@/lib/wpr/tst-view-model'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import TstSelectionTable from './tst-selection-table'
 import TstWeeklyPanel from './tst-weekly-panel'
@@ -32,14 +32,12 @@ function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
 }
 
 function buildHeroContent(
-  bundle: WprWeekBundle,
   viewModel: TstSelectionViewModel,
-  selectedWeekLabel: string,
 ): { name: string; meta: string[] } {
   if (viewModel.scopeType === 'empty') {
     return {
       name: 'TST Selection',
-      meta: ['0 roots selected', selectedWeekLabel],
+      meta: ['0 roots selected'],
     }
   }
 
@@ -51,13 +49,13 @@ function buildHeroContent(
   if (viewModel.scopeType === 'no-terms') {
     return {
       name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-      meta: [rootLabel, '0 terms selected', selectedWeekLabel],
+      meta: [rootLabel, '0 terms selected'],
     }
   }
 
   return {
     name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-    meta: [rootLabel, selectedWeekLabel],
+    meta: [rootLabel],
   }
 }
 
@@ -80,6 +78,12 @@ export default function TstTab({
   const setCompetitorTableSort = useWprStore((state) => state.setCompetitorTableSort)
   const compWowVisible = useWprStore((state) => state.compWowVisible)
   const setCompWowVisible = useWprStore((state) => state.setCompWowVisible)
+  const selectedWeek = useWprStore((state) => state.selectedWeek)
+  const setSelectedWeek = useWprStore((state) => state.setSelectedWeek)
+
+  if (selectedWeek === null) {
+    throw new Error('Missing WPR table week')
+  }
 
   useEffect(() => {
     const rootIdSet = new Set(bundle.clusters.map((cluster) => cluster.id))
@@ -150,7 +154,7 @@ export default function TstTab({
     bundle,
     selectedRootIds: selectedCompetitorRootIds,
     selectedTermIds: selectedCompetitorTermIds,
-    selectedWeek: bundle.meta.anchorWeek,
+    selectedWeek,
   })
 
   const familyOrder: string[] = []
@@ -161,8 +165,7 @@ export default function TstTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const selectedWeekLabel = formatWeekLabelFromLookup(bundle.meta.anchorWeek, weekStartDates)
-  const heroContent = buildHeroContent(bundle, viewModel, selectedWeekLabel)
+  const heroContent = buildHeroContent(viewModel)
   const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const competitor = bundle.meta.competitor
 
@@ -238,23 +241,25 @@ export default function TstTab({
   return (
     <Stack spacing={2}>
       <TstWeeklyPanel
-        competitor={competitor}
         heroContent={heroContent}
         viewModel={viewModel}
         changeEntries={changeEntries}
-        selectedWeekLabel={selectedWeekLabel}
         historyLabel={historyLabel}
         weekStartDates={weekStartDates}
         wowVisible={compWowVisible}
         setWowVisible={setCompWowVisible}
       />
       <TstSelectionTable
+        selectedWeek={selectedWeek}
+        weeks={bundle.weeks}
+        weekStartDates={weekStartDates}
         competitorBrand={competitor.brand}
         familyOrder={familyOrder}
         viewModel={viewModel}
         expandedRootIds={expandedCompetitorRootIds}
         sortState={competitorTableSort}
         setSortState={setCompetitorTableSort}
+        onSelectWeek={setSelectedWeek}
         onSelectAll={() => {
           setSelectedCompetitorRootIds(bundle.clusters.map((cluster) => cluster.id))
           const allTermIds: string[] = []

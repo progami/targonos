@@ -18,11 +18,13 @@ export const wprSelectionMetricCellSx = {
 export function WprSelectionPanel({
   title,
   summary,
+  toolbar,
   children,
   tableMaxHeight = 640,
 }: {
   title: string
   summary: string
+  toolbar?: ReactNode
   children: ReactNode
   tableMaxHeight?: number
 }) {
@@ -56,6 +58,8 @@ export function WprSelectionPanel({
             {summary}
           </Typography>
         </Box>
+
+        {toolbar}
       </Box>
 
       <TableContainer sx={{ maxHeight: tableMaxHeight }}>{children}</TableContainer>

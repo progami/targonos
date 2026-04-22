@@ -29,6 +29,7 @@ import {
   textPrimary,
   textSecondary,
 } from '@/lib/wpr/panel-tokens';
+import WprWeekSelect from '@/components/wpr/wpr-week-select';
 
 const basePath = getPublicBasePath();
 
@@ -198,10 +199,16 @@ function splitLineValues(value: string): string[] {
 
 export default function ChangeTimeline({
   entries,
-  selectedWeekLabel,
+  selectedWeek,
+  weeks,
+  weekStartDates,
+  onSelectWeek,
 }: {
   entries: WprChangeLogEntry[];
-  selectedWeekLabel: WeekLabel;
+  selectedWeek: WeekLabel;
+  weeks: WeekLabel[];
+  weekStartDates: Record<WeekLabel, string>;
+  onSelectWeek: (week: WeekLabel) => void;
 }) {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -239,7 +246,7 @@ export default function ChangeTimeline({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          weekLabel: selectedWeekLabel,
+          weekLabel: selectedWeek,
           entryDate: draft.entryDate,
           category: draft.category,
           title: draft.title,
@@ -283,27 +290,37 @@ export default function ChangeTimeline({
           <Typography sx={panelBadgeSx}>
             {entries.length} tracked change{entries.length !== 1 ? 's' : ''}
           </Typography>
-          <Typography sx={panelBadgeSx}>Through {selectedWeekLabel}</Typography>
+          <Typography sx={panelBadgeSx}>Through {selectedWeek}</Typography>
         </Stack>
-        <Button
-          type="button"
-          size="small"
-          variant="outlined"
-          onClick={handleOpenDialog}
-          sx={{
-            borderColor: 'rgba(0,194,185,0.42)',
-            color: teal,
-            fontWeight: 700,
-            letterSpacing: '0.04em',
-            textTransform: 'none',
-            '&:hover': {
-              borderColor: 'rgba(0,194,185,0.56)',
-              bgcolor: 'rgba(0,194,185,0.12)',
-            },
-          }}
-        >
-          New change
-        </Button>
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <WprWeekSelect
+            label="Week"
+            selectedWeek={selectedWeek}
+            weeks={weeks}
+            weekStartDates={weekStartDates}
+            onSelectWeek={onSelectWeek}
+            minWidth={220}
+          />
+          <Button
+            type="button"
+            size="small"
+            variant="outlined"
+            onClick={handleOpenDialog}
+            sx={{
+              borderColor: 'rgba(0,194,185,0.42)',
+              color: teal,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'none',
+              '&:hover': {
+                borderColor: 'rgba(0,194,185,0.56)',
+                bgcolor: 'rgba(0,194,185,0.12)',
+              },
+            }}
+          >
+            New change
+          </Button>
+        </Stack>
       </Box>
 
       {entries.length === 0 ? (
@@ -483,7 +500,7 @@ export default function ChangeTimeline({
               Log a new standardized change
             </Typography>
             <Typography sx={{ fontSize: '0.82rem', color: textSecondary }}>
-              This writes a canonical Plan Log markdown file for {selectedWeekLabel} and rebuilds the WPR payload.
+              This writes a canonical Plan Log markdown file for {selectedWeek} and rebuilds the WPR payload.
             </Typography>
           </Stack>
         </DialogTitle>
@@ -495,7 +512,7 @@ export default function ChangeTimeline({
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 label="Week"
-                value={selectedWeekLabel}
+                value={selectedWeek}
                 fullWidth
                 InputProps={{ readOnly: true }}
                 sx={{

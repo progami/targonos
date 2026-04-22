@@ -4,7 +4,6 @@ import { useEffect, type JSX } from 'react'
 import { Box, Button, Stack } from '@mui/material'
 import {
   WprAnalyticsFooter,
-  WprAnalyticsMetric,
   WprAnalyticsPanel,
 } from '@/components/wpr/wpr-analytics-panel'
 import {
@@ -24,14 +23,12 @@ import {
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprScpWowVisible } from '@/lib/wpr/dashboard-state'
-import { formatCount, formatMoney } from '@/lib/wpr/format'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import {
   buildBundleWeekStartDateLookup,
   formatTooltipWeekLabelFromLookup,
-  formatWeekLabelFromLookup,
   formatWeekWindowLabel,
 } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
@@ -40,10 +37,6 @@ import ScpSelectionTable from './scp-selection-table'
 type ScpHeroContent = {
   name: string
   meta: string[]
-}
-
-function blankMetricValue(): string {
-  return '---'
 }
 
 function ScpWeeklyChart({
@@ -208,10 +201,10 @@ function ScpWeeklyChart({
   )
 }
 
-function buildHeroContent(selectedWeekLabel: string): ScpHeroContent {
+function buildHeroContent(): ScpHeroContent {
   return {
     name: 'Search Catalog Performance',
-    meta: [`Catalog search funnel`, selectedWeekLabel],
+    meta: ['Catalog search funnel'],
   }
 }
 
@@ -230,6 +223,12 @@ export default function ScpTab({
   const setScpTableSort = useWprStore((state) => state.setScpTableSort)
   const scpWowVisible = useWprStore((state) => state.scpWowVisible)
   const setScpWowVisible = useWprStore((state) => state.setScpWowVisible)
+  const selectedWeek = useWprStore((state) => state.selectedWeek)
+  const setSelectedWeek = useWprStore((state) => state.setSelectedWeek)
+
+  if (selectedWeek === null) {
+    throw new Error('Missing WPR table week')
+  }
 
   useEffect(() => {
     const allIds = bundle.scp.asins.map((row) => row.id)
@@ -263,11 +262,10 @@ export default function ScpTab({
     setSelectedScpAsinIds,
   ])
 
-  const selectedWeekLabel = bundle.meta.anchorWeek
   const viewModel = createScpSelectionViewModel({
     window: bundle.scp,
     selectedAsinIds: selectedScpAsinIds,
-    selectedWeek: selectedWeekLabel,
+    selectedWeek,
   })
 
   if (viewModel.scopeType === 'unavailable') {
@@ -289,17 +287,13 @@ export default function ScpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const formattedSelectedWeekLabel = formatWeekLabelFromLookup(selectedWeekLabel, weekStartDates)
-  const heroContent = buildHeroContent(formattedSelectedWeekLabel)
-  const blankTopValues = viewModel.scopeType === 'empty' || viewModel.current === null
-  const currentMetrics = viewModel.current
+  const heroContent = buildHeroContent()
   const historyLabel = formatWeekWindowLabel(bundle.scp.meta.baselineWindow, weekStartDates)
   const footerItems = [
     `Source: SCP`,
     `Scope: catalog search`,
     `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
     `Target ASIN: ${bundle.scp.meta.targetAsin}`,
-    `Table week: ${formattedSelectedWeekLabel}`,
     `Chart history: ${historyLabel}`,
   ]
 
@@ -308,23 +302,6 @@ export default function ScpTab({
       <WprAnalyticsPanel
         title={heroContent.name}
         meta={heroContent.meta}
-        metricColumns={{ xs: 2, md: 3 }}
-        metrics={
-          <>
-            <WprAnalyticsMetric
-              label="Search Impressions"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.impressions)}
-            />
-            <WprAnalyticsMetric
-              label="Search Purchases"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.purchases)}
-            />
-            <WprAnalyticsMetric
-              label="Search Sales"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatMoney(currentMetrics.sales)}
-            />
-          </>
-        }
         footer={<WprAnalyticsFooter items={footerItems} />}
       >
         <ScpWeeklyChart
@@ -337,10 +314,13 @@ export default function ScpTab({
       </WprAnalyticsPanel>
 
       <ScpSelectionTable
-        selectedWeekLabel={selectedWeekLabel}
+        selectedWeek={selectedWeek}
+        weeks={bundle.weeks}
+        weekStartDates={weekStartDates}
         viewModel={viewModel}
         sortState={scpTableSort}
         setSortState={setScpTableSort}
+        onSelectWeek={setSelectedWeek}
         onSelectAll={() => {
           setSelectedScpAsinIds(viewModel.allIds)
           setHasInitializedScpSelection(true)

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
 import { Box, Button, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import {
   WprAnalyticsFooter,
-  WprAnalyticsMetric,
   WprAnalyticsPanel,
 } from '@/components/wpr/wpr-analytics-panel'
 import {
@@ -28,16 +27,14 @@ import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/compo
 import type { WprBrWowVisible } from '@/lib/wpr/dashboard-state'
 import {
   createBusinessReportsSelectionViewModel,
-  selectedWeekBusinessRecord,
   type BusinessReportsSelectionViewModel,
 } from '@/lib/wpr/business-reports-view-model'
-import { formatCount, formatPercent } from '@/lib/wpr/format'
+import { formatCount } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import {
   buildBundleWeekStartDateLookup,
   formatTooltipWeekLabelFromLookup,
-  formatWeekLabelFromLookup,
   formatWeekWindowLabel,
 } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
@@ -77,10 +74,6 @@ const businessReportsViewToggleGroupSx = {
       bgcolor: 'rgba(255,255,255,0.07)',
     },
   },
-}
-
-function blankMetricValue(): string {
-  return '---'
 }
 
 function dailyWindowLabel(dailySeries: WprBusinessDailyPoint[]): string {
@@ -469,10 +462,10 @@ function BusinessReportsChart({
   )
 }
 
-function buildHeroContent(selectedWeekLabel: string): BusinessReportsHeroContent {
+function buildHeroContent(): BusinessReportsHeroContent {
   return {
     name: 'Business Reports',
-    meta: ['Retail detail-page metrics', selectedWeekLabel],
+    meta: ['Retail detail-page metrics'],
   }
 }
 
@@ -492,6 +485,12 @@ export default function BusinessReportsTab({
   const setBrTableSort = useWprStore((state) => state.setBrTableSort)
   const brWowVisible = useWprStore((state) => state.brWowVisible)
   const setBrWowVisible = useWprStore((state) => state.setBrWowVisible)
+  const selectedWeek = useWprStore((state) => state.selectedWeek)
+  const setSelectedWeek = useWprStore((state) => state.setSelectedWeek)
+
+  if (selectedWeek === null) {
+    throw new Error('Missing WPR table week')
+  }
 
   useEffect(() => {
     const allIds = bundle.businessReports.asins.map((row) => row.id)
@@ -525,11 +524,10 @@ export default function BusinessReportsTab({
     setSelectedBusinessReportAsinIds,
   ])
 
-  const selectedWeekLabel = bundle.meta.anchorWeek
   const viewModel = createBusinessReportsSelectionViewModel({
     window: bundle.businessReports,
     selectedAsinIds: selectedBusinessReportAsinIds,
-    selectedWeek: selectedWeekLabel,
+    selectedWeek,
   })
 
   if (viewModel.scopeType === 'unavailable') {
@@ -551,12 +549,8 @@ export default function BusinessReportsTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const formattedSelectedWeekLabel = formatWeekLabelFromLookup(selectedWeekLabel, weekStartDates)
-  const heroContent = buildHeroContent(formattedSelectedWeekLabel)
-  const selectedRecord = selectedWeekBusinessRecord(viewModel.weekly, selectedWeekLabel)
-  const blankTopValues = viewModel.scopeType === 'empty' || selectedRecord === null || viewModel.current === null
-  const currentMetrics = viewModel.current
-  const dailySeries = bundle.businessReports.dailyByWeek[selectedWeekLabel]
+  const heroContent = buildHeroContent()
+  const dailySeries = bundle.businessReports.dailyByWeek[bundle.meta.anchorWeek]
   let dailyChartSeries: WprBusinessDailyPoint[] = []
   if (dailySeries !== undefined) {
     dailyChartSeries = dailySeries
@@ -569,7 +563,6 @@ export default function BusinessReportsTab({
     `Scope: detail page retail`,
     `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
     `Target ASIN: ${bundle.businessReports.meta.targetAsin}`,
-    `Table week: ${formattedSelectedWeekLabel}`,
     `Chart window: ${chartWindowLabel}`,
   ]
 
@@ -578,23 +571,6 @@ export default function BusinessReportsTab({
       <WprAnalyticsPanel
         title={heroContent.name}
         meta={heroContent.meta}
-        metricColumns={{ xs: 2, md: 3 }}
-        metrics={
-          <>
-            <WprAnalyticsMetric
-              label="Sessions"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.sessions)}
-            />
-            <WprAnalyticsMetric
-              label="Order Item %"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.order_item_session_percentage)}
-            />
-            <WprAnalyticsMetric
-              label="Unit Session %"
-              value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatPercent(currentMetrics.unit_session_percentage)}
-            />
-          </>
-        }
         footer={<WprAnalyticsFooter items={footerItems} />}
       >
         <BusinessReportsChart
@@ -610,10 +586,13 @@ export default function BusinessReportsTab({
       </WprAnalyticsPanel>
 
       <BusinessReportsSelectionTable
-        selectedWeekLabel={selectedWeekLabel}
+        selectedWeek={selectedWeek}
+        weeks={bundle.weeks}
+        weekStartDates={weekStartDates}
         viewModel={viewModel}
         sortState={brTableSort}
         setSortState={setBrTableSort}
+        onSelectWeek={setSelectedWeek}
         onSelectAll={() => {
           setSelectedBusinessReportAsinIds(viewModel.allIds)
           setHasInitializedBusinessReportSelection(true)
