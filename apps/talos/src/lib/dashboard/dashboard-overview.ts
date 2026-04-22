@@ -51,7 +51,11 @@ export function buildDashboardOverviewSnapshot({
   >()
 
   for (const balance of balances) {
-    const key = balance.warehouseCode.trim().length > 0 ? balance.warehouseCode : balance.warehouseName
+    const key = balance.warehouseCode.trim()
+    if (key.length === 0) {
+      throw new Error('warehouseCode is required')
+    }
+
     const existing = warehouseMap.get(key)
 
     if (existing === undefined) {

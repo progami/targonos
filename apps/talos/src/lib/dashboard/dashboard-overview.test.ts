@@ -3,10 +3,11 @@ import test from 'node:test'
 import {
   buildDashboardOverviewSnapshot,
   type DashboardOverviewBalanceInput,
+  type DashboardOverviewSnapshot,
   type DashboardOverviewPurchaseOrderInput,
 } from './dashboard-overview'
 
-test('buildDashboardOverviewSnapshot groups stock into factory, transit, and warehouse totals', () => {
+test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehouse totals', () => {
   const purchaseOrders: DashboardOverviewPurchaseOrderInput[] = [
     {
       id: 'po-mfg-1',
@@ -53,23 +54,46 @@ test('buildDashboardOverviewSnapshot groups stock into factory, transit, and war
 
   const snapshot = buildDashboardOverviewSnapshot({ purchaseOrders, balances })
 
-  assert.equal(snapshot.summary.factory.cartons, 120)
-  assert.equal(snapshot.summary.factory.pallets, 8)
-  assert.equal(snapshot.summary.factory.units, 960)
-  assert.equal(snapshot.summary.factory.poCount, 1)
+  const expectedSnapshot: DashboardOverviewSnapshot = {
+    summary: {
+      factory: {
+        cartons: 120,
+        pallets: 8,
+        units: 960,
+        poCount: 1,
+      },
+      transit: {
+        cartons: 80,
+        pallets: 5,
+        units: 640,
+        poCount: 1,
+      },
+      warehouses: {
+        cartons: 500,
+        pallets: 30,
+        units: 4000,
+        warehouseCount: 2,
+      },
+    },
+    warehouses: [
+      {
+        warehouseCode: 'TCL-CHINO',
+        warehouseName: 'Tactical Warehouse Solutions',
+        cartons: 300,
+        pallets: 20,
+        units: 2400,
+        skuCount: 1,
+      },
+      {
+        warehouseCode: 'FMC-UK',
+        warehouseName: 'FMC Logistics (UK) Ltd',
+        cartons: 200,
+        pallets: 10,
+        units: 1600,
+        skuCount: 1,
+      },
+    ],
+  }
 
-  assert.equal(snapshot.summary.transit.cartons, 80)
-  assert.equal(snapshot.summary.transit.pallets, 5)
-  assert.equal(snapshot.summary.transit.units, 640)
-  assert.equal(snapshot.summary.transit.poCount, 1)
-
-  assert.equal(snapshot.summary.warehouses.cartons, 500)
-  assert.equal(snapshot.summary.warehouses.pallets, 30)
-  assert.equal(snapshot.summary.warehouses.units, 4000)
-  assert.equal(snapshot.summary.warehouses.warehouseCount, 2)
-
-  assert.deepEqual(
-    snapshot.warehouses.map(row => row.warehouseCode),
-    ['TCL-CHINO', 'FMC-UK']
-  )
+  assert.deepEqual(snapshot, expectedSnapshot)
 })
