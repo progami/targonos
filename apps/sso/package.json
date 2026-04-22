@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "node ../../scripts/run-next-port.js start 3200",
     "type-check": "tsc --noEmit",
-    "test:auth-contracts": "tsx --test lib/auth-logger.test.ts tests/active-tenant.route.test.ts tests/fixtures/hosted-smoke-config.test.ts scripts/ensure-hosted-smoke-user-lib.test.ts",
+    "test:auth-contracts": "tsx --test lib/auth-logger.test.ts lib/auth-route-recovery.test.ts tests/active-tenant.route.test.ts tests/fixtures/hosted-smoke-config.test.ts scripts/ensure-hosted-smoke-user-lib.test.ts",
     "test:auth-smoke": "pnpm run test:auth-contracts && playwright test --grep \"portal login|stale encrypted session|authenticated launcher|auth cleanup\"",
     "test:e2e": "playwright test",
     "test:hosted-smoke": "pnpm run test:auth-contracts && PLAYWRIGHT_HOSTED_ONLY=1 playwright test tests/hosted-deep-links.spec.ts --workers=1",

@@ -9,7 +9,7 @@ import { PageContainer, PageHeaderSection, PageContent } from '@/components/layo
 import { Button } from '@/components/ui/button'
 import { PageTabs } from '@/components/ui/page-tabs'
 import { PageLoading } from '@/components/ui/loading-spinner'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { FileText, Plus, Truck, XCircle, FileEdit } from '@/lib/lucide-icons'
 import { FulfillmentOrdersPanel } from './fulfillment-orders-panel'
@@ -65,7 +65,7 @@ function FulfillmentOrdersPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/fulfillment-orders')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/fulfillment-orders'))
       return
     }
 

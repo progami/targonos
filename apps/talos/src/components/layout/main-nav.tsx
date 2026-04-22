@@ -12,7 +12,7 @@ import {
 } from '@/lib/lucide-icons'
 import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { portalUrl } from '@/lib/portal'
+import { buildAppCallbackUrl, portalUrl } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { TenantIndicator } from '@/components/tenant/TenantIndicator'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -225,7 +225,7 @@ export function MainNav() {
             <button
               onClick={() => {
                 const url = portalUrl('/api/auth/signout')
-                url.searchParams.set('callbackUrl', `${window.location.origin}${withBasePath('/auth/login')}`)
+                url.searchParams.set('callbackUrl', buildAppCallbackUrl('/auth/login'))
                 window.location.href = url.toString()
               }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -346,7 +346,7 @@ export function MainNav() {
                   <button
                     onClick={() => {
                       const url = portalUrl('/api/auth/signout')
-                      url.searchParams.set('callbackUrl', `${window.location.origin}${withBasePath('/auth/login')}`)
+                      url.searchParams.set('callbackUrl', buildAppCallbackUrl('/auth/login'))
                       window.location.href = url.toString()
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"

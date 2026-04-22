@@ -22,7 +22,7 @@ import { PageLoading } from '@/components/ui/loading-spinner'
 import { formatCurrency } from '@/lib/utils'
 import { toast } from 'react-hot-toast'
 import type { CostLedgerBucketTotals, CostLedgerGroupResult } from '@targon/ledger'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { parseCostLedgerExportResponse } from './export'
 import { usePageState } from '@/lib/store'
@@ -101,7 +101,7 @@ export default function CostLedgerPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/cost-ledger')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/cost-ledger'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

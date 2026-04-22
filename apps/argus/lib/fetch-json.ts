@@ -13,7 +13,14 @@ export function buildAppPath(path: string): string {
 }
 
 export async function readJsonOrThrow<T>(input: RequestInfo | URL, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, init)
+  const headers = new Headers(init?.headers)
+  headers.set('accept', 'application/json')
+
+  const response = await fetch(input, {
+    ...init,
+    cache: 'no-store',
+    headers,
+  })
   const contentType = response.headers.get('content-type')
   const text = await response.text()
 
