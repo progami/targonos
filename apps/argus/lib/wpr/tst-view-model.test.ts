@@ -449,3 +449,27 @@ test('createTstViewModel aggregates competitor term selection into current and w
   assert.equal(vm.rootRows[0]?.id, 'cluster-1')
   assert.equal(vm.termRowsByRoot['cluster-1']?.[0]?.id, competitorTermKey('Root One', 'term 1'))
 })
+
+test('createTstViewModel derives root and term table rows from the selected week', () => {
+  const weekFifteenVm = createTstViewModel({
+    bundle: buildBundle(),
+    selectedRootIds: new Set(['cluster-1']),
+    selectedTermIds: new Set(),
+    selectedWeek: 'W15',
+  })
+
+  assert.equal(weekFifteenVm.rootRows[0]?.current.observed.competitor_purchase_share, 0.28)
+
+  const weekSixteenVm = createTstViewModel({
+    bundle: buildBundle(),
+    selectedRootIds: new Set(['cluster-1']),
+    selectedTermIds: new Set(),
+    selectedWeek: 'W16',
+  })
+
+  const selectedTermRow = weekSixteenVm.termRowsByRoot['cluster-1']?.find(
+    (row) => row.id === competitorTermKey('Root One', 'term 2'),
+  )
+
+  assert.equal(selectedTermRow?.current.purchase_gap, -0.06)
+})

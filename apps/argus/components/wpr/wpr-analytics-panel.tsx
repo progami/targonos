@@ -4,18 +4,6 @@ import type { ReactNode } from 'react'
 import { Box, Stack, Typography } from '@mui/material'
 import { panelSx, subtleBorder, textMuted, textSecondary } from '@/lib/wpr/panel-tokens'
 
-type WprAnalyticsMetricColumns = {
-  xs: number
-  md: number
-}
-
-function metricGridTemplateColumns(columns: WprAnalyticsMetricColumns) {
-  return {
-    xs: `repeat(${columns.xs}, minmax(0, 1fr))`,
-    md: `repeat(${columns.md}, minmax(0, 1fr))`,
-  }
-}
-
 export function WprAnalyticsMetric({
   label,
   value,
@@ -95,15 +83,11 @@ export function WprAnalyticsFooter({
 export function WprAnalyticsPanel({
   title,
   meta,
-  metricColumns,
-  metrics,
   children,
   footer,
 }: {
   title: string
   meta: string[]
-  metricColumns: WprAnalyticsMetricColumns
-  metrics: ReactNode
   children: ReactNode
   footer: ReactNode
 }) {
@@ -129,19 +113,6 @@ export function WprAnalyticsPanel({
             {meta.join(' · ')}
           </Typography>
         </Stack>
-      </Box>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: metricGridTemplateColumns(metricColumns),
-          gap: 1.5,
-          px: 2.5,
-          py: 1.75,
-          borderBottom: subtleBorder,
-        }}
-      >
-        {metrics}
       </Box>
 
       <Box sx={{ p: 2.5 }}>{children}</Box>

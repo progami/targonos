@@ -706,6 +706,28 @@ def build_listing_change_title(category: str, fields: list[str], asin_count: int
     return title
 
 
+def normalize_manual_change_category(category: str | None) -> str:
+    if category is None:
+        return "Content"
+
+    normalized = category.strip().upper()
+    if normalized == "MANUAL":
+        return "Content"
+    if normalized == "CONTENT":
+        return "Content"
+    if normalized == "PRICING":
+        return "Pricing"
+    if normalized == "IMAGES":
+        return "Images"
+    if normalized == "OFFER":
+        return "Offer"
+    if normalized == "CATALOG":
+        return "Catalog"
+    if normalized == "MIXED":
+        return "Mixed"
+    raise ValueError(f"Unsupported WPR manual change category: {category}")
+
+
 def summarize_field_labels(fields: list[str], limit: int = 5) -> str:
     labels = [CHANGE_FIELD_LABELS.get(field, field.replace("_", " ").title()) for field in fields]
     visible = labels[:limit]
@@ -890,9 +912,7 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
     if source is None:
         source = "Plan Log"
 
-    category = match_metadata("Type")
-    if category is None:
-        category = "Manual"
+    category = normalize_manual_change_category(match_metadata("Type"))
     return {
         "id": slugify(f"manual-{week_label}-{title}"),
         "kind": "manual",

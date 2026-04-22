@@ -235,7 +235,23 @@ function termMap(bundle: WprWeekBundle): Map<string, WprSqpTerm> {
   return new Map(bundle.sqpTerms.map((term) => [term.id, term]))
 }
 
-function aggregateSelectedTermMetrics(bundle: WprWeekBundle, selectedIds: string[]): SqpAggregatedMetrics {
+function observedWindowForWeek(
+  series: readonly WprObservedWindow[],
+  selectedWeek: WeekLabel,
+): WprObservedWindow | null {
+  const record = series.find((item) => item.week_label === selectedWeek)
+  if (record === undefined) {
+    return null
+  }
+
+  return record
+}
+
+function aggregateSelectedTermMetrics(
+  bundle: WprWeekBundle,
+  selectedIds: string[],
+  selectedWeek: WeekLabel,
+): SqpAggregatedMetrics {
   const terms = termMap(bundle)
   return aggregateObservedSources(
     selectedIds
@@ -245,17 +261,22 @@ function aggregateSelectedTermMetrics(bundle: WprWeekBundle, selectedIds: string
           return undefined
         }
 
-        return term.observed.current_week
+        return observedWindowForWeek(term.weekly, selectedWeek) ?? undefined
       })
       .filter((metric): metric is WprObservedWindow => metric !== undefined),
   )
 }
 
-function aggregateSelectedRootMetrics(bundle: WprWeekBundle, rootIds: string[]): SqpAggregatedMetrics {
+function aggregateSelectedRootMetrics(
+  bundle: WprWeekBundle,
+  rootIds: string[],
+  selectedWeek: WeekLabel,
+): SqpAggregatedMetrics {
   return aggregateObservedSources(
     bundle.clusters
       .filter((cluster) => rootIds.includes(cluster.id))
-      .map((cluster) => cluster.observed.current_week),
+      .map((cluster) => observedWindowForWeek(cluster.weekly, selectedWeek))
+      .filter((metric): metric is WprObservedWindow => metric !== null),
   )
 }
 
@@ -348,6 +369,18 @@ function toCurrentMetrics(source: WprObservedWindow): SqpAggregatedMetrics {
     avg_rank: source.avg_rank,
     rank_volatility: source.rank_volatility,
   })
+}
+
+function currentMetricsForWeek(
+  series: readonly WprObservedWindow[],
+  selectedWeek: WeekLabel,
+): SqpAggregatedMetrics {
+  const record = observedWindowForWeek(series, selectedWeek)
+  if (record === null) {
+    return finalizeSqpMetrics(emptySqpMetrics())
+  }
+
+  return toCurrentMetrics(record)
 }
 
 function compareSortValues(
@@ -448,8 +481,9 @@ export function createSqpSelectionViewModel(input: {
   bundle: WprWeekBundle
   selectedRootIds: Set<string>
   selectedTermIds: Set<string>
+  selectedWeek: WeekLabel
 }): SqpSelectionViewModel {
-  const { bundle, selectedRootIds, selectedTermIds } = input
+  const { bundle, selectedRootIds, selectedTermIds, selectedWeek } = input
   const terms = termMap(bundle)
   const selectedRoots = selectedRootIdsList(bundle, selectedRootIds)
   const rootRows: SqpSelectionRootRow[] = bundle.clusters.map((cluster) => {
@@ -472,7 +506,7 @@ export function createSqpSelectionViewModel(input: {
       partial: selectedIds.length > 0 && selectedIds.length < allIds.length,
       topTerms: cluster.top_terms,
       coverageLabel,
-      current: toCurrentMetrics(cluster.observed.current_week),
+      current: currentMetricsForWeek(cluster.weekly, selectedWeek),
     }
   })
 
@@ -486,8 +520,8 @@ export function createSqpSelectionViewModel(input: {
         rootId: cluster.id,
         label: term.term,
         checked: selectedTermIds.has(term.id),
-        selectionVolumeSelectedWeek: term.selection_volume_selected_week,
-        current: toCurrentMetrics(term.observed.current_week),
+        selectionVolumeSelectedWeek: currentMetricsForWeek(term.weekly, selectedWeek).query_volume,
+        current: currentMetricsForWeek(term.weekly, selectedWeek),
       }))
   }
 
@@ -520,7 +554,7 @@ export function createSqpSelectionViewModel(input: {
     if (selectedIds.length === 0) {
       return {
         scopeType: 'no-terms',
-        metrics: toCurrentMetrics(cluster.observed.current_week),
+        metrics: currentMetricsForWeek(cluster.weekly, selectedWeek),
         weekly: aggregateSelectedRootWeeklyMetrics(bundle, [rootId]),
         rootRows,
         termRowsByRoot,
@@ -535,8 +569,8 @@ export function createSqpSelectionViewModel(input: {
     return {
       scopeType: isAllSelected ? 'root' : selectedIds.length === 1 ? 'term' : 'multi',
       metrics: isAllSelected
-        ? toCurrentMetrics(cluster.observed.current_week)
-        : aggregateSelectedTermMetrics(bundle, selectedIds),
+        ? currentMetricsForWeek(cluster.weekly, selectedWeek)
+        : aggregateSelectedTermMetrics(bundle, selectedIds, selectedWeek),
       weekly: isAllSelected
         ? aggregateSelectedRootWeeklyMetrics(bundle, [rootId])
         : aggregateSelectedTermWeeklyMetrics(bundle, selectedIds),
@@ -559,8 +593,8 @@ export function createSqpSelectionViewModel(input: {
   return {
     scopeType: selectedIds.length > 0 ? 'multi-root' : 'no-terms',
     metrics: selectedIds.length > 0
-      ? aggregateSelectedTermMetrics(bundle, selectedIds)
-      : aggregateSelectedRootMetrics(bundle, selectedRoots),
+      ? aggregateSelectedTermMetrics(bundle, selectedIds, selectedWeek)
+      : aggregateSelectedRootMetrics(bundle, selectedRoots, selectedWeek),
     weekly: selectedIds.length > 0
       ? aggregateSelectedTermWeeklyMetrics(bundle, selectedIds)
       : aggregateSelectedRootWeeklyMetrics(bundle, selectedRoots),

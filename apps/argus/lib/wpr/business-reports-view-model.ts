@@ -289,7 +289,7 @@ export function businessReportsSortValueForRow(
 ): number | string {
   const current = selectedWeekBusinessMetrics(row.weekly, selectedWeek)
   if (key === 'asin') return row.asin
-  if (key === 'weeks_present_selected_week') return row.weeks_present_selected_week
+  if (key === 'weeks_present_selected_week') return selectedWeekBusinessRecord(row.weekly, selectedWeek) === null ? 0 : 1
   if (key === 'sessions') return current.sessions
   if (key === 'page_views') return current.page_views
   if (key === 'order_items') return current.order_items

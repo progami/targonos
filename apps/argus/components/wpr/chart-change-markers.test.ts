@@ -66,11 +66,33 @@ test('buildWeeklyChangeMarkers groups change entries by week', () => {
       label: 'W14',
       count: 2,
       titles: ['Content update across 4 ASINs', 'Price update across 4 ASINs'],
+      details: [
+        {
+          id: 'chg-1',
+          title: 'Content update across 4 ASINs',
+          summary: 'Backend terms',
+          category: 'CONTENT',
+        },
+        {
+          id: 'chg-2',
+          title: 'Price update across 4 ASINs',
+          summary: 'Buy box landed price',
+          category: 'PRICING',
+        },
+      ],
     },
     {
       label: 'W15',
       count: 1,
       titles: ['Price update across 3 ASINs'],
+      details: [
+        {
+          id: 'chg-3',
+          title: 'Price update across 3 ASINs',
+          summary: 'List price',
+          category: 'PRICING',
+        },
+      ],
     },
   ])
 })
@@ -86,6 +108,10 @@ test('buildDailyChangeMarkers keeps only days with tracked changes', () => {
       label: 'Apr 05',
       count: 2,
       titles: ['Title A', 'Title B'],
+      details: [
+        { id: 'Apr 05-0', title: 'Title A' },
+        { id: 'Apr 05-1', title: 'Title B' },
+      ],
     },
   ])
 })
@@ -151,8 +177,12 @@ test('WprChangeTooltipContent renders every change title on its own line', () =>
   )
 
   assert.match(markup, /W14 · 2 changes/)
+  assert.match(markup, /Content/)
+  assert.match(markup, /Pricing/)
   assert.match(markup, /Content update across 4 ASINs/)
+  assert.match(markup, /Backend terms/)
   assert.match(markup, /Price update across 4 ASINs/)
+  assert.match(markup, /Buy box landed price/)
 })
 
 test('RechartsChangeMarkers renders the reference lines on a front z-index layer', () => {

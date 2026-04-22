@@ -3,10 +3,24 @@ import type { WprChangeLogEntry, WeekLabel } from '@/lib/wpr/types';
 
 export default function ChangelogTab({
   entries,
-  selectedWeekLabel,
+  selectedWeek,
+  weeks,
+  weekStartDates,
+  onSelectWeek,
 }: {
   entries: WprChangeLogEntry[];
-  selectedWeekLabel: WeekLabel;
+  selectedWeek: WeekLabel;
+  weeks: WeekLabel[];
+  weekStartDates: Record<WeekLabel, string>;
+  onSelectWeek: (week: WeekLabel) => void;
 }) {
-  return <ChangeTimeline entries={entries} selectedWeekLabel={selectedWeekLabel} />;
+  return (
+    <ChangeTimeline
+      entries={entries}
+      selectedWeek={selectedWeek}
+      weeks={weeks}
+      weekStartDates={weekStartDates}
+      onSelectWeek={onSelectWeek}
+    />
+  );
 }

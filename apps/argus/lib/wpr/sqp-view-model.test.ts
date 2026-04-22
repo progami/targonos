@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 import { allSelectableSqpTermIds, createSqpSelectionViewModel, sortSqpRootRows, sortSqpTermRows } from './sqp-view-model'
 import type { WprWeekBundle } from './types'
 
-function buildObserved(queryVolume: number, purchases: number) {
+function buildObserved(weekLabel: string, queryVolume: number, purchases: number) {
+  const weekNumber = Number.parseInt(weekLabel.replace('W', ''), 10)
+  const startDate = weekLabel === 'W15' ? '2026-04-05' : '2026-04-12'
+
   return {
-    week_label: 'W16',
-    week_number: 16,
-    start_date: '2026-04-12',
+    week_label: weekLabel,
+    week_number: weekNumber,
+    start_date: startDate,
     market_impressions: 100,
     asin_impressions: 20,
     market_clicks: 40,
@@ -108,7 +111,7 @@ function buildBundle(): WprWeekBundle {
         ppc_cvr: 0,
         expected_rank: 3,
         top_terms: ['alpha', 'beta'],
-        weekly: [buildObserved(10, 1), buildObserved(20, 2)],
+        weekly: [buildObserved('W15', 10, 1), buildObserved('W16', 20, 2)],
         coverage: {
           weeks_sqp: 1,
           weeks_rank: 1,
@@ -122,9 +125,9 @@ function buildBundle(): WprWeekBundle {
         },
         eligibility: {},
         observed: {
-          current_week: buildObserved(20, 2),
-          recent_4w: buildObserved(20, 2),
-          baseline_13w: buildObserved(20, 2),
+          current_week: buildObserved('W16', 20, 2),
+          recent_4w: buildObserved('W16', 20, 2),
+          baseline_13w: buildObserved('W16', 20, 2),
         },
         benchmark: {
           competitor: {
@@ -188,7 +191,7 @@ function buildBundle(): WprWeekBundle {
         ppc_cvr: 0,
         expected_rank: 4,
         top_terms: ['gamma'],
-        weekly: [buildObserved(6, 1), buildObserved(12, 1)],
+        weekly: [buildObserved('W15', 6, 1), buildObserved('W16', 12, 1)],
         coverage: {
           weeks_sqp: 1,
           weeks_rank: 1,
@@ -202,9 +205,9 @@ function buildBundle(): WprWeekBundle {
         },
         eligibility: {},
         observed: {
-          current_week: buildObserved(12, 1),
-          recent_4w: buildObserved(12, 1),
-          baseline_13w: buildObserved(12, 1),
+          current_week: buildObserved('W16', 12, 1),
+          recent_4w: buildObserved('W16', 12, 1),
+          baseline_13w: buildObserved('W16', 12, 1),
         },
         benchmark: {
           competitor: {
@@ -242,7 +245,7 @@ function buildBundle(): WprWeekBundle {
         family: 'Family',
         cluster: 'Root One',
         cluster_id: 'cluster-1',
-        weekly: [buildObserved(5, 1), buildObserved(10, 2)],
+        weekly: [buildObserved('W15', 5, 1), buildObserved('W16', 10, 2)],
         selection_status: 'selected',
         selection_reason: 'default',
         selection_volume_selected_week: 10,
@@ -258,9 +261,9 @@ function buildBundle(): WprWeekBundle {
           baseline_to_anchor: { weeks_sqp: 1, weeks_rank: 1, weeks_ppc: 0, has_sqp: true, has_rank: true, has_ppc: false },
         },
         observed: {
-          current_week: buildObserved(10, 2),
-          recent_4w: buildObserved(10, 2),
-          baseline_13w: buildObserved(10, 2),
+          current_week: buildObserved('W16', 10, 2),
+          recent_4w: buildObserved('W16', 10, 2),
+          baseline_13w: buildObserved('W16', 10, 2),
         },
         benchmark: {
           competitor: {
@@ -300,7 +303,7 @@ function buildBundle(): WprWeekBundle {
         family: 'Family',
         cluster: 'Root One',
         cluster_id: 'cluster-1',
-        weekly: [buildObserved(2, 0), buildObserved(4, 0)],
+        weekly: [buildObserved('W15', 2, 0), buildObserved('W16', 4, 0)],
         selection_status: 'selected',
         selection_reason: 'default',
         selection_volume_selected_week: 4,
@@ -316,9 +319,9 @@ function buildBundle(): WprWeekBundle {
           baseline_to_anchor: { weeks_sqp: 1, weeks_rank: 1, weeks_ppc: 0, has_sqp: true, has_rank: true, has_ppc: false },
         },
         observed: {
-          current_week: buildObserved(4, 0),
-          recent_4w: buildObserved(4, 0),
-          baseline_13w: buildObserved(4, 0),
+          current_week: buildObserved('W16', 4, 0),
+          recent_4w: buildObserved('W16', 4, 0),
+          baseline_13w: buildObserved('W16', 4, 0),
         },
         benchmark: {
           competitor: {
@@ -358,7 +361,7 @@ function buildBundle(): WprWeekBundle {
         family: 'Other Family',
         cluster: 'Root Two',
         cluster_id: 'cluster-2',
-        weekly: [buildObserved(3, 1), buildObserved(12, 1)],
+        weekly: [buildObserved('W15', 3, 1), buildObserved('W16', 12, 1)],
         selection_status: 'selected',
         selection_reason: 'default',
         selection_volume_selected_week: 12,
@@ -374,9 +377,9 @@ function buildBundle(): WprWeekBundle {
           baseline_to_anchor: { weeks_sqp: 1, weeks_rank: 1, weeks_ppc: 0, has_sqp: true, has_rank: true, has_ppc: false },
         },
         observed: {
-          current_week: buildObserved(12, 1),
-          recent_4w: buildObserved(12, 1),
-          baseline_13w: buildObserved(12, 1),
+          current_week: buildObserved('W16', 12, 1),
+          recent_4w: buildObserved('W16', 12, 1),
+          baseline_13w: buildObserved('W16', 12, 1),
         },
         benchmark: {
           competitor: {
@@ -444,6 +447,7 @@ test('createSqpSelectionViewModel aggregates selected term rows by root and curr
     bundle: buildBundle(),
     selectedRootIds: new Set(['cluster-1']),
     selectedTermIds: new Set(['cluster-1::term-1']),
+    selectedWeek: 'W16',
   })
 
   assert.equal(vm.scopeType, 'term')
@@ -472,6 +476,7 @@ test('createSqpSelectionViewModel preserves root weekly context when a single ro
     bundle: buildBundle(),
     selectedRootIds: new Set(['cluster-1']),
     selectedTermIds: new Set(),
+    selectedWeek: 'W16',
   })
 
   assert.equal(vm.scopeType, 'no-terms')
@@ -485,6 +490,7 @@ test('createSqpSelectionViewModel aggregates multiple selected roots by selected
     bundle: buildBundle(),
     selectedRootIds: new Set(['cluster-1', 'cluster-2']),
     selectedTermIds: new Set(['cluster-1::term-1', 'cluster-2::term-1']),
+    selectedWeek: 'W16',
   })
 
   assert.equal(vm.scopeType, 'multi-root')
@@ -498,6 +504,7 @@ test('sortSqpRootRows and sortSqpTermRows follow the HTML table sort order', () 
     bundle: buildBundle(),
     selectedRootIds: new Set(['cluster-1', 'cluster-2']),
     selectedTermIds: new Set(['cluster-1::term-1', 'cluster-2::term-1']),
+    selectedWeek: 'W16',
   })
 
   const rootsByVolume = sortSqpRootRows(vm.rootRows, 'query_volume', 'desc')
@@ -511,4 +518,17 @@ test('sortSqpRootRows and sortSqpTermRows follow the HTML table sort order', () 
     termsByName.map((row) => row.id),
     ['cluster-1::term-1', 'cluster-1::term-2'],
   )
+})
+
+test('createSqpSelectionViewModel derives root and term current metrics from the selected table week', () => {
+  const vm = createSqpSelectionViewModel({
+    bundle: buildBundle(),
+    selectedRootIds: new Set(['cluster-1']),
+    selectedTermIds: new Set(['cluster-1::term-1']),
+    selectedWeek: 'W15',
+  })
+
+  assert.equal(vm.rootRows[0]?.current.query_volume, 10)
+  assert.equal(vm.termRowsByRoot['cluster-1']?.[0]?.current.query_volume, 5)
+  assert.equal(vm.termRowsByRoot['cluster-1']?.[0]?.selectionVolumeSelectedWeek, 5)
 })

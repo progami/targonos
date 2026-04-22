@@ -91,8 +91,12 @@ test('SQP weekly chart renders hover tooltip content for the active week', () =>
 
   assert.match(markup, /data-hover-tooltip=\"sqp\"/)
   assert.match(markup, /W02 · 08 Jan - 14 Jan 26 · 2 changes/)
+  assert.match(markup, /Content/)
   assert.match(markup, /Content update across 4 ASINs/)
+  assert.match(markup, /Backend terms/)
+  assert.match(markup, /Pricing/)
   assert.match(markup, /Price update across 4 ASINs/)
+  assert.match(markup, /Buy box landed price/)
   assert.doesNotMatch(markup, /tracked changes/)
   assert.match(markup, /Impr Share/)
   assert.match(markup, /CTR x/)

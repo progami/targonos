@@ -147,7 +147,7 @@ class ManualChangeLogParsingTest(unittest.TestCase):
 
             self.assertEqual(len(entries), 1)
             self.assertEqual(entries[0]["source"], "Plan Log")
-            self.assertEqual(entries[0]["category"], "CONTENT")
+            self.assertEqual(entries[0]["category"], "Content")
             self.assertEqual(entries[0]["asins"], ["B09HXC3NL8", "B0CR1GSBQ9"])
             self.assertEqual(entries[0]["field_labels"], ["Backend terms", "Bullet points"])
             self.assertEqual(
@@ -157,6 +157,46 @@ class ManualChangeLogParsingTest(unittest.TestCase):
                     "Tightened bullet hierarchy for mobile.",
                 ],
             )
+
+    def test_legacy_plan_log_without_type_defaults_to_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            week_dir = sales_root / "WPR" / "Week 12 - 2026-03-15 (Sun)" / "output" / "Plans"
+            week_dir.mkdir(parents=True, exist_ok=True)
+            log_path = week_dir / "Week12_Legacy_EBC_Log_2026-03-21.md"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "# Legacy EBC update",
+                        "",
+                        "Entry date: 2026-03-21",
+                        "Source: Plan Log",
+                        "",
+                        "## Change Summary",
+                        "EBC modules refreshed for the current pack structure.",
+                        "",
+                        "## What Changed (Observed)",
+                        "- Updated EBC comparison blocks.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            module = load_module(data_dir)
+            entries = module.load_manual_change_logs(
+                {
+                    "W12": {
+                        "week_number": 12,
+                        "start_date": "2026-03-15",
+                    }
+                }
+            )
+
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["category"], "Content")
 
 
 class SourceOverviewTest(unittest.TestCase):
