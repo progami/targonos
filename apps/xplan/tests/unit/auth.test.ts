@@ -1,78 +1,101 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-const headersMock = vi.fn()
-const readPortalConsumerSessionMock = vi.fn()
-
-vi.mock('next/headers', () => ({
-  headers: headersMock,
-}))
+const getWorktreeDevSessionMock = vi.fn()
+const withSharedAuthMock = vi.fn()
+const nextAuthMock = vi.fn()
+const nextAuthAuthMock = vi.fn()
 
 vi.mock('@targon/auth', () => ({
-  getWorktreeDevSession: vi.fn(),
-  readPortalConsumerSession: readPortalConsumerSessionMock,
-  withSharedAuth: vi.fn(),
+  getWorktreeDevSession: getWorktreeDevSessionMock,
+  withSharedAuth: withSharedAuthMock,
+}))
+
+vi.mock('next-auth', () => ({
+  default: nextAuthMock,
 }))
 
 describe('xplan auth', () => {
   afterEach(() => {
     vi.resetModules()
     vi.unstubAllEnvs()
-    headersMock.mockReset()
-    readPortalConsumerSessionMock.mockReset()
+    getWorktreeDevSessionMock.mockReset()
+    withSharedAuthMock.mockReset()
+    nextAuthMock.mockReset()
+    nextAuthAuthMock.mockReset()
   })
 
-  it('returns null when the portal cookie is missing', async () => {
-    vi.stubEnv('PORTAL_AUTH_SECRET', 'test-portal-auth-secret-000000000000')
-    vi.stubEnv('NEXTAUTH_SECRET', 'test-portal-auth-secret-000000000000')
-    headersMock.mockResolvedValue(new Headers())
-    readPortalConsumerSessionMock.mockResolvedValue(null)
-
-    const { auth } = await import('@/lib/auth')
-
-    await expect(auth()).resolves.toBeNull()
-  })
-
-  it('returns claims from the shared portal cookie', async () => {
-    vi.stubEnv('PORTAL_AUTH_SECRET', 'test-portal-auth-secret-000000000000')
-    vi.stubEnv('NEXTAUTH_SECRET', 'test-portal-auth-secret-000000000000')
-    headersMock.mockResolvedValue(new Headers({
-      cookie: '__Secure-next-auth.session-token=token-value',
-    }))
-    readPortalConsumerSessionMock.mockResolvedValue({
-      payload: {
-        sub: 'xplan-user-1',
+  it('returns the worktree dev session before initializing next-auth', async () => {
+    const worktreeSession = {
+      expires: '2026-04-22T00:00:00.000Z',
+      user: {
+        id: 'xplan-user-1',
         email: 'planner@targonglobal.com',
         name: 'Planner User',
+      },
+    }
+
+    getWorktreeDevSessionMock.mockResolvedValue(worktreeSession)
+
+    const { auth } = await import('@/lib/auth')
+    const session = await auth()
+
+    expect(session).toEqual(worktreeSession)
+    expect(getWorktreeDevSessionMock).toHaveBeenCalledWith('xplan')
+    expect(nextAuthMock).not.toHaveBeenCalled()
+  })
+
+  it('falls back to next-auth when no worktree dev session exists', async () => {
+    vi.stubEnv('COOKIE_DOMAIN', '.targonglobal.com')
+    vi.stubEnv('NEXTAUTH_URL', 'https://os.targonglobal.com/xplan')
+    vi.stubEnv('NEXT_PUBLIC_APP_URL', 'https://os.targonglobal.com/xplan')
+    vi.stubEnv('PORTAL_AUTH_URL', 'https://os.targonglobal.com')
+    vi.stubEnv('NEXT_PUBLIC_PORTAL_AUTH_URL', 'https://os.targonglobal.com')
+    vi.stubEnv('PORTAL_AUTH_SECRET', 'test-portal-auth-secret-000000000000')
+    vi.stubEnv('NEXTAUTH_SECRET', 'test-portal-auth-secret-000000000000')
+
+    const nextAuthSession = {
+      expires: '2026-04-22T00:00:00.000Z',
+      user: {
+        id: 'xplan-user-2',
+        email: 'ops@targonglobal.com',
+        name: 'Ops User',
       },
       authz: {
         version: 1,
         globalRoles: ['platform_admin'],
-        apps: {
-          xplan: {
-            departments: ['Admin'],
-            tenantMemberships: [],
-          },
-        },
       },
       activeTenant: null,
+    }
+
+    getWorktreeDevSessionMock.mockResolvedValue(null)
+    withSharedAuthMock.mockImplementation((baseConfig) => baseConfig)
+    nextAuthAuthMock.mockResolvedValue(nextAuthSession)
+    nextAuthMock.mockReturnValue({
+      auth: nextAuthAuthMock,
+      handlers: {
+        GET: vi.fn(),
+        POST: vi.fn(),
+      },
     })
 
     const { auth } = await import('@/lib/auth')
     const session = await auth()
 
-    expect(session?.user?.id).toBe('xplan-user-1')
-    expect(session?.user?.email).toBe('planner@targonglobal.com')
-    expect((session as { authz?: unknown } | null)?.authz).toEqual({
-      version: 1,
-      globalRoles: ['platform_admin'],
-      apps: {
-        xplan: {
-          departments: ['Admin'],
-          tenantMemberships: [],
-        },
+    expect(session).toEqual(nextAuthSession)
+    expect(getWorktreeDevSessionMock).toHaveBeenCalledWith('xplan')
+    expect(withSharedAuthMock).toHaveBeenCalledTimes(1)
+    expect(withSharedAuthMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        trustHost: true,
+        providers: [],
+        secret: 'test-portal-auth-secret-000000000000',
+      }),
+      {
+        cookieDomain: '.targonglobal.com',
+        appId: 'targon',
       },
-    })
-    expect((session as { activeTenant?: unknown } | null)?.activeTenant).toBeNull()
-    expect(readPortalConsumerSessionMock).toHaveBeenCalledTimes(1)
+    )
+    expect(nextAuthMock).toHaveBeenCalledTimes(1)
+    expect(nextAuthAuthMock).toHaveBeenCalledTimes(1)
   })
 })

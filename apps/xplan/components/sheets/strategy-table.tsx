@@ -358,61 +358,72 @@ export function StrategyTable({
 
   /* ---- Render ---- */
 
+  const availableGroups = regionFilter === 'ALL'
+    ? groups
+    : groups.filter((group) => group.region === regionFilter);
+
   return (
     <>
       <div className="space-y-4">
-        {/* Toolbar: region tabs + new scenario */}
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
-            {REGION_TABS.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setRegionFilter(tab.id)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                  regionFilter === tab.id
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
+        <div className="flex flex-col gap-3 rounded-[20px] border border-slate-200/80 bg-white/88 p-3 shadow-[0_18px_35px_-30px_rgba(15,23,42,0.35)] dark:border-[#153a54] dark:bg-[#081a2b]/84 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+                Scenario Roster
+              </p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Switch the workbook between active planning scenarios without leaving setup.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {REGION_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setRegionFilter(tab.id)}
+                  className={cn(
+                    'rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors',
+                    regionFilter === tab.id
+                      ? 'bg-slate-950 text-white shadow-sm dark:bg-[#00C2B9] dark:text-slate-950'
+                      : 'border border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-900/60',
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {groups.length > 0 && (() => {
-            const filtered = regionFilter === 'ALL'
-              ? groups
-              : groups.filter((g) => g.region === regionFilter);
-            if (filtered.length === 0) return null;
-            return (
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              {filteredStrategies.length} scenario{filteredStrategies.length === 1 ? '' : 's'}
+            </span>
+            {availableGroups.length > 0 && (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => openCreateDialog(filtered[0].id)}
-                className="gap-1.5"
+                onClick={() => openCreateDialog(availableGroups[0].id)}
+                className="gap-1.5 rounded-xl border-slate-300 bg-white/90 px-3.5 text-slate-900 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 <Plus className="h-3.5 w-3.5" />
                 New Scenario
               </Button>
-            );
-          })()}
+            )}
+          </div>
         </div>
 
-        {/* Table */}
-        <div className="rounded-lg border border-slate-200 dark:border-[#0b3a52]">
+        <div className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white/92 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.42)] dark:border-[#153a54] dark:bg-[#081a2b]/90">
           <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[280px]">Strategy</TableHead>
-                <TableHead>Group</TableHead>
-                <TableHead className="w-[60px]">Region</TableHead>
-                <TableHead className="w-[80px] text-right">Products</TableHead>
-                <TableHead className="w-[120px]">Updated</TableHead>
+            <TableHeader className="bg-slate-50/90 dark:bg-[#0a2237]/92">
+              <TableRow className="border-slate-200/80 hover:bg-transparent dark:border-[#17364d]">
+                <TableHead className="h-11 w-[280px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Strategy</TableHead>
+                <TableHead className="px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Group</TableHead>
+                <TableHead className="w-[88px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Region</TableHead>
+                <TableHead className="w-[90px] px-4 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Products</TableHead>
+                <TableHead className="w-[120px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Updated</TableHead>
                 <TableHead className="w-[60px]" />
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="[&_tr:last-child]:border-b-0">
               {filteredStrategies.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
@@ -427,58 +438,58 @@ export function StrategyTable({
                       key={strategy.id}
                       onClick={() => handleRowClick(strategy)}
                       className={cn(
-                        'cursor-pointer',
-                        isActive && 'bg-teal-50/60 dark:bg-teal-900/15 shadow-[inset_3px_0_0_#00C2B9]',
+                        'cursor-pointer border-slate-200/80 hover:bg-slate-50/80 dark:border-[#17364d] dark:hover:bg-[#0d2438]/88',
+                        isActive && 'bg-cyan-50/70 ring-1 ring-inset ring-cyan-200/70 dark:bg-[#082f3a]/70 dark:ring-cyan-900/50',
                       )}
                     >
-                      <TableCell className="font-medium">
+                      <TableCell className="px-4 py-3.5 font-medium">
                         <div className="flex items-center gap-2">
-                          <span className="text-slate-900 dark:text-white">
+                          <span className="text-[15px] font-semibold text-slate-900 dark:text-white">
                             {strategy.name}
                           </span>
                           {strategy.isPrimary && (
                             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
                           )}
                           {isActive && (
-                            <span className="rounded bg-cyan-500 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-[#00C2B9] dark:text-[#002430]">
-                              Active
+                            <span className="rounded-full border border-cyan-200 bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-900 dark:border-cyan-900/50 dark:bg-cyan-950/50 dark:text-cyan-100">
+                              Live
                             </span>
                           )}
                         </div>
                         {strategy.description && (
-                          <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                          <p className="mt-1 max-w-[32rem] text-xs text-muted-foreground line-clamp-1">
                             {strategy.description}
                           </p>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-slate-700 dark:text-slate-300">
                             {strategy.strategyGroup?.name ?? '\u2014'}
                           </span>
                           {strategy.strategyGroup?.code && (
-                            <span className="font-mono text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 px-1 py-0.5 rounded">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                               {strategy.strategyGroup.code}
                             </span>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-muted-foreground">
+                      <TableCell className="px-4 py-3.5">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                           {strategy.region === 'US' ? '\u{1F1FA}\u{1F1F8}' : '\u{1F1EC}\u{1F1E7}'} {strategy.region}
                         </span>
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm tabular-nums">
+                      <TableCell className="px-4 py-3.5 text-right font-mono text-sm tabular-nums">
                         {strategy._count.products}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="px-4 py-3.5 text-xs font-medium text-muted-foreground">
                         {timeAgo(strategy.updatedAt)}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="px-4 py-3.5">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0"
+                          className="h-8 w-8 rounded-xl p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                           onClick={(e) => {
                             e.stopPropagation();
                             openEditDialog(strategy);
