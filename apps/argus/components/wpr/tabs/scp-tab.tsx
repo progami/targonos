@@ -28,7 +28,12 @@ import { formatCount, formatMoney } from '@/lib/wpr/format'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import {
+  buildBundleWeekStartDateLookup,
+  formatTooltipWeekLabelFromLookup,
+  formatWeekLabelFromLookup,
+  formatWeekWindowLabel,
+} from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
 
@@ -89,7 +94,7 @@ function ScpWeeklyChart({
                   active={active}
                   payload={payload}
                   label={label}
-                  labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
+                  labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
                   changeMarker={changeMarkersByLabel.get(String(label))}
                   formatRow={(entry) => {
                     const key = entry.dataKey

@@ -93,6 +93,34 @@ test('parseCaseReportSnapshotJson extracts entity sections and case rows', () =>
   assert.equal(report.sections[1]?.rows[0]?.issue, 'Weights and dimensions review')
 })
 
+test('parseCaseReportSnapshotJson normalizes looping rows to Watching', () => {
+  const report = parseCaseReportSnapshotJson(
+    JSON.stringify({
+      report_date: '2026-04-21',
+      market: 'US',
+      sections: [
+        {
+          entity: 'TARGON',
+          rows: [
+            {
+              category: 'looping',
+              issue: 'Shipping label refund ($2,583.96)',
+              case_id: '19550165441',
+              days_ago: '0 days ago',
+              status: 'Work in progress',
+              evidence: 'Forum thread has a new seller follow-up.',
+              assessment: 'Amazon is still looping.',
+              next_step: 'Wait for an Amazon update.',
+            },
+          ],
+        },
+      ],
+    }),
+  )
+
+  assert.equal(report.sections[0]?.rows[0]?.category, 'Watching')
+})
+
 test('readCaseReportBundleFromCaseRoot resolves the latest dated report and tracked cases', async () => {
   const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
   const reportsDir = path.join(caseRoot, 'reports')

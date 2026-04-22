@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildWeekStartDateLookup,
   formatWeekLabelWithDateRange,
+  formatTooltipWeekLabelFromLookup,
   formatWeekWindowLabel,
 } from './week-display'
 
@@ -31,4 +32,13 @@ test('buildWeekStartDateLookup collects week start dates from weekly series rows
       W16: '2026-04-13',
     },
   )
+})
+
+test('formatTooltipWeekLabelFromLookup skips inactive tooltip labels', () => {
+  const weekStartDates = {
+    W16: '2026-04-13',
+  }
+
+  assert.equal(formatTooltipWeekLabelFromLookup(undefined, weekStartDates), undefined)
+  assert.equal(formatTooltipWeekLabelFromLookup('W16', weekStartDates), 'W16 · 13 Apr - 19 Apr 26')
 })
