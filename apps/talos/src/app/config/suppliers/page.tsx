@@ -7,7 +7,7 @@ import { useSession } from '@/hooks/usePortalSession'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
 import { Plus, Users } from '@/lib/lucide-icons'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { Button } from '@/components/ui/button'
 import { ImportButton } from '@/components/ui/import-button'
 import SuppliersPanel from './suppliers-panel'
@@ -28,7 +28,7 @@ function SuppliersPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/suppliers')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/config/suppliers'))
       return
     }
 

@@ -21,7 +21,7 @@ import { PageTabs } from '@/components/ui/page-tabs'
 import { InventoryPipelineTab } from '@/components/operations/inventory-pipeline-tab'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { usePageState } from '@/lib/store/page-state'
 import {
@@ -94,10 +94,7 @@ function InventoryPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal(
-        '/login',
-        `${window.location.origin}${withBasePath('/operations/inventory')}`
-      )
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/inventory'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

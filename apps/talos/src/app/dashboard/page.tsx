@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSession } from '@/hooks/usePortalSession'
 import { usePageState } from '@/lib/store/page-state'
-import { useRouter } from 'next/navigation'
 import { useClientLogger } from '@/hooks/useClientLogger'
 import {
   Home,
@@ -27,6 +26,7 @@ import { toast } from 'react-hot-toast'
 import { startOfMonth, endOfMonth, subMonths } from 'date-fns'
 import { withBasePath } from '@/lib/utils/base-path'
 import { formatDashboardCurrency } from '@/lib/dashboard/currency'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 
 interface DashboardStats {
   totalInventory: number
@@ -98,7 +98,6 @@ const PAGE_KEY = '/dashboard'
 
 export default function DashboardPage() {
   const { data: session, status } = useSession()
-  const router = useRouter()
   const { logAction, logPerformance, logError } = useClientLogger()
   const pageState = usePageState(PAGE_KEY)
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -109,14 +108,11 @@ export default function DashboardPage() {
   const [showTimeRangeDropdown, setShowTimeRangeDropdown] = useState(false)
   const [hasError, setHasError] = useState(false)
 
-  // Trust middleware auth check - don't redirect on client
-  // The middleware already validates the portal session
   useEffect(() => {
-    // Commented out to trust middleware auth
-    // if (status === 'unauthenticated') {
-    // router.push('/auth/login?callbackUrl=/dashboard')
-    // }
-  }, [status, router])
+    if (status === 'unauthenticated') {
+      redirectToPortal('/login', buildAppCallbackUrl('/dashboard'))
+    }
+  }, [status])
 
   // Always use real data, never demo data
   const useDemoData = false
@@ -221,8 +217,7 @@ export default function DashboardPage() {
 
       // Check if it's an authentication error
       if (_error instanceof Error && _error.message.includes('401')) {
-        const callbackUrl = '/dashboard'
-        router.push(`/auth/login?callbackUrl=${encodeURIComponent(callbackUrl)}`)
+        redirectToPortal('/login', buildAppCallbackUrl('/dashboard'))
       } else {
         toast.error(_error instanceof Error ? _error.message : 'Failed to load dashboard stats')
       }
@@ -369,7 +364,9 @@ export default function DashboardPage() {
               subtitle="need attention"
               icon={AlertTriangle}
               variant={(stats?.fbaDiscrepancies?.mismatch ?? 0) > 0 ? 'warning' : 'default'}
-              onClick={() => router.push('/amazon/fba-fee-discrepancies')}
+              onClick={() => {
+                window.location.href = withBasePath('/amazon/fba-fee-discrepancies')
+              }}
             />
           </StatsCardGrid>
 

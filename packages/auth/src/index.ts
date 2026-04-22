@@ -535,6 +535,12 @@ export type PortalAuthz = {
   apps: Record<string, AuthzAppGrant>;
 };
 
+export type PortalConsumerSession = {
+  payload: PortalJwtPayload;
+  authz: PortalAuthz;
+  activeTenant: string | null;
+};
+
 export type AppEntitlement = {
   departments?: string[];
   depts?: string[];
@@ -643,6 +649,41 @@ function resolveCookieNames(appId?: string, provided?: string[]): string[] {
   ]));
 }
 
+export async function readPortalConsumerSession(options: {
+  request: Request | { headers: Headers };
+  appId: string;
+  cookieNames?: string[];
+  secret?: string;
+  debug?: boolean;
+}): Promise<PortalConsumerSession | null> {
+  const debug = options.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
+  const cookieNames = resolveCookieNames(options.appId, options.cookieNames);
+  const cookieHeader = options.request.headers.get('cookie');
+
+  const payload = await decodePortalSession({
+    cookieHeader,
+    cookieNames,
+    appId: options.appId,
+    secret: options.secret,
+    debug,
+  });
+
+  if (!payload) {
+    return null;
+  }
+
+  const authz = normalizeAuthzFromClaims(payload);
+  if (!authz) {
+    return null;
+  }
+
+  return {
+    payload,
+    authz,
+    activeTenant: typeof payload.activeTenant === 'string' ? payload.activeTenant : null,
+  };
+}
+
 export async function getCurrentAuthz(
   request: Request,
   options?: {
@@ -656,7 +697,6 @@ export async function getCurrentAuthz(
   const debug = options?.debug ?? truthyValues.has(String(process.env.NEXTAUTH_DEBUG ?? '').toLowerCase());
   const cookieNames = resolveCookieNames(options?.appId, options?.cookieNames);
   const cookieHeader = request.headers.get('cookie');
-
   const decoded = await decodePortalSession({
     cookieHeader,
     cookieNames,

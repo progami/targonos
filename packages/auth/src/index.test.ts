@@ -8,6 +8,7 @@ import {
   hasCapability,
   hasPortalSession,
   normalizePortalAuthz,
+  readPortalConsumerSession,
   resolveAppAuthOrigin,
   resolvePortalAuthOrigin,
 } from './index'
@@ -308,6 +309,74 @@ test('decodePortalSession ignores a signed active tenant cookie after membership
   })
 
   assert.equal(payload?.activeTenant, undefined)
+})
+
+test('readPortalConsumerSession returns claims and normalized authz', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      email: 'ops@targonglobal.com',
+      name: 'Ops User',
+      authz: {
+        version: 4,
+        globalRoles: ['platform_admin'],
+        apps: {
+          talos: {
+            departments: ['Ops'],
+            tenantMemberships: ['US', 'UK'],
+          },
+        },
+      },
+      activeTenant: 'UK',
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+
+  const session = await readPortalConsumerSession({
+    request: new Request('https://dev-os.targonglobal.com/talos/dashboard', {
+      headers: {
+        cookie: `${sessionCookieName}=${sessionToken}`,
+      },
+    }),
+    appId: 'talos',
+  })
+
+  assert.equal(session?.payload.sub, 'u_1')
+  assert.equal(session?.payload.email, 'ops@targonglobal.com')
+  assert.equal(session?.payload.name, 'Ops User')
+  assert.equal(session?.payload.activeTenant, 'UK')
+  assert.deepEqual(session?.authz, {
+    version: 4,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+    },
+  })
+  assert.equal(session?.activeTenant, 'UK')
+})
+
+test('readPortalConsumerSession returns null on decrypt failure', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const session = await readPortalConsumerSession({
+    request: new Request('https://dev-os.targonglobal.com/talos/dashboard', {
+      headers: {
+        cookie: '__Secure-next-auth.session-token=invalid-token',
+      },
+    }),
+    appId: 'talos',
+  })
+
+  assert.equal(session, null)
 })
 
 test('decodePortalSession strips an embedded active tenant that is no longer allowed for the app', async () => {
