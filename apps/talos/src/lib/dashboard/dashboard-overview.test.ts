@@ -8,6 +8,26 @@ import {
   type DashboardOverviewPurchaseOrderInput,
 } from './dashboard-overview'
 
+process.env.NEXT_PUBLIC_APP_URL ??= 'http://localhost:3000'
+process.env.NEXTAUTH_URL ??= 'http://localhost:3000'
+process.env.PORTAL_AUTH_URL ??= 'http://localhost:3000'
+process.env.NEXT_PUBLIC_PORTAL_AUTH_URL ??= 'http://localhost:3000'
+process.env.COOKIE_DOMAIN ??= 'localhost'
+process.env.PORTAL_AUTH_SECRET ??= 'test-secret'
+
+let resolveDashboardOverviewWarehouseCodeFilter:
+  | typeof import('../../app/api/dashboard/overview/route')['resolveDashboardOverviewWarehouseCodeFilter']
+  | undefined
+
+const loadResolveDashboardOverviewWarehouseCodeFilter = async () => {
+  if (resolveDashboardOverviewWarehouseCodeFilter === undefined) {
+    const mod = await import('../../app/api/dashboard/overview/route')
+    resolveDashboardOverviewWarehouseCodeFilter = mod.resolveDashboardOverviewWarehouseCodeFilter
+  }
+
+  return resolveDashboardOverviewWarehouseCodeFilter
+}
+
 test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehouse totals', () => {
   const purchaseOrders: DashboardOverviewPurchaseOrderInput[] = [
     {
@@ -255,4 +275,42 @@ test('buildDashboardOverviewSnapshot throws when pallet data is missing', () => 
       }),
     /totalPallets is required/
   )
+})
+
+test('resolveDashboardOverviewWarehouseCodeFilter fails closed when staff has no warehouseId', async () => {
+  const helper = await loadResolveDashboardOverviewWarehouseCodeFilter()
+
+  const prisma = {
+    warehouse: {
+      findUnique: async () => {
+        throw new Error('should not query warehouse lookup without warehouseId')
+      },
+    },
+  }
+
+  const response = await helper(prisma as never, {
+    user: { role: 'staff', warehouseId: null },
+  })
+
+  assert.ok(response instanceof Response)
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'No warehouse assigned' })
+})
+
+test('resolveDashboardOverviewWarehouseCodeFilter fails closed when staff warehouse lookup is unresolved', async () => {
+  const helper = await loadResolveDashboardOverviewWarehouseCodeFilter()
+
+  const prisma = {
+    warehouse: {
+      findUnique: async () => null,
+    },
+  }
+
+  const response = await helper(prisma as never, {
+    user: { role: 'staff', warehouseId: 'warehouse-missing' },
+  })
+
+  assert.ok(response instanceof Response)
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: 'Warehouse not found' })
 })

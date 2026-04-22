@@ -15,25 +15,48 @@ import {
 
 export const dynamic = 'force-dynamic'
 
-export const GET = withAuth(async (_request, session) => {
-  const prisma = await getTenantPrisma()
-  let warehouseCodeFilter: string | null = null
+type DashboardOverviewSession = {
+  user: {
+    role?: string
+    warehouseId?: string | null
+  }
+}
 
-  if (session.user.role === 'staff' && session.user.warehouseId) {
-    const staffWarehouse = await prisma.warehouse.findUnique({
-      where: { id: session.user.warehouseId },
-      select: { code: true },
-    })
-
-    if (staffWarehouse === null) {
-      return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 })
-    }
-
-    warehouseCodeFilter = staffWarehouse.code
+export async function resolveDashboardOverviewWarehouseCodeFilter(
+  prisma: Awaited<ReturnType<typeof getTenantPrisma>>,
+  session: DashboardOverviewSession
+): Promise<string | Response | null> {
+  if (session.user.role !== 'staff') {
+    return null
   }
 
+  if (!session.user.warehouseId) {
+    return NextResponse.json({ error: 'No warehouse assigned' }, { status: 400 })
+  }
+
+  const staffWarehouse = await prisma.warehouse.findUnique({
+    where: { id: session.user.warehouseId },
+    select: { code: true },
+  })
+
+  if (staffWarehouse === null) {
+    return NextResponse.json({ error: 'Warehouse not found' }, { status: 404 })
+  }
+
+  return staffWarehouse.code
+}
+
+export const GET = withAuth(async (_request, session) => {
+  const prisma = await getTenantPrisma()
+  const warehouseCodeFilter = await resolveDashboardOverviewWarehouseCodeFilter(prisma, session)
+
+  if (warehouseCodeFilter instanceof Response) {
+    return warehouseCodeFilter
+  }
+
+  const resolvedWarehouseCodeFilter = warehouseCodeFilter
   const blockedAmazonWarehouseCodes =
-    warehouseCodeFilter === null
+    resolvedWarehouseCodeFilter === null
       ? AMAZON_WAREHOUSE_CODES.filter(
           warehouseCode =>
             !canRegionUseWarehouseCode(session.user.region as TalosRegion, warehouseCode)
@@ -41,8 +64,8 @@ export const GET = withAuth(async (_request, session) => {
       : []
 
   const transactionWhere: Prisma.InventoryTransactionWhereInput = {}
-  if (warehouseCodeFilter !== null) {
-    transactionWhere.warehouseCode = warehouseCodeFilter
+  if (resolvedWarehouseCodeFilter !== null) {
+    transactionWhere.warehouseCode = resolvedWarehouseCodeFilter
   } else if (blockedAmazonWarehouseCodes.length > 0) {
     transactionWhere.NOT = { warehouseCode: { in: blockedAmazonWarehouseCodes } }
   }
@@ -50,8 +73,8 @@ export const GET = withAuth(async (_request, session) => {
   const purchaseOrderWhere: Prisma.PurchaseOrderWhereInput = {
     status: { in: ['MANUFACTURING', 'OCEAN'] },
   }
-  if (warehouseCodeFilter !== null) {
-    purchaseOrderWhere.warehouseCode = warehouseCodeFilter
+  if (resolvedWarehouseCodeFilter !== null) {
+    purchaseOrderWhere.warehouseCode = resolvedWarehouseCodeFilter
   } else if (blockedAmazonWarehouseCodes.length > 0) {
     purchaseOrderWhere.NOT = { warehouseCode: { in: blockedAmazonWarehouseCodes } }
   }
