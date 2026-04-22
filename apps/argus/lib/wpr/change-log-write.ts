@@ -2,11 +2,11 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { execFile as execFileCallback } from 'node:child_process'
+import { expectWritableWprChangeCategory } from './change-log-categories'
 
 const execFile = promisify(execFileCallback)
 
 const WEEK_FOLDER_PATTERN = /^Week (\d+) - \d{4}-\d{2}-\d{2} \(Sun\)(?: \(Partial\))?$/
-const CATEGORY_VALUES = new Set(['MANUAL', 'CONTENT', 'PRICING', 'IMAGES', 'OFFER', 'CATALOG'])
 
 export type CreateWprChangeLogEntryInput = {
   weekLabel: string
@@ -64,11 +64,7 @@ function expectEntryDate(value: string): string {
 }
 
 function expectCategory(value: string): string {
-  if (!CATEGORY_VALUES.has(value)) {
-    throw new Error(`Invalid WPR change type: ${value}`)
-  }
-
-  return value
+  return expectWritableWprChangeCategory(value)
 }
 
 function expectNonEmptyString(value: string, fieldName: string): string {

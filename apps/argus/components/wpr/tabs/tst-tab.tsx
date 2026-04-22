@@ -8,38 +8,22 @@ import {
   createTstViewModel,
   type TstSelectionViewModel,
 } from '@/lib/wpr/tst-view-model'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import TstSelectionTable from './tst-selection-table'
 import TstWeeklyPanel from './tst-weekly-panel'
-
-function getDefaultRootId(bundle: WprWeekBundle): string | null {
-  const defaultRootId = bundle.defaultClusterIds[0]
-  if (defaultRootId !== undefined) {
-    return defaultRootId
-  }
-
-  const firstCluster = bundle.clusters[0]
-  if (firstCluster !== undefined) {
-    return firstCluster.id
-  }
-
-  return null
-}
 
 function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
   return Array.from(ids).filter((id) => allowedIds.has(id))
 }
 
 function buildHeroContent(
-  bundle: WprWeekBundle,
   viewModel: TstSelectionViewModel,
-  selectedWeekLabel: string,
 ): { name: string; meta: string[] } {
   if (viewModel.scopeType === 'empty') {
     return {
       name: 'TST Selection',
-      meta: ['0 roots selected', selectedWeekLabel],
+      meta: ['0 roots selected'],
     }
   }
 
@@ -51,13 +35,13 @@ function buildHeroContent(
   if (viewModel.scopeType === 'no-terms') {
     return {
       name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-      meta: [rootLabel, '0 terms selected', selectedWeekLabel],
+      meta: [rootLabel, '0 terms selected'],
     }
   }
 
   return {
     name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-    meta: [rootLabel, selectedWeekLabel],
+    meta: [rootLabel],
   }
 }
 
@@ -80,12 +64,18 @@ export default function TstTab({
   const setCompetitorTableSort = useWprStore((state) => state.setCompetitorTableSort)
   const compWowVisible = useWprStore((state) => state.compWowVisible)
   const setCompWowVisible = useWprStore((state) => state.setCompWowVisible)
+  const selectedWeek = useWprStore((state) => state.selectedWeek)
+  const setSelectedWeek = useWprStore((state) => state.setSelectedWeek)
+
+  if (selectedWeek === null) {
+    throw new Error('Missing WPR table week')
+  }
 
   useEffect(() => {
     const rootIdSet = new Set(bundle.clusters.map((cluster) => cluster.id))
     const allowedTermIds = new Set<string>()
     for (const cluster of bundle.clusters) {
-      for (const termId of competitorRootTermIds(bundle, cluster.id)) {
+      for (const termId of competitorRootTermIds(bundle, cluster.id, selectedWeek)) {
         allowedTermIds.add(termId)
       }
     }
@@ -95,30 +85,16 @@ export default function TstTab({
     const filteredExpandedIds = filterIds(expandedCompetitorRootIds, rootIdSet)
 
     if (!hasInitializedCompetitorSelection) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        setHasInitializedCompetitorSelection(true)
-        return
-      }
-
-      setSelectedCompetitorRootIds([defaultRootId])
-      setSelectedCompetitorTermIds(competitorRootTermIds(bundle, defaultRootId))
+      setSelectedCompetitorRootIds([])
+      setSelectedCompetitorTermIds([])
       setExpandedCompetitorRootIds([])
       setHasInitializedCompetitorSelection(true)
       return
     }
 
     if (selectedCompetitorRootIds.size > 0 && filteredRootIds.length === 0) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        setSelectedCompetitorRootIds([])
-        setSelectedCompetitorTermIds([])
-        setExpandedCompetitorRootIds([])
-        return
-      }
-
-      setSelectedCompetitorRootIds([defaultRootId])
-      setSelectedCompetitorTermIds(competitorRootTermIds(bundle, defaultRootId))
+      setSelectedCompetitorRootIds([])
+      setSelectedCompetitorTermIds([])
       setExpandedCompetitorRootIds([])
       return
     }
@@ -144,13 +120,14 @@ export default function TstTab({
     setHasInitializedCompetitorSelection,
     setSelectedCompetitorRootIds,
     setSelectedCompetitorTermIds,
+    selectedWeek,
   ])
 
   const viewModel = createTstViewModel({
     bundle,
     selectedRootIds: selectedCompetitorRootIds,
     selectedTermIds: selectedCompetitorTermIds,
-    selectedWeek: bundle.meta.anchorWeek,
+    selectedWeek,
   })
 
   const familyOrder: string[] = []
@@ -161,15 +138,14 @@ export default function TstTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const selectedWeekLabel = formatWeekLabelFromLookup(bundle.meta.anchorWeek, weekStartDates)
-  const heroContent = buildHeroContent(bundle, viewModel, selectedWeekLabel)
+  const heroContent = buildHeroContent(viewModel)
   const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const competitor = bundle.meta.competitor
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
     const nextRootIds = new Set(selectedCompetitorRootIds)
     const nextTermIds = new Set(selectedCompetitorTermIds)
-    const termIds = competitorRootTermIds(bundle, rootId)
+    const termIds = competitorRootTermIds(bundle, rootId, selectedWeek)
 
     if (shouldSelect) {
       nextRootIds.add(rootId)
@@ -199,7 +175,7 @@ export default function TstTab({
     }
 
     let rootStillSelected = false
-    for (const candidateTermId of competitorRootTermIds(bundle, rootId)) {
+    for (const candidateTermId of competitorRootTermIds(bundle, rootId, selectedWeek)) {
       if (nextTermIds.has(candidateTermId)) {
         rootStillSelected = true
         break
@@ -238,28 +214,30 @@ export default function TstTab({
   return (
     <Stack spacing={2}>
       <TstWeeklyPanel
-        competitor={competitor}
         heroContent={heroContent}
         viewModel={viewModel}
         changeEntries={changeEntries}
-        selectedWeekLabel={selectedWeekLabel}
         historyLabel={historyLabel}
         weekStartDates={weekStartDates}
         wowVisible={compWowVisible}
         setWowVisible={setCompWowVisible}
       />
       <TstSelectionTable
+        selectedWeek={selectedWeek}
+        weeks={bundle.weeks}
+        weekStartDates={weekStartDates}
         competitorBrand={competitor.brand}
         familyOrder={familyOrder}
         viewModel={viewModel}
         expandedRootIds={expandedCompetitorRootIds}
         sortState={competitorTableSort}
         setSortState={setCompetitorTableSort}
+        onSelectWeek={setSelectedWeek}
         onSelectAll={() => {
           setSelectedCompetitorRootIds(bundle.clusters.map((cluster) => cluster.id))
           const allTermIds: string[] = []
           for (const cluster of bundle.clusters) {
-            allTermIds.push(...competitorRootTermIds(bundle, cluster.id))
+            allTermIds.push(...competitorRootTermIds(bundle, cluster.id, selectedWeek))
           }
           setSelectedCompetitorTermIds(allTermIds)
           setHasInitializedCompetitorSelection(true)

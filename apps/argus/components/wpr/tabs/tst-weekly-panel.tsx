@@ -4,7 +4,6 @@ import type { JSX } from 'react'
 import { Box, Button } from '@mui/material'
 import {
   WprAnalyticsFooter,
-  WprAnalyticsMetric,
   WprAnalyticsPanel,
 } from '@/components/wpr/wpr-analytics-panel'
 import {
@@ -26,7 +25,7 @@ import {
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprCompWowVisible } from '@/lib/wpr/dashboard-state'
 import type { TstSelectionViewModel } from '@/lib/wpr/tst-view-model'
-import type { WprChangeLogEntry, WprCompetitorSummary } from '@/lib/wpr/types'
+import type { WprChangeLogEntry } from '@/lib/wpr/types'
 import { formatTooltipWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   chartToggleButtonSx,
@@ -36,10 +35,6 @@ import { formatPercent } from '@/lib/wpr/format'
 type TstHeroContent = {
   name: string
   meta: string[]
-}
-
-function blankMetricValue(): string {
-  return '---'
 }
 
 function WeeklyGapChart({
@@ -174,27 +169,22 @@ function WeeklyGapChart({
 }
 
 export default function TstWeeklyPanel({
-  competitor,
   heroContent,
   viewModel,
   changeEntries,
-  selectedWeekLabel,
   historyLabel,
   weekStartDates,
   wowVisible,
   setWowVisible,
 }: {
-  competitor: WprCompetitorSummary
   heroContent: TstHeroContent
   viewModel: TstSelectionViewModel
   changeEntries: WprChangeLogEntry[]
-  selectedWeekLabel: string
   historyLabel: string
   weekStartDates: Record<string, string>
   wowVisible: WprCompWowVisible
   setWowVisible: (nextState: WprCompWowVisible) => void
 }) {
-  const blankTopValues = viewModel.scopeType === 'empty'
   const current = viewModel.current
 
   let footerItems = [
@@ -202,7 +192,6 @@ export default function TstWeeklyPanel({
     `Scope: ${viewModel.scopeType}`,
     `Roots: ${viewModel.rootIds.length}`,
     `TST terms: ${viewModel.selectedTermIds.length} / ${viewModel.allTermIds.length}`,
-    `Table week: ${selectedWeekLabel}`,
     `Chart history: ${historyLabel}`,
   ]
 
@@ -212,7 +201,6 @@ export default function TstWeeklyPanel({
       `Term-weeks: ${current.coverage.term_weeks_covered}`,
       `TST rows capture: ${formatPercent(current.coverage.avg_click_pool_share, 1)} clicks`,
       `TST rows capture: ${formatPercent(current.coverage.avg_purchase_pool_share, 1)} purchases`,
-      `Table week: ${selectedWeekLabel}`,
       `Chart history: ${historyLabel}`,
     ]
   }
@@ -221,27 +209,6 @@ export default function TstWeeklyPanel({
     <WprAnalyticsPanel
       title={heroContent.name}
       meta={heroContent.meta}
-      metricColumns={{ xs: 2, md: 4 }}
-      metrics={
-        <>
-          <WprAnalyticsMetric
-            label="Terms Covered"
-            value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.terms_covered)}
-          />
-          <WprAnalyticsMetric
-            label="Term-Weeks"
-            value={blankTopValues || current === null ? blankMetricValue() : String(current.coverage.term_weeks_covered)}
-          />
-          <WprAnalyticsMetric
-            label="Our Click Share"
-            value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.our_click_share, 1)}
-          />
-          <WprAnalyticsMetric
-            label={`${competitor.brand} Click Share`}
-            value={blankTopValues || current === null ? blankMetricValue() : formatPercent(current.observed.competitor_click_share, 1)}
-          />
-        </>
-      }
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <WeeklyGapChart

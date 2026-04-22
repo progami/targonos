@@ -6,7 +6,6 @@ import {
   applyWeekScopedPatch,
   captureWeekScopedState,
   createInitialDashboardState,
-  switchDashboardWeek,
   toggleSetMember,
   wprStateReplacer,
   wprStateReviver,
@@ -78,7 +77,7 @@ export const useWprStore = create<WprStore>()(
           setDashboardState({ activeTab });
         },
         setSelectedWeek: (selectedWeek) => {
-          set((state) => switchDashboardWeek(state, selectedWeek));
+          setDashboardState({ selectedWeek });
         },
         setSelectedClusterId: (selectedClusterId) => {
           setDashboardState({ selectedClusterId });

@@ -14,6 +14,7 @@ import {
   wprSelectionHeaderCellSx,
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
+import WprWeekSelect from '@/components/wpr/wpr-week-select'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -24,6 +25,7 @@ import {
   sortBusinessReportsRows,
 } from '@/lib/wpr/business-reports-view-model'
 import { formatCount, formatMoney, formatPercent } from '@/lib/wpr/format'
+import type { WeekLabel } from '@/lib/wpr/types'
 
 const BR_COLUMNS: Array<{ key: BusinessReportsSortKey; label: string }> = [
   { key: 'asin', label: 'ASIN' },
@@ -75,30 +77,45 @@ function MetricCell({
 }
 
 export default function BusinessReportsSelectionTable({
-  selectedWeekLabel,
+  selectedWeek,
+  weeks,
+  weekStartDates,
   viewModel,
   sortState,
   setSortState,
+  onSelectWeek,
   onSelectAll,
   onClearAll,
   onToggleAsin,
 }: {
-  selectedWeekLabel: string
+  selectedWeek: WeekLabel
+  weeks: WeekLabel[]
+  weekStartDates: Record<WeekLabel, string>
   viewModel: BusinessReportsSelectionViewModel
   sortState: WprSortState
   setSortState: (nextState: WprSortState) => void
+  onSelectWeek: (week: WeekLabel) => void
   onSelectAll: () => void
   onClearAll: () => void
   onToggleAsin: (asinId: string) => void
 }) {
   const allChecked = viewModel.isAllSelected && viewModel.allIds.length > 0
   const indeterminate = viewModel.selectedIds.length > 0 && !viewModel.isAllSelected
-  const rows = sortBusinessReportsRows(viewModel.rows, sortState, selectedWeekLabel)
+  const rows = sortBusinessReportsRows(viewModel.rows, sortState, selectedWeek)
 
   return (
     <WprSelectionPanel
       title="Business Reports Selection"
-      summary={`Selected week · ${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
+      summary={`${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
+      toolbar={(
+        <WprWeekSelect
+          label="Table week"
+          selectedWeek={selectedWeek}
+          weeks={weeks}
+          weekStartDates={weekStartDates}
+          onSelectWeek={onSelectWeek}
+        />
+      )}
     >
         <Table stickyHeader size="small" sx={{ minWidth: 1120 }}>
           <TableHead>
@@ -151,8 +168,8 @@ export default function BusinessReportsSelectionTable({
           </TableHead>
           <TableBody>
             {rows.map((row) => {
-              const currentRecord = selectedWeekBusinessRecord(row.weekly, selectedWeekLabel)
-              const current = selectedWeekBusinessMetrics(row.weekly, selectedWeekLabel)
+              const currentRecord = selectedWeekBusinessRecord(row.weekly, selectedWeek)
+              const current = selectedWeekBusinessMetrics(row.weekly, selectedWeek)
               const checked = viewModel.selectedIds.includes(row.id)
 
               let sessionsValue = '—'
@@ -204,9 +221,9 @@ export default function BusinessReportsSelectionTable({
                   </TableCell>
                   <MetricCell
                     align="left"
-                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${row.weeks_present_selected_week} / 1 weeks`}
+                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${currentRecord === null ? 0 : 1} / 1 weeks`}
                   />
-                  <MetricCell align="right" value={formatCount(row.weeks_present_selected_week)} />
+                  <MetricCell align="right" value={formatCount(currentRecord === null ? 0 : 1)} />
                   <MetricCell align="right" value={sessionsValue} />
                   <MetricCell align="right" value={pageViewsValue} />
                   <MetricCell align="right" value={orderItemsValue} />

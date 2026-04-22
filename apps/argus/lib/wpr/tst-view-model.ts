@@ -190,34 +190,39 @@ function toWeeklySelection(window: WprTstWeeklyWindow): TstWeeklySelection {
   }
 }
 
-function competitorAllWeeklyTermRows(cluster: WprCluster): WprTstTermRow[] {
-  const rowsByTerm = new Map<string, WprTstTermRow>()
-  for (const weekCompare of cluster.tstCompare.weekly) {
-    for (const row of weekCompare.term_rows) {
-      if (!rowsByTerm.has(row.term)) {
-        rowsByTerm.set(row.term, row)
-      }
-    }
+function selectedWeekTermRows(cluster: WprCluster, selectedWeek: WeekLabel): WprTstTermRow[] {
+  const selectedWindow = cluster.tstCompare.weekly.find((week) => week.week_label === selectedWeek)
+  if (selectedWindow === undefined) {
+    return []
   }
 
-  return Array.from(rowsByTerm.values())
+  return selectedWindow.term_rows
 }
 
-export function competitorRootTermIds(bundle: WprWeekBundle, clusterId: string): string[] {
+export function competitorRootTermIds(
+  bundle: WprWeekBundle,
+  clusterId: string,
+  selectedWeek: WeekLabel,
+): string[] {
   const cluster = bundle.clusters.find((item) => item.id === clusterId)
   if (cluster === undefined) {
     return []
   }
 
-  return competitorAllWeeklyTermRows(cluster).map((row) => competitorTermKey(cluster.cluster, row.term))
+  return selectedWeekTermRows(cluster, selectedWeek).map((row) =>
+    competitorTermKey(cluster.cluster, row.term),
+  )
 }
 
 function competitorSelectedTermsForRoot(
   bundle: WprWeekBundle,
   clusterId: string,
   selectedTermIds: Set<string>,
+  selectedWeek: WeekLabel,
 ): string[] {
-  return competitorRootTermIds(bundle, clusterId).filter((termId) => selectedTermIds.has(termId))
+  return competitorRootTermIds(bundle, clusterId, selectedWeek).filter((termId) =>
+    selectedTermIds.has(termId),
+  )
 }
 
 function selectedCompetitorRootIdsList(bundle: WprWeekBundle, selectedRootIds: Set<string>): string[] {
@@ -229,10 +234,11 @@ function selectedCompetitorRootIdsList(bundle: WprWeekBundle, selectedRootIds: S
 function buildRootRows(
   bundle: WprWeekBundle,
   selectedTermIds: Set<string>,
+  selectedWeek: WeekLabel,
 ): TstSelectionRootRow[] {
   return bundle.clusters.map((cluster) => {
-    const allIds = competitorRootTermIds(bundle, cluster.id)
-    const selectedIds = competitorSelectedTermsForRoot(bundle, cluster.id, selectedTermIds)
+    const allIds = competitorRootTermIds(bundle, cluster.id, selectedWeek)
+    const selectedIds = competitorSelectedTermsForRoot(bundle, cluster.id, selectedTermIds, selectedWeek)
 
     return {
       id: cluster.id,
@@ -242,7 +248,7 @@ function buildRootRows(
       totalCount: allIds.length,
       checked: allIds.length > 0 && selectedIds.length === allIds.length,
       partial: selectedIds.length > 0 && selectedIds.length < allIds.length,
-      current: selectedWeekTstCompare(cluster.tstCompare.weekly, bundle.meta.anchorWeek),
+      current: selectedWeekTstCompare(cluster.tstCompare.weekly, selectedWeek),
     }
   })
 }
@@ -250,10 +256,11 @@ function buildRootRows(
 function buildTermRowsByRoot(
   bundle: WprWeekBundle,
   selectedTermIds: Set<string>,
+  selectedWeek: WeekLabel,
 ): Record<string, TstSelectionTermRow[]> {
   const rowsByRoot: Record<string, TstSelectionTermRow[]> = {}
   for (const cluster of bundle.clusters) {
-    const rows = competitorAllWeeklyTermRows(cluster)
+    const rows = selectedWeekTermRows(cluster, selectedWeek)
       .map((row) => {
         const id = competitorTermKey(cluster.cluster, row.term)
         return {
@@ -479,8 +486,8 @@ export function createTstViewModel(input: {
 }): TstSelectionViewModel {
   const { bundle, selectedRootIds, selectedTermIds, selectedWeek } = input
   const rootIds = selectedCompetitorRootIdsList(bundle, selectedRootIds)
-  const rootRows = buildRootRows(bundle, selectedTermIds)
-  const termRowsByRoot = buildTermRowsByRoot(bundle, selectedTermIds)
+  const rootRows = buildRootRows(bundle, selectedTermIds, selectedWeek)
+  const termRowsByRoot = buildTermRowsByRoot(bundle, selectedTermIds, selectedWeek)
 
   if (rootIds.length === 0) {
     return {
@@ -504,8 +511,8 @@ export function createTstViewModel(input: {
       throw new Error(`Missing TST root ${rootId}`)
     }
 
-    const allTermIds = competitorRootTermIds(bundle, rootId)
-    const selectedIds = competitorSelectedTermsForRoot(bundle, rootId, selectedTermIds)
+    const allTermIds = competitorRootTermIds(bundle, rootId, selectedWeek)
+    const selectedIds = competitorSelectedTermsForRoot(bundle, rootId, selectedTermIds, selectedWeek)
     if (selectedIds.length === 0) {
       return {
         rootIds,
@@ -543,7 +550,7 @@ export function createTstViewModel(input: {
 
   const allTermIds: string[] = []
   for (const rootId of rootIds) {
-    allTermIds.push(...competitorRootTermIds(bundle, rootId))
+    allTermIds.push(...competitorRootTermIds(bundle, rootId, selectedWeek))
   }
 
   const selectedIds = allTermIds.filter((termId) => selectedTermIds.has(termId))

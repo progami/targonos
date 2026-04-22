@@ -252,7 +252,7 @@ export function scpSortValueForRow(
 ): number | string {
   const current = selectedWeekScpMetrics(row.weekly, selectedWeek)
   if (key === 'asin') return row.asin
-  if (key === 'weeks_present_selected_week') return row.weeks_present_selected_week
+  if (key === 'weeks_present_selected_week') return selectedWeekScpRecord(row.weekly, selectedWeek) === null ? 0 : 1
   if (key === 'impressions') return current.impressions
   if (key === 'clicks') return current.clicks
   if (key === 'ctr') return current.ctr
