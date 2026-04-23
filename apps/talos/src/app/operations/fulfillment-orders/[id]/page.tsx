@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { PageLoading } from '@/components/ui/loading-spinner'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { ZoomablePdfIframe } from '@/components/ui/zoomable-pdf-iframe'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
@@ -275,10 +275,7 @@ export default function FulfillmentOrderDetailPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal(
-        '/login',
-        `${window.location.origin}${withBasePath(`/operations/fulfillment-orders/${params.id}`)}`
-      )
+      redirectToPortal('/login', buildAppCallbackUrl(`/operations/fulfillment-orders/${params.id}`))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

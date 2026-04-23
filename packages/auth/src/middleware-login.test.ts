@@ -33,3 +33,18 @@ test('buildAppLoginRedirect prefixes the app base path when the pathname is root
     'https://os.targonglobal.com/login?callbackUrl=https%3A%2F%2Fos.targonglobal.com%2Fargus%2Fbrand%2Fdemo%23section',
   )
 })
+
+test('buildAppLoginRedirect preserves an explicitly passed loopback app origin', () => {
+  const redirect = buildAppLoginRedirect({
+    portalOrigin: 'https://dev-os.targonglobal.com',
+    appOrigin: 'http://localhost:3201',
+    appBasePath: '/talos',
+    pathname: '/dashboard',
+    search: '?tenant=US',
+  })
+
+  assert.equal(
+    redirect.toString(),
+    'https://dev-os.targonglobal.com/login?callbackUrl=http%3A%2F%2Flocalhost%3A3201%2Ftalos%2Fdashboard%3Ftenant%3DUS',
+  )
+})

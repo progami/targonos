@@ -11,6 +11,7 @@ import {
 } from '@/hooks/use-wpr';
 import { getInitialWprTab } from '@/lib/wpr/dashboard-state';
 import { useWprStore } from '@/stores/wpr-store';
+import BrandMetricsTab from './tabs/brand-metrics-tab';
 import BusinessReportsTab from './tabs/business-reports-tab';
 import ChangelogTab from './tabs/changelog-tab';
 import CompareTab from './tabs/compare-tab';
@@ -20,6 +21,9 @@ import SqpTab from './tabs/sqp-tab';
 import TstTab from './tabs/tst-tab';
 import WprTopBar from './wpr-top-bar';
 
+const BUNDLE_TABS = new Set(['sqp', 'scp', 'br', 'tst', 'brand', 'compare']);
+const CHART_CHANGE_ENTRY_TABS = new Set(['sqp', 'scp', 'br', 'tst', 'brand', 'compare']);
+
 export default function WprDashboardShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,10 +32,12 @@ export default function WprDashboardShell() {
   const setActiveTab = useWprStore((state) => state.setActiveTab);
   const setSelectedWeek = useWprStore((state) => state.setSelectedWeek);
   const weeksQuery = useWprWeeksQuery();
-  const needsBundle = activeTab === 'sqp' || activeTab === 'scp' || activeTab === 'br' || activeTab === 'tst' || activeTab === 'compare';
-  const needsChangeEntries = activeTab === 'sqp' || activeTab === 'scp' || activeTab === 'br' || activeTab === 'tst' || activeTab === 'changelog' || activeTab === 'compare';
-  const bundleQuery = useWprWeekBundleQuery(selectedWeek, needsBundle);
-  const changeLogQuery = useWprChangeLogWeekQuery(selectedWeek, needsChangeEntries);
+  const needsBundle = BUNDLE_TABS.has(activeTab);
+  const needsChartChangeEntries = CHART_CHANGE_ENTRY_TABS.has(activeTab);
+  const bundleWeek = weeksQuery.data?.defaultWeek ?? null;
+  const bundleQuery = useWprWeekBundleQuery(bundleWeek, needsBundle);
+  const chartChangeLogQuery = useWprChangeLogWeekQuery(bundleWeek, needsChartChangeEntries);
+  const changelogQuery = useWprChangeLogWeekQuery(selectedWeek, activeTab === 'changelog');
   const sourcesQuery = useWprSourcesQuery(activeTab === 'sources');
 
   const tabFromQuery = getInitialWprTab(searchParams);
@@ -71,8 +77,12 @@ export default function WprDashboardShell() {
     return <Alert severity="error">{bundleQuery.error.message}</Alert>;
   }
 
-  if (changeLogQuery.error instanceof Error) {
-    return <Alert severity="error">{changeLogQuery.error.message}</Alert>;
+  if (chartChangeLogQuery.error instanceof Error) {
+    return <Alert severity="error">{chartChangeLogQuery.error.message}</Alert>;
+  }
+
+  if (changelogQuery.error instanceof Error) {
+    return <Alert severity="error">{changelogQuery.error.message}</Alert>;
   }
 
   if (sourcesQuery.error instanceof Error) {
@@ -96,8 +106,17 @@ export default function WprDashboardShell() {
     );
   }
 
-  const changeEntries = changeLogQuery.data
-  if (needsChangeEntries && changeEntries === undefined) {
+  const chartChangeEntries = chartChangeLogQuery.data;
+  if (needsChartChangeEntries && chartChangeEntries === undefined) {
+    return (
+      <Box sx={{ py: 10, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  const changelogEntries = changelogQuery.data;
+  if (activeTab === 'changelog' && changelogEntries === undefined) {
     return (
       <Box sx={{ py: 10, display: 'flex', justifyContent: 'center' }}>
         <CircularProgress />
@@ -117,19 +136,24 @@ export default function WprDashboardShell() {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WprTopBar
         activeTab={activeTab}
-        selectedWeek={selectedWeek}
-        weeks={weeksQuery.data.weeks}
-        weekStartDates={weeksQuery.data.weekStartDates}
         onSelectTab={handleSelectTab}
-        onSelectWeek={setSelectedWeek}
       />
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 0, py: 1.5 }}>
-        {activeTab === 'sqp' && bundle !== undefined && changeEntries !== undefined ? <SqpTab bundle={bundle} changeEntries={changeEntries} /> : null}
-        {activeTab === 'scp' && bundle !== undefined && changeEntries !== undefined ? <ScpTab bundle={bundle} changeEntries={changeEntries} /> : null}
-        {activeTab === 'br' && bundle !== undefined && changeEntries !== undefined ? <BusinessReportsTab bundle={bundle} changeEntries={changeEntries} /> : null}
-        {activeTab === 'tst' && bundle !== undefined && changeEntries !== undefined ? <TstTab bundle={bundle} changeEntries={changeEntries} /> : null}
-        {activeTab === 'changelog' && changeEntries !== undefined ? <ChangelogTab entries={changeEntries} selectedWeekLabel={selectedWeek} /> : null}
-        {activeTab === 'compare' && bundle !== undefined && changeEntries !== undefined ? <CompareTab bundle={bundle} changeEntries={changeEntries} /> : null}
+        {activeTab === 'sqp' && bundle !== undefined && chartChangeEntries !== undefined ? <SqpTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'scp' && bundle !== undefined && chartChangeEntries !== undefined ? <ScpTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'br' && bundle !== undefined && chartChangeEntries !== undefined ? <BusinessReportsTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'tst' && bundle !== undefined && chartChangeEntries !== undefined ? <TstTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'brand' && bundle !== undefined && chartChangeEntries !== undefined ? <BrandMetricsTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'changelog' && changelogEntries !== undefined ? (
+          <ChangelogTab
+            entries={changelogEntries}
+            selectedWeek={selectedWeek}
+            weeks={weeksQuery.data.weeks}
+            weekStartDates={weeksQuery.data.weekStartDates}
+            onSelectWeek={setSelectedWeek}
+          />
+        ) : null}
+        {activeTab === 'compare' && bundle !== undefined && chartChangeEntries !== undefined ? <CompareTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
         {activeTab === 'sources' && sourcesQuery.data !== undefined ? <SourcesTab overview={sourcesQuery.data} /> : null}
       </Box>
     </Box>

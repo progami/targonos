@@ -5,7 +5,6 @@ import { Button } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
 import {
   WprAnalyticsFooter,
-  WprAnalyticsMetric,
   WprAnalyticsPanel,
 } from '@/components/wpr/wpr-analytics-panel'
 import {
@@ -15,21 +14,15 @@ import {
 } from '@/components/wpr/chart-change-markers'
 import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
-import { formatCompactNumber, formatCount } from '@/lib/wpr/format'
 import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
+import { formatWprChangeCategory, getWprChangeCategoryColor } from '@/lib/wpr/change-log-categories'
 import { formatWeekLabelWithDateRange } from '@/lib/wpr/week-display'
 import {
   rateRatio,
-  type SqpAggregatedMetrics,
   type SqpSelectionScope,
   type SqpWeeklyPoint,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
-
-type SqpHeroContent = {
-  name: string
-  meta: string[]
-}
 
 type ChartPoint = {
   week_label: string
@@ -75,23 +68,17 @@ function formatPoints(value: number): string {
   return `${value.toFixed(1)} pts`
 }
 
-function blankMetricValue(): string {
-  return '---'
-}
-
 function buildFooterItems({
   scopeType,
   rootCount,
   termCount,
   totalTermCount,
-  selectedWeekLabel,
   historyLabel,
 }: {
   scopeType: SqpSelectionScope
   rootCount: number
   termCount: number
   totalTermCount: number
-  selectedWeekLabel: string
   historyLabel: string
 }) {
   const footerItems = [
@@ -99,7 +86,6 @@ function buildFooterItems({
     `Scope: ${scopeType}`,
     `Roots: ${rootCount}`,
     `SQP terms: ${termCount} / ${totalTermCount}`,
-    `Table week: ${selectedWeekLabel}`,
     `Chart history: ${historyLabel}`,
   ]
 
@@ -298,15 +284,27 @@ export function SqpWeeklySvg({
       throw new Error(`Missing SQP tooltip header for ${hoveredPoint.week_label}`)
     }
 
-    const changeDetailLines = tooltipLabelParts.slice(1)
     const tooltipWidth = crampedLayout ? 146 : compactLayout ? 170 : 188
     const tooltipHeaderFontSize = crampedLayout ? 8 : 9
     const tooltipRowFontSize = crampedLayout ? 7 : 8
     const tooltipRowHeight = crampedLayout ? 13 : 15
     const tooltipPaddingX = crampedLayout ? 8 : 10
     const tooltipTop = margin.top + 8
-    const changeLineCount = changeDetailLines.length
-    const tooltipHeight = 22 + tooltipRows.length * tooltipRowHeight + changeLineCount * tooltipRowHeight + 8
+    const changeDetails = hoveredMarker === undefined ? [] : hoveredMarker.details
+    const changeRowHeight = crampedLayout ? 12 : 14
+    const changeSummaryHeight = crampedLayout ? 11 : 13
+    let changeSectionHeight = 0
+    for (const detail of changeDetails) {
+      changeSectionHeight += changeRowHeight
+      if (detail.summary !== undefined && detail.summary.trim() !== '') {
+        changeSectionHeight += changeSummaryHeight
+      }
+      changeSectionHeight += 4
+    }
+    if (changeDetails.length > 0) {
+      changeSectionHeight += 10
+    }
+    const tooltipHeight = 22 + tooltipRows.length * tooltipRowHeight + changeSectionHeight + 8
     const tooltipMinX = margin.left + 4
     let tooltipMaxX = width - margin.right - tooltipWidth
     if (tooltipMaxX < tooltipMinX) {
@@ -375,17 +373,61 @@ export function SqpWeeklySvg({
               </g>
             )
           })}
-          {changeDetailLines.map((line, lineIndex) => (
-            <text
-              key={`${hoveredPoint.week_label}-change-${lineIndex}`}
-              x={tooltipPaddingX}
-              y={30 + tooltipRows.length * tooltipRowHeight + lineIndex * tooltipRowHeight}
-              fill="rgba(255,255,255,0.58)"
-              fontSize={tooltipRowFontSize}
-            >
-              {line}
-            </text>
-          ))}
+          {changeDetails.length > 0 ? (
+            <line
+              x1={tooltipPaddingX}
+              x2={tooltipWidth - tooltipPaddingX}
+              y1={30 + tooltipRows.length * tooltipRowHeight + 3}
+              y2={30 + tooltipRows.length * tooltipRowHeight + 3}
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth="1"
+            />
+          ) : null}
+          {changeDetails
+            .reduce<Array<{ detail: typeof changeDetails[number]; summary: string | null; y: number }>>((rows, detail) => {
+              const previous = rows[rows.length - 1]
+              let nextY = 30 + tooltipRows.length * tooltipRowHeight + 14
+              if (previous !== undefined) {
+                nextY = previous.y + changeRowHeight + 4
+                if (previous.summary !== null) {
+                  nextY += changeSummaryHeight
+                }
+              }
+
+              const summary = detail.summary !== undefined && detail.summary.trim() !== '' ? detail.summary : null
+              rows.push({ detail, summary, y: nextY })
+              return rows
+            }, [])
+            .map(({ detail, summary, y }) => (
+              <g key={`${hoveredPoint.week_label}-change-${detail.id}`}>
+                <text
+                  x={tooltipPaddingX}
+                  y={y}
+                  fontSize={tooltipRowFontSize}
+                >
+                  {detail.category !== undefined ? (
+                    <>
+                      <tspan fill={getWprChangeCategoryColor(detail.category)} fontWeight="700">
+                        {formatWprChangeCategory(detail.category)}
+                      </tspan>
+                      <tspan fill="rgba(255,255,255,0.86)"> · {detail.title}</tspan>
+                    </>
+                  ) : (
+                    <tspan fill="rgba(255,255,255,0.86)">{detail.title}</tspan>
+                  )}
+                </text>
+                {summary !== null ? (
+                  <text
+                    x={tooltipPaddingX}
+                    y={y + changeSummaryHeight - 2}
+                    fill="rgba(255,255,255,0.58)"
+                    fontSize={tooltipRowFontSize}
+                  >
+                    {summary}
+                  </text>
+                ) : null}
+              </g>
+            ))}
         </g>
         {visibleSeries.map((series) => (
           <circle
@@ -614,9 +656,6 @@ function SqpWeeklyChart({
 }
 
 export default function SqpWeeklyPanel({
-  heroContent,
-  blankTopValues,
-  currentMetrics,
   weekly,
   changeEntries,
   wowVisible,
@@ -625,12 +664,8 @@ export default function SqpWeeklyPanel({
   selectedRootCount,
   selectedTermCount,
   totalTermCount,
-  selectedWeekLabel,
   historyLabel,
 }: {
-  heroContent: SqpHeroContent
-  blankTopValues: boolean
-  currentMetrics: SqpAggregatedMetrics | null
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprSqpWowVisible
@@ -639,7 +674,6 @@ export default function SqpWeeklyPanel({
   selectedRootCount: number
   selectedTermCount: number
   totalTermCount: number
-  selectedWeekLabel: string
   historyLabel: string
 }) {
   const footerItems = buildFooterItems({
@@ -647,31 +681,11 @@ export default function SqpWeeklyPanel({
     rootCount: selectedRootCount,
     termCount: selectedTermCount,
     totalTermCount,
-    selectedWeekLabel,
     historyLabel,
   })
 
   return (
     <WprAnalyticsPanel
-      title={heroContent.name}
-      meta={heroContent.meta}
-      metricColumns={{ xs: 2, md: 3 }}
-      metrics={
-        <>
-          <WprAnalyticsMetric
-            label="Query Volume"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCompactNumber(currentMetrics.query_volume)}
-          />
-          <WprAnalyticsMetric
-            label="Market Purchases"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.market_purchases)}
-          />
-          <WprAnalyticsMetric
-            label="Our Purchases"
-            value={blankTopValues || currentMetrics === null ? blankMetricValue() : formatCount(currentMetrics.asin_purchases)}
-          />
-        </>
-      }
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <SqpWeeklyChart

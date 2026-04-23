@@ -103,6 +103,17 @@ export function formatWeekLabelFromLookup(
   return formatWeekLabelWithDateRange(weekLabel, startDate)
 }
 
+export function formatTooltipWeekLabelFromLookup(
+  weekLabel: WeekLabel | number | undefined,
+  weekStartDates: Readonly<Record<WeekLabel, string>>,
+): string | undefined {
+  if (typeof weekLabel !== 'string') {
+    return undefined
+  }
+
+  return formatWeekLabelFromLookup(weekLabel, weekStartDates)
+}
+
 export function formatWeekWindowLabel(
   weeks: readonly WeekLabel[],
   weekStartDates: Readonly<Record<WeekLabel, string>>,

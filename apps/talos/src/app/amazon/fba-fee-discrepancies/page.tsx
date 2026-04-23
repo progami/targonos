@@ -11,7 +11,7 @@ import {
   computeComparison,
   getComparisonStatusLabel,
 } from '@/lib/amazon/fba-fee-discrepancies'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { formatDimensionTripletDisplayFromCm, formatWeightDisplayFromKg, getDefaultUnitSystem } from '@/lib/measurements'
 import { usePageState } from '@/lib/store/page-state'
@@ -100,7 +100,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/amazon/fba-fee-discrepancies')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/amazon/fba-fee-discrepancies'))
       return
     }
 

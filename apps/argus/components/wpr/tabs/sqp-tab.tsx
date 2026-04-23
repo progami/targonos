@@ -5,10 +5,9 @@ import { Box, Stack } from '@mui/material'
 import {
   createSqpSelectionViewModel,
   rootTermIds,
-  type SqpSelectionViewModel,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import SqpSelectionTable from './sqp-selection-table'
 import SqpWeeklyPanel from './sqp-weekly-panel'
@@ -58,99 +57,6 @@ function allSelectableTermIds(bundle: WprWeekBundle): string[] {
   return termIds
 }
 
-function buildHeroContent(
-  bundle: WprWeekBundle,
-  viewModel: SqpSelectionViewModel,
-  selectedWeekLabel: string,
-): { name: string; meta: string[] } {
-  if (viewModel.scopeType === 'empty') {
-    return {
-      name: 'SQP Selection',
-      meta: ['0 roots selected', selectedWeekLabel],
-    }
-  }
-
-  const selectedRootId = viewModel.selectedRootIds[0]
-  const selectedRootRow = viewModel.rootRows.find((row) => row.id === selectedRootId)
-  if (selectedRootRow === undefined && viewModel.selectedRootIds.length === 1) {
-    throw new Error(`Missing SQP root row ${selectedRootId}`)
-  }
-
-  if (viewModel.scopeType === 'term') {
-    const selectedTermId = viewModel.selectedTermIds[0]
-    const selectedTerm = bundle.sqpTerms.find((term) => term.id === selectedTermId)
-    if (selectedTerm === undefined) {
-      throw new Error(`Missing SQP term ${selectedTermId}`)
-    }
-
-    return {
-      name: selectedTerm.term,
-      meta: [
-        selectedTerm.cluster,
-        `1 / ${viewModel.allTermIds.length} SQP terms selected`,
-        selectedWeekLabel,
-      ],
-    }
-  }
-
-  if (viewModel.scopeType === 'root' || viewModel.scopeType === 'multi') {
-    if (selectedRootRow === undefined) {
-      throw new Error('Missing SQP root row for single-root selection')
-    }
-
-    return {
-      name: selectedRootRow.label,
-      meta: [
-        selectedRootRow.family,
-        `${viewModel.selectedTermIds.length} / ${viewModel.allTermIds.length} SQP terms selected`,
-        selectedWeekLabel,
-      ],
-    }
-  }
-
-  if (viewModel.scopeType === 'no-terms') {
-    if (viewModel.selectedRootIds.length === 1) {
-      if (selectedRootRow === undefined) {
-        throw new Error('Missing SQP root row for no-term selection')
-      }
-
-      return {
-        name: selectedRootRow.label,
-        meta: [
-          selectedRootRow.family,
-          `0 / ${viewModel.allTermIds.length} SQP terms selected`,
-          selectedWeekLabel,
-        ],
-      }
-    }
-
-    const preview = viewModel.selectedRootLabels.slice(0, 3).join(', ')
-    return {
-      name: `${viewModel.selectedRootIds.length} Roots`,
-      meta: [
-        preview,
-        `0 / ${viewModel.allTermIds.length} SQP terms selected`,
-        selectedWeekLabel,
-      ],
-    }
-  }
-
-  const previewLabels = viewModel.selectedRootLabels.slice(0, 3)
-  let preview = previewLabels.join(', ')
-  if (viewModel.selectedRootLabels.length > 3) {
-    preview = `${preview} +${viewModel.selectedRootLabels.length - 3}`
-  }
-
-  return {
-    name: `${viewModel.selectedRootIds.length} Roots`,
-    meta: [
-      preview,
-      `${viewModel.selectedTermIds.length} / ${viewModel.allTermIds.length} SQP terms selected`,
-      selectedWeekLabel,
-    ],
-  }
-}
-
 export default function SqpTab({
   bundle,
   changeEntries,
@@ -169,6 +75,12 @@ export default function SqpTab({
   const setSqpTableSort = useWprStore((state) => state.setSqpTableSort)
   const sqpWowVisible = useWprStore((state) => state.sqpWowVisible)
   const setSqpWowVisible = useWprStore((state) => state.setSqpWowVisible)
+  const selectedWeek = useWprStore((state) => state.selectedWeek)
+  const setSelectedWeek = useWprStore((state) => state.setSelectedWeek)
+
+  if (selectedWeek === null) {
+    throw new Error('Missing WPR table week')
+  }
 
   const replaceSqpSelection = ({
     rootIds,
@@ -200,22 +112,10 @@ export default function SqpTab({
     const filteredExpandedIds = filterIds(expandedSqpRootIds, rootIdSet)
 
     if (!hasInitializedSqpSelection) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        replaceState({
-          selectedClusterId: null,
-          selectedSqpRootIds: new Set<string>(),
-          selectedSqpTermIds: new Set<string>(),
-          expandedSqpRootIds: new Set<string>(),
-          hasInitializedSqpSelection: true,
-        })
-        return
-      }
-
       replaceState({
-        selectedClusterId: defaultRootId,
-        selectedSqpRootIds: new Set([defaultRootId]),
-        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        selectedClusterId: null,
+        selectedSqpRootIds: new Set<string>(),
+        selectedSqpTermIds: new Set<string>(),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
@@ -223,22 +123,10 @@ export default function SqpTab({
     }
 
     if (selectedSqpRootIds.size > 0 && filteredRootIds.length === 0) {
-      const defaultRootId = getDefaultRootId(bundle)
-      if (defaultRootId === null) {
-        replaceState({
-          selectedClusterId: null,
-          selectedSqpRootIds: new Set<string>(),
-          selectedSqpTermIds: new Set<string>(),
-          expandedSqpRootIds: new Set<string>(),
-          hasInitializedSqpSelection: true,
-        })
-        return
-      }
-
       replaceState({
-        selectedClusterId: defaultRootId,
-        selectedSqpRootIds: new Set([defaultRootId]),
-        selectedSqpTermIds: new Set(rootTermIds(bundle, defaultRootId)),
+        selectedClusterId: null,
+        selectedSqpRootIds: new Set<string>(),
+        selectedSqpTermIds: new Set<string>(),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
@@ -298,6 +186,7 @@ export default function SqpTab({
     bundle,
     selectedRootIds: selectedSqpRootIds,
     selectedTermIds: selectedSqpTermIds,
+    selectedWeek,
   })
 
   const familyOrder: string[] = []
@@ -308,11 +197,7 @@ export default function SqpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const selectedWeekLabel = formatWeekLabelFromLookup(bundle.meta.anchorWeek, weekStartDates)
-  const heroContent = buildHeroContent(bundle, viewModel, selectedWeekLabel)
   const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
-  const blankTopValues = viewModel.scopeType === 'empty'
-  const currentMetrics = viewModel.metrics
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
     const nextRootIds = new Set(selectedSqpRootIds)
@@ -422,9 +307,6 @@ export default function SqpTab({
   return (
     <Stack spacing={2}>
       <SqpWeeklyPanel
-        heroContent={heroContent}
-        blankTopValues={blankTopValues}
-        currentMetrics={currentMetrics}
         weekly={viewModel.weekly}
         changeEntries={changeEntries}
         wowVisible={sqpWowVisible}
@@ -433,16 +315,19 @@ export default function SqpTab({
         selectedRootCount={viewModel.selectedRootIds.length}
         selectedTermCount={viewModel.selectedTermIds.length}
         totalTermCount={viewModel.allTermIds.length}
-        selectedWeekLabel={selectedWeekLabel}
         historyLabel={historyLabel}
       />
 
       <SqpSelectionTable
+        selectedWeek={selectedWeek}
+        weeks={bundle.weeks}
+        weekStartDates={weekStartDates}
         familyOrder={familyOrder}
         viewModel={viewModel}
         expandedRootIds={expandedSqpRootIds}
         sortState={sqpTableSort}
         setSortState={setSqpTableSort}
+        onSelectWeek={setSelectedWeek}
         onSelectAll={handleSelectAll}
         onClearAll={handleClearAll}
         onSetRootSelection={handleSetRootSelection}

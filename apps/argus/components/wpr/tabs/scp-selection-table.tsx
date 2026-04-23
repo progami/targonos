@@ -14,6 +14,7 @@ import {
   wprSelectionHeaderCellSx,
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
+import WprWeekSelect from '@/components/wpr/wpr-week-select'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -26,6 +27,7 @@ import {
   sortScpRows,
 } from '@/lib/wpr/scp-view-model'
 import { formatCount, formatMoney, formatPercent } from '@/lib/wpr/format'
+import type { WeekLabel } from '@/lib/wpr/types'
 
 const SCP_COLUMNS: Array<{ key: ScpSortKey; label: string }> = [
   { key: 'asin', label: 'ASIN' },
@@ -81,18 +83,24 @@ function MetricCell({
 }
 
 export default function ScpSelectionTable({
-  selectedWeekLabel,
+  selectedWeek,
+  weeks,
+  weekStartDates,
   viewModel,
   sortState,
   setSortState,
+  onSelectWeek,
   onSelectAll,
   onClearAll,
   onToggleAsin,
 }: {
-  selectedWeekLabel: string
+  selectedWeek: WeekLabel
+  weeks: WeekLabel[]
+  weekStartDates: Record<WeekLabel, string>
   viewModel: ScpSelectionViewModel
   sortState: WprSortState
   setSortState: (nextState: WprSortState) => void
+  onSelectWeek: (week: WeekLabel) => void
   onSelectAll: () => void
   onClearAll: () => void
   onToggleAsin: (asinId: string) => void
@@ -100,12 +108,21 @@ export default function ScpSelectionTable({
   const allChecked = viewModel.isAllSelected && viewModel.allIds.length > 0
   const indeterminate = viewModel.selectedIds.length > 0 && !viewModel.isAllSelected
   const total = viewModel.current === null ? finalizeScpMetrics(emptyScpMetrics()) : viewModel.current
-  const rows = sortScpRows(viewModel.rows, sortState, selectedWeekLabel, viewModel.current)
+  const rows = sortScpRows(viewModel.rows, sortState, selectedWeek, viewModel.current)
 
   return (
     <WprSelectionPanel
       title="SCP Selection"
-      summary={`Selected week · ${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
+      summary={`${viewModel.selectedIds.length} / ${viewModel.allIds.length} ASINs`}
+      toolbar={(
+        <WprWeekSelect
+          label="Table week"
+          selectedWeek={selectedWeek}
+          weeks={weeks}
+          weekStartDates={weekStartDates}
+          onSelectWeek={onSelectWeek}
+        />
+      )}
     >
         <Table stickyHeader size="small" sx={{ minWidth: 1280 }}>
           <TableHead>
@@ -158,7 +175,8 @@ export default function ScpSelectionTable({
           </TableHead>
           <TableBody>
             {rows.map((row) => {
-              const current = selectedWeekScpMetrics(row.weekly, selectedWeekLabel)
+              const current = selectedWeekScpMetrics(row.weekly, selectedWeek)
+              const weeksPresent = current.start_date === '' ? 0 : 1
               const checked = viewModel.selectedIds.includes(row.id)
 
               return (
@@ -190,9 +208,9 @@ export default function ScpSelectionTable({
                   </TableCell>
                   <MetricCell
                     align="left"
-                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${row.weeks_present_selected_week} / 1 weeks`}
+                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${weeksPresent} / 1 weeks`}
                   />
-                  <MetricCell align="right" value={formatCount(row.weeks_present_selected_week)} />
+                  <MetricCell align="right" value={formatCount(weeksPresent)} />
                   <MetricCell align="right" value={formatCount(current.impressions)} />
                   <MetricCell align="right" value={formatPercent(safeDiv(current.impressions, total.impressions))} />
                   <MetricCell align="right" value={formatCount(current.clicks)} />

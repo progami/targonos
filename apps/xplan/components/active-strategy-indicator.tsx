@@ -42,21 +42,24 @@ export function ActiveStrategyIndicator({ strategyName, className }: ActiveStrat
         size="small"
         className={className}
         sx={{
-          height: 26,
+          height: 28,
           borderRadius: '9999px',
-          fontWeight: 600,
+          fontWeight: 700,
           fontSize: '11px',
           border: 1,
-          borderColor: '#a7f3d0',
-          bgcolor: 'rgba(236, 253, 245, 0.7)',
+          borderColor: 'rgba(16, 185, 129, 0.2)',
+          bgcolor: 'rgba(240, 253, 250, 0.86)',
           color: '#064e3b',
+          boxShadow: '0 12px 24px -22px rgba(6, 78, 59, 0.42)',
           '.dark &': {
             borderColor: 'rgba(16, 185, 129, 0.3)',
-            bgcolor: 'rgba(16, 185, 129, 0.1)',
+            bgcolor: 'rgba(16, 185, 129, 0.12)',
             color: '#d1fae5',
           },
           '& .MuiChip-label': {
             whiteSpace: 'nowrap',
+            paddingLeft: 2,
+            paddingRight: 8,
           },
         }}
       />

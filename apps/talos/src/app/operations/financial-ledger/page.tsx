@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { toast } from 'react-hot-toast'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import {
   FINANCIAL_LEDGER_CATEGORIES,
@@ -66,7 +66,7 @@ export default function FinancialLedgerPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/financial-ledger')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/financial-ledger'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs'
 test('dashboard shell passes change entries into all week-based WPR tabs', () => {
   const shellSource = readFileSync(new URL('./wpr-dashboard-shell.tsx', import.meta.url), 'utf8')
 
-  assert.match(shellSource, /<ScpTab bundle=\{bundle\} changeEntries=\{changeEntries\} \/>/)
-  assert.match(shellSource, /<BusinessReportsTab bundle=\{bundle\} changeEntries=\{changeEntries\} \/>/)
-  assert.match(shellSource, /<CompareTab bundle=\{bundle\} changeEntries=\{changeEntries\} \/>/)
+  assert.match(shellSource, /<ScpTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
+  assert.match(shellSource, /<BusinessReportsTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
+  assert.match(shellSource, /<BrandMetricsTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
+  assert.match(shellSource, /<CompareTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
 })
 
 test('dashboard shell loads weeks and the selected week bundle instead of the full WPR payload', () => {
@@ -19,6 +20,15 @@ test('dashboard shell loads weeks and the selected week bundle instead of the fu
   assert.match(shellSource, /useWprChangeLogWeekQuery/)
   assert.match(shellSource, /useWprSourcesQuery\(activeTab === 'sources'\)/)
   assert.match(shellSource, /weekStartDates=\{weeksQuery\.data\.weekStartDates\}/)
+})
+
+test('dashboard shell keeps chart bundles pinned to the default week while changelog follows the selected week', () => {
+  const shellSource = readFileSync(new URL('./wpr-dashboard-shell.tsx', import.meta.url), 'utf8')
+
+  assert.match(shellSource, /const bundleWeek = weeksQuery\.data\?\.defaultWeek \?\? null/)
+  assert.match(shellSource, /useWprWeekBundleQuery\(bundleWeek, needsBundle\)/)
+  assert.match(shellSource, /useWprChangeLogWeekQuery\(bundleWeek, needsChartChangeEntries\)/)
+  assert.match(shellSource, /useWprChangeLogWeekQuery\(selectedWeek, activeTab === 'changelog'\)/)
 })
 
 test('tst tab forwards change entries into the weekly panel', () => {
@@ -78,12 +88,14 @@ test('all week-based WPR charts use the shared change tooltip renderer', () => {
   const scpSource = readFileSync(new URL('./tabs/scp-tab.tsx', import.meta.url), 'utf8')
   const tstSource = readFileSync(new URL('./tabs/tst-weekly-panel.tsx', import.meta.url), 'utf8')
   const brSource = readFileSync(new URL('./tabs/business-reports-tab.tsx', import.meta.url), 'utf8')
+  const brandSource = readFileSync(new URL('./tabs/brand-metrics-tab.tsx', import.meta.url), 'utf8')
   const compareSource = readFileSync(new URL('./tabs/compare-tab.tsx', import.meta.url), 'utf8')
 
   assert.match(scpSource, /<WprChangeTooltipContent/)
   assert.match(tstSource, /<WprChangeTooltipContent/)
   assert.match(brSource, /<WprChangeTooltipContent/)
-  assert.equal(compareSource.match(/<WprChangeTooltipContent/g)?.length, 2)
+  assert.match(brandSource, /<WprChangeTooltipContent/)
+  assert.equal(compareSource.match(/<WprChangeTooltipContent/g)?.length, 1)
 })
 
 test('SQP, SCP, BR, and TST use one shared analytics panel shell', () => {
@@ -100,6 +112,37 @@ test('SQP, SCP, BR, and TST use one shared analytics panel shell', () => {
   assert.match(tstSource, /<WprAnalyticsPanel/)
 })
 
+test('week-based analytics panels drop the summary metric strip above the charts', () => {
+  const analyticsPanelSource = readFileSync(new URL('./wpr-analytics-panel.tsx', import.meta.url), 'utf8')
+  const sqpSource = readFileSync(new URL('./tabs/sqp-weekly-panel.tsx', import.meta.url), 'utf8')
+  const scpSource = readFileSync(new URL('./tabs/scp-tab.tsx', import.meta.url), 'utf8')
+  const brSource = readFileSync(new URL('./tabs/business-reports-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-weekly-panel.tsx', import.meta.url), 'utf8')
+  const sqpTabSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstTabSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(analyticsPanelSource, /metricColumns/)
+  assert.doesNotMatch(analyticsPanelSource, /metrics:/)
+  assert.doesNotMatch(analyticsPanelSource, /title:/)
+  assert.doesNotMatch(analyticsPanelSource, /meta:/)
+  assert.doesNotMatch(analyticsPanelSource, /<Stack/)
+  assert.doesNotMatch(analyticsPanelSource, /textSecondary/)
+  assert.doesNotMatch(sqpSource, /metrics=\{/)
+  assert.doesNotMatch(scpSource, /metrics=\{/)
+  assert.doesNotMatch(brSource, /metrics=\{/)
+  assert.doesNotMatch(tstSource, /metrics=\{/)
+  assert.doesNotMatch(sqpSource, /title=\{/)
+  assert.doesNotMatch(scpSource, /title=\{/)
+  assert.doesNotMatch(brSource, /title=\{/)
+  assert.doesNotMatch(tstSource, /title=\{/)
+  assert.doesNotMatch(sqpSource, /meta=\{/)
+  assert.doesNotMatch(scpSource, /meta=\{/)
+  assert.doesNotMatch(brSource, /meta=\{/)
+  assert.doesNotMatch(tstSource, /meta=\{/)
+  assert.doesNotMatch(sqpTabSource, /buildHeroContent/)
+  assert.doesNotMatch(tstTabSource, /buildHeroContent/)
+})
+
 test('SQP, SCP, BR, and TST use one shared selection panel shell', () => {
   const selectionPanelSource = readFileSync(new URL('./wpr-selection-panel.tsx', import.meta.url), 'utf8')
   const sqpSource = readFileSync(new URL('./tabs/sqp-selection-table.tsx', import.meta.url), 'utf8')
@@ -112,4 +155,81 @@ test('SQP, SCP, BR, and TST use one shared selection panel shell', () => {
   assert.match(scpSource, /<WprSelectionPanel/)
   assert.match(brSource, /<WprSelectionPanel/)
   assert.match(tstSource, /<WprSelectionPanel/)
+})
+
+test('the sticky WPR top bar keeps tab navigation only', () => {
+  const topBarSource = readFileSync(new URL('./wpr-top-bar.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(topBarSource, /<Select/)
+  assert.doesNotMatch(topBarSource, /onSelectWeek/)
+})
+
+test('selection tables own the shared week selector near the table header', () => {
+  const selectionPanelSource = readFileSync(new URL('./wpr-selection-panel.tsx', import.meta.url), 'utf8')
+  const sqpSource = readFileSync(new URL('./tabs/sqp-selection-table.tsx', import.meta.url), 'utf8')
+  const scpSource = readFileSync(new URL('./tabs/scp-selection-table.tsx', import.meta.url), 'utf8')
+  const brSource = readFileSync(new URL('./tabs/business-reports-selection-table.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-selection-table.tsx', import.meta.url), 'utf8')
+
+  assert.match(selectionPanelSource, /toolbar\?: ReactNode/)
+  assert.match(sqpSource, /<WprWeekSelect/)
+  assert.match(scpSource, /<WprWeekSelect/)
+  assert.match(brSource, /<WprWeekSelect/)
+  assert.match(tstSource, /<WprWeekSelect/)
+})
+
+test('changelog owns its week selector once the top bar stops rendering one', () => {
+  const changelogSource = readFileSync(new URL('./change-timeline.tsx', import.meta.url), 'utf8')
+  const changelogTabSource = readFileSync(new URL('./tabs/changelog-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(changelogSource, /<WprWeekSelect/)
+  assert.match(changelogTabSource, /weeks=\{weeks\}/)
+  assert.match(changelogTabSource, /weekStartDates=\{weekStartDates\}/)
+  assert.match(changelogTabSource, /onSelectWeek=\{onSelectWeek\}/)
+})
+
+test('SQP and TST do not auto-select the default cluster on first load', () => {
+  const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    sqpSource,
+    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: null,[\s\S]*selectedSqpRootIds: new Set<string>\(\),[\s\S]*selectedSqpTermIds: new Set<string>\(\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    sqpSource,
+    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: defaultRootId,[\s\S]*selectedSqpRootIds: new Set\(\[defaultRootId\]\),[\s\S]*selectedSqpTermIds: new Set\(rootTermIds\(bundle, defaultRootId\)\)/,
+  )
+
+  assert.match(
+    tstSource,
+    /if \(!hasInitializedCompetitorSelection\) \{[\s\S]*setSelectedCompetitorRootIds\(\[\]\)[\s\S]*setSelectedCompetitorTermIds\(\[\]\)[\s\S]*setExpandedCompetitorRootIds\(\[\]\)[\s\S]*setHasInitializedCompetitorSelection\(true\)[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    tstSource,
+    /if \(!hasInitializedCompetitorSelection\) \{[\s\S]*setSelectedCompetitorRootIds\(\[defaultRootId\]\)[\s\S]*setSelectedCompetitorTermIds\(competitorRootTermIds\(bundle, defaultRootId\)\)/,
+  )
+})
+
+test('SQP and TST clear invalid persisted root selections instead of picking a fallback cluster', () => {
+  const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    sqpSource,
+    /if \(selectedSqpRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*selectedClusterId: null,[\s\S]*selectedSqpRootIds: new Set<string>\(\),[\s\S]*selectedSqpTermIds: new Set<string>\(\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    sqpSource,
+    /if \(selectedSqpRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*selectedClusterId: defaultRootId,[\s\S]*selectedSqpRootIds: new Set\(\[defaultRootId\]\),[\s\S]*selectedSqpTermIds: new Set\(rootTermIds\(bundle, defaultRootId\)\)/,
+  )
+
+  assert.match(
+    tstSource,
+    /if \(selectedCompetitorRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*setSelectedCompetitorRootIds\(\[\]\)[\s\S]*setSelectedCompetitorTermIds\(\[\]\)[\s\S]*setExpandedCompetitorRootIds\(\[\]\)[\s\S]*return/,
+  )
+  assert.doesNotMatch(
+    tstSource,
+    /if \(selectedCompetitorRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*setSelectedCompetitorRootIds\(\[defaultRootId\]\)[\s\S]*setSelectedCompetitorTermIds\(competitorRootTermIds\(bundle, defaultRootId\)\)/,
+  )
 })

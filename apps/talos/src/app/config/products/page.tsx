@@ -8,7 +8,7 @@ import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { Package, Plus } from '@/lib/lucide-icons'
 import SkusPanel from './skus-panel'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { Button } from '@/components/ui/button'
 import { ImportButton } from '@/components/ui/import-button'
 import { AmazonImportButton } from './amazon-import-button'
@@ -32,7 +32,7 @@ function ProductsPageContent() {
     if (status === 'loading') return
 
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/config/products')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/config/products'))
       return
     }
 

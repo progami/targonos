@@ -109,6 +109,11 @@ export type PortalAuthz = {
     globalRoles: string[];
     apps: Record<string, AuthzAppGrant>;
 };
+export type PortalConsumerSession = {
+    payload: PortalJwtPayload;
+    authz: PortalAuthz;
+    activeTenant: string | null;
+};
 export type AppEntitlement = {
     departments?: string[];
     depts?: string[];
@@ -124,6 +129,15 @@ export type AuthDecision = {
     authz: PortalAuthz | null;
 };
 export declare function normalizePortalAuthz(value: unknown): PortalAuthz | null;
+export declare function readPortalConsumerSession(options: {
+    request: Request | {
+        headers: Headers;
+    };
+    appId: string;
+    cookieNames?: string[];
+    secret?: string;
+    debug?: boolean;
+}): Promise<PortalConsumerSession | null>;
 export declare function getCurrentAuthz(request: Request, options?: {
     appId?: string;
     cookieNames?: string[];

@@ -18,7 +18,7 @@ import {
   Trash2,
   Truck,
 } from '@/lib/lucide-icons'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import {
@@ -188,7 +188,7 @@ export default function NewFulfillmentOrderPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/fulfillment-orders/new')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/fulfillment-orders/new'))
       return
     }
   }, [session, status])
@@ -200,7 +200,7 @@ export default function NewFulfillmentOrderPage() {
       try {
 	        setLoading(true)
 	        const [warehousesRes, skusRes] = await Promise.all([
-	          fetch(withBasePath('/api/warehouses?includeAmazon=true'), { credentials: 'include' }),
+	          fetch(withBasePath('/api/warehouses'), { credentials: 'include' }),
 	          fetch(withBasePath('/api/skus'), { credentials: 'include' }),
 	        ])
 
@@ -227,7 +227,7 @@ export default function NewFulfillmentOrderPage() {
             ? (skusPayload as SkuMasterOption[])
             : []
 
-        setWarehouses(warehousesData)
+        setWarehouses(warehousesData.filter(warehouse => warehouse.kind !== 'AMAZON_FBA'))
         setSkus(skusData)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : 'Failed to load data')

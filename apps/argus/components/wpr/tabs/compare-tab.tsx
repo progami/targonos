@@ -23,11 +23,11 @@ import {
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
-import { WPR_CHART_HEIGHT, WPR_COMPACT_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
+import { WPR_CHART_HEIGHT } from '@/lib/wpr/chart-layout'
 import { createCompareViewModel } from '@/lib/wpr/compare-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { useWprStore } from '@/stores/wpr-store'
-import { buildBundleWeekStartDateLookup, formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup, formatTooltipWeekLabelFromLookup, formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
 import {
   panelBadgeSx,
   panelHeadSx,
@@ -240,74 +240,6 @@ export default function CompareTab({
       }}
     >
       <Box sx={{ ...panelSx, gridColumn: '1 / -1' }}>
-        <PanelTitle title="Brand Metrics" badge="Awareness / Consideration / Purchase" />
-        <Box sx={{ p: 1.5 }}>
-          {viewModel.brandRows.length === 0 ? (
-            <Box
-              sx={{
-                minHeight: 220,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'rgba(255,255,255,0.54)',
-                fontSize: '0.76rem',
-              }}
-            >
-              No brand metrics data.
-            </Box>
-          ) : (
-            <Box role="img" aria-label="Brand metrics trend over weeks showing awareness, consideration, and purchase">
-              <ResponsiveChartFrame height={WPR_COMPACT_CHART_HEIGHT}>
-                <LineChart data={viewModel.brandRows} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
-                  <YAxis tickFormatter={(value) => formatCompactNumber(value)} tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    content={({ active, payload, label }) => (
-                      <WprChangeTooltipContent
-                        active={active}
-                        payload={payload}
-                        label={label}
-                        labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
-                        changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
-                        formatRow={(entry) => {
-                          const value = entry.value
-                          if (typeof value !== 'number') {
-                            throw new Error(`Invalid Compare brand-metrics tooltip value for ${String(entry.dataKey)}`)
-                          }
-
-                          const color = entry.color
-                          if (color === undefined) {
-                            throw new Error(`Missing Compare brand-metrics tooltip color for ${String(entry.dataKey)}`)
-                          }
-
-                          const name = entry.name
-                          if (name === undefined) {
-                            throw new Error(`Missing Compare brand-metrics tooltip label for ${String(entry.dataKey)}`)
-                          }
-
-                          return {
-                            label: String(name),
-                            value: formatCompactNumber(value),
-                            color,
-                          }
-                        }}
-                      />
-                    )}
-                  />
-                  <RechartsChangeMarkers markers={weeklyChangeMarkers} />
-                  <Legend content={<CompareChartLegend />} />
-                  <Line type="monotone" dataKey="awareness" name="Awareness" stroke="#8fc7ff" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#8fc7ff' }} activeDot={{ r: 3.5 }} />
-                  <Line type="monotone" dataKey="consideration" name="Consideration" stroke="#77dfd0" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#77dfd0' }} activeDot={{ r: 3.5 }} />
-                  <Line type="monotone" dataKey="purchase" name="Purchase" stroke="#d5ff62" strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: '#d5ff62' }} activeDot={{ r: 3.5 }} />
-                </LineChart>
-              </ResponsiveChartFrame>
-            </Box>
-          )}
-        </Box>
-      </Box>
-
-      <Box sx={{ ...panelSx, gridColumn: '1 / -1' }}>
         <Box
           sx={{
             ...panelHeadSx,
@@ -426,7 +358,7 @@ export default function CompareTab({
                             active={active}
                             payload={payload}
                             label={label}
-                            labelText={formatWeekLabelFromLookup(String(label), weekStartDates)}
+                            labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
                             changeMarker={weeklyChangeMarkersByLabel.get(String(label))}
                             formatRow={(entry) => {
                               const key = entry.dataKey

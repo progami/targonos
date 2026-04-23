@@ -1,11 +1,20 @@
 import React from 'react'
 import { ReferenceLine } from 'recharts'
+import { formatWprChangeCategory, getWprChangeCategoryColor } from '@/lib/wpr/change-log-categories'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
+
+export type ChartChangeMarkerDetail = {
+  id: string
+  title: string
+  summary?: string
+  category?: string
+}
 
 export type ChartChangeMarker = {
   label: string
   count: number
   titles: string[]
+  details: ChartChangeMarkerDetail[]
 }
 
 export type WprTooltipPayloadEntry = {
@@ -47,12 +56,26 @@ export function buildWeeklyChangeMarkers(changeEntries: WprChangeLogEntry[]): Ch
         label: entry.week_label,
         count: 1,
         titles: [entry.title],
+        details: [
+          {
+            id: entry.id,
+            title: entry.title,
+            summary: entry.summary,
+            category: entry.category,
+          },
+        ],
       })
       continue
     }
 
     marker.count += 1
     marker.titles.push(entry.title)
+    marker.details.push({
+      id: entry.id,
+      title: entry.title,
+      summary: entry.summary,
+      category: entry.category,
+    })
   }
 
   return Array.from(markersByLabel.values())
@@ -70,6 +93,10 @@ export function buildDailyChangeMarkers(points: DailyChangePoint[]): ChartChange
       label: point.day_label,
       count: point.change_count,
       titles: point.change_titles,
+      details: point.change_titles.map((title, index) => ({
+        id: `${point.day_label}-${index}`,
+        title,
+      })),
     })
   }
 
@@ -142,7 +169,7 @@ export function WprChangeTooltipContent({
     throw new Error(`Missing tooltip header for ${String(label)}`)
   }
 
-  const changeLines = labelParts.slice(1)
+  const changeDetails = changeMarker === undefined ? [] : changeMarker.details
   const rows = payload.map((entry) => formatRow(entry))
 
   return (
@@ -229,26 +256,83 @@ export function WprChangeTooltipContent({
         ))}
       </div>
 
-      {changeLines.length > 0 ? (
+      {changeDetails.length > 0 ? (
         <div
           style={{
             display: 'grid',
-            gap: 4,
+            gap: 6,
             marginTop: 8,
             paddingTop: 8,
             borderTop: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          {changeLines.map((line, lineIndex) => (
+          {changeDetails.map((detail) => (
             <div
-              key={`${header}-change-${lineIndex}`}
+              key={`${header}-change-${detail.id}`}
               style={{
-                color: 'rgba(255,255,255,0.58)',
-                fontSize: 11,
-                lineHeight: 1.35,
+                display: 'grid',
+                gap: 3,
               }}
             >
-              {line}
+              {detail.category !== undefined ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    minWidth: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      padding: '2px 6px',
+                      borderRadius: 999,
+                      border: `1px solid ${getWprChangeCategoryColor(detail.category)}40`,
+                      background: `${getWprChangeCategoryColor(detail.category)}18`,
+                      color: getWprChangeCategoryColor(detail.category),
+                      fontSize: 10,
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {formatWprChangeCategory(detail.category)}
+                  </span>
+                  <span
+                    style={{
+                      color: 'rgba(255,255,255,0.86)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {detail.title}
+                  </span>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.86)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {detail.title}
+                </div>
+              )}
+              {detail.summary !== undefined && detail.summary.trim() !== '' ? (
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.58)',
+                    fontSize: 11,
+                    lineHeight: 1.35,
+                  }}
+                >
+                  {detail.summary}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

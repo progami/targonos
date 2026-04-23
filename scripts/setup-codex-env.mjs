@@ -30,6 +30,7 @@ const APP_BASE_PATHS = {
 
 const APP_ORDER = ['sso', 'talos', 'website', 'atlas', 'xplan', 'kairos', 'plutus', 'hermes', 'argus']
 const WORKTREE_DEV_AUTHZ_JSON = stringifyWorktreeDevAuthz()
+const ENABLE_SSO_WORKTREE_DEV_AUTH = process.env.TARGON_SSO_WORKTREE_DEV_AUTH?.trim().toLowerCase() === 'true'
 
 function requireFile(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -201,7 +202,9 @@ function buildManagedEntries(context) {
       entries.set('NODE_ENV', 'development')
       entries.set('PORT', String(port))
       entries.set('HOST', '0.0.0.0')
-      applyWorktreeDevAuth(entries)
+      if (ENABLE_SSO_WORKTREE_DEV_AUTH) {
+        applyWorktreeDevAuth(entries)
+      }
       entries.set('AUTH_TRUST_HOST', 'true')
       entries.set('PORTAL_RUNTIME_ENV', 'local')
       entries.set('COOKIE_DOMAIN', 'localhost')
@@ -240,7 +243,7 @@ function buildManagedEntries(context) {
       entries.set('DATABASE_URL_US', withSchema(baseDevDbUrl, 'dev_talos_us'))
       entries.set('DATABASE_URL_UK', withSchema(baseDevDbUrl, 'dev_talos_uk'))
       entries.set('REDIS_URL', sharedValue(sourceValues, appName, 'REDIS_URL', 'redis://localhost:6379'))
-      entries.set('S3_BUCKET_NAME', sharedValue(sourceValues, appName, 'S3_BUCKET_NAME', 'wms-development-459288913318'))
+      entries.set('S3_BUCKET_NAME', sharedValue(sourceValues, appName, 'S3_BUCKET_NAME', 'ci-talos-bucket'))
       entries.set('S3_BUCKET_REGION', sharedValue(sourceValues, appName, 'S3_BUCKET_REGION', 'us-east-1'))
       return entries
     case 'atlas':

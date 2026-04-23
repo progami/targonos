@@ -21,7 +21,7 @@ import {
 } from '@/lib/lucide-icons'
 import { toast } from 'react-hot-toast'
 import { PageHeader } from '@/components/ui/page-header'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { withBasePath } from '@/lib/utils/base-path'
 
@@ -259,7 +259,7 @@ export default function AmazonIntegrationPage() {
  }
 
  if (!session || session.user.role !== 'admin') {
- redirectToPortal('/login', `${window.location.origin}/market/amazon`)
+ redirectToPortal('/login', buildAppCallbackUrl('/market/amazon'))
  return null
  }
 

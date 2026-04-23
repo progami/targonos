@@ -1,6 +1,6 @@
 # TargonOS
 
-TargonOS is a pnpm + Turborepo monorepo for Targon Global's internal apps and website.
+TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps and website.
 
 ## Apps
 

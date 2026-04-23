@@ -18,6 +18,7 @@ import {
   wprSelectionHeaderCellSx,
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
+import WprWeekSelect from '@/components/wpr/wpr-week-select'
 import type { WprSortState } from '@/lib/wpr/dashboard-state'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import {
@@ -29,6 +30,7 @@ import {
   type SqpSortKey,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprSortDirection } from '@/lib/wpr/dashboard-state'
+import type { WeekLabel } from '@/lib/wpr/types'
 
 const SQP_COLUMNS: Array<{ key: SqpSortKey; label: string }> = [
   { key: 'term', label: 'Term' },
@@ -128,22 +130,30 @@ function nextSortDirection(current: WprSortState, key: SqpSortKey): WprSortDirec
 }
 
 export default function SqpSelectionTable({
+  selectedWeek,
+  weeks,
+  weekStartDates,
   familyOrder,
   viewModel,
   expandedRootIds,
   sortState,
   setSortState,
+  onSelectWeek,
   onSelectAll,
   onClearAll,
   onSetRootSelection,
   onToggleTerm,
   onToggleExpanded,
 }: {
+  selectedWeek: WeekLabel
+  weeks: WeekLabel[]
+  weekStartDates: Record<WeekLabel, string>
   familyOrder: string[]
   viewModel: SqpSelectionViewModel
   expandedRootIds: Set<string>
   sortState: WprSortState
   setSortState: (nextState: WprSortState) => void
+  onSelectWeek: (week: WeekLabel) => void
   onSelectAll: () => void
   onClearAll: () => void
   onSetRootSelection: (rootId: string, shouldSelect: boolean) => void
@@ -157,7 +167,16 @@ export default function SqpSelectionTable({
   return (
     <WprSelectionPanel
       title="SQP Selection"
-      summary={`Selected week · ${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      summary={`${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      toolbar={(
+        <WprWeekSelect
+          label="Table week"
+          selectedWeek={selectedWeek}
+          weeks={weeks}
+          weekStartDates={weekStartDates}
+          onSelectWeek={onSelectWeek}
+        />
+      )}
     >
         <Table stickyHeader size="small" sx={{ minWidth: 960 }}>
           <TableHead>
