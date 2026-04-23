@@ -10,11 +10,24 @@ import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 
+function RedirectingToLoginMessage() {
+  return (
+    <PageContainer>
+      <PageContent>
+        <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+          Redirecting to login…
+        </div>
+      </PageContent>
+    </PageContainer>
+  )
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession()
   const [snapshot, setSnapshot] = useState<DashboardOverviewSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<Error | null>(null)
+  const [redirectingToLogin, setRedirectingToLogin] = useState(false)
 
   useEffect(() => {
     if (status === 'loading') {
@@ -25,6 +38,7 @@ export default function DashboardPage() {
       return
     }
 
+    setRedirectingToLogin(true)
     redirectToPortal('/login', `${window.location.origin}${withBasePath('/dashboard')}`)
   }, [session, status])
 
@@ -38,6 +52,7 @@ export default function DashboardPage() {
       })
 
       if (response.status === 401) {
+        setRedirectingToLogin(true)
         redirectToPortal('/login', `${window.location.origin}${withBasePath('/dashboard')}`)
         return
       }
@@ -80,16 +95,16 @@ export default function DashboardPage() {
     )
   }
 
-  if (status === 'unauthenticated' || session === null) {
-    return (
-      <PageContainer>
-        <PageContent>
-          <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-            Redirecting to login…
-          </div>
-        </PageContent>
-      </PageContainer>
-    )
+  if (redirectingToLogin) {
+    return <RedirectingToLoginMessage />
+  }
+
+  if (status === 'unauthenticated') {
+    return <RedirectingToLoginMessage />
+  }
+
+  if (session === null) {
+    return <RedirectingToLoginMessage />
   }
 
   if (loadError !== null) {

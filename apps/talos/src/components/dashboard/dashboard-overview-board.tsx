@@ -172,7 +172,7 @@ function WarehouseChart({ warehouses }: { warehouses: DashboardOverviewSnapshot[
     name: row.warehouseCode,
     cartons: row.cartons,
   }))
-  const maxCartons = chartData.reduce((max, row) => Math.max(max, row.cartons), 0)
+  const maxCartons = chartData.reduce((max, row) => Math.max(max, row.cartons, 0), 0)
   const scaleMax = maxCartons === 0 ? 1 : maxCartons
 
   return (
@@ -191,7 +191,7 @@ function WarehouseChart({ warehouses }: { warehouses: DashboardOverviewSnapshot[
         ) : (
           <div className="space-y-4">
             {chartData.map(row => {
-              const width = Math.round((row.cartons / scaleMax) * 100)
+              const width = Math.round((Math.max(row.cartons, 0) / scaleMax) * 100)
 
               return (
                 <div
