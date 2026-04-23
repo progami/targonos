@@ -5,7 +5,6 @@ import { Box, Stack } from '@mui/material'
 import {
   createSqpSelectionViewModel,
   rootTermIds,
-  type SqpSelectionViewModel,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
@@ -56,93 +55,6 @@ function allSelectableTermIds(bundle: WprWeekBundle): string[] {
   }
 
   return termIds
-}
-
-function buildHeroContent(
-  bundle: WprWeekBundle,
-  viewModel: SqpSelectionViewModel,
-): { name: string; meta: string[] } {
-  if (viewModel.scopeType === 'empty') {
-    return {
-      name: 'SQP Selection',
-      meta: ['0 roots selected'],
-    }
-  }
-
-  const selectedRootId = viewModel.selectedRootIds[0]
-  const selectedRootRow = viewModel.rootRows.find((row) => row.id === selectedRootId)
-  if (selectedRootRow === undefined && viewModel.selectedRootIds.length === 1) {
-    throw new Error(`Missing SQP root row ${selectedRootId}`)
-  }
-
-  if (viewModel.scopeType === 'term') {
-    const selectedTermId = viewModel.selectedTermIds[0]
-    const selectedTerm = bundle.sqpTerms.find((term) => term.id === selectedTermId)
-    if (selectedTerm === undefined) {
-      throw new Error(`Missing SQP term ${selectedTermId}`)
-    }
-
-    return {
-      name: selectedTerm.term,
-      meta: [
-        selectedTerm.cluster,
-        `1 / ${viewModel.allTermIds.length} SQP terms selected`,
-      ],
-    }
-  }
-
-  if (viewModel.scopeType === 'root' || viewModel.scopeType === 'multi') {
-    if (selectedRootRow === undefined) {
-      throw new Error('Missing SQP root row for single-root selection')
-    }
-
-    return {
-      name: selectedRootRow.label,
-      meta: [
-        selectedRootRow.family,
-        `${viewModel.selectedTermIds.length} / ${viewModel.allTermIds.length} SQP terms selected`,
-      ],
-    }
-  }
-
-  if (viewModel.scopeType === 'no-terms') {
-    if (viewModel.selectedRootIds.length === 1) {
-      if (selectedRootRow === undefined) {
-        throw new Error('Missing SQP root row for no-term selection')
-      }
-
-      return {
-        name: selectedRootRow.label,
-        meta: [
-          selectedRootRow.family,
-          `0 / ${viewModel.allTermIds.length} SQP terms selected`,
-        ],
-      }
-    }
-
-    const preview = viewModel.selectedRootLabels.slice(0, 3).join(', ')
-    return {
-      name: `${viewModel.selectedRootIds.length} Roots`,
-      meta: [
-        preview,
-        `0 / ${viewModel.allTermIds.length} SQP terms selected`,
-      ],
-    }
-  }
-
-  const previewLabels = viewModel.selectedRootLabels.slice(0, 3)
-  let preview = previewLabels.join(', ')
-  if (viewModel.selectedRootLabels.length > 3) {
-    preview = `${preview} +${viewModel.selectedRootLabels.length - 3}`
-  }
-
-  return {
-    name: `${viewModel.selectedRootIds.length} Roots`,
-    meta: [
-      preview,
-      `${viewModel.selectedTermIds.length} / ${viewModel.allTermIds.length} SQP terms selected`,
-    ],
-  }
 }
 
 export default function SqpTab({
@@ -285,7 +197,6 @@ export default function SqpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const heroContent = buildHeroContent(bundle, viewModel)
   const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
@@ -396,7 +307,6 @@ export default function SqpTab({
   return (
     <Stack spacing={2}>
       <SqpWeeklyPanel
-        heroContent={heroContent}
         weekly={viewModel.weekly}
         changeEntries={changeEntries}
         wowVisible={sqpWowVisible}

@@ -6,7 +6,6 @@ import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import {
   competitorRootTermIds,
   createTstViewModel,
-  type TstSelectionViewModel,
 } from '@/lib/wpr/tst-view-model'
 import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
@@ -15,34 +14,6 @@ import TstWeeklyPanel from './tst-weekly-panel'
 
 function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
   return Array.from(ids).filter((id) => allowedIds.has(id))
-}
-
-function buildHeroContent(
-  viewModel: TstSelectionViewModel,
-): { name: string; meta: string[] } {
-  if (viewModel.scopeType === 'empty') {
-    return {
-      name: 'TST Selection',
-      meta: ['0 roots selected'],
-    }
-  }
-
-  let rootLabel = viewModel.rootLabels.slice(0, 3).join(', ')
-  if (viewModel.rootLabels.length > 3) {
-    rootLabel = `${rootLabel} +${viewModel.rootLabels.length - 3}`
-  }
-
-  if (viewModel.scopeType === 'no-terms') {
-    return {
-      name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-      meta: [rootLabel, '0 terms selected'],
-    }
-  }
-
-  return {
-    name: viewModel.rootIds.length > 1 ? `${viewModel.rootIds.length} Roots` : viewModel.rootLabels[0],
-    meta: [rootLabel],
-  }
 }
 
 export default function TstTab({
@@ -138,7 +109,6 @@ export default function TstTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const heroContent = buildHeroContent(viewModel)
   const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const competitor = bundle.meta.competitor
 
@@ -214,7 +184,6 @@ export default function TstTab({
   return (
     <Stack spacing={2}>
       <TstWeeklyPanel
-        heroContent={heroContent}
         viewModel={viewModel}
         changeEntries={changeEntries}
         historyLabel={historyLabel}

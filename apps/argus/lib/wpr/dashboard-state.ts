@@ -1,6 +1,6 @@
 import type { WeekLabel } from './types'
 
-export type WprTab = 'sqp' | 'scp' | 'br' | 'tst' | 'changelog' | 'compare' | 'sources'
+export type WprTab = 'sqp' | 'scp' | 'br' | 'tst' | 'brand' | 'changelog' | 'compare' | 'sources'
 export type WprCompareOrganicMode = 'map' | 'trend'
 export type WprSortDirection = 'asc' | 'desc'
 
@@ -59,6 +59,7 @@ export const WPR_TABS = [
   { id: 'scp', label: 'SCP' },
   { id: 'br', label: 'BR' },
   { id: 'tst', label: 'TST' },
+  { id: 'brand', label: 'BM' },
   { id: 'changelog', label: 'Change Log' },
   { id: 'compare', label: 'Compare' },
   { id: 'sources', label: 'Sources' },

@@ -42,11 +42,6 @@ import BusinessReportsSelectionTable from './business-reports-selection-table'
 
 type BusinessReportsViewMode = 'weekly' | 'daily'
 
-type BusinessReportsHeroContent = {
-  name: string
-  meta: string[]
-}
-
 const businessReportsViewToggleGroupSx = {
   '& .MuiToggleButtonGroup-grouped': {
     minWidth: 76,
@@ -462,13 +457,6 @@ function BusinessReportsChart({
   )
 }
 
-function buildHeroContent(): BusinessReportsHeroContent {
-  return {
-    name: 'Business Reports',
-    meta: ['Retail detail-page metrics'],
-  }
-}
-
 export default function BusinessReportsTab({
   bundle,
   changeEntries,
@@ -549,7 +537,6 @@ export default function BusinessReportsTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const heroContent = buildHeroContent()
   const dailySeries = bundle.businessReports.dailyByWeek[bundle.meta.anchorWeek]
   let dailyChartSeries: WprBusinessDailyPoint[] = []
   if (dailySeries !== undefined) {
@@ -569,8 +556,6 @@ export default function BusinessReportsTab({
   return (
     <Stack spacing={2}>
       <WprAnalyticsPanel
-        title={heroContent.name}
-        meta={heroContent.meta}
         footer={<WprAnalyticsFooter items={footerItems} />}
       >
         <BusinessReportsChart
