@@ -2301,11 +2301,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         },
       })
     : null;
-  const activeStrategyName: string | null = activeStrategyRow
-    ? activeStrategyRow.strategyGroup?.name
-      ? `${activeStrategyRow.strategyGroup.name} · ${activeStrategyRow.name}`
-      : activeStrategyRow.name
-    : null;
+  const activeStrategyName: string | null = activeStrategyRow ? activeStrategyRow.name : null;
   const strategyRegion: StrategyRegion =
     strategyId && activeStrategyRow
       ? (() => {
