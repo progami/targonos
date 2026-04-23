@@ -124,6 +124,27 @@ export const GET = withAuth(async (_request, session) => {
         currentPallets: balance.currentPallets,
         currentUnits: balance.currentUnits,
       })),
+      movements: transactions.map(
+        ({
+          purchaseOrder: _purchaseOrder,
+          fulfillmentOrder: _fulfillmentOrder,
+          ...transaction
+        }) => ({
+          id: transaction.id,
+          transactionType: transaction.transactionType,
+          transactionDate: transaction.transactionDate,
+          warehouseCode: transaction.warehouseCode,
+          warehouseName: transaction.warehouseName,
+          skuCode: transaction.skuCode,
+          skuDescription: transaction.skuDescription,
+          lotRef: transaction.lotRef,
+          cartonsIn: transaction.cartonsIn,
+          cartonsOut: transaction.cartonsOut,
+          storagePalletsIn: transaction.storagePalletsIn,
+          shippingPalletsOut: transaction.shippingPalletsOut,
+          unitsPerCarton: transaction.unitsPerCarton,
+        })
+      ),
     })
   )
 })

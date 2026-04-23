@@ -1,3 +1,5 @@
+import { isAmazonWarehouseCode } from '@/lib/warehouses/amazon-warehouse'
+
 export interface DashboardOverviewPurchaseOrderInput {
   id: string
   orderNumber: string
@@ -31,6 +33,37 @@ export interface DashboardOverviewBalanceInput {
   currentUnits: number
 }
 
+export interface DashboardOverviewMovementInput {
+  id: string
+  transactionType: string
+  transactionDate: Date
+  warehouseCode: string
+  warehouseName: string
+  skuCode: string
+  skuDescription: string
+  lotRef: string
+  cartonsIn: number
+  cartonsOut: number
+  storagePalletsIn: number
+  shippingPalletsOut: number
+  unitsPerCarton: number
+}
+
+export type DashboardOverviewMovement = {
+  id: string
+  transactionType: string
+  transactionDate: string
+  warehouseCode: string
+  warehouseName: string
+  skuCode: string
+  skuDescription: string
+  lotRef: string
+  cartons: number
+  pallets: number
+  units: number
+  carriesPallets: boolean
+}
+
 export interface DashboardOverviewSnapshot {
   summary: {
     factory: { cartons: number; pallets: number; units: number; poCount: number }
@@ -44,8 +77,13 @@ export interface DashboardOverviewSnapshot {
     pallets: number
     units: number
     skuCount: number
+    carriesPallets: boolean
   }>
+  recentIn: DashboardOverviewMovement[]
+  recentOut: DashboardOverviewMovement[]
 }
+
+const RECENT_MOVEMENT_LIMIT = 5
 
 function hasOnHandInventory(balance: DashboardOverviewBalanceInput) {
   return !(
@@ -83,6 +121,50 @@ function parseDashboardOverviewStatus(
   throw new Error(`Unsupported purchase order status: ${status}`)
 }
 
+function warehouseCarriesPallets(warehouseCode: string) {
+  return !isAmazonWarehouseCode(warehouseCode)
+}
+
+function mapDashboardMovement(
+  movement: DashboardOverviewMovementInput,
+  direction: 'in' | 'out'
+): DashboardOverviewMovement {
+  const warehouseCode = movement.warehouseCode.trim()
+  if (warehouseCode.length === 0) {
+    throw new Error('warehouseCode is required')
+  }
+
+  const carriesPallets = warehouseCarriesPallets(warehouseCode)
+  const cartons = direction === 'in' ? movement.cartonsIn : movement.cartonsOut
+  const pallets = direction === 'in' ? movement.storagePalletsIn : movement.shippingPalletsOut
+
+  return {
+    id: movement.id,
+    transactionType: movement.transactionType,
+    transactionDate: movement.transactionDate.toISOString(),
+    warehouseCode,
+    warehouseName: movement.warehouseName,
+    skuCode: movement.skuCode,
+    skuDescription: movement.skuDescription,
+    lotRef: movement.lotRef,
+    cartons,
+    pallets: carriesPallets ? pallets : 0,
+    units: cartons * movement.unitsPerCarton,
+    carriesPallets,
+  }
+}
+
+function buildRecentMovements(
+  movements: DashboardOverviewMovementInput[],
+  direction: 'in' | 'out'
+) {
+  return movements
+    .filter(movement => (direction === 'in' ? movement.cartonsIn > 0 : movement.cartonsOut > 0))
+    .sort((left, right) => right.transactionDate.getTime() - left.transactionDate.getTime())
+    .slice(0, RECENT_MOVEMENT_LIMIT)
+    .map(movement => mapDashboardMovement(movement, direction))
+}
+
 export function mapPurchaseOrderToDashboardOverviewInput(
   order: DashboardOverviewPurchaseOrderRow
 ): DashboardOverviewPurchaseOrderInput {
@@ -102,9 +184,11 @@ export function mapPurchaseOrderToDashboardOverviewInput(
 export function buildDashboardOverviewSnapshot({
   purchaseOrders,
   balances,
+  movements,
 }: {
   purchaseOrders: DashboardOverviewPurchaseOrderInput[]
   balances: DashboardOverviewBalanceInput[]
+  movements: DashboardOverviewMovementInput[]
 }): DashboardOverviewSnapshot {
   const factoryOrders = purchaseOrders.filter(order => order.status === 'MANUFACTURING')
   const transitOrders = purchaseOrders.filter(order => order.status === 'OCEAN')
@@ -125,22 +209,25 @@ export function buildDashboardOverviewSnapshot({
     }
 
     const existing = warehouseMap.get(key)
+    const carriesPallets = warehouseCarriesPallets(key)
+    const currentPallets = carriesPallets ? balance.currentPallets : 0
 
     if (existing === undefined) {
       warehouseMap.set(key, {
         warehouseCode: key,
         warehouseName: balance.warehouseName,
         cartons: balance.currentCartons,
-        pallets: balance.currentPallets,
+        pallets: currentPallets,
         units: balance.currentUnits,
         skuCount: 1,
+        carriesPallets,
         skuCodes: new Set([balance.skuCode]),
       })
       continue
     }
 
     existing.cartons += balance.currentCartons
-    existing.pallets += balance.currentPallets
+    existing.pallets += currentPallets
     existing.units += balance.currentUnits
     existing.skuCodes.add(balance.skuCode)
     existing.skuCount = existing.skuCodes.size
@@ -172,5 +259,7 @@ export function buildDashboardOverviewSnapshot({
       },
     },
     warehouses,
+    recentIn: buildRecentMovements(movements, 'in'),
+    recentOut: buildRecentMovements(movements, 'out'),
   }
 }

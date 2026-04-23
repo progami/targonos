@@ -16,7 +16,7 @@ process.env.COOKIE_DOMAIN ??= 'localhost'
 process.env.PORTAL_AUTH_SECRET ??= 'test-secret'
 
 let resolveDashboardOverviewWarehouseCodeFilter:
-  | typeof import('../../app/api/dashboard/overview/route')['resolveDashboardOverviewWarehouseCodeFilter']
+  | (typeof import('../../app/api/dashboard/overview/route'))['resolveDashboardOverviewWarehouseCodeFilter']
   | undefined
 
 const loadResolveDashboardOverviewWarehouseCodeFilter = async () => {
@@ -81,7 +81,7 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
     },
   ]
 
-  const snapshot = buildDashboardOverviewSnapshot({ purchaseOrders, balances })
+  const snapshot = buildDashboardOverviewSnapshot({ purchaseOrders, balances, movements: [] })
 
   const expectedSnapshot: DashboardOverviewSnapshot = {
     summary: {
@@ -112,6 +112,7 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
         pallets: 17,
         units: 2800,
         skuCount: 2,
+        carriesPallets: true,
       },
       {
         warehouseCode: 'TCL-CHINO',
@@ -120,8 +121,11 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
         pallets: 20,
         units: 2400,
         skuCount: 1,
+        carriesPallets: true,
       },
     ],
+    recentIn: [],
+    recentOut: [],
   }
 
   assert.deepEqual(snapshot, expectedSnapshot)
@@ -130,6 +134,7 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
 test('buildDashboardOverviewSnapshot sorts warehouses by cartons descending', () => {
   const snapshot = buildDashboardOverviewSnapshot({
     purchaseOrders: [],
+    movements: [],
     balances: [
       {
         warehouseCode: 'B',
@@ -150,12 +155,16 @@ test('buildDashboardOverviewSnapshot sorts warehouses by cartons descending', ()
     ],
   })
 
-  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['A', 'B'])
+  assert.deepEqual(
+    snapshot.warehouses.map(row => row.warehouseCode),
+    ['A', 'B']
+  )
 })
 
 test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () => {
   const snapshot = buildDashboardOverviewSnapshot({
     purchaseOrders: [],
+    movements: [],
     balances: [
       {
         warehouseCode: 'A',
@@ -176,7 +185,10 @@ test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () =>
     ],
   })
 
-  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['B'])
+  assert.deepEqual(
+    snapshot.warehouses.map(row => row.warehouseCode),
+    ['B']
+  )
   assert.deepEqual(snapshot.summary.warehouses, {
     cartons: 5,
     pallets: 0,
@@ -188,6 +200,7 @@ test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () =>
 test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible', () => {
   const snapshot = buildDashboardOverviewSnapshot({
     purchaseOrders: [],
+    movements: [],
     balances: [
       {
         warehouseCode: 'NEG',
@@ -208,7 +221,10 @@ test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible',
     ],
   })
 
-  assert.deepEqual(snapshot.warehouses.map(row => row.warehouseCode), ['NEG'])
+  assert.deepEqual(
+    snapshot.warehouses.map(row => row.warehouseCode),
+    ['NEG']
+  )
   assert.deepEqual(snapshot.summary.warehouses, {
     cartons: -3,
     pallets: -1,
@@ -217,9 +233,132 @@ test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible',
   })
 })
 
+test('buildDashboardOverviewSnapshot excludes Amazon FBA pallets from warehouse totals', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    movements: [],
+    balances: [
+      {
+        warehouseCode: 'AMZN-US',
+        warehouseName: 'Amazon FBA US',
+        skuCode: 'SKU-FBA',
+        currentCartons: 120,
+        currentPallets: 12,
+        currentUnits: 1200,
+      },
+      {
+        warehouseCode: 'TCL-CHINO',
+        warehouseName: 'Tactical Warehouse Solutions',
+        skuCode: 'SKU-3PL',
+        currentCartons: 80,
+        currentPallets: 5,
+        currentUnits: 800,
+      },
+    ],
+  })
+
+  assert.deepEqual(snapshot.summary.warehouses, {
+    cartons: 200,
+    pallets: 5,
+    units: 2000,
+    warehouseCount: 2,
+  })
+  assert.deepEqual(
+    snapshot.warehouses.map(row => ({
+      warehouseCode: row.warehouseCode,
+      pallets: row.pallets,
+      carriesPallets: row.carriesPallets,
+    })),
+    [
+      { warehouseCode: 'AMZN-US', pallets: 0, carriesPallets: false },
+      { warehouseCode: 'TCL-CHINO', pallets: 5, carriesPallets: true },
+    ]
+  )
+})
+
+test('buildDashboardOverviewSnapshot returns recent inbound and outbound movements', () => {
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [],
+    movements: [
+      {
+        id: 'old-receive',
+        transactionType: 'RECEIVE',
+        transactionDate: new Date('2026-04-10T12:00:00.000Z'),
+        warehouseCode: 'TCL-CHINO',
+        warehouseName: 'Tactical Warehouse Solutions',
+        skuCode: 'SKU-OLD',
+        skuDescription: 'Older item',
+        lotRef: 'LOT-OLD',
+        cartonsIn: 3,
+        cartonsOut: 0,
+        storagePalletsIn: 1,
+        shippingPalletsOut: 0,
+        unitsPerCarton: 10,
+      },
+      {
+        id: 'recent-receive',
+        transactionType: 'RECEIVE',
+        transactionDate: new Date('2026-04-13T12:00:00.000Z'),
+        warehouseCode: 'TCL-CHINO',
+        warehouseName: 'Tactical Warehouse Solutions',
+        skuCode: 'SKU-IN',
+        skuDescription: 'Inbound item',
+        lotRef: 'LOT-IN',
+        cartonsIn: 7,
+        cartonsOut: 0,
+        storagePalletsIn: 2,
+        shippingPalletsOut: 0,
+        unitsPerCarton: 12,
+      },
+      {
+        id: 'recent-ship',
+        transactionType: 'SHIP',
+        transactionDate: new Date('2026-04-14T12:00:00.000Z'),
+        warehouseCode: 'AMZN-US',
+        warehouseName: 'Amazon FBA US',
+        skuCode: 'SKU-OUT',
+        skuDescription: 'Outbound item',
+        lotRef: 'LOT-OUT',
+        cartonsIn: 0,
+        cartonsOut: 4,
+        storagePalletsIn: 0,
+        shippingPalletsOut: 3,
+        unitsPerCarton: 6,
+      },
+    ],
+  })
+
+  assert.deepEqual(
+    snapshot.recentIn.map(row => row.id),
+    ['recent-receive', 'old-receive']
+  )
+  assert.deepEqual(
+    snapshot.recentOut.map(row => row.id),
+    ['recent-ship']
+  )
+  assert.deepEqual(snapshot.recentIn[0], {
+    id: 'recent-receive',
+    transactionType: 'RECEIVE',
+    transactionDate: '2026-04-13T12:00:00.000Z',
+    warehouseCode: 'TCL-CHINO',
+    warehouseName: 'Tactical Warehouse Solutions',
+    skuCode: 'SKU-IN',
+    skuDescription: 'Inbound item',
+    lotRef: 'LOT-IN',
+    cartons: 7,
+    pallets: 2,
+    units: 84,
+    carriesPallets: true,
+  })
+  assert.equal(snapshot.recentOut[0].pallets, 0)
+  assert.equal(snapshot.recentOut[0].carriesPallets, false)
+})
+
 test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed grouping key', () => {
   const snapshot = buildDashboardOverviewSnapshot({
     purchaseOrders: [],
+    movements: [],
     balances: [
       {
         warehouseCode: '  FMC-UK  ',
@@ -248,6 +387,7 @@ test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed g
       pallets: 3,
       units: 250,
       skuCount: 2,
+      carriesPallets: true,
     },
   ])
 })
@@ -292,6 +432,7 @@ test('buildDashboardOverviewSnapshot throws when warehouseCode is blank even on 
     () =>
       buildDashboardOverviewSnapshot({
         purchaseOrders: [],
+        movements: [],
         balances: [
           {
             warehouseCode: '   ',
@@ -311,6 +452,7 @@ test('buildDashboardOverviewSnapshot throws when pallet data is missing', () => 
   assert.throws(
     () =>
       buildDashboardOverviewSnapshot({
+        movements: [],
         purchaseOrders: [
           {
             id: 'po-null-pallets',
