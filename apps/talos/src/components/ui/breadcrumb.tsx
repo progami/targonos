@@ -5,14 +5,46 @@ import { usePathname } from 'next/navigation'
 import { ChevronRight, Home } from '@/lib/lucide-icons'
 import { withoutBasePath } from '@/lib/utils/base-path'
 
-export function Breadcrumb() {
- const pathname = usePathname()
- const normalizedPathname = withoutBasePath(pathname)
- 
- // Don't show breadcrumbs on home or login pages
- if (normalizedPathname === '/' || normalizedPathname === '/auth/login') {
- return null
+type BreadcrumbItem = {
+ href: string
+ label: string
+ skip: boolean
+}
+
+const ROUTE_LABELS = new Map<string, string>([
+ ['/amazon/fba-fee-discrepancies', 'SKU Info'],
+])
+
+function formatSegmentLabel(segment: string): string {
+ switch (segment) {
+ case 'operations':
+ return 'Operations'
+ case 'finance':
+ return 'Ledgers'
+ case 'config':
+ return 'Configuration'
+ case 'integrations':
+ return 'Integrations'
+ case 'transactions':
+ return 'Transactions'
+ case 'inventory':
+ return 'Inventory'
+ default:
+ // For IDs and other segments, format them nicely
+ if (segment.match(/^[a-f0-9-]+$/i) && segment.length > 20) {
+ // Looks like an ID, truncate it
+ return segment.substring(0, 8) + '...'
  }
+
+ return segment
+ .split('-')
+ .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+ .join(' ')
+ }
+}
+
+export function buildBreadcrumbItems(pathname: string): BreadcrumbItem[] {
+ const normalizedPathname = withoutBasePath(pathname, pathname)
 
  // Parse the pathname into segments
  const segments = normalizedPathname.split('/').filter(Boolean)
@@ -28,42 +60,25 @@ export function Breadcrumb() {
  const isWarehouseId = previousSegment === 'warehouses' && nextSegment !== null && ['edit', 'rates'].includes(nextSegment)
  const isOperationsRoot = segment === 'operations'
 
- // Handle special cases for better labels
- let label = segment
- switch (segment) {
- case 'operations':
- label = 'Operations'
- break
- case 'finance':
- label = 'Ledgers'
- break
- case 'config':
- label = 'Configuration'
- break
- case 'integrations':
- label = 'Integrations'
- break
- case 'transactions':
- label = 'Transactions'
- break
- case 'inventory':
- label = 'Inventory'
- break
- default:
- // For IDs and other segments, format them nicely
- if (segment.match(/^[a-f0-9-]+$/i) && segment.length > 20) {
- // Looks like an ID, truncate it
- label = segment.substring(0, 8) + '...'
- } else {
- label = segment
- .split('-')
- .map(word => word.charAt(0).toUpperCase() + word.slice(1))
- .join(' ')
- }
- }
+ const routeLabel = ROUTE_LABELS.get(href)
+ const label = typeof routeLabel === 'string' ? routeLabel : formatSegmentLabel(segment)
 
  return { href, label, skip: isWarehouseId || isOperationsRoot }
  }).filter(item => !item.skip)
+
+ return breadcrumbs
+}
+
+export function Breadcrumb() {
+ const pathname = usePathname()
+ const normalizedPathname = withoutBasePath(pathname, pathname)
+
+ // Don't show breadcrumbs on home or login pages
+ if (normalizedPathname === '/' || normalizedPathname === '/auth/login') {
+ return null
+ }
+
+ const breadcrumbs = buildBreadcrumbItems(normalizedPathname)
 
  const homeLink = '/dashboard'
 

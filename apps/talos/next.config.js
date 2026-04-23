@@ -14,6 +14,10 @@ const basePath = hasDuplicatedBasePath
   ? `/${basePathSegments.slice(0, basePathHalfLen).join('/')}`
   : rawBasePathWithoutTrailingSlash
 const assetPrefix = basePath || ''
+const staticAssetCacheControl =
+  process.env.NODE_ENV === 'development'
+    ? 'no-store, no-cache, must-revalidate'
+    : 'public, max-age=31536000, immutable'
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
   throw new Error('NEXT_PUBLIC_APP_URL must be defined before loading the Talos Next.js config.')
@@ -125,7 +129,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable'
+            value: staticAssetCacheControl
           }
         ]
       }
