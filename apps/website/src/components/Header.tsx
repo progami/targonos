@@ -8,7 +8,6 @@ import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
-import { Button } from '@/components/Button';
 
 const navLinks = [
   { label: 'Packs', href: '/cs/us/packs' },
@@ -38,11 +37,11 @@ export function Header() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 border-b border-white/10 bg-[#002C51] transition-shadow',
+        'sticky top-0 z-50 border-b border-white/10 bg-[#002C51]/80 backdrop-blur-md transition-shadow supports-[backdrop-filter]:bg-[#002C51]/65',
         scrolled ? 'shadow-[0_1px_0_rgba(0,0,0,0.55)]' : null
       )}
     >
-      <Container className="flex h-16 items-center justify-between">
+      <Container className="flex h-16 items-center justify-between md:grid md:grid-cols-[1fr_auto_1fr]">
         <Link
           href="/"
           aria-label={site.name}
@@ -77,13 +76,7 @@ export function Header() {
           })}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="accent">
-            <Link href="/cs">
-              Caelum Star
-            </Link>
-          </Button>
-
+        <div className="flex items-center justify-end">
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
