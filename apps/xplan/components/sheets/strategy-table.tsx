@@ -175,18 +175,12 @@ export function StrategyTable({
       : strategies.filter((s) => s.region === regionFilter);
 
     return [...filtered].sort((a, b) => {
-      // Active first
-      if (a.id === selectedStrategyId && b.id !== selectedStrategyId) return -1;
-      if (b.id === selectedStrategyId && a.id !== selectedStrategyId) return 1;
-      // Then by group name
       const groupCmp = a.strategyGroup!.name.localeCompare(b.strategyGroup!.name);
       if (groupCmp !== 0) return groupCmp;
-      // Primary first within group
       if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
-      // Then by updated
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-  }, [strategies, regionFilter, selectedStrategyId]);
+  }, [strategies, regionFilter]);
 
   const strategyAssigneeIds = (strategy: Strategy) =>
     Array.isArray(strategy.strategyAssignees) && strategy.strategyAssignees.length > 0
@@ -365,32 +359,22 @@ export function StrategyTable({
   return (
     <>
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 rounded-[20px] border border-slate-200/80 bg-white/88 p-3 shadow-[0_18px_35px_-30px_rgba(15,23,42,0.35)] dark:border-[#153a54] dark:bg-[#081a2b]/84 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-2">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                Scenario Roster
-              </p>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                Switch the workbook between active planning scenarios without leaving setup.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {REGION_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setRegionFilter(tab.id)}
-                  className={cn(
-                    'rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors',
-                    regionFilter === tab.id
-                      ? 'bg-slate-950 text-white shadow-sm dark:bg-[#00C2B9] dark:text-slate-950'
-                      : 'border border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:bg-slate-900/60',
-                  )}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+        <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {REGION_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setRegionFilter(tab.id)}
+                className={cn(
+                  'rounded-xl px-3 py-1.5 text-sm font-semibold transition-colors',
+                  regionFilter === tab.id
+                    ? 'bg-slate-950 text-white shadow-sm dark:bg-cyan-400 dark:text-slate-950'
+                    : 'border border-transparent bg-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-900/70',
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center justify-between gap-3 sm:justify-end">
@@ -402,7 +386,7 @@ export function StrategyTable({
                 size="sm"
                 variant="outline"
                 onClick={() => openCreateDialog(availableGroups[0].id)}
-                className="gap-1.5 rounded-xl border-slate-300 bg-white/90 px-3.5 text-slate-900 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-800"
+                className="gap-1.5 rounded-lg border-slate-300 bg-white/90 px-3.5 text-slate-900 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900/70 dark:text-slate-100 dark:hover:bg-slate-800"
               >
                 <Plus className="h-3.5 w-3.5" />
                 New Scenario
@@ -411,10 +395,10 @@ export function StrategyTable({
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-[22px] border border-slate-200/80 bg-white/92 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.42)] dark:border-[#153a54] dark:bg-[#081a2b]/90">
+        <div className="overflow-hidden rounded-lg border border-slate-200/80 bg-white/90 shadow-[0_22px_48px_-34px_rgba(15,23,42,0.42)] dark:border-slate-700/70 dark:bg-slate-950/50">
           <Table>
-            <TableHeader className="bg-slate-50/90 dark:bg-[#0a2237]/92">
-              <TableRow className="border-slate-200/80 hover:bg-transparent dark:border-[#17364d]">
+            <TableHeader className="bg-slate-50/90 dark:bg-slate-900/90">
+              <TableRow className="border-slate-200/80 hover:bg-transparent dark:border-slate-700/70">
                 <TableHead className="h-11 w-[280px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Strategy</TableHead>
                 <TableHead className="px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Group</TableHead>
                 <TableHead className="w-[88px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Region</TableHead>
@@ -438,8 +422,8 @@ export function StrategyTable({
                       key={strategy.id}
                       onClick={() => handleRowClick(strategy)}
                       className={cn(
-                        'cursor-pointer border-slate-200/80 hover:bg-slate-50/80 dark:border-[#17364d] dark:hover:bg-[#0d2438]/88',
-                        isActive && 'bg-cyan-50/70 ring-1 ring-inset ring-cyan-200/70 dark:bg-[#082f3a]/70 dark:ring-cyan-900/50',
+                        'cursor-pointer border-slate-200/80 hover:bg-slate-50/80 dark:border-slate-700/70 dark:hover:bg-slate-900/70',
+                        isActive && 'bg-cyan-50/70 ring-1 ring-inset ring-cyan-200/70 dark:bg-cyan-950/40 dark:ring-cyan-500/30',
                       )}
                     >
                       <TableCell className="px-4 py-3.5 font-medium">
@@ -451,7 +435,7 @@ export function StrategyTable({
                             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
                           )}
                           {isActive && (
-                            <span className="rounded-full border border-cyan-200 bg-cyan-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-cyan-900 dark:border-cyan-900/50 dark:bg-cyan-950/50 dark:text-cyan-100">
+                            <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200">
                               Live
                             </span>
                           )}
@@ -463,16 +447,9 @@ export function StrategyTable({
                         )}
                       </TableCell>
                       <TableCell className="px-4 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-slate-700 dark:text-slate-300">
-                            {strategy.strategyGroup?.name ?? '\u2014'}
-                          </span>
-                          {strategy.strategyGroup?.code && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                              {strategy.strategyGroup.code}
-                            </span>
-                          )}
-                        </div>
+                        <span className="text-sm text-slate-700 dark:text-slate-300">
+                          {strategy.strategyGroup?.name ?? '\u2014'}
+                        </span>
                       </TableCell>
                       <TableCell className="px-4 py-3.5">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -489,7 +466,7 @@ export function StrategyTable({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 rounded-xl p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                          className="h-8 w-8 rounded-lg p-0 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                           onClick={(e) => {
                             e.stopPropagation();
                             openEditDialog(strategy);

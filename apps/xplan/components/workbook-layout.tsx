@@ -545,8 +545,31 @@ export function WorkbookLayout({
                   />
                 </Box>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
-                  {ribbon}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: 0.75,
+                    flex: '0 1 auto',
+                    minWidth: 0,
+                    maxWidth: { xs: '100%', md: 430, lg: 470, xl: 500 },
+                    ml: 'auto',
+                    overflow: 'hidden',
+                  }}
+                >
+                  {ribbon ? (
+                    <Box
+                      sx={{
+                        minWidth: 0,
+                        flex: '0 1 auto',
+                        maxWidth: { xs: 150, sm: 200, md: 240, lg: 270, xl: 300 },
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {ribbon}
+                    </Box>
+                  ) : null}
 
                   {showLoadingIndicator && (
                     <Box
@@ -582,7 +605,9 @@ export function WorkbookLayout({
 
                   {reportTimeZone ? <TimeZoneClocks reportTimeZone={reportTimeZone} /> : null}
 
-                  <ThemeToggle />
+                  <Box sx={{ display: 'flex', flexShrink: 0 }}>
+                    <ThemeToggle />
+                  </Box>
                 </Box>
               </Toolbar>
 
