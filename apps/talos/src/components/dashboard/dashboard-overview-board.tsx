@@ -1,5 +1,3 @@
-'use client'
-
 import type { DashboardOverviewSnapshot } from '@/lib/dashboard/dashboard-overview'
 
 const numberFormatter = new Intl.NumberFormat('en-US')
@@ -8,173 +6,73 @@ function formatNumber(value: number) {
   return numberFormatter.format(value)
 }
 
-function CompactSummary({
-  title,
-  cartons,
-  pallets,
-  units,
-  detail,
-}: {
-  title: string
-  cartons: number
-  pallets: number
-  units: number
-  detail: string
-}) {
-  return (
-    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/40">
-      <div className="flex items-start justify-between gap-4">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          {title}
-        </div>
-        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-          Cartons
-        </div>
-      </div>
-      <div className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-        {formatNumber(cartons)}
-      </div>
-      <div className="space-y-1 text-sm text-slate-600 dark:text-slate-300">
-        <div>
-          {formatNumber(pallets)} pallets • {formatNumber(units)} units
-        </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">{detail}</div>
-      </div>
-    </div>
-  )
+function getShare(value: number, total: number) {
+  if (total === 0) {
+    return 0
+  }
+
+  return Math.round((value / total) * 100)
 }
 
-function WarehouseSummary({
-  summary,
-}: {
-  summary: DashboardOverviewSnapshot['summary']['warehouses']
-}) {
+function StageTable({ snapshot }: { snapshot: DashboardOverviewSnapshot }) {
+  const rows = [
+    {
+      label: 'Factory',
+      cartons: snapshot.summary.factory.cartons,
+      pallets: snapshot.summary.factory.pallets,
+      units: snapshot.summary.factory.units,
+      count: `${formatNumber(snapshot.summary.factory.poCount)} POs`,
+    },
+    {
+      label: 'Transit',
+      cartons: snapshot.summary.transit.cartons,
+      pallets: snapshot.summary.transit.pallets,
+      units: snapshot.summary.transit.units,
+      count: `${formatNumber(snapshot.summary.transit.poCount)} POs`,
+    },
+    {
+      label: 'Warehouse',
+      cartons: snapshot.summary.warehouses.cartons,
+      pallets: snapshot.summary.warehouses.pallets,
+      units: snapshot.summary.warehouses.units,
+      count: `${formatNumber(snapshot.summary.warehouses.warehouseCount)} sites`,
+    },
+  ]
+  const totalCartons = rows.reduce((sum, row) => sum + row.cartons, 0)
+
   return (
-    <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-soft dark:border-slate-700 dark:bg-slate-900 sm:p-6">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-3">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-            Warehouses
-          </div>
-          <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                Cartons
-              </div>
-              <div className="mt-1 text-4xl font-semibold tracking-tight text-slate-950 dark:text-slate-50 sm:text-5xl">
-                {formatNumber(summary.cartons)}
-              </div>
-            </div>
-            <div className="pb-1 text-sm text-slate-500 dark:text-slate-400">
-              {formatNumber(summary.warehouseCount)} locations
-            </div>
-          </div>
-        </div>
+    <section className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
+      <table className="min-w-[720px] table-fixed text-sm">
+        <thead>
+          <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
+            <th className="w-[28%] py-3 pr-4">Stage</th>
+            <th className="w-[30%] px-4">Cartons</th>
+            <th className="px-4 text-right">Pallets</th>
+            <th className="px-4 text-right">Units</th>
+            <th className="pl-4 text-right">Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(row => {
+            const share = getShare(row.cartons, totalCartons)
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[22rem]">
-          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Pallets
-            </div>
-            <div className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-50">
-              {formatNumber(summary.pallets)}
-            </div>
-          </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 dark:border-slate-700/80 dark:bg-slate-800/40">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Units
-            </div>
-            <div className="mt-1 text-lg font-semibold text-slate-950 dark:text-slate-50">
-              {formatNumber(summary.units)}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function WarehouseTable({
-  summary,
-  warehouses,
-}: {
-  summary: DashboardOverviewSnapshot['summary']['warehouses']
-  warehouses: DashboardOverviewSnapshot['warehouses']
-}) {
-  return (
-    <section className="rounded-[28px] border border-slate-200 bg-white shadow-soft dark:border-slate-700 dark:bg-slate-900">
-      <div className="flex flex-col gap-4 border-b border-slate-200 px-5 py-5 dark:border-slate-700 sm:flex-row sm:items-end sm:justify-between sm:px-6">
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-slate-950 dark:text-slate-50">Warehouses</h2>
-          <div className="text-sm text-slate-500 dark:text-slate-400">Sorted by cartons.</div>
-        </div>
-        <div className="grid grid-cols-3 gap-3 text-right text-sm text-slate-600 dark:text-slate-300">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Locations
-            </div>
-            <div className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
-              {formatNumber(summary.warehouseCount)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Pallets
-            </div>
-            <div className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
-              {formatNumber(summary.pallets)}
-            </div>
-          </div>
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-              Units
-            </div>
-            <div className="mt-1 font-semibold text-slate-950 dark:text-slate-50">
-              {formatNumber(summary.units)}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              <th className="px-5 py-3 sm:px-6">Warehouse</th>
-              <th className="px-4 py-3 text-right">Cartons</th>
-              <th className="px-4 py-3 text-right">Pallets</th>
-              <th className="px-4 py-3 text-right">Units</th>
-              <th className="px-5 py-3 text-right sm:px-6">SKUs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {warehouses.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-5 py-12 text-center text-sm text-slate-500 dark:text-slate-400 sm:px-6"
-                >
-                  No warehouse stock posted yet.
+            return (
+              <tr key={row.label} className="border-t border-slate-200 dark:border-slate-800/80">
+                <td className="py-4 pr-4 text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {row.label}
                 </td>
-              </tr>
-            ) : null}
-            {warehouses.map(row => (
-              <tr
-                key={row.warehouseCode}
-                className="border-b border-slate-200/80 align-top last:border-b-0 dark:border-slate-800"
-              >
-                <td className="px-5 py-4 sm:px-6">
-                  <div className="flex flex-col gap-1">
-                    <div className="font-medium text-slate-950 dark:text-slate-50">
-                      {row.warehouseName}
+                <td className="px-4 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-16 text-right text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                      {formatNumber(row.cartons)}
+                    </span>
+                    <div className="h-2 min-w-24 flex-1 bg-slate-200 dark:bg-slate-900">
+                      <div className="h-full bg-teal-700/80" style={{ width: `${share}%` }} />
                     </div>
-                    <div className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-                      {row.warehouseCode}
-                    </div>
+                    <span className="w-10 text-right text-xs tabular-nums text-slate-500 dark:text-slate-500">
+                      {share}%
+                    </span>
                   </div>
-                </td>
-                <td className="px-4 py-4 text-right text-base font-semibold tabular-nums text-slate-950 dark:text-slate-50">
-                  {formatNumber(row.cartons)}
                 </td>
                 <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
                   {formatNumber(row.pallets)}
@@ -182,11 +80,86 @@ function WarehouseTable({
                 <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
                   {formatNumber(row.units)}
                 </td>
-                <td className="px-5 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300 sm:px-6">
-                  {formatNumber(row.skuCount)}
+                <td className="py-4 pl-4 text-right text-slate-500 dark:text-slate-400">
+                  {row.count}
                 </td>
               </tr>
-            ))}
+            )
+          })}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+function WarehouseTable({ warehouses }: { warehouses: DashboardOverviewSnapshot['warehouses'] }) {
+  const totalCartons = warehouses.reduce((sum, row) => sum + row.cartons, 0)
+
+  return (
+    <section className="min-w-0">
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+          Warehouses
+        </h2>
+      </div>
+
+      <div className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
+              <th className="py-3 pr-4">Warehouse</th>
+              <th className="px-4 py-3 text-right">Cartons</th>
+              <th className="px-4 py-3 text-right">Pallets</th>
+              <th className="px-4 py-3 text-right">Units</th>
+              <th className="px-4 py-3 text-right">SKUs</th>
+              <th className="py-3 pl-4 text-right">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {warehouses.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  className="py-10 text-center text-sm text-slate-500 dark:text-slate-500"
+                >
+                  No warehouse stock.
+                </td>
+              </tr>
+            ) : null}
+            {warehouses.map(row => {
+              const share = getShare(row.cartons, totalCartons)
+
+              return (
+                <tr
+                  key={row.warehouseCode}
+                  className="border-t border-slate-200 dark:border-slate-800/80"
+                >
+                  <td className="py-4 pr-4">
+                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                      {row.warehouseName}
+                    </div>
+                    <div className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
+                      {row.warehouseCode}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-right text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatNumber(row.cartons)}
+                  </td>
+                  <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                    {formatNumber(row.pallets)}
+                  </td>
+                  <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                    {formatNumber(row.units)}
+                  </td>
+                  <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                    {formatNumber(row.skuCount)}
+                  </td>
+                  <td className="py-4 pl-4 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                    {share}%
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -194,37 +167,70 @@ function WarehouseTable({
   )
 }
 
-export function DashboardOverviewBoard({
-  snapshot,
-}: {
-  snapshot: DashboardOverviewSnapshot
-}) {
+function WarehouseChart({ warehouses }: { warehouses: DashboardOverviewSnapshot['warehouses'] }) {
+  const chartData = warehouses.map(row => ({
+    name: row.warehouseCode,
+    cartons: row.cartons,
+  }))
+  const maxCartons = chartData.reduce((max, row) => Math.max(max, row.cartons), 0)
+  const scaleMax = maxCartons === 0 ? 1 : maxCartons
+
+  return (
+    <section className="min-w-0">
+      <div className="mb-3 flex items-end justify-between gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
+          Distribution
+        </h2>
+      </div>
+
+      <div className="border-y border-slate-200 py-4 dark:border-slate-800">
+        {chartData.length === 0 ? (
+          <div className="flex h-56 items-center justify-center text-sm text-slate-500 dark:text-slate-500">
+            No chart data.
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {chartData.map(row => {
+              const width = Math.round((row.cartons / scaleMax) * 100)
+
+              return (
+                <div
+                  key={row.name}
+                  className="grid grid-cols-[5.5rem_minmax(0,1fr)_4.5rem] items-center gap-3"
+                >
+                  <div className="truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    {row.name}
+                  </div>
+                  <div className="h-9 bg-slate-100 dark:bg-slate-900">
+                    <div
+                      className="h-full bg-teal-700/80"
+                      style={{ width: `${width}%` }}
+                      title={`${row.name}: ${formatNumber(row.cartons)} cartons`}
+                    />
+                  </div>
+                  <div className="text-right text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                    {formatNumber(row.cartons)}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+export function DashboardOverviewBoard({ snapshot }: { snapshot: DashboardOverviewSnapshot }) {
   const warehouses = [...snapshot.warehouses].sort((left, right) => right.cartons - left.cartons)
 
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,0.82fr)]">
-        <div className="space-y-4">
-          <WarehouseSummary summary={snapshot.summary.warehouses} />
-          <WarehouseTable summary={snapshot.summary.warehouses} warehouses={warehouses} />
-        </div>
+    <div className="space-y-7 text-slate-700 dark:text-slate-200">
+      <StageTable snapshot={snapshot} />
 
-        <div className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-1">
-          <CompactSummary
-            title="Factory"
-            cartons={snapshot.summary.factory.cartons}
-            pallets={snapshot.summary.factory.pallets}
-            units={snapshot.summary.factory.units}
-            detail={`${formatNumber(snapshot.summary.factory.poCount)} open POs`}
-          />
-          <CompactSummary
-            title="Transit"
-            cartons={snapshot.summary.transit.cartons}
-            pallets={snapshot.summary.transit.pallets}
-            units={snapshot.summary.transit.units}
-            detail={`${formatNumber(snapshot.summary.transit.poCount)} open POs`}
-          />
-        </div>
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.65fr)]">
+        <WarehouseTable warehouses={warehouses} />
+        <WarehouseChart warehouses={warehouses} />
       </div>
     </div>
   )

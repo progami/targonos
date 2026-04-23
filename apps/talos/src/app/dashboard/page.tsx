@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { DashboardLayout } from '@/components/layout/dashboard-layout'
-import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
+import { PageContainer, PageContent } from '@/components/layout/page-container'
 import { DashboardOverviewBoard } from '@/components/dashboard/dashboard-overview-board'
 import { PageLoading } from '@/components/ui/loading-spinner'
-import { LayoutDashboard } from '@/lib/lucide-icons'
 import type { DashboardOverviewSnapshot } from '@/lib/dashboard/dashboard-overview'
 import { useSession } from '@/hooks/usePortalSession'
 import { redirectToPortal } from '@/lib/portal'
@@ -76,25 +74,21 @@ export default function DashboardPage() {
 
   if (status === 'loading' || (status === 'authenticated' && loading)) {
     return (
-      <DashboardLayout>
-        <PageContainer>
-          <PageLoading />
-        </PageContainer>
-      </DashboardLayout>
+      <PageContainer>
+        <PageLoading />
+      </PageContainer>
     )
   }
 
   if (status === 'unauthenticated' || session === null) {
     return (
-      <DashboardLayout>
-        <PageContainer>
-          <PageContent>
-            <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-              Redirecting to login…
-            </div>
-          </PageContent>
-        </PageContainer>
-      </DashboardLayout>
+      <PageContainer>
+        <PageContent>
+          <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+            Redirecting to login…
+          </div>
+        </PageContent>
+      </PageContainer>
     )
   }
 
@@ -107,13 +101,13 @@ export default function DashboardPage() {
   }
 
   return (
-    <DashboardLayout>
-      <PageContainer>
-        <PageHeaderSection title="Dashboard" description="Operations" icon={LayoutDashboard} />
-        <PageContent>
-          <DashboardOverviewBoard snapshot={snapshot} />
-        </PageContent>
-      </PageContainer>
-    </DashboardLayout>
+    <PageContainer>
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950 sm:px-6 lg:px-8">
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
+      </header>
+      <PageContent>
+        <DashboardOverviewBoard snapshot={snapshot} />
+      </PageContent>
+    </PageContainer>
   )
 }
