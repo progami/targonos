@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button'
 import { PageTabs } from '@/components/ui/page-tabs'
 import { PageLoading } from '@/components/ui/loading-spinner'
 import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
-import { withBasePath } from '@/lib/utils/base-path'
 import { FileText, Plus, Truck, XCircle, FileEdit } from '@/lib/lucide-icons'
+import { AmazonShipmentsPanel } from './amazon-shipments-panel'
 import { FulfillmentOrdersPanel } from './fulfillment-orders-panel'
 import type { LucideIcon } from 'lucide-react'
 
@@ -126,6 +126,7 @@ function FulfillmentOrdersPageContent() {
           />
 
           <FulfillmentOrdersPanel statusFilter={currentStatus} />
+          <AmazonShipmentsPanel />
         </div>
       </PageContent>
     </PageContainer>
