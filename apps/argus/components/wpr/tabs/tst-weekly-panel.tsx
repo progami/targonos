@@ -32,11 +32,6 @@ import {
 } from '@/lib/wpr/panel-tokens'
 import { formatPercent } from '@/lib/wpr/format'
 
-type TstHeroContent = {
-  name: string
-  meta: string[]
-}
-
 function WeeklyGapChart({
   weekly,
   weekStartDates,
@@ -169,7 +164,6 @@ function WeeklyGapChart({
 }
 
 export default function TstWeeklyPanel({
-  heroContent,
   viewModel,
   changeEntries,
   historyLabel,
@@ -177,7 +171,6 @@ export default function TstWeeklyPanel({
   wowVisible,
   setWowVisible,
 }: {
-  heroContent: TstHeroContent
   viewModel: TstSelectionViewModel
   changeEntries: WprChangeLogEntry[]
   historyLabel: string
@@ -207,8 +200,6 @@ export default function TstWeeklyPanel({
 
   return (
     <WprAnalyticsPanel
-      title={heroContent.name}
-      meta={heroContent.meta}
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <WeeklyGapChart

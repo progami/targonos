@@ -7,6 +7,7 @@ test('dashboard shell passes change entries into all week-based WPR tabs', () =>
 
   assert.match(shellSource, /<ScpTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
   assert.match(shellSource, /<BusinessReportsTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
+  assert.match(shellSource, /<BrandMetricsTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
   assert.match(shellSource, /<CompareTab bundle=\{bundle\} changeEntries=\{chartChangeEntries\} \/>/)
 })
 
@@ -87,12 +88,14 @@ test('all week-based WPR charts use the shared change tooltip renderer', () => {
   const scpSource = readFileSync(new URL('./tabs/scp-tab.tsx', import.meta.url), 'utf8')
   const tstSource = readFileSync(new URL('./tabs/tst-weekly-panel.tsx', import.meta.url), 'utf8')
   const brSource = readFileSync(new URL('./tabs/business-reports-tab.tsx', import.meta.url), 'utf8')
+  const brandSource = readFileSync(new URL('./tabs/brand-metrics-tab.tsx', import.meta.url), 'utf8')
   const compareSource = readFileSync(new URL('./tabs/compare-tab.tsx', import.meta.url), 'utf8')
 
   assert.match(scpSource, /<WprChangeTooltipContent/)
   assert.match(tstSource, /<WprChangeTooltipContent/)
   assert.match(brSource, /<WprChangeTooltipContent/)
-  assert.equal(compareSource.match(/<WprChangeTooltipContent/g)?.length, 2)
+  assert.match(brandSource, /<WprChangeTooltipContent/)
+  assert.equal(compareSource.match(/<WprChangeTooltipContent/g)?.length, 1)
 })
 
 test('SQP, SCP, BR, and TST use one shared analytics panel shell', () => {
@@ -115,13 +118,29 @@ test('week-based analytics panels drop the summary metric strip above the charts
   const scpSource = readFileSync(new URL('./tabs/scp-tab.tsx', import.meta.url), 'utf8')
   const brSource = readFileSync(new URL('./tabs/business-reports-tab.tsx', import.meta.url), 'utf8')
   const tstSource = readFileSync(new URL('./tabs/tst-weekly-panel.tsx', import.meta.url), 'utf8')
+  const sqpTabSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+  const tstTabSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
 
   assert.doesNotMatch(analyticsPanelSource, /metricColumns/)
   assert.doesNotMatch(analyticsPanelSource, /metrics:/)
+  assert.doesNotMatch(analyticsPanelSource, /title:/)
+  assert.doesNotMatch(analyticsPanelSource, /meta:/)
+  assert.doesNotMatch(analyticsPanelSource, /<Stack/)
+  assert.doesNotMatch(analyticsPanelSource, /textSecondary/)
   assert.doesNotMatch(sqpSource, /metrics=\{/)
   assert.doesNotMatch(scpSource, /metrics=\{/)
   assert.doesNotMatch(brSource, /metrics=\{/)
   assert.doesNotMatch(tstSource, /metrics=\{/)
+  assert.doesNotMatch(sqpSource, /title=\{/)
+  assert.doesNotMatch(scpSource, /title=\{/)
+  assert.doesNotMatch(brSource, /title=\{/)
+  assert.doesNotMatch(tstSource, /title=\{/)
+  assert.doesNotMatch(sqpSource, /meta=\{/)
+  assert.doesNotMatch(scpSource, /meta=\{/)
+  assert.doesNotMatch(brSource, /meta=\{/)
+  assert.doesNotMatch(tstSource, /meta=\{/)
+  assert.doesNotMatch(sqpTabSource, /buildHeroContent/)
+  assert.doesNotMatch(tstTabSource, /buildHeroContent/)
 })
 
 test('SQP, SCP, BR, and TST use one shared selection panel shell', () => {
