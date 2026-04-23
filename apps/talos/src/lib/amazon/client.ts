@@ -1,8 +1,8 @@
 import 'server-only'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { getMarketplaceCurrencyCode } from '@/lib/amazon/fees'
-
-type SellingPartnerApiRegion = 'eu' | 'na' | 'fe'
+import { buildInboundShipmentsQuery, resolveInboundShipmentsMarketplaceId } from '@/lib/amazon/inbound-shipments'
+import { getAmazonSpApiConfigFromEnv, type AmazonSpApiConfig } from '@/lib/amazon/config'
 
 type SellingPartnerApiClient = {
   callAPI: (params: Record<string, unknown>) => Promise<unknown>
@@ -188,22 +188,6 @@ async function callAmazonApi<T>(tenantCode: TenantCode | undefined, params: Reco
   return (await client.callAPI(params)) as T
 }
 
-type AmazonSpApiConfig = {
-  region: SellingPartnerApiRegion
-  refreshToken: string
-  marketplaceId: string
-  appClientId: string
-  appClientSecret: string
-  sellerId?: string
-}
-
-const AMAZON_BASE_REQUIRED_ENV_VARS = [
-  'AMAZON_SP_APP_CLIENT_ID',
-  'AMAZON_SP_APP_CLIENT_SECRET',
-] as const
-
-const AMAZON_TENANT_REQUIRED_ENV_VARS = ['AMAZON_REFRESH_TOKEN'] as const
-
 const clientCache = new Map<string, SellingPartnerApiClient>()
 
 // Pricing cache to avoid repeated API calls for the same ASIN
@@ -237,33 +221,6 @@ function setCachedPrice(asin: string, tenantCode: TenantCode | undefined, price:
       }
     }
   }
-}
-
-function normalizeRegion(value: string): SellingPartnerApiRegion | null {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'eu' || normalized === 'na' || normalized === 'fe') {
-    return normalized
-  }
-  return null
-}
-
-function readEnvVar(name: string): string | undefined {
-  const value = process.env[name]
-  if (!value) return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-function getDefaultMarketplaceId(tenantCode: TenantCode | undefined): string | undefined {
-  if (tenantCode === 'US') return 'ATVPDKIKX0DER'
-  if (tenantCode === 'UK') return 'A1F83G8C2ARO7P'
-  return undefined
-}
-
-function getDefaultRegion(tenantCode: TenantCode | undefined): SellingPartnerApiRegion {
-  if (tenantCode === 'US') return 'na'
-  if (tenantCode === 'UK') return 'eu'
-  return 'eu'
 }
 
 function extractAmazonErrors(response: { errors?: AmazonErrorDetail[] } | null | undefined): string[] {
@@ -458,72 +415,6 @@ function toRecordArray(values: unknown[]): Record<string, unknown>[] {
     .filter((value): value is Record<string, unknown> => Boolean(value))
 }
 
-function getAmazonSpApiConfigFromEnv(tenantCode?: TenantCode): AmazonSpApiConfig | null {
-  const isProduction = process.env.NODE_ENV === 'production'
-  const anyAmazonEnvConfigured =
-    AMAZON_BASE_REQUIRED_ENV_VARS.some((name) => Boolean(readEnvVar(name))) ||
-    AMAZON_TENANT_REQUIRED_ENV_VARS.some((name) => Boolean(readEnvVar(name) || readEnvVar(`${name}_US`) || readEnvVar(`${name}_UK`)))
-
-  if (!anyAmazonEnvConfigured) {
-    if (isProduction) {
-      throw new Error(
-        'Amazon SP-API not configured. Missing env vars: AMAZON_SP_APP_CLIENT_ID, AMAZON_SP_APP_CLIENT_SECRET, AMAZON_REFRESH_TOKEN[_US|_UK]'
-      )
-    }
-
-    return null
-  }
-
-  const appClientId = readEnvVar('AMAZON_SP_APP_CLIENT_ID')
-  const appClientSecret = readEnvVar('AMAZON_SP_APP_CLIENT_SECRET')
-
-  const refreshToken = tenantCode
-    ? readEnvVar(`AMAZON_REFRESH_TOKEN_${tenantCode}`)
-    : readEnvVar('AMAZON_REFRESH_TOKEN')
-
-  const marketplaceId =
-    (tenantCode ? readEnvVar(`AMAZON_MARKETPLACE_ID_${tenantCode}`) : readEnvVar('AMAZON_MARKETPLACE_ID')) ||
-    getDefaultMarketplaceId(tenantCode)
-
-  const regionRaw =
-    (tenantCode ? readEnvVar(`AMAZON_SP_API_REGION_${tenantCode}`) : readEnvVar('AMAZON_SP_API_REGION')) ||
-    getDefaultRegion(tenantCode)
-  const region = normalizeRegion(regionRaw)
-
-  const sellerId = tenantCode
-    ? readEnvVar(`AMAZON_SELLER_ID_${tenantCode}`)
-    : readEnvVar('AMAZON_SELLER_ID')
-
-  const missing: string[] = []
-  if (!appClientId) missing.push('AMAZON_SP_APP_CLIENT_ID')
-  if (!appClientSecret) missing.push('AMAZON_SP_APP_CLIENT_SECRET')
-
-  if (!refreshToken) {
-    missing.push(tenantCode ? `AMAZON_REFRESH_TOKEN_${tenantCode}` : 'AMAZON_REFRESH_TOKEN')
-  }
-  if (!marketplaceId) {
-    missing.push(tenantCode ? `AMAZON_MARKETPLACE_ID_${tenantCode}` : 'AMAZON_MARKETPLACE_ID')
-  }
-
-  if (missing.length > 0) {
-    throw new Error(`Amazon SP-API not configured. Missing env vars: ${missing.join(', ')}`)
-  }
-
-  if (!region) {
-    const key = tenantCode ? `AMAZON_SP_API_REGION_${tenantCode}` : 'AMAZON_SP_API_REGION'
-    throw new Error(`Invalid ${key} value "${regionRaw}". Expected one of: eu, na, fe.`)
-  }
-
-  return {
-    region,
-    refreshToken,
-    marketplaceId,
-    appClientId,
-    appClientSecret,
-    sellerId: sellerId || undefined,
-  }
-}
-
 function getCacheKey(config: AmazonSpApiConfig) {
   return `${config.region}:${config.marketplaceId}:${config.refreshToken}`
 }
@@ -649,23 +540,16 @@ export async function getInventory(tenantCode?: TenantCode) {
 
 export async function getInboundShipments(
   tenantCode?: TenantCode,
-  options?: { nextToken?: string; includeCancelled?: boolean }
+  options?: { nextToken?: string }
 ) {
   try {
     const config = getAmazonSpApiConfigFromEnv(tenantCode)
-    const nextToken = options?.nextToken?.trim()
-    const includeCancelled = options?.includeCancelled === true
-    const shipmentStatusList = includeCancelled
-      ? ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED', 'CANCELLED', 'DELETED']
-      : ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED']
-    const baseQuery = {
-      MarketplaceId: config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID,
-      ShipmentStatusList: shipmentStatusList,
-    }
+    const marketplaceId = resolveInboundShipmentsMarketplaceId(tenantCode, config?.marketplaceId)
+
     const response = await callAmazonApi<unknown>(tenantCode, {
       operation: 'getShipments',
       endpoint: 'fulfillmentInbound',
-      query: nextToken ? { ...baseQuery, NextToken: nextToken } : baseQuery,
+      query: buildInboundShipmentsQuery(marketplaceId, options?.nextToken),
     })
     return response
   } catch (_error) {

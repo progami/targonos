@@ -33,6 +33,12 @@ function getMockData(operation: string) {
  { sellerSku: 'TEST-SKU-003', asin: 'B001TEST08', totalQuantity: 0, fnSku: 'X001TEST08' },
  ]
  }
+ case 'getShipments':
+ return {
+ payload: {
+ ShipmentData: [],
+ },
+ }
  case 'searchListingsItems':
  return {
  items: [
@@ -85,10 +91,10 @@ export async function getInventory() {
 
 export async function getInboundShipments(
   _tenantCode?: unknown,
-  _options?: { nextToken?: string; includeCancelled?: boolean }
+  _options?: { nextToken?: string }
 ) {
  // console.log('Mock: Fetching inbound shipments')
- return { shipments: [] }
+ return getMockData('getShipments')
 }
 
 export async function getOrders(_createdAfter?: Date) {

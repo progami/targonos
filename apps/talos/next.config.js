@@ -13,9 +13,14 @@ const hasDuplicatedBasePath =
 const basePath = hasDuplicatedBasePath
   ? `/${basePathSegments.slice(0, basePathHalfLen).join('/')}`
   : rawBasePathWithoutTrailingSlash
-const assetPrefix = basePath || ''
+const isDevelopment = process.env.NODE_ENV === 'development'
+const devAssetVersion = process.env.TALOS_DEV_ASSET_VERSION ?? Date.now().toString(36)
+const devAssetPrefix = `/_dev-assets/${devAssetVersion}`
+const assetPrefix = isDevelopment
+  ? `${basePath}${devAssetPrefix}`
+  : basePath
 const staticAssetCacheControl =
-  process.env.NODE_ENV === 'development'
+  isDevelopment
     ? 'no-store, no-cache, must-revalidate'
     : 'public, max-age=31536000, immutable'
 
@@ -132,6 +137,15 @@ const nextConfig = {
             value: staticAssetCacheControl
           }
         ]
+      },
+      {
+        source: `${devAssetPrefix}/_next/static/:path*`,
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: staticAssetCacheControl
+          }
+        ]
       }
     ]
   },
@@ -139,11 +153,18 @@ const nextConfig = {
   // Support `/talos/*` URLs when BASE_PATH is not set.
   // When BASE_PATH is `/talos`, Next strips the basePath before matching rewrites.
   async rewrites() {
+    const devAssetRewrites = isDevelopment
+      ? [{ source: `${devAssetPrefix}/_next/static/:path*`, destination: '/_next/static/:path*' }]
+      : []
+
     if (basePath) {
-      return []
+      return devAssetRewrites
     }
 
-    return [{ source: '/talos/:path*', destination: '/:path*' }]
+    return [
+      ...devAssetRewrites,
+      { source: '/talos/:path*', destination: '/:path*' },
+    ]
   },
   
   // Environment variables validation
