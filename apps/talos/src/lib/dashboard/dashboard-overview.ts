@@ -37,6 +37,7 @@ export interface DashboardOverviewMovementInput {
   id: string
   transactionType: string
   transactionDate: Date
+  createdAt: Date
   warehouseCode: string
   warehouseName: string
   skuCode: string
@@ -160,7 +161,19 @@ function buildRecentMovements(
 ) {
   return movements
     .filter(movement => (direction === 'in' ? movement.cartonsIn > 0 : movement.cartonsOut > 0))
-    .sort((left, right) => right.transactionDate.getTime() - left.transactionDate.getTime())
+    .sort((left, right) => {
+      const transactionDateDelta = right.transactionDate.getTime() - left.transactionDate.getTime()
+      if (transactionDateDelta !== 0) {
+        return transactionDateDelta
+      }
+
+      const createdAtDelta = right.createdAt.getTime() - left.createdAt.getTime()
+      if (createdAtDelta !== 0) {
+        return createdAtDelta
+      }
+
+      return right.id.localeCompare(left.id)
+    })
     .slice(0, RECENT_MOVEMENT_LIMIT)
     .map(movement => mapDashboardMovement(movement, direction))
 }

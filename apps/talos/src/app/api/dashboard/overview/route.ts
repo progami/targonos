@@ -133,6 +133,7 @@ export const GET = withAuth(async (_request, session) => {
           id: transaction.id,
           transactionType: transaction.transactionType,
           transactionDate: transaction.transactionDate,
+          createdAt: transaction.createdAt,
           warehouseCode: transaction.warehouseCode,
           warehouseName: transaction.warehouseName,
           skuCode: transaction.skuCode,

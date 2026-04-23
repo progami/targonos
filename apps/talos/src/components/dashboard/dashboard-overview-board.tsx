@@ -21,6 +21,7 @@ const numberFormatter = new Intl.NumberFormat('en-US')
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
   day: '2-digit',
+  timeZone: 'UTC',
 })
 
 const metricOptions: Array<{ value: InventoryMetric; label: string }> = [

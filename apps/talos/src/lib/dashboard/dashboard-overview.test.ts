@@ -285,6 +285,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
         id: 'old-receive',
         transactionType: 'RECEIVE',
         transactionDate: new Date('2026-04-10T12:00:00.000Z'),
+        createdAt: new Date('2026-04-10T12:01:00.000Z'),
         warehouseCode: 'TCL-CHINO',
         warehouseName: 'Tactical Warehouse Solutions',
         skuCode: 'SKU-OLD',
@@ -300,6 +301,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
         id: 'recent-receive',
         transactionType: 'RECEIVE',
         transactionDate: new Date('2026-04-13T12:00:00.000Z'),
+        createdAt: new Date('2026-04-13T12:01:00.000Z'),
         warehouseCode: 'TCL-CHINO',
         warehouseName: 'Tactical Warehouse Solutions',
         skuCode: 'SKU-IN',
@@ -315,6 +317,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
         id: 'recent-ship',
         transactionType: 'SHIP',
         transactionDate: new Date('2026-04-14T12:00:00.000Z'),
+        createdAt: new Date('2026-04-14T12:01:00.000Z'),
         warehouseCode: 'AMZN-US',
         warehouseName: 'Amazon FBA US',
         skuCode: 'SKU-OUT',
@@ -353,6 +356,36 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
   })
   assert.equal(snapshot.recentOut[0].pallets, 0)
   assert.equal(snapshot.recentOut[0].carriesPallets, false)
+})
+
+test('buildDashboardOverviewSnapshot uses createdAt to rank same-day recent movements', () => {
+  const movements = Array.from({ length: 6 }, (_, index) => ({
+    id: `same-day-${index + 1}`,
+    transactionType: 'RECEIVE',
+    transactionDate: new Date('2026-04-15T00:00:00.000Z'),
+    createdAt: new Date(`2026-04-15T00:0${index}:00.000Z`),
+    warehouseCode: 'TCL-CHINO',
+    warehouseName: 'Tactical Warehouse Solutions',
+    skuCode: `SKU-${index + 1}`,
+    skuDescription: `Same day item ${index + 1}`,
+    lotRef: `LOT-${index + 1}`,
+    cartonsIn: 1,
+    cartonsOut: 0,
+    storagePalletsIn: 1,
+    shippingPalletsOut: 0,
+    unitsPerCarton: 10,
+  }))
+
+  const snapshot = buildDashboardOverviewSnapshot({
+    purchaseOrders: [],
+    balances: [],
+    movements,
+  })
+
+  assert.deepEqual(
+    snapshot.recentIn.map(row => row.id),
+    ['same-day-6', 'same-day-5', 'same-day-4', 'same-day-3', 'same-day-2']
+  )
 })
 
 test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed grouping key', () => {
