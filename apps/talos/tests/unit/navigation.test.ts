@@ -11,6 +11,10 @@ test('amazon workspace exposes the live tool surfaces in Talos', () => {
     AMAZON_WORKSPACE_TOOLS.map((tool) => tool.href),
     ['/amazon/fba-fee-discrepancies']
   )
+  assert.deepEqual(
+    AMAZON_WORKSPACE_TOOLS.map((tool) => tool.name),
+    ['SKU Info']
+  )
 
   assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/amazon'), false)
   assert.equal(AMAZON_WORKSPACE_TOOLS.some((tool) => tool.href === '/market/shipment-planning'), false)
@@ -26,6 +30,10 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
   assert.deepEqual(
     amazonSection.items.map((item) => item.href),
     ['/amazon/fba-fee-discrepancies']
+  )
+  assert.deepEqual(
+    amazonSection.items.map((item) => item.name),
+    ['SKU Info']
   )
 
   const operationsSection = staffNavigation.find((section) => section.title === 'Operations')
@@ -90,4 +98,15 @@ test('talos no longer ships the FBA fee tables page or SKU link', () => {
     false,
     'SKU panel should not link to the removed FBA fee tables page'
   )
+})
+
+test('amazon SKU info page uses the current product label', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const pageSource = readFileSync(
+    path.join(talosRoot, 'src/app/amazon/fba-fee-discrepancies/page.tsx'),
+    'utf8'
+  )
+
+  assert.equal(pageSource.includes('title="SKU Info"'), true)
+  assert.equal(pageSource.includes('title="FBA Fee Discrepancies"'), false)
 })

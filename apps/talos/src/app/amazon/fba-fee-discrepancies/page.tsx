@@ -30,6 +30,7 @@ import {
   Clock,
   DollarSign,
   Loader2,
+  Package,
   Search,
   XCircle,
 } from '@/lib/lucide-icons'
@@ -123,7 +124,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error ?? 'Failed to load fee discrepancies')
+        throw new Error(payload?.error ?? 'Failed to load SKU info')
       }
 
       const payload = await response.json()
@@ -131,7 +132,7 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
       setSkus(Array.isArray(payload?.skus) ? payload.skus : [])
       setTotalRows(typeof payload?.total === 'number' ? payload.total : 0)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load fee discrepancies')
+      toast.error(error instanceof Error ? error.message : 'Failed to load SKU info')
       setSkus([])
       setTotalRows(0)
     } finally {
@@ -196,9 +197,9 @@ export default function AmazonFbaFeeDiscrepanciesPage() {
   return (
     <PageContainer>
       <PageHeaderSection
-        title="FBA Fee Discrepancies"
+        title="SKU Info"
         description="Amazon"
-        icon={DollarSign}
+        icon={Package}
         backHref="/dashboard"
         backLabel="Dashboard"
         metadata={<AmazonWorkspaceSwitcher currentHref="/amazon/fba-fee-discrepancies" />}
