@@ -34,11 +34,6 @@ import {
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
 
-type ScpHeroContent = {
-  name: string
-  meta: string[]
-}
-
 function ScpWeeklyChart({
   weekly,
   weekStartDates,
@@ -201,13 +196,6 @@ function ScpWeeklyChart({
   )
 }
 
-function buildHeroContent(): ScpHeroContent {
-  return {
-    name: 'Search Catalog Performance',
-    meta: ['Catalog search funnel'],
-  }
-}
-
 export default function ScpTab({
   bundle,
   changeEntries,
@@ -287,7 +275,6 @@ export default function ScpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const heroContent = buildHeroContent()
   const historyLabel = formatWeekWindowLabel(bundle.scp.meta.baselineWindow, weekStartDates)
   const footerItems = [
     `Source: SCP`,
@@ -300,8 +287,6 @@ export default function ScpTab({
   return (
     <Stack spacing={2}>
       <WprAnalyticsPanel
-        title={heroContent.name}
-        meta={heroContent.meta}
         footer={<WprAnalyticsFooter items={footerItems} />}
       >
         <ScpWeeklyChart

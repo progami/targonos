@@ -24,11 +24,6 @@ import {
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
 
-type SqpHeroContent = {
-  name: string
-  meta: string[]
-}
-
 type ChartPoint = {
   week_label: string
   start_date: string
@@ -661,7 +656,6 @@ function SqpWeeklyChart({
 }
 
 export default function SqpWeeklyPanel({
-  heroContent,
   weekly,
   changeEntries,
   wowVisible,
@@ -672,7 +666,6 @@ export default function SqpWeeklyPanel({
   totalTermCount,
   historyLabel,
 }: {
-  heroContent: SqpHeroContent
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprSqpWowVisible
@@ -693,8 +686,6 @@ export default function SqpWeeklyPanel({
 
   return (
     <WprAnalyticsPanel
-      title={heroContent.name}
-      meta={heroContent.meta}
       footer={<WprAnalyticsFooter items={footerItems} />}
     >
       <SqpWeeklyChart

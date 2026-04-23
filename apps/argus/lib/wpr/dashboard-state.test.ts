@@ -8,6 +8,7 @@ import {
   getLegacyWprRedirect,
   switchDashboardWeek,
   toggleSetMember,
+  WPR_TABS,
   wprStateReviver,
   wprStateReplacer,
   type WprTab,
@@ -44,6 +45,14 @@ test('legacy competitor route maps to the TST tab', () => {
 
 test('missing query params default the shell to SQP', () => {
   assert.equal(getInitialWprTab(new URLSearchParams()), 'sqp')
+})
+
+test('brand query param opens the Brand WPR tab', () => {
+  assert.equal(getInitialWprTab(new URLSearchParams('tab=brand')), 'brand')
+})
+
+test('brand metrics tab is labeled BM in the WPR navigation', () => {
+  assert.deepEqual(WPR_TABS.find((tab) => tab.id === 'brand'), { id: 'brand', label: 'BM' })
 })
 
 test('switchDashboardWeek snapshots the current week and clears state for an uncached week', () => {

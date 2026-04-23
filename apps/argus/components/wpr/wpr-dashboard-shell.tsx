@@ -11,6 +11,7 @@ import {
 } from '@/hooks/use-wpr';
 import { getInitialWprTab } from '@/lib/wpr/dashboard-state';
 import { useWprStore } from '@/stores/wpr-store';
+import BrandMetricsTab from './tabs/brand-metrics-tab';
 import BusinessReportsTab from './tabs/business-reports-tab';
 import ChangelogTab from './tabs/changelog-tab';
 import CompareTab from './tabs/compare-tab';
@@ -20,6 +21,9 @@ import SqpTab from './tabs/sqp-tab';
 import TstTab from './tabs/tst-tab';
 import WprTopBar from './wpr-top-bar';
 
+const BUNDLE_TABS = new Set(['sqp', 'scp', 'br', 'tst', 'brand', 'compare']);
+const CHART_CHANGE_ENTRY_TABS = new Set(['sqp', 'scp', 'br', 'tst', 'brand', 'compare']);
+
 export default function WprDashboardShell() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -28,8 +32,8 @@ export default function WprDashboardShell() {
   const setActiveTab = useWprStore((state) => state.setActiveTab);
   const setSelectedWeek = useWprStore((state) => state.setSelectedWeek);
   const weeksQuery = useWprWeeksQuery();
-  const needsBundle = activeTab === 'sqp' || activeTab === 'scp' || activeTab === 'br' || activeTab === 'tst' || activeTab === 'compare';
-  const needsChartChangeEntries = activeTab === 'sqp' || activeTab === 'scp' || activeTab === 'br' || activeTab === 'tst' || activeTab === 'compare';
+  const needsBundle = BUNDLE_TABS.has(activeTab);
+  const needsChartChangeEntries = CHART_CHANGE_ENTRY_TABS.has(activeTab);
   const bundleWeek = weeksQuery.data?.defaultWeek ?? null;
   const bundleQuery = useWprWeekBundleQuery(bundleWeek, needsBundle);
   const chartChangeLogQuery = useWprChangeLogWeekQuery(bundleWeek, needsChartChangeEntries);
@@ -139,6 +143,7 @@ export default function WprDashboardShell() {
         {activeTab === 'scp' && bundle !== undefined && chartChangeEntries !== undefined ? <ScpTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
         {activeTab === 'br' && bundle !== undefined && chartChangeEntries !== undefined ? <BusinessReportsTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
         {activeTab === 'tst' && bundle !== undefined && chartChangeEntries !== undefined ? <TstTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
+        {activeTab === 'brand' && bundle !== undefined && chartChangeEntries !== undefined ? <BrandMetricsTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
         {activeTab === 'changelog' && changelogEntries !== undefined ? (
           <ChangelogTab
             entries={changelogEntries}
