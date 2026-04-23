@@ -5,31 +5,21 @@ import { useSession } from '@/hooks/usePortalSession'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import {
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Filter,
-  BookOpen,
-  Building,
-} from '@/lib/lucide-icons'
+import { ArrowUpDown, ArrowUp, ArrowDown, Filter, BookOpen } from '@/lib/lucide-icons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner, PageLoading } from '@/components/ui/loading-spinner'
-import { PageTabs } from '@/components/ui/page-tabs'
-import { InventoryPipelineTab } from '@/components/operations/inventory-pipeline-tab'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
 import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
-import { usePageState } from '@/lib/store/page-state'
 import {
   useInventoryFilters,
   type InventoryBalance,
   type SortKey,
 } from '@/hooks/useInventoryFilters'
-import { getMovementTypeFromTransaction, getMovementMultiplier } from '@/lib/utils/movement-types'
+import { getMovementTypeFromTransaction } from '@/lib/utils/movement-types'
 
 const LEDGER_TIME_FORMAT = 'MMM d, yyyy h:mm a'
 
@@ -56,21 +46,17 @@ interface InventoryResponse {
   pagination?: {
     totalCount: number
   }
-  summary?: InventorySummary
+  summary: InventorySummary
 }
-
-type InventoryTab = 'ledger' | 'analytics'
-
 const PAGE_KEY = '/operations/inventory'
 
 function InventoryPage() {
   const { data: session, status } = useSession()
   const router = useRouter()
-  const pageState = usePageState(PAGE_KEY)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<InventoryTab>('ledger')
   const [balances, setBalances] = useState<InventoryBalance[]>([])
   const [summary, setSummary] = useState<InventorySummary | null>(null)
+  const [loadError, setLoadError] = useState<Error | null>(null)
 
   // Use the inventory filters hook for filtering, sorting, and persistence
   const {
@@ -106,28 +92,37 @@ function InventoryPage() {
   const fetchBalances = useCallback(async () => {
     try {
       setLoading(true)
+      setLoadError(null)
 
       const response = await fetch(withBasePath('/api/inventory/balances'), {
         credentials: 'include',
       })
+
+      const payload = (await response.json()) as InventoryResponse | { error: string }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        toast.error(`Failed to load inventory balances: ${errorData.error || response.statusText}`)
-        return
+        if (!('error' in payload) || typeof payload.error !== 'string') {
+          throw new Error('Inventory balances request failed')
+        }
+
+        throw new Error(payload.error)
       }
 
-      const payload: InventoryResponse | InventoryBalance[] = await response.json()
-
-      if (Array.isArray(payload)) {
-        setBalances(payload)
-        setSummary(null)
-      } else {
-        setBalances(payload.data)
-        setSummary(payload.summary ?? null)
+      if (!('data' in payload) || !Array.isArray(payload.data)) {
+        throw new Error('Inventory balances payload missing data')
       }
-    } catch (_error) {
-      toast.error('Failed to load inventory balances')
-      setSummary(null)
+
+      if (!('summary' in payload) || payload.summary === null || payload.summary === undefined) {
+        throw new Error('Inventory balances payload missing summary')
+      }
+
+      setBalances(payload.data)
+      setSummary(payload.summary)
+    } catch (error) {
+      const resolvedError =
+        error instanceof Error ? error : new Error('Failed to load inventory balances')
+      setLoadError(resolvedError)
+      toast.error(resolvedError.message)
     } finally {
       setLoading(false)
     }
@@ -139,28 +134,12 @@ function InventoryPage() {
     }
   }, [fetchBalances, status])
 
-  useEffect(() => {
-    if (pageState.activeTab === 'analytics') {
-      setActiveTab('analytics')
-      return
-    }
-
-    if (pageState.activeTab === 'ledger') {
-      setActiveTab('ledger')
-    }
-  }, [pageState.activeTab])
-
   const tableTotals = useMemo(() => {
     return processedBalances.reduce(
       (acc, balance) => {
-        const multiplier = getMovementMultiplier(balance.lastTransactionType)
-        const baseCartons = Math.abs(balance.currentCartons)
-        const basePallets = Math.abs(balance.currentPallets)
-        const baseUnits = Math.abs(balance.currentUnits)
-
-        acc.cartons += multiplier === 0 ? balance.currentCartons : multiplier * baseCartons
-        acc.pallets += multiplier === 0 ? balance.currentPallets : multiplier * basePallets
-        acc.units += multiplier === 0 ? balance.currentUnits : multiplier * baseUnits
+        acc.cartons += balance.currentCartons
+        acc.pallets += balance.currentPallets
+        acc.units += balance.currentUnits
         return acc
       },
       { cartons: 0, pallets: 0, units: 0 }
@@ -182,46 +161,6 @@ function InventoryPage() {
     [sortConfig]
   )
 
-  const metrics = useMemo(() => {
-    const totalCartons = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentCartons), 0)
-    const totalPallets = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentPallets), 0)
-    const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
-    const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
-    const lotsWithInventoryFallback = balances.filter(balance => balance.currentCartons > 0).length
-    const totalLotCountFallback = balances.length
-    const lotsOutOfStockFallback = Math.max(totalLotCountFallback - lotsWithInventoryFallback, 0)
-
-    return {
-      totalCartons,
-      totalPallets,
-      uniqueWarehouses,
-      summary: {
-        totalSkuCount: summary?.totalSkuCount ?? uniqueSkusFallback,
-        totalLotCount: summary?.totalLotCount ?? totalLotCountFallback,
-        lotsWithInventory: summary?.lotsWithInventory ?? lotsWithInventoryFallback,
-        lotsOutOfStock: summary?.lotsOutOfStock ?? lotsOutOfStockFallback,
-      },
-    }
-  }, [balances, summary])
-
-  const inventoryTabs = useMemo(
-    () => [
-      {
-        value: 'ledger',
-        label: 'Ledger',
-        icon: BookOpen,
-        count: balances.length,
-      },
-      {
-        value: 'analytics',
-        label: 'Analytics',
-        icon: Building,
-        count: metrics.uniqueWarehouses,
-      },
-    ],
-    [balances.length, metrics.uniqueWarehouses]
-  )
-
   const baseFilterInputClass =
     'w-full rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
 
@@ -233,598 +172,573 @@ function InventoryPage() {
     )
   }
 
+  if (loadError !== null) {
+    throw loadError
+  }
+
+  if (!loading && summary === null) {
+    throw new Error('Inventory summary is required')
+  }
+
   return (
     <PageContainer>
       <PageHeaderSection title="Inventory" description="Operations" icon={BookOpen} />
       <PageContent className="flex-1 overflow-hidden px-4 py-6 sm:px-6 lg:px-8 flex flex-col">
         <div className="flex flex-col gap-6 flex-1 min-h-0">
-          <div className="flex items-center justify-between gap-4">
-            <PageTabs
-              tabs={inventoryTabs}
-              value={activeTab}
-              onChange={(value) => {
-                pageState.setActiveTab(value)
-                setActiveTab(value as InventoryTab)
-              }}
-              variant="underline"
-            />
-          </div>
+          <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden flex-1">
+            <div className="relative min-h-0 overflow-auto scrollbar-gutter-stable flex-1">
+              <table className="w-full min-w-[1100px] table-auto text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <span>Source</span>
+                    </th>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
+                          onClick={() => handleSort('warehouse')}
+                        >
+                          Warehouse
+                          {getSortIcon('warehouse')}
+                        </button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter warehouses"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['warehouse'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Warehouse filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['warehouse'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                              {uniqueWarehouseOptions.map(option => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 text-sm text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.warehouse.includes(option.value)}
+                                    onChange={() =>
+                                      toggleMultiValueFilter('warehouse', option.value)
+                                    }
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  <span className="flex-1 text-sm">{option.label}</span>
+                                </label>
+                              ))}
+                              {uniqueWarehouseOptions.length === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  No warehouse options available.
+                                </p>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
+                          onClick={() => handleSort('sku')}
+                        >
+                          SKU
+                          {getSortIcon('sku')}
+                        </button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter SKUs"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['sku'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                SKU filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['sku'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                              {uniqueSkuOptions.map(option => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 text-sm text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.sku.includes(option.value)}
+                                    onChange={() => toggleMultiValueFilter('sku', option.value)}
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  <span className="flex-1 text-sm">{option.label}</span>
+                                </label>
+                              ))}
+                              {uniqueSkuOptions.length === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  No SKU options available.
+                                </p>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                    <th className="w-48 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        <span>Description</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter SKU descriptions"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['skuDescription'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="w-64 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                SKU description filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['skuDescription'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={columnFilters.skuDescription}
+                              onChange={event =>
+                                updateColumnFilter('skuDescription', event.target.value)
+                              }
+                              placeholder="Search SKU description"
+                              className={baseFilterInputClass}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
+                          onClick={() => handleSort('lot')}
+                        >
+                          Lot
+                          {getSortIcon('lot')}
+                        </button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter lot values"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['lot'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Lot filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['lot'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
+                              {uniqueLotOptions.map(option => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 text-sm text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.lot.includes(option.value)}
+                                    onChange={() => toggleMultiValueFilter('lot', option.value)}
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  <span className="flex-1 text-sm">{option.label}</span>
+                                </label>
+                              ))}
+                              {uniqueLotOptions.length === 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                  No lot options available.
+                                </p>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                    <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <span>Ref ID</span>
+                    </th>
+                    <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
+                        onClick={() => handleSort('cartons')}
+                      >
+                        Ctns
+                        {getSortIcon('cartons')}
+                      </button>
+                    </th>
+                    <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
+                        onClick={() => handleSort('pallets')}
+                      >
+                        Plts
+                        {getSortIcon('pallets')}
+                      </button>
+                    </th>
+                    <th className="w-24 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
+                        onClick={() => handleSort('units')}
+                      >
+                        Units
+                        {getSortIcon('units')}
+                      </button>
+                    </th>
+                    <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-1">
+                        <span>Type</span>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter type"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['movement'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-48 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Type filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['movement'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              {[
+                                { value: 'positive' as const, label: 'Inbound' },
+                                { value: 'negative' as const, label: 'Outbound' },
+                              ].map(option => (
+                                <label
+                                  key={option.value}
+                                  className="flex items-center gap-2 text-sm text-foreground"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={columnFilters.movement.includes(option.value)}
+                                    onChange={() =>
+                                      updateColumnFilter(
+                                        'movement',
+                                        columnFilters.movement.includes(option.value)
+                                          ? columnFilters.movement.filter(v => v !== option.value)
+                                          : [...columnFilters.movement, option.value]
+                                      )
+                                    }
+                                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                                  />
+                                  <span className="flex-1 text-sm">{option.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                    <th className="w-40 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
+                      <div className="flex items-center justify-between gap-1">
+                        <button
+                          type="button"
+                          className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
+                          onClick={() => handleSort('lastTransaction')}
+                        >
+                          Transaction Date
+                          {getSortIcon('lastTransaction')}
+                        </button>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label="Filter latest transactions"
+                              className={cn(
+                                'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
+                                isFilterActive(['lastTransaction'])
+                                  ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
+                                  : 'hover:bg-muted hover:text-primary'
+                              )}
+                            >
+                              <Filter className="h-3.5 w-3.5" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-64 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-foreground">
+                                Transaction filter
+                              </span>
+                              <button
+                                type="button"
+                                className="text-xs font-medium text-primary hover:underline"
+                                onClick={() => clearColumnFilter(['lastTransaction'])}
+                              >
+                                Clear
+                              </button>
+                            </div>
+                            <input
+                              type="text"
+                              value={columnFilters.lastTransaction}
+                              onChange={event =>
+                                updateColumnFilter('lastTransaction', event.target.value)
+                              }
+                              placeholder="Search type or date"
+                              className={baseFilterInputClass}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </th>
+                  </tr>
+                </thead>
 
-          {activeTab === 'analytics' ? (
-            <InventoryPipelineTab
-              balances={balances}
-              loadingBalances={loading}
-              enabled={activeTab === 'analytics'}
-            />
-          ) : (
-            <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden flex-1">
-              <div className="relative min-h-0 overflow-auto scrollbar-gutter-stable flex-1">
-                <table className="w-full min-w-[1100px] table-auto text-sm">
-                  <thead>
-                    <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                      <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <span>Source</span>
-                      </th>
-                      <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                            onClick={() => handleSort('warehouse')}
-                          >
-                            Warehouse
-                            {getSortIcon('warehouse')}
-                          </button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter warehouses"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['warehouse'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-64 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  Warehouse filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['warehouse'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                                {uniqueWarehouseOptions.map(option => (
-                                  <label
-                                    key={option.value}
-                                    className="flex items-center gap-2 text-sm text-foreground"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={columnFilters.warehouse.includes(option.value)}
-                                      onChange={() =>
-                                        toggleMultiValueFilter('warehouse', option.value)
-                                      }
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                    />
-                                    <span className="flex-1 text-sm">{option.label}</span>
-                                  </label>
-                                ))}
-                                {uniqueWarehouseOptions.length === 0 && (
-                                  <p className="text-xs text-muted-foreground">
-                                    No warehouse options available.
-                                  </p>
-                                )}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
-                      <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                            onClick={() => handleSort('sku')}
-                          >
-                            SKU
-                            {getSortIcon('sku')}
-                          </button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter SKUs"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['sku'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-64 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  SKU filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['sku'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                                {uniqueSkuOptions.map(option => (
-                                  <label
-                                    key={option.value}
-                                    className="flex items-center gap-2 text-sm text-foreground"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={columnFilters.sku.includes(option.value)}
-                                      onChange={() => toggleMultiValueFilter('sku', option.value)}
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                    />
-                                    <span className="flex-1 text-sm">{option.label}</span>
-                                  </label>
-                                ))}
-                                {uniqueSkuOptions.length === 0 && (
-                                  <p className="text-xs text-muted-foreground">
-                                    No SKU options available.
-                                  </p>
-                                )}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
-                      <th className="w-48 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          <span>Description</span>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter SKU descriptions"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['skuDescription'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-64 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  SKU description filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['skuDescription'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={columnFilters.skuDescription}
-                                onChange={event =>
-                                  updateColumnFilter('skuDescription', event.target.value)
-                                }
-                                placeholder="Search SKU description"
-                                className={baseFilterInputClass}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
-                      <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                            onClick={() => handleSort('lot')}
-                          >
-                            Lot
-                            {getSortIcon('lot')}
-                          </button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter lot values"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['lot'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-64 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  Lot filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['lot'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-                                {uniqueLotOptions.map(option => (
-                                  <label
-                                    key={option.value}
-                                    className="flex items-center gap-2 text-sm text-foreground"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={columnFilters.lot.includes(option.value)}
-                                      onChange={() => toggleMultiValueFilter('lot', option.value)}
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                    />
-                                    <span className="flex-1 text-sm">{option.label}</span>
-                                  </label>
-                                ))}
-                                {uniqueLotOptions.length === 0 && (
-                                  <p className="text-xs text-muted-foreground">
-                                    No lot options available.
-                                  </p>
-                                )}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
-                      <th className="w-28 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <span>Ref ID</span>
-                      </th>
-                      <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
-                          onClick={() => handleSort('cartons')}
-                        >
-                          Ctns
-                          {getSortIcon('cartons')}
-                        </button>
-                      </th>
-                      <th className="w-20 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
-                          onClick={() => handleSort('pallets')}
-                        >
-                          Plts
-                          {getSortIcon('pallets')}
-                        </button>
-                      </th>
-                      <th className="w-24 px-2 py-2 text-right text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <button
-                          type="button"
-                          className="flex w-full items-center justify-end gap-1 hover:text-primary focus:outline-none"
-                          onClick={() => handleSort('units')}
-                        >
-                          Units
-                          {getSortIcon('units')}
-                        </button>
-                      </th>
-                      <th className="w-24 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center justify-between gap-1">
-                          <span>Type</span>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter type"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['movement'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-48 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  Type filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['movement'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <div className="space-y-2">
-                                {([
-                                  { value: 'positive' as const, label: 'Inbound' },
-                                  { value: 'negative' as const, label: 'Outbound' },
-                                ]).map(option => (
-                                  <label
-                                    key={option.value}
-                                    className="flex items-center gap-2 text-sm text-foreground"
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={columnFilters.movement.includes(option.value)}
-                                      onChange={() =>
-                                        updateColumnFilter(
-                                          'movement',
-                                          columnFilters.movement.includes(option.value)
-                                            ? columnFilters.movement.filter(v => v !== option.value)
-                                            : [...columnFilters.movement, option.value]
-                                        )
-                                      }
-                                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                                    />
-                                    <span className="flex-1 text-sm">{option.label}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
-                      <th className="w-40 px-2 py-2 text-left text-xs font-medium text-muted-foreground whitespace-nowrap">
-                        <div className="flex items-center justify-between gap-1">
-                          <button
-                            type="button"
-                            className="flex flex-1 items-center gap-1 text-left hover:text-primary focus:outline-none"
-                            onClick={() => handleSort('lastTransaction')}
-                          >
-                            Transaction Date
-                            {getSortIcon('lastTransaction')}
-                          </button>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <button
-                                type="button"
-                                aria-label="Filter latest transactions"
-                                className={cn(
-                                  'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
-                                  isFilterActive(['lastTransaction'])
-                                    ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                    : 'hover:bg-muted hover:text-primary'
-                                )}
-                              >
-                                <Filter className="h-3.5 w-3.5" />
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-64 space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-sm font-medium text-foreground">
-                                  Transaction filter
-                                </span>
-                                <button
-                                  type="button"
-                                  className="text-xs font-medium text-primary hover:underline"
-                                  onClick={() => clearColumnFilter(['lastTransaction'])}
-                                >
-                                  Clear
-                                </button>
-                              </div>
-                              <input
-                                type="text"
-                                value={columnFilters.lastTransaction}
-                                onChange={event =>
-                                  updateColumnFilter('lastTransaction', event.target.value)
-                                }
-                                placeholder="Search type or date"
-                                className={baseFilterInputClass}
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </th>
+                <tbody>
+                  {loading && processedBalances.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
+                        <span className="inline-flex items-center gap-2">
+                          <LoadingSpinner size="sm" />
+                          Loading inventory…
+                        </span>
+                      </td>
                     </tr>
-                  </thead>
+                  )}
 
-                  <tbody>
-                    {loading && processedBalances.length === 0 && (
-                      <tr>
-                        <td colSpan={11} className="px-4 py-8 text-center text-muted-foreground">
-                          <span className="inline-flex items-center gap-2">
-                            <LoadingSpinner size="sm" />
-                            Loading inventory…
-                          </span>
-                        </td>
-                      </tr>
-                    )}
+                  {!loading && processedBalances.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-6 text-center text-muted-foreground">
+                        No on-hand inventory.
+                      </td>
+                    </tr>
+                  )}
 
-                    {!loading && processedBalances.length === 0 && (
-                      <tr>
-                        <td colSpan={11} className="px-4 py-6 text-center text-muted-foreground">
-                          No on-hand inventory.
-                        </td>
-                      </tr>
-                    )}
+                  {processedBalances.map(balance => {
+                    const lastTransactionDisplay = formatLedgerTimestamp(
+                      balance.lastTransactionDate
+                    )
+                    const movementType = getMovementTypeFromTransaction(balance.lastTransactionType)
+                    const movementLabel =
+                      movementType === 'positive'
+                        ? 'Inbound'
+                        : movementType === 'negative'
+                          ? 'Outbound'
+                          : 'Flat'
+                    const movementBadgeVariant =
+                      movementType === 'positive'
+                        ? ('success' as const)
+                        : movementType === 'negative'
+                          ? ('danger' as const)
+                          : ('neutral' as const)
 
-                    {processedBalances.map(balance => {
-                      const lastTransactionDisplay = formatLedgerTimestamp(
-                        balance.lastTransactionDate
-                      )
-                      const movementType = getMovementTypeFromTransaction(balance.lastTransactionType)
-                      const movementMultiplier = getMovementMultiplier(balance.lastTransactionType)
-                      const signedCartons =
-                        movementMultiplier === 0
-                          ? balance.currentCartons
-                          : movementMultiplier * Math.abs(balance.currentCartons)
-                      const signedPallets =
-                        movementMultiplier === 0
-                          ? balance.currentPallets
-                          : movementMultiplier * Math.abs(balance.currentPallets)
-                      const signedUnits =
-                        movementMultiplier === 0
-                          ? balance.currentUnits
-                          : movementMultiplier * Math.abs(balance.currentUnits)
-                      const movementLabel =
-                        movementType === 'positive'
-                          ? 'Inbound'
-                          : movementType === 'negative'
-                            ? 'Outbound'
-                            : 'Flat'
-                      const movementBadgeVariant =
-                        movementType === 'positive'
-                          ? ('success' as const)
-                          : movementType === 'negative'
-                            ? ('danger' as const)
-                            : ('neutral' as const)
-
-                      const sourceNumber =
-                        balance.fulfillmentOrderNumber ?? balance.purchaseOrderNumber ?? null
-                      const sourceHref = balance.fulfillmentOrderId
-                        ? `/operations/fulfillment-orders/${balance.fulfillmentOrderId}`
-                        : balance.purchaseOrderId
-                          ? `/operations/purchase-orders/${balance.purchaseOrderId}`
-                          : null
-                      const sourceDisplay = sourceNumber ?? (sourceHref ? 'View' : '—')
-                      const firstReceiveMeta = balance.receiveTransaction
-                        ? `First receive: ${formatLedgerTimestamp(balance.receiveTransaction.transactionDate) ?? '—'} by ${balance.receiveTransaction.createdBy?.fullName ?? 'Unknown'}`
+                    const sourceNumber =
+                      balance.fulfillmentOrderNumber ?? balance.purchaseOrderNumber ?? null
+                    const sourceHref = balance.fulfillmentOrderId
+                      ? `/operations/fulfillment-orders/${balance.fulfillmentOrderId}`
+                      : balance.purchaseOrderId
+                        ? `/operations/purchase-orders/${balance.purchaseOrderId}`
                         : null
-                      let warehouseDisplay = balance.warehouse.code
-                      if (warehouseDisplay.length === 0) {
-                        warehouseDisplay = balance.warehouse.name
-                      }
-                      if (warehouseDisplay.length === 0) {
-                        warehouseDisplay = '—'
-                      }
+                    const sourceDisplay = sourceNumber ?? (sourceHref ? 'View' : '—')
+                    const firstReceiveMeta = balance.receiveTransaction
+                      ? `First receive: ${formatLedgerTimestamp(balance.receiveTransaction.transactionDate) ?? '—'} by ${balance.receiveTransaction.createdBy?.fullName ?? 'Unknown'}`
+                      : null
+                    let warehouseDisplay = balance.warehouse.code
+                    if (warehouseDisplay.length === 0) {
+                      warehouseDisplay = balance.warehouse.name
+                    }
+                    if (warehouseDisplay.length === 0) {
+                      warehouseDisplay = '—'
+                    }
 
-                      return (
-                        <tr
-                          key={balance.id}
-                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                    return (
+                      <tr
+                        key={balance.id}
+                        className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                      >
+                        <td
+                          className="px-2 py-2 text-sm font-semibold text-foreground truncate"
+                          title={
+                            [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n') || undefined
+                          }
                         >
-                          <td
-                            className="px-2 py-2 text-sm font-semibold text-foreground truncate"
-                            title={
-                              [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n') || undefined
-                            }
-                          >
-                            {sourceHref ? (
-                              <Link
-                                href={sourceHref}
-                                className="text-primary hover:underline"
-                                prefetch={false}
-                              >
-                                {sourceDisplay}
-                              </Link>
-                            ) : (
-                              sourceDisplay
-                            )}
-                          </td>
-                          <td className="px-2 py-2 text-sm font-medium text-foreground truncate">
-                            {warehouseDisplay}
-                          </td>
-                          <td className="px-2 py-2 text-sm font-semibold text-foreground truncate">
-                            {balance.sku.skuCode}
-                          </td>
-                          <td
-                            className="px-2 py-2 text-sm text-muted-foreground truncate"
-                            title={balance.sku.description || undefined}
-                          >
-                            {balance.sku.description || '—'}
-                          </td>
-                          <td
-                            className="px-2 py-2 text-xs text-muted-foreground uppercase truncate"
-                            title={balance.lotRef}
-                          >
-                            {balance.lotRef}
-                          </td>
-                          <td
-                            className="px-2 py-2 text-sm text-muted-foreground truncate"
-                            title={
-                              [balance.lastTransactionReference, balance.lastTransactionId]
-                                .filter(Boolean)
-                                .join('\n') || undefined
-                            }
-                          >
-                            {balance.lastTransactionId ? (
-                              <Link
-                                href={`/operations/transactions/${balance.lastTransactionId}`}
-                                className="text-primary hover:underline"
-                                prefetch={false}
-                              >
-                                {balance.lastTransactionReference ?? 'View'}
-                              </Link>
-                            ) : (
-                              (balance.lastTransactionReference ?? '—')
-                            )}
-                          </td>
-                          <td className="px-2 py-2 text-right text-sm font-semibold text-primary whitespace-nowrap">
-                            {signedCartons.toLocaleString()}
-                          </td>
-                          <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
-                            {signedPallets.toLocaleString()}
-                          </td>
-                          <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
-                            {signedUnits.toLocaleString()}
-                          </td>
-                          <td className="px-2 py-2 text-sm whitespace-nowrap">
-                            <Badge variant={movementBadgeVariant} className="uppercase text-[10px]">
-                              {movementLabel}
-                            </Badge>
-                          </td>
-                          <td className="px-2 py-2 text-xs text-muted-foreground truncate">
-                            {lastTransactionDisplay ?? '—'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t bg-muted/80 text-xs uppercase tracking-wide text-muted-foreground">
-                      <td colSpan={2} className="px-2 py-2 font-semibold text-left">
-                        Totals
-                      </td>
-                      <td className="px-2 py-2 font-medium whitespace-nowrap">
-                        {metrics.summary.totalSkuCount} SKUs
-                      </td>
-                      <td colSpan={3} />
-                      <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">
-                        {tableTotals.cartons.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
-                        {tableTotals.pallets.toLocaleString()}
-                      </td>
-                      <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
-                        {tableTotals.units.toLocaleString()}
-                      </td>
-                      <td colSpan={2} />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+                          {sourceHref ? (
+                            <Link
+                              href={sourceHref}
+                              className="text-primary hover:underline"
+                              prefetch={false}
+                            >
+                              {sourceDisplay}
+                            </Link>
+                          ) : (
+                            sourceDisplay
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-sm font-medium text-foreground truncate">
+                          {warehouseDisplay}
+                        </td>
+                        <td className="px-2 py-2 text-sm font-semibold text-foreground truncate">
+                          {balance.sku.skuCode}
+                        </td>
+                        <td
+                          className="px-2 py-2 text-sm text-muted-foreground truncate"
+                          title={balance.sku.description || undefined}
+                        >
+                          {balance.sku.description || '—'}
+                        </td>
+                        <td
+                          className="px-2 py-2 text-xs text-muted-foreground uppercase truncate"
+                          title={balance.lotRef}
+                        >
+                          {balance.lotRef}
+                        </td>
+                        <td
+                          className="px-2 py-2 text-sm text-muted-foreground truncate"
+                          title={
+                            [balance.lastTransactionReference, balance.lastTransactionId]
+                              .filter(Boolean)
+                              .join('\n') || undefined
+                          }
+                        >
+                          {balance.lastTransactionId ? (
+                            <Link
+                              href={`/operations/transactions/${balance.lastTransactionId}`}
+                              className="text-primary hover:underline"
+                              prefetch={false}
+                            >
+                              {balance.lastTransactionReference ?? 'View'}
+                            </Link>
+                          ) : (
+                            (balance.lastTransactionReference ?? '—')
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right text-sm font-semibold text-primary whitespace-nowrap">
+                          {balance.currentCartons.toLocaleString()}
+                        </td>
+                        <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
+                          {balance.currentPallets.toLocaleString()}
+                        </td>
+                        <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
+                          {balance.currentUnits.toLocaleString()}
+                        </td>
+                        <td className="px-2 py-2 text-sm whitespace-nowrap">
+                          <Badge variant={movementBadgeVariant} className="uppercase text-[10px]">
+                            {movementLabel}
+                          </Badge>
+                        </td>
+                        <td className="px-2 py-2 text-xs text-muted-foreground truncate">
+                          {lastTransactionDisplay ?? '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t bg-muted/80 text-xs uppercase tracking-wide text-muted-foreground">
+                    <td colSpan={2} className="px-2 py-2 font-semibold text-left">
+                      Totals
+                    </td>
+                    <td className="px-2 py-2 font-medium whitespace-nowrap">
+                      {summary.totalSkuCount} SKUs
+                    </td>
+                    <td colSpan={3} />
+                    <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">
+                      {tableTotals.cartons.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
+                      {tableTotals.pallets.toLocaleString()}
+                    </td>
+                    <td className="px-2 py-2 text-right font-medium whitespace-nowrap">
+                      {tableTotals.units.toLocaleString()}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              </table>
             </div>
-          )}
+          </div>
         </div>
       </PageContent>
     </PageContainer>
