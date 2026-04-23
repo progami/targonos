@@ -57,17 +57,17 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
       placement="bottom"
     >
       <Box
-        className="hidden sm:flex"
         sx={{
-          display: 'flex',
+          display: { xs: 'none', md: 'flex' },
           alignItems: 'center',
-          gap: 1.1,
+          gap: 0.7,
+          flexShrink: 0,
           borderRadius: '9999px',
           border: 1,
           borderColor: 'divider',
           bgcolor: 'rgba(255,255,255,0.72)',
-          px: 1.15,
-          py: 0.6,
+          px: 0.8,
+          py: 0.45,
           fontSize: '10px',
           fontWeight: 600,
           color: 'text.secondary',
@@ -77,7 +77,7 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
           },
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.35 }}>
           <Box
             component="span"
             sx={{
@@ -95,7 +95,7 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
         <Box component="span" sx={{ color: 'divider' }}>
           /
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.35 }}>
           <Box
             component="span"
             sx={{
