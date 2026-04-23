@@ -55,6 +55,7 @@ export async function middleware(request: NextRequest) {
   if (
     isPublicRoute ||
     normalizedPath.startsWith('/_next') ||
+    normalizedPath.startsWith('/_dev-assets') ||
     normalizedPath === '/favicon.ico' ||
     normalizedPath === '/favicon.svg'
   ) {
@@ -150,5 +151,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|_dev-assets|favicon.ico).*)'],
 }
