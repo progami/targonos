@@ -1,6 +1,10 @@
 function parseEmailSet(raw: string | undefined): Set<string> {
+  if (raw === undefined) {
+    return new Set()
+  }
+
   return new Set(
-    (raw ?? '')
+    raw
       .split(/[,\s]+/)
       .map((value) => value.trim().toLowerCase())
       .filter(Boolean),
