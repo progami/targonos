@@ -171,7 +171,10 @@ export function isWorktreeDevAuthEnabled() {
 }
 function requireWorktreeDevAuthEnv(name) {
     const value = process.env[name];
-    if (!value || value.trim() === '') {
+    if (!value) {
+        throw new Error(`${name} must be defined when TARGON_WORKTREE_DEV_AUTH is enabled.`);
+    }
+    if (value.trim() === '') {
         throw new Error(`${name} must be defined when TARGON_WORKTREE_DEV_AUTH is enabled.`);
     }
     return value.trim();
@@ -233,7 +236,19 @@ export async function getWorktreeDevSession(appId) {
         return null;
     }
     const authz = normalizeAuthzFromClaims(payload);
-    if (!authz || !payload.sub || !payload.email) {
+    if (!authz) {
+        throw new Error('Worktree dev auth payload is incomplete.');
+    }
+    if (!payload.sub) {
+        throw new Error('Worktree dev auth payload is incomplete.');
+    }
+    if (!payload.email) {
+        throw new Error('Worktree dev auth payload is incomplete.');
+    }
+    if (typeof payload.name !== 'string') {
+        throw new Error('Worktree dev auth payload is incomplete.');
+    }
+    if (payload.name.trim() === '') {
         throw new Error('Worktree dev auth payload is incomplete.');
     }
     return {
@@ -241,7 +256,7 @@ export async function getWorktreeDevSession(appId) {
         user: {
             id: payload.sub,
             email: payload.email,
-            name: typeof payload.name === 'string' && payload.name.trim() !== '' ? payload.name : payload.email,
+            name: payload.name,
         },
         authz,
         roles: buildRolesClaimFromAuthz(authz),
