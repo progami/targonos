@@ -5,8 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
+load_monitoring_env
 
-DEST="${ARGUS_POE_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Product Opportunity Explorer (Browser)}"
+DEST="${ARGUS_POE_DEST:-$(argus_monitoring_root)/Weekly/Product Opportunity Explorer (Browser)}"
 LOG="${ARGUS_POE_LOG:-/tmp/weekly-poe.log}"
 TARGET_URL_BASE="https://sellercentral.amazon.com/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326"
 

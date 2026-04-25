@@ -1,8 +1,36 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const MONITORING_BASE =
-  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const REPO_ROOT = path.resolve(__dirname, '../../../../')
+
+function loadEnvFile(file) {
+  if (!fs.existsSync(file)) return
+
+  const rawLines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
+  for (const rawLine of rawLines) {
+    for (const line of rawLine.split(/\\\\n|\\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+
+      const separator = trimmed.indexOf('=')
+      if (separator < 0) continue
+
+      const key = trimmed.slice(0, separator).trim()
+      let value = trimmed.slice(separator + 1).trim()
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1)
+      }
+      if (!process.env[key]) process.env[key] = value
+    }
+  }
+}
+
+function loadArgusEnv() {
+  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
+}
 
 function readFlag(argv, flag) {
   const index = argv.indexOf(flag)
@@ -16,6 +44,28 @@ function requireFlag(argv, flag) {
     throw new Error(`Missing required flag: ${flag}`)
   }
   return value.trim()
+}
+
+function parseMarket(raw) {
+  if (raw === null) return 'us'
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported market: ${raw}`)
+}
+
+function requireEnv(name) {
+  const value = process.env[name]
+  if (!value || !value.trim()) {
+    throw new Error(`Missing required env var: ${name}`)
+  }
+  return value.trim()
+}
+
+function monitoringRootForMarket(market) {
+  const salesRoot = requireEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`)
+  return path.join(salesRoot, 'Monitoring')
 }
 
 function parseDurationMs(raw) {
@@ -54,7 +104,9 @@ function parseTimestamp(raw) {
 }
 
 async function main() {
+  loadArgusEnv()
   const argv = process.argv.slice(2)
+  const market = parseMarket(readFlag(argv, '--market'))
   const jobId = requireFlag(argv, '--job-id')
   const status = parseStatus(requireFlag(argv, '--status'))
   const summary = requireFlag(argv, '--summary')
@@ -82,7 +134,7 @@ async function main() {
     ...(warnSteps.length > 0 ? { warnSteps } : {}),
   }
 
-  const targetPath = path.join(MONITORING_BASE, 'Logs', jobId, 'run-log.jsonl')
+  const targetPath = path.join(monitoringRootForMarket(market), 'Logs', jobId, 'run-log.jsonl')
   await fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
   await fs.promises.appendFile(targetPath, `${JSON.stringify(entry)}\n`, 'utf8')
 }

@@ -3,18 +3,13 @@
 import argparse
 import csv
 import json
+import os
 import re
 from datetime import date, timedelta
 from pathlib import Path
 
-MONITORING_BASE = Path(
-    '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
-)
-WEEKLY_BASE = MONITORING_BASE / 'Weekly'
-
-SP_ADS_BASE = WEEKLY_BASE / 'Ad Console' / 'SP - Sponsored Products (API)'
-BRAND_ANALYTICS_BASE = WEEKLY_BASE / 'Brand Analytics (API)'
-BUSINESS_REPORTS_BASE = WEEKLY_BASE / 'Business Reports (API)' / 'Sales & Traffic (API)'
+ARGUS_APP_ROOT = Path(__file__).resolve().parents[3]
+ENV_PATH = ARGUS_APP_ROOT / '.env.local'
 
 SP_ADS_SCHEMAS = {
     'SP - Search Term Report (API)': [
@@ -375,7 +370,39 @@ SQP_ASIN_RE = re.compile(r'ASIN or Product=\["([^"]+)"\]')
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--market', default=os.environ.get('ARGUS_MARKET', 'us'))
     return parser.parse_args()
+
+
+def load_env(path: Path):
+    env = {}
+    for raw_line in path.read_text().splitlines():
+        for line in re.split(r'\\\\n|\\n', raw_line):
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            key, value = line.split('=', 1)
+            value = value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            env[key.strip()] = value
+    return env
+
+
+def parse_market(raw):
+    value = (raw or 'us').strip().lower()
+    if value in ('us', 'uk'):
+        return value
+    raise RuntimeError(f'Unsupported Argus market: {raw}')
+
+
+def monitoring_base_for_market(market):
+    env = load_env(ENV_PATH)
+    key = f'ARGUS_SALES_ROOT_{market.upper()}'
+    value = env.get(key)
+    if not value:
+        raise RuntimeError(f'Missing env var: {key}')
+    return Path(value) / 'Monitoring'
 
 
 def week_bounds_from_name(path: Path):
@@ -546,17 +573,21 @@ def rewrite_sqp(path: Path, dry_run):
 
 def main():
     args = parse_args()
+    weekly_base = monitoring_base_for_market(parse_market(args.market)) / 'Weekly'
+    sp_ads_base = weekly_base / 'Ad Console' / 'SP - Sponsored Products (API)'
+    brand_analytics_base = weekly_base / 'Brand Analytics (API)'
+    business_reports_base = weekly_base / 'Business Reports (API)' / 'Sales & Traffic (API)'
 
     for subdir, headers in SP_ADS_SCHEMAS.items():
-        for path in sorted((SP_ADS_BASE / subdir).glob('W*_*.csv')):
+        for path in sorted((sp_ads_base / subdir).glob('W*_*.csv')):
             rewrite_projected_csv(path, headers, args.dry_run)
 
-    for path in sorted(SP_ADS_BASE.glob('W*_SP-Manifest.json')):
+    for path in sorted(sp_ads_base.glob('W*_SP-Manifest.json')):
         if not WEEK_FILE_RE.match(path.name):
             continue
         rewrite_sp_ads_manifest(path, args.dry_run)
 
-    for path in sorted((BUSINESS_REPORTS_BASE).glob('W*_SalesTraffic-ByDate.csv')):
+    for path in sorted((business_reports_base).glob('W*_SalesTraffic-ByDate.csv')):
         rewrite_sales_traffic(
             path,
             SALES_BY_DATE_HEADERS,
@@ -564,7 +595,7 @@ def main():
             args.dry_run,
         )
 
-    for path in sorted((BUSINESS_REPORTS_BASE).glob('W*_SalesTraffic-ByAsin.csv')):
+    for path in sorted((business_reports_base).glob('W*_SalesTraffic-ByAsin.csv')):
         rewrite_sales_traffic(
             path,
             SALES_BY_ASIN_HEADERS,
@@ -572,13 +603,13 @@ def main():
             args.dry_run,
         )
 
-    for path in sorted((BRAND_ANALYTICS_BASE / 'TST - Top Search Terms (API)').glob('W*_TST.csv')):
+    for path in sorted((brand_analytics_base / 'TST - Top Search Terms (API)').glob('W*_TST.csv')):
         rewrite_tst(path, args.dry_run)
 
-    for path in sorted((BRAND_ANALYTICS_BASE / 'SCP - Search Catalog Performance (API)').glob('W*_SCP.csv')):
+    for path in sorted((brand_analytics_base / 'SCP - Search Catalog Performance (API)').glob('W*_SCP.csv')):
         rewrite_scp(path, args.dry_run)
 
-    for path in sorted((BRAND_ANALYTICS_BASE / 'SQP - Search Query Performance (API)').glob('W*_SQP.csv')):
+    for path in sorted((brand_analytics_base / 'SQP - Search Query Performance (API)').glob('W*_SQP.csv')):
         rewrite_sqp(path, args.dry_run)
 
 

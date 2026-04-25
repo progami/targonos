@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getPublicBasePath } from '@/lib/base-path';
+import { appendMarketParam, type ArgusMarket } from '@/lib/argus-market';
 import type {
   WprChangeLogEntry,
   WeekLabel,
@@ -25,40 +26,40 @@ async function getJson<T>(path: string): Promise<T> {
   return payload;
 }
 
-export function useWprWeeksQuery() {
+export function useWprWeeksQuery(market: ArgusMarket) {
   return useQuery({
-    queryKey: ['wpr', 'weeks'],
-    queryFn: () => getJson<WprWeekSummaryResponse>('/api/wpr/weeks'),
+    queryKey: ['wpr', market, 'weeks'],
+    queryFn: () => getJson<WprWeekSummaryResponse>(appendMarketParam('/api/wpr/weeks', market)),
   });
 }
 
-export function useWprWeekBundleQuery(week: WeekLabel | null, enabled = true) {
+export function useWprWeekBundleQuery(market: ArgusMarket, week: WeekLabel | null, enabled = true) {
   return useQuery({
-    queryKey: ['wpr', 'weeks', week],
+    queryKey: ['wpr', market, 'weeks', week],
     enabled: enabled && week !== null,
-    queryFn: () => getJson<WprWeekBundle>(`/api/wpr/weeks/${week}`),
+    queryFn: () => getJson<WprWeekBundle>(appendMarketParam(`/api/wpr/weeks/${week}`, market)),
   });
 }
 
-export function useWprSourcesQuery(enabled = true) {
+export function useWprSourcesQuery(market: ArgusMarket, enabled = true) {
   return useQuery({
-    queryKey: ['wpr', 'sources'],
+    queryKey: ['wpr', market, 'sources'],
     enabled,
-    queryFn: () => getJson<WprSourceOverview>('/api/wpr/sources'),
+    queryFn: () => getJson<WprSourceOverview>(appendMarketParam('/api/wpr/sources', market)),
   });
 }
 
-export function useWprChangeLogQuery() {
+export function useWprChangeLogQuery(market: ArgusMarket) {
   return useQuery({
-    queryKey: ['wpr', 'changelog'],
-    queryFn: () => getJson<Record<WeekLabel, WprChangeLogEntry[]>>('/api/wpr/changelog'),
+    queryKey: ['wpr', market, 'changelog'],
+    queryFn: () => getJson<Record<WeekLabel, WprChangeLogEntry[]>>(appendMarketParam('/api/wpr/changelog', market)),
   });
 }
 
-export function useWprChangeLogWeekQuery(week: WeekLabel | null, enabled = true) {
+export function useWprChangeLogWeekQuery(market: ArgusMarket, week: WeekLabel | null, enabled = true) {
   return useQuery({
-    queryKey: ['wpr', 'changelog', week],
+    queryKey: ['wpr', market, 'changelog', week],
     enabled: enabled && week !== null,
-    queryFn: () => getJson<WprChangeLogEntry[]>(`/api/wpr/changelog/${week}`),
+    queryFn: () => getJson<WprChangeLogEntry[]>(appendMarketParam(`/api/wpr/changelog/${week}`, market)),
   });
 }

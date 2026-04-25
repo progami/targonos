@@ -4,6 +4,7 @@ import { execFile } from 'child_process'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { promisify } from 'util'
+import { DEFAULT_ARGUS_MARKET, getArgusMarketConfig, type ArgusMarket } from '@/lib/argus-market'
 import prisma from '@/lib/db'
 import { parseCsvRows } from './csv'
 import { formatMonitoringLabel } from './labels'
@@ -26,53 +27,100 @@ import type {
 } from './types'
 
 const execFileAsync = promisify(execFile)
-const HOME_DIR = process.env.HOME
+const HOME_DIR = requireHomeDir()
 
-if (!HOME_DIR) {
-  throw new Error('Missing HOME environment variable.')
+function requireHomeDir(): string {
+  const value = process.env.HOME
+  if (!value) {
+    throw new Error('Missing HOME environment variable.')
+  }
+  return value
 }
 
-const MONITORING_BASE =
-  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
+interface MonitoringPaths {
+  monitoringBase: string
+  dailyBase: string
+  weeklyBase: string
+  listingAttributesBase: string
+  latestStatePath: string
+  changeHistoryPath: string
+  snapshotHistoryPath: string
+  dailyAccountHealthPath: string
+  dailyVisualsPath: string
+  dailyVocPath: string
+  weeklyBrandAnalyticsPath: string
+  weeklyBusinessReportsPath: string
+  weeklyDatadivePath: string
+  weeklySellerboardPath: string
+  weeklyCategoryInsightsPath: string
+  weeklyPoePath: string
+  weeklySponsoredProductsPath: string
+  weeklyBrandMetricsPath: string
+  weeklyScaleinsightsPath: string
+}
 
-const DAILY_BASE = path.join(MONITORING_BASE, 'Daily')
-const WEEKLY_BASE = path.join(MONITORING_BASE, 'Weekly')
-const LISTING_ATTRIBUTES_BASE = path.join(MONITORING_BASE, 'Hourly/Listing Attributes (API)')
-const LATEST_STATE_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'latest_state.json')
-const CHANGE_HISTORY_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'Listings-Changes-History.csv')
-const SNAPSHOT_HISTORY_PATH = path.join(LISTING_ATTRIBUTES_BASE, 'Listings-Snapshot-History.csv')
-const DAILY_ACCOUNT_HEALTH_PATH = path.join(DAILY_BASE, 'Account Health Dashboard (API)', 'account-health.csv')
-const DAILY_VISUALS_PATH = path.join(DAILY_BASE, 'Visuals (Browser)')
-const DAILY_VOC_PATH = path.join(DAILY_BASE, 'Voice of the Customer (Manual)')
-const WEEKLY_BRAND_ANALYTICS_PATH = path.join(WEEKLY_BASE, 'Brand Analytics (API)')
-const WEEKLY_BUSINESS_REPORTS_PATH = path.join(WEEKLY_BASE, 'Business Reports (API)')
-const WEEKLY_DATADIVE_PATH = path.join(WEEKLY_BASE, 'Datadive (API)')
-const WEEKLY_SELLERBOARD_PATH = path.join(WEEKLY_BASE, 'Sellerboard (API)')
-const WEEKLY_CATEGORY_INSIGHTS_PATH = path.join(WEEKLY_BASE, 'Category Insights (Browser)')
-const WEEKLY_POE_PATH = path.join(WEEKLY_BASE, 'Product Opportunity Explorer (Browser)')
-const WEEKLY_SPONSORED_PRODUCTS_PATH = path.join(
-  WEEKLY_BASE,
-  'Ad Console/SP - Sponsored Products (API)',
-)
-const WEEKLY_BRAND_METRICS_PATH = path.join(WEEKLY_BASE, 'Ad Console/Brand Metrics (Browser)')
-const WEEKLY_SCALEINSIGHTS_PATH = path.join(
-  WEEKLY_BASE,
-  'ScaleInsights/KeywordRanking (Browser)',
-)
+function buildMonitoringPaths(market: ArgusMarket): MonitoringPaths {
+  const monitoringBase = getArgusMarketConfig(market).monitoringRoot
+  const dailyBase = path.join(monitoringBase, 'Daily')
+  const weeklyBase = path.join(monitoringBase, 'Weekly')
+  const listingAttributesBase = path.join(monitoringBase, 'Hourly/Listing Attributes (API)')
+  return {
+    monitoringBase,
+    dailyBase,
+    weeklyBase,
+    listingAttributesBase,
+    latestStatePath: path.join(listingAttributesBase, 'latest_state.json'),
+    changeHistoryPath: path.join(listingAttributesBase, 'Listings-Changes-History.csv'),
+    snapshotHistoryPath: path.join(listingAttributesBase, 'Listings-Snapshot-History.csv'),
+    dailyAccountHealthPath: path.join(dailyBase, 'Account Health Dashboard (API)', 'account-health.csv'),
+    dailyVisualsPath: path.join(dailyBase, 'Visuals (Browser)'),
+    dailyVocPath: path.join(dailyBase, 'Voice of the Customer (Manual)'),
+    weeklyBrandAnalyticsPath: path.join(weeklyBase, 'Brand Analytics (API)'),
+    weeklyBusinessReportsPath: path.join(weeklyBase, 'Business Reports (API)'),
+    weeklyDatadivePath: path.join(weeklyBase, 'Datadive (API)'),
+    weeklySellerboardPath: path.join(weeklyBase, 'Sellerboard (API)'),
+    weeklyCategoryInsightsPath: path.join(weeklyBase, 'Category Insights (Browser)'),
+    weeklyPoePath: path.join(weeklyBase, 'Product Opportunity Explorer (Browser)'),
+    weeklySponsoredProductsPath: path.join(weeklyBase, 'Ad Console/SP - Sponsored Products (API)'),
+    weeklyBrandMetricsPath: path.join(weeklyBase, 'Ad Console/Brand Metrics (Browser)'),
+    weeklyScaleinsightsPath: path.join(weeklyBase, 'ScaleInsights/KeywordRanking (Browser)'),
+  }
+}
 
 const HOUR_IN_MINUTES = 60
 const DAY_IN_MINUTES = 24 * HOUR_IN_MINUTES
 
-const ARGUS_SCHEDULER_SPECS = [
+interface SchedulerSpec {
+  id: string
+  label: string
+  cadence: MonitoringHealthDataset['cadence']
+  sourceType: Exclude<MonitoringSourceType, 'MANUAL'>
+  schedule: string
+  launchdLabel: string
+  plistPath: string
+  runLogPath: string
+  outputs: string[]
+}
+
+function schedulerLaunchdLabel(market: ArgusMarket, baseLabel: string): string {
+  if (market === 'us') {
+    return baseLabel
+  }
+
+  return `${baseLabel}.${market}`
+}
+
+function buildArgusSchedulerSpecs(market: ArgusMarket, paths: MonitoringPaths): SchedulerSpec[] {
+  return [
   {
     id: 'tracking-fetch',
     label: 'Tracking fetch',
     cadence: 'hourly',
     sourceType: 'API',
     schedule: 'Every hour',
-    launchdLabel: 'com.targon.argus.tracking-fetch',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.argus.tracking-fetch.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/tracking-fetch/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.argus.tracking-fetch'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.argus.tracking-fetch')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/tracking-fetch/run-log.jsonl'),
     outputs: ['Argus tracking snapshots (DB)'],
   },
   {
@@ -81,9 +129,9 @@ const ARGUS_SCHEDULER_SPECS = [
     cadence: 'hourly',
     sourceType: 'API',
     schedule: 'Every hour',
-    launchdLabel: 'com.targon.hourly-listing-attributes-api',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.hourly-listing-attributes-api.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/hourly-listing-attributes-api/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.hourly-listing-attributes-api'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.hourly-listing-attributes-api')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/hourly-listing-attributes-api/run-log.jsonl'),
     outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
   },
   {
@@ -92,9 +140,9 @@ const ARGUS_SCHEDULER_SPECS = [
     cadence: 'daily',
     sourceType: 'API',
     schedule: 'Daily at 3:00 AM',
-    launchdLabel: 'com.targon.daily-account-health',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-account-health.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/daily-account-health/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.daily-account-health'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.daily-account-health')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/daily-account-health/run-log.jsonl'),
     outputs: ['Account Health Dashboard (API)'],
   },
   {
@@ -103,9 +151,9 @@ const ARGUS_SCHEDULER_SPECS = [
     cadence: 'weekly',
     sourceType: 'API',
     schedule: 'Monday at 4:00 AM',
-    launchdLabel: 'com.targon.weekly-api-sources',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-api-sources.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-api-sources/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.weekly-api-sources'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.weekly-api-sources')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/weekly-api-sources/run-log.jsonl'),
     outputs: [
       'Brand Analytics (API)',
       'Business Reports (API)',
@@ -120,9 +168,9 @@ const ARGUS_SCHEDULER_SPECS = [
     cadence: 'daily',
     sourceType: 'BROWSER',
     schedule: 'Daily at 3:30 AM',
-    launchdLabel: 'com.targon.daily-visuals',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.daily-visuals.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/daily-visuals/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.daily-visuals'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.daily-visuals')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/daily-visuals/run-log.jsonl'),
     outputs: ['Visuals (Browser)'],
   },
   {
@@ -131,9 +179,9 @@ const ARGUS_SCHEDULER_SPECS = [
     cadence: 'weekly',
     sourceType: 'BROWSER',
     schedule: 'Monday at 3:00 AM',
-    launchdLabel: 'com.targon.weekly-browser-sources',
-    plistPath: path.join(HOME_DIR, 'Library/LaunchAgents/com.targon.weekly-browser-sources.plist'),
-    runLogPath: path.join(MONITORING_BASE, 'Logs/weekly-browser-sources/run-log.jsonl'),
+    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.weekly-browser-sources'),
+    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.weekly-browser-sources')}.plist`),
+    runLogPath: path.join(paths.monitoringBase, 'Logs/weekly-browser-sources/run-log.jsonl'),
     outputs: [
       'Category Insights (Browser)',
       'Product Opportunity Explorer (Browser)',
@@ -141,7 +189,8 @@ const ARGUS_SCHEDULER_SPECS = [
       'Brand Metrics (Browser)',
     ],
   },
-] as const
+  ]
+}
 
 interface DatasetHealthSpec {
   id: string
@@ -156,188 +205,190 @@ interface DatasetHealthSpec {
   getUpdatedAt: () => Promise<string | null>
 }
 
-const DATASET_SPECS: DatasetHealthSpec[] = [
+function buildDatasetSpecs(paths: MonitoringPaths): DatasetHealthSpec[] {
+  return [
   {
     id: 'hourly-state',
     label: 'Hourly latest state',
     cadence: 'hourly',
     sourceType: 'API',
-    path: LATEST_STATE_PATH,
+    path: paths.latestStatePath,
     driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Latest listing baseline used to compute the next hourly diff run.',
     producedBy: 'Hourly listing attributes',
     consumers: ['Change detection'],
-    getUpdatedAt: async () => statIso(LATEST_STATE_PATH),
+    getUpdatedAt: async () => statIso(paths.latestStatePath),
   },
   {
     id: 'hourly-snapshots',
     label: 'Snapshot history',
     cadence: 'hourly',
     sourceType: 'API',
-    path: SNAPSHOT_HISTORY_PATH,
+    path: paths.snapshotHistoryPath,
     driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Historical snapshot archive behind per-ASIN timelines and comparisons.',
     producedBy: 'Hourly listing attributes',
     consumers: ['ASIN detail timelines', 'Baseline reconstruction'],
-    getUpdatedAt: async () => statIso(SNAPSHOT_HISTORY_PATH),
+    getUpdatedAt: async () => statIso(paths.snapshotHistoryPath),
   },
   {
     id: 'hourly-changes',
     label: 'Change Feed -> Email',
     cadence: 'hourly',
     sourceType: 'API',
-    path: CHANGE_HISTORY_PATH,
+    path: paths.changeHistoryPath,
     driveId: '1bp8zLczIxTqQDFACdlDg6hdZvCB9innQ',
     purpose: 'Canonical event stream consumed by the Change Feed and alert email digest.',
     producedBy: 'Hourly listing attributes',
     consumers: ['Change Feed', 'Alert email'],
-    getUpdatedAt: async () => statIso(CHANGE_HISTORY_PATH),
+    getUpdatedAt: async () => statIso(paths.changeHistoryPath),
   },
   {
     id: 'daily-account-health',
     label: 'Account Health Dashboard (API)',
     cadence: 'daily',
     sourceType: 'API',
-    path: DAILY_ACCOUNT_HEALTH_PATH,
+    path: paths.dailyAccountHealthPath,
     driveId: '10BC2vI2OqAoYegD1icqU_VvYaiA9Imxc',
     purpose: 'Daily account health report export.',
     producedBy: 'Daily account health',
     consumers: ['Source Health'],
-    getUpdatedAt: async () => statIso(DAILY_ACCOUNT_HEALTH_PATH),
+    getUpdatedAt: async () => statIso(paths.dailyAccountHealthPath),
   },
   {
     id: 'daily-visuals',
     label: 'Visuals (Browser)',
     cadence: 'daily',
     sourceType: 'BROWSER',
-    path: DAILY_VISUALS_PATH,
+    path: paths.dailyVisualsPath,
     driveId: '1z8u466gU3r1Q4_UPy3Dg_dzdI1Lj4ntN',
     purpose: 'Daily browser screenshots for monitored ASINs.',
     producedBy: 'Daily visuals',
     consumers: ['Daily monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(DAILY_VISUALS_PATH, 4),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.dailyVisualsPath, 4),
   },
   {
     id: 'daily-voc',
     label: 'Voice of the Customer (Manual)',
     cadence: 'daily',
     sourceType: 'MANUAL',
-    path: DAILY_VOC_PATH,
+    path: paths.dailyVocPath,
     driveId: '1iHqtjKY01veKSWNj8zZF76UMcyrDdXZe',
     purpose: 'Manual VOC files that support daily review.',
     producedBy: null,
     consumers: ['Daily monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(DAILY_VOC_PATH, 2),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.dailyVocPath, 2),
   },
   {
     id: 'weekly-brand-analytics',
     label: 'Brand Analytics (API)',
     cadence: 'weekly',
     sourceType: 'API',
-    path: WEEKLY_BRAND_ANALYTICS_PATH,
+    path: paths.weeklyBrandAnalyticsPath,
     driveId: '1OQ1_pvWGLzdIKBfwZmRSWYDEVoP9dHUi',
     purpose: 'Weekly Amazon Brand Analytics exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BRAND_ANALYTICS_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyBrandAnalyticsPath, 3),
   },
   {
     id: 'weekly-business-reports',
     label: 'Business Reports (API)',
     cadence: 'weekly',
     sourceType: 'API',
-    path: WEEKLY_BUSINESS_REPORTS_PATH,
+    path: paths.weeklyBusinessReportsPath,
     driveId: '1jVUnicQEiNqTW3rEl-8hr79BZ_YjVG2j',
     purpose: 'Weekly Amazon business reports exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BUSINESS_REPORTS_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyBusinessReportsPath, 3),
   },
   {
     id: 'weekly-datadive',
     label: 'Datadive (API)',
     cadence: 'weekly',
     sourceType: 'API',
-    path: WEEKLY_DATADIVE_PATH,
+    path: paths.weeklyDatadivePath,
     driveId: '1ZFiwse0eukOHJUPgokvHWRcWMri0klvY',
     purpose: 'Weekly Datadive keyword, competitor, and rank radar exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_DATADIVE_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyDatadivePath, 3),
   },
   {
     id: 'weekly-sellerboard',
     label: 'Sellerboard (API)',
     cadence: 'weekly',
     sourceType: 'API',
-    path: WEEKLY_SELLERBOARD_PATH,
+    path: paths.weeklySellerboardPath,
     driveId: '1lhg3lHwprusOZiOYV0oM5Ce5wqlBoH8w',
     purpose: 'Weekly Sellerboard dashboard and order exports.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SELLERBOARD_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklySellerboardPath, 3),
   },
   {
     id: 'weekly-sponsored-products',
     label: 'SP - Sponsored Products (API)',
     cadence: 'weekly',
     sourceType: 'API',
-    path: WEEKLY_SPONSORED_PRODUCTS_PATH,
+    path: paths.weeklySponsoredProductsPath,
     driveId: '1pXOzQwXPcTYvw-feJhZB4muO0PD0tl9S',
     purpose: 'Weekly Sponsored Products console exports and manifest.',
     producedBy: 'Weekly API sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SPONSORED_PRODUCTS_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklySponsoredProductsPath, 3),
   },
   {
     id: 'weekly-category-insights',
     label: 'Category Insights (Browser)',
     cadence: 'weekly',
     sourceType: 'BROWSER',
-    path: WEEKLY_CATEGORY_INSIGHTS_PATH,
+    path: paths.weeklyCategoryInsightsPath,
     driveId: '14SWSVb9w7e9m_Pd0U8eyKQZAsSVmFctI',
     purpose: 'Weekly browser capture of category insights.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_CATEGORY_INSIGHTS_PATH, 2),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyCategoryInsightsPath, 2),
   },
   {
     id: 'weekly-poe',
     label: 'Product Opportunity Explorer (Browser)',
     cadence: 'weekly',
     sourceType: 'BROWSER',
-    path: WEEKLY_POE_PATH,
+    path: paths.weeklyPoePath,
     driveId: '1EB67PbUwcxFHJHigwwtCsfj0pAVWOWqo',
     purpose: 'Weekly browser export from Product Opportunity Explorer.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_POE_PATH, 2),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyPoePath, 2),
   },
   {
     id: 'weekly-scaleinsights',
     label: 'KeywordRanking (Browser)',
     cadence: 'weekly',
     sourceType: 'BROWSER',
-    path: WEEKLY_SCALEINSIGHTS_PATH,
+    path: paths.weeklyScaleinsightsPath,
     driveId: '1TzCiN-ja4inCCK_s_-9wOgH0S0D5hq_Q',
     purpose: 'Weekly ScaleInsights keyword ranking workbook.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_SCALEINSIGHTS_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyScaleinsightsPath, 3),
   },
   {
     id: 'weekly-brand-metrics',
     label: 'Brand Metrics (Browser)',
     cadence: 'weekly',
     sourceType: 'BROWSER',
-    path: WEEKLY_BRAND_METRICS_PATH,
+    path: paths.weeklyBrandMetricsPath,
     driveId: '1B-ohB3dGZU8c4gswpwRoYt034J_T8aqA',
     purpose: 'Weekly browser capture of Brand Metrics.',
     producedBy: 'Weekly browser sources',
     consumers: ['Weekly monitoring review'],
-    getUpdatedAt: async () => findLatestModifiedAt(WEEKLY_BRAND_METRICS_PATH, 3),
+    getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyBrandMetricsPath, 3),
   },
-]
+  ]
+}
 
 interface LaunchAgentPlist {
   Label: string
@@ -501,6 +552,7 @@ interface ChangeHistoryRow {
 }
 
 export interface MonitoringChangeFilters {
+  market?: ArgusMarket
   window?: MonitoringWindow
   owner?: MonitoringOwner | 'ALL'
   category?: MonitoringCategory | 'ALL'
@@ -523,26 +575,27 @@ type CacheState = {
   model: MonitoringModel
 }
 
-let cacheState: CacheState | null = null
-let pendingCacheKey: string | null = null
-let pendingModelPromise: Promise<MonitoringModel> | null = null
+const cacheStateByMarket = new Map<ArgusMarket, CacheState>()
+const pendingModelByMarket = new Map<ArgusMarket, { key: string; promise: Promise<MonitoringModel> }>()
 
-export async function getMonitoringOverview(): Promise<MonitoringOverview> {
-  const model = await loadMonitoringModel()
+export async function getMonitoringOverview(market: ArgusMarket = DEFAULT_ARGUS_MARKET): Promise<MonitoringOverview> {
+  const model = await loadMonitoringModel(market)
   return buildMonitoringOverview(model)
 }
 
 export async function getMonitoringChanges(
   filters: MonitoringChangeFilters = {},
 ): Promise<MonitoringChangeEvent[]> {
-  const model = await loadMonitoringModel()
+  const market = filters.market ?? DEFAULT_ARGUS_MARKET
+  const model = await loadMonitoringModel(market)
   return applyFilters(model.changes, filters)
 }
 
 export async function getMonitoringBootstrap(
   filters: MonitoringChangeFilters = {},
 ): Promise<MonitoringBootstrap> {
-  const model = await loadMonitoringModel()
+  const market = filters.market ?? DEFAULT_ARGUS_MARKET
+  const model = await loadMonitoringModel(market)
 
   return {
     overview: buildMonitoringOverview(model),
@@ -550,9 +603,12 @@ export async function getMonitoringBootstrap(
   }
 }
 
-export async function getMonitoringAsinDetail(asin: string): Promise<MonitoringAsinDetail> {
+export async function getMonitoringAsinDetail(
+  asin: string,
+  market: ArgusMarket = DEFAULT_ARGUS_MARKET,
+): Promise<MonitoringAsinDetail> {
   const normalizedAsin = asin.trim().toUpperCase()
-  const model = await loadMonitoringModel()
+  const model = await loadMonitoringModel(market)
   const current = model.currentByAsin.get(normalizedAsin) ?? null
   const snapshots = model.snapshotsByAsin.get(normalizedAsin) ?? []
   const changes = model.changes.filter((item) => item.asin === normalizedAsin)
@@ -572,10 +628,13 @@ export async function getMonitoringAsinDetail(asin: string): Promise<MonitoringA
   }
 }
 
-export async function getMonitoringHealth(): Promise<MonitoringHealthReport> {
+export async function getMonitoringHealth(market: ArgusMarket = DEFAULT_ARGUS_MARKET): Promise<MonitoringHealthReport> {
+  const paths = buildMonitoringPaths(market)
+  const datasetSpecs = buildDatasetSpecs(paths)
+  const schedulerSpecs = buildArgusSchedulerSpecs(market, paths)
   const [datasets, jobs] = await Promise.all([
-    Promise.all(DATASET_SPECS.map((spec) => getDatasetHealth(spec))),
-    Promise.all(ARGUS_SCHEDULER_SPECS.map((spec) => getSchedulerHealth(spec))),
+    Promise.all(datasetSpecs.map((spec) => getDatasetHealth(spec))),
+    Promise.all(schedulerSpecs.map((spec) => getSchedulerHealth(spec))),
   ])
 
   return {
@@ -667,41 +726,44 @@ function buildMonitoringOverview(model: MonitoringModel): MonitoringOverview {
   }
 }
 
-async function loadMonitoringModel(): Promise<MonitoringModel> {
-  const cacheKey = await getMonitoringCacheKey()
+async function loadMonitoringModel(market: ArgusMarket): Promise<MonitoringModel> {
+  const paths = buildMonitoringPaths(market)
+  const cacheKey = await getMonitoringCacheKey(market, paths)
+  const cacheState = cacheStateByMarket.get(market)
 
-  if (cacheState !== null && cacheState.key === cacheKey) {
+  if (cacheState !== undefined && cacheState.key === cacheKey) {
     return cacheState.model
   }
 
-  if (pendingCacheKey === cacheKey && pendingModelPromise !== null) {
-    return pendingModelPromise
+  const pending = pendingModelByMarket.get(market)
+  if (pending !== undefined && pending.key === cacheKey) {
+    return pending.promise
   }
 
-  const modelPromise = buildMonitoringModel()
-  pendingCacheKey = cacheKey
-  pendingModelPromise = modelPromise
+  const modelPromise = buildMonitoringModel(paths)
+  pendingModelByMarket.set(market, { key: cacheKey, promise: modelPromise })
 
   try {
     const model = await modelPromise
-    if (pendingCacheKey === cacheKey && pendingModelPromise === modelPromise) {
-      cacheState = { key: cacheKey, model }
+    const latestPending = pendingModelByMarket.get(market)
+    if (latestPending !== undefined && latestPending.key === cacheKey && latestPending.promise === modelPromise) {
+      cacheStateByMarket.set(market, { key: cacheKey, model })
     }
     return model
   } finally {
-    if (pendingModelPromise === modelPromise) {
-      pendingCacheKey = null
-      pendingModelPromise = null
+    const latestPending = pendingModelByMarket.get(market)
+    if (latestPending !== undefined && latestPending.promise === modelPromise) {
+      pendingModelByMarket.delete(market)
     }
   }
 }
 
-async function getMonitoringCacheKey(): Promise<string> {
+async function getMonitoringCacheKey(market: ArgusMarket, paths: MonitoringPaths): Promise<string> {
   const [latestStateStats, changeHistoryStats, snapshotHistoryStats, trackedAsinCount, latestTrackedAsin] =
     await Promise.all([
-      fs.stat(LATEST_STATE_PATH),
-      fs.stat(CHANGE_HISTORY_PATH),
-      fs.stat(SNAPSHOT_HISTORY_PATH),
+      fs.stat(paths.latestStatePath),
+      fs.stat(paths.changeHistoryPath),
+      fs.stat(paths.snapshotHistoryPath),
       prisma.trackedAsin.count(),
       prisma.trackedAsin.findFirst({
         orderBy: { updatedAt: 'desc' },
@@ -710,6 +772,7 @@ async function getMonitoringCacheKey(): Promise<string> {
     ])
 
   return [
+    market,
     latestStateStats.mtimeMs.toString(),
     changeHistoryStats.mtimeMs.toString(),
     snapshotHistoryStats.mtimeMs.toString(),
@@ -718,11 +781,11 @@ async function getMonitoringCacheKey(): Promise<string> {
   ].join(':')
 }
 
-async function buildMonitoringModel(): Promise<MonitoringModel> {
-  const latestState = await readLatestState()
+async function buildMonitoringModel(paths: MonitoringPaths): Promise<MonitoringModel> {
+  const latestState = await readLatestState(paths)
   const [changeRows, snapshotRows, trackedAsins] = await Promise.all([
-    readChangeHistory(),
-    readSnapshotHistory(),
+    readChangeHistory(paths),
+    readSnapshotHistory(paths),
     prisma.trackedAsin.findMany({ select: { asin: true, label: true } }),
   ])
 
@@ -758,8 +821,8 @@ async function buildMonitoringModel(): Promise<MonitoringModel> {
   }
 }
 
-async function readLatestState(): Promise<LatestStateFile> {
-  const content = await fs.readFile(LATEST_STATE_PATH, 'utf8')
+async function readLatestState(paths: MonitoringPaths): Promise<LatestStateFile> {
+  const content = await fs.readFile(paths.latestStatePath, 'utf8')
   const parsed = JSON.parse(content) as LatestStateFile
 
   if (!parsed.by_asin || !parsed.timestamp_utc || !parsed.snapshot_file) {
@@ -769,8 +832,8 @@ async function readLatestState(): Promise<LatestStateFile> {
   return parsed
 }
 
-async function readChangeHistory(): Promise<ChangeHistoryRow[]> {
-  const content = await fs.readFile(CHANGE_HISTORY_PATH, 'utf8')
+async function readChangeHistory(paths: MonitoringPaths): Promise<ChangeHistoryRow[]> {
+  const content = await fs.readFile(paths.changeHistoryPath, 'utf8')
   const rows = parseCsvRows(content)
 
   return rows.map((row) => ({
@@ -791,8 +854,8 @@ async function readChangeHistory(): Promise<ChangeHistoryRow[]> {
   }))
 }
 
-async function readSnapshotHistory(): Promise<MonitoringSnapshotRecord[]> {
-  const content = await fs.readFile(SNAPSHOT_HISTORY_PATH, 'utf8')
+async function readSnapshotHistory(paths: MonitoringPaths): Promise<MonitoringSnapshotRecord[]> {
+  const content = await fs.readFile(paths.snapshotHistoryPath, 'utf8')
   const rows = parseCsvRows(content)
 
   return rows.map((row) =>
@@ -1468,7 +1531,7 @@ async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHeal
   }
 }
 
-async function getSchedulerHealth(spec: (typeof ARGUS_SCHEDULER_SPECS)[number]): Promise<MonitoringSchedulerJob> {
+async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedulerJob> {
   const plist = await readLaunchAgentPlist(spec.plistPath)
   const target = resolveLaunchAgentTarget(plist)
   const stdoutPath = plist?.StandardOutPath ?? null

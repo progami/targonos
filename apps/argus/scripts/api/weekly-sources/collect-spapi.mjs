@@ -8,11 +8,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { spawnSync } from 'node:child_process'
 import {
   REPO_ROOT,
+  ARGUS_MARKET,
   MONITORING_BASE,
   ensureDir,
   flattenRows,
   latestCompleteWeek,
   loadMonitoringEnv,
+  marketEnvSuffix,
   orderHeaders,
   requireEnv,
   weekContextForRange,
@@ -229,6 +231,10 @@ function parseArgs() {
     const arg = argv[index]
     if (arg === '--dry-run') {
       dryRun = true
+      continue
+    }
+    if (arg === '--market') {
+      index += 1
       continue
     }
     if (arg === '--start-date') {
@@ -590,9 +596,10 @@ async function main() {
 
   const appClientId = requireEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requireEnv('AMAZON_SP_APP_CLIENT_SECRET')
-  const refreshToken = requireEnv('AMAZON_REFRESH_TOKEN_US')
-  const region = requireEnv('AMAZON_SP_API_REGION_US')
-  const marketplaceId = requireEnv('AMAZON_MARKETPLACE_ID_US')
+  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
+  const refreshToken = requireEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`)
+  const region = requireEnv(`AMAZON_SP_API_REGION_${envSuffix}`)
+  const marketplaceId = requireEnv(`AMAZON_MARKETPLACE_ID_${envSuffix}`)
 
   const requireFromTalos = createRequire(TALOS_PACKAGE_JSON)
   const SellingPartnerAPI = requireFromTalos('amazon-sp-api')

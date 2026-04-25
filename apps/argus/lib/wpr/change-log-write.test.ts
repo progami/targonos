@@ -14,8 +14,9 @@ function createWprWorkspaceRoot() {
 }
 
 test('createWprChangeLogEntry writes the canonical markdown log into the selected week folder', async () => {
-  const { wprRoot, dataDir } = createWprWorkspaceRoot()
-  process.env.WPR_DATA_DIR = dataDir
+  const { salesRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  process.env.WPR_DATA_DIR_US = dataDir
 
   const weekDir = path.join(wprRoot, 'Week 16 - 2026-04-12 (Sun)')
   await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(weekDir, 'output', 'Plans'), { recursive: true }))
@@ -33,6 +34,7 @@ test('createWprChangeLogEntry writes the canonical markdown log into the selecte
       highlights: ['Rewrote backend terms for root coverage.', 'Tightened bullet hierarchy for mobile.'],
       statusLines: ['Submitted in Seller Central.', 'Waiting for propagation.'],
     },
+    'us',
     async () => {
       rebuildCalls += 1
     },
@@ -57,8 +59,9 @@ test('createWprChangeLogEntry writes the canonical markdown log into the selecte
 })
 
 test('createWprChangeLogEntry fails when the target week folder does not exist', async () => {
-  const { dataDir } = createWprWorkspaceRoot()
-  process.env.WPR_DATA_DIR = dataDir
+  const { salesRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  process.env.WPR_DATA_DIR_US = dataDir
 
   await assert.rejects(
     () =>
@@ -74,6 +77,7 @@ test('createWprChangeLogEntry fails when the target week folder does not exist',
           highlights: ['Logged the change.'],
           statusLines: [],
         },
+        'us',
         async () => undefined,
       ),
     /Missing WPR week folder for W16/,
@@ -81,8 +85,9 @@ test('createWprChangeLogEntry fails when the target week folder does not exist',
 })
 
 test('createWprChangeLogEntry rejects the removed manual category for new entries', async () => {
-  const { wprRoot, dataDir } = createWprWorkspaceRoot()
-  process.env.WPR_DATA_DIR = dataDir
+  const { salesRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  process.env.WPR_DATA_DIR_US = dataDir
 
   const weekDir = path.join(wprRoot, 'Week 16 - 2026-04-12 (Sun)')
   await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(weekDir, 'output', 'Plans'), { recursive: true }))
@@ -101,6 +106,7 @@ test('createWprChangeLogEntry rejects the removed manual category for new entrie
           highlights: ['Logged the change.'],
           statusLines: ['Queued.'],
         },
+        'us',
         async () => undefined,
       ),
     /Invalid WPR change category: MANUAL/,

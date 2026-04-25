@@ -10,6 +10,35 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
+MARKET="us"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
+
 LOG="/tmp/weekly-browser-sources.log"
 RUN_LOG_WRITER="$REPO_ROOT/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
 WPR_SYNC_SCRIPT="$REPO_ROOT/apps/argus/scripts/lib/sync-wpr-workspace.sh"
@@ -43,7 +72,7 @@ append_detail_log_tail() {
   done < <(tail -10 "$detail_log")
 }
 
-log "=== Weekly Master Run Starting ==="
+log "=== Weekly Master Run Starting (market=$MARKET) ==="
 
 ensure_chrome_browser
 sleep 2
@@ -56,7 +85,7 @@ run_script() {
   local script="$2"
   local detail_log="$3"
   log "Running: $name"
-  if bash "$script"; then
+  if ARGUS_MARKET="$MARKET" bash "$script"; then
     log "OK: $name"
   else
     local exit_code=$?
@@ -76,7 +105,7 @@ run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "/tmp/w
 
 if [ "$FAILED" -eq 0 ]; then
   log "Running: WPR workspace sync"
-  if bash "$WPR_SYNC_SCRIPT" --trigger weekly-browser-sources >> "$LOG" 2>&1; then
+  if bash "$WPR_SYNC_SCRIPT" --market "$MARKET" --trigger weekly-browser-sources >> "$LOG" 2>&1; then
     log "OK: WPR workspace sync"
   else
     local_exit_code=$?
@@ -106,6 +135,7 @@ fi
 
 RUN_LOG_ARGS=(
   --job-id "weekly-browser-sources"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"

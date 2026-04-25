@@ -1,27 +1,36 @@
 import { NextResponse } from 'next/server'
 import { promises as fs } from 'fs'
 import path from 'path'
+import { getArgusMarketConfig, parseArgusMarket, type ArgusMarket } from '@/lib/argus-market'
 
 export const dynamic = 'force-dynamic'
 
-const MONITORING_BASE =
-  '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
+const JOB_LOG_DIRS: Record<string, string> = {
+  'tracking-fetch': 'tracking-fetch',
+  'hourly-listing-attributes-api': 'hourly-listing-attributes-api',
+  'daily-account-health': 'daily-account-health',
+  'daily-visuals': 'daily-visuals',
+  'weekly-api-sources': 'weekly-api-sources',
+  'weekly-browser-sources': 'weekly-browser-sources',
+}
 
-const JOB_LOG_PATHS: Record<string, string> = {
-  'tracking-fetch': path.join(MONITORING_BASE, 'Logs/tracking-fetch/run-log.jsonl'),
-  'hourly-listing-attributes-api': path.join(MONITORING_BASE, 'Logs/hourly-listing-attributes-api/run-log.jsonl'),
-  'daily-account-health': path.join(MONITORING_BASE, 'Logs/daily-account-health/run-log.jsonl'),
-  'daily-visuals': path.join(MONITORING_BASE, 'Logs/daily-visuals/run-log.jsonl'),
-  'weekly-api-sources': path.join(MONITORING_BASE, 'Logs/weekly-api-sources/run-log.jsonl'),
-  'weekly-browser-sources': path.join(MONITORING_BASE, 'Logs/weekly-browser-sources/run-log.jsonl'),
+function resolveJobLogPath(jobId: string, market: ArgusMarket): string | null {
+  const logDir = JOB_LOG_DIRS[jobId]
+  if (logDir === undefined) {
+    return null
+  }
+
+  return path.join(getArgusMarketConfig(market).monitoringRoot, 'Logs', logDir, 'run-log.jsonl')
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ jobId: string }> },
 ) {
   const { jobId } = await params
-  const logPath = JOB_LOG_PATHS[jobId]
+  const { searchParams } = new URL(request.url)
+  const market = parseArgusMarket(searchParams.get('market'))
+  const logPath = resolveJobLogPath(jobId, market)
 
   if (!logPath) {
     return NextResponse.json([])

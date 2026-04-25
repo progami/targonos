@@ -16,6 +16,7 @@ import {
   Typography,
 } from '@mui/material';
 import { getPublicBasePath } from '@/lib/base-path';
+import { appendMarketParam, type ArgusMarket } from '@/lib/argus-market';
 import {
   formatWprChangeCategory,
   getWprChangeCategoryColor,
@@ -186,12 +187,14 @@ export default function ChangeTimeline({
   weeks,
   weekStartDates,
   onSelectWeek,
+  market,
 }: {
   entries: WprChangeLogEntry[];
   selectedWeek: WeekLabel;
   weeks: WeekLabel[];
   weekStartDates: Record<WeekLabel, string>;
   onSelectWeek: (week: WeekLabel) => void;
+  market: ArgusMarket;
 }) {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -223,7 +226,7 @@ export default function ChangeTimeline({
     setError(null);
 
     try {
-      const response = await fetch(`${basePath}/api/wpr/changelog`, {
+      const response = await fetch(`${basePath}${appendMarketParam('/api/wpr/changelog', market)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -246,7 +249,7 @@ export default function ChangeTimeline({
         throw new Error(payload.error ?? 'Failed to create the WPR changelog entry.');
       }
 
-      await queryClient.invalidateQueries({ queryKey: ['wpr'] });
+      await queryClient.invalidateQueries({ queryKey: ['wpr', market] });
       setDialogOpen(false);
       resetDraft();
     } catch (submissionError) {

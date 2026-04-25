@@ -12,8 +12,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
-DEST_AH="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Account Health Dashboard (API)"
-DEST_VOC="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Daily/Voice of the Customer (Manual)"
+load_monitoring_env
+DEST_AH="$(argus_monitoring_root)/Daily/Account Health Dashboard (API)"
+DEST_VOC="$(argus_monitoring_root)/Daily/Voice of the Customer (Manual)"
 CSV="$DEST_AH/account-health.csv"
 LOG="/tmp/daily-account-health.log"
 TODAY=$(date '+%Y-%m-%d')

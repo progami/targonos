@@ -12,7 +12,7 @@ const REPO_ROOT = path.resolve(__dirname, '../../../../../')
 const ARGUS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/argus/package.json')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 
-const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)'
+let MONITORING_HOURLY_LISTINGS_DIR = ''
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
 const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
@@ -66,6 +66,30 @@ function requiredEnv(name) {
     throw new Error(`Missing required env var: ${name}`)
   }
   return value.trim()
+}
+
+function readMarketArg() {
+  const argv = process.argv.slice(2)
+  const index = argv.indexOf('--market')
+  if (index < 0) {
+    return process.env.ARGUS_MARKET
+  }
+  return argv[index + 1]
+}
+
+function resolveArgusMarket() {
+  const raw = readMarketArg()
+  if (raw === undefined) return 'us'
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+function monitoringHourlyListingsDir(market) {
+  const salesRoot = requiredEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`)
+  return path.join(salesRoot, 'Monitoring', 'Hourly', 'Listing Attributes (API)')
 }
 
 function parseAsinList(value) {
@@ -1799,22 +1823,24 @@ ${overflowRow}
 }
 
 async function main() {
-  ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
-
   loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
   loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+  const market = resolveArgusMarket()
+  const envSuffix = market.toUpperCase()
+  MONITORING_HOURLY_LISTINGS_DIR = monitoringHourlyListingsDir(market)
+  ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
 
   const competitorMainAsins = getCompetitorMainAsins()
   const heroBsrAsins = getHeroBsrAsins()
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')
-  const refreshToken = requiredEnv('AMAZON_REFRESH_TOKEN_US')
-  const region = requiredEnv('AMAZON_SP_API_REGION_US')
-  const marketplaceId = requiredEnv('AMAZON_MARKETPLACE_ID_US')
-  const sellerId = requiredEnv('AMAZON_SELLER_ID_US')
+  const refreshToken = requiredEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`)
+  const region = requiredEnv(`AMAZON_SP_API_REGION_${envSuffix}`)
+  const marketplaceId = requiredEnv(`AMAZON_MARKETPLACE_ID_${envSuffix}`)
+  const sellerId = requiredEnv(`AMAZON_SELLER_ID_${envSuffix}`)
   const trackedAsinMarketplace = resolveTrackedAsinMarketplace(marketplaceId)
   const trackedLabelsByAsin = await loadTrackedAsinLabels(trackedAsinMarketplace)
 

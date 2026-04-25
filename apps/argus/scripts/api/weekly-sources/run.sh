@@ -21,11 +21,20 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DRY_FLAG=""
 START_DATE=""
 END_DATE=""
+MARKET="us"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY_FLAG="--dry-run"
+      ;;
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
       ;;
     --start-date)
       START_DATE="${2:-}"
@@ -43,6 +52,16 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
+
 if [ -n "$START_DATE" ] && [ -z "$END_DATE" ] || [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
   echo "Both --start-date and --end-date are required together." >&2
   exit 1
@@ -52,10 +71,11 @@ DATE_FLAGS=""
 if [ -n "$START_DATE" ]; then
   DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
 fi
+MARKET_FLAG="--market $MARKET"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
-log "=== Weekly API Sources run starting ${DRY_FLAG:-live} ==="
+log "=== Weekly API Sources run starting market=$MARKET mode=${DRY_FLAG:-live} ==="
 
 if ! NODE_BIN="$(command -v node)"; then
   log "FAILED: Node.js not found in PATH=$PATH"
@@ -105,15 +125,15 @@ run_optional_step() {
   fi
 }
 
-run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG $DATE_FLAGS"
-run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG $DATE_FLAGS"
-run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
-run_optional_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $DRY_FLAG"
-run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG $DATE_FLAGS"
-run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $DRY_FLAG"
+run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_optional_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $MARKET_FLAG $DRY_FLAG"
 
 if [ -z "$DRY_FLAG" ] && [ "$FAILED" -eq 0 ]; then
-  run_step "WPR workspace sync" "bash \"$WPR_SYNC_SCRIPT\" --trigger weekly-api-sources"
+  run_step "WPR workspace sync" "bash \"$WPR_SYNC_SCRIPT\" --market \"$MARKET\" --trigger weekly-api-sources"
 fi
 
 log "=== Weekly API Sources run done (failures=$FAILED) ==="
@@ -142,6 +162,7 @@ fi
 
 RUN_LOG_ARGS=(
   --job-id "weekly-api-sources"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"
