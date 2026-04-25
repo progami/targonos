@@ -5,8 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
+load_monitoring_env
 
-DEST="${ARGUS_CATEGORY_INSIGHTS_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Category Insights (Browser)}"
+DEST="${ARGUS_CATEGORY_INSIGHTS_DEST:-$(argus_monitoring_root)/Weekly/Category Insights (Browser)}"
 LOG="${ARGUS_CATEGORY_INSIGHTS_LOG:-/tmp/weekly-category-insights.log}"
 TARGET_URL="https://sellercentral.amazon.com/selection/category-insights"
 TARGET_MARKETPLACE_ID="ATVPDKIKX0DER"

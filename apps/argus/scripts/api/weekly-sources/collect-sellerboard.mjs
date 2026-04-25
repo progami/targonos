@@ -3,10 +3,12 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import {
+  ARGUS_MARKET,
   MONITORING_BASE,
   ensureDir,
   latestCompleteWeek,
   loadMonitoringEnv,
+  marketEnvSuffix,
   orderHeaders,
   requireEnv,
   weekContextForRange,
@@ -78,6 +80,10 @@ function parseArgs() {
     const arg = argv[index]
     if (arg === '--dry-run') {
       dryRun = true
+      continue
+    }
+    if (arg === '--market') {
+      index += 1
       continue
     }
     if (arg === '--start-date') {
@@ -284,8 +290,9 @@ async function main() {
 
   loadMonitoringEnv()
 
-  const dashboardUrl = requireEnv('SELLERBOARD_US_DASHBOARD_REPORT_URL')
-  const ordersUrl = requireEnv('SELLERBOARD_US_ORDERS_REPORT_URL')
+  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
+  const dashboardUrl = requireEnv(`SELLERBOARD_${envSuffix}_DASHBOARD_REPORT_URL`)
+  const ordersUrl = requireEnv(`SELLERBOARD_${envSuffix}_ORDERS_REPORT_URL`)
 
   const dashboardCsvRaw = await downloadCsv(dashboardUrl)
   const ordersCsvRaw = await downloadCsv(ordersUrl)

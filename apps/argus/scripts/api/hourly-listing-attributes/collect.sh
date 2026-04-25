@@ -5,17 +5,43 @@
 #   - Listings-Changes-History.csv
 #   - latest_state.json
 #
-# Destination:
-# /Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/hourly-listing-attributes-api.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+MARKET="us"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting hourly listing attributes collection" >> "$LOG"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting hourly listing attributes collection (market=$MARKET)" >> "$LOG"
 
 if ! NODE_BIN="$(command -v node)"; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Node.js not found in PATH=$PATH" >> "$LOG"
@@ -29,7 +55,7 @@ RUN_STATUS="ok"
 RUN_SUMMARY="Hourly listing attributes completed successfully."
 RUN_ERROR_MESSAGE=""
 
-if "$NODE_BIN" "$SCRIPT_DIR/collect.mjs" >> "$LOG" 2>&1; then
+if "$NODE_BIN" "$SCRIPT_DIR/collect.mjs" --market "$MARKET" >> "$LOG" 2>&1; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection OK" >> "$LOG"
 else
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED" >> "$LOG"
@@ -43,6 +69,7 @@ RUN_FINISHED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 DURATION_MS=$((RUN_FINISHED_AT_MS - RUN_STARTED_AT_MS))
 RUN_LOG_ARGS=(
   --job-id "hourly-listing-attributes-api"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"

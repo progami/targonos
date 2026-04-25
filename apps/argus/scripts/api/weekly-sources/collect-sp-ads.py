@@ -16,8 +16,8 @@ from pathlib import Path
 ARGUS_APP_ROOT = Path(__file__).resolve().parents[3]
 ENV_PATH = ARGUS_APP_ROOT / '.env.local'
 
-DEST_ROOT = Path('/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)')
-MANIFEST_ROOT = DEST_ROOT
+DEST_ROOT = None
+MANIFEST_ROOT = None
 
 POLL_INTERVAL_SEC = 15
 MAX_WAIT_SECONDS = 40 * 60
@@ -58,6 +58,21 @@ def load_env(path: Path):
                 value = value[:-1]
             env[key.strip()] = value
     return env
+
+
+def parse_market(raw):
+    value = (raw or 'us').strip().lower()
+    if value in ('us', 'uk'):
+        return value
+    raise RuntimeError(f'Unsupported Argus market: {raw}')
+
+
+def monitoring_base_for_market(env, market):
+    key = f'ARGUS_SALES_ROOT_{market.upper()}'
+    value = env.get(key)
+    if not value:
+        raise RuntimeError(f'Missing env var: {key}')
+    return Path(value) / 'Monitoring'
 
 
 def latest_complete_week():
@@ -566,15 +581,21 @@ def run_week(base_url, headers, week):
 
 
 def main():
+    global DEST_ROOT, MANIFEST_ROOT
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--start-date')
     parser.add_argument('--end-date')
+    parser.add_argument('--market', default=os.environ.get('ARGUS_MARKET', 'us'))
     args = parser.parse_args()
 
     if bool(args.start_date) != bool(args.end_date):
         raise RuntimeError('Both --start-date and --end-date are required together.')
 
+    env = load_env(ENV_PATH)
+    market = parse_market(args.market)
+    DEST_ROOT = monitoring_base_for_market(env, market) / 'Weekly' / 'Ad Console' / 'SP - Sponsored Products (API)'
+    MANIFEST_ROOT = DEST_ROOT
     week = week_context_for_range(args.start_date, args.end_date) if args.start_date else latest_complete_week()
     dry_run = args.dry_run
 
@@ -586,7 +607,6 @@ def main():
             print(f'[SP-Ads][dry-run] {DEST_ROOT / subdir / file_name}')
         return
 
-    env = load_env(ENV_PATH)
     required = [
         'AMAZON_ADS_API_BASE_URL',
         'AMAZON_ADS_CLIENT_ID',

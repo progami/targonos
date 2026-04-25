@@ -6,9 +6,11 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import {
   REPO_ROOT,
+  ARGUS_MARKET,
   MONITORING_BASE,
   ensureDir,
   loadMonitoringEnv,
+  marketEnvSuffix,
   requireEnv,
   writeCsv,
 } from '../weekly-sources/lib/common.mjs'
@@ -109,10 +111,11 @@ function createClient() {
 
   const requireFromTalos = createRequire(TALOS_PACKAGE_JSON)
   const SellingPartnerAPI = requireFromTalos('amazon-sp-api')
+  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
 
   return new SellingPartnerAPI({
-    region: requireEnv('AMAZON_SP_API_REGION_US'),
-    refresh_token: requireEnv('AMAZON_REFRESH_TOKEN_US'),
+    region: requireEnv(`AMAZON_SP_API_REGION_${envSuffix}`),
+    refresh_token: requireEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`),
     credentials: {
       SELLING_PARTNER_APP_CLIENT_ID: requireEnv('AMAZON_SP_APP_CLIENT_ID'),
       SELLING_PARTNER_APP_CLIENT_SECRET: requireEnv('AMAZON_SP_APP_CLIENT_SECRET'),
@@ -363,7 +366,7 @@ function upsertRow(file, row) {
 
 async function main() {
   const client = createClient()
-  const marketplaceId = requireEnv('AMAZON_MARKETPLACE_ID_US')
+  const marketplaceId = requireEnv(`AMAZON_MARKETPLACE_ID_${marketEnvSuffix(ARGUS_MARKET)}`)
 
   const reusableReportId = await findReusableReport(client, marketplaceId)
   const reportId = reusableReportId ?? await createReport(client, marketplaceId)

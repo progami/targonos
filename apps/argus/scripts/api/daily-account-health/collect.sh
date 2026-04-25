@@ -6,6 +6,35 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG="/tmp/daily-account-health.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+MARKET="us"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
 
 if ! NODE_BIN="$(command -v node)"; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED (node not found in PATH=$PATH)" >> "$LOG"
@@ -18,9 +47,9 @@ RUN_STATUS="ok"
 RUN_SUMMARY="Daily account health completed successfully."
 RUN_ERROR_MESSAGE=""
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting account health API collection" >> "$LOG"
+echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting account health API collection (market=$MARKET)" >> "$LOG"
 
-if "$NODE_BIN" "$SCRIPT_DIR/collect.mjs" >> "$LOG" 2>&1; then
+if "$NODE_BIN" "$SCRIPT_DIR/collect.mjs" --market "$MARKET" >> "$LOG" 2>&1; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection OK" >> "$LOG"
 else
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED" >> "$LOG"
@@ -34,6 +63,7 @@ RUN_FINISHED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 DURATION_MS=$((RUN_FINISHED_AT_MS - RUN_STARTED_AT_MS))
 RUN_LOG_ARGS=(
   --job-id "daily-account-health"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"

@@ -352,6 +352,38 @@ require_env() {
   printf '%s' "$value"
 }
 
+argus_market() {
+  local value="${ARGUS_MARKET:-us}"
+  case "$value" in
+    us|uk)
+      printf '%s' "$value"
+      ;;
+    *)
+      echo "Unsupported market: $value" >&2
+      exit 1
+      ;;
+  esac
+}
+
+argus_sales_root() {
+  local market
+  local env_name
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      env_name="ARGUS_SALES_ROOT_US"
+      ;;
+    uk)
+      env_name="ARGUS_SALES_ROOT_UK"
+      ;;
+  esac
+  require_env "$env_name"
+}
+
+argus_monitoring_root() {
+  printf '%s/Monitoring' "$(argus_sales_root)"
+}
+
 js_string_literal() {
   "$PYTHON_BIN" - "$1" <<'PY'
 import json
