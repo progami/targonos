@@ -3,10 +3,10 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js sso -- node ../../scripts/run-next-port.js dev 3200",
+    "dev": "node ../../scripts/run-dev-with-logs.js sso -- node ../../scripts/run-next-port.js dev",
     "clean": "rm -rf .next out dist",
     "build": "next build",
-    "start": "node ../../scripts/run-next-port.js start 3200",
+    "start": "node ../../scripts/run-next-port.js start",
     "type-check": "tsc --noEmit",
     "test:auth-contracts": "tsx --test lib/auth-logger.test.ts lib/auth-route-recovery.test.ts tests/active-tenant.route.test.ts tests/fixtures/hosted-smoke-config.test.ts scripts/ensure-hosted-smoke-user-lib.test.ts",
     "test:auth-smoke": "pnpm run test:auth-contracts && playwright test --grep \"portal login|stale encrypted session|authenticated launcher|auth cleanup\"",

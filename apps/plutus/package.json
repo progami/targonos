@@ -4,10 +4,10 @@
   "private": true,
   "description": "Plutus – finance workspace for custom financials from QuickBooks Online",
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js plutus -- node ../../scripts/run-next-port.js dev 3212",
+    "dev": "node ../../scripts/run-dev-with-logs.js plutus -- node ../../scripts/run-next-port.js dev",
     "clean": "rm -rf .next out dist",
     "build": "prisma generate --schema prisma/schema.prisma && next build",
-    "start": "node ../../scripts/run-next-port.js start 3212",
+    "start": "node ../../scripts/run-next-port.js start",
     "lint": "eslint app components lib",
     "test": "tsx tests/run.ts",
     "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit",

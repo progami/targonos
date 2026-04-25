@@ -30,7 +30,7 @@ function parsePortFromEnvText(text) {
   return null
 }
 
-function resolvePortFromAppEnv(appDir, fallbackPort) {
+function resolvePortFromAppEnv(appDir) {
   for (const candidate of ENV_FILE_CANDIDATES) {
     const envPath = path.join(appDir, candidate)
     if (!fs.existsSync(envPath)) {
@@ -43,7 +43,7 @@ function resolvePortFromAppEnv(appDir, fallbackPort) {
     }
   }
 
-  return fallbackPort
+  throw new Error('PORT must be defined in an app env file.')
 }
 
 function resolveNextCommand() {
@@ -56,24 +56,25 @@ function resolveNextCommand() {
 
 function runCli() {
   const args = process.argv.slice(2)
-  if (args.length < 2) {
-    console.error('Usage: run-next-port <dev|start> <fallback-port> [next args...]')
+  if (args.length < 1) {
+    console.error('Usage: run-next-port <dev|start> [next args...]')
     process.exit(1)
   }
 
-  const [mode, fallbackPortRaw, ...nextArgs] = args
+  const [mode, ...nextArgs] = args
   if (mode !== 'dev' && mode !== 'start') {
     console.error(`Unsupported Next mode "${mode}". Expected "dev" or "start".`)
     process.exit(1)
   }
 
-  if (!/^\d+$/.test(fallbackPortRaw)) {
-    console.error(`Fallback port must be numeric. Received "${fallbackPortRaw}".`)
+  let port
+  try {
+    port = resolvePortFromAppEnv(process.cwd())
+  } catch (error) {
+    console.error(`[run-next-port] ${error.message}`)
     process.exit(1)
   }
 
-  const fallbackPort = Number(fallbackPortRaw)
-  const port = resolvePortFromAppEnv(process.cwd(), fallbackPort)
   const child = spawn(resolveNextCommand(), [mode, '-p', String(port), ...nextArgs], {
     cwd: process.cwd(),
     env: process.env,
