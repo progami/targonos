@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { parseArgusMarket } from '@/lib/argus-market';
 import { getWprChangeLog } from '@/lib/wpr/reader';
 import { createWprChangeLogEntry } from '@/lib/wpr/change-log-write';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const changes = await getWprChangeLog();
+    const { searchParams } = new URL(request.url);
+    const market = parseArgusMarket(searchParams.get('market'));
+    const changes = await getWprChangeLog(market);
     return NextResponse.json(changes);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to load the WPR changelog.';
@@ -51,6 +54,8 @@ function expectStringArray(value: unknown, fieldName: string): string[] {
 
 export async function POST(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const market = parseArgusMarket(searchParams.get('market'));
     const payload = (await request.json()) as ChangeLogRequestPayload;
     const result = await createWprChangeLogEntry({
       weekLabel: expectString(payload.weekLabel, 'weekLabel'),
@@ -62,7 +67,7 @@ export async function POST(request: NextRequest) {
       fieldLabels: expectStringArray(payload.fieldLabels, 'fieldLabels'),
       highlights: expectStringArray(payload.highlights, 'highlights'),
       statusLines: expectStringArray(payload.statusLines, 'statusLines'),
-    });
+    }, market);
 
     return NextResponse.json({ ok: true, filePath: result.filePath });
   } catch (error) {

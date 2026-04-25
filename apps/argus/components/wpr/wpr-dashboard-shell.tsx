@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Alert, Box, CircularProgress } from '@mui/material';
+import { parseArgusMarket, type ArgusMarket } from '@/lib/argus-market';
 import {
   useWprChangeLogWeekQuery,
   useWprSourcesQuery,
@@ -31,14 +32,15 @@ export default function WprDashboardShell() {
   const selectedWeek = useWprStore((state) => state.selectedWeek);
   const setActiveTab = useWprStore((state) => state.setActiveTab);
   const setSelectedWeek = useWprStore((state) => state.setSelectedWeek);
-  const weeksQuery = useWprWeeksQuery();
+  const market = parseArgusMarket(searchParams.get('market'));
+  const weeksQuery = useWprWeeksQuery(market);
   const needsBundle = BUNDLE_TABS.has(activeTab);
   const needsChartChangeEntries = CHART_CHANGE_ENTRY_TABS.has(activeTab);
   const bundleWeek = weeksQuery.data?.defaultWeek ?? null;
-  const bundleQuery = useWprWeekBundleQuery(bundleWeek, needsBundle);
-  const chartChangeLogQuery = useWprChangeLogWeekQuery(bundleWeek, needsChartChangeEntries);
-  const changelogQuery = useWprChangeLogWeekQuery(selectedWeek, activeTab === 'changelog');
-  const sourcesQuery = useWprSourcesQuery(activeTab === 'sources');
+  const bundleQuery = useWprWeekBundleQuery(market, bundleWeek, needsBundle);
+  const chartChangeLogQuery = useWprChangeLogWeekQuery(market, bundleWeek, needsChartChangeEntries);
+  const changelogQuery = useWprChangeLogWeekQuery(market, selectedWeek, activeTab === 'changelog');
+  const sourcesQuery = useWprSourcesQuery(market, activeTab === 'sources');
 
   const tabFromQuery = getInitialWprTab(searchParams);
 
@@ -66,7 +68,26 @@ export default function WprDashboardShell() {
     }
 
     setActiveTab(tab);
-    router.replace(tab === 'sqp' ? '/wpr' : `/wpr?tab=${tab}`);
+    const params = new URLSearchParams(searchParams.toString());
+    if (tab === 'sqp') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const query = params.toString();
+    router.replace(query === '' ? '/wpr' : `/wpr?${query}`);
+  };
+
+  const handleSelectMarket = (nextMarket: ArgusMarket) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextMarket === 'us') {
+      params.delete('market');
+    } else {
+      params.set('market', nextMarket);
+    }
+    const query = params.toString();
+    setSelectedWeek(null);
+    router.replace(query === '' ? '/wpr' : `/wpr?${query}`);
   };
 
   if (weeksQuery.error instanceof Error) {
@@ -136,7 +157,9 @@ export default function WprDashboardShell() {
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <WprTopBar
         activeTab={activeTab}
+        market={market}
         onSelectTab={handleSelectTab}
+        onSelectMarket={handleSelectMarket}
       />
       <Box sx={{ flex: 1, minHeight: 0, overflow: 'auto', px: 0, py: 1.5 }}>
         {activeTab === 'sqp' && bundle !== undefined && chartChangeEntries !== undefined ? <SqpTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}
@@ -151,6 +174,7 @@ export default function WprDashboardShell() {
             weeks={weeksQuery.data.weeks}
             weekStartDates={weeksQuery.data.weekStartDates}
             onSelectWeek={setSelectedWeek}
+            market={market}
           />
         ) : null}
         {activeTab === 'compare' && bundle !== undefined && chartChangeEntries !== undefined ? <CompareTab bundle={bundle} changeEntries={chartChangeEntries} /> : null}

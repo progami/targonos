@@ -2,6 +2,7 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { execFile as execFileCallback } from 'node:child_process'
+import { DEFAULT_ARGUS_MARKET, getArgusMarketConfig, type ArgusMarket } from '@/lib/argus-market'
 import { expectWritableWprChangeCategory } from './change-log-categories'
 
 const execFile = promisify(execFileCallback)
@@ -21,30 +22,13 @@ export type CreateWprChangeLogEntryInput = {
 }
 
 type WprPaths = {
-  dataDir: string
-  workspaceRoot: string
   wprRoot: string
+  wprDataDir: string
 }
 
-function resolveDataDir(): string {
-  const value = process.env.WPR_DATA_DIR
-  if (value === undefined) {
-    throw new Error('WPR_DATA_DIR is required for Argus.')
-  }
-
-  const trimmed = value.trim()
-  if (trimmed === '') {
-    throw new Error('WPR_DATA_DIR is required for Argus.')
-  }
-
-  return trimmed
-}
-
-function resolveWprPaths(): WprPaths {
-  const dataDir = resolveDataDir()
-  const workspaceRoot = join(dataDir, '..')
-  const wprRoot = join(workspaceRoot, '..')
-  return { dataDir, workspaceRoot, wprRoot }
+function resolveWprPaths(market: ArgusMarket): WprPaths {
+  const config = getArgusMarketConfig(market)
+  return { wprRoot: config.wprRoot, wprDataDir: config.wprDataDir }
 }
 
 function expectWeekLabel(value: string): string {
@@ -104,8 +88,8 @@ function resolveWeekFolderNumber(weekLabel: string): number {
   return Number.parseInt(weekLabel.slice(1), 10)
 }
 
-async function resolveWeekFolderPath(weekLabel: string): Promise<string> {
-  const { wprRoot } = resolveWprPaths()
+async function resolveWeekFolderPath(weekLabel: string, market: ArgusMarket): Promise<string> {
+  const { wprRoot } = resolveWprPaths(market)
   try {
     await stat(wprRoot)
   } catch {
@@ -164,18 +148,25 @@ function buildMarkdown(input: CreateWprChangeLogEntryInput): string {
   ].join('\n')
 }
 
-async function defaultRebuildRunner(): Promise<void> {
+async function defaultRebuildRunner(market: ArgusMarket): Promise<void> {
   const rebuildScript = join(process.cwd(), 'apps/argus/scripts/wpr/rebuild_wpr.py')
   const buildScript = join(process.cwd(), 'apps/argus/scripts/wpr/build_intent_cluster_dashboard.py')
+  const { wprDataDir } = resolveWprPaths(market)
   await stat(rebuildScript)
   await stat(buildScript)
-  await execFile('python3', [rebuildScript], { env: process.env, cwd: process.cwd(), maxBuffer: 1024 * 1024 * 16 })
-  await execFile('python3', [buildScript], { env: process.env, cwd: process.cwd(), maxBuffer: 1024 * 1024 * 16 })
+  const env = {
+    ...process.env,
+    ARGUS_MARKET: market,
+    WPR_DATA_DIR: wprDataDir,
+  }
+  await execFile('python3', [rebuildScript], { env, cwd: process.cwd(), maxBuffer: 1024 * 1024 * 16 })
+  await execFile('python3', [buildScript], { env, cwd: process.cwd(), maxBuffer: 1024 * 1024 * 16 })
 }
 
 export async function createWprChangeLogEntry(
   input: CreateWprChangeLogEntryInput,
-  runRebuild: () => Promise<void> = defaultRebuildRunner,
+  market: ArgusMarket = DEFAULT_ARGUS_MARKET,
+  runRebuild: (market: ArgusMarket) => Promise<void> = defaultRebuildRunner,
 ): Promise<{ filePath: string }> {
   const weekLabel = expectWeekLabel(input.weekLabel)
   const entryDate = expectEntryDate(input.entryDate)
@@ -187,7 +178,7 @@ export async function createWprChangeLogEntry(
   const highlights = expectLineItems(input.highlights, 'What changed')
   const statusLines = expectLineItems(input.statusLines, 'Status')
 
-  const weekFolderPath = await resolveWeekFolderPath(weekLabel)
+  const weekFolderPath = await resolveWeekFolderPath(weekLabel, market)
   const plansDir = join(weekFolderPath, 'output', 'Plans')
   await mkdir(plansDir, { recursive: true })
 
@@ -206,6 +197,6 @@ export async function createWprChangeLogEntry(
   })
 
   await writeFile(filePath, markdown, { encoding: 'utf8', flag: 'wx' })
-  await runRebuild()
+  await runRebuild(market)
   return { filePath }
 }

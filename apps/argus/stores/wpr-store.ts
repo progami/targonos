@@ -23,7 +23,7 @@ import type { WeekLabel } from '@/lib/wpr/types';
 type WprStore = WprDashboardState & {
   replaceState: (nextState: Partial<WprDashboardState>) => void;
   setActiveTab: (activeTab: WprTab) => void;
-  setSelectedWeek: (selectedWeek: WeekLabel) => void;
+  setSelectedWeek: (selectedWeek: WeekLabel | null) => void;
   setSelectedClusterId: (selectedClusterId: string | null) => void;
   setSelectedSqpRootIds: (rootIds: string[]) => void;
   setSelectedSqpTermIds: (termIds: string[]) => void;

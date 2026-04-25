@@ -5,8 +5,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/../common.sh"
+load_monitoring_env
 
-DEST="${ARGUS_BRAND_METRICS_DEST:-/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Weekly/Ad Console/Brand Metrics (Browser)}"
+DEST="${ARGUS_BRAND_METRICS_DEST:-$(argus_monitoring_root)/Weekly/Ad Console/Brand Metrics (Browser)}"
 DL="${ARGUS_BRAND_METRICS_DOWNLOAD_DIR:-$HOME/Downloads}"
 LOG="${ARGUS_BRAND_METRICS_LOG:-/tmp/weekly-brand-metrics.log}"
 TARGET_URL_BASE="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899"

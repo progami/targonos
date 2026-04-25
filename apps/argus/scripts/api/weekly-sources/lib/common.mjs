@@ -6,7 +6,6 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export const REPO_ROOT = path.resolve(__dirname, '../../../../../../')
-export const MONITORING_BASE = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000
 const BASE_WEEK_START_UTC = Date.UTC(2025, 11, 28)
@@ -56,6 +55,40 @@ export function requireEnv(name) {
   }
   return value.trim()
 }
+
+function readMarketArg(argv) {
+  const index = argv.indexOf('--market')
+  if (index < 0) return undefined
+  return argv[index + 1]
+}
+
+export function resolveArgusMarket(raw = readMarketArg(process.argv.slice(2)) ?? process.env.ARGUS_MARKET) {
+  if (raw === undefined) return 'us'
+  if (raw === null) return 'us'
+
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+export function marketEnvSuffix(market = resolveArgusMarket()) {
+  return market.toUpperCase()
+}
+
+export function salesRootForMarket(market = resolveArgusMarket()) {
+  return requireEnv(`ARGUS_SALES_ROOT_${marketEnvSuffix(market)}`)
+}
+
+export function monitoringBaseForMarket(market = resolveArgusMarket()) {
+  return path.join(salesRootForMarket(market), 'Monitoring')
+}
+
+loadMonitoringEnv()
+
+export const ARGUS_MARKET = resolveArgusMarket()
+export const MONITORING_BASE = monitoringBaseForMarket(ARGUS_MARKET)
 
 export function formatDate(date) {
   const year = date.getFullYear()

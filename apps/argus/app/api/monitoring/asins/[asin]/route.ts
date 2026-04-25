@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { parseArgusMarket } from '@/lib/argus-market'
 import { getMonitoringAsinDetail } from '@/lib/monitoring/reader'
 
 type Params = { params: Promise<{ asin: string }> }
@@ -8,7 +9,9 @@ export const dynamic = 'force-dynamic'
 export async function GET(_request: NextRequest, { params }: Params) {
   try {
     const { asin } = await params
-    const detail = await getMonitoringAsinDetail(asin)
+    const { searchParams } = new URL(_request.url)
+    const market = parseArgusMarket(searchParams.get('market'))
+    const detail = await getMonitoringAsinDetail(asin, market)
 
     if (!detail.current) {
       return NextResponse.json({ error: 'ASIN not found in monitoring state.' }, { status: 404 })
