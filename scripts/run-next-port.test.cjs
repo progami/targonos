@@ -14,14 +14,17 @@ test('parsePortFromEnvText ignores comments and blank lines', () => {
   assert.equal(parsePortFromEnvText('\n# comment\nPORT=41210\n'), 41210)
 })
 
-test('resolvePortFromAppEnv prefers the app env file over the fallback port', () => {
+test('resolvePortFromAppEnv returns the app env port', () => {
   const appDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-next-port-'))
   fs.writeFileSync(path.join(appDir, '.env.local'), 'PORT=41216\n', 'utf8')
 
-  assert.equal(resolvePortFromAppEnv(appDir, 3216), 41216)
+  assert.equal(resolvePortFromAppEnv(appDir), 41216)
 })
 
-test('resolvePortFromAppEnv returns the fallback port when no env file exists', () => {
+test('resolvePortFromAppEnv fails when no app env port exists', () => {
   const appDir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-next-port-'))
-  assert.equal(resolvePortFromAppEnv(appDir, 3214), 3214)
+  assert.throws(
+    () => resolvePortFromAppEnv(appDir),
+    /PORT must be defined in an app env file/,
+  )
 })

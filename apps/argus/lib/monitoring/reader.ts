@@ -919,26 +919,21 @@ function normalizeChangeEvent(
           currentSnapshot,
           baselineSnapshot,
         })
-  const displayName = label ?? row.event_label ?? asin
-  const headline =
-    didFilterBsrChanges
-      ? buildHeadline({
-          asin: displayName,
-          owner,
-          primaryCategory,
-          currentSnapshot,
-          baselineSnapshot,
-          changedFields,
-        })
-      : readString(row.event_headline) ??
-        buildHeadline({
-          asin: displayName,
-          owner,
-          primaryCategory,
-          currentSnapshot,
-          baselineSnapshot,
-          changedFields,
-        })
+  const displaySource =
+    currentSnapshot !== null
+      ? currentSnapshot
+      : baselineSnapshot !== null
+        ? baselineSnapshot
+        : { asin }
+  const displayName = label !== null ? label : formatMonitoringLabel(displaySource)
+  const headline = buildHeadline({
+    asin: displayName,
+    owner,
+    primaryCategory,
+    currentSnapshot,
+    baselineSnapshot,
+    changedFields,
+  })
   const summary =
     didFilterBsrChanges
       ? buildSummary({
@@ -960,7 +955,7 @@ function normalizeChangeEvent(
   return {
     id: `${asin}-${row.snapshot_timestamp_utc}-${index}`,
     asin,
-    label: label ?? row.event_label ?? null,
+    label: displayName,
     owner,
     timestamp: row.snapshot_timestamp_utc,
     baselineTimestamp: readString(row.baseline_timestamp_utc),
