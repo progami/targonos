@@ -74,22 +74,26 @@ test('atlas dev deploy no longer falls back to db push on migrate errors', () =>
   )
 })
 
-test('production deploys prefer .env.production before .env.local', () => {
+test('hosted deploys load exact shared and app env files without .env.local fallback', () => {
   assert.match(
     deployScript,
-    /ensure_database_url\(\)[\s\S]*?else[\s\S]*?candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
+    /load_selected_app_env\(\)[\s\S]*?if ! exports="\$\(node "\$REPO_DIR\/scripts\/load-app-env\.js" --app "\$app_key" --mode "\$shared_env_mode"\)"; then/,
   )
-  assert.match(
+  assert.doesNotMatch(
     deployScript,
-    /ensure_portal_db_url\(\)[\s\S]*?else[\s\S]*?candidates=\("\$sso_dir\/.env.production" "\$sso_dir\/.env.local" "\$sso_dir\/.env"\)/,
+    /candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
   )
-  assert.match(
+  assert.doesNotMatch(
     deployScript,
-    /resolve_portal_shared_secret\(\)[\s\S]*?else[\s\S]*?candidates=\("\$sso_dir\/.env.production" "\$sso_dir\/.env.local" "\$sso_dir\/.env"\)/,
+    /candidates=\("\$app_dir\/.env.local" "\$app_dir\/.env.dev" "\$app_dir\/.env.dev.ci" "\$app_dir\/.env"\)/,
   )
-  assert.match(
+  assert.doesNotMatch(
     deployScript,
-    /ensure_app_env_loaded\(\)[\s\S]*?else[\s\S]*?candidates=\("\$app_dir\/.env.production" "\$app_dir\/.env.local" "\$app_dir\/.env"\)/,
+    /candidates=\("\$sso_dir\/.env.production" "\$sso_dir\/.env.local" "\$sso_dir\/.env"\)/,
+  )
+  assert.doesNotMatch(
+    deployScript,
+    /candidates=\("\$sso_dir\/.env.local" "\$sso_dir\/.env.dev" "\$sso_dir\/.env.dev.ci" "\$sso_dir\/.env"\)/,
   )
 })
 

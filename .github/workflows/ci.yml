@@ -82,8 +82,12 @@ jobs:
         run: node scripts/sync-versions.js --check
       - name: Populate dev env files
         run: |
+          cp env/shared.dev.ci.env env/shared.local.env
+          cp env/shared.dev.ci.env env/shared.dev.env
+          cp env/shared.dev.ci.env env/shared.production.env
           cp apps/sso/.env.dev.ci apps/sso/.env.dev
           cp apps/sso/.env.dev.ci apps/sso/.env.local
+          cp apps/sso/.env.dev.ci apps/sso/.env.production
           python - <<'PY'
           from pathlib import Path
           env_local = Path('apps/sso/.env.local')
@@ -96,16 +100,28 @@ jobs:
           PY
           cp apps/talos/.env.dev.ci apps/talos/.env.dev
           cp apps/talos/.env.dev.ci apps/talos/.env.local
+          cp apps/talos/.env.dev.ci apps/talos/.env.production
           cp apps/xplan/.env.dev.ci apps/xplan/.env.dev
           cp apps/xplan/.env.dev.ci apps/xplan/.env.local
+          cp apps/xplan/.env.dev.ci apps/xplan/.env.production
           cp apps/kairos/.env.dev.ci apps/kairos/.env.dev
           cp apps/kairos/.env.dev.ci apps/kairos/.env.local
+          cp apps/kairos/.env.dev.ci apps/kairos/.env.production
           cp apps/atlas/.env.dev.ci apps/atlas/.env.dev
           cp apps/atlas/.env.dev.ci apps/atlas/.env.local
+          cp apps/atlas/.env.dev.ci apps/atlas/.env.production
           cp apps/plutus/.env.dev.ci apps/plutus/.env.dev
           cp apps/plutus/.env.dev.ci apps/plutus/.env.local
+          cp apps/plutus/.env.dev.ci apps/plutus/.env.production
           cp apps/argus/.env.dev.ci apps/argus/.env.dev
           cp apps/argus/.env.dev.ci apps/argus/.env.local
+          cp apps/argus/.env.dev.ci apps/argus/.env.production
+          cp apps/hermes/.env.dev.ci apps/hermes/.env.dev
+          cp apps/hermes/.env.dev.ci apps/hermes/.env.local
+          cp apps/hermes/.env.dev.ci apps/hermes/.env.production
+          cp apps/website/.env.dev.ci apps/website/.env.dev
+          cp apps/website/.env.dev.ci apps/website/.env.local
+          cp apps/website/.env.dev.ci apps/website/.env.production
       - name: Verify CI env contracts
         run: node scripts/verify-ci-env-contracts.mjs
       - name: Verify dev environment configuration

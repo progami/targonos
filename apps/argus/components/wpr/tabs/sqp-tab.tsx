@@ -4,27 +4,15 @@ import { useEffect } from 'react'
 import { Box, Stack } from '@mui/material'
 import {
   createSqpSelectionViewModel,
+  defaultSqpRootIds,
   rootTermIds,
+  selectableSqpTermIdsForRoots,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { buildBundleWeekStartDateLookup } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import SqpSelectionTable from './sqp-selection-table'
 import SqpWeeklyPanel from './sqp-weekly-panel'
-
-function getDefaultRootId(bundle: WprWeekBundle): string | null {
-  const defaultRootId = bundle.defaultClusterIds[0]
-  if (defaultRootId !== undefined) {
-    return defaultRootId
-  }
-
-  const firstCluster = bundle.clusters[0]
-  if (firstCluster !== undefined) {
-    return firstCluster.id
-  }
-
-  return null
-}
 
 function filterIds(ids: Set<string>, allowedIds: Set<string>): string[] {
   return Array.from(ids).filter((id) => allowedIds.has(id))
@@ -37,24 +25,6 @@ function firstSetMember(ids: Set<string>): string | null {
   }
 
   return first
-}
-
-function allSelectableTermIds(bundle: WprWeekBundle): string[] {
-  const termIds: string[] = []
-  const seenTermIds = new Set<string>()
-
-  for (const cluster of bundle.clusters) {
-    for (const termId of rootTermIds(bundle, cluster.id)) {
-      if (seenTermIds.has(termId)) {
-        continue
-      }
-
-      seenTermIds.add(termId)
-      termIds.push(termId)
-    }
-  }
-
-  return termIds
 }
 
 export default function SqpTab({
@@ -112,10 +82,12 @@ export default function SqpTab({
     const filteredExpandedIds = filterIds(expandedSqpRootIds, rootIdSet)
 
     if (!hasInitializedSqpSelection) {
+      const initialRootIds = defaultSqpRootIds(bundle)
+      const initialClusterId = initialRootIds[0]
       replaceState({
-        selectedClusterId: null,
-        selectedSqpRootIds: new Set<string>(),
-        selectedSqpTermIds: new Set<string>(),
+        selectedClusterId: initialClusterId === undefined ? null : initialClusterId,
+        selectedSqpRootIds: new Set(initialRootIds),
+        selectedSqpTermIds: new Set(selectableSqpTermIdsForRoots(bundle, initialRootIds)),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
@@ -257,10 +229,12 @@ export default function SqpTab({
   }
 
   const handleSelectAll = () => {
+    const initialRootIds = defaultSqpRootIds(bundle)
+    const initialClusterId = initialRootIds[0]
     replaceSqpSelection({
-      rootIds: bundle.clusters.map((cluster) => cluster.id),
-      termIds: allSelectableTermIds(bundle),
-      clusterId: getDefaultRootId(bundle),
+      rootIds: initialRootIds,
+      termIds: selectableSqpTermIdsForRoots(bundle, initialRootIds),
+      clusterId: initialClusterId === undefined ? null : initialClusterId,
       hasInitialized: true,
     })
   }

@@ -12,6 +12,24 @@ process.env.PORTAL_AUTH_SECRET = process.env.PORTAL_AUTH_SECRET || 'test-hosted-
 
 const ecosystem = require('./ecosystem.config.js')
 
+function writeSharedEnv(root, mode) {
+  const envDir = path.join(root, 'env')
+  fs.mkdirSync(envDir, { recursive: true })
+  fs.writeFileSync(
+    path.join(envDir, `shared.${mode}.env`),
+    [
+      'AMAZON_SP_APP_CLIENT_ID=',
+      'AMAZON_SP_APP_CLIENT_SECRET=',
+      'AMAZON_REFRESH_TOKEN=',
+      'AMAZON_REFRESH_TOKEN_US=',
+      'AMAZON_REFRESH_TOKEN_UK=',
+      'AMAZON_SP_API_REGION=na',
+      'AMAZON_MARKETPLACE_ID=ATVPDKIKX0DER',
+      '',
+    ].join('\n'),
+  )
+}
+
 const hostedAppExpectations = [
   { name: 'dev-talos', appUrl: 'https://dev-os.targonglobal.com/talos', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'dev-atlas', appUrl: 'https://dev-os.targonglobal.com/atlas', portalUrl: 'https://dev-os.targonglobal.com' },
@@ -83,6 +101,7 @@ test('hosted Hermes workers load production env files', () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'targonos-hermes-worker-env-'))
   const hermesDir = path.join(fixtureRoot, 'apps', 'hermes')
   fs.mkdirSync(hermesDir, { recursive: true })
+  writeSharedEnv(fixtureRoot, 'production')
 
   fs.writeFileSync(
     path.join(hermesDir, '.env.production'),
@@ -115,9 +134,10 @@ test('hosted child app env strips local hosted overrides and uses portal-managed
   const plutusDir = path.join(fixtureRoot, 'apps', 'plutus')
   fs.mkdirSync(ssoDir, { recursive: true })
   fs.mkdirSync(plutusDir, { recursive: true })
+  writeSharedEnv(fixtureRoot, 'dev')
 
   fs.writeFileSync(
-    path.join(ssoDir, '.env.local'),
+    path.join(ssoDir, '.env.dev'),
     [
       'PORTAL_AUTH_SECRET=portal-shared-secret',
       'NEXTAUTH_SECRET=portal-nextauth-secret',
@@ -129,7 +149,7 @@ test('hosted child app env strips local hosted overrides and uses portal-managed
   )
 
   fs.writeFileSync(
-    path.join(plutusDir, '.env.local'),
+    path.join(plutusDir, '.env.dev'),
     [
       'PORTAL_AUTH_SECRET=wrong-plutus-secret',
       'NEXTAUTH_SECRET=wrong-plutus-secret',

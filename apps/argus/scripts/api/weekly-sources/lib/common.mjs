@@ -1,11 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export const REPO_ROOT = path.resolve(__dirname, '../../../../../../')
+const require = createRequire(import.meta.url)
+const { loadEnvForApp } = require(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000
 const BASE_WEEK_START_UTC = Date.UTC(2025, 11, 28)
@@ -40,12 +43,19 @@ export function loadEnvFile(file) {
 }
 
 export function loadMonitoringEnv() {
-  // Argus carries the concrete monitoring secrets; Talos now carries Bitwarden refs.
-  // Load Argus first so the shared loader does not lock in unresolved bw:// placeholders.
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+  let mode = 'local'
+  if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
+    mode = process.env.ARGUS_ENV_MODE
+  } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
+    mode = process.env.TARGONOS_ENV_MODE
+  }
+
+  loadEnvForApp({
+    repoRoot: REPO_ROOT,
+    appName: 'argus',
+    mode,
+    targetEnv: process.env,
+  })
 }
 
 export function requireEnv(name) {

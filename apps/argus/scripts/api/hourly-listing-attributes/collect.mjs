@@ -11,6 +11,7 @@ const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '../../../../../')
 const ARGUS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/argus/package.json')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
+const { loadEnvForApp } = createRequire(import.meta.url)(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
 
 let MONITORING_HOURLY_LISTINGS_DIR = ''
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
@@ -1823,10 +1824,19 @@ ${overflowRow}
 }
 
 async function main() {
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+  let envMode = 'local'
+  if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
+    envMode = process.env.ARGUS_ENV_MODE
+  } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
+    envMode = process.env.TARGONOS_ENV_MODE
+  }
+
+  loadEnvForApp({
+    repoRoot: REPO_ROOT,
+    appName: 'argus',
+    mode: envMode,
+    targetEnv: process.env,
+  })
   const market = resolveArgusMarket()
   const envSuffix = market.toUpperCase()
   MONITORING_HOURLY_LISTINGS_DIR = monitoringHourlyListingsDir(market)

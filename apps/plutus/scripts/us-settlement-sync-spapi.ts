@@ -1,10 +1,11 @@
 import { promises as fs } from 'node:fs';
+import { loadSharedPlutusEnv } from './shared-env';
 
 type CliOptions = {
   startDate: string;
   endDate: string | undefined;
   settlementIds: string[] | undefined;
-  amazonEnvPath: string;
+  amazonEnvPath: string | null;
   plutusEnvPath: string;
   postToQbo: boolean;
   process: boolean;
@@ -63,7 +64,7 @@ function parseArgs(argv: string[]): CliOptions {
   let startDate = '2025-12-01';
   let endDate: string | undefined;
   let settlementIds: string[] | undefined;
-  let amazonEnvPath = '../talos/.env.local';
+  let amazonEnvPath: string | null = null;
   let plutusEnvPath = '.env.local';
   let postToQbo = true;
   let process = false;
@@ -136,7 +137,11 @@ function parseArgs(argv: string[]): CliOptions {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
 
-  await loadAmazonEnvFile(options.amazonEnvPath);
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  } else {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
   await loadPlutusEnvFile(options.plutusEnvPath);
 
   const { syncUsSettlementsFromSpApiFinances } = await import('@/lib/amazon-finances/us-settlement-sync');

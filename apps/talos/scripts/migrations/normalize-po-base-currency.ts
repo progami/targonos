@@ -10,6 +10,8 @@ import { PURCHASE_ORDER_BASE_CURRENCY } from '../../src/lib/constants/cost-curre
 
 type SchemaTier = 'main' | 'dev'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   schemaTiers: SchemaTier[]
@@ -18,15 +20,7 @@ type ScriptOptions = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {

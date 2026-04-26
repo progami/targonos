@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
+import { loadSharedPlutusEnv } from './shared-env';
 import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
@@ -23,7 +24,7 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 type CliOptions = {
   settlementIds: string[];
   startDate: string;
-  amazonEnvPath: string;
+  amazonEnvPath: string | null;
   plutusEnvPath: string;
   templateDocNumber: string | null;
   post: boolean;
@@ -82,7 +83,7 @@ async function loadPlutusEnvFile(filePath: string): Promise<void> {
 function parseArgs(argv: string[]): CliOptions {
   let settlementIds: string[] = [];
   let startDate = '2025-12-01';
-  let amazonEnvPath = '../talos/.env.local';
+  let amazonEnvPath: string | null = null;
   let plutusEnvPath = '.env.local';
   let templateDocNumber: string | null = null;
   let post = false;
@@ -286,7 +287,11 @@ async function findAccountIdInRecentUsSettlementJournals(input: {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
 
-  await loadAmazonEnvFile(options.amazonEnvPath);
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  } else {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
   await loadPlutusEnvFile(options.plutusEnvPath);
 
   const { db } = await import('@/lib/db');

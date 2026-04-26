@@ -8,6 +8,8 @@ import { getReferralFeePercent2026 } from '../../src/lib/amazon/fees'
 import type { TenantCode } from '../../src/lib/tenant/constants'
 import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   dryRun: boolean
@@ -15,15 +17,7 @@ type ScriptOptions = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {

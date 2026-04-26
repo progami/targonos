@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
-const { readFileSync, existsSync } = require('node:fs');
 const path = require('node:path');
+const { loadEnvForApp } = require('../../../scripts/lib/shared-env.cjs');
 
 const SHARED_SCHEMAS = new Set([
   'dev_talos_us',
@@ -11,58 +11,24 @@ const SHARED_SCHEMAS = new Set([
 ]);
 
 const appDir = path.resolve(__dirname, '..');
-const envCandidates = [
-  path.join(appDir, '.env.local'),
-  path.join(appDir, '.env.dev'),
-  path.join(appDir, '.env.production'),
-  path.join(appDir, '.env'),
-];
-
-function parseDotenv(filePath) {
-  const out = {};
-  const content = readFileSync(filePath, 'utf8');
-  for (const rawLine of content.split(/\r?\n/)) {
-    const trimmed = rawLine.trim();
-    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) {
-      continue;
-    }
-
-    const line = trimmed.startsWith('export ') ? trimmed.slice(7).trimStart() : trimmed;
-    const separator = line.indexOf('=');
-    const key = line.slice(0, separator).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
-      continue;
-    }
-    let value = line.slice(separator + 1);
-    if (value.startsWith('"') && value.endsWith('"')) {
-      value = value.slice(1, -1);
-    } else if (value.startsWith("'") && value.endsWith("'")) {
-      value = value.slice(1, -1);
-    }
-    out[key] = value;
-  }
-  return out;
-}
+const repoRoot = path.resolve(appDir, '..', '..');
 
 function loadEnvIfNeeded() {
   if (process.env.DATABASE_URL || process.env.DATABASE_URL_US || process.env.DATABASE_URL_UK) {
     return;
   }
 
-  for (const candidate of envCandidates) {
-    if (!existsSync(candidate)) {
-      continue;
-    }
-    const parsed = parseDotenv(candidate);
-    for (const [key, value] of Object.entries(parsed)) {
-      if (!process.env[key]) {
-        process.env[key] = value;
-      }
-    }
-    if (process.env.DATABASE_URL || process.env.DATABASE_URL_US || process.env.DATABASE_URL_UK) {
-      return;
-    }
+  let mode = 'local';
+  if (process.env.TALOS_ENV_MODE) {
+    mode = process.env.TALOS_ENV_MODE;
   }
+
+  loadEnvForApp({
+    repoRoot,
+    appName: 'talos',
+    mode,
+    targetEnv: process.env,
+  });
 }
 
 function resolveConnectionStrings() {

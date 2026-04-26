@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { allSelectableSqpTermIds, createSqpSelectionViewModel, sortSqpRootRows, sortSqpTermRows } from './sqp-view-model'
+import {
+  allSelectableSqpTermIds,
+  createSqpSelectionViewModel,
+  defaultSqpRootIds,
+  selectableSqpTermIdsForRoots,
+  sortSqpRootRows,
+  sortSqpTermRows,
+} from './sqp-view-model'
 import type { WprWeekBundle } from './types'
 
 function buildObserved(weekLabel: string, queryVolume: number, purchases: number) {
@@ -468,6 +475,34 @@ test('allSelectableSqpTermIds returns every term shown in the selection table', 
     'cluster-1::term-1',
     'cluster-1::term-2',
     'cluster-2::term-1',
+  ])
+})
+
+test('defaultSqpRootIds returns valid default roots and falls back to all roots when omitted', () => {
+  const bundle = buildBundle()
+
+  assert.deepEqual(defaultSqpRootIds(bundle), ['cluster-1', 'cluster-2'])
+
+  bundle.defaultClusterIds = []
+  assert.deepEqual(defaultSqpRootIds(bundle), ['cluster-1', 'cluster-2'])
+})
+
+test('defaultSqpRootIds fails when the payload references a missing root', () => {
+  const bundle = buildBundle()
+  bundle.defaultClusterIds = ['cluster-missing']
+
+  assert.throws(
+    () => defaultSqpRootIds(bundle),
+    /Default SQP root id is not present in the bundle: cluster-missing/,
+  )
+})
+
+test('selectableSqpTermIdsForRoots returns the table terms for selected roots only', () => {
+  const bundle = buildBundle()
+
+  assert.deepEqual(selectableSqpTermIdsForRoots(bundle, ['cluster-1']), [
+    'cluster-1::term-1',
+    'cluster-1::term-2',
   ])
 })
 
