@@ -6,6 +6,7 @@ import {
   createInitialDashboardState,
   getInitialWprTab,
   getLegacyWprRedirect,
+  migrateWprDashboardState,
   switchDashboardWeek,
   toggleSetMember,
   WPR_TABS,
@@ -142,4 +143,31 @@ test('WPR state JSON replacer and reviver preserve Set-backed fields', () => {
   assert.deepEqual([...roundTrip.selectedSqpRootIds], ['cluster-a'])
   assert.ok(roundTrip.weekStateByWeek.W16?.selectedSqpRootIds instanceof Set)
   assert.deepEqual([...roundTrip.weekStateByWeek.W16!.selectedSqpRootIds], ['cluster-a'])
+})
+
+test('WPR persisted state migration reopens initialized empty SQP selections', () => {
+  const state = createInitialDashboardState('W16')
+  state.hasInitializedSqpSelection = true
+  state.weekStateByWeek.W16 = {
+    ...captureWeekScopedState(state),
+    hasInitializedSqpSelection: true,
+  }
+
+  const migrated = migrateWprDashboardState(state, 1) as typeof state
+
+  assert.equal(migrated.hasInitializedSqpSelection, false)
+  assert.equal(migrated.weekStateByWeek.W16?.hasInitializedSqpSelection, false)
+})
+
+test('WPR persisted state migration preserves non-empty SQP selections', () => {
+  const state = createInitialDashboardState('W16')
+  state.selectedSqpRootIds = new Set(['cluster-a'])
+  state.selectedSqpTermIds = new Set(['term-a'])
+  state.hasInitializedSqpSelection = true
+
+  const migrated = migrateWprDashboardState(state, 1) as typeof state
+
+  assert.equal(migrated.hasInitializedSqpSelection, true)
+  assert.deepEqual([...migrated.selectedSqpRootIds], ['cluster-a'])
+  assert.deepEqual([...migrated.selectedSqpTermIds], ['term-a'])
 })

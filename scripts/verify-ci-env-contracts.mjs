@@ -1,6 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { validateSharedEnvEntries } = require('./lib/shared-env.cjs')
 
 export const DEV_PORTAL_ORIGIN = 'https://dev-os.targonglobal.com'
 export const DEV_COOKIE_DOMAIN = '.dev-os.targonglobal.com'
@@ -69,11 +73,16 @@ export function validateCiEnvEntries(entries, filePath) {
 
 export function collectCiEnvFiles(repoRoot) {
   const appsDir = path.join(repoRoot, 'apps')
-  return fs.readdirSync(appsDir, { withFileTypes: true })
+  const appEnvFiles = fs.readdirSync(appsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => path.join(appsDir, entry.name, '.env.dev.ci'))
     .filter((filePath) => fs.existsSync(filePath))
     .sort()
+  const sharedEnvFile = path.join(repoRoot, 'env', 'shared.dev.ci.env')
+  if (fs.existsSync(sharedEnvFile)) {
+    return [sharedEnvFile, ...appEnvFiles]
+  }
+  return appEnvFiles
 }
 
 export function verifyCiEnvContracts(repoRoot) {
@@ -84,7 +93,11 @@ export function verifyCiEnvContracts(repoRoot) {
     const relativePath = path.relative(repoRoot, filePath)
     const text = fs.readFileSync(filePath, 'utf8')
     const entries = parseEnvFile(text, relativePath)
-    errors.push(...validateCiEnvEntries(entries, relativePath))
+    if (relativePath === path.join('env', 'shared.dev.ci.env')) {
+      errors.push(...validateSharedEnvEntries(entries, relativePath))
+    } else {
+      errors.push(...validateCiEnvEntries(entries, relativePath))
+    }
   }
 
   return { envFiles, errors }

@@ -12,19 +12,6 @@ export interface ProductInput {
   storagePerMonth: number;
 }
 
-export interface LeadStageTemplateInput {
-  id: string;
-  label: string;
-  defaultWeeks: number;
-  sequence: number;
-}
-
-export interface LeadStageOverrideInput {
-  productId: string;
-  stageTemplateId: string;
-  durationWeeks: number;
-}
-
 export interface LeadTimeProfile {
   productionWeeks: number;
   sourceWeeks: number;
@@ -65,13 +52,7 @@ export interface PurchaseOrderPaymentInput {
   dueDateSource?: 'SYSTEM' | 'USER';
 }
 
-export type PurchaseOrderStatus =
-  | 'DRAFT'
-  | 'ISSUED'
-  | 'MANUFACTURING'
-  | 'OCEAN'
-  | 'WAREHOUSE'
-  | 'SHIPPED';
+export type PurchaseOrderStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'CANCELLED';
 
 export interface PurchaseOrderInput {
   id: string;

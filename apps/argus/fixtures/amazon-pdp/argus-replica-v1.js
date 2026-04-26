@@ -2,14 +2,36 @@
   const REPLICA_VERSION = 'amazon-pdp-v1'
   const SLOT_ATTR = 'data-argus-slot'
 
-  function setSlot(selector, slot) {
+  function requireElement(selector) {
     const el = document.querySelector(selector)
-    if (!el) return
+    if (!el) {
+      throw new Error(`[Argus replica] Missing required selector: ${selector}`)
+    }
+    return el
+  }
+
+  function setSlot(selector, slot) {
+    const el = requireElement(selector)
     el.setAttribute(SLOT_ATTR, slot)
+  }
+
+  function reorderBelowTheFold() {
+    const zone = requireElement('#Desktop-Detailed-Evaluation-Zone')
+    const productVideos = requireElement('#va-related-videos-widget_feature_div')
+    const brandStory = requireElement('#aplusBrandStory_feature_div')
+    const subNav = requireElement('#btfSubNavDesktopCopy')
+    const productDetails = requireElement('#productDetails_feature_div')
+    const productDescription = requireElement('#aplus_feature_div')
+
+    zone.insertBefore(brandStory, subNav)
+    zone.insertBefore(productDescription, subNav)
+    zone.insertBefore(productDetails, productDescription.nextSibling)
+    zone.insertBefore(productVideos, productDetails.nextSibling)
   }
 
   function bindSlots() {
     document.documentElement.setAttribute('data-argus-replica', REPLICA_VERSION)
+    reorderBelowTheFold()
 
     setSlot('#imageBlock', 'gallery-root')
     setSlot('#landingImage', 'gallery-landing-image')

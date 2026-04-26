@@ -98,18 +98,12 @@ function toUtcDateOnly(value: Date | null | undefined): Date | null {
 }
 
 const XPLAN_STATUS_VALUES = new Set<string>([
-  'DRAFT',
   'ISSUED',
   'MANUFACTURING',
   'OCEAN',
   'WAREHOUSE',
-  'SHIPPED',
-  'REJECTED',
-  'ARCHIVED',
   'CANCELLED',
 ]);
-
-const TALOS_IMPORT_DISALLOWED_STATUS_VALUES = new Set<string>(['CANCELLED', 'REJECTED']);
 
 function mapTalosStatus(value: string): XPlanPurchaseOrderStatus {
   const normalized = value
@@ -121,13 +115,17 @@ function mapTalosStatus(value: string): XPlanPurchaseOrderStatus {
   }
 
   switch (normalized) {
-    case 'CLOSED':
-      return 'SHIPPED';
-    case 'POSTED':
+    case 'RFQ':
       return 'ISSUED';
+    case 'CLOSED':
+    case 'ARCHIVED':
+    case 'REJECTED':
+      return 'CANCELLED';
+    case 'POSTED':
+    case 'SHIPPED':
     case 'REVIEW':
     case 'AWAITING_PROOF':
-      return 'DRAFT';
+      return 'WAREHOUSE';
     default:
       return 'ISSUED';
   }
@@ -496,19 +494,6 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
 
   try {
     for (const purchaseOrder of talosPurchaseOrders) {
-      const talosStatusNormalized = String(purchaseOrder.status)
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z_]/g, '');
-      if (TALOS_IMPORT_DISALLOWED_STATUS_VALUES.has(talosStatusNormalized)) {
-        const message = `Talos purchase order is ${talosStatusNormalized} and cannot be imported`;
-        if (references.length === 1) {
-          return NextResponse.json({ error: message }, { status: 400 });
-        }
-        failed.push(buildFailure(purchaseOrder, message));
-        continue;
-      }
-
       if (!Array.isArray(purchaseOrder.lines) || purchaseOrder.lines.length === 0) {
         if (references.length === 1) {
           return NextResponse.json(

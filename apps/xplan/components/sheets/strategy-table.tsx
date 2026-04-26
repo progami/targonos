@@ -161,7 +161,9 @@ export function StrategyTable({
       }
     }
     void loadAssignees();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* ---- Derived ---- */
@@ -170,9 +172,8 @@ export function StrategyTable({
   const selectedStrategyName = strategies.find((s) => s.id === selectedStrategyId)?.name ?? null;
 
   const filteredStrategies = useMemo(() => {
-    const filtered = regionFilter === 'ALL'
-      ? strategies
-      : strategies.filter((s) => s.region === regionFilter);
+    const filtered =
+      regionFilter === 'ALL' ? strategies : strategies.filter((s) => s.region === regionFilter);
 
     return [...filtered].sort((a, b) => {
       const groupCmp = a.strategyGroup!.name.localeCompare(b.strategyGroup!.name);
@@ -207,10 +208,13 @@ export function StrategyTable({
 
   /* ---- Handlers ---- */
 
-  const handleRowClick = useCallback((strategy: Strategy) => {
-    if (strategy.id === selectedStrategyId) return;
-    setPendingSwitch({ id: strategy.id, name: strategy.name });
-  }, [selectedStrategyId]);
+  const handleRowClick = useCallback(
+    (strategy: Strategy) => {
+      if (strategy.id === selectedStrategyId) return;
+      setPendingSwitch({ id: strategy.id, name: strategy.name });
+    },
+    [selectedStrategyId],
+  );
 
   const confirmSwitch = useCallback(() => {
     if (!pendingSwitch) return;
@@ -221,17 +225,20 @@ export function StrategyTable({
     toast.success(`Switched to "${pendingSwitch.name}"`);
   }, [pendingSwitch, searchParams, router]);
 
-  const openCreateDialog = useCallback((groupId: string) => {
-    setScenarioDialog({
-      mode: 'create',
-      groupId,
-      strategyId: null,
-      name: '',
-      description: '',
-      assigneeIds: viewer.id ? [viewer.id] : [],
-      isPrimary: false,
-    });
-  }, [viewer.id]);
+  const openCreateDialog = useCallback(
+    (groupId: string) => {
+      setScenarioDialog({
+        mode: 'create',
+        groupId,
+        strategyId: null,
+        name: '',
+        description: '',
+        assigneeIds: viewer.id ? [viewer.id] : [],
+        isPrimary: false,
+      });
+    },
+    [viewer.id],
+  );
 
   const openEditDialog = useCallback((strategy: Strategy) => {
     setScenarioDialog({
@@ -245,84 +252,87 @@ export function StrategyTable({
     });
   }, []);
 
-  const handleScenarioSubmit = useCallback(async (data: {
-    mode: 'create' | 'edit';
-    groupId: string;
-    strategyId: string | null;
-    name: string;
-    description: string;
-    assigneeIds: string[];
-    isPrimary: boolean;
-  }) => {
-    const trimmedName = data.name.trim();
-    if (!trimmedName) {
-      toast.error('Enter a scenario name');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      if (data.mode === 'create') {
-        const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            strategyGroupId: data.groupId,
-            name: trimmedName,
-            description: data.description,
-            assigneeIds: data.assigneeIds,
-            isPrimary: data.isPrimary,
-          }),
-        });
-        const result = (await response.json().catch(() => null)) as {
-          strategy?: Strategy;
-          error?: string;
-        } | null;
-        if (!response.ok || !result?.strategy) {
-          throw new Error(result?.error ?? 'Failed to create scenario');
-        }
-        const created = result.strategy;
-        setStrategies((prev) => {
-          const next = prev.map((s) =>
-            created.isPrimary && s.strategyGroupId === created.strategyGroupId
-              ? { ...s, isPrimary: false }
-              : s,
-          );
-          next.push(created);
-          return next;
-        });
-        toast.success('Scenario created');
-      } else {
-        const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: data.strategyId,
-            name: trimmedName,
-            description: data.description,
-            assigneeIds: data.assigneeIds,
-          }),
-        });
-        const result = (await response.json().catch(() => null)) as {
-          strategy?: Strategy;
-          error?: string;
-        } | null;
-        if (!response.ok || !result?.strategy) {
-          throw new Error(result?.error ?? 'Failed to update scenario');
-        }
-        setStrategies((prev) =>
-          prev.map((s) => (s.id === data.strategyId ? { ...s, ...result.strategy } : s)),
-        );
-        toast.success('Scenario updated');
+  const handleScenarioSubmit = useCallback(
+    async (data: {
+      mode: 'create' | 'edit';
+      groupId: string;
+      strategyId: string | null;
+      name: string;
+      description: string;
+      assigneeIds: string[];
+      isPrimary: boolean;
+    }) => {
+      const trimmedName = data.name.trim();
+      if (!trimmedName) {
+        toast.error('Enter a scenario name');
+        return;
       }
-      setScenarioDialog(null);
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Operation failed');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, []);
+
+      setIsSubmitting(true);
+      try {
+        if (data.mode === 'create') {
+          const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              strategyGroupId: data.groupId,
+              name: trimmedName,
+              description: data.description,
+              assigneeIds: data.assigneeIds,
+              isPrimary: data.isPrimary,
+            }),
+          });
+          const result = (await response.json().catch(() => null)) as {
+            strategy?: Strategy;
+            error?: string;
+          } | null;
+          if (!response.ok || !result?.strategy) {
+            throw new Error(result?.error ?? 'Failed to create scenario');
+          }
+          const created = result.strategy;
+          setStrategies((prev) => {
+            const next = prev.map((s) =>
+              created.isPrimary && s.strategyGroupId === created.strategyGroupId
+                ? { ...s, isPrimary: false }
+                : s,
+            );
+            next.push(created);
+            return next;
+          });
+          toast.success('Scenario created');
+        } else {
+          const response = await fetch(withAppBasePath('/api/v1/xplan/strategies'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: data.strategyId,
+              name: trimmedName,
+              description: data.description,
+              assigneeIds: data.assigneeIds,
+            }),
+          });
+          const result = (await response.json().catch(() => null)) as {
+            strategy?: Strategy;
+            error?: string;
+          } | null;
+          if (!response.ok || !result?.strategy) {
+            throw new Error(result?.error ?? 'Failed to update scenario');
+          }
+          setStrategies((prev) =>
+            prev.map((s) => (s.id === data.strategyId ? { ...s, ...result.strategy } : s)),
+          );
+          toast.success('Scenario updated');
+        }
+        setScenarioDialog(null);
+      } catch (error) {
+        console.error(error);
+        toast.error(error instanceof Error ? error.message : 'Operation failed');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [],
+  );
 
   const confirmDelete = useCallback(async () => {
     if (!pendingDelete) return;
@@ -352,9 +362,8 @@ export function StrategyTable({
 
   /* ---- Render ---- */
 
-  const availableGroups = regionFilter === 'ALL'
-    ? groups
-    : groups.filter((group) => group.region === regionFilter);
+  const availableGroups =
+    regionFilter === 'ALL' ? groups : groups.filter((group) => group.region === regionFilter);
 
   return (
     <>
@@ -399,11 +408,21 @@ export function StrategyTable({
           <Table>
             <TableHeader className="bg-slate-50/90 dark:bg-slate-900/90">
               <TableRow className="border-slate-200/80 hover:bg-transparent dark:border-slate-700/70">
-                <TableHead className="h-11 w-[280px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Strategy</TableHead>
-                <TableHead className="px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Group</TableHead>
-                <TableHead className="w-[88px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Region</TableHead>
-                <TableHead className="w-[90px] px-4 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">Products</TableHead>
-                <TableHead className="w-[120px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">Updated</TableHead>
+                <TableHead className="h-11 w-[280px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">
+                  Strategy
+                </TableHead>
+                <TableHead className="px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">
+                  Group
+                </TableHead>
+                <TableHead className="w-[88px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">
+                  Region
+                </TableHead>
+                <TableHead className="w-[90px] px-4 text-right text-[11px] font-semibold uppercase tracking-[0.14em]">
+                  Products
+                </TableHead>
+                <TableHead className="w-[120px] px-4 text-[11px] font-semibold uppercase tracking-[0.14em]">
+                  Updated
+                </TableHead>
                 <TableHead className="w-[60px]" />
               </TableRow>
             </TableHeader>
@@ -420,10 +439,12 @@ export function StrategyTable({
                   return (
                     <TableRow
                       key={strategy.id}
+                      aria-current={isActive ? 'true' : undefined}
                       onClick={() => handleRowClick(strategy)}
                       className={cn(
                         'cursor-pointer border-slate-200/80 hover:bg-slate-50/80 dark:border-slate-700/70 dark:hover:bg-slate-900/70',
-                        isActive && 'bg-cyan-50/70 ring-1 ring-inset ring-cyan-200/70 dark:bg-cyan-950/40 dark:ring-cyan-500/30',
+                        isActive &&
+                          'border-l-4 border-l-cyan-600 bg-cyan-100/80 shadow-[inset_0_0_0_1px_rgba(8,145,178,0.28)] dark:border-l-cyan-300 dark:bg-cyan-950/55 dark:shadow-[inset_0_0_0_1px_rgba(103,232,249,0.24)]',
                       )}
                     >
                       <TableCell className="px-4 py-3.5 font-medium">
@@ -435,7 +456,7 @@ export function StrategyTable({
                             <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400 shrink-0" />
                           )}
                           {isActive && (
-                            <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-800 dark:border-emerald-400/25 dark:bg-emerald-500/10 dark:text-emerald-200">
+                            <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-emerald-900 shadow-sm dark:border-emerald-300/45 dark:bg-emerald-500/18 dark:text-emerald-100">
                               Live
                             </span>
                           )}
@@ -453,7 +474,8 @@ export function StrategyTable({
                       </TableCell>
                       <TableCell className="px-4 py-3.5">
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          {strategy.region === 'US' ? '\u{1F1FA}\u{1F1F8}' : '\u{1F1EC}\u{1F1E7}'} {strategy.region}
+                          {strategy.region === 'US' ? '\u{1F1FA}\u{1F1F8}' : '\u{1F1EC}\u{1F1E7}'}{' '}
+                          {strategy.region}
                         </span>
                       </TableCell>
                       <TableCell className="px-4 py-3.5 text-right font-mono text-sm tabular-nums">

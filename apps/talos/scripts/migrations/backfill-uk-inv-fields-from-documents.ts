@@ -47,6 +47,8 @@ import type { TenantCode } from '../../src/lib/tenant/constants'
 
 type OcrMode = 'off' | 'auto' | 'always'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenant: TenantCode
   all: boolean
@@ -248,15 +250,7 @@ const BATCHES_ROOT_BY_TENANT: Record<TenantCode, string> = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function rewriteSchema(urlString: string, schema: string): string {

@@ -116,7 +116,7 @@ function resolveSectionCopy(pathname: string) {
   return {
     eyebrow: 'Argus / Listings',
     title: 'Listing controls',
-    subtitle: 'Manage replica content, revisions, and snapshot ingest for Amazon PDPs.',
+    subtitle: 'Manage replica content and listing revisions for Amazon PDPs.',
   };
 }
 
