@@ -14,7 +14,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Tooltip,
@@ -117,7 +116,7 @@ function ProductCell({ row }: { row: ListingTableRow }) {
             display: 'block',
             fontSize: '0.8rem',
             fontWeight: 800,
-            maxWidth: 520,
+            maxWidth: 300,
             overflow: 'hidden',
             textDecoration: 'none',
             textOverflow: 'ellipsis',
@@ -228,26 +227,31 @@ export function ListingsTable({ viewModel }: { viewModel: ListingsViewModel }) {
       {metadataError ? <Alert severity="error">{metadataError}</Alert> : null}
       {refreshingMetadata ? <LinearProgress /> : null}
 
-      <TableContainer
+      <Box
         sx={{
           border: '1px solid',
           borderColor: 'divider',
           borderRadius: 1,
           bgcolor: 'background.paper',
-          overflowX: 'auto',
+          display: 'inline-block',
+          overflowX: 'hidden',
+          alignSelf: 'start',
+          justifySelf: 'start',
+          maxWidth: '100%',
+          width: 858,
         }}
       >
-        <Table stickyHeader size="small" sx={{ minWidth: 940, tableLayout: 'fixed' }}>
+        <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: '42%' }} />
-            <col style={{ width: '8%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '7%' }} />
-            <col style={{ width: '11%' }} />
-            <col style={{ width: '4%' }} />
+            <col style={{ width: 300 }} />
+            <col style={{ width: 78 }} />
+            <col style={{ width: 60 }} />
+            <col style={{ width: 66 }} />
+            <col style={{ width: 66 }} />
+            <col style={{ width: 60 }} />
+            <col style={{ width: 52 }} />
+            <col style={{ width: 128 }} />
+            <col style={{ width: 48 }} />
           </colgroup>
           <TableHead>
             <TableRow>
@@ -310,7 +314,7 @@ export function ListingsTable({ viewModel }: { viewModel: ListingsViewModel }) {
             )}
           </TableBody>
         </Table>
-      </TableContainer>
+      </Box>
     </Box>
   )
 }
