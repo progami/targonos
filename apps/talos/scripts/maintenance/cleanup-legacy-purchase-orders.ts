@@ -13,6 +13,8 @@ import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
 
 type CleanupMode = 'void' | 'hard-delete'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   mode: CleanupMode
@@ -29,15 +31,7 @@ const LEGACY_STATUSES: PurchaseOrderStatus[] = [
 ]
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {
@@ -125,7 +119,7 @@ Notes:
   - In void mode, non-POSTED legacy orders have their linked inventory transactions deleted
     (cost ledger rows cascade via FK) and their PO lines are marked CANCELLED.
   - In hard-delete mode, the purchase order record is deleted (lines/containers/movement notes cascade).
-  - Loads env from apps/talos/.env.local (or .env.*) and resolves tenant schema automatically.
+  - Loads the exact Talos env selected by TALOS_ENV_MODE (default local) and resolves tenant schema automatically.
 `)
 }
 

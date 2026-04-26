@@ -16,74 +16,28 @@ talos_app_dir() {
   printf '%s\n' "$repo_dir/apps/talos"
 }
 
-load_env_file() {
-  local file="$1"
-  if [[ ! -f "$file" ]]; then
-    return 1
-  fi
-
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-
-    if [[ -z "$line" || "${line:0:1}" == "#" ]]; then
-      continue
-    fi
-
-    if [[ "$line" == export\ * ]]; then
-      line="${line#export }"
-      line="${line#"${line%%[![:space:]]*}"}"
-    fi
-
-    if [[ "$line" != *"="* ]]; then
-      continue
-    fi
-
-    local key="${line%%=*}"
-    local value="${line#*=}"
-
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-
-    if [[ -z "$key" || ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      continue
-    fi
-
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-
-    export "${key}=${value}"
-  done < "$file"
-
-  return 0
-}
-
 load_talos_env_if_needed() {
   if [[ -n "${TALOS_ADMIN_DATABASE_URL:-}" || -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
     return 0
   fi
 
-  local app_dir
-  app_dir="$(talos_app_dir)"
-  local candidates=(
-    "$app_dir/.env.local"
-    "$app_dir/.env.dev"
-    "$app_dir/.env.production"
-    "$app_dir/.env"
-  )
-  local file
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file"; then
-      if [[ -n "${TALOS_ADMIN_DATABASE_URL:-}" || -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
-        return 0
-      fi
-    fi
-  done
+  local repo_dir
+  repo_dir="$(talos_repo_dir)"
+  local mode="local"
+  if [[ -n "${TALOS_ENV_MODE:-}" ]]; then
+    mode="$TALOS_ENV_MODE"
+  fi
+
+  local exports
+  if ! exports="$("$repo_dir/scripts/load-app-env.js" --app talos --mode "$mode")"; then
+    return 1
+  fi
+
+  eval "$exports"
+
+  if [[ -n "${TALOS_ADMIN_DATABASE_URL:-}" || -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
+    return 0
+  fi
 
   return 1
 }
