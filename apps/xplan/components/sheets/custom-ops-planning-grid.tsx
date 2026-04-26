@@ -35,15 +35,28 @@ export type OpsInputRow = {
   productId: string;
   orderCode: string;
   poDate: string;
+  poClass: string;
   productionStart: string;
   productionComplete: string;
   sourceDeparture: string;
   portEta: string;
   availableDate: string;
+  inboundWeekOverride: string;
+  inboundWeek: string;
   shipName: string;
   containerNumber: string;
   productName: string;
   quantity: string;
+  unitsPerCarton: string;
+  carton: string;
+  cartonSide1Cm: string;
+  cartonSide2Cm: string;
+  cartonSide3Cm: string;
+  cbm: string;
+  poTotalQty: string;
+  poFirstRow: string;
+  notes: string;
+  region: string;
   pay1Date: string;
   productionWeeks: string;
   sourceWeeks: string;
@@ -96,6 +109,14 @@ const STAGE_OVERRIDE_FIELDS: Record<StageWeeksKey, StageOverrideKey> = STAGE_CON
 
 const NUMERIC_PRECISION: Partial<Record<keyof OpsInputRow, number>> = {
   quantity: 0,
+  unitsPerCarton: 0,
+  carton: 0,
+  cartonSide1Cm: 2,
+  cartonSide2Cm: 2,
+  cartonSide3Cm: 2,
+  cbm: 3,
+  poTotalQty: 0,
+  poFirstRow: 0,
   productionWeeks: 2,
   sourceWeeks: 2,
   oceanWeeks: 2,
@@ -112,6 +133,14 @@ const NUMERIC_PRECISION: Partial<Record<keyof OpsInputRow, number>> = {
 
 const NUMERIC_FIELDS = new Set<keyof OpsInputRow>([
   'quantity',
+  'unitsPerCarton',
+  'carton',
+  'cartonSide1Cm',
+  'cartonSide2Cm',
+  'cartonSide3Cm',
+  'cbm',
+  'poTotalQty',
+  'poFirstRow',
   'productionWeeks',
   'sourceWeeks',
   'oceanWeeks',
@@ -129,6 +158,8 @@ const NUMERIC_FIELDS = new Set<keyof OpsInputRow>([
 const DATE_FIELDS = new Set<keyof OpsInputRow>([
   'poDate',
   'productionStart',
+  'inboundWeekOverride',
+  'inboundWeek',
   'pay1Date',
   'productionComplete',
   'sourceDeparture',
@@ -416,22 +447,59 @@ function formatPurchaseOrderStatus(value: string): string {
 }
 
 const COLUMNS: ColumnDef[] = [
-  { key: 'orderCode', header: 'PO Code', width: 150, type: 'text', editable: true },
-  { key: 'productionStart', header: 'Mfg Start', width: 130, type: 'date', editable: true },
-  { key: 'shipName', header: 'Ship', width: 160, type: 'text', editable: true },
-  { key: 'containerNumber', header: 'Container #', width: 160, type: 'text', editable: true },
+  { key: 'orderCode', header: 'PO CODE', width: 150, type: 'text', editable: true },
+  { key: 'productName', header: 'PRODUCT', width: 180, type: 'text', editable: false },
+  { key: 'quantity', header: 'QTY', width: 95, type: 'numeric', editable: true, precision: 0 },
+  {
+    key: 'unitsPerCarton',
+    header: 'UNITS/CTN',
+    width: 110,
+    type: 'numeric',
+    editable: false,
+    precision: 0,
+  },
+  { key: 'carton', header: 'CARTON', width: 95, type: 'numeric', editable: false, precision: 0 },
+  {
+    key: 'cartonSide1Cm',
+    header: 'CTN L (CM)',
+    width: 115,
+    type: 'numeric',
+    editable: false,
+    precision: 2,
+  },
+  {
+    key: 'cartonSide2Cm',
+    header: 'CTN W (CM)',
+    width: 115,
+    type: 'numeric',
+    editable: false,
+    precision: 2,
+  },
+  {
+    key: 'cartonSide3Cm',
+    header: 'CTN H (CM)',
+    width: 115,
+    type: 'numeric',
+    editable: false,
+    precision: 2,
+  },
+  { key: 'cbm', header: 'CBM', width: 95, type: 'numeric', editable: false, precision: 3 },
+  { key: 'productionStart', header: 'MFG START', width: 130, type: 'date', editable: true },
+  { key: 'shipName', header: 'SHIP', width: 160, type: 'text', editable: true },
+  { key: 'containerNumber', header: 'CONTAINER #', width: 160, type: 'text', editable: true },
   {
     key: 'status',
-    header: 'Status',
+    header: 'STATUS',
     width: 130,
     type: 'dropdown',
     editable: true,
     options: PURCHASE_ORDER_STATUS_OPTIONS,
   },
+  { key: 'poClass', header: 'PO CLASS', width: 140, type: 'text', editable: true },
   {
     key: 'productionWeeks',
-    header: 'Manufacturing',
-    headerWeeks: 'Mfg (wk)',
+    header: 'MFG (WK)',
+    headerWeeks: 'MFG (WK)',
     headerDates: 'Mfg Done',
     width: 130,
     type: 'stage',
@@ -440,8 +508,8 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     key: 'sourceWeeks',
-    header: 'Ocean Departure',
-    headerWeeks: 'Depart (wk)',
+    header: 'DEPART (WK)',
+    headerWeeks: 'DEPART (WK)',
     headerDates: 'Departure',
     width: 130,
     type: 'stage',
@@ -450,8 +518,8 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     key: 'oceanWeeks',
-    header: 'Ocean Transit',
-    headerWeeks: 'Arrival (wk)',
+    header: 'ARRIVAL (WK)',
+    headerWeeks: 'ARRIVAL (WK)',
     headerDates: 'Port Arrival',
     width: 130,
     type: 'stage',
@@ -460,14 +528,46 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     key: 'finalWeeks',
-    header: 'Final Delivery',
-    headerWeeks: 'WH (wk)',
+    header: 'WH (WK)',
+    headerWeeks: 'WH (WK)',
     headerDates: 'Warehouse',
     width: 130,
     type: 'stage',
     editable: true,
     precision: 2,
   },
+  {
+    key: 'inboundWeekOverride',
+    header: 'INBOUND WK OVERRIDE',
+    width: 170,
+    type: 'date',
+    editable: true,
+  },
+  {
+    key: 'inboundWeek',
+    header: 'INBOUND WK',
+    width: 130,
+    type: 'date',
+    editable: false,
+  },
+  {
+    key: 'poTotalQty',
+    header: 'PO TOTAL QTY',
+    width: 130,
+    type: 'numeric',
+    editable: false,
+    precision: 0,
+  },
+  { key: 'notes', header: 'NOTES', width: 190, type: 'text', editable: true },
+  {
+    key: 'poFirstRow',
+    header: 'PO FIRST ROW',
+    width: 135,
+    type: 'numeric',
+    editable: false,
+    precision: 0,
+  },
+  { key: 'region', header: 'REGION', width: 95, type: 'text', editable: false },
 ];
 
 // StageMode imported from @/stores

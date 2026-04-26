@@ -32,6 +32,7 @@ model Strategy {
   strategyAssignees    StrategyAssignee[]
   salesWeeks           SalesWeek[]
   salesWeekFinancials  SalesWeekFinancials[]
+  productSetupYears    ProductSetupYear[]
   profitAndLossWeeks   ProfitAndLossWeek[]
   cashFlowWeeks        CashFlowWeek[]
   monthlySummaries     MonthlySummary[]
@@ -118,11 +119,33 @@ model Product {
   batchTableRows      BatchTableRow[]
   salesWeeks          SalesWeek[]
   salesWeekFinancials SalesWeekFinancials[]
+  setupYears          ProductSetupYear[]
 
   @@unique([strategyId, sku])
   @@index([strategyId])
   @@index([name])
   @@index([asin])
+}
+
+/// Year-scoped workbook setup inputs from Excel "Setup"
+model ProductSetupYear {
+  id                         String   @id @default(cuid())
+  strategyId                 String
+  productId                  String
+  year                       Int
+  openingStock               Int?
+  nextYearOpeningOverride    Int?
+  notes                      String?
+  totalCoverThresholdWeeks   Decimal? @db.Decimal(8, 2)
+  fbaCoverThresholdWeeks     Decimal? @db.Decimal(8, 2)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  strategy                   Strategy @relation(fields: [strategyId], references: [id], onDelete: Cascade)
+  product                    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyId, productId, year])
+  @@index([strategyId, year])
+  @@index([productId])
 }
 
 /// Default lead time configuration ("1. Product Setup" -> LEAD TIME CONFIGURATION)
@@ -174,6 +197,8 @@ model PurchaseOrder {
   productId                 String
   poDate                    DateTime?
   poWeekNumber              Int?
+  poClass                   String?
+  inboundWeekOverride       DateTime?
   quantity                  Int
   productionWeeks           Decimal                @db.Decimal(5, 2)
   sourceWeeks               Decimal                @db.Decimal(5, 2)

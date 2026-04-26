@@ -106,6 +106,24 @@ export function mapPurchaseOrders(
               batch.overrideReferralRate != null ? Number(batch.overrideReferralRate) : null,
             overrideStoragePerMonth:
               batch.overrideStoragePerMonth != null ? Number(batch.overrideStoragePerMonth) : null,
+            cartonSide1Cm:
+              (batch as BatchTableRow & { cartonSide1Cm?: unknown }).cartonSide1Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide1Cm?: unknown }).cartonSide1Cm)
+                : null,
+            cartonSide2Cm:
+              (batch as BatchTableRow & { cartonSide2Cm?: unknown }).cartonSide2Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide2Cm?: unknown }).cartonSide2Cm)
+                : null,
+            cartonSide3Cm:
+              (batch as BatchTableRow & { cartonSide3Cm?: unknown }).cartonSide3Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide3Cm?: unknown }).cartonSide3Cm)
+                : null,
+            cartonWeightKg:
+              (batch as BatchTableRow & { cartonWeightKg?: unknown }).cartonWeightKg != null
+                ? Number((batch as BatchTableRow & { cartonWeightKg?: unknown }).cartonWeightKg)
+                : null,
+            unitsPerCarton:
+              (batch as BatchTableRow & { unitsPerCarton?: number | null }).unitsPerCarton ?? null,
           }),
         )
       : [];
@@ -120,6 +138,10 @@ export function mapPurchaseOrders(
       quantity: batches.length > 0 ? totalBatchQuantity : coerceNumber(order.quantity),
       poDate: order.poDate ?? null,
       poWeekNumber: order.poWeekNumber ?? null,
+      poClass: (order as PurchaseOrder & { poClass?: string | null }).poClass ?? null,
+      inboundWeekOverride:
+        (order as PurchaseOrder & { inboundWeekOverride?: Date | null }).inboundWeekOverride ??
+        null,
       productionWeeks: normalizePositiveDecimal(order.productionWeeks),
       sourceWeeks: normalizePositiveDecimal(order.sourceWeeks),
       oceanWeeks: normalizePositiveDecimal(order.oceanWeeks),

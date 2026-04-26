@@ -13,8 +13,9 @@ export type SheetSlug =
   | '3-ops-planning'
   | '4-sales-planning'
   | '5-fin-planning-pl'
-  | '6-po-profitability'
-  | '7-fin-planning-cash-flow';
+  | '6-po-finances'
+  | '7-fin-planning-cash-flow'
+  | '8-po-profitability';
 
 export type LegacySheetSlug =
   | '0-strategies'
@@ -67,7 +68,14 @@ export const SHEETS: SheetConfig[] = [
     icon: LineChart,
   },
   {
-    slug: '6-po-profitability',
+    slug: '6-po-finances',
+    label: 'PO Finances',
+    shortLabel: 'PO Fin',
+    description: '',
+    icon: TrendingUp,
+  },
+  {
+    slug: '8-po-profitability',
     label: 'PO P&L',
     shortLabel: 'PO P&L',
     description: '',
@@ -92,8 +100,8 @@ export const LEGACY_SHEET_SLUG_REDIRECTS: Readonly<Record<LegacySheetSlug, Sheet
   '4-fin-planning-pl': '5-fin-planning-pl',
   '5-fin-planning-cash-flow': '7-fin-planning-cash-flow',
   '6-fin-planning-cash-flow': '7-fin-planning-cash-flow',
-  '6-po-profitability': '6-po-profitability',
-  '7-po-profitability': '6-po-profitability',
+  '6-po-profitability': '8-po-profitability',
+  '7-po-profitability': '8-po-profitability',
 };
 
 export function getCanonicalSheetSlug(slug: string): SheetSlug | undefined {
