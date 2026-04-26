@@ -6,6 +6,9 @@
     "dev": "node ../../scripts/run-dev-with-logs.js argus -- node ../../scripts/run-next-port.js dev",
     "build": "next build",
     "start": "node ../../scripts/run-next-port.js start",
+    "media:import-us-gallery-versions": "tsx scripts/import-us-gallery-versions.ts",
+    "media:remove-bad-source-gallery-revisions": "tsx scripts/remove-bad-source-gallery-revisions.ts",
+    "media:upload-local-to-s3": "tsx scripts/upload-local-media-to-s3.ts",
     "lint": "eslint app components lib middleware.ts",
     "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },
