@@ -9,6 +9,8 @@ jobs:
   portal-db-audit:
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 10
+    env:
+      TARGONOS_DEV_DIR: ${{ vars.TARGONOS_DEV_DIR }}
     steps:
       - name: Run portal ownership and privilege audit
         shell: bash
