@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CheckSquare, Loader2, RefreshCw, Search } from 'lucide-react';
 import {
   CustomOpsPlanningGrid,
+  normalizePurchaseOrderStatus,
   type OpsInputRow,
 } from '@/components/sheets/custom-ops-planning-grid';
 import { PurchaseTimeline } from '@/components/sheets/purchase-timeline';
@@ -31,7 +32,6 @@ import {
   type BatchTableRowInput,
   type PurchaseOrderPaymentInput,
   type PurchaseOrderStatus,
-  type LeadTimeProfile,
 } from '@/lib/calculations';
 import { weekLabelForIsoDate, type PlanningWeekConfig } from '@/lib/calculations/planning-week';
 import {
@@ -175,38 +175,9 @@ const FALLBACK_STAGE_DEFAULTS: StageDefaults = {
   finalWeeks: 1,
 };
 
-function sanitizeStageDefault(value: number | null | undefined, fallback: number): number {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return numeric;
-}
-
-function resolveStageDefaults(parameters?: BusinessParameterMap): StageDefaults {
-  if (!parameters) return FALLBACK_STAGE_DEFAULTS;
-  return {
-    productionWeeks: sanitizeStageDefault(
-      parameters.defaultProductionWeeks,
-      FALLBACK_STAGE_DEFAULTS.productionWeeks,
-    ),
-    sourceWeeks: sanitizeStageDefault(
-      parameters.defaultSourceWeeks,
-      FALLBACK_STAGE_DEFAULTS.sourceWeeks,
-    ),
-    oceanWeeks: sanitizeStageDefault(
-      parameters.defaultOceanWeeks,
-      FALLBACK_STAGE_DEFAULTS.oceanWeeks,
-    ),
-    finalWeeks: sanitizeStageDefault(
-      parameters.defaultFinalWeeks,
-      FALLBACK_STAGE_DEFAULTS.finalWeeks,
-    ),
-  };
-}
-
 export type OpsPlanningCalculatorPayload = {
   parameters: BusinessParameterMap;
   products: ProductInput[];
-  leadProfiles: Array<LeadTimeProfile & { productId: string }>;
   purchaseOrders: PurchaseOrderSerialized[];
 };
 
@@ -243,7 +214,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
 });
 
-const DEFAULT_PROFILE: LeadTimeProfile = {
+const DEFAULT_PROFILE = {
   productionWeeks: 0,
   sourceWeeks: 0,
   oceanWeeks: 0,
@@ -351,6 +322,15 @@ function parseNumber(value: string | number | null | undefined): number | null {
 function parseInteger(value: string | number | null | undefined, fallback: number): number {
   const numeric = toNumber(value);
   return numeric == null ? fallback : Math.round(numeric);
+}
+
+function resolvePurchaseOrderStatus(
+  value: string | null | undefined,
+  fallback: PurchaseOrderStatus,
+): PurchaseOrderStatus {
+  const normalized = normalizePurchaseOrderStatus(value ?? '');
+  if (normalized) return normalized;
+  return fallback;
 }
 
 function parsePercent(value: string | number | null | undefined): number | null {
@@ -516,7 +496,7 @@ function mergeOrders(
         inboundEta: parseDateValue(row.portEta),
         availableDate: parseDateValue(row.availableDate),
         totalLeadDays: null,
-        status: (row.status as PurchaseOrderStatus) ?? 'ISSUED',
+        status: resolvePurchaseOrderStatus(row.status, 'ISSUED'),
         payments: [],
         overrideSellingPrice: parseNumber(row.sellingPrice),
         overrideManufacturingCost: parseNumber(row.manufacturingCost),
@@ -535,7 +515,8 @@ function mergeOrders(
       productId: row.productId,
       quantity: parseInteger(row.quantity, base.quantity ?? 0),
       poClass: row.poClass ? row.poClass : null,
-      inboundWeekOverride: parseDateValue(row.inboundWeekOverride) ?? base.inboundWeekOverride ?? null,
+      inboundWeekOverride:
+        parseDateValue(row.inboundWeekOverride) ?? base.inboundWeekOverride ?? null,
       pay1Date: parseDateValue(row.pay1Date),
       productionWeeks: normalizeStageWeeks(
         'productionWeeks',
@@ -560,7 +541,7 @@ function mergeOrders(
       portEta: parseDateValue(row.portEta) ?? base.portEta ?? null,
       inboundEta: parseDateValue(row.portEta) ?? base.inboundEta ?? base.portEta ?? null,
       availableDate: parseDateValue(row.availableDate) ?? base.availableDate ?? null,
-      status: (row.status as PurchaseOrderStatus) ?? base.status,
+      status: resolvePurchaseOrderStatus(row.status, base.status),
       overrideSellingPrice: parseNumber(row.sellingPrice),
       overrideManufacturingCost: parseNumber(row.manufacturingCost),
       overrideFreightCost: parseNumber(row.freightCost),
@@ -615,7 +596,6 @@ function buildTimelineRowsFromData(params: {
   rows: OpsInputRow[];
   payments: PurchasePaymentRow[];
   productIndex: Map<string, ProductCostSummary>;
-  leadProfiles: Map<string, LeadTimeProfile>;
   parameters: BusinessParameterMap;
   planningWeekConfig?: PlanningWeekConfig | null;
 }): {
@@ -623,8 +603,7 @@ function buildTimelineRowsFromData(params: {
   timelineOrders: PurchaseTimelineOrder[];
   derivedMap: Map<string, ReturnType<typeof computePurchaseOrderDerived>>;
 } {
-  const { orders, rows, payments, productIndex, leadProfiles, parameters, planningWeekConfig } =
-    params;
+  const { orders, rows, payments, productIndex, parameters, planningWeekConfig } = params;
   const ordersById = new Map(orders.map((order) => [order.id, order]));
   const paymentsByOrder = buildPaymentsByOrder(payments);
   const derivedMap = new Map<string, ReturnType<typeof computePurchaseOrderDerived>>();
@@ -671,12 +650,11 @@ function buildTimelineRowsFromData(params: {
       };
     }
 
-    const profile = leadProfiles.get(order.productId) ?? DEFAULT_PROFILE;
     const paymentsOverride = paymentsByOrder.get(order.id) ?? order.payments ?? [];
     const derived = computePurchaseOrderDerived(
       { ...order, payments: paymentsOverride },
       productIndex,
-      profile,
+      DEFAULT_PROFILE,
       parameters,
       { planningWeekConfig },
     );
@@ -771,7 +749,7 @@ export function OpsPlanningWorkspace({
   calculator,
   timelineMonths,
   mode = 'tabular',
-  showPoFinanceTable = false,
+  showPoFinanceTable = true,
 }: OpsPlanningWorkspaceProps) {
   const isVisualMode = mode === 'visual';
   const router = useRouter();
@@ -796,23 +774,7 @@ export function OpsPlanningWorkspace({
     () => calculator.products.map((product) => ({ id: product.id, name: productLabel(product) })),
     [calculator.products, productLabel],
   );
-  const leadProfileMap = useMemo(() => {
-    const map = new Map<string, LeadTimeProfile>();
-    for (const profile of calculator.leadProfiles) {
-      map.set(profile.productId, {
-        productionWeeks: Number(profile.productionWeeks ?? 0),
-        sourceWeeks: Number(profile.sourceWeeks ?? 0),
-        oceanWeeks: Number(profile.oceanWeeks ?? 0),
-        finalWeeks: Number(profile.finalWeeks ?? 0),
-      });
-    }
-    return map;
-  }, [calculator.leadProfiles]);
-
-  const stageDefaults = useMemo(
-    () => resolveStageDefaults(calculator.parameters),
-    [calculator.parameters],
-  );
+  const stageDefaults = FALLBACK_STAGE_DEFAULTS;
 
   const initialOrders = useMemo(
     () => deserializeOrders(calculator.purchaseOrders, stageDefaults),
@@ -898,17 +860,9 @@ export function OpsPlanningWorkspace({
         rows: poTableRows,
         payments: initialPayments,
         productIndex,
-        leadProfiles: leadProfileMap,
         parameters: calculator.parameters,
       }),
-    [
-      initialOrders,
-      poTableRows,
-      initialPayments,
-      productIndex,
-      leadProfileMap,
-      calculator.parameters,
-    ],
+    [initialOrders, poTableRows, initialPayments, productIndex, calculator.parameters],
   );
 
   const [inputRows, setInputRows] = useState<OpsInputRow[]>(poTableRows);
@@ -1191,7 +1145,6 @@ export function OpsPlanningWorkspace({
         rows: nextInputRows,
         payments: nextPayments,
         productIndex,
-        leadProfiles: leadProfileMap,
         parameters: calculator.parameters,
         planningWeekConfig: planningWeekConfigRef.current,
       });
@@ -1200,7 +1153,7 @@ export function OpsPlanningWorkspace({
       setTimelineOrdersState(newTimelineOrders);
       syncPaymentExpectations(Array.from(derivedMap.keys()));
     },
-    [productIndex, leadProfileMap, calculator.parameters, syncPaymentExpectations],
+    [productIndex, calculator.parameters, syncPaymentExpectations],
   );
 
   useEffect(() => {
@@ -2344,19 +2297,31 @@ export function OpsPlanningWorkspace({
             </section>
           ) : null}
 
+          <CustomOpsCostGrid
+            tableKind="batch"
+            rows={visibleBatches}
+            activeOrderId={activeOrderId}
+            activeBatchId={activeBatchId}
+            scrollKey={`ops-planning:batch:${strategyId}`}
+            onSelectOrder={(orderId) => setActiveOrderId(orderId)}
+            onSelectBatch={handleSelectBatch}
+            onRowsChange={handleBatchRowsChange}
+            onAddBatch={handleAddBatch}
+            onDeleteBatch={handleDeleteBatch}
+            disableAdd={isPending || !activeOrderId}
+            disableDelete={isPending}
+            products={productOptions}
+            onSync={handleCostSync}
+          />
           {showPoFinanceTable ? (
             <CustomOpsCostGrid
               rows={visibleBatches}
               activeOrderId={activeOrderId}
               activeBatchId={activeBatchId}
-              scrollKey={`ops-planning:batch:${strategyId}`}
+              scrollKey={`ops-planning:finance:${strategyId}`}
               onSelectOrder={(orderId) => setActiveOrderId(orderId)}
               onSelectBatch={handleSelectBatch}
               onRowsChange={handleBatchRowsChange}
-              onAddBatch={handleAddBatch}
-              onDeleteBatch={handleDeleteBatch}
-              disableAdd={isPending || !activeOrderId}
-              disableDelete={isPending}
               products={productOptions}
               onSync={handleCostSync}
             />
