@@ -1,7 +1,5 @@
 import type {
   Product,
-  LeadStageTemplate,
-  LeadTimeOverride,
   BusinessParameter,
   PurchaseOrder,
   PurchaseOrderPayment,
@@ -15,8 +13,6 @@ import { coerceNumber, parseNumber } from '@/lib/utils/numbers';
 import {
   BusinessParameterInput,
   CashFlowWeekInput,
-  LeadStageOverrideInput,
-  LeadStageTemplateInput,
   ProductInput,
   ProfitAndLossWeekInput,
   PurchaseOrderInput,
@@ -44,23 +40,6 @@ export function mapProducts(products: Product[]): ProductInput[] {
     fbaFee: coerceNumber(product.fbaFee),
     amazonReferralRate: coerceNumber(product.amazonReferralRate),
     storagePerMonth: coerceNumber(product.storagePerMonth),
-  }));
-}
-
-export function mapLeadStageTemplates(stages: LeadStageTemplate[]): LeadStageTemplateInput[] {
-  return stages.map((stage) => ({
-    id: stage.id,
-    label: stage.label,
-    defaultWeeks: coerceNumber(stage.defaultWeeks),
-    sequence: stage.sequence,
-  }));
-}
-
-export function mapLeadOverrides(overrides: LeadTimeOverride[]): LeadStageOverrideInput[] {
-  return overrides.map((override) => ({
-    productId: override.productId,
-    stageTemplateId: override.stageTemplateId,
-    durationWeeks: coerceNumber(override.durationWeeks),
   }));
 }
 
@@ -227,8 +206,7 @@ export function mapPurchaseOrders(
 export function mapSalesWeeks(rows: SalesWeek[]): SalesWeekInput[] {
   return rows.map((row) => {
     const explicitHasActualData = (row as SalesWeek & { hasActualData?: boolean }).hasActualData;
-    const hasActualData =
-      explicitHasActualData === true ? true : row.actualSales != null;
+    const hasActualData = explicitHasActualData === true ? true : row.actualSales != null;
     return {
       id: row.id,
       productId: row.productId,
