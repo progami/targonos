@@ -10,9 +10,9 @@ load_monitoring_env
 
 DEST="${ARGUS_SCALEINSIGHTS_DEST:-$(argus_monitoring_root)/Weekly/ScaleInsights/KeywordRanking (Browser)}"
 DL="${ARGUS_SCALEINSIGHTS_DOWNLOAD_DIR:-$HOME/Downloads}"
-LOG="${ARGUS_SCALEINSIGHTS_LOG:-/tmp/weekly-scaleinsights.log}"
+LOG="${ARGUS_SCALEINSIGHTS_LOG:-$(argus_tmp_log_path weekly-scaleinsights)}"
 TARGET_URL="https://portal.scaleinsights.com/KeywordRanking"
-COUNTRY_CODE="US"
+COUNTRY_CODE="$(require_market_env ARGUS_SCALEINSIGHTS_COUNTRY_CODE)"
 
 if [ "$#" -eq 2 ]; then
   START_DATE="$1"
@@ -33,6 +33,20 @@ wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
 
 log "Starting weekly ScaleInsights: $PREFIX"
+
+target_file="$DEST/${PREFIX}_SI-KeywordRanking.xlsx"
+if [ -f "$target_file" ]; then
+  target_size="$(stat -f '%z' "$target_file")"
+  log "Existing ScaleInsights target: $target_file size=$target_size"
+  if [ "$target_size" -gt 0 ]; then
+    log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx already current"
+    log "Done"
+    tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+    exit 0
+  fi
+else
+  log "Existing ScaleInsights target missing: $target_file"
+fi
 
 open_window "$TARGET_URL"
 wait_tab
@@ -119,7 +133,7 @@ if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baselin
   exit 1
 fi
 
-copy_file_with_node "$downloaded_file" "$DEST/${PREFIX}_SI-KeywordRanking.xlsx"
+copy_file_with_node "$downloaded_file" "$target_file"
 
 log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx"
 log "Done"

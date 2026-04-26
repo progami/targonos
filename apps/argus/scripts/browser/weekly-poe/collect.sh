@@ -1,5 +1,5 @@
 #!/bin/bash
-# Weekly Product Opportunity Explorer CSV download via Chrome.
+# Weekly Product Opportunity Explorer CSV capture via the authenticated POE GraphQL backend.
 
 set -euo pipefail
 
@@ -8,8 +8,11 @@ source "$SCRIPT_DIR/../common.sh"
 load_monitoring_env
 
 DEST="${ARGUS_POE_DEST:-$(argus_monitoring_root)/Weekly/Product Opportunity Explorer (Browser)}"
-LOG="${ARGUS_POE_LOG:-/tmp/weekly-poe.log}"
-TARGET_URL_BASE="https://sellercentral.amazon.com/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326"
+LOG="${ARGUS_POE_LOG:-$(argus_tmp_log_path weekly-poe)}"
+TARGET_URL_BASE="$(require_market_env ARGUS_POE_TARGET_URL_BASE)"
+TARGET_URL_BASE_PATH="$("$NODE_BIN" -e 'const url = new URL(process.argv[1]); process.stdout.write(url.pathname.replace(/\/$/, ""));' "$TARGET_URL_BASE")"
+TARGET_NICHE_ID="$("$NODE_BIN" -e 'const parts = new URL(process.argv[1]).pathname.split("/").filter(Boolean); const index = parts.indexOf("niche"); if (index === -1) throw new Error("POE target URL must include /niche/{id}"); if (!parts[index + 1]) throw new Error("POE target URL must include /niche/{id}"); process.stdout.write(parts[index + 1]);' "$TARGET_URL_BASE")"
+TARGET_MARKETPLACE_ID="$(require_market_env AMAZON_MARKETPLACE_ID)"
 
 IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 
@@ -24,6 +27,23 @@ wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
 navigate_tab() { run_chrome_helper navigate-tab-id "$TAB_ID" "$1" >/dev/null; }
 
+wait_for_expected_path() {
+  local expected_path="$1"
+  local actual_path=""
+
+  for _ in $(seq 1 60); do
+    actual_path="$(run_js "location.pathname")"
+    if [ "$actual_path" = "$expected_path" ]; then
+      printf '%s' "$actual_path"
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s' "$actual_path"
+  return 1
+}
+
 ensure_route_loaded() {
   local target_url="$1"
 
@@ -35,7 +55,7 @@ ensure_route_loaded() {
   wait_tab
 
   local current_url
-  current_url=$(tab_url)
+  current_url="$(tab_url)"
   if is_amazon_login_url "$current_url"; then
     log "Seller Central session expired — attempting relogin"
     bash "$SCRIPT_DIR/../relogin.sh" "$target_url"
@@ -48,93 +68,109 @@ ensure_route_loaded() {
   fi
 }
 
-wait_for_expected_path() {
-  local expected_path="$1"
-  local actual_path=""
+fetch_graphql_payload() {
+  local js
+  js="$("$NODE_BIN" - "$TARGET_NICHE_ID" "$TARGET_MARKETPLACE_ID" <<'NODE'
+const nicheId = process.argv[2];
+const marketplaceId = process.argv[3];
+const query = `
+query getNiche($nicheInput: NicheInput!) {
+  niche(request: $nicheInput) {
+    nicheId
+    obfuscatedMarketplaceId
+    nicheTitle
+    currency
+    lastUpdatedTimeISO8601
+  }
+  asinMetrics(request: $nicheInput) {
+    asin
+    asinTitle
+    brand
+    category
+    launchDate
+    clickCountT360
+    clickShareT360
+    avgPriceT360
+    currency
+    totalReviews
+    customerRating
+    bestSellersRanking
+    avgSellerVendorCountT360
+  }
+  searchTermMetrics(request: $nicheInput) {
+    searchTerm
+    searchVolumeT360
+    searchVolumeQoq
+    searchVolumeGrowthT180
+    clickShareT360
+    searchConversionRateT360
+    topClickedProducts {
+      asin
+      asinTitle
+      obfuscatedMarketplaceId
+    }
+  }
+}
+`;
 
-  for _ in $(seq 1 20); do
-    actual_path=$(run_js "location.pathname")
-    if [ "$actual_path" = "$expected_path" ]; then
-      printf '%s' "$actual_path"
-      return 0
-    fi
-    sleep 1
-  done
+const body = JSON.stringify({
+  operationName: 'getNiche',
+  query,
+  variables: {
+    nicheInput: {
+      nicheId,
+      obfuscatedMarketplaceId: marketplaceId,
+    },
+  },
+});
 
-  printf '%s' "$actual_path"
-  return 1
+process.stdout.write(`(() => fetch('/ox-api/graphql', {
+  method: 'POST',
+  credentials: 'same-origin',
+  headers: {
+    'content-type': 'application/json',
+    'anti-csrftoken-a2z': document.querySelector('meta[name="anti-csrftoken-a2z"]')?.content ?? '',
+  },
+  body: ${JSON.stringify(body)},
+}).then(async (response) => {
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error('POE GraphQL HTTP ' + response.status + ': ' + text.slice(0, 500));
+  }
+  return text;
+}))();`);
+NODE
+)"
+  run_js "$js"
 }
 
-download_export() {
-  local route_path="$1"
-  local expected_tab="$2"
-  local output_name="$3"
-  local target_url="${TARGET_URL_BASE}/${route_path}"
-  local expected_path
-  local download_js
-  local download_payload=""
-  local download_status=""
+write_csvs() {
+  local payload="$1"
+  local payload_file
 
-  ensure_route_loaded "$target_url"
-  expected_path="/opportunity-explorer/explore/niche/84dd9c9ba70c2b6df8c7bacb37f9a326/${route_path}"
-
-  if ! actual_path=$(wait_for_expected_path "$expected_path"); then
-    log "FAILED: ${expected_tab} route stabilized on unexpected path ${actual_path}"
-    exit 1
-  fi
-
-  download_js="$("$NODE_BIN" -e '
-const expectedPath = process.argv[1];
-const expectedTab = process.argv[2];
-process.stdout.write(`(() => {
-  const normalize = (value) => String(value ?? "").replace(/\\s+/g, " ").trim();
-  if (location.pathname !== ${JSON.stringify(expectedPath)}) {
-    return JSON.stringify({ status: "UNEXPECTED_PATH", path: location.pathname });
-  }
-  const tab = Array.from(document.querySelectorAll("kat-tab,button,a,span,div")).find((element) => normalize(element.innerText ?? element.textContent) === ${JSON.stringify(expectedTab)});
-  if (!tab) {
-    return JSON.stringify({ status: "MISSING_TAB", tab: ${JSON.stringify(expectedTab)} });
-  }
-  const link = Array.from(document.querySelectorAll("a,button")).find((element) => normalize(element.innerText ?? element.textContent) === "Download");
-  if (!link) {
-    return JSON.stringify({ status: "NO_DOWNLOAD_BUTTON", tab: ${JSON.stringify(expectedTab)} });
-  }
-  if (!link.href) {
-    return JSON.stringify({ status: "NO_DOWNLOAD_BUTTON", tab: ${JSON.stringify(expectedTab)} });
-  }
-  const request = new XMLHttpRequest();
-  request.open("GET", link.href, false);
-  request.send();
-  return JSON.stringify({
-    status: request.status && request.status !== 200 ? \`FETCH_FAILED_\${request.status}\` : "OK",
-    tab: ${JSON.stringify(expectedTab)},
-    content: request.responseText ?? ""
-  });
-})();`);
-' "$expected_path" "$expected_tab")"
-
-  for _ in $(seq 1 10); do
-    download_payload=$(run_js "$download_js")
-    download_status=$("$NODE_BIN" -e 'const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.status ?? "");' "$download_payload")
-    if [ "$download_status" = "OK" ]; then
-      break
-    fi
-    sleep 2
-  done
-
-  if [ "$download_status" != "OK" ]; then
-    log "FAILED: ${expected_tab} download fetch returned $download_status"
-    exit 1
-  fi
-
-  $NODE_BIN -e 'const payload = JSON.parse(process.argv[1]); process.stdout.write(payload.content ?? "");' "$download_payload" \
-    | write_stdin_to_file_with_node "$DEST/$output_name"
-  log "Saved: $output_name"
+  payload_file="$(mktemp "/tmp/argus-poe-$(argus_market)-XXXXXX.json")"
+  printf '%s' "$payload" | write_stdin_to_file_with_node "$payload_file"
+  "$NODE_BIN" "$SCRIPT_DIR/write-graphql-csvs.mjs" \
+    "$payload_file" \
+    "$DEST/${PREFIX}_POE.csv" \
+    "$DEST/${PREFIX}_POE-SearchTerms.csv"
+  rm -f "$payload_file"
 }
 
 log "Starting weekly POE: $PREFIX"
 
-download_export "product" "Products" "${PREFIX}_POE.csv"
-download_export "search-queries" "Search Terms" "${PREFIX}_POE-SearchTerms.csv"
+ensure_route_loaded "${TARGET_URL_BASE}/product"
+
+expected_path="${TARGET_URL_BASE_PATH}/product"
+if ! current_path="$(wait_for_expected_path "$expected_path")"; then
+  log "FAILED: POE route stabilized on unexpected path $current_path"
+  exit 1
+fi
+
+payload="$(fetch_graphql_payload)"
+write_csvs "$payload"
+
+log "Saved: ${PREFIX}_POE.csv"
+log "Saved: ${PREFIX}_POE-SearchTerms.csv"
 log "Done"
 tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

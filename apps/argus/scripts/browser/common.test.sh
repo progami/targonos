@@ -97,6 +97,35 @@ bash -lc '
 set -euo pipefail
 source "'"$SCRIPT_DIR"'/common.sh"
 
+ARGUS_MARKET=uk
+ARGUS_SELLER_CENTRAL_HOST_UK="sellercentral.amazon.co.uk"
+ARGUS_EXAMPLE_VALUE_UK="uk-value"
+
+if [ "$(argus_market_env_suffix)" != "UK" ]; then
+  echo "expected UK market env suffix" >&2
+  exit 1
+fi
+
+if [ "$(argus_market_env_name ARGUS_EXAMPLE_VALUE)" != "ARGUS_EXAMPLE_VALUE_UK" ]; then
+  echo "expected UK market env name" >&2
+  exit 1
+fi
+
+if [ "$(require_market_env ARGUS_EXAMPLE_VALUE)" != "uk-value" ]; then
+  echo "expected UK market env value" >&2
+  exit 1
+fi
+
+if [ "$(argus_tmp_log_path weekly-poe)" != "/tmp/weekly-poe-uk.log" ]; then
+  echo "expected UK-specific tmp log path" >&2
+  exit 1
+fi
+
+if [ "$(seller_central_host_globs)" != "sellercentral.amazon.co.uk,amazon.co.uk,amazon.com" ]; then
+  echo "expected UK Seller Central host globs" >&2
+  exit 1
+fi
+
 if [ "$(bitwarden_login_username "sellercentral.amazon.com" "shoaibgondal@targonglobal.com")" != "shoaibgondal@targonglobal.com" ]; then
   echo "expected sellercentral URI host match for username lookup" >&2
   exit 1
