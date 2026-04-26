@@ -70,17 +70,21 @@ export function WprChartShell({
   secondaryControls?: ReactNode
   children: ReactNode
 }) {
+  const hasControls = primaryControls !== undefined ? true : secondaryControls !== undefined
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-      <Box
-        sx={{
-          ...chartControlRailSx,
-          alignItems: 'flex-start',
-        }}
-      >
-        {primaryControls}
-        {secondaryControls}
-      </Box>
+      {hasControls ? (
+        <Box
+          sx={{
+            ...chartControlRailSx,
+            alignItems: 'flex-start',
+          }}
+        >
+          {primaryControls}
+          {secondaryControls}
+        </Box>
+      ) : null}
 
       <Box sx={chartViewportSx}>{children}</Box>
     </Box>

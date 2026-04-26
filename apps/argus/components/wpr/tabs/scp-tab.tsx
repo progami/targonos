@@ -1,11 +1,8 @@
 'use client'
 
 import { useEffect, type JSX } from 'react'
-import { Box, Button, Stack } from '@mui/material'
-import {
-  WprAnalyticsFooter,
-  WprAnalyticsPanel,
-} from '@/components/wpr/wpr-analytics-panel'
+import { Box, Stack } from '@mui/material'
+import { WprAnalyticsPanel } from '@/components/wpr/wpr-analytics-panel'
 import {
   CartesianGrid,
   Line,
@@ -21,18 +18,30 @@ import {
   RechartsChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
-import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
+import { WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
+import { WprInlineChartLegend, type WprInlineChartLegendItem } from '@/components/wpr/wpr-inline-chart-legend'
 import type { WprScpWowVisible } from '@/lib/wpr/dashboard-state'
 import { createScpSelectionViewModel, type ScpSelectionViewModel } from '@/lib/wpr/scp-view-model'
-import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import {
   buildBundleWeekStartDateLookup,
   formatTooltipWeekLabelFromLookup,
-  formatWeekWindowLabel,
 } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import ScpSelectionTable from './scp-selection-table'
+
+type ScpSeriesKey = keyof WprScpWowVisible
+
+const SCP_WOW_SERIES: Array<{
+  key: ScpSeriesKey
+  label: string
+  color: string
+}> = [
+  { key: 'ctr', label: 'CTR', color: '#8fc7ff' },
+  { key: 'atc', label: 'ATC Rate', color: '#f5a623' },
+  { key: 'purch', label: 'Purch Rate', color: '#77dfd0' },
+  { key: 'cvr', label: 'CVR', color: '#d5ff62' },
+]
 
 function ScpWeeklyChart({
   weekly,
@@ -47,12 +56,17 @@ function ScpWeeklyChart({
   wowVisible: WprScpWowVisible
   setWowVisible: (nextState: WprScpWowVisible) => void
 }) {
-  const visibleSeries = [
-    wowVisible.ctr ? { key: 'ctr', label: 'CTR', color: '#8fc7ff' } : null,
-    wowVisible.atc ? { key: 'atc', label: 'ATC Rate', color: '#f5a623' } : null,
-    wowVisible.purch ? { key: 'purch', label: 'Purch Rate', color: '#77dfd0' } : null,
-    wowVisible.cvr ? { key: 'cvr', label: 'CVR', color: '#d5ff62' } : null,
-  ].filter((value): value is { key: 'ctr' | 'atc' | 'purch' | 'cvr'; label: string; color: string } => value !== null)
+  const visibleSeries = SCP_WOW_SERIES.filter((series) => wowVisible[series.key])
+  const legendItems: Array<WprInlineChartLegendItem<ScpSeriesKey>> = SCP_WOW_SERIES.map((series) => ({
+    ...series,
+    active: wowVisible[series.key],
+  }))
+  const toggleSeries = (seriesKey: ScpSeriesKey) => {
+    setWowVisible({
+      ...wowVisible,
+      [seriesKey]: !wowVisible[seriesKey],
+    })
+  }
   const changeMarkers = buildWeeklyChangeMarkers(changeEntries)
   let chartBody: JSX.Element
   if (weekly.length === 0) {
@@ -70,127 +84,73 @@ function ScpWeeklyChart({
     }))
 
     chartBody = (
-      <Box sx={{ height: '100%' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-            <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} tickFormatter={(value: number) => `${value.toFixed(0)}%`} />
-            <Tooltip
-              content={({ active, payload, label }) => (
-                <WprChangeTooltipContent
-                  active={active}
-                  payload={payload}
-                  label={label}
-                  labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
-                  changeMarker={changeMarkersByLabel.get(String(label))}
-                  formatRow={(entry) => {
-                    const key = entry.dataKey
-                    if (key === undefined) {
-                      throw new Error('Missing SCP tooltip data key')
-                    }
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ flex: 1, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis dataKey="weekLabel" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={(value: number) => `${value.toFixed(0)}%`} />
+              <Tooltip
+                content={({ active, payload, label }) => (
+                  <WprChangeTooltipContent
+                    active={active}
+                    payload={payload}
+                    label={label}
+                    labelText={formatTooltipWeekLabelFromLookup(label, weekStartDates)}
+                    changeMarker={changeMarkersByLabel.get(String(label))}
+                    formatRow={(entry) => {
+                      const key = entry.dataKey
+                      if (key === undefined) {
+                        throw new Error('Missing SCP tooltip data key')
+                      }
 
-                    const value = entry.value
-                    if (typeof value !== 'number') {
-                      throw new Error(`Invalid SCP tooltip value for ${String(key)}`)
-                    }
+                      const value = entry.value
+                      if (typeof value !== 'number') {
+                        throw new Error(`Invalid SCP tooltip value for ${String(key)}`)
+                      }
 
-                    const color = entry.color
-                    if (color === undefined) {
-                      throw new Error(`Missing SCP tooltip color for ${String(key)}`)
-                    }
+                      const color = entry.color
+                      if (color === undefined) {
+                        throw new Error(`Missing SCP tooltip color for ${String(key)}`)
+                      }
 
-                    let rowLabel = 'CVR'
-                    if (key === 'ctr') rowLabel = 'CTR'
-                    if (key === 'atc') rowLabel = 'ATC Rate'
-                    if (key === 'purch') rowLabel = 'Purch Rate'
+                      let rowLabel = 'CVR'
+                      if (key === 'ctr') rowLabel = 'CTR'
+                      if (key === 'atc') rowLabel = 'ATC Rate'
+                      if (key === 'purch') rowLabel = 'Purch Rate'
 
-                    return {
-                      label: rowLabel,
-                      value: `${value.toFixed(1)}%`,
-                      color,
-                    }
-                  }}
-                />
-              )}
-            />
-            <RechartsChangeMarkers markers={changeMarkers} />
-            {visibleSeries.map((series) => (
-              <Line
-                key={series.key}
-                type="monotone"
-                dataKey={series.key}
-                stroke={series.color}
-                strokeWidth={2.2}
-                dot={{ r: 2.5, strokeWidth: 0, fill: series.color }}
-                activeDot={{ r: 4 }}
+                      return {
+                        label: rowLabel,
+                        value: `${value.toFixed(1)}%`,
+                        color,
+                      }
+                    }}
+                  />
+                )}
               />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+              <RechartsChangeMarkers markers={changeMarkers} />
+              {visibleSeries.map((series) => (
+                <Line
+                  key={series.key}
+                  type="monotone"
+                  dataKey={series.key}
+                  stroke={series.color}
+                  strokeWidth={2.2}
+                  dot={{ r: 2.5, strokeWidth: 0, fill: series.color }}
+                  activeDot={{ r: 4 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        </Box>
+        <WprInlineChartLegend chartId="scp" items={legendItems} onToggle={toggleSeries} />
       </Box>
     )
   }
 
   return (
-    <WprChartShell
-      secondaryControls={
-        <WprChartControlGroup label="Metrics">
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                ctr: !wowVisible.ctr,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.ctr, '#8fc7ff')}
-          >
-            CTR
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                atc: !wowVisible.atc,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.atc, '#f5a623')}
-          >
-            ATC Rate
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                purch: !wowVisible.purch,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.purch, '#77dfd0')}
-          >
-            Purch Rate
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                cvr: !wowVisible.cvr,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.cvr, '#d5ff62')}
-          >
-            CVR
-          </Button>
-        </WprChartControlGroup>
-      }
-    >
+    <WprChartShell>
       {chartBody}
     </WprChartShell>
   )
@@ -275,19 +235,11 @@ export default function ScpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const historyLabel = formatWeekWindowLabel(bundle.scp.meta.baselineWindow, weekStartDates)
-  const footerItems = [
-    `Source: SCP`,
-    `Scope: catalog search`,
-    `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
-    `Target ASIN: ${bundle.scp.meta.targetAsin}`,
-    `Chart history: ${historyLabel}`,
-  ]
 
   return (
     <Stack spacing={2}>
       <WprAnalyticsPanel
-        footer={<WprAnalyticsFooter items={footerItems} />}
+        footer={null}
       >
         <ScpWeeklyChart
           weekly={viewModel.weekly}

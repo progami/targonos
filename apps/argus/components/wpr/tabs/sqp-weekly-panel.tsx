@@ -1,25 +1,19 @@
 'use client'
 
 import React, { useState, type JSX } from 'react'
-import { Button } from '@mui/material'
 import ResponsiveChartFrame from '@/components/charts/responsive-chart-frame'
-import {
-  WprAnalyticsFooter,
-  WprAnalyticsPanel,
-} from '@/components/wpr/wpr-analytics-panel'
+import { WprAnalyticsPanel } from '@/components/wpr/wpr-analytics-panel'
 import {
   buildChangeMarkerLabelParts,
   buildChangeMarkerLookup,
   buildWeeklyChangeMarkers,
 } from '@/components/wpr/chart-change-markers'
-import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
+import { WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
 import type { WprSqpWowVisible } from '@/lib/wpr/dashboard-state'
-import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import { formatWprChangeCategory, getWprChangeCategoryColor } from '@/lib/wpr/change-log-categories'
 import { formatWeekLabelWithDateRange } from '@/lib/wpr/week-display'
 import {
   rateRatio,
-  type SqpSelectionScope,
   type SqpWeeklyPoint,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry } from '@/lib/wpr/types'
@@ -27,6 +21,7 @@ import type { WprChangeLogEntry } from '@/lib/wpr/types'
 type ChartPoint = {
   week_label: string
   start_date: string
+  query_volume: number
   impr_points: number
   ctr_adv: number
   atc_adv: number
@@ -44,6 +39,8 @@ type ChartSeriesMeta = {
   valueField: keyof Pick<ChartPoint, 'impr_points' | 'ctr_adv' | 'atc_adv' | 'cvr_adv'>
   ratioField?: keyof Pick<ChartPoint, 'ctr_ratio' | 'atc_ratio' | 'cvr_ratio'>
 }
+
+type SqpLegendKey = 'qvol' | ChartSeriesMeta['key']
 
 export const SQP_WOW_SERIES: ChartSeriesMeta[] = [
   { key: 'impr', label: 'Impr Share', color: '#8fc7ff', kind: 'points', valueField: 'impr_points' },
@@ -68,28 +65,16 @@ function formatPoints(value: number): string {
   return `${value.toFixed(1)} pts`
 }
 
-function buildFooterItems({
-  scopeType,
-  rootCount,
-  termCount,
-  totalTermCount,
-  historyLabel,
-}: {
-  scopeType: SqpSelectionScope
-  rootCount: number
-  termCount: number
-  totalTermCount: number
-  historyLabel: string
-}) {
-  const footerItems = [
-    `Source: SQP`,
-    `Scope: ${scopeType}`,
-    `Roots: ${rootCount}`,
-    `SQP terms: ${termCount} / ${totalTermCount}`,
-    `Chart history: ${historyLabel}`,
-  ]
+function formatCompactCount(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '–'
+  }
 
-  return footerItems
+  if (Math.abs(value) >= 1000) {
+    return `${(value / 1000).toFixed(1)}k`
+  }
+
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 }
 
 function buildRatioFillPolygons(
@@ -106,8 +91,11 @@ function buildRatioFillPolygons(
   for (let index = 0; index < points.length - 1; index += 1) {
     const current = points[index]
     const next = points[index + 1]
-    if (current === undefined || next === undefined) {
-      throw new Error(`Missing SQP weekly chart points for index ${index}`)
+    if (current === undefined) {
+      throw new Error(`Missing SQP weekly chart current point for index ${index}`)
+    }
+    if (next === undefined) {
+      throw new Error(`Missing SQP weekly chart next point for index ${index}`)
     }
 
     const currentValue = current[series.valueField]
@@ -169,21 +157,32 @@ export function SqpWeeklySvg({
   weekly,
   changeEntries,
   visibleSeries,
+  seriesVisibility,
+  qVolVisible,
   width,
   height,
   hoveredIndex,
   onHoverIndexChange,
+  onToggleQVol,
+  onToggleSeries,
 }: {
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   visibleSeries: ChartSeriesMeta[]
+  seriesVisibility: WprSqpWowVisible
+  qVolVisible: boolean
   width?: number
   height?: number
   hoveredIndex: number | null
   onHoverIndexChange: (index: number | null) => void
+  onToggleQVol: () => void
+  onToggleSeries: (seriesKey: keyof WprSqpWowVisible) => void
 }) {
-  if (width === undefined || height === undefined) {
-    throw new Error('Missing SQP weekly chart frame size')
+  if (width === undefined) {
+    throw new Error('Missing SQP weekly chart frame width')
+  }
+  if (height === undefined) {
+    throw new Error('Missing SQP weekly chart frame height')
   }
 
   const compactLayout = width < 640
@@ -191,14 +190,18 @@ export function SqpWeeklySvg({
   const margin = {
     top: 18,
     right: crampedLayout ? 44 : compactLayout ? 56 : 72,
-    bottom: 24,
+    bottom: crampedLayout ? 40 : 42,
     left: crampedLayout ? 20 : compactLayout ? 28 : 38,
   }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
-  if (plotWidth <= 0 || plotHeight <= 0) {
-    throw new Error(`Invalid SQP weekly chart frame dimensions ${width}x${height}`)
+  if (plotWidth <= 0) {
+    throw new Error(`Invalid SQP weekly chart frame width ${width}`)
   }
+  if (plotHeight <= 0) {
+    throw new Error(`Invalid SQP weekly chart frame height ${height}`)
+  }
+  const plotBottomY = height - margin.bottom
 
   const changeMarkers = buildChangeMarkerLookup(buildWeeklyChangeMarkers(changeEntries))
   const points: ChartPoint[] = weekly.map((week) => {
@@ -209,6 +212,7 @@ export function SqpWeeklySvg({
     return {
       week_label: week.week_label,
       start_date: week.start_date,
+      query_volume: week.metrics.query_volume,
       impr_points: week.metrics.impression_share * 100,
       ctr_ratio: ctrRatio,
       atc_ratio: atcRatio,
@@ -252,10 +256,56 @@ export function SqpWeeklySvg({
     return margin.top + plotHeight - progress * plotHeight
   }
 
+  const minQueryVolume = Math.min(...points.map((point) => point.query_volume))
+  const maxQueryVolume = Math.max(...points.map((point) => point.query_volume))
+  const queryVolumeRange = maxQueryVolume - minQueryVolume
+  const queryVolumeYPosition = (value: number) => {
+    if (queryVolumeRange === 0) {
+      return margin.top + plotHeight / 2
+    }
+
+    const progress = (value - minQueryVolume) / queryVolumeRange
+    return margin.top + plotHeight - progress * plotHeight
+  }
+
   const markerFontSize = crampedLayout ? 7 : 8
   const valueFontSize = crampedLayout ? 8 : 9
   const weekFontSize = crampedLayout ? 8 : 9
+  const legendFontSize = crampedLayout ? 7 : 8
+  const legendY = height - (crampedLayout ? 6 : 7)
+  const weekLabelY = height - (crampedLayout ? 22 : 24)
+  const legendGap = crampedLayout ? 55 : compactLayout ? 70 : 86
+  const legendItemWidth = crampedLayout ? 47 : compactLayout ? 58 : 70
   const valueLabelX = width - margin.right + (crampedLayout ? 4 : 8)
+  const legendItems: Array<{
+    key: SqpLegendKey
+    label: string
+    color: string
+    dash: boolean
+    active: boolean
+  }> = [
+    { key: 'qvol', label: 'Q Vol', color: '#00c2b9', dash: true, active: qVolVisible },
+    ...SQP_WOW_SERIES.map((series) => ({
+      key: series.key,
+      label: series.label,
+      color: series.color,
+      dash: false,
+      active: seriesVisibility[series.key],
+    })),
+  ]
+  const legendTotalWidth = (legendItems.length - 1) * legendGap + legendItemWidth
+  let legendStartX = margin.left + (plotWidth - legendTotalWidth) / 2
+  if (legendStartX < margin.left) {
+    legendStartX = margin.left
+  }
+  const toggleLegendItem = (key: SqpLegendKey) => {
+    if (key === 'qvol') {
+      onToggleQVol()
+      return
+    }
+
+    onToggleSeries(key)
+  }
   let activeHoverIndex: number | null = null
   if (hoveredIndex !== null && hoveredIndex >= 0 && hoveredIndex < points.length) {
     activeHoverIndex = hoveredIndex
@@ -269,12 +319,27 @@ export function SqpWeeklySvg({
     }
 
     const hoveredMarker = changeMarkers.get(hoveredPoint.week_label)
-    const tooltipRows = visibleSeries.map((series) => ({
+    const tooltipRows: Array<{
+      key: string
+      label: string
+      color: string
+      value: string
+    }> = visibleSeries.map((series) => ({
       key: series.key,
       label: series.label,
       color: series.color,
       value: formatSeriesTooltipValue(hoveredPoint, series),
     }))
+    if (qVolVisible) {
+      tooltipRows.unshift(
+        {
+          key: 'query-volume',
+          label: 'Q Vol',
+          color: '#00c2b9',
+          value: formatCompactCount(hoveredPoint.query_volume),
+        },
+      )
+    }
     const tooltipLabelParts = buildChangeMarkerLabelParts(
       formatWeekLabelWithDateRange(hoveredPoint.week_label, hoveredPoint.start_date),
       hoveredMarker,
@@ -325,8 +390,8 @@ export function SqpWeeklySvg({
           x1={activeX}
           x2={activeX}
           y1={margin.top}
-          y2={height - margin.bottom}
-          stroke="rgba(255,255,255,0.22)"
+          y2={plotBottomY}
+          stroke="rgba(255,255,255,0.2)"
           strokeWidth="1.2"
           strokeDasharray="4 4"
         />
@@ -440,6 +505,16 @@ export function SqpWeeklySvg({
             strokeWidth="1.8"
           />
         ))}
+        {qVolVisible ? (
+          <circle
+            cx={activeX}
+            cy={queryVolumeYPosition(hoveredPoint.query_volume)}
+            r={4.2}
+            fill="#00c2b9"
+            stroke="#09100f"
+            strokeWidth="1.8"
+          />
+        ) : null}
       </g>
     )
   }
@@ -469,8 +544,8 @@ export function SqpWeeklySvg({
       <line
         x1={margin.left}
         x2={width - margin.right}
-        y1={height - margin.bottom}
-        y2={height - margin.bottom}
+        y1={plotBottomY}
+        y2={plotBottomY}
         stroke="rgba(255,255,255,0.08)"
         strokeWidth="1"
       />
@@ -489,8 +564,8 @@ export function SqpWeeklySvg({
               x1={xPosition(index)}
               x2={xPosition(index)}
               y1={margin.top}
-              y2={height - margin.bottom}
-              stroke="rgba(241,235,222,0.34)"
+              y2={plotBottomY}
+              stroke="rgba(241,235,222,0.24)"
               strokeWidth="1.2"
               strokeDasharray="3 5"
             />
@@ -553,13 +628,40 @@ export function SqpWeeklySvg({
         )
       })}
 
+      {qVolVisible ? (
+        <g data-series="query-volume-line" aria-label="SQP normalized query volume line">
+          <path
+            d={points
+              .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xPosition(index).toFixed(1)} ${queryVolumeYPosition(point.query_volume).toFixed(1)}`)
+              .join(' ')}
+            fill="none"
+            stroke="#00c2b9"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="6 5"
+          />
+          {points.map((point, index) => (
+            <circle
+              key={`qvol-line-${point.week_label}`}
+              cx={xPosition(index)}
+              cy={queryVolumeYPosition(point.query_volume)}
+              r={2.5}
+              fill="#00c2b9"
+              stroke="#09100f"
+              strokeWidth="1"
+            />
+          ))}
+        </g>
+      ) : null}
+
       {hoverTooltip}
 
       {weekly.map((week, index) => (
         <text
           key={week.week_label}
           x={xPosition(index)}
-          y={height - 6}
+          y={weekLabelY}
           fill={activeHoverIndex === index ? 'rgba(255,255,255,0.86)' : '#93a399'}
           fontSize={weekFontSize}
           fontWeight={activeHoverIndex === index ? '700' : '500'}
@@ -568,6 +670,49 @@ export function SqpWeeklySvg({
           {week.week_label}
         </text>
       ))}
+
+      <g data-chart-legend="sqp" aria-label="SQP chart legend">
+        {legendItems.map((item, index) => {
+          const x = legendStartX + index * legendGap
+          return (
+            <g
+              key={item.key}
+              transform={`translate(${x}, ${legendY})`}
+              aria-label={`${item.label} series`}
+              data-legend-item={item.key}
+              data-active={item.active ? 'true' : 'false'}
+              onMouseDown={(event) => {
+                event.preventDefault()
+              }}
+              onClick={() => {
+                toggleLegendItem(item.key)
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <line
+                x1="0"
+                x2="15"
+                y1="-4"
+                y2="-4"
+                stroke={item.color}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeDasharray={item.dash ? '5 4' : undefined}
+                opacity={item.active ? 1 : 0.28}
+              />
+              <text
+                x="20"
+                y="0"
+                fill={item.active ? 'rgba(255,255,255,0.68)' : 'rgba(255,255,255,0.34)'}
+                fontSize={legendFontSize}
+                fontWeight="600"
+              >
+                {item.label}
+              </text>
+            </g>
+          )
+        })}
+      </g>
 
       {points.map((point, index) => {
         const currentX = xPosition(index)
@@ -607,11 +752,12 @@ function SqpWeeklyChart({
   setWowVisible: (nextState: WprSqpWowVisible) => void
 }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+  const [qVolVisible, setQVolVisible] = useState(true)
   const visibleSeries = SQP_WOW_SERIES.filter((series) => wowVisible[series.key])
   let chartBody: JSX.Element
   if (weekly.length === 0) {
     chartBody = <WprChartEmptyState>No weekly SQP history for this selection.</WprChartEmptyState>
-  } else if (visibleSeries.length === 0) {
+  } else if (visibleSeries.length === 0 && !qVolVisible) {
     chartBody = <WprChartEmptyState>Turn on at least one series to view the SQP history chart.</WprChartEmptyState>
   } else {
     chartBody = (
@@ -620,36 +766,26 @@ function SqpWeeklyChart({
           weekly={weekly}
           changeEntries={changeEntries}
           visibleSeries={visibleSeries}
+          seriesVisibility={wowVisible}
+          qVolVisible={qVolVisible}
           hoveredIndex={hoveredIndex}
           onHoverIndexChange={setHoveredIndex}
+          onToggleQVol={() => {
+            setQVolVisible(!qVolVisible)
+          }}
+          onToggleSeries={(seriesKey) => {
+            setWowVisible({
+              ...wowVisible,
+              [seriesKey]: !wowVisible[seriesKey],
+            })
+          }}
         />
       </ResponsiveChartFrame>
     )
   }
 
   return (
-    <WprChartShell
-      secondaryControls={
-        <WprChartControlGroup label="Metrics">
-          {SQP_WOW_SERIES.map((series) => (
-            <Button
-              key={series.key}
-              size="small"
-              variant="outlined"
-              onClick={() => {
-                setWowVisible({
-                  ...wowVisible,
-                  [series.key]: !wowVisible[series.key],
-                })
-              }}
-              sx={chartToggleButtonSx(wowVisible[series.key], series.color)}
-            >
-              {series.label}
-            </Button>
-          ))}
-        </WprChartControlGroup>
-      }
-    >
+    <WprChartShell>
       {chartBody}
     </WprChartShell>
   )
@@ -660,33 +796,15 @@ export default function SqpWeeklyPanel({
   changeEntries,
   wowVisible,
   setWowVisible,
-  scopeType,
-  selectedRootCount,
-  selectedTermCount,
-  totalTermCount,
-  historyLabel,
 }: {
   weekly: SqpWeeklyPoint[]
   changeEntries: WprChangeLogEntry[]
   wowVisible: WprSqpWowVisible
   setWowVisible: (nextState: WprSqpWowVisible) => void
-  scopeType: SqpSelectionScope
-  selectedRootCount: number
-  selectedTermCount: number
-  totalTermCount: number
-  historyLabel: string
 }) {
-  const footerItems = buildFooterItems({
-    scopeType,
-    rootCount: selectedRootCount,
-    termCount: selectedTermCount,
-    totalTermCount,
-    historyLabel,
-  })
-
   return (
     <WprAnalyticsPanel
-      footer={<WprAnalyticsFooter items={footerItems} />}
+      footer={null}
     >
       <SqpWeeklyChart
         weekly={weekly}
