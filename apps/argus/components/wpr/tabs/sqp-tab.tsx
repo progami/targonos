@@ -7,7 +7,7 @@ import {
   rootTermIds,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
-import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import SqpSelectionTable from './sqp-selection-table'
 import SqpWeeklyPanel from './sqp-weekly-panel'
@@ -197,7 +197,6 @@ export default function SqpTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
     const nextRootIds = new Set(selectedSqpRootIds)
@@ -311,11 +310,6 @@ export default function SqpTab({
         changeEntries={changeEntries}
         wowVisible={sqpWowVisible}
         setWowVisible={setSqpWowVisible}
-        scopeType={viewModel.scopeType}
-        selectedRootCount={viewModel.selectedRootIds.length}
-        selectedTermCount={viewModel.selectedTermIds.length}
-        totalTermCount={viewModel.allTermIds.length}
-        historyLabel={historyLabel}
       />
 
       <SqpSelectionTable

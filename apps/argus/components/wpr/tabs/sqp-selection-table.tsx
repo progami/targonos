@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react'
 import {
   Box,
   Checkbox,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -13,12 +14,12 @@ import {
   TableSortLabel,
   Typography,
 } from '@mui/material'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   WprSelectionPanel,
   wprSelectionHeaderCellSx,
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
-import WprWeekSelect from '@/components/wpr/wpr-week-select'
 import type { WprSortState } from '@/lib/wpr/dashboard-state'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import {
@@ -31,6 +32,7 @@ import {
 } from '@/lib/wpr/sqp-view-model'
 import type { WprSortDirection } from '@/lib/wpr/dashboard-state'
 import type { WeekLabel } from '@/lib/wpr/types'
+import { formatWeekLabelFromLookup } from '@/lib/wpr/week-display'
 
 const SQP_COLUMNS: Array<{ key: SqpSortKey; label: string }> = [
   { key: 'term', label: 'Term' },
@@ -98,6 +100,65 @@ function formatRatio(value: number): string {
   return `${value.toFixed(2)}x`
 }
 
+function formatSqpSelectionSummary(viewModel: SqpSelectionViewModel): string {
+  const baseSummary = `${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} selected`
+  const selectedQueryVolume = selectedSqpQueryVolume(viewModel)
+  const activeTermCount = activeSqpTermCount(viewModel)
+  if (selectedQueryVolume === null) {
+    return baseSummary
+  }
+
+  return `${baseSummary} · ${activeTermCount} active · Total SV ${formatCount(selectedQueryVolume)}`
+}
+
+function selectedSqpQueryVolume(viewModel: SqpSelectionViewModel): number | null {
+  if (viewModel.selectedTermIds.length === 0) {
+    if (viewModel.metrics === null) {
+      return null
+    }
+
+    return viewModel.metrics.query_volume
+  }
+
+  const countedTermIds = new Set<string>()
+  let queryVolume = 0
+  for (const rows of Object.values(viewModel.termRowsByRoot)) {
+    for (const row of rows) {
+      if (!row.checked) {
+        continue
+      }
+
+      if (countedTermIds.has(row.id)) {
+        continue
+      }
+
+      countedTermIds.add(row.id)
+      queryVolume += row.current.query_volume
+    }
+  }
+
+  return queryVolume
+}
+
+function activeSqpTermCount(viewModel: SqpSelectionViewModel): number {
+  const countedTermIds = new Set<string>()
+  for (const rows of Object.values(viewModel.termRowsByRoot)) {
+    for (const row of rows) {
+      if (!row.checked) {
+        continue
+      }
+
+      if (row.current.query_volume <= 0) {
+        continue
+      }
+
+      countedTermIds.add(row.id)
+    }
+  }
+
+  return countedTermIds.size
+}
+
 function MetricCell({
   children,
   align,
@@ -127,6 +188,109 @@ function nextSortDirection(current: WprSortState, key: SqpSortKey): WprSortDirec
   }
 
   return 'desc'
+}
+
+function SqpWeekStepper({
+  selectedWeek,
+  weeks,
+  weekStartDates,
+  onSelectWeek,
+}: {
+  selectedWeek: WeekLabel
+  weeks: WeekLabel[]
+  weekStartDates: Record<WeekLabel, string>
+  onSelectWeek: (week: WeekLabel) => void
+}) {
+  const selectedIndex = weeks.indexOf(selectedWeek)
+  if (selectedIndex < 0) {
+    throw new Error(`Selected SQP table week is not available: ${selectedWeek}`)
+  }
+
+  const previousWeek = selectedIndex > 0 ? weeks[selectedIndex - 1] : undefined
+  const nextWeek = selectedIndex < weeks.length - 1 ? weeks[selectedIndex + 1] : undefined
+  const selectedWeekLabel = formatWeekLabelFromLookup(selectedWeek, weekStartDates)
+
+  const handlePreviousWeek = () => {
+    if (previousWeek === undefined) {
+      throw new Error(`Missing previous SQP table week before ${selectedWeek}`)
+    }
+
+    onSelectWeek(previousWeek)
+  }
+
+  const handleNextWeek = () => {
+    if (nextWeek === undefined) {
+      throw new Error(`Missing next SQP table week after ${selectedWeek}`)
+    }
+
+    onSelectWeek(nextWeek)
+  }
+
+  const arrowButtonSx = {
+    width: 30,
+    height: 30,
+    border: '1px solid rgba(255,255,255,0.08)',
+    color: 'rgba(255,255,255,0.78)',
+    bgcolor: 'rgba(255,255,255,0.035)',
+    '&:hover': {
+      bgcolor: 'rgba(0,194,185,0.12)',
+      borderColor: 'rgba(0,194,185,0.32)',
+      color: 'rgba(255,255,255,0.94)',
+    },
+    '&.Mui-disabled': {
+      color: 'rgba(255,255,255,0.22)',
+      borderColor: 'rgba(255,255,255,0.04)',
+      bgcolor: 'rgba(255,255,255,0.02)',
+    },
+  }
+
+  return (
+    <Stack
+      direction="row"
+      alignItems="center"
+      spacing={0.75}
+      aria-label="SQP table week controls"
+      sx={{
+        px: 0.75,
+        py: 0.45,
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '10px',
+        bgcolor: 'rgba(255,255,255,0.03)',
+      }}
+    >
+      <IconButton
+        size="small"
+        aria-label="Previous table week"
+        disabled={previousWeek === undefined}
+        onClick={handlePreviousWeek}
+        sx={arrowButtonSx}
+      >
+        <ChevronLeft size={15} strokeWidth={2.4} />
+      </IconButton>
+      <Box
+        sx={{
+          minWidth: 166,
+          textAlign: 'center',
+          fontSize: '0.77rem',
+          lineHeight: 1.2,
+          fontWeight: 700,
+          color: 'rgba(255,255,255,0.9)',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {selectedWeekLabel}
+      </Box>
+      <IconButton
+        size="small"
+        aria-label="Next table week"
+        disabled={nextWeek === undefined}
+        onClick={handleNextWeek}
+        sx={arrowButtonSx}
+      >
+        <ChevronRight size={15} strokeWidth={2.4} />
+      </IconButton>
+    </Stack>
+  )
 }
 
 export default function SqpSelectionTable({
@@ -163,14 +327,27 @@ export default function SqpSelectionTable({
   const allTermsChecked = viewModel.isAllSelected && viewModel.allTermIds.length > 0
   const allTermsIndeterminate = viewModel.selectedTermIds.length > 0 && !viewModel.isAllSelected
   const sortKey = toSqpSortKey(sortState.key)
+  const groupRowsByFamily = sortKey === 'term'
+  const rootRowSections = groupRowsByFamily
+    ? familyOrder.map((family) => ({
+      family,
+      rows: sortSqpRootRows(
+        viewModel.rootRows.filter((row) => row.family === family),
+        sortKey,
+        sortState.dir,
+      ),
+    }))
+    : [{
+      family: null,
+      rows: sortSqpRootRows(viewModel.rootRows, sortKey, sortState.dir),
+    }]
 
   return (
     <WprSelectionPanel
       title="SQP Selection"
-      summary={`${viewModel.selectedRootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      summary={formatSqpSelectionSummary(viewModel)}
       toolbar={(
-        <WprWeekSelect
-          label="Table week"
+        <SqpWeekStepper
           selectedWeek={selectedWeek}
           weeks={weeks}
           weekStartDates={weekStartDates}
@@ -229,33 +406,33 @@ export default function SqpSelectionTable({
           </TableHead>
 
           <TableBody>
-            {familyOrder.map((family) => {
-              const familyRows = viewModel.rootRows.filter((row) => row.family === family)
-              const sortedFamilyRows = sortSqpRootRows(familyRows, sortKey, sortState.dir)
-              if (sortedFamilyRows.length === 0) {
+            {rootRowSections.map((section) => {
+              if (section.rows.length === 0) {
                 return null
               }
 
               return (
-                <Fragment key={family}>
-                  <TableRow>
-                    <TableCell
-                      colSpan={SQP_COLUMNS.length + 1}
-                      sx={{
-                        bgcolor: 'rgba(0,194,185,0.05)',
-                        color: '#00C2B9',
-                        fontSize: '0.62rem',
-                        fontWeight: 800,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.14em',
-                        borderBottom: '1px solid rgba(0,194,185,0.12)',
-                      }}
-                    >
-                      {family}
-                    </TableCell>
-                  </TableRow>
+                <Fragment key={section.family ?? 'all-roots'}>
+                  {section.family !== null ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={SQP_COLUMNS.length + 1}
+                        sx={{
+                          bgcolor: 'rgba(0,194,185,0.05)',
+                          color: '#00C2B9',
+                          fontSize: '0.62rem',
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.14em',
+                          borderBottom: '1px solid rgba(0,194,185,0.12)',
+                        }}
+                      >
+                        {section.family}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
 
-                  {sortedFamilyRows.map((row) => {
+                  {section.rows.map((row) => {
                     const rowIsExpanded = expandedRootIds.has(row.id)
                     const termRows = viewModel.termRowsByRoot[row.id]
                     if (termRows === undefined) {
@@ -323,7 +500,9 @@ export default function SqpSelectionTable({
                                   {row.label}
                                 </Typography>
                                 <Typography sx={{ fontSize: '0.66rem', color: 'rgba(255,255,255,0.58)' }}>
-                                  {`${row.selectedCount} / ${row.totalCount} terms selected`}
+                                  {groupRowsByFamily
+                                    ? `${row.selectedCount} / ${row.totalCount} terms selected`
+                                    : `${row.family} · ${row.selectedCount} / ${row.totalCount} terms selected`}
                                 </Typography>
                               </Stack>
                             </Box>

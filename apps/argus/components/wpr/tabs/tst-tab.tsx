@@ -7,7 +7,7 @@ import {
   competitorRootTermIds,
   createTstViewModel,
 } from '@/lib/wpr/tst-view-model'
-import { buildBundleWeekStartDateLookup, formatWeekWindowLabel } from '@/lib/wpr/week-display'
+import { buildBundleWeekStartDateLookup } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import TstSelectionTable from './tst-selection-table'
 import TstWeeklyPanel from './tst-weekly-panel'
@@ -109,7 +109,6 @@ export default function TstTab({
   }
 
   const weekStartDates = buildBundleWeekStartDateLookup(bundle)
-  const historyLabel = formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
   const competitor = bundle.meta.competitor
 
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
@@ -186,7 +185,6 @@ export default function TstTab({
       <TstWeeklyPanel
         viewModel={viewModel}
         changeEntries={changeEntries}
-        historyLabel={historyLabel}
         weekStartDates={weekStartDates}
         wowVisible={compWowVisible}
         setWowVisible={setCompWowVisible}

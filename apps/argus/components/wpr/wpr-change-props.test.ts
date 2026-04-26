@@ -18,7 +18,7 @@ test('dashboard shell loads weeks and the selected week bundle instead of the fu
   assert.match(shellSource, /useWprWeeksQuery/)
   assert.match(shellSource, /useWprWeekBundleQuery/)
   assert.match(shellSource, /useWprChangeLogWeekQuery/)
-  assert.match(shellSource, /useWprSourcesQuery\(activeTab === 'sources'\)/)
+  assert.match(shellSource, /useWprSourcesQuery\(market, activeTab === 'sources'\)/)
   assert.match(shellSource, /weekStartDates=\{weeksQuery\.data\.weekStartDates\}/)
 })
 
@@ -26,9 +26,9 @@ test('dashboard shell keeps chart bundles pinned to the default week while chang
   const shellSource = readFileSync(new URL('./wpr-dashboard-shell.tsx', import.meta.url), 'utf8')
 
   assert.match(shellSource, /const bundleWeek = weeksQuery\.data\?\.defaultWeek \?\? null/)
-  assert.match(shellSource, /useWprWeekBundleQuery\(bundleWeek, needsBundle\)/)
-  assert.match(shellSource, /useWprChangeLogWeekQuery\(bundleWeek, needsChartChangeEntries\)/)
-  assert.match(shellSource, /useWprChangeLogWeekQuery\(selectedWeek, activeTab === 'changelog'\)/)
+  assert.match(shellSource, /useWprWeekBundleQuery\(market, bundleWeek, needsBundle\)/)
+  assert.match(shellSource, /useWprChangeLogWeekQuery\(market, bundleWeek, needsChartChangeEntries\)/)
+  assert.match(shellSource, /useWprChangeLogWeekQuery\(market, selectedWeek, activeTab === 'changelog'\)/)
 })
 
 test('tst tab forwards change entries into the weekly panel', () => {
@@ -164,7 +164,7 @@ test('the sticky WPR top bar keeps tab navigation only', () => {
   assert.doesNotMatch(topBarSource, /onSelectWeek/)
 })
 
-test('selection tables own the shared week selector near the table header', () => {
+test('selection tables own table week controls near the table header', () => {
   const selectionPanelSource = readFileSync(new URL('./wpr-selection-panel.tsx', import.meta.url), 'utf8')
   const sqpSource = readFileSync(new URL('./tabs/sqp-selection-table.tsx', import.meta.url), 'utf8')
   const scpSource = readFileSync(new URL('./tabs/scp-selection-table.tsx', import.meta.url), 'utf8')
@@ -172,7 +172,8 @@ test('selection tables own the shared week selector near the table header', () =
   const tstSource = readFileSync(new URL('./tabs/tst-selection-table.tsx', import.meta.url), 'utf8')
 
   assert.match(selectionPanelSource, /toolbar\?: ReactNode/)
-  assert.match(sqpSource, /<WprWeekSelect/)
+  assert.match(sqpSource, /function SqpWeekStepper/)
+  assert.doesNotMatch(sqpSource, /<WprWeekSelect/)
   assert.match(scpSource, /<WprWeekSelect/)
   assert.match(brSource, /<WprWeekSelect/)
   assert.match(tstSource, /<WprWeekSelect/)
