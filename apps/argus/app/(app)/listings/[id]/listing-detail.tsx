@@ -198,7 +198,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
       if (!selected) return
-      const versionNumber = titleRevisions.length - titleIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Title v${versionNumber}?`)) return
 
       void (async () => {
@@ -249,7 +249,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
       if (!selected) return
-      const versionNumber = bulletsRevisions.length - bulletsIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Bullets v${versionNumber}?`)) return
 
       void (async () => {
@@ -326,7 +326,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      const versionNumber = galleryRevisions.length - galleryIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Images v${versionNumber}?`)) return
 
       void (async () => {
@@ -371,7 +371,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
       if (!selected) return
-      const versionNumber = videoRevisions.length - videoIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Video v${versionNumber}?`)) return
 
       void (async () => {
@@ -744,11 +744,11 @@ export function ListingDetail({
     applyEbc(doc, appliedEbc)
     applyVariationSelection(doc, listing ? listing.asin : null)
 
-    const titleVersionNumber = selectedTitleRev ? titleRevisions.length - titleIndex : undefined
-    const bulletsVersionNumber = selectedBullets ? bulletsRevisions.length - bulletsIndex : undefined
-    const galleryVersionNumber = selectedGallery ? galleryRevisions.length - galleryIndex : undefined
-    const videoVersionNumber = selectedVideo ? videoRevisions.length - videoIndex : undefined
-    const ebcVersionNumber = selectedEbc ? ebcRevisions.length - ebcIndex : undefined
+    const titleVersionNumber = selectedTitleRev ? selectedTitleRev.seq : undefined
+    const bulletsVersionNumber = selectedBullets ? selectedBullets.seq : undefined
+    const galleryVersionNumber = selectedGallery ? selectedGallery.seq : undefined
+    const videoVersionNumber = selectedVideo ? selectedVideo.seq : undefined
+    const ebcVersionNumber = selectedEbc ? selectedEbc.seq : undefined
 
     updateTrackControls(doc, 'title', titleVersionNumber, titleIndex, titleRevisions.length)
     updateTrackControls(doc, 'bullets', bulletsVersionNumber, bulletsIndex, bulletsRevisions.length)
@@ -784,7 +784,7 @@ export function ListingDetail({
     callbacksRef.current.galleryDownload = () => {
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      const versionNumber = galleryRevisions.length - galleryIndex
+      const versionNumber = selected.seq
       void downloadGalleryRevisionZip(selected, versionNumber).catch((err) => console.error(err))
     }
 
@@ -1301,11 +1301,6 @@ function injectArgusVersionControls(
     ensurePriceControls(doc, price, callbacksRef)
   }
 
-  const video = getReplicaSlotElement<HTMLElement>(doc, 'gallery-video-thumb')
-  if (video) {
-    ensureTrackControls(doc, video, 'video', 'Video', callbacksRef)
-  }
-
   let ebc: HTMLElement | null = null
   const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
   const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
@@ -1455,7 +1450,7 @@ function ensureTrackControls(
 
   const controls = doc.createElement('div')
   controls.id = controlsId
-  controls.className = 'argus-vc-controls'
+  controls.className = `argus-vc-controls argus-vc-controls-${track}`
 
   const prev = doc.createElement('button')
   prev.id = `argus-vc-prev-${track}`
@@ -2114,7 +2109,7 @@ function ensureGalleryThumbnailSwap(
   if (altList.dataset.argusGallerySwapBound === 'true') return
   altList.dataset.argusGallerySwapBound = 'true'
 
-  altList.addEventListener('click', (e) => {
+  const handleThumbnailSwap = (e: Event, allowPlaceholderUpload: boolean) => {
     const target = e.target
     if (!(target instanceof doc.defaultView!.Element)) return
     if (target.closest('.argus-vc-controls')) return
@@ -2124,6 +2119,7 @@ function ensureGalleryThumbnailSwap(
     const storedDoc = doc as ArgusReplicaDocument
 
     if (li.classList.contains('videoThumbnail')) {
+      if (!allowPlaceholderUpload) return
       const videoIndex = itemNoFromElement(li)
       if (typeof videoIndex !== 'number') return
 
@@ -2151,6 +2147,7 @@ function ensureGalleryThumbnailSwap(
     e.stopPropagation()
 
     if (src === ARGUS_GALLERY_PLACEHOLDER_MAIN) {
+      if (!allowPlaceholderUpload) return
       callbacksRef.current.galleryUpload()
       return
     }
@@ -2164,7 +2161,10 @@ function ensureGalleryThumbnailSwap(
     ensureGalleryLandingSizing(landing)
 
     setAltImagesSelection(altList, li)
-  }, true)
+  }
+
+  altList.addEventListener('click', (e) => handleThumbnailSwap(e, true), true)
+  altList.addEventListener('mouseover', (e) => handleThumbnailSwap(e, false), true)
 }
 
 function getVariationSwatches(doc: Document): HTMLElement[] {

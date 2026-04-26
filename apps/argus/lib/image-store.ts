@@ -2,7 +2,7 @@ import { createHash } from 'crypto'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, extname } from 'path'
 import prisma from '@/lib/db'
-import { getArgusMediaBackend, getArgusMediaS3Key } from '@/lib/media-backend'
+import { getArgusMediaBackend, getArgusMediaS3Key, requireArgusS3MediaConfig } from '@/lib/media-backend'
 
 const MEDIA_ROOT = join(process.cwd(), 'public', 'media')
 
@@ -54,6 +54,8 @@ async function storeBuffer(
   const relPath = `media/${prefix}/${sha256}${ext}`
 
   const backend = getArgusMediaBackend()
+  const s3Config = backend === 's3' ? requireArgusS3MediaConfig() : null
+  const s3Key = backend === 's3' ? getArgusMediaS3Key(relPath) : null
 
   if (backend === 'local') {
     const absPath = join(MEDIA_ROOT, prefix, `${sha256}${ext}`)
@@ -68,9 +70,11 @@ async function storeBuffer(
   } else if (backend === 's3') {
     const { getS3Service } = await import('@targon/aws-s3')
     const s3 = getS3Service()
-    const key = getArgusMediaS3Key(relPath)
     const mimeType = opts?.mimeType ?? guessMime(ext)
-    await s3.uploadFile(data, key, {
+    if (s3Key === null) {
+      throw new Error('S3 key missing while using the S3 media backend.')
+    }
+    await s3.uploadFile(data, s3Key, {
       contentType: mimeType,
       cacheControl: 'public, max-age=31536000, immutable',
     })
@@ -79,11 +83,15 @@ async function storeBuffer(
   }
 
   const mimeType = opts?.mimeType ?? guessMime(ext)
+  const s3Bucket = s3Config === null ? null : s3Config.bucket
 
   const asset = await prisma.mediaAsset.create({
     data: {
       sha256,
       filePath: relPath,
+      storageBackend: backend === 's3' ? 'S3' : 'LOCAL',
+      s3Bucket,
+      s3Key,
       mimeType,
       bytes: data.length,
       sourceUrl: opts?.sourceUrl ?? null,

@@ -1,6 +1,6 @@
 // Get version from package.json
 const { version } = require('./package.json')
-const resolvedVersion = process.env.NEXT_PUBLIC_VERSION || version
+const resolvedVersion = process.env.NEXT_PUBLIC_VERSION ?? version
 
 const rawBasePath = (process.env.BASE_PATH ?? '').trim()
 const rawBasePathWithoutTrailingSlash = rawBasePath.endsWith('/') ? rawBasePath.slice(0, -1) : rawBasePath
@@ -13,14 +13,11 @@ const hasDuplicatedBasePath =
 const basePath = hasDuplicatedBasePath
   ? `/${basePathSegments.slice(0, basePathHalfLen).join('/')}`
   : rawBasePathWithoutTrailingSlash
-const assetPrefix = basePath || ''
+const assetPrefix = basePath
+const isDevelopment = process.env.NODE_ENV === 'development'
 
 if (!process.env.NEXT_PUBLIC_APP_URL) {
-  if (process.env.NODE_ENV === 'development') {
-    process.env.NEXT_PUBLIC_APP_URL = 'http://localhost:3216/argus'
-  } else {
-    throw new Error('NEXT_PUBLIC_APP_URL must be defined before loading the Argus Next.js config.')
-  }
+  throw new Error('NEXT_PUBLIC_APP_URL must be defined before loading the Argus Next.js config.')
 }
 
 /** @type {import('next').NextConfig} */
@@ -61,7 +58,7 @@ const nextConfig = {
         ],
       },
       {
-        source: `${basePath || ''}/config/:path*`,
+        source: `${basePath}/config/:path*`,
         headers: [
           {
             key: 'Cache-Control',
@@ -70,7 +67,7 @@ const nextConfig = {
         ],
       },
       {
-        source: `${basePath || ''}/_next/static/chunks/app/config/:path*`,
+        source: `${basePath}/_next/static/chunks/app/config/:path*`,
         headers: [
           {
             key: 'Cache-Control',
@@ -121,7 +118,9 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: isDevelopment
+              ? 'no-store, no-cache, must-revalidate'
+              : 'public, max-age=31536000, immutable',
           },
         ],
       },
@@ -138,9 +137,9 @@ const nextConfig = {
 
   env: {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
-    NEXT_PUBLIC_BUILD_TIME: process.env.BUILD_TIME || new Date().toISOString(),
+    NEXT_PUBLIC_BUILD_TIME: process.env.BUILD_TIME ?? new Date().toISOString(),
     NEXT_PUBLIC_VERSION: resolvedVersion,
-    NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH || basePath,
+    NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH ?? basePath,
   },
 
   webpack: (config, { isServer, dev }) => {
@@ -171,6 +170,7 @@ const nextConfig = {
 
   experimental: {
     optimizePackageImports: ['lucide-react', '@radix-ui/react-dialog', '@radix-ui/react-select'],
+    proxyClientMaxBodySize: '100mb',
   },
 
   serverExternalPackages: ['bcryptjs'],
