@@ -10,12 +10,10 @@ import {
   validateAmazonPdpReplicaContract,
   type AmazonPdpReplicaContractError,
 } from './amazon-pdp-replica'
-import { ListingDetailDialogs, ListingDetailHeader } from './listing-detail-dialogs'
+import { ListingDetailDialogs } from './listing-detail-dialogs'
 import {
   CLOUDFLARE_MAX_UPLOAD_BYTES,
-  SNAPSHOT_ZIP_MAX_UPLOAD_BYTES,
   basePath,
-  formatBytes,
   formatUsdFromCents,
   getUploadSizeError,
   isInitialIframeDocument,
@@ -109,14 +107,6 @@ export function ListingDetail({
   const [ebcModuleEditorTarget, setEbcModuleEditorTarget] = useState<EbcModuleEditorTarget | null>(null)
   const [ebcModuleDraft, setEbcModuleDraft] = useState<EbcModuleDraft>({ headline: '', bodyText: '' })
   const [ebcModuleFiles, setEbcModuleFiles] = useState<File[]>([])
-
-  const [snapshotIngestOpen, setSnapshotIngestOpen] = useState(false)
-  const [snapshotIngestFile, setSnapshotIngestFile] = useState<File | null>(null)
-  const [snapshotIngestBusy, setSnapshotIngestBusy] = useState(false)
-  const [snapshotIngestError, setSnapshotIngestError] = useState<string | null>(null)
-  const [resetDialogOpen, setResetDialogOpen] = useState(false)
-  const [resetBusy, setResetBusy] = useState(false)
-  const [resetError, setResetError] = useState<string | null>(null)
 
   const callbacksRef = useRef<ListingDetailCallbacks>({
     titlePrev: () => {},
@@ -797,63 +787,6 @@ export function ListingDetail({
     }
   }, [galleryRevisions, galleryIndex, ebcRevisions, ebcIndex, ebcModulePointers, activePointers])
 
-  async function handleSnapshotIngestSubmit() {
-    if (!listing || !snapshotIngestFile) return
-
-    if (snapshotIngestFile.size > SNAPSHOT_ZIP_MAX_UPLOAD_BYTES) {
-      setSnapshotIngestError(
-        `“${snapshotIngestFile.name}” is ${formatBytes(snapshotIngestFile.size)}. Max zip size is ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}.`,
-      )
-      return
-    }
-
-    setSnapshotIngestBusy(true)
-    setSnapshotIngestError(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('snapshot', snapshotIngestFile)
-
-      const response = await fetch(`${basePath}/api/listings/${listing.id}/ingest`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      const text = await response.text()
-      if (!response.ok) {
-        try {
-          const parsed = JSON.parse(text) as { error?: unknown }
-          if (typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
-            setSnapshotIngestError(parsed.error)
-            return
-          }
-        } catch {
-          // keep raw text when JSON parsing fails
-        }
-
-        setSnapshotIngestError(text.trim().length > 0 ? text : 'Snapshot ingest failed.')
-        return
-      }
-
-      try {
-        const parsed = JSON.parse(text) as { changes?: unknown }
-        if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
-          window.alert(`Ingested snapshot:\n${parsed.changes.join('\n')}`)
-        } else {
-          window.alert('Ingested snapshot (no content changes detected).')
-        }
-      } catch {
-        window.alert('Ingested snapshot.')
-      }
-
-      setSnapshotIngestOpen(false)
-      setSnapshotIngestFile(null)
-      refreshListingData()
-    } finally {
-      setSnapshotIngestBusy(false)
-    }
-  }
-
   async function handleTitleSubmit() {
     if (!listing) return
 
@@ -1030,38 +963,6 @@ export function ListingDetail({
     refreshListingData()
   }
 
-  async function handleResetSubmit() {
-    if (!listing) return
-
-    setResetBusy(true)
-    setResetError(null)
-
-    try {
-      const response = await fetch(`${basePath}/api/listings/${listing.id}/reset`, {
-        method: 'POST',
-      })
-      const text = await response.text()
-      if (!response.ok) {
-        setResetError(text.trim().length > 0 ? text : 'Reset failed.')
-        return
-      }
-
-      setResetDialogOpen(false)
-      setSnapshotIngestOpen(false)
-      setSnapshotIngestFile(null)
-      setSnapshotIngestError(null)
-      setTitleEditorOpen(false)
-      setBulletsEditorOpen(false)
-      setPriceEditorOpen(false)
-      setGalleryUploaderOpen(false)
-      setVideoUploaderOpen(false)
-      setEbcModuleEditorOpen(false)
-      refreshListingData()
-    } finally {
-      setResetBusy(false)
-    }
-  }
-
   return (
     <div className="flex flex-col h-screen bg-white">
       {replicaContractError && (
@@ -1069,18 +970,6 @@ export function ListingDetail({
           Replica template mismatch: {formatAmazonPdpReplicaContractError(replicaContractError)}
         </div>
       )}
-      <ListingDetailHeader
-        listing={listing}
-        onOpenSnapshotIngest={() => {
-          setSnapshotIngestError(null)
-          setSnapshotIngestFile(null)
-          setSnapshotIngestOpen(true)
-        }}
-        onOpenReset={() => {
-          setResetError(null)
-          setResetDialogOpen(true)
-        }}
-      />
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
@@ -1090,16 +979,6 @@ export function ListingDetail({
       />
       <ListingDetailDialogs
         listing={listing}
-        snapshotIngestOpen={snapshotIngestOpen}
-        snapshotIngestBusy={snapshotIngestBusy}
-        snapshotIngestError={snapshotIngestError}
-        snapshotIngestFile={snapshotIngestFile}
-        onSnapshotIngestClose={() => setSnapshotIngestOpen(false)}
-        onSnapshotIngestFileChange={(file) => {
-          setSnapshotIngestError(null)
-          setSnapshotIngestFile(file)
-        }}
-        onSnapshotIngestSubmit={handleSnapshotIngestSubmit}
         titleEditorOpen={titleEditorOpen}
         titleDraft={titleDraft}
         onTitleEditorClose={() => setTitleEditorOpen(false)}
@@ -1141,11 +1020,6 @@ export function ListingDetail({
         }}
         onEbcModuleFilesChange={setEbcModuleFiles}
         onEbcModuleSubmit={handleEbcModuleSubmit}
-        resetDialogOpen={resetDialogOpen}
-        resetBusy={resetBusy}
-        resetError={resetError}
-        onResetDialogClose={() => setResetDialogOpen(false)}
-        onResetSubmit={handleResetSubmit}
       />
     </div>
   )

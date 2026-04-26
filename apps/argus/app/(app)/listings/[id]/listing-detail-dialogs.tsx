@@ -1,7 +1,6 @@
 'use client'
 
 import {
-  Alert,
   Box,
   Button as MuiButton,
   Chip,
@@ -14,8 +13,6 @@ import {
   Typography,
 } from '@mui/material'
 import {
-  SNAPSHOT_ZIP_MAX_UPLOAD_BYTES,
-  formatBytes,
   type BulletsDraft,
   type EbcModuleDraft,
   type EbcModuleEditorTarget,
@@ -23,21 +20,8 @@ import {
   type PriceDraft,
 } from './listing-detail-shared'
 
-interface ListingDetailHeaderProps {
-  listing: ListingSummary | null
-  onOpenSnapshotIngest: () => void
-  onOpenReset: () => void
-}
-
 interface ListingDetailDialogsProps {
   listing: ListingSummary | null
-  snapshotIngestOpen: boolean
-  snapshotIngestBusy: boolean
-  snapshotIngestError: string | null
-  snapshotIngestFile: File | null
-  onSnapshotIngestClose: () => void
-  onSnapshotIngestFileChange: (file: File | null) => void
-  onSnapshotIngestSubmit: () => void | Promise<void>
   titleEditorOpen: boolean
   titleDraft: string
   onTitleEditorClose: () => void
@@ -73,11 +57,6 @@ interface ListingDetailDialogsProps {
   onEbcModuleDraftChange: (key: keyof EbcModuleDraft, value: string) => void
   onEbcModuleFilesChange: (files: File[]) => void
   onEbcModuleSubmit: () => void | Promise<void>
-  resetDialogOpen: boolean
-  resetBusy: boolean
-  resetError: string | null
-  onResetDialogClose: () => void
-  onResetSubmit: () => void | Promise<void>
 }
 
 const dialogSlotProps = {
@@ -109,72 +88,8 @@ function ListingChip({ listing }: { listing: ListingSummary }) {
   )
 }
 
-export function ListingDetailHeader({
-  listing,
-  onOpenSnapshotIngest,
-  onOpenReset,
-}: ListingDetailHeaderProps) {
-  if (!listing) {
-    return null
-  }
-
-  return (
-    <Box
-      sx={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 30,
-        px: 2.5,
-        py: 1.25,
-        bgcolor: 'rgba(255, 255, 255, 0.92)',
-        borderBottom: '1px solid rgba(15, 23, 42, 0.12)',
-        backdropFilter: 'blur(10px)',
-      }}
-    >
-      <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-        <Stack spacing={0.2} sx={{ minWidth: 0 }}>
-          <Typography
-            variant="subtitle2"
-            sx={{ fontWeight: 800, fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}
-          >
-            {listing.asin}
-          </Typography>
-          <Typography
-            variant="body2"
-            sx={{
-              color: 'text.secondary',
-              fontWeight: 600,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              maxWidth: { xs: 240, sm: 520, md: 760 },
-            }}
-          >
-            {listing.label}
-          </Typography>
-        </Stack>
-        <Stack direction="row" spacing={1} alignItems="center">
-          <MuiButton type="button" size="small" variant="outlined" onClick={onOpenSnapshotIngest}>
-            Ingest snapshot zip
-          </MuiButton>
-          <MuiButton type="button" size="small" variant="outlined" color="error" onClick={onOpenReset}>
-            Reset listing
-          </MuiButton>
-        </Stack>
-      </Stack>
-    </Box>
-  )
-}
-
 export function ListingDetailDialogs({
   listing,
-  snapshotIngestOpen,
-  snapshotIngestBusy,
-  snapshotIngestError,
-  snapshotIngestFile,
-  onSnapshotIngestClose,
-  onSnapshotIngestFileChange,
-  onSnapshotIngestSubmit,
   titleEditorOpen,
   titleDraft,
   onTitleEditorClose,
@@ -210,89 +125,9 @@ export function ListingDetailDialogs({
   onEbcModuleDraftChange,
   onEbcModuleFilesChange,
   onEbcModuleSubmit,
-  resetDialogOpen,
-  resetBusy,
-  resetError,
-  onResetDialogClose,
-  onResetSubmit,
 }: ListingDetailDialogsProps) {
   return (
     <>
-      {snapshotIngestOpen && listing ? (
-        <Dialog
-          open={snapshotIngestOpen}
-          onClose={() => {
-            if (snapshotIngestBusy) return
-            onSnapshotIngestClose()
-          }}
-          fullWidth
-          maxWidth="sm"
-          slotProps={dialogSlotProps}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  Ingest snapshot zip
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Chrome → Save Page As → Webpage, Complete. Zip the HTML + the assets folder.
-                </Typography>
-              </Box>
-              <ListingChip listing={listing} />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={1.5}>
-              <Stack spacing={1}>
-                <MuiButton component="label" variant="outlined" sx={{ alignSelf: 'flex-start', fontWeight: 600 }}>
-                  Choose zip
-                  <input
-                    hidden
-                    type="file"
-                    accept=".zip,application/zip"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0] ?? null
-                      onSnapshotIngestFileChange(file)
-                    }}
-                  />
-                </MuiButton>
-                <Typography
-                  variant="caption"
-                  sx={{ fontFamily: 'var(--font-mono)', color: snapshotIngestFile ? 'text.primary' : 'text.secondary' }}
-                >
-                  {snapshotIngestFile
-                    ? `${snapshotIngestFile.name} (${formatBytes(snapshotIngestFile.size)})`
-                    : `Max zip size: ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}`}
-                </Typography>
-              </Stack>
-
-              {snapshotIngestError ? (
-                <Typography variant="caption" color="error">
-                  {snapshotIngestError}
-                </Typography>
-              ) : null}
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" disabled={snapshotIngestBusy} onClick={onSnapshotIngestClose}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              disabled={!snapshotIngestFile || snapshotIngestBusy}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={() => {
-                void onSnapshotIngestSubmit()
-              }}
-            >
-              {snapshotIngestBusy ? 'Ingesting...' : 'Ingest'}
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      ) : null}
-
       {titleEditorOpen && listing ? (
         <Dialog open={titleEditorOpen} onClose={onTitleEditorClose} fullWidth maxWidth="md" slotProps={dialogSlotProps}>
           <DialogTitle sx={{ pb: 1.5 }}>
@@ -690,61 +525,6 @@ export function ListingDetailDialogs({
         </Dialog>
       ) : null}
 
-      {resetDialogOpen && listing ? (
-        <Dialog
-          open={resetDialogOpen}
-          onClose={() => {
-            if (resetBusy) return
-            onResetDialogClose()
-          }}
-          fullWidth
-          maxWidth="sm"
-          slotProps={dialogSlotProps}
-        >
-          <DialogTitle sx={{ pb: 1.5 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-              <Box>
-                <Typography variant="h6" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
-                  Reset listing state
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  This removes snapshots, revisions, pointers, and media references for this listing.
-                </Typography>
-              </Box>
-              <ListingChip listing={listing} />
-            </Stack>
-          </DialogTitle>
-          <DialogContent dividers sx={{ py: 2.5 }}>
-            <Stack spacing={2}>
-              <Alert severity="warning" sx={{ borderRadius: 2 }}>
-                Reset is destructive. The listing record remains, but all revision history and snapshot ingest data are cleared.
-              </Alert>
-              {resetError ? (
-                <Typography variant="caption" color="error">
-                  {resetError}
-                </Typography>
-              ) : null}
-            </Stack>
-          </DialogContent>
-          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-            <MuiButton type="button" variant="text" color="inherit" disabled={resetBusy} onClick={onResetDialogClose}>
-              Cancel
-            </MuiButton>
-            <MuiButton
-              type="button"
-              variant="contained"
-              color="error"
-              disabled={resetBusy}
-              sx={{ px: 2.5, fontWeight: 600 }}
-              onClick={() => {
-                void onResetSubmit()
-              }}
-            >
-              {resetBusy ? 'Resetting...' : 'Reset listing'}
-            </MuiButton>
-          </DialogActions>
-        </Dialog>
-      ) : null}
     </>
   )
 }
