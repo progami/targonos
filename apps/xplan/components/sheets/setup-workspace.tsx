@@ -3,16 +3,11 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { StrategyTable } from '@/components/sheets/strategy-table';
-import { SetupDefaultsBand } from '@/components/sheets/setup-defaults-band';
 import { SetupProductTable } from '@/components/sheets/setup-product-table';
-import { WorkbookSetupTable, type WorkbookSetupRow } from '@/components/sheets/workbook-setup-table';
-
-type ParameterList = Array<{
-  id: string;
-  label: string;
-  value: string;
-  type: 'numeric' | 'text';
-}>;
+import {
+  WorkbookSetupTable,
+  type WorkbookSetupRow,
+} from '@/components/sheets/workbook-setup-table';
 
 type Strategy = {
   id: string;
@@ -52,25 +47,6 @@ type Strategy = {
   };
 };
 
-type LeadStageTemplateView = {
-  id: string;
-  label: string;
-  defaultWeeks: number;
-  sequence: number;
-};
-
-type LeadTimeProfileView = {
-  productionWeeks: number;
-  sourceWeeks: number;
-  oceanWeeks: number;
-  finalWeeks: number;
-};
-
-type LeadTimeOverrideId = {
-  productId: string;
-  stageTemplateId: string;
-};
-
 type SetupWorkspaceProps = {
   strategies: Strategy[];
   activeStrategyId: string | null;
@@ -78,19 +54,13 @@ type SetupWorkspaceProps = {
   viewer: { id: string | null; email: string | null; isSuperAdmin: boolean };
   products: Array<{ id: string; sku: string; name: string }>;
   workbookSetupRows: WorkbookSetupRow[];
-  operationsParameters: ParameterList;
-  salesParameters: ParameterList;
-  financeParameters: ParameterList;
-  leadStageTemplates: LeadStageTemplateView[];
-  leadTimeProfiles: Record<string, LeadTimeProfileView>;
-  leadTimeOverrideIds: LeadTimeOverrideId[];
   keyParametersByStrategyId: Record<string, Array<{ label: string; value: string }>>;
 };
 
 const TABS = [
   { id: 'workbook' as const, label: 'Workbook Setup' },
   { id: 'strategies' as const, label: 'Strategies' },
-  { id: 'defaults' as const, label: 'Defaults & Products' },
+  { id: 'products' as const, label: 'Products' },
 ];
 
 type TabId = (typeof TABS)[number]['id'];
@@ -102,12 +72,6 @@ export function SetupWorkspace({
   viewer,
   products,
   workbookSetupRows,
-  operationsParameters,
-  salesParameters,
-  financeParameters,
-  leadStageTemplates,
-  leadTimeProfiles,
-  leadTimeOverrideIds,
   keyParametersByStrategyId,
 }: SetupWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<TabId>(activeStrategyId ? 'workbook' : 'strategies');
@@ -117,8 +81,8 @@ export function SetupWorkspace({
     activeTab === 'workbook'
       ? `${workbookSetupRows.length} SKU rows`
       : activeTab === 'strategies'
-      ? `${strategies.length} scenarios`
-      : `${products.length} products`;
+        ? `${strategies.length} scenarios`
+        : `${products.length} products`;
 
   return (
     <div className="space-y-4">
@@ -161,23 +125,8 @@ export function SetupWorkspace({
         />
       )}
 
-      {activeTab === 'defaults' && hasStrategy && (
-        <div className="space-y-6">
-          <SetupDefaultsBand
-            strategyId={activeStrategyId!}
-            operationsParameters={operationsParameters}
-            salesParameters={salesParameters}
-            financeParameters={financeParameters}
-          />
-          <SetupProductTable
-            strategyId={activeStrategyId!}
-            products={products}
-            leadStageTemplates={leadStageTemplates}
-            leadTimeProfiles={leadTimeProfiles}
-            leadTimeOverrideIds={leadTimeOverrideIds}
-            operationsParameters={operationsParameters}
-          />
-        </div>
+      {activeTab === 'products' && hasStrategy && (
+        <SetupProductTable strategyId={activeStrategyId!} products={products} />
       )}
     </div>
   );

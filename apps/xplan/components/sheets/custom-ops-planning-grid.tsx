@@ -395,26 +395,25 @@ type ColumnDef = {
   options?: ReadonlyArray<{ value: string; label: string }>;
 };
 
-const PURCHASE_ORDER_STATUS_OPTIONS = [
-  { value: 'DRAFT', label: 'Draft' },
+export const PURCHASE_ORDER_STATUS_OPTIONS = [
   { value: 'ISSUED', label: 'Issued' },
   { value: 'MANUFACTURING', label: 'Manufacturing' },
   { value: 'OCEAN', label: 'Ocean' },
   { value: 'WAREHOUSE', label: 'Warehouse' },
-  { value: 'SHIPPED', label: 'Shipped' },
+  { value: 'CANCELLED', label: 'Cancelled' },
 ] as const;
 
 type PurchaseOrderStatusValue = (typeof PURCHASE_ORDER_STATUS_OPTIONS)[number]['value'];
 
-function normalizePurchaseOrderStatus(value: string): PurchaseOrderStatusValue | null {
+export function normalizePurchaseOrderStatus(value: string): PurchaseOrderStatusValue | null {
   const trimmed = value.trim();
   if (!trimmed) return null;
   const normalized = trimmed.toUpperCase().replace(/[^A-Z]/g, '');
   switch (normalized) {
     case 'DRAFT':
-      return 'DRAFT';
     case 'ISSUED':
     case 'PLANNED':
+    case 'RFQ':
       return 'ISSUED';
     case 'MANUFACTURING':
     case 'PRODUCTION':
@@ -425,14 +424,18 @@ function normalizePurchaseOrderStatus(value: string): PurchaseOrderStatusValue |
       return 'OCEAN';
     case 'WAREHOUSE':
     case 'ARRIVED':
-      return 'WAREHOUSE';
+    case 'POSTED':
+    case 'REVIEW':
+    case 'AWAITINGPROOF':
+    case 'AWAITING_PROOF':
     case 'SHIPPED':
-    case 'ARCHIVED':
     case 'CLOSED':
+      return 'WAREHOUSE';
+    case 'ARCHIVED':
     case 'REJECTED':
     case 'CANCELLED':
     case 'CANCELED':
-      return 'SHIPPED';
+      return 'CANCELLED';
     default:
       return null;
   }
@@ -732,10 +735,12 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
 
   return (
     <TableRow
+      aria-selected={isActive ? 'true' : undefined}
       className={cn(
         'hover:bg-transparent',
         isEvenRow ? 'bg-muted/30' : 'bg-card',
-        isActive && 'bg-cyan-50/70 dark:bg-cyan-900/20',
+        isActive &&
+          'bg-cyan-100/85 shadow-[inset_0_0_0_1px_rgba(8,145,178,0.25)] dark:bg-cyan-900/35 dark:shadow-[inset_0_0_0_1px_rgba(103,232,249,0.22)]',
       )}
     >
       {COLUMNS.map((column, colIndex) => {
@@ -775,11 +780,7 @@ const CustomOpsPlanningRow = memo(function CustomOpsPlanningRow({
 
         if (isEditing && onCommitEdit) {
           return (
-            <TableCell
-              key={column.key}
-              className={cellClassName}
-              style={{ boxShadow }}
-            >
+            <TableCell key={column.key} className={cellClassName} style={{ boxShadow }}>
               {isDropdownCell ? (
                 <select
                   ref={inputRef as React.RefObject<HTMLSelectElement>}
@@ -1423,9 +1424,7 @@ export function CustomOpsPlanningGrid({
       }
 
       const shouldValidateStageOrder =
-        colKey === 'poDate' ||
-        colKey === 'productionStart' ||
-        column.type === 'stage';
+        colKey === 'poDate' || colKey === 'productionStart' || column.type === 'stage';
 
       if (shouldValidateStageOrder) {
         const stageError = validateStageDates(updatedRow);
@@ -1447,14 +1446,12 @@ export function CustomOpsPlanningGrid({
       }
 
       // Record edits for undo/redo
-      const undoEdits: CellEdit[] = Object.entries(entry.values).map(
-        ([field, newValue]) => ({
-          rowKey: rowId,
-          field,
-          oldValue: row[field as keyof OpsInputRow] ?? '',
-          newValue: newValue as string,
-        }),
-      );
+      const undoEdits: CellEdit[] = Object.entries(entry.values).map(([field, newValue]) => ({
+        rowKey: rowId,
+        field,
+        oldValue: row[field as keyof OpsInputRow] ?? '',
+        newValue: newValue as string,
+      }));
       recordEdits(undoEdits);
 
       // Update rows
@@ -1892,16 +1889,16 @@ export function CustomOpsPlanningGrid({
         const nextValues: Record<string, string> = {};
         let nextRow = { ...baseRow };
 
-      for (const update of rowUpdates) {
-        const { column, colKey } = update;
-        let rawValue = update.value;
-        if (NON_CLEARABLE_FIELDS.has(colKey) && rawValue.trim() === '') {
-          continue;
-        }
+        for (const update of rowUpdates) {
+          const { column, colKey } = update;
+          let rawValue = update.value;
+          if (NON_CLEARABLE_FIELDS.has(colKey) && rawValue.trim() === '') {
+            continue;
+          }
 
-        // Stage columns: allow paste in both date and weeks modes.
-        if (column.type === 'stage') {
-          const stageField = colKey as StageWeeksKey;
+          // Stage columns: allow paste in both date and weeks modes.
+          if (column.type === 'stage') {
+            const stageField = colKey as StageWeeksKey;
             const overrideField = STAGE_OVERRIDE_FIELDS[stageField];
             const trimmed = rawValue.trim();
 
