@@ -77,6 +77,13 @@ test('atlas dev deploy no longer falls back to db push on migrate errors', () =>
   )
 })
 
+test('talos deploy runs only changed migrations when deploy range is known', () => {
+  assert.match(
+    deployScript,
+    /if \[\[ "\$app_key" == "talos" && "\$changed_files_available" == "true" \]\]; then[\s\S]*?talos_changed_migrate_cmd="\$\(build_talos_changed_migrate_cmd\)"[\s\S]*?migrate_cmd=""/,
+  )
+})
+
 test('hosted deploys load exact shared and app env files without .env.local fallback', () => {
   assert.match(
     deployScript,
@@ -184,6 +191,7 @@ test('pm2 starts scrub workflow-inherited database and hosted runtime env', () =
     'DATABASE_URL',
     'DATABASE_URL_US',
     'DATABASE_URL_UK',
+    'TALOS_PRESERVE_DATABASE_ENV',
     'PORTAL_DB_URL',
     'PGHOSTADDR',
     'PGPASSFILE',

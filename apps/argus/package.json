@@ -11,7 +11,7 @@
     "media:remove-bad-source-gallery-revisions": "tsx scripts/remove-bad-source-gallery-revisions.ts",
     "media:upload-local-to-s3": "tsx scripts/upload-local-media-to-s3.ts",
     "lint": "eslint app components lib middleware.ts",
-    "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
+    "type-check": "node -e \"require('fs').rmSync('.next/types', { recursive: true, force: true })\" && prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",

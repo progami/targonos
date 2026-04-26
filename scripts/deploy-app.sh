@@ -637,6 +637,7 @@ run_pm2_sanitized() {
   DATABASE_URL= \
   DATABASE_URL_US= \
   DATABASE_URL_UK= \
+  TALOS_PRESERVE_DATABASE_ENV= \
   PORTAL_DB_URL= \
   PGDATABASE= \
   PGHOST= \
@@ -1184,6 +1185,14 @@ if compute_changed_files; then
   log "Detected ${#changed_files[@]} changed files for deploy range ${deploy_base_sha:-unknown}..${deploy_head_sha:-unknown}"
 else
   warn "Could not determine changed files for this deployment; using safe defaults"
+fi
+
+if [[ "$app_key" == "talos" && "$changed_files_available" == "true" ]]; then
+  if talos_changed_migrate_cmd="$(build_talos_changed_migrate_cmd)"; then
+    migrate_cmd="$talos_changed_migrate_cmd"
+  else
+    migrate_cmd=""
+  fi
 fi
 
 # Step 2: Install dependencies
