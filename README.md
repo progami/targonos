@@ -196,7 +196,14 @@ pm2 save
 
 ### Tunnel health (Cloudflare Error 1033)
 
-`cloudflared` exports a readiness endpoint on `127.0.0.1:20241`:
+The laptop host uses a Targon-owned LaunchAgent, not the Homebrew `cloudflared`
+service. The LaunchAgent must run the named tunnel, not the bare binary:
+
+```bash
+launchctl print gui/$UID/com.targonglobal.cloudflared-tunnel
+```
+
+`cloudflared` exports a fixed readiness endpoint on `127.0.0.1:20241`:
 
 ```bash
 curl -fsS http://127.0.0.1:20241/ready
@@ -205,17 +212,25 @@ curl -fsS http://127.0.0.1:20241/ready
 If it’s unhealthy:
 
 ```bash
-launchctl kickstart -k gui/$UID/homebrew.mxcl.cloudflared
+launchctl kickstart -k gui/$UID/com.targonglobal.cloudflared-tunnel
 ```
 
-Optional watchdog (macOS LaunchAgent) for auto-recovery:
+Install the tunnel service and watchdog:
 
 ```bash
+scripts/install-cloudflared-tunnel-macos.sh
 scripts/install-cloudflared-watchdog-macos.sh
+```
+
+Full host verification:
+
+```bash
+node scripts/verify-host-stack.mjs --env all
 ```
 
 ### Common failure modes
 
 - `502 Bad Gateway`: check nginx (`brew services list`) and the target PM2 process (`pm2 status`, `pm2 logs <name>`).
+- `530` / Cloudflare `1033`: check `com.targonglobal.cloudflared-tunnel`, `127.0.0.1:20241/ready`, and `cloudflared tunnel info cdb60dd3-b875-4735-9f5d-21ebc0f42b46`.
 - NextAuth `UntrustedHost`: set `AUTH_TRUST_HOST=true` and ensure nginx forwards `X-Forwarded-*` headers.
 - Cookies not shared across apps: ensure `COOKIE_DOMAIN` matches the portal environment scope (`.os.targonglobal.com` for main, `.dev-os.targonglobal.com` for dev) and that all apps share `PORTAL_AUTH_SECRET`.
