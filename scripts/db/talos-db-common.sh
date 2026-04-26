@@ -29,7 +29,7 @@ load_talos_env_if_needed() {
   fi
 
   local exports
-  if ! exports="$("$repo_dir/scripts/load-app-env.js" --app talos --mode "$mode")"; then
+  if ! exports="$(node "$repo_dir/scripts/load-app-env.js" --app talos --mode "$mode")"; then
     return 1
   fi
 

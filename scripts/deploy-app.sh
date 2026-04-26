@@ -1036,6 +1036,7 @@ prepare_talos_owner_migration_env() {
   fi
 
   export DATABASE_URL="$DATABASE_URL_US"
+  export TALOS_PRESERVE_DATABASE_ENV="1"
 }
 
 prepare_owner_migration_env() {
