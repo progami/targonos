@@ -24,6 +24,7 @@ const OUTPUT_DIR = path.join(MONITORING_BASE, 'Daily', 'Account Health Dashboard
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'account-health.csv')
 const REPORT_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
+const ACTIVE_REPORT_STATUSES = new Set(['IN_PROGRESS', 'IN_QUEUE'])
 const ACTIVE_REPORT_REUSE_MAX_AGE_MS = 30 * 60 * 1000
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
