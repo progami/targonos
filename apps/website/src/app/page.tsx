@@ -26,7 +26,7 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/65 via-black/20 to-black/85" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+        <Container className="relative z-10 flex min-h-[var(--tg-panel-height)] flex-col items-center justify-center px-6 text-center">
           <div
             aria-hidden
             className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[60%] select-none blur-[2px]"
@@ -99,9 +99,9 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/80" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+        <Container className="relative z-10 flex min-h-[var(--tg-panel-height)] flex-col items-center justify-center px-6 text-center">
           <Reveal>
-            <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
+            <div data-home-eyebrow className="tg-section-eyebrow text-accent/90">
               Targon’s purpose
             </div>
           </Reveal>
@@ -125,9 +125,12 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-t from-black via-ink/40 to-black" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+        <Container className="relative z-10 flex min-h-[var(--tg-panel-height)] flex-col items-center justify-center px-6 text-center">
           <Reveal>
-            <div className="inline-flex items-center gap-3 border-b border-white/10 pb-4 text-xs font-bold uppercase tracking-[0.5em] text-white/50">
+            <div
+              data-home-eyebrow
+              className="tg-section-eyebrow inline-flex items-center gap-3 border-b border-white/10 pb-4 text-white/50"
+            >
               Mission
             </div>
           </Reveal>
@@ -151,9 +154,12 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/70" />
         </div>
 
-        <Container className="relative z-10 flex min-h-[100svh] flex-col items-center justify-center px-6 text-center">
+        <Container className="relative z-10 flex min-h-[var(--tg-panel-height)] flex-col items-center justify-center px-6 text-center">
           <Reveal>
-            <span className="inline-flex items-center rounded-pill border border-white/20 bg-black/20 px-6 py-2 text-xs font-bold uppercase tracking-[0.3em] text-white backdrop-blur-md">
+            <span
+              data-home-eyebrow
+              className="tg-section-eyebrow inline-flex items-center rounded-pill border border-white/20 bg-black/20 px-6 py-2 text-white backdrop-blur-md"
+            >
               Vision
             </span>
           </Reveal>
@@ -172,7 +178,9 @@ export default function HomePage() {
         <div className="absolute left-0 right-0 top-0 z-20 flex items-start justify-between p-6 md:p-10">
           <div>
             <Reveal>
-              <h2 className="text-xs font-bold uppercase tracking-[0.3em] text-accent">Core values</h2>
+              <h2 data-home-eyebrow className="tg-section-eyebrow text-accent">
+                Core values
+              </h2>
             </Reveal>
             <Reveal delay={100}>
               <div className="mt-3 h-0.5 w-16 bg-accent/50" />
@@ -290,7 +298,7 @@ export default function HomePage() {
             <div className="grid items-end gap-8 md:grid-cols-12">
               <div className="text-center md:col-span-5 md:text-left">
                 <Reveal>
-                  <div className="text-xs font-bold uppercase tracking-[0.5em] text-accent/90">
+                  <div data-home-eyebrow className="tg-section-eyebrow text-accent/90">
                     Products
                   </div>
                 </Reveal>
