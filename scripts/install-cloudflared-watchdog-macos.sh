@@ -43,11 +43,13 @@ cat >"$PLIST_PATH" <<EOF
 </plist>
 EOF
 
-launchctl bootout "gui/$(id -u)" "$PLIST_PATH" 2>/dev/null || true
+if launchctl print "gui/$(id -u)/${LABEL}" >/dev/null 2>&1; then
+  launchctl bootout "gui/$(id -u)/${LABEL}"
+fi
+
 launchctl bootstrap "gui/$(id -u)" "$PLIST_PATH"
 
 echo "Installed cloudflared watchdog:"
 echo "- Script: ${TARGET_SCRIPT}"
 echo "- LaunchAgent: ${PLIST_PATH}"
 echo "- Logs: ${HOME}/Library/Logs/cloudflared-watchdog.{out,err}.log"
-

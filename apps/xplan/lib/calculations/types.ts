@@ -79,6 +79,8 @@ export interface PurchaseOrderInput {
   productId: string;
   poDate?: Date | null;
   poWeekNumber?: number | null;
+  poClass?: string | null;
+  inboundWeekOverride?: Date | null;
   quantity: number;
   productionWeeks?: number | null;
   sourceWeeks?: number | null;

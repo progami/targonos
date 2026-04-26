@@ -3,6 +3,9 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${TARGONOS_MAIN_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
 log() {
   printf '%s %s\n' "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "$*"
 }
@@ -43,11 +46,11 @@ ensure_brew_services_started() {
     return 0
   fi
 
-  local services_csv="${TARGONOS_BREW_SERVICES_CSV:-nginx,redis,cloudflared,pgbouncer,postgresql@14}"
+  local services_csv="${TARGONOS_BREW_SERVICES_CSV:-nginx,redis,pgbouncer,postgresql@14}"
   local IFS=,
   local svc status
   for svc in $services_csv; do
-    status="$(brew services list | awk -v s="$svc" '$1==s {print $2; exit}' || true)"
+    status="$(brew services list | awk -v s="$svc" '$1==s {print $2; exit}')"
     if [[ "$status" != "started" ]]; then
       log "starting brew service: ${svc} (current: ${status:-missing})"
       brew services start "$svc"
@@ -77,12 +80,16 @@ maybe_build_next_app_if_missing() {
   local pm_name="$1"
   local cwd="$2"
 
-  if [[ -z "$cwd" || ! -f "$cwd/package.json" ]]; then
+  if [[ -z "$cwd" ]]; then
+    return 0
+  fi
+
+  if [[ ! -f "$cwd/package.json" ]]; then
     return 0
   fi
 
   local uses_next
-  uses_next="$(PKG_JSON="$cwd/package.json" node -e "const p=require(process.env.PKG_JSON); const deps={...(p.dependencies||{}),...(p.devDependencies||{})}; process.stdout.write(String(Boolean(deps.next)));")"
+  uses_next="$(PKG_JSON="$cwd/package.json" node -e "const p=require(process.env.PKG_JSON); const deps={...(p.dependencies ?? {}),...(p.devDependencies ?? {})}; process.stdout.write(String(Boolean(deps.next)));")"
   if [[ "$uses_next" != "true" ]]; then
     return 0
   fi
@@ -108,7 +115,12 @@ ensure_pm2_processes_healthy() {
     status="$(pm2_describe_field "$pm_name" "status")"
     cwd="$(pm2_describe_field "$pm_name" "exec cwd")"
 
-    if [[ -z "$status" || -z "$cwd" ]]; then
+    if [[ -z "$status" ]]; then
+      log "pm2 missing process: ${pm_name}"
+      continue
+    fi
+
+    if [[ -z "$cwd" ]]; then
       log "pm2 missing process: ${pm_name}"
       continue
     fi
@@ -212,33 +224,37 @@ ensure_no_deploy_lock() {
 }
 
 check_nginx_routes() {
-  check_http_not_5xx "http://127.0.0.1:8080/" || exit 1
-  check_http_not_5xx "http://127.0.0.1:8081/" || exit 1
+  if ! check_http_not_5xx "http://127.0.0.1:8080/"; then exit 1; fi
+  if ! check_http_not_5xx "http://127.0.0.1:8081/"; then exit 1; fi
 
   local base p
   for base in "http://127.0.0.1:8080" "http://127.0.0.1:8081"; do
     for p in "/talos/" "/xplan/" "/atlas/" "/kairos/" "/plutus/" "/hermes/" "/argus/"; do
-      check_http_not_5xx "${base}${p}" || exit 1
+      if ! check_http_not_5xx "${base}${p}"; then exit 1; fi
     done
   done
 
-  check_next_build_manifest "http://127.0.0.1:8080" "" "main-targonos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/talos" "main-talos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/xplan" "main-xplan" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/atlas" "main-atlas" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/kairos" "main-kairos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/plutus" "main-plutus" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/hermes" "main-hermes" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8080" "/argus" "main-argus" || exit 1
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "" "main-targonos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/talos" "main-talos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/xplan" "main-xplan"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/atlas" "main-atlas"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/kairos" "main-kairos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/plutus" "main-plutus"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/hermes" "main-hermes"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8080" "/argus" "main-argus"; then exit 1; fi
 
-  check_next_build_manifest "http://127.0.0.1:8081" "" "dev-targonos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/talos" "dev-talos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/xplan" "dev-xplan" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/atlas" "dev-atlas" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/kairos" "dev-kairos" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/plutus" "dev-plutus" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/hermes" "dev-hermes" || exit 1
-  check_next_build_manifest "http://127.0.0.1:8081" "/argus" "dev-argus" || exit 1
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "" "dev-targonos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/talos" "dev-talos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/xplan" "dev-xplan"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/atlas" "dev-atlas"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/kairos" "dev-kairos"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/plutus" "dev-plutus"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/hermes" "dev-hermes"; then exit 1; fi
+  if ! check_next_build_manifest "http://127.0.0.1:8081" "/argus" "dev-argus"; then exit 1; fi
+}
+
+run_host_stack_verifier() {
+  node "$REPO_ROOT/scripts/verify-host-stack.mjs" --env all
 }
 
 main() {
@@ -247,6 +263,7 @@ main() {
   ensure_no_deploy_lock
   ensure_pm2_processes_healthy
   check_nginx_routes
+  run_host_stack_verifier
 }
 
 main "$@"
