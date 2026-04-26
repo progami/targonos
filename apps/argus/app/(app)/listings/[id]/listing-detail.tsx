@@ -712,6 +712,7 @@ export function ListingDetail({
 
       setReplicaContractError(null)
 
+      captureEbcBaseline(doc)
       injectArgusVersionControls(doc, callbacksRef)
     }
 
@@ -742,6 +743,7 @@ export function ListingDetail({
     applyGallery(doc, selectedGallery)
     applyVideo(doc, selectedVideo)
     applyEbc(doc, appliedEbc)
+    ensureCurrentEbcModuleControls(doc, callbacksRef, appliedEbc)
     applyVariationSelection(doc, listing ? listing.asin : null)
 
     const titleVersionNumber = selectedTitleRev ? selectedTitleRev.seq : undefined
@@ -1275,6 +1277,15 @@ function injectArgusVersionControls(
         pointer-events: none;
         z-index: 2;
       }
+      .argus-generated-ebc-module {
+        position: relative;
+        margin-top: 12px;
+      }
+      .argus-generated-ebc-module img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
       a { cursor: default !important; }
     `
     doc.head.append(style)
@@ -1312,20 +1323,6 @@ function injectArgusVersionControls(
 
   if (ebc) {
     ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
-  }
-
-  if (brandContainer) {
-    const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-    for (let i = 0; i < modules.length; i++) {
-      ensureEbcModuleControls(doc, modules[i], 'BRAND_STORY', i, callbacksRef)
-    }
-  }
-
-  if (descriptionContainer) {
-    const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-    for (let i = 0; i < modules.length; i++) {
-      ensureEbcModuleControls(doc, modules[i], 'PRODUCT_DESCRIPTION', i, callbacksRef)
-    }
   }
 
   const swatches = getVariationSwatches(doc)
@@ -1613,13 +1610,7 @@ function ensureEbcModuleControls(
   target: HTMLElement,
   sectionType: string,
   modulePosition: number,
-  callbacksRef: RefObject<{
-    ebcModulePrev: (sectionType: string, modulePosition: number) => void
-    ebcModuleNext: (sectionType: string, modulePosition: number) => void
-    ebcModuleLive: (sectionType: string, modulePosition: number) => void
-    ebcModuleEdit: (sectionType: string, modulePosition: number) => void
-    ebcModuleDelete: (sectionType: string, modulePosition: number) => void
-  }>,
+  callbacksRef: RefObject<ListingDetailCallbacks>,
 ) {
   function stopClick(e: MouseEvent) {
     e.preventDefault()
@@ -1702,6 +1693,33 @@ function ensureEbcModuleControls(
 
   controls.append(prev, label, next, sep, live, edit, del)
   target.append(controls)
+}
+
+function ensureCurrentEbcModuleControls(
+  doc: Document,
+  callbacksRef: RefObject<ListingDetailCallbacks>,
+  rev: EbcRevision | null,
+) {
+  if (!rev) return
+
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
+
+  for (const section of rev.sections) {
+    const container = section.sectionType === 'BRAND_STORY' ? brandContainer : descriptionContainer
+    if (!container) {
+      throw new Error(`Replica EBC container missing for ${section.sectionType}.`)
+    }
+
+    const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+    for (let i = 0; i < section.modules.length; i++) {
+      const target = modules[i]
+      if (!target) {
+        throw new Error(`Replica EBC module missing for ${section.sectionType}:${i}.`)
+      }
+      ensureEbcModuleControls(doc, target, section.sectionType, i, callbacksRef)
+    }
+  }
 }
 
 function updateTrackControls(
@@ -2308,19 +2326,15 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
   const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
   const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
 
-  if (!rev || rev.sections.length === 0) {
-    if (brandContainer) {
-      brandContainer.style.display = ''
-      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete brandContainer.dataset.argusEbcApplied
-    }
-    if (descriptionContainer) {
-      descriptionContainer.style.display = ''
-      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete descriptionContainer.dataset.argusEbcApplied
-    }
+  if (!rev) {
+    if (brandContainer) restoreEbcContainerBaseline(doc, 'brand', brandContainer)
+    if (descriptionContainer) restoreEbcContainerBaseline(doc, 'description', descriptionContainer)
+    return
+  }
+
+  if (rev.sections.length === 0) {
+    if (brandContainer) markEbcContainerEmpty(brandContainer)
+    if (descriptionContainer) markEbcContainerEmpty(descriptionContainer)
     return
   }
 
@@ -2329,10 +2343,7 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
 
   if (brandContainer) {
     if (!brandSection) {
-      brandContainer.style.display = ''
-      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete brandContainer.dataset.argusEbcApplied
+      restoreEbcContainerBaseline(doc, 'brand', brandContainer)
     } else {
       brandContainer.style.display = ''
       applyEbcSection(brandContainer, brandSection)
@@ -2342,16 +2353,65 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
 
   if (descriptionContainer) {
     if (!descriptionSection) {
-      descriptionContainer.style.display = ''
-      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete descriptionContainer.dataset.argusEbcApplied
+      restoreEbcContainerBaseline(doc, 'description', descriptionContainer)
     } else {
       descriptionContainer.style.display = ''
       applyEbcSection(descriptionContainer, descriptionSection)
       descriptionContainer.dataset.argusEbcApplied = rev.id
     }
   }
+}
+
+function captureEbcBaseline(doc: Document) {
+  const storedDoc = doc as ArgusReplicaDocument
+  if (storedDoc.__argusEbcBaseline !== undefined) return
+
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  if (!brandContainer) {
+    throw new Error('Replica EBC brand container missing while capturing baseline.')
+  }
+
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
+  if (!descriptionContainer) {
+    throw new Error('Replica EBC description container missing while capturing baseline.')
+  }
+
+  storedDoc.__argusEbcBaseline = {
+    brand: brandContainer.innerHTML,
+    description: descriptionContainer.innerHTML,
+  }
+}
+
+function restoreEbcContainerBaseline(doc: Document, key: 'brand' | 'description', container: HTMLElement) {
+  const baseline = (doc as ArgusReplicaDocument).__argusEbcBaseline
+  if (baseline === undefined) {
+    throw new Error('Replica EBC baseline missing.')
+  }
+
+  container.style.display = ''
+  container.innerHTML = key === 'brand' ? baseline.brand : baseline.description
+  delete container.dataset.argusEbcApplied
+}
+
+function resetEbcContainer(container: HTMLElement) {
+  const previousGeneratedModules = Array.from(container.querySelectorAll<HTMLElement>('.argus-generated-ebc-module'))
+  for (const mod of previousGeneratedModules) mod.remove()
+
+  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (const mod of modules) {
+    mod.style.display = ''
+    setEbcModulePlaceholder(mod, null)
+  }
+
+  delete container.dataset.argusEbcApplied
+}
+
+function markEbcContainerEmpty(container: HTMLElement) {
+  container.style.display = ''
+  resetEbcContainer(container)
+
+  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
 }
 
 function setEbcModulePlaceholder(target: HTMLElement, label: string | null) {
@@ -2366,7 +2426,15 @@ function setEbcModulePlaceholder(target: HTMLElement, label: string | null) {
 }
 
 function applyEbcSection(container: HTMLElement, section: EbcSection) {
+  const previousGeneratedModules = Array.from(container.querySelectorAll<HTMLElement>('.argus-generated-ebc-module'))
+  for (const mod of previousGeneratedModules) mod.remove()
+
   const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (let mi = modules.length; mi < section.modules.length; mi += 1) {
+    const ebcModule = createGeneratedEbcModule(container.ownerDocument)
+    container.append(ebcModule)
+    modules.push(ebcModule)
+  }
 
   for (let mi = 0; mi < modules.length; mi++) {
     const target = modules[mi]
@@ -2429,4 +2497,15 @@ function applyEbcSection(container: HTMLElement, section: EbcSection) {
       if (srcImg.alt) img.alt = srcImg.alt
     }
   }
+}
+
+function createGeneratedEbcModule(doc: Document): HTMLElement {
+  const ebcModule = doc.createElement('div')
+  ebcModule.className = 'aplus-module aplus-premium argus-generated-ebc-module'
+
+  const img = doc.createElement('img')
+  img.alt = 'A+ module image'
+  ebcModule.append(img)
+
+  return ebcModule
 }

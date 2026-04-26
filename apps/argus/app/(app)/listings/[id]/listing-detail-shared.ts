@@ -239,6 +239,10 @@ export interface EbcModuleDraft {
 export type ArgusReplicaDocument = Document & {
   __argusMainMediaIndex?: number
   __argusVideoBaseline?: string
+  __argusEbcBaseline?: {
+    brand: string
+    description: string
+  }
 }
 
 export interface ListingDetailCallbacks {
