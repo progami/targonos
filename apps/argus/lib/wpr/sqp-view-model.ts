@@ -196,6 +196,26 @@ function allRootIds(bundle: WprWeekBundle): string[] {
   return bundle.clusters.map((cluster) => cluster.id)
 }
 
+export function defaultSqpRootIds(bundle: WprWeekBundle): string[] {
+  const rootIds = allRootIds(bundle)
+  const rootIdSet = new Set(rootIds)
+  const defaultRootIds: string[] = []
+
+  for (const rootId of bundle.defaultClusterIds) {
+    if (!rootIdSet.has(rootId)) {
+      throw new Error(`Default SQP root id is not present in the bundle: ${rootId}`)
+    }
+
+    defaultRootIds.push(rootId)
+  }
+
+  if (defaultRootIds.length > 0) {
+    return defaultRootIds
+  }
+
+  return rootIds
+}
+
 export function rootTermIds(bundle: WprWeekBundle, rootId: string): string[] {
   const ids = bundle.sqpClusterTerms[rootId]
   if (ids === undefined) {
@@ -205,12 +225,12 @@ export function rootTermIds(bundle: WprWeekBundle, rootId: string): string[] {
   return ids
 }
 
-export function allSelectableSqpTermIds(bundle: WprWeekBundle): string[] {
+export function selectableSqpTermIdsForRoots(bundle: WprWeekBundle, rootIds: string[]): string[] {
   const allIds: string[] = []
   const seenIds = new Set<string>()
 
-  for (const cluster of bundle.clusters) {
-    for (const termId of rootTermIds(bundle, cluster.id)) {
+  for (const rootId of rootIds) {
+    for (const termId of rootTermIds(bundle, rootId)) {
       if (seenIds.has(termId)) {
         continue
       }
@@ -221,6 +241,10 @@ export function allSelectableSqpTermIds(bundle: WprWeekBundle): string[] {
   }
 
   return allIds
+}
+
+export function allSelectableSqpTermIds(bundle: WprWeekBundle): string[] {
+  return selectableSqpTermIdsForRoots(bundle, allRootIds(bundle))
 }
 
 function selectedRootIdsList(bundle: WprWeekBundle, selectedRootIds: Set<string>): string[] {

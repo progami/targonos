@@ -1,60 +1,19 @@
 const path = require('path');
-const fs = require('fs');
+const { createBitwardenResolver, loadEnvForApp } = require('./scripts/lib/shared-env.cjs');
 const DEV_DIR = process.env.TARGONOS_DEV_DIR ?? process.env.TARGON_DEV_DIR;
 const MAIN_DIR = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR;
 const HOME_DIR = process.env.HOME;
+const sharedEnvBitwardenResolver = createBitwardenResolver(process.env);
 
-function loadEnvFile(filePath) {
-  try {
-    const content = fs.readFileSync(filePath, 'utf8');
-    const env = {};
-    for (const line of content.split(/\r?\n/)) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIdx = trimmed.indexOf('=');
-      if (eqIdx === -1) continue;
-      const key = trimmed.slice(0, eqIdx).replace(/^export\s+/, '').trim();
-      let value = trimmed.slice(eqIdx + 1).trim();
-      if ((value.startsWith("'") && value.endsWith("'")) || (value.startsWith('"') && value.endsWith('"'))) {
-        value = value.slice(1, -1);
-      }
-      env[key] = value;
-    }
-    return env;
-  } catch { return {}; }
-}
-
-function envFilenamesFor(environment, includeLocal = true, options = {}) {
-  const preferLocal = options.preferLocal === undefined ? true : options.preferLocal;
-  if (environment === 'dev') {
-    const filenames = ['.env', '.env.dev.ci', '.env.dev'];
-    if (includeLocal) {
-      filenames.push('.env.local');
-    }
-    return filenames;
-  }
-
-  const filenames = ['.env'];
-  if (includeLocal && !preferLocal) {
-    filenames.push('.env.local');
-  }
-  filenames.push('.env.production');
-  if (includeLocal && preferLocal) {
-    filenames.push('.env.local');
-  }
-  return filenames;
-}
-
-function loadAppEnv(appDir, environment, options = {}) {
-  const includeLocal = options.includeLocal === undefined ? true : options.includeLocal;
-  const preferLocal = options.preferLocal === undefined ? true : options.preferLocal;
-  const env = {};
-
-  for (const filename of envFilenamesFor(environment, includeLocal, { preferLocal })) {
-    Object.assign(env, loadEnvFile(path.join(appDir, filename)));
-  }
-
-  return env;
+function loadAppEnv(rootDir, appName, environment) {
+  const result = loadEnvForApp({
+    repoRoot: rootDir,
+    appName,
+    mode: environment === 'production' ? 'production' : 'dev',
+    targetEnv: {},
+    resolveBitwardenRef: sharedEnvBitwardenResolver,
+  });
+  return Object.fromEntries(result.entries);
 }
 
 function pickProcessEnv(keys) {
@@ -70,22 +29,8 @@ function pickProcessEnv(keys) {
 
 function createNextAppEnv(rootDir, appName, environment, runtimeEnv) {
   return {
-    ...loadAppEnv(path.join(rootDir, `apps/${appName}`), environment),
+    ...loadAppEnv(rootDir, appName, environment),
     ...runtimeEnv,
-  };
-}
-
-function getHostedEnvLoadOptions(environment) {
-  if (environment === 'production') {
-    return {
-      includeLocal: true,
-      preferLocal: false,
-    };
-  }
-
-  return {
-    includeLocal: true,
-    preferLocal: true,
   };
 }
 
@@ -158,8 +103,7 @@ function omitHostedManagedAppEnv(appEnv) {
 
 function createPortalRuntimeEnv(rootDir, environment, runtimeEnv) {
   const portalBaseUrl = getPortalHostedUrl(environment);
-  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
-  const portalEnv = loadAppEnv(path.join(rootDir, 'apps/sso'), environment, hostedLoadOptions);
+  const portalEnv = loadAppEnv(rootDir, 'sso', environment);
   const portalProcessEnv = pickProcessEnv(['PORTAL_AUTH_SECRET', 'NEXTAUTH_SECRET', 'PORTAL_DB_URL']);
   const sharedSecret = getHostedSharedSecret({
     ...portalEnv,
@@ -246,9 +190,8 @@ function resolveHostedBasePath(appEnv, runtimeEnv) {
 
 function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   const portalEnv = createPortalRuntimeEnv(rootDir, environment, {});
-  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
   const appEnv = omitHostedManagedAppEnv(
-    loadAppEnv(path.join(rootDir, `apps/${appName}`), environment, hostedLoadOptions),
+    loadAppEnv(rootDir, appName, environment),
   );
   const portalBaseUrl = portalEnv.PORTAL_AUTH_URL;
   if (!portalBaseUrl) {
@@ -282,9 +225,8 @@ function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
 }
 
 function createHermesWorkerEnv(rootDir, environment, runtimeEnv) {
-  const hostedLoadOptions = getHostedEnvLoadOptions(environment);
   return {
-    ...loadAppEnv(path.join(rootDir, 'apps/hermes'), environment, hostedLoadOptions),
+    ...loadAppEnv(rootDir, 'hermes', environment),
     ...runtimeEnv,
   };
 }

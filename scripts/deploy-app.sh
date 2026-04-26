@@ -247,10 +247,12 @@ if [[ "$environment" == "dev" ]]; then
   REPO_DIR="$TARGONOS_DEV_DIR"
   PM2_PREFIX="dev"
   BRANCH="dev"
+  shared_env_mode="dev"
 elif [[ "$environment" == "main" ]]; then
   REPO_DIR="$TARGONOS_MAIN_DIR"
   PM2_PREFIX="main"
   BRANCH="main"
+  shared_env_mode="production"
 else
   echo "Unknown environment: $environment" >&2
   exit 1
@@ -360,6 +362,25 @@ fi
 log() { printf '\033[36m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 warn() { printf '\033[33m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 error() { printf '\033[31m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*" >&2; }
+
+selected_app_env_loaded="false"
+
+load_selected_app_env() {
+  local exports
+  if ! exports="$(node "$REPO_DIR/scripts/load-app-env.js" --app "$app_key" --mode "$shared_env_mode")"; then
+    error "Failed to load shared/app env for $shared_env_mode"
+    exit 1
+  fi
+  eval "$exports"
+  selected_app_env_loaded="true"
+  log "Loaded shared/app env for $shared_env_mode"
+}
+
+get_selected_env_value() {
+  local env_app="$1"
+  local key="$2"
+  node "$REPO_DIR/scripts/load-app-env.js" --app "$env_app" --mode "$shared_env_mode" --get "$key"
+}
 
 resolve_origin_repository_slug() {
   local remote_url
@@ -739,59 +760,6 @@ sync_next_standalone_assets() {
   log "Standalone assets synced for $app_key"
 }
 
-load_env_file() {
-  local file="$1"
-  if [[ ! -f "$file" ]]; then
-    return 1
-  fi
-
-  # Parse dotenv-style env files safely (values may contain '&', '?', etc.).
-  # Avoid `source`, which treats those characters as shell operators.
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-
-    if [[ -z "$line" || "${line:0:1}" == "#" ]]; then
-      continue
-    fi
-
-    if [[ "$line" == export\ * ]]; then
-      line="${line#export }"
-      line="${line#"${line%%[![:space:]]*}"}"
-    fi
-
-    if [[ "$line" != *"="* ]]; then
-      continue
-    fi
-
-    local key="${line%%=*}"
-    local value="${line#*=}"
-
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-
-    if [[ -z "$key" || ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      continue
-    fi
-
-    if [[ "$key" == "TARGONOS_DEV_DIR" || "$key" == "TARGONOS_MAIN_DIR" || "$key" == "TARGON_DEV_DIR" || "$key" == "TARGON_MAIN_DIR" ]]; then
-      continue
-    fi
-
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-
-    export "${key}=${value}"
-  done < "$file"
-
-  return 0
-}
-
 set_env_var_in_file() {
   local file="$1"
   local key="$2"
@@ -822,24 +790,6 @@ ensure_database_url() {
     return 0
   fi
 
-  local candidates=()
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
-  else
-    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
-  fi
-
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file" && [[ -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
-      if [[ -n "${DATABASE_URL:-}" ]]; then
-        log "Loaded DATABASE_URL from $(basename "$file")"
-      else
-        log "Loaded tenant database URLs from $(basename "$file")"
-      fi
-      return 0
-    fi
-  done
-
   return 1
 }
 
@@ -848,21 +798,13 @@ ensure_portal_db_url() {
     return 0
   fi
 
-  local sso_dir="$REPO_DIR/apps/sso"
-  local candidates=()
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
-  else
-    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
-  fi
-  local file
-
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file" && [[ -n "${PORTAL_DB_URL:-}" ]]; then
-      log "Loaded PORTAL_DB_URL from $(basename "$file")"
+  local portal_db_url
+  if portal_db_url="$(get_selected_env_value sso PORTAL_DB_URL)"; then
+    if [[ -n "${portal_db_url//[[:space:]]/}" ]]; then
+      export PORTAL_DB_URL="$portal_db_url"
       return 0
     fi
-  done
+  fi
 
   return 1
 }
@@ -931,35 +873,7 @@ hosted_app_url() {
 }
 
 resolve_portal_shared_secret() {
-  local sso_dir="$REPO_DIR/apps/sso"
-  local candidates=()
-
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
-  else
-    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
-  fi
-
-  local file
-  for file in "${candidates[@]}"; do
-    if [[ ! -f "$file" ]]; then
-      continue
-    fi
-
-    local secret
-    secret="$(
-      unset PORTAL_AUTH_SECRET NEXTAUTH_SECRET
-      load_env_file "$file" >/dev/null
-      printf '%s' "${PORTAL_AUTH_SECRET:-${NEXTAUTH_SECRET:-}}"
-    )"
-
-    if [[ -n "${secret//[[:space:]]/}" ]]; then
-      printf '%s' "$secret"
-      return 0
-    fi
-  done
-
-  return 1
+  get_selected_env_value sso PORTAL_AUTH_SECRET
 }
 
 apply_hosted_env_overrides() {
@@ -1138,23 +1052,7 @@ prepare_owner_migration_env() {
   esac
 }
 ensure_app_env_loaded() {
-  local candidates=()
-
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
-  else
-    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
-  fi
-
-  local file
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file"; then
-      log "Loaded app env from $(basename "$file")"
-      return 0
-    fi
-  done
-
-  return 1
+  [[ "$selected_app_env_loaded" == "true" ]]
 }
 
 validate_plutus_qbo_env() {
@@ -1270,6 +1168,8 @@ fi
 
 deploy_runtime_sha="$(git -C "$REPO_DIR" rev-parse HEAD)"
 log "Target runtime SHA: $deploy_runtime_sha"
+
+load_selected_app_env
 
 # Step 1.5: Detect what changed in this deploy range (if available)
 if compute_changed_files; then

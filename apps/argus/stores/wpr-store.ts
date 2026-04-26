@@ -6,6 +6,7 @@ import {
   applyWeekScopedPatch,
   captureWeekScopedState,
   createInitialDashboardState,
+  migrateWprDashboardState,
   toggleSetMember,
   wprStateReplacer,
   wprStateReviver,
@@ -189,11 +190,12 @@ export const useWprStore = create<WprStore>()(
     },
     {
       name: 'argus-wpr-dashboard',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage, {
         replacer: wprStateReplacer,
         reviver: wprStateReviver,
       }),
+      migrate: migrateWprDashboardState,
       partialize: (state) => ({
         activeTab: state.activeTab,
         selectedWeek: state.selectedWeek,

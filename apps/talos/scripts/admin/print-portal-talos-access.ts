@@ -1,28 +1,19 @@
 #!/usr/bin/env tsx
 
-import dotenv from 'dotenv'
-import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pathToFileURL } from 'node:url'
 import { getTenantPrismaClient, disconnectAllTenants } from '../../src/lib/tenant/prisma-factory'
 import { TENANT_CODES, type TenantCode } from '../../src/lib/tenant/constants'
+import { loadAppScriptEnv } from '../load-env'
 
 type ScriptOptions = {
   onlyEmails: Set<string> | null
 }
 
 function loadEnv() {
-  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')
-  const candidates = [
-    path.join(repoRoot, 'apps', 'sso', '.env.local'),
-    path.join(repoRoot, 'apps', 'talos', '.env.local'),
-  ]
-
-  for (const candidate of candidates) {
-    if (!fs.existsSync(candidate)) continue
-    dotenv.config({ path: candidate })
-  }
+  loadAppScriptEnv('sso')
+  loadAppScriptEnv('talos')
 }
 
 function parseArgs(): ScriptOptions {
@@ -71,7 +62,7 @@ function pad(text: string, width: number): string {
 
 async function readPortalUsers(options: ScriptOptions): Promise<PortalUserRow[]> {
   if (!process.env.PORTAL_DB_URL) {
-    throw new Error('PORTAL_DB_URL is not configured (load apps/sso/.env.local).')
+    throw new Error('PORTAL_DB_URL is not configured.')
   }
 
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..')

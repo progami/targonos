@@ -202,6 +202,58 @@ export function wprStateReviver(_key: string, value: unknown): unknown {
   return value
 }
 
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function shouldResetInitializedEmptySqpSelection(state: Record<string, unknown>): boolean {
+  return state.hasInitializedSqpSelection === true
+    && state.selectedSqpRootIds instanceof Set
+    && state.selectedSqpRootIds.size === 0
+    && state.selectedSqpTermIds instanceof Set
+    && state.selectedSqpTermIds.size === 0
+}
+
+function resetInitializedEmptySqpSelection<T extends Record<string, unknown>>(state: T): T {
+  if (!shouldResetInitializedEmptySqpSelection(state)) {
+    return state
+  }
+
+  return {
+    ...state,
+    hasInitializedSqpSelection: false,
+  }
+}
+
+export function migrateWprDashboardState(persistedState: unknown, persistedVersion: number): unknown {
+  if (persistedVersion >= 2) {
+    return persistedState
+  }
+
+  if (!isObjectRecord(persistedState)) {
+    return persistedState
+  }
+
+  const nextState = resetInitializedEmptySqpSelection(persistedState)
+  if (!isObjectRecord(nextState.weekStateByWeek)) {
+    return nextState
+  }
+
+  const nextWeekStateByWeek: Record<string, unknown> = {}
+  for (const [weekLabel, weekState] of Object.entries(nextState.weekStateByWeek)) {
+    if (isObjectRecord(weekState)) {
+      nextWeekStateByWeek[weekLabel] = resetInitializedEmptySqpSelection(weekState)
+    } else {
+      nextWeekStateByWeek[weekLabel] = weekState
+    }
+  }
+
+  return {
+    ...nextState,
+    weekStateByWeek: nextWeekStateByWeek,
+  }
+}
+
 export function createInitialDashboardState(defaultWeek: WeekLabel | null): WprDashboardState {
   return {
     activeTab: 'sqp',

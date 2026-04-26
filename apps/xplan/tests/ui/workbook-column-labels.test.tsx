@@ -1,39 +1,34 @@
-import { render, screen } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  CustomOpsCostGrid,
-  type OpsBatchRow,
-} from '@/components/sheets/custom-ops-cost-grid'
-import {
-  CustomOpsPlanningGrid,
-} from '@/components/sheets/custom-ops-planning-grid'
-import { SalesPlanningGrid } from '@/components/sheets/sales-planning-grid'
+import { CustomOpsCostGrid, type OpsBatchRow } from '@/components/sheets/custom-ops-cost-grid';
+import { CustomOpsPlanningGrid } from '@/components/sheets/custom-ops-planning-grid';
+import { SalesPlanningGrid } from '@/components/sheets/sales-planning-grid';
 import {
   WorkbookSetupTable,
   type WorkbookSetupRow,
-} from '@/components/sheets/workbook-setup-table'
-import { TooltipProvider } from '@/components/ui/tooltip'
+} from '@/components/sheets/workbook-setup-table';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 beforeEach(() => {
   vi.stubGlobal(
     'requestAnimationFrame',
     vi.fn((callback: FrameRequestCallback) => window.setTimeout(() => callback(Date.now()), 0)),
-  )
+  );
   vi.stubGlobal(
     'cancelAnimationFrame',
     vi.fn((handle: number) => window.clearTimeout(handle)),
-  )
-})
+  );
+});
 
 afterEach(() => {
-  vi.unstubAllGlobals()
-})
+  vi.unstubAllGlobals();
+});
 
 function expectLabels(labels: string[]) {
   labels.forEach((label) => {
-    expect(screen.getByText(label)).toBeInTheDocument()
-  })
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
 }
 
 describe('workbook sheet column labels', () => {
@@ -49,9 +44,9 @@ describe('workbook sheet column labels', () => {
         totalCoverThresholdWeeks: '8',
         fbaCoverThresholdWeeks: '4',
       },
-    ]
+    ];
 
-    render(<WorkbookSetupTable strategyId="strategy-1" activeYear={2026} rows={rows} />)
+    render(<WorkbookSetupTable strategyId="strategy-1" activeYear={2026} rows={rows} />);
 
     expectLabels([
       'SKU',
@@ -61,11 +56,11 @@ describe('workbook sheet column labels', () => {
       'REGION',
       'Total Threshold (W)',
       'FBA Threshold (W)',
-    ])
-  })
+    ]);
+  });
 
   it('renders PO Table with the Excel PO Table columns', () => {
-    render(<CustomOpsPlanningGrid rows={[]} />)
+    render(<CustomOpsPlanningGrid rows={[]} />);
 
     expectLabels([
       'PO CODE',
@@ -92,15 +87,15 @@ describe('workbook sheet column labels', () => {
       'NOTES',
       'PO FIRST ROW',
       'REGION',
-    ])
-  })
+    ]);
+  });
 
   it('renders PO Finances Table with the Excel finance columns', () => {
-    const rows: OpsBatchRow[] = []
+    const rows: OpsBatchRow[] = [];
 
-    render(<CustomOpsCostGrid rows={rows} products={[]} />)
+    render(<CustomOpsCostGrid rows={rows} products={[]} />);
 
-    expect(screen.getByText('PO Finances Table')).toBeInTheDocument()
+    expect(screen.getByText('PO Finances Table')).toBeInTheDocument();
     expectLabels([
       'PO CODE',
       'PRODUCT',
@@ -116,8 +111,29 @@ describe('workbook sheet column labels', () => {
       'GP $',
       'NP $',
       'REGION',
-    ])
-  })
+    ]);
+  });
+
+  it('renders Batch Table separately from PO Finances Table', () => {
+    const rows: OpsBatchRow[] = [];
+
+    render(<CustomOpsCostGrid rows={rows} products={[]} tableKind="batch" />);
+
+    expect(screen.getByText('Batch Table')).toBeInTheDocument();
+    expectLabels([
+      'PO CODE',
+      'BATCH',
+      'PRODUCT',
+      'QTY',
+      'UNITS/CTN',
+      'CTN L (CM)',
+      'CTN W (CM)',
+      'CTN H (CM)',
+      'CTN WT (KG)',
+      'CBM',
+      'REGION',
+    ]);
+  });
 
   it('renders Forecast with base columns and one Excel SKU block', () => {
     const metrics = [
@@ -129,25 +145,25 @@ describe('workbook sheet column labels', () => {
       'actualSales',
       'forecastSales',
       'finalSales',
-    ]
+    ];
     const columnMeta = Object.fromEntries(
       metrics.map((field) => [`product-1_${field}`, { productId: 'product-1', field }]),
-    )
+    );
     const row: {
-      weekNumber: string
-      weekLabel: string
-      weekDate: string
-      arrivalDetail: string
-      [key: string]: string
+      weekNumber: string;
+      weekLabel: string;
+      weekDate: string;
+      arrivalDetail: string;
+      [key: string]: string;
     } = {
       weekNumber: '1',
       weekLabel: 'W1',
       weekDate: '2026-01-05',
       arrivalDetail: '',
-    }
+    };
     metrics.forEach((field) => {
-      row[`product-1_${field}`] = '0'
-    })
+      row[`product-1_${field}`] = '0';
+    });
 
     render(
       <TooltipProvider>
@@ -163,7 +179,7 @@ describe('workbook sheet column labels', () => {
           reorderCueByProduct={new Map()}
         />
       </TooltipProvider>,
-    )
+    );
 
     expectLabels([
       'WEEK',
@@ -177,6 +193,10 @@ describe('workbook sheet column labels', () => {
       'ACTUAL',
       'PLANNER',
       'FINAL',
-    ])
-  })
-})
+    ]);
+
+    expect(screen.getByText('FBA COVER (W)')).toHaveClass('leading-tight');
+    expect(screen.getByText('TOTAL COVER (W)')).toHaveClass('leading-tight');
+    expect(screen.getByText('TOTAL COVER (W)').closest('th')).toHaveClass('whitespace-normal');
+  });
+});

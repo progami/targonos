@@ -49,8 +49,6 @@ import {
   type BatchTableRow,
   type BusinessParameter,
   type CashFlowWeek,
-  type LeadStageTemplate,
-  type LeadTimeOverride,
   type Product,
   type ProfitAndLossWeek,
   type PurchaseOrder,
@@ -64,8 +62,6 @@ import { ActiveStrategyIndicator } from '@/components/active-strategy-indicator'
 import { getUtcDateForTimeZone } from '@/lib/utils/dates';
 import {
   mapProducts,
-  mapLeadStageTemplates,
-  mapLeadOverrides,
   mapBusinessParameters,
   mapPurchaseOrders,
   mapSalesWeeks,
@@ -74,8 +70,6 @@ import {
 } from '@/lib/calculations/adapters';
 import {
   buildProductCostIndex,
-  buildLeadTimeProfiles,
-  getLeadTimeProfile,
   normalizeBusinessParameters,
   computePurchaseOrderDerived,
   computeSalesPlan,
@@ -513,56 +507,9 @@ async function safeFindMany<T>(
   }
 }
 
-type BusinessParameterView = {
-  id: string;
-  label: string;
-  value: string;
-  type: 'numeric' | 'text';
-};
-
 type NestedHeaderCell =
   | string
   | { label: string; colspan?: number; rowspan?: number; title?: string };
-
-const FINANCE_PARAMETER_LABELS = new Set(
-  ['amazon payout delay (weeks)', 'starting cash', 'weekly fixed costs', 'fixed costs'].map(
-    (label) => label.toLowerCase(),
-  ),
-);
-const SALES_PARAMETER_LABELS = new Set(
-  ['weeks of stock warning threshold', 'stockout warning (weeks)'].map((label) =>
-    label.toLowerCase(),
-  ),
-);
-const HIDDEN_PARAMETER_LABELS = new Set(
-  [
-    'forecast smoothing factor',
-    'low stock threshold (%)',
-    'inventory carrying cost (%/year)',
-    'target gross margin (%)',
-    'default moq (units)',
-    'production buffer (%)',
-  ].map((label) => label.toLowerCase()),
-);
-const OPERATIONS_PARAMETER_EXCLUDES = new Set([
-  'product ordering',
-  'supplier payment split 1 (%)',
-  'supplier payment split 2 (%)',
-  'supplier payment split 3 (%)',
-  'supplier payment terms (weeks)',
-]);
-
-function isFinanceParameterLabel(label: string) {
-  return FINANCE_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
-
-function isSalesParameterLabel(label: string) {
-  return SALES_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
-
-function isHiddenParameterLabel(label: string) {
-  return HIDDEN_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
 
 async function resolveStrategyId(
   searchParamStrategy: string | string[] | undefined,
@@ -680,21 +627,6 @@ async function getProductSetupView(
   const productDelegate = prismaAny.product as
     | { findMany: (args?: unknown) => Promise<Product[]> }
     | undefined;
-  const businessParameterDelegate = prismaAny.businessParameter as
-    | {
-        findMany: (args?: unknown) => Promise<BusinessParameter[]>;
-      }
-    | undefined;
-  const leadStageDelegate = prismaAny.leadStageTemplate as
-    | {
-        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
-      }
-    | undefined;
-  const leadOverrideDelegate = prismaAny.leadTimeOverride as
-    | {
-        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
-      }
-    | undefined;
   const productSetupYearDelegate = prismaAny.productSetupYear as
     | {
         findMany: (args?: unknown) => Promise<
@@ -710,30 +642,12 @@ async function getProductSetupView(
       }
     | undefined;
 
-  const [products, businessParameters, leadStages, leadOverrides, setupYears] = await Promise.all([
+  const [products, setupYears] = await Promise.all([
     safeFindMany<Product[]>(
       productDelegate,
       { where: { strategyId }, orderBy: { name: 'asc' } },
       [],
       'product',
-    ),
-    safeFindMany<BusinessParameter[]>(
-      businessParameterDelegate,
-      { where: { strategyId }, orderBy: { label: 'asc' } },
-      [],
-      'businessParameter',
-    ),
-    safeFindMany<LeadStageTemplate[]>(
-      leadStageDelegate,
-      { orderBy: { sequence: 'asc' } },
-      [],
-      'leadStageTemplate',
-    ),
-    safeFindMany<LeadTimeOverride[]>(
-      leadOverrideDelegate,
-      { where: { product: { strategyId } } },
-      [],
-      'leadTimeOverride',
     ),
     safeFindMany(
       productSetupYearDelegate,
@@ -747,54 +661,6 @@ async function getProductSetupView(
     const sku = product.sku?.trim();
     return product.isActive && sku && sku.length > 0;
   });
-
-  const parameterInputs = mapBusinessParameters(businessParameters);
-  const visibleParameterInputs = parameterInputs.filter(
-    (parameter) => !isHiddenParameterLabel(parameter.label),
-  );
-
-  const operationsParameters = visibleParameterInputs
-    .filter((parameter) => {
-      const normalized = parameter.label.trim().toLowerCase();
-      return (
-        !isFinanceParameterLabel(parameter.label) &&
-        !isSalesParameterLabel(parameter.label) &&
-        !OPERATIONS_PARAMETER_EXCLUDES.has(normalized)
-      );
-    })
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
-
-  const salesParameters = visibleParameterInputs
-    .filter((parameter) => isSalesParameterLabel(parameter.label))
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
-
-  const financeParameters = visibleParameterInputs
-    .filter((parameter) => isFinanceParameterLabel(parameter.label))
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
 
   const productRows = activeProducts
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -828,38 +694,9 @@ async function getProductSetupView(
     };
   });
 
-  const leadStageTemplateViews = mapLeadStageTemplates(leadStages).map((stage) => ({
-    id: stage.id,
-    label: stage.label,
-    defaultWeeks: stage.defaultWeeks,
-    sequence: stage.sequence,
-  }));
-
-  const leadProfiles = buildLeadTimeProfiles(
-    mapLeadStageTemplates(leadStages),
-    mapLeadOverrides(leadOverrides),
-    productRows.map((p) => p.id),
-  );
-
-  const leadTimeProfiles: Record<string, { productionWeeks: number; sourceWeeks: number; oceanWeeks: number; finalWeeks: number }> = {};
-  for (const [productId, profile] of leadProfiles) {
-    leadTimeProfiles[productId] = profile;
-  }
-
-  const leadTimeOverrideIds = leadOverrides.map((o) => ({
-    productId: o.productId,
-    stageTemplateId: o.stageTemplateId,
-  }));
-
   return {
     products: productRows,
     workbookSetupRows,
-    operationsParameters,
-    salesParameters,
-    financeParameters,
-    leadStageTemplates: leadStageTemplateViews,
-    leadTimeProfiles,
-    leadTimeOverrideIds,
   };
 }
 
@@ -892,9 +729,7 @@ async function getKeyParametersForAllStrategies(
     result[sid].push({
       label: param.label,
       value:
-        param.valueNumeric != null
-          ? formatNumeric(param.valueNumeric)
-          : (param.valueText ?? ''),
+        param.valueNumeric != null ? formatNumeric(param.valueNumeric) : (param.valueText ?? ''),
     });
   }
   return result;
@@ -904,16 +739,6 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
   const prismaAny = prisma as unknown as Record<string, unknown>;
   const productDelegate = prismaAny.product as
     | { findMany: (args?: unknown) => Promise<Product[]> }
-    | undefined;
-  const leadStageDelegate = prismaAny.leadStageTemplate as
-    | {
-        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
-      }
-    | undefined;
-  const leadOverrideDelegate = prismaAny.leadTimeOverride as
-    | {
-        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
-      }
     | undefined;
   const businessParameterDelegate = prismaAny.businessParameter as
     | {
@@ -934,63 +759,45 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     | typeof prisma.purchaseOrderPayment
     | undefined;
 
-  const [products, leadStages, overrides, businessParameters, purchaseOrders, batchTableRows] =
-    await Promise.all([
-      safeFindMany<Product[]>(
-        productDelegate,
-        { where: { strategyId }, orderBy: { name: 'asc' } },
-        [],
-        'product',
-      ),
-      safeFindMany<LeadStageTemplate[]>(
-        leadStageDelegate,
-        { orderBy: { sequence: 'asc' } },
-        [],
-        'leadStageTemplate',
-      ),
-      safeFindMany<LeadTimeOverride[]>(
-        leadOverrideDelegate,
-        { where: { product: { strategyId } } },
-        [],
-        'leadTimeOverride',
-      ),
-      safeFindMany<BusinessParameter[]>(
-        businessParameterDelegate,
-        { where: { strategyId }, orderBy: { label: 'asc' } },
-        [],
-        'businessParameter',
-      ),
-      safeFindMany<Array<PurchaseOrder & { payments: PurchaseOrderPayment[] }>>(
-        purchaseOrderDelegate,
-        {
-          where: { strategyId },
-          orderBy: [{ productionStart: 'asc' }, { orderCode: 'asc' }],
-          include: {
-            payments: { orderBy: { paymentIndex: 'asc' } },
-          },
+  const [products, businessParameters, purchaseOrders, batchTableRows] = await Promise.all([
+    safeFindMany<Product[]>(
+      productDelegate,
+      { where: { strategyId }, orderBy: { name: 'asc' } },
+      [],
+      'product',
+    ),
+    safeFindMany<BusinessParameter[]>(
+      businessParameterDelegate,
+      { where: { strategyId }, orderBy: { label: 'asc' } },
+      [],
+      'businessParameter',
+    ),
+    safeFindMany<Array<PurchaseOrder & { payments: PurchaseOrderPayment[] }>>(
+      purchaseOrderDelegate,
+      {
+        where: { strategyId },
+        orderBy: [{ productionStart: 'asc' }, { orderCode: 'asc' }],
+        include: {
+          payments: { orderBy: { paymentIndex: 'asc' } },
         },
-        [],
-        'purchaseOrder',
-      ),
-      safeFindMany<BatchTableRow[]>(
-        batchTableRowDelegate,
-        {
-          where: { purchaseOrder: { strategyId } },
-          orderBy: [{ purchaseOrderId: 'asc' }, { createdAt: 'asc' }],
-        },
-        [],
-        'batchTableRow',
-      ),
-    ]);
+      },
+      [],
+      'purchaseOrder',
+    ),
+    safeFindMany<BatchTableRow[]>(
+      batchTableRowDelegate,
+      {
+        where: { purchaseOrder: { strategyId } },
+        orderBy: [{ purchaseOrderId: 'asc' }, { createdAt: 'asc' }],
+      },
+      [],
+      'batchTableRow',
+    ),
+  ]);
 
   const productInputs = mapProducts(products);
   const productIndex = buildProductCostIndex(productInputs);
   const productNameById = new Map(products.map((product) => [product.id, productLabel(product)]));
-  const leadProfiles = buildLeadTimeProfiles(
-    mapLeadStageTemplates(leadStages),
-    mapLeadOverrides(overrides),
-    productInputs.map((product) => product.id),
-  );
   const parameters = normalizeBusinessParameters(mapBusinessParameters(businessParameters));
   const batchesByOrder = new Map<string, typeof batchTableRows>();
   for (const batch of batchTableRows) {
@@ -1015,7 +822,6 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     purchaseOrders: purchaseOrdersWithBatches,
     purchaseOrderInputs: purchaseOrderInputsInitial,
     productIndex,
-    leadProfiles,
     parameters,
     paymentsDelegate,
     calendar,
@@ -1029,18 +835,23 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     productInputs,
     productIndex,
     productNameById,
-    leadProfiles,
     parameters,
     purchaseOrderInputs,
     rawPurchaseOrders: purchaseOrdersWithBatches,
   };
 }
 
+const PO_LEVEL_STAGE_PROFILE: LeadTimeProfile = {
+  productionWeeks: 0,
+  sourceWeeks: 0,
+  oceanWeeks: 0,
+  finalWeeks: 0,
+};
+
 async function ensureDefaultSupplierInvoices({
   purchaseOrders,
   purchaseOrderInputs,
   productIndex,
-  leadProfiles,
   parameters,
   paymentsDelegate,
   calendar,
@@ -1050,7 +861,6 @@ async function ensureDefaultSupplierInvoices({
   >;
   purchaseOrderInputs: PurchaseOrderInput[];
   productIndex: Map<string, ProductCostSummary>;
-  leadProfiles: Map<string, LeadTimeProfile>;
   parameters: BusinessParameterMap;
   paymentsDelegate?: typeof prisma.purchaseOrderPayment;
   calendar?: PlanningCalendar['calendar'];
@@ -1065,11 +875,15 @@ async function ensureDefaultSupplierInvoices({
     const record = purchaseOrders[index];
     const input = purchaseOrderInputs[index];
     if (!input) continue;
-    const profile = getLeadTimeProfile(input.productId, leadProfiles);
-    if (!profile) continue;
-    const derived = computePurchaseOrderDerived(input, productIndex, profile, parameters, {
-      calendar,
-    });
+    const derived = computePurchaseOrderDerived(
+      input,
+      productIndex,
+      PO_LEVEL_STAGE_PROFILE,
+      parameters,
+      {
+        calendar,
+      },
+    );
     if (!derived.plannedPayments.length) continue;
 
     const existingByIndex = new Map<number, PurchaseOrderPayment>();
@@ -1304,20 +1118,11 @@ async function updatePurchaseOrderPayment(
 function deriveOrders(
   context: Awaited<ReturnType<typeof loadOperationsContext>>,
   calendar?: PlanningCalendar['calendar'],
-  options: { includeDraft?: boolean } = {},
+  _options: { includeDraft?: boolean } = {},
 ) {
-  const includeDraft = options.includeDraft === true;
   return context.purchaseOrderInputs
     .map((order) => {
-      if (
-        !includeDraft &&
-        typeof order.status === 'string' &&
-        order.status.trim().toUpperCase() === 'DRAFT'
-      ) {
-        return null;
-      }
       if (!context.productIndex.has(order.productId)) return null;
-      const profile = getLeadTimeProfile(order.productId, context.leadProfiles);
       const productNames =
         Array.isArray(order.batchTableRows) && order.batchTableRows.length > 1
           ? order.batchTableRows
@@ -1330,7 +1135,7 @@ function deriveOrders(
         derived: computePurchaseOrderDerived(
           order,
           context.productIndex,
-          profile,
+          PO_LEVEL_STAGE_PROFILE,
           context.parameters,
           { calendar },
         ),
@@ -1406,32 +1211,27 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
 
   const [operations, salesRows, profitOverrideRows, cashOverrideRows, productSetupYears] =
     await Promise.all([
-    loadOperationsContext(strategyId, planning.calendar),
-    safeFindMany<SalesWeek[]>(
-      salesDelegate,
-      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-      [],
-      'salesWeek',
-    ),
-    safeFindMany<ProfitAndLossWeek[]>(
-      profitDelegate,
-      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-      [],
-      'profitAndLossWeek',
-    ),
-    safeFindMany<CashFlowWeek[]>(
-      cashDelegate,
-      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-      [],
-      'cashFlowWeek',
-    ),
-    safeFindMany(
-      productSetupYearDelegate,
-      { where: { strategyId } },
-      [],
-      'productSetupYear',
-    ),
-  ]);
+      loadOperationsContext(strategyId, planning.calendar),
+      safeFindMany<SalesWeek[]>(
+        salesDelegate,
+        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+        [],
+        'salesWeek',
+      ),
+      safeFindMany<ProfitAndLossWeek[]>(
+        profitDelegate,
+        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+        [],
+        'profitAndLossWeek',
+      ),
+      safeFindMany<CashFlowWeek[]>(
+        cashDelegate,
+        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+        [],
+        'cashFlowWeek',
+      ),
+      safeFindMany(productSetupYearDelegate, { where: { strategyId } }, [], 'productSetupYear'),
+    ]);
 
   // SalesWeekFinancials table may not exist yet - gracefully handle missing table
   let financialsRows: SalesWeekFinancialsRow[] = [];
@@ -1700,16 +1500,6 @@ async function getOpsPlanningView(
       });
     });
 
-  const leadProfilesPayload = Array.from(context.leadProfiles.entries()).map(
-    ([productId, profile]) => ({
-      productId,
-      productionWeeks: Number(profile.productionWeeks ?? 0),
-      sourceWeeks: Number(profile.sourceWeeks ?? 0),
-      oceanWeeks: Number(profile.oceanWeeks ?? 0),
-      finalWeeks: Number(profile.finalWeeks ?? 0),
-    }),
-  );
-
   const poFinanceLookupRows = rawPurchaseOrders
     .filter((order) => visibleOrderIds.has(order.id))
     .flatMap((order) => {
@@ -1745,8 +1535,8 @@ async function getOpsPlanningView(
           arrivalWeeks: derived?.stageProfile.oceanWeeks ?? null,
           warehouseWeeks: totalStageWeeks,
           inboundWeekOverride:
-            (order as PurchaseOrder & { inboundWeekOverride?: Date | null })
-              .inboundWeekOverride ?? null,
+            (order as PurchaseOrder & { inboundWeekOverride?: Date | null }).inboundWeekOverride ??
+            null,
           region: strategyRegion,
         } satisfies PoTableWorkbookInput;
       });
@@ -1821,7 +1611,6 @@ async function getOpsPlanningView(
   const calculator: OpsPlanningCalculatorPayload = {
     parameters: context.parameters,
     products: context.productInputs,
-    leadProfiles: leadProfilesPayload,
     purchaseOrders: context.purchaseOrderInputs
       .filter((order) => visibleOrderIds.has(order.id))
       .map(serializePurchaseOrder),
@@ -1848,31 +1637,30 @@ function getSalesPlanningView(
   const productList = [...context.productInputs].sort((a, b) =>
     productLabel(a).localeCompare(productLabel(b)),
   );
+  const orderLeadTimeByProduct = new Map<string, LeadTimeProfile & { totalWeeks: number }>();
+  for (const order of context.purchaseOrderInputs) {
+    const profile = {
+      productionWeeks: Number(order.productionWeeks ?? 0),
+      sourceWeeks: Number(order.sourceWeeks ?? 0),
+      oceanWeeks: Number(order.oceanWeeks ?? 0),
+      finalWeeks: Number(order.finalWeeks ?? 0),
+    };
+    const totalWeeks =
+      profile.productionWeeks + profile.sourceWeeks + profile.oceanWeeks + profile.finalWeeks;
+    if (totalWeeks <= 0) continue;
+    const existing = orderLeadTimeByProduct.get(order.productId);
+    if (existing && existing.totalWeeks >= totalWeeks) continue;
+    orderLeadTimeByProduct.set(order.productId, { ...profile, totalWeeks });
+  }
   const leadTimeByProduct = Object.fromEntries(
     productList.map((product) => {
-      const profile = getLeadTimeProfile(product.id, context.leadProfiles);
-      const profileTotal =
-        Number(profile.productionWeeks ?? 0) +
-        Number(profile.sourceWeeks ?? 0) +
-        Number(profile.oceanWeeks ?? 0) +
-        Number(profile.finalWeeks ?? 0);
-
-      const fallback = context.parameters;
-      const fallbackProfile = {
-        productionWeeks: fallback.defaultProductionWeeks,
-        sourceWeeks: fallback.defaultSourceWeeks,
-        oceanWeeks: fallback.defaultOceanWeeks,
-        finalWeeks: fallback.defaultFinalWeeks,
+      const resolved = orderLeadTimeByProduct.get(product.id) ?? {
+        productionWeeks: 0,
+        sourceWeeks: 0,
+        oceanWeeks: 0,
+        finalWeeks: 0,
+        totalWeeks: 0,
       };
-      const fallbackTotal =
-        Number(fallbackProfile.productionWeeks) +
-        Number(fallbackProfile.sourceWeeks) +
-        Number(fallbackProfile.oceanWeeks) +
-        Number(fallbackProfile.finalWeeks);
-
-      const resolved = profileTotal > 0 ? profile : fallbackProfile;
-      const totalWeeks = profileTotal > 0 ? profileTotal : fallbackTotal;
-
       return [
         product.id,
         {
@@ -1880,7 +1668,7 @@ function getSalesPlanningView(
           sourceWeeks: Number(resolved.sourceWeeks ?? 0),
           oceanWeeks: Number(resolved.oceanWeeks ?? 0),
           finalWeeks: Number(resolved.finalWeeks ?? 0),
-          totalWeeks: Number(totalWeeks ?? 0),
+          totalWeeks: Number(resolved.totalWeeks ?? 0),
         },
       ];
     }),
@@ -2527,7 +2315,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       : 'US';
   const weekStartsOn = weekStartsOnForRegion(strategyRegion);
   const reportTimeZone = strategyId ? sellerboardReportTimeZoneForRegion(strategyRegion) : null;
-  const reportAsOfDate = reportTimeZone ? getUtcDateForTimeZone(new Date(), reportTimeZone) : new Date();
+  const reportAsOfDate = reportTimeZone
+    ? getUtcDateForTimeZone(new Date(), reportTimeZone)
+    : new Date();
 
   const [workbookStatus, planningCalendar] = await Promise.all([
     getWorkbookStatus(),
@@ -2564,7 +2354,8 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
     return strategyId;
   };
 
-  const getFinancialData = () => loadFinancialData(planningCalendar, requireStrategyId(), reportAsOfDate);
+  const getFinancialData = () =>
+    loadFinancialData(planningCalendar, requireStrategyId(), reportAsOfDate);
   const weeklyLabelControl = (label: string) => (
     <div key="weekly-label" className={SHEET_TOOLBAR_GROUP}>
       <span className={SHEET_TOOLBAR_LABEL}>{label}</span>
@@ -2763,12 +2554,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           : Promise.resolve({
               products: [],
               workbookSetupRows: [],
-              operationsParameters: [],
-              salesParameters: [],
-              financeParameters: [],
-              leadStageTemplates: [],
-              leadTimeProfiles: {},
-              leadTimeOverrideIds: [],
             }),
         getKeyParametersForAllStrategies(allStrategyIds),
       ]);
@@ -2781,12 +2566,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           activeYear={activeYear ?? new Date().getUTCFullYear()}
           products={productSetupView.products}
           workbookSetupRows={productSetupView.workbookSetupRows}
-          operationsParameters={productSetupView.operationsParameters}
-          salesParameters={productSetupView.salesParameters}
-          financeParameters={productSetupView.financeParameters}
-          leadStageTemplates={productSetupView.leadStageTemplates}
-          leadTimeProfiles={productSetupView.leadTimeProfiles}
-          leadTimeOverrideIds={productSetupView.leadTimeOverrideIds}
           keyParametersByStrategyId={keyParametersByStrategyId}
         />
       );
@@ -2901,7 +2680,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getProfitAndLossView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
+      const view = getProfitAndLossView(
+        data,
+        planningCalendar,
+        activeSegment,
+        activeYear,
+        reportAsOfDate,
+      );
       controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
       controls.push(
         <SellerboardSyncControl
@@ -3053,7 +2838,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getCashFlowView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
+      const view = getCashFlowView(
+        data,
+        planningCalendar,
+        activeSegment,
+        activeYear,
+        reportAsOfDate,
+      );
       tabularContent = (
         <CashFlowGrid
           strategyId={activeStrategyId}
@@ -3163,7 +2954,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   // Use unshift to place view toggle first (leftmost) for consistent positioning
   const hasVisualMode = Boolean(visualContent);
   if (hasVisualMode) {
-    controls.unshift(<SheetViewToggle key="sheet-view-toggle" value={viewMode} slug={config.slug} />);
+    controls.unshift(
+      <SheetViewToggle key="sheet-view-toggle" value={viewMode} slug={config.slug} />,
+    );
   }
   const headerControls = controls.length ? controls : undefined;
 

@@ -110,12 +110,11 @@ export interface PurchaseOrderDerived {
 }
 
 const STATUS_ICON_MAP: Record<PurchaseOrderStatus, string> = {
-  DRAFT: '📝',
   ISSUED: '📤',
   MANUFACTURING: '🛠',
   OCEAN: '🚢',
   WAREHOUSE: '📦',
-  SHIPPED: '🚚',
+  CANCELLED: '✕',
 };
 
 const PAY_PERCENT_FIELDS = ['pay1Percent', 'pay2Percent', 'pay3Percent'] as const;
@@ -349,7 +348,8 @@ function buildStageSchedule(
   const productionCompleteForDiff = order.productionComplete ?? productionComplete ?? null;
   const sourceDepartureForDiff = order.sourceDeparture ?? sourceDeparture ?? null;
   const portEtaForDiff = order.portEta ?? portEta ?? null;
-  const availableForDiff = order.inboundWeekOverride ?? order.availableDate ?? availableDate ?? null;
+  const availableForDiff =
+    order.inboundWeekOverride ?? order.availableDate ?? availableDate ?? null;
 
   const computedProductionWeeks = weeksBetweenDates(
     productionStartForDiff,

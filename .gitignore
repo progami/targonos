@@ -65,6 +65,10 @@ apps/archived/**/prisma/*.db*
 
 # Env
 .env*
+env/shared.local.env
+env/shared.dev.env
+env/shared.production.env
+!env/shared.dev.ci.env
 *.mcp.json
 !apps/wms/.env.dev.ci
 !apps/xplan/.env.dev.ci
@@ -73,6 +77,8 @@ apps/archived/**/prisma/*.db*
 !apps/sso/.env.dev.ci
 !apps/plutus/.env.dev.ci
 !apps/argus/.env.dev.ci
+!apps/hermes/.env.dev.ci
+!apps/website/.env.dev.ci
 
 # Editor
 .DS_Store

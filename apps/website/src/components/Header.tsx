@@ -9,17 +9,37 @@ import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 
-const navLinks = [
+const productNavLinks = [
   { label: 'Packs', href: '/cs/us/packs' },
   { label: 'Where to buy', href: '/cs/us/where-to-buy' },
   { label: 'Support', href: '/cs/us/support' },
   { label: 'About', href: '/cs/us/about' }
 ];
 
+const homeNavLinks = [
+  { label: 'Purpose', href: '#purpose' },
+  { label: 'Mission', href: '#mission' },
+  { label: 'Vision', href: '#vision' },
+  { label: 'Values', href: '#values' },
+  { label: 'Our Brands', href: '#products' }
+];
+
 export function Header() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const navLinks = pathname === '/' ? homeNavLinks : productNavLinks;
+  const isActiveLink = (href: string) => {
+    if (href.startsWith('#')) {
+      return false;
+    }
+
+    if (pathname === href) {
+      return true;
+    }
+
+    return pathname.startsWith(`${href}/`);
+  };
 
   // Close the mobile menu on navigation.
   useEffect(() => {
@@ -59,7 +79,7 @@ export function Header() {
 
         <nav className="hidden items-center gap-6 md:flex">
           {navLinks.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            const active = isActiveLink(l.href);
             return (
               <Link
                 key={l.href}
@@ -99,11 +119,12 @@ export function Header() {
           <Container className="py-4">
             <div className="grid gap-2">
               {navLinks.map((l) => {
-                const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+                const active = isActiveLink(l.href);
                 return (
                   <Link
                     key={l.href}
                     href={l.href}
+                    onClick={() => setMobileOpen(false)}
                     className={cn(
                       'rounded-pill px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white',
                       active ? 'bg-white/5 text-white' : null

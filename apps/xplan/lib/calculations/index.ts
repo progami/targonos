@@ -1,7 +1,6 @@
 export * from './types';
 export * from './parameters';
 export * from './product';
-export * from './lead-times';
 export * from './ops';
 export * from './sales';
 export * from './finance';

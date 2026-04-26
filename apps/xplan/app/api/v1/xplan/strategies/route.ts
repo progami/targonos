@@ -544,8 +544,7 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
   const { assigneeId, assigneeIds, ...strategyUpdates } = data;
   const shouldUpdateAssignees =
     Boolean(body) && typeof body === 'object' && ('assigneeId' in body || 'assigneeIds' in body);
-  const hasPrimaryFlag =
-    Boolean(body) && typeof body === 'object' && 'isPrimary' in body;
+  const hasPrimaryFlag = Boolean(body) && typeof body === 'object' && 'isPrimary' in body;
 
   const actor = getStrategyActor(session);
 
@@ -712,126 +711,128 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
   }
 });
 
-export const DELETE = withXPlanAuth(async (request: Request, session) => {
-  const body = await request.json().catch(() => null);
-  const parsed = deleteSchema.safeParse(body);
+export const DELETE = withXPlanAuth(
+  async (request: Request, session) => {
+    const body = await request.json().catch(() => null);
+    const parsed = deleteSchema.safeParse(body);
 
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
-  }
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
+    }
 
-  const { id } = parsed.data;
+    const { id } = parsed.data;
 
-  const actor = getStrategyActor(session);
+    const actor = getStrategyActor(session);
 
-  if (!areStrategyAssignmentFieldsAvailable()) {
-    return strategyAccessUnavailableResponse();
-  }
+    if (!areStrategyAssignmentFieldsAvailable()) {
+      return strategyAccessUnavailableResponse();
+    }
 
-  let existing: any;
-  try {
-    existing = await prismaAny.strategy.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        region: true,
-        isDefault: true,
-        isPrimary: true,
-        strategyGroupId: true,
-        createdById: true,
-        createdByEmail: true,
-        assigneeId: true,
-        assigneeEmail: true,
-        strategyGroup: { select: strategyGroupSelect },
-        strategyAssignees: {
-          select: assigneeRelationSelect,
+    let existing: any;
+    try {
+      existing = await prismaAny.strategy.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          name: true,
+          region: true,
+          isDefault: true,
+          isPrimary: true,
+          strategyGroupId: true,
+          createdById: true,
+          createdByEmail: true,
+          assigneeId: true,
+          assigneeEmail: true,
+          strategyGroup: { select: strategyGroupSelect },
+          strategyAssignees: {
+            select: assigneeRelationSelect,
+          },
         },
-      },
-    });
-  } catch (error) {
-    if (!isStrategyAssignmentFieldsMissingError(error)) {
-      throw error;
-    }
-    markStrategyAssignmentFieldsUnavailable();
-    return strategyAccessUnavailableResponse();
-  }
-
-  if (!existing) {
-    return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
-  }
-
-  if (!canActorAccessStrategy(existing, actor)) {
-    return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
-  }
-
-  emitAuditEvent({
-    event: 'xplan.strategy.delete',
-    actor,
-    strategy: {
-      id,
-      name: existing.name,
-      region: existing.region,
-      isDefault: existing.isDefault,
-      isPrimary: existing.isPrimary,
-      strategyGroupId: existing.strategyGroupId,
-      strategyGroupCode: existing.strategyGroup?.code,
-      strategyGroupName: existing.strategyGroup?.name,
-      createdByEmail: existing.createdByEmail,
-      assigneeEmail: existing.assigneeEmail,
-      assigneeEmails: Array.isArray(existing.strategyAssignees)
-        ? existing.strategyAssignees.map((entry: any) => entry.assigneeEmail)
-        : [],
-    },
-    request: buildAuditRequestMeta(request),
-  });
-
-  const txResult = await prismaAny.$transaction(async (tx: any) => {
-    await tx.batchTableRow.deleteMany({
-      where: { purchaseOrder: { strategyId: id } },
-    });
-    await tx.purchaseOrderPayment.deleteMany({
-      where: { purchaseOrder: { strategyId: id } },
-    });
-    await tx.logisticsEvent.deleteMany({
-      where: { purchaseOrder: { strategyId: id } },
-    });
-    await tx.purchaseOrder.deleteMany({ where: { strategyId: id } });
-    await tx.salesWeek.deleteMany({ where: { strategyId: id } });
-    await tx.leadTimeOverride.deleteMany({
-      where: { product: { strategyId: id } },
-    });
-    await tx.businessParameter.deleteMany({ where: { strategyId: id } });
-    await tx.profitAndLossWeek.deleteMany({ where: { strategyId: id } });
-    await tx.cashFlowWeek.deleteMany({ where: { strategyId: id } });
-    await tx.monthlySummary.deleteMany({ where: { strategyId: id } });
-    await tx.quarterlySummary.deleteMany({ where: { strategyId: id } });
-    await tx.product.deleteMany({ where: { strategyId: id } });
-    await tx.strategy.delete({ where: { id } });
-
-    const remainingStrategies = await tx.strategy.findMany({
-      where: { strategyGroupId: existing.strategyGroupId },
-      select: { id: true, isPrimary: true, updatedAt: true },
-      orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
-    });
-
-    if (remainingStrategies.length === 0) {
-      await tx.strategyGroup.delete({ where: { id: existing.strategyGroupId } });
-      return { deletedGroup: true, promotedId: null as string | null };
-    }
-
-    const hasPrimary = remainingStrategies.some((strategy: { isPrimary: boolean }) => strategy.isPrimary);
-    if (!hasPrimary) {
-      const promoted = remainingStrategies[0];
-      await tx.strategy.update({
-        where: { id: promoted.id },
-        data: { isPrimary: true },
       });
-      return { deletedGroup: false, promotedId: promoted.id };
+    } catch (error) {
+      if (!isStrategyAssignmentFieldsMissingError(error)) {
+        throw error;
+      }
+      markStrategyAssignmentFieldsUnavailable();
+      return strategyAccessUnavailableResponse();
     }
 
-    return { deletedGroup: false, promotedId: null as string | null };
-  });
+    if (!existing) {
+      return NextResponse.json({ error: 'Strategy not found' }, { status: 404 });
+    }
 
-  return NextResponse.json({ ok: true, ...txResult });
-}, { rateLimit: EXPENSIVE_RATE_LIMIT });
+    if (!canActorAccessStrategy(existing, actor)) {
+      return NextResponse.json({ error: 'No access to strategy' }, { status: 403 });
+    }
+
+    emitAuditEvent({
+      event: 'xplan.strategy.delete',
+      actor,
+      strategy: {
+        id,
+        name: existing.name,
+        region: existing.region,
+        isDefault: existing.isDefault,
+        isPrimary: existing.isPrimary,
+        strategyGroupId: existing.strategyGroupId,
+        strategyGroupCode: existing.strategyGroup?.code,
+        strategyGroupName: existing.strategyGroup?.name,
+        createdByEmail: existing.createdByEmail,
+        assigneeEmail: existing.assigneeEmail,
+        assigneeEmails: Array.isArray(existing.strategyAssignees)
+          ? existing.strategyAssignees.map((entry: any) => entry.assigneeEmail)
+          : [],
+      },
+      request: buildAuditRequestMeta(request),
+    });
+
+    const txResult = await prismaAny.$transaction(async (tx: any) => {
+      await tx.batchTableRow.deleteMany({
+        where: { purchaseOrder: { strategyId: id } },
+      });
+      await tx.purchaseOrderPayment.deleteMany({
+        where: { purchaseOrder: { strategyId: id } },
+      });
+      await tx.logisticsEvent.deleteMany({
+        where: { purchaseOrder: { strategyId: id } },
+      });
+      await tx.purchaseOrder.deleteMany({ where: { strategyId: id } });
+      await tx.salesWeek.deleteMany({ where: { strategyId: id } });
+      await tx.businessParameter.deleteMany({ where: { strategyId: id } });
+      await tx.profitAndLossWeek.deleteMany({ where: { strategyId: id } });
+      await tx.cashFlowWeek.deleteMany({ where: { strategyId: id } });
+      await tx.monthlySummary.deleteMany({ where: { strategyId: id } });
+      await tx.quarterlySummary.deleteMany({ where: { strategyId: id } });
+      await tx.product.deleteMany({ where: { strategyId: id } });
+      await tx.strategy.delete({ where: { id } });
+
+      const remainingStrategies = await tx.strategy.findMany({
+        where: { strategyGroupId: existing.strategyGroupId },
+        select: { id: true, isPrimary: true, updatedAt: true },
+        orderBy: [{ isPrimary: 'desc' }, { updatedAt: 'desc' }],
+      });
+
+      if (remainingStrategies.length === 0) {
+        await tx.strategyGroup.delete({ where: { id: existing.strategyGroupId } });
+        return { deletedGroup: true, promotedId: null as string | null };
+      }
+
+      const hasPrimary = remainingStrategies.some(
+        (strategy: { isPrimary: boolean }) => strategy.isPrimary,
+      );
+      if (!hasPrimary) {
+        const promoted = remainingStrategies[0];
+        await tx.strategy.update({
+          where: { id: promoted.id },
+          data: { isPrimary: true },
+        });
+        return { deletedGroup: false, promotedId: promoted.id };
+      }
+
+      return { deletedGroup: false, promotedId: null as string | null };
+    });
+
+    return NextResponse.json({ ok: true, ...txResult });
+  },
+  { rateLimit: EXPENSIVE_RATE_LIMIT },
+);

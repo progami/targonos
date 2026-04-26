@@ -1,10 +1,10 @@
-import { render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { StrategyTable } from '@/components/sheets/strategy-table'
+import { render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrategyTable } from '@/components/sheets/strategy-table';
 
-const pushMock = vi.fn()
-const refreshMock = vi.fn()
-let searchParamsInstance = new URLSearchParams()
+const pushMock = vi.fn();
+const refreshMock = vi.fn();
+let searchParamsInstance = new URLSearchParams();
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -12,7 +12,7 @@ vi.mock('next/navigation', () => ({
     refresh: refreshMock,
   }),
   useSearchParams: () => searchParamsInstance,
-}))
+}));
 
 const strategies = [
   {
@@ -43,23 +43,24 @@ const strategies = [
       salesWeeks: 0,
     },
   },
-] as const
+] as const;
 
 describe('StrategyTable', () => {
   beforeEach(() => {
-    pushMock.mockReset()
-    refreshMock.mockReset()
-    searchParamsInstance = new URLSearchParams()
+    pushMock.mockReset();
+    refreshMock.mockReset();
+    searchParamsInstance = new URLSearchParams();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(JSON.stringify({ assignees: [], directoryConfigured: true }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ assignees: [], directoryConfigured: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
       ),
-    )
-  })
+    );
+  });
 
   it('renders compact scenario controls without explanatory roster copy', () => {
     render(
@@ -69,15 +70,21 @@ describe('StrategyTable', () => {
         viewer={{ id: null, email: null, isSuperAdmin: false }}
         keyParametersByStrategyId={{}}
       />,
-    )
+    );
 
-    expect(screen.queryByText('Scenario Roster')).not.toBeInTheDocument()
+    expect(screen.queryByText('Scenario Roster')).not.toBeInTheDocument();
     expect(
-      screen.queryByText('Switch the workbook between active planning scenarios without leaving setup.'),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByText('demo-strategy')).not.toBeInTheDocument()
-    expect(screen.getByText('Live')).toHaveClass('dark:bg-emerald-500/10')
-    expect(screen.getByRole('button', { name: 'All' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'New Scenario' })).toBeVisible()
-  })
-})
+      screen.queryByText(
+        'Switch the workbook between active planning scenarios without leaving setup.',
+      ),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('demo-strategy')).not.toBeInTheDocument();
+    expect(screen.getByText('Live')).toHaveClass('dark:bg-emerald-500/18');
+    expect(screen.getByRole('row', { name: /Demo Strategy/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(screen.getByRole('button', { name: 'All' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'New Scenario' })).toBeVisible();
+  });
+});

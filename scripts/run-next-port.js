@@ -3,7 +3,8 @@ const { spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 
-const ENV_FILE_CANDIDATES = ['.env.local', '.env.development', '.env.production', '.env']
+const { defaultRepoRoot, loadEnvForApp } = require('./lib/shared-env.cjs')
+
 const ENV_ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/
 
 function parsePortFromEnvText(text) {
@@ -31,19 +32,51 @@ function parsePortFromEnvText(text) {
 }
 
 function resolvePortFromAppEnv(appDir) {
-  for (const candidate of ENV_FILE_CANDIDATES) {
-    const envPath = path.join(appDir, candidate)
-    if (!fs.existsSync(envPath)) {
-      continue
-    }
-
-    const port = parsePortFromEnvText(fs.readFileSync(envPath, 'utf8'))
-    if (port !== null) {
-      return port
-    }
+  const envPath = path.join(appDir, '.env.local')
+  if (!fs.existsSync(envPath)) {
+    throw new Error('PORT must be defined in an app env file.')
   }
 
-  throw new Error('PORT must be defined in an app env file.')
+  const port = parsePortFromEnvText(fs.readFileSync(envPath, 'utf8'))
+  if (port === null) {
+    throw new Error('PORT must be defined in an app env file.')
+  }
+  return port
+}
+
+function resolveAppName(appDir, repoRoot) {
+  const relativePath = path.relative(path.join(repoRoot, 'apps'), appDir)
+  const parts = relativePath.split(path.sep)
+  if (parts.length > 0) {
+    if (parts[0]) {
+      return parts[0]
+    }
+  }
+  return path.basename(appDir)
+}
+
+function loadEnvAndResolvePort({
+  repoRoot = defaultRepoRoot(),
+  appName,
+  appDir = process.cwd(),
+  targetEnv = process.env,
+}) {
+  const resolvedAppName = appName ? appName : resolveAppName(appDir, repoRoot)
+  loadEnvForApp({
+    repoRoot,
+    appName: resolvedAppName,
+    mode: 'local',
+    targetEnv,
+  })
+
+  const port = targetEnv.PORT
+  if (!port) {
+    throw new Error('PORT must be defined in an app env file.')
+  }
+  if (!/^\d+$/.test(port)) {
+    throw new Error(`Invalid PORT value "${port}" in env file.`)
+  }
+  return Number(port)
 }
 
 function resolveNextCommand() {
@@ -69,7 +102,11 @@ function runCli() {
 
   let port
   try {
-    port = resolvePortFromAppEnv(process.cwd())
+    port = loadEnvAndResolvePort({
+      repoRoot: defaultRepoRoot(),
+      appDir: process.cwd(),
+      targetEnv: process.env,
+    })
   } catch (error) {
     console.error(`[run-next-port] ${error.message}`)
     process.exit(1)
@@ -101,6 +138,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  loadEnvAndResolvePort,
   parsePortFromEnvText,
   resolvePortFromAppEnv,
 }

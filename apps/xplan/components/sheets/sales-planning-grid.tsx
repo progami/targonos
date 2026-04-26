@@ -94,6 +94,37 @@ const BASE_SALES_METRICS = [
   'finalSales',
 ] as const;
 
+type SalesMetricField = (typeof BASE_SALES_METRICS)[number];
+
+const SALES_METRIC_LABELS: Record<SalesMetricField, string> = {
+  inbound: 'INBOUND',
+  threePl: '3PL',
+  fba: 'FBA',
+  fbaCoverWeeks: 'FBA COVER (W)',
+  totalCoverWeeks: 'TOTAL COVER (W)',
+  actualSales: 'ACTUAL',
+  forecastSales: 'PLANNER',
+  finalSales: 'FINAL',
+};
+
+const SALES_METRIC_COLUMN_WIDTHS: Record<SalesMetricField, number> = {
+  inbound: 104,
+  threePl: 88,
+  fba: 88,
+  fbaCoverWeeks: 136,
+  totalCoverWeeks: 152,
+  actualSales: 100,
+  forecastSales: 108,
+  finalSales: 96,
+};
+
+function getSalesMetricLabel(field: string): string {
+  if (field in SALES_METRIC_LABELS) {
+    return SALES_METRIC_LABELS[field as SalesMetricField];
+  }
+  return field;
+}
+
 function isEditableMetric(field: string | undefined) {
   return Boolean(field && editableMetrics.has(field));
 }
@@ -569,29 +600,16 @@ export function SalesPlanningGrid({
           if (!key) return null;
           return columnHelper.accessor((row) => row[key] ?? '', {
             id: key,
-            header: () => {
-              const labelMap: Record<string, string> = {
-                inbound: 'INBOUND',
-                threePl: '3PL',
-                fba: 'FBA',
-                fbaCoverWeeks: 'FBA COVER (W)',
-                totalCoverWeeks: 'TOTAL COVER (W)',
-                actualSales: 'ACTUAL',
-                forecastSales: 'PLANNER',
-                finalSales: 'FINAL',
-              };
-
-              return (
-                <span className="text-xs font-medium text-muted-foreground">
-                  {labelMap[field] ?? field}
-                </span>
-              );
-            },
+            header: () => (
+              <span className="inline-flex min-h-8 w-full items-center justify-center text-center text-xs font-medium leading-tight text-muted-foreground">
+                {getSalesMetricLabel(field)}
+              </span>
+            ),
             meta: {
               kind: 'metric',
               productId: product.id,
               field,
-              width: 110,
+              width: SALES_METRIC_COLUMN_WIDTHS[field],
             },
           });
         })
@@ -599,12 +617,7 @@ export function SalesPlanningGrid({
     });
 
     return [...baseColumns, ...productColumns];
-  }, [
-    columnHelper,
-    displayedProducts,
-    keyByProductField,
-    metricSequence,
-  ]);
+  }, [columnHelper, displayedProducts, keyByProductField, metricSequence]);
 
   const table = useReactTable({
     data: visibleRows,
@@ -749,11 +762,11 @@ export function SalesPlanningGrid({
             ? 'ACTUAL'
             : forecast != null
               ? 'PLANNER'
-                : sourceRaw === 'SYSTEM' && currentFinal != null
-                  ? 'SYSTEM'
-                  : sourceRaw === 'OVERRIDE' && currentFinal != null
-                    ? 'OVERRIDE'
-                    : 'ZERO';
+              : sourceRaw === 'SYSTEM' && currentFinal != null
+                ? 'SYSTEM'
+                : sourceRaw === 'OVERRIDE' && currentFinal != null
+                  ? 'OVERRIDE'
+                  : 'ZERO';
       }
 
       if (Number.isFinite(warningThreshold) && warningThreshold > 0) {
@@ -2134,27 +2147,13 @@ export function SalesPlanningGrid({
     [focusContext, focusProductId, preserveGridScroll, productOptions],
   );
 
-  const renderMetricHeader = useCallback(
-    (field: string) => {
-      const labelMap: Record<string, string> = {
-        inbound: 'INBOUND',
-        threePl: '3PL',
-        fba: 'FBA',
-        fbaCoverWeeks: 'FBA COVER (W)',
-        totalCoverWeeks: 'TOTAL COVER (W)',
-        actualSales: 'ACTUAL',
-        forecastSales: 'PLANNER',
-        finalSales: 'FINAL',
-      };
-
-      return (
-        <span className="text-xs font-medium text-muted-foreground">
-          {labelMap[field] ?? field}
-        </span>
-      );
-    },
-    [],
-  );
+  const renderMetricHeader = useCallback((field: string) => {
+    return (
+      <span className="inline-flex min-h-8 w-full items-center justify-center text-center text-xs font-medium leading-tight text-muted-foreground">
+        {getSalesMetricLabel(field)}
+      </span>
+    );
+  }, []);
 
   return (
     <section className="space-y-4">
@@ -2169,15 +2168,15 @@ export function SalesPlanningGrid({
           className="fixed left-0 top-0 h-1 w-1 opacity-0 pointer-events-none"
           onPaste={handleClipboardPaste}
         />
-	        <div
-	          ref={scrollRef}
-	          tabIndex={0}
-	          className="h-full select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-	          onPointerDownCapture={() => {
-	            if (!editingCell) {
-	              scrollRef.current?.focus();
-	            }
-	          }}
+        <div
+          ref={scrollRef}
+          tabIndex={0}
+          className="h-full select-none overflow-auto outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          onPointerDownCapture={() => {
+            if (!editingCell) {
+              scrollRef.current?.focus();
+            }
+          }}
           onKeyDown={handleKeyDown}
           onCopy={handleCopy}
           onPaste={handlePaste}
@@ -2242,9 +2241,10 @@ export function SalesPlanningGrid({
                       <TableHead
                         key={`${product.id}:${columnId}`}
                         className={cn(
-                          'sticky top-10 z-20 h-10 whitespace-nowrap border-b border-r px-2 py-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300/80',
+                          'sticky top-10 z-20 h-12 whitespace-normal break-words border-b border-r px-2 py-1.5 text-center text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 dark:text-cyan-300/80',
                           isInputColumn ? 'bg-cyan-100/90 dark:bg-cyan-900/50' : 'bg-muted',
-                          isEditableMetric(field) && 'border-b-[3px] border-b-cyan-500/50 dark:border-b-[#00C2B9]/40',
+                          isEditableMetric(field) &&
+                            'border-b-[3px] border-b-cyan-500/50 dark:border-b-[#00C2B9]/40',
                         )}
                       >
                         {renderMetricHeader(field)}
@@ -2261,7 +2261,12 @@ export function SalesPlanningGrid({
                   className={cn(
                     'hover:bg-transparent',
                     visibleRowIndex % 2 === 1 && 'bg-slate-50 dark:bg-slate-800/40',
-                    visibleRowIndex > 0 && isMonthBoundary(row.original.weekDate ?? '', table.getRowModel().rows[visibleRowIndex - 1]?.original.weekDate) && 'border-t-2 border-t-slate-300 dark:border-t-slate-600',
+                    visibleRowIndex > 0 &&
+                      isMonthBoundary(
+                        row.original.weekDate ?? '',
+                        table.getRowModel().rows[visibleRowIndex - 1]?.original.weekDate,
+                      ) &&
+                      'border-t-2 border-t-slate-300 dark:border-t-slate-600',
                   )}
                 >
                   {leafColumns.map((column, colIndex) => {
@@ -2349,22 +2354,22 @@ export function SalesPlanningGrid({
                     );
 
                     const cell = (
-	                      <TableCell
-	                        key={column.id}
-	                        className={cn(
-	                          'h-9 select-none whitespace-nowrap border-r px-2.5 py-0.5 text-sm overflow-hidden',
-	                          meta?.sticky
-	                            ? isEvenRow
-	                              ? 'bg-muted'
-	                              : 'bg-card'
+                      <TableCell
+                        key={column.id}
+                        className={cn(
+                          'h-9 select-none whitespace-nowrap border-r px-2.5 py-0.5 text-sm overflow-hidden',
+                          meta?.sticky
+                            ? isEvenRow
+                              ? 'bg-muted'
+                              : 'bg-card'
                             : isEvenRow
                               ? 'bg-slate-50 dark:bg-slate-800/40'
                               : 'bg-card',
-                          isWeekCellWithActualData &&
-                            'bg-cyan-100 dark:bg-cyan-900/50',
+                          isWeekCellWithActualData && 'bg-cyan-100 dark:bg-cyan-900/50',
                           meta?.sticky && 'sticky z-10',
                           colIndex === 2 && 'border-r-2',
-                          productBoundaryColumns.firstColIndices.has(colIndex) && 'border-l-[3px] border-l-cyan-400/50 dark:border-l-cyan-500/30',
+                          productBoundaryColumns.firstColIndices.has(colIndex) &&
+                            'border-l-[3px] border-l-cyan-400/50 dark:border-l-cyan-500/30',
                           presentation.isEditable && 'cursor-text font-medium',
                           presentation.isEditable &&
                             presentation.highlight === 'none' &&
