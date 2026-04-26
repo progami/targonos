@@ -97,6 +97,28 @@ test('hosted deploys load exact shared and app env files without .env.local fall
   )
 })
 
+test('argus deploy requires explicit media backend before prebuild repair', () => {
+  assert.match(
+    deployScript,
+    /normalize_argus_media_backend\(\)[\s\S]*?error "ARGUS_MEDIA_BACKEND is required for argus deployments"/,
+  )
+  assert.match(
+    deployScript,
+    /if \[\[ "\$media_backend" == "s3" \]\]; then[\s\S]*?Skipping Argus local media repair/,
+  )
+})
+
+test('hermes hosted deploy rejects runtime auto migration', () => {
+  assert.match(
+    deployScript,
+    /validate_hermes_env\(\)[\s\S]*?HERMES_AUTO_MIGRATE must be 0 for hosted hermes deployments/,
+  )
+  assert.match(
+    deployScript,
+    /if \[\[ "\$app_key" == "hermes" \]\]; then\s+validate_hermes_env\s+fi/,
+  )
+})
+
 test('pm2 starts scrub workflow-inherited database and hosted runtime env', () => {
   const match = deployScript.match(/run_pm2_sanitized\(\) \{[\s\S]*?\n\}/)
   assert.ok(match, 'run_pm2_sanitized block should exist')
