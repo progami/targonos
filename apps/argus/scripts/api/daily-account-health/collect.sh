@@ -3,7 +3,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG="/tmp/daily-account-health.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 MARKET="us"
@@ -35,6 +34,12 @@ case "$MARKET" in
     exit 1
     ;;
 esac
+
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/daily-account-health.log"
+else
+  LOG="/tmp/daily-account-health-$MARKET.log"
+fi
 
 if ! NODE_BIN="$(command -v node)"; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') — Collection FAILED (node not found in PATH=$PATH)" >> "$LOG"

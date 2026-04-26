@@ -39,7 +39,11 @@ case "$MARKET" in
     ;;
 esac
 
-LOG="/tmp/weekly-browser-sources.log"
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/weekly-browser-sources.log"
+else
+  LOG="/tmp/weekly-browser-sources-$MARKET.log"
+fi
 RUN_LOG_WRITER="$REPO_ROOT/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
 WPR_SYNC_SCRIPT="$REPO_ROOT/apps/argus/scripts/lib/sync-wpr-workspace.sh"
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"

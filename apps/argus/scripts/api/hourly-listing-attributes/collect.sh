@@ -8,7 +8,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG="/tmp/hourly-listing-attributes-api.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 MARKET="us"
@@ -40,6 +39,12 @@ case "$MARKET" in
     exit 1
     ;;
 esac
+
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/hourly-listing-attributes-api.log"
+else
+  LOG="/tmp/hourly-listing-attributes-api-$MARKET.log"
+fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — Starting hourly listing attributes collection (market=$MARKET)" >> "$LOG"
 

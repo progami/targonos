@@ -13,7 +13,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG="/tmp/weekly-api-sources.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 WPR_SYNC_SCRIPT="$SCRIPT_DIR/../../lib/sync-wpr-workspace.sh"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -62,7 +61,18 @@ case "$MARKET" in
     ;;
 esac
 
-if [ -n "$START_DATE" ] && [ -z "$END_DATE" ] || [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/weekly-api-sources.log"
+else
+  LOG="/tmp/weekly-api-sources-$MARKET.log"
+fi
+
+if [ -n "$START_DATE" ] && [ -z "$END_DATE" ]; then
+  echo "Both --start-date and --end-date are required together." >&2
+  exit 1
+fi
+
+if [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
   echo "Both --start-date and --end-date are required together." >&2
   exit 1
 fi
