@@ -8,15 +8,15 @@ source "$SCRIPT_DIR/../common.sh"
 load_monitoring_env
 
 DEST="${ARGUS_CATEGORY_INSIGHTS_DEST:-$(argus_monitoring_root)/Weekly/Category Insights (Browser)}"
-LOG="${ARGUS_CATEGORY_INSIGHTS_LOG:-/tmp/weekly-category-insights.log}"
-TARGET_URL="https://sellercentral.amazon.com/selection/category-insights"
-TARGET_MARKETPLACE_ID="ATVPDKIKX0DER"
-TARGET_MARKETPLACE_LABEL="United States"
-TARGET_SEARCH_TERM="Painting Drop Cloths"
-TARGET_CATEGORY_ID="Tools & Home Improvement"
-TARGET_PRODUCT_TYPE_ID="BUILDING_MATERIAL"
-TARGET_PRODUCT_TYPE_LABEL="Building Material"
-TARGET_BROWSE_NODE_ID="13399811"
+LOG="${ARGUS_CATEGORY_INSIGHTS_LOG:-$(argus_tmp_log_path weekly-category-insights)}"
+TARGET_URL="$(require_market_env ARGUS_CATEGORY_INSIGHTS_URL)"
+TARGET_MARKETPLACE_ID="$(require_market_env ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID)"
+TARGET_MARKETPLACE_LABEL="$(require_market_env ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL)"
+TARGET_SEARCH_TERM="$(require_market_env ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM)"
+TARGET_CATEGORY_ID="$(require_market_env ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID)"
+TARGET_PRODUCT_TYPE_ID="$(require_market_env ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID)"
+TARGET_PRODUCT_TYPE_LABEL="$(require_market_env ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL)"
+TARGET_BROWSE_NODE_ID="$(require_market_env ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID)"
 
 IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(latest_complete_week_context)"
 TODAY=$(date '+%Y-%m-%d')
@@ -31,6 +31,27 @@ open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+
+wait_for_target_page() {
+  local expected_url="$1"
+  local actual_href=""
+
+  for _ in $(seq 1 60); do
+    actual_href="$(run_js "location.href")"
+    if [ "$actual_href" = "$expected_url" ]; then
+      printf '%s' "$actual_href"
+      return 0
+    fi
+    if is_amazon_login_url "$actual_href"; then
+      printf '%s' "$actual_href"
+      return 0
+    fi
+    sleep 1
+  done
+
+  printf '%s' "$actual_href"
+  return 1
+}
 
 json_stringify() {
   "$NODE_BIN" -e '
@@ -99,13 +120,14 @@ post_json_from_page() {
   path_literal=$(json_stringify "$path")
   payload_literal=$(json_stringify "$payload")
   js="(() => {
+    const endpoint = new URL(${path_literal}, location.origin).toString();
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', ${path_literal}, false);
+    xhr.open('POST', endpoint, false);
     xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
     xhr.send(${payload_literal});
     if (xhr.status !== 200) {
       const responseText = xhr.responseText ?? '';
-      throw new Error('HTTP ' + xhr.status + ' from ' + ${path_literal} + ': ' + responseText.slice(0, 500));
+      throw new Error('HTTP ' + xhr.status + ' from ' + endpoint + ': ' + responseText.slice(0, 500));
     }
     return xhr.responseText;
   })();"
@@ -337,12 +359,18 @@ log "Starting weekly Category Insights: $PREFIX"
 open_window "$TARGET_URL"
 wait_tab
 
-current_url=$(tab_url)
+current_url="$(wait_for_target_page "$TARGET_URL")"
 if is_amazon_login_url "$current_url"; then
   log "Seller Central session expired — attempting relogin"
   bash "$SCRIPT_DIR/../relogin.sh" "$TARGET_URL"
   open_window "$TARGET_URL"
   wait_tab
+  current_url="$(wait_for_target_page "$TARGET_URL")"
+fi
+
+if [ "$current_url" != "$TARGET_URL" ]; then
+  log "FAILED: Category Insights route stabilized on unexpected URL $current_url"
+  exit 1
 fi
 
 SEARCH_PAYLOAD="$(build_search_payload)"

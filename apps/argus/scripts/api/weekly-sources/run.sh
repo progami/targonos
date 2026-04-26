@@ -77,10 +77,6 @@ if [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
   exit 1
 fi
 
-DATE_FLAGS=""
-if [ -n "$START_DATE" ]; then
-  DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
-fi
 MARKET_FLAG="--market $MARKET"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
@@ -91,6 +87,33 @@ if ! NODE_BIN="$(command -v node)"; then
   log "FAILED: Node.js not found in PATH=$PATH"
   exit 1
 fi
+
+if [ -z "$START_DATE" ]; then
+  IFS='|' read -r START_DATE END_DATE <<<"$("$NODE_BIN" - <<'NODE'
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const today = new Date()
+const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+const day = todayLocal.getDay()
+let daysBackToCompletedSaturday = day === 6 ? 7 : (day + 1) % 7
+if (day === 0) {
+  daysBackToCompletedSaturday += 7
+}
+const weekEndDate = new Date(todayLocal)
+weekEndDate.setDate(weekEndDate.getDate() - daysBackToCompletedSaturday)
+const weekStartDate = new Date(weekEndDate)
+weekStartDate.setDate(weekStartDate.getDate() - 6)
+process.stdout.write(`${formatDate(weekStartDate)}|${formatDate(weekEndDate)}`)
+NODE
+)"
+fi
+
+DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
+log "Weekly API source window: $START_DATE..$END_DATE"
 
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
 RUN_STARTED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"

@@ -9,9 +9,9 @@ load_monitoring_env
 
 DEST="${ARGUS_BRAND_METRICS_DEST:-$(argus_monitoring_root)/Weekly/Ad Console/Brand Metrics (Browser)}"
 DL="${ARGUS_BRAND_METRICS_DOWNLOAD_DIR:-$HOME/Downloads}"
-LOG="${ARGUS_BRAND_METRICS_LOG:-/tmp/weekly-brand-metrics.log}"
-TARGET_URL_BASE="https://advertising.amazon.com/bb/bm/overview?entityId=ENTITY2JBRT701DBI1P&brand=1113309&category=228899"
-DOWNLOAD_PATTERN="$DL/Caelum_Star_*_Overview_*.csv"
+LOG="${ARGUS_BRAND_METRICS_LOG:-$(argus_tmp_log_path weekly-brand-metrics)}"
+TARGET_URL_BASE="$(require_market_env ARGUS_BRAND_METRICS_URL_BASE)"
+DOWNLOAD_PATTERN="$DL/$(require_market_env ARGUS_BRAND_METRICS_DOWNLOAD_GLOB)"
 REFERENCE_DATE="$(date '+%Y-%m-%d')"
 
 if [ "$#" -eq 2 ]; then
@@ -49,25 +49,26 @@ process.stdout.write(value == null ? "" : String(value));
 
 page_state() {
   run_js '(() => {
-    const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
     const bodyText = clean(document.body ? document.body.innerText : "");
-    const dateButton = Array.from(document.querySelectorAll("button")).find((el) =>
-      clean(el.innerText || el.textContent).startsWith("Date range")
+    const dateButton = Array.from(document.querySelectorAll("button,[role=button]")).find((el) =>
+      clean(el.innerText ?? el.textContent).startsWith("Date range")
     );
     const exportButton = Array.from(document.querySelectorAll("button")).find((el) =>
-      clean(el.innerText || el.textContent) === "Export"
+      clean(el.innerText ?? el.textContent) === "Export"
     );
-    const currentPeriod = bodyText.match(/Current period \(([^)]+)\)/)?.[1] || "";
+    const currentPeriod = bodyText.match(/Current period \(([^)]+)\)/)?.[1] ?? "";
     const noData = bodyText.includes("No data available");
-    const loginRequired =
-      location.href.includes("signin") ||
-      location.href.includes("/ap/") ||
-      /sign in|enter the characters you see below|solve this puzzle/i.test(bodyText);
+    const loginRequired = [
+      location.href.includes("signin"),
+      location.href.includes("/ap/"),
+      /sign in|enter the characters you see below|solve this puzzle/i.test(bodyText),
+    ].some(Boolean);
 
     return JSON.stringify({
-      href: location.href || "",
-      title: document.title || "",
-      dateButtonText: clean(dateButton?.innerText || dateButton?.textContent || ""),
+      href: location.href ?? "",
+      title: document.title ?? "",
+      dateButtonText: clean(dateButton?.innerText ?? dateButton?.textContent ?? ""),
       exportPresent: Boolean(exportButton),
       currentPeriod,
       noData,
@@ -125,9 +126,9 @@ PY
 
 open_date_picker() {
   run_js '(() => {
-    const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
-    const button = Array.from(document.querySelectorAll("button")).find((el) =>
-      clean(el.innerText || el.textContent).startsWith("Date range")
+    const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+    const button = Array.from(document.querySelectorAll("button,[role=button]")).find((el) =>
+      clean(el.innerText ?? el.textContent).startsWith("Date range")
     );
     if (!button) return "NO_DATE_BUTTON";
     button.click();
@@ -135,16 +136,32 @@ open_date_picker() {
   })();'
 }
 
+wait_open_date_picker() {
+  local status=""
+
+  for _ in $(seq 1 30); do
+    status="$(open_date_picker)"
+    if [ "$status" = "DATE_PICKER_OPENED" ]; then
+      printf '%s' "$status"
+      return 0
+    fi
+    sleep 2
+  done
+
+  printf '%s' "$status"
+  return 1
+}
+
 apply_last_available_week() {
   run_js '(() => {
-    const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+    const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
     const option = Array.from(document.querySelectorAll("[role=option], button, div, span")).find((el) =>
-      clean(el.innerText || el.textContent) === "Last available week"
+      clean(el.innerText ?? el.textContent) === "Last available week"
     );
     if (!option) return "NO_LAST_AVAILABLE_WEEK_OPTION";
     option.click();
     const save = Array.from(document.querySelectorAll("button")).find((el) =>
-      clean(el.innerText || el.textContent) === "Save"
+      clean(el.innerText ?? el.textContent) === "Save"
     );
     if (!save) return "NO_SAVE_BUTTON";
     save.click();
@@ -345,7 +362,7 @@ sleep 8
 wait_tab
 
 current_url="$(tab_url)"
-if [[ "$current_url" == *"signin"* || "$current_url" == *"/ap/"* ]]; then
+if is_amazon_login_url "$current_url"; then
   log "FAILED: Brand Metrics requires an authenticated Chrome session"
   exit 1
 fi
@@ -363,7 +380,7 @@ if [ "$REQUEST_MODE" = "explicit-week" ]; then
     exit 1
   fi
 else
-  if [ "$(open_date_picker)" != "DATE_PICKER_OPENED" ]; then
+  if [ "$(wait_open_date_picker)" != "DATE_PICKER_OPENED" ]; then
     log "FAILED: Brand Metrics date picker button not found"
     exit 1
   fi

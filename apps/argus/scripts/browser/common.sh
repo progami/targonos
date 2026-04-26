@@ -365,6 +365,56 @@ argus_market() {
   esac
 }
 
+argus_market_env_suffix() {
+  local market
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      printf '%s' 'US'
+      ;;
+    uk)
+      printf '%s' 'UK'
+      ;;
+  esac
+}
+
+argus_market_env_name() {
+  local base_name="$1"
+  printf '%s_%s' "$base_name" "$(argus_market_env_suffix)"
+}
+
+require_market_env() {
+  local base_name="$1"
+  require_env "$(argus_market_env_name "$base_name")"
+}
+
+argus_tmp_log_path() {
+  local log_name="$1"
+  local market
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      printf '/tmp/%s.log' "$log_name"
+      ;;
+    uk)
+      printf '/tmp/%s-%s.log' "$log_name" "$market"
+      ;;
+  esac
+}
+
+seller_central_host_globs() {
+  local host
+  host="$(require_market_env ARGUS_SELLER_CENTRAL_HOST)"
+  case "$(argus_market)" in
+    us)
+      printf '%s' "$host,amazon.com"
+      ;;
+    uk)
+      printf '%s' "$host,amazon.co.uk,amazon.com"
+      ;;
+  esac
+}
+
 argus_sales_root() {
   local market
   local env_name
@@ -395,7 +445,14 @@ PY
 
 is_amazon_login_url() {
   local url="${1:-}"
-  [[ "$url" == *"amazon.com/ap/"* || "$url" == *"signin"* ]]
+  case "$url" in
+    *"amazon.com/ap/"*|*"amazon.co.uk/ap/"*|*"signin"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 copy_file_with_node() {

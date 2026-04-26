@@ -88,8 +88,9 @@ run_script() {
   local name="$1"
   local script="$2"
   local detail_log="$3"
+  local detail_log_env="$4"
   log "Running: $name"
-  if ARGUS_MARKET="$MARKET" bash "$script"; then
+  if env ARGUS_MARKET="$MARKET" "$detail_log_env=$detail_log" bash "$script"; then
     log "OK: $name"
   else
     local exit_code=$?
@@ -101,11 +102,11 @@ run_script() {
   sleep 5
 }
 
-run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh" "/tmp/weekly-category-insights.log"
-run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "/tmp/weekly-poe.log"
-run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "/tmp/weekly-scaleinsights.log"
+run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh" "$(argus_tmp_log_path weekly-category-insights)" "ARGUS_CATEGORY_INSIGHTS_LOG"
+run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "$(argus_tmp_log_path weekly-poe)" "ARGUS_POE_LOG"
+run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "$(argus_tmp_log_path weekly-scaleinsights)" "ARGUS_SCALEINSIGHTS_LOG"
 log "Brand Metrics note: $BRAND_METRICS_SOURCE_LIMIT_NOTE"
-run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "/tmp/weekly-brand-metrics.log"
+run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "$(argus_tmp_log_path weekly-brand-metrics)" "ARGUS_BRAND_METRICS_LOG"
 
 if [ "$FAILED" -eq 0 ]; then
   log "Running: WPR workspace sync"

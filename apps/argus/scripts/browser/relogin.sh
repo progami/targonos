@@ -5,15 +5,21 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
+load_monitoring_env
 
-TARGET_URL="${1:-https://sellercentral.amazon.com/home}"
+if [ "$#" -gt 0 ]; then
+  TARGET_URL="$1"
+else
+  TARGET_URL="$(require_market_env ARGUS_SELLER_CENTRAL_HOME_URL)"
+fi
 SELLER_CENTRAL_LOGIN_USERNAME="shoaibgondal@targonglobal.com"
-SELLER_CENTRAL_LOGIN_QUERY="${ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY:-sellercentral.amazon.com}"
-SELLER_CENTRAL_ACCOUNT_LABEL="Targon LLC"
-SELLER_CENTRAL_MARKETPLACE_LABEL="United States"
+SELLER_CENTRAL_LOGIN_QUERY="$(require_market_env ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY)"
+SELLER_CENTRAL_ACCOUNT_LABEL="$(require_market_env ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL)"
+SELLER_CENTRAL_MARKETPLACE_LABEL="$(require_market_env ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL)"
+SELLER_CENTRAL_HOSTS="$(seller_central_host_globs)"
 SC_EMAIL="$(bitwarden_login_username "$SELLER_CENTRAL_LOGIN_QUERY" "$SELLER_CENTRAL_LOGIN_USERNAME")"
 SC_PASSWORD="$(bitwarden_login_password "$SELLER_CENTRAL_LOGIN_QUERY" "$SELLER_CENTRAL_LOGIN_USERNAME")"
-LOG="/tmp/sc-relogin.log"
+LOG="$(argus_tmp_log_path sc-relogin)"
 SELLER_TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
@@ -41,7 +47,7 @@ tab_url_for_id() {
 }
 
 ensure_seller_tab() {
-  SELLER_TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "sellercentral.amazon.com,amazon.com")"
+  SELLER_TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "$SELLER_CENTRAL_HOSTS")"
 }
 
 run_js() {
