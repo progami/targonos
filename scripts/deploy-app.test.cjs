@@ -1,10 +1,13 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
 
 const rootDir = path.resolve(__dirname, '..')
 const deployScript = fs.readFileSync(path.join(rootDir, 'scripts', 'deploy-app.sh'), 'utf8')
+const talosDbCommon = fs.readFileSync(path.join(rootDir, 'scripts', 'db', 'talos-db-common.sh'), 'utf8')
+const talosLoadEnv = fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'scripts', 'load-env.ts'), 'utf8')
 const authPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'packages', 'auth', 'package.json'), 'utf8'))
 
 test('auth package exposes a deploy-safe prisma migrate command', () => {
@@ -74,6 +77,13 @@ test('atlas dev deploy no longer falls back to db push on migrate errors', () =>
   )
 })
 
+test('talos deploy runs only changed migrations when deploy range is known', () => {
+  assert.match(
+    deployScript,
+    /if \[\[ "\$app_key" == "talos" && "\$changed_files_available" == "true" \]\]; then[\s\S]*?talos_changed_migrate_cmd="\$\(build_talos_changed_migrate_cmd\)"[\s\S]*?migrate_cmd=""/,
+  )
+})
+
 test('hosted deploys load exact shared and app env files without .env.local fallback', () => {
   assert.match(
     deployScript,
@@ -108,6 +118,59 @@ test('argus deploy requires explicit media backend before prebuild repair', () =
   )
 })
 
+test('talos owner migrations keep explicit owner database env after loading app env', () => {
+  assert.match(
+    deployScript,
+    /prepare_talos_owner_migration_env\(\)[\s\S]*?export TALOS_PRESERVE_DATABASE_ENV="1"/,
+  )
+  assert.match(
+    talosLoadEnv,
+    /if \(process\.env\.TALOS_PRESERVE_DATABASE_ENV !== '1'\) \{[\s\S]*?return captured/,
+  )
+  assert.match(talosLoadEnv, /'DATABASE_URL_US'/)
+  assert.match(talosLoadEnv, /'DATABASE_URL_UK'/)
+  assert.match(talosLoadEnv, /restoreDatabaseEnvForMigration\(preservedDatabaseEnv\)/)
+})
+
+test('talos script env loader preserves owner database urls at runtime', () => {
+  const script = `
+    import assert from 'node:assert/strict'
+    import { loadTalosScriptEnv } from './scripts/load-env.ts'
+
+    loadTalosScriptEnv()
+
+    assert.equal(process.env.DATABASE_URL_US, 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_us')
+    assert.equal(process.env.DATABASE_URL_UK, 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_uk')
+    assert.equal(process.env.DATABASE_URL, 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_us')
+  `
+
+  const result = spawnSync('pnpm', ['--filter', '@targon/talos', 'exec', 'tsx', '-e', script], {
+    cwd: rootDir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      TALOS_ENV_MODE: 'ci',
+      TALOS_PRESERVE_DATABASE_ENV: '1',
+      DATABASE_URL_US: 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_us',
+      DATABASE_URL_UK: 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_uk',
+      DATABASE_URL: 'postgresql://portal_talos@localhost:5432/portal_db_dev?schema=dev_talos_us',
+    },
+  })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+})
+
+test('talos db shell helpers run load-app-env through node', () => {
+  assert.match(
+    talosDbCommon,
+    /exports="\$\(node "\$repo_dir\/scripts\/load-app-env\.js" --app talos --mode "\$mode"\)"/,
+  )
+  assert.doesNotMatch(
+    talosDbCommon,
+    /exports="\$\("\$repo_dir\/scripts\/load-app-env\.js"/,
+  )
+})
+
 test('hermes hosted deploy rejects runtime auto migration', () => {
   assert.match(
     deployScript,
@@ -128,6 +191,7 @@ test('pm2 starts scrub workflow-inherited database and hosted runtime env', () =
     'DATABASE_URL',
     'DATABASE_URL_US',
     'DATABASE_URL_UK',
+    'TALOS_PRESERVE_DATABASE_ENV',
     'PORTAL_DB_URL',
     'PGHOSTADDR',
     'PGPASSFILE',

@@ -162,6 +162,7 @@ jobs:
       - name: Run CI contract tests
         run: |
           pnpm run test:auth-topology
+          node --test scripts/deploy-app.test.cjs scripts/detect-cd-affected-apps.test.cjs scripts/lib/shared-env.test.cjs
           node --test scripts/verify-ci-env-contracts.test.mjs
           node --test scripts/verify-promotion-ready.test.mjs
       - name: Run auth contract tests
