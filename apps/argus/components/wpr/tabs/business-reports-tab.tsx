@@ -1,11 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState, type JSX, type RefObject } from 'react'
-import { Box, Button, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
-import {
-  WprAnalyticsFooter,
-  WprAnalyticsPanel,
-} from '@/components/wpr/wpr-analytics-panel'
+import { Box, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
+import { WprAnalyticsPanel } from '@/components/wpr/wpr-analytics-panel'
 import {
   Bar,
   CartesianGrid,
@@ -23,24 +20,34 @@ import {
   buildWeeklyChangeMarkers,
   WprChangeTooltipContent,
 } from '@/components/wpr/chart-change-markers'
-import { WprChartControlGroup, WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
+import { WprChartEmptyState, WprChartShell } from '@/components/wpr/wpr-chart-shell'
+import { WprInlineChartLegend, type WprInlineChartLegendItem } from '@/components/wpr/wpr-inline-chart-legend'
 import type { WprBrWowVisible } from '@/lib/wpr/dashboard-state'
 import {
   createBusinessReportsSelectionViewModel,
   type BusinessReportsSelectionViewModel,
 } from '@/lib/wpr/business-reports-view-model'
 import { formatCount } from '@/lib/wpr/format'
-import { chartToggleButtonSx } from '@/lib/wpr/panel-tokens'
 import type { WprBusinessDailyPoint, WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import {
   buildBundleWeekStartDateLookup,
   formatTooltipWeekLabelFromLookup,
-  formatWeekWindowLabel,
 } from '@/lib/wpr/week-display'
 import { useWprStore } from '@/stores/wpr-store'
 import BusinessReportsSelectionTable from './business-reports-selection-table'
 
 type BusinessReportsViewMode = 'weekly' | 'daily'
+type BusinessReportsSeriesKey = keyof WprBrWowVisible
+
+const BUSINESS_REPORTS_WOW_SERIES: Array<{
+  key: BusinessReportsSeriesKey
+  label: string
+  color: string
+}> = [
+  { key: 'sessions', label: 'Sessions', color: '#8fc7ff' },
+  { key: 'order_items', label: 'Order Item %', color: '#f5a623' },
+  { key: 'unit_session', label: 'Unit Session %', color: '#d5ff62' },
+]
 
 const businessReportsViewToggleGroupSx = {
   '& .MuiToggleButtonGroup-grouped': {
@@ -69,20 +76,6 @@ const businessReportsViewToggleGroupSx = {
       bgcolor: 'rgba(255,255,255,0.07)',
     },
   },
-}
-
-function dailyWindowLabel(dailySeries: WprBusinessDailyPoint[]): string {
-  if (dailySeries.length === 0) {
-    return 'No daily business-report history'
-  }
-
-  const first = dailySeries[0]
-  const last = dailySeries[dailySeries.length - 1]
-  if (first === undefined || last === undefined) {
-    throw new Error('Missing Business Reports daily history')
-  }
-
-  return `${first.day_label} to ${last.day_label}`
 }
 
 type OverlayLayout = {
@@ -246,14 +239,17 @@ function BusinessReportsChart({
   setViewMode: (nextMode: BusinessReportsViewMode) => void
 }) {
   const chartRootRef = useRef<HTMLDivElement | null>(null)
-  const visibleSeries = [
-    wowVisible.sessions ? { key: 'sessions', label: 'Sessions', color: '#8fc7ff' } : null,
-    wowVisible.order_items ? { key: 'order_items', label: 'Order Item %', color: '#f5a623' } : null,
-    wowVisible.unit_session ? { key: 'unit_session', label: 'Unit Session %', color: '#d5ff62' } : null,
-  ].filter(
-    (value): value is { key: 'sessions' | 'order_items' | 'unit_session'; label: string; color: string } =>
-      value !== null,
-  )
+  const visibleSeries = BUSINESS_REPORTS_WOW_SERIES.filter((series) => wowVisible[series.key])
+  const legendItems: Array<WprInlineChartLegendItem<BusinessReportsSeriesKey>> = BUSINESS_REPORTS_WOW_SERIES.map((series) => ({
+    ...series,
+    active: wowVisible[series.key],
+  }))
+  const toggleSeries = (seriesKey: BusinessReportsSeriesKey) => {
+    setWowVisible({
+      ...wowVisible,
+      [seriesKey]: !wowVisible[seriesKey],
+    })
+  }
   const changeMarkers =
     viewMode === 'weekly'
       ? buildWeeklyChangeMarkers(changeEntries)
@@ -294,165 +290,135 @@ function BusinessReportsChart({
     }
 
     chartBody = (
-      <Box ref={chartRootRef} sx={{ position: 'relative', height: '100%' }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-            <YAxis yAxisId="counts" tick={{ fontSize: 10 }} />
-            <YAxis
-              yAxisId="rates"
-              orientation="right"
-              tick={{ fontSize: 10 }}
-              tickFormatter={(value: number) => `${value.toFixed(0)}%`}
-            />
-            <Tooltip
-              content={({ active, payload, label }) => (
-                <WprChangeTooltipContent
-                  active={active}
-                  payload={payload}
-                  label={label}
-                  labelText={viewMode === 'weekly' ? formatTooltipWeekLabelFromLookup(label, weekStartDates) : undefined}
-                  changeMarker={changeMarkersByLabel.get(String(label))}
-                  formatRow={(entry) => {
-                    const key = entry.dataKey
-                    if (key === undefined) {
-                      throw new Error('Missing Business Reports tooltip data key')
-                    }
-
-                    const value = entry.value
-                    if (typeof value !== 'number') {
-                      throw new Error(`Invalid Business Reports tooltip value for ${String(key)}`)
-                    }
-
-                    const color = entry.color
-                    if (color === undefined) {
-                      throw new Error(`Missing Business Reports tooltip color for ${String(key)}`)
-                    }
-
-                    if (key === 'sessions') {
-                      return {
-                        label: 'Sessions',
-                        value: formatCount(value),
-                        color,
+      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Box ref={chartRootRef} sx={{ position: 'relative', flex: 1, minHeight: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartRows} margin={{ top: 12, right: 16, bottom: 0, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+              <YAxis yAxisId="counts" tick={{ fontSize: 10 }} />
+              <YAxis
+                yAxisId="rates"
+                orientation="right"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(value: number) => `${value.toFixed(0)}%`}
+              />
+              <Tooltip
+                content={({ active, payload, label }) => (
+                  <WprChangeTooltipContent
+                    active={active}
+                    payload={payload}
+                    label={label}
+                    labelText={viewMode === 'weekly' ? formatTooltipWeekLabelFromLookup(label, weekStartDates) : undefined}
+                    changeMarker={changeMarkersByLabel.get(String(label))}
+                    formatRow={(entry) => {
+                      const key = entry.dataKey
+                      if (key === undefined) {
+                        throw new Error('Missing Business Reports tooltip data key')
                       }
-                    }
 
-                    if (key === 'order_items') {
+                      const value = entry.value
+                      if (typeof value !== 'number') {
+                        throw new Error(`Invalid Business Reports tooltip value for ${String(key)}`)
+                      }
+
+                      const color = entry.color
+                      if (color === undefined) {
+                        throw new Error(`Missing Business Reports tooltip color for ${String(key)}`)
+                      }
+
+                      if (key === 'sessions') {
+                        return {
+                          label: 'Sessions',
+                          value: formatCount(value),
+                          color,
+                        }
+                      }
+
+                      if (key === 'order_items') {
+                        return {
+                          label: 'Order Item %',
+                          value: `${value.toFixed(1)}%`,
+                          color,
+                        }
+                      }
+
                       return {
-                        label: 'Order Item %',
+                        label: 'Unit Session %',
                         value: `${value.toFixed(1)}%`,
                         color,
                       }
-                    }
-
-                    return {
-                      label: 'Unit Session %',
-                      value: `${value.toFixed(1)}%`,
-                      color,
-                    }
-                  }}
+                    }}
+                  />
+                )}
+              />
+              {wowVisible.sessions ? (
+                <Bar yAxisId="counts" dataKey="sessions" fill="rgba(143,199,255,0.34)" stroke="#8fc7ff" />
+              ) : null}
+              {wowVisible.order_items ? (
+                <Line
+                  yAxisId="rates"
+                  type="monotone"
+                  dataKey="order_items"
+                  stroke="#f5a623"
+                  strokeWidth={2.2}
+                  dot={{ r: 2.5, strokeWidth: 0, fill: '#f5a623' }}
+                  activeDot={{ r: 4 }}
                 />
-              )}
-            />
-            {wowVisible.sessions ? (
-              <Bar yAxisId="counts" dataKey="sessions" fill="rgba(143,199,255,0.34)" stroke="#8fc7ff" />
-            ) : null}
-            {wowVisible.order_items ? (
-              <Line
-                yAxisId="rates"
-                type="monotone"
-                dataKey="order_items"
-                stroke="#f5a623"
-                strokeWidth={2.2}
-                dot={{ r: 2.5, strokeWidth: 0, fill: '#f5a623' }}
-                activeDot={{ r: 4 }}
-              />
-            ) : null}
-            {wowVisible.unit_session ? (
-              <Line
-                yAxisId="rates"
-                type="monotone"
-                dataKey="unit_session"
-                stroke="#d5ff62"
-                strokeWidth={2.2}
-                dot={{ r: 2.5, strokeWidth: 0, fill: '#d5ff62' }}
-                activeDot={{ r: 4 }}
-              />
-            ) : null}
-          </ComposedChart>
-        </ResponsiveContainer>
-        <BusinessReportsChangeOverlay chartRootRef={chartRootRef} markers={changeMarkers} />
+              ) : null}
+              {wowVisible.unit_session ? (
+                <Line
+                  yAxisId="rates"
+                  type="monotone"
+                  dataKey="unit_session"
+                  stroke="#d5ff62"
+                  strokeWidth={2.2}
+                  dot={{ r: 2.5, strokeWidth: 0, fill: '#d5ff62' }}
+                  activeDot={{ r: 4 }}
+                />
+              ) : null}
+            </ComposedChart>
+          </ResponsiveContainer>
+          <BusinessReportsChangeOverlay chartRootRef={chartRootRef} markers={changeMarkers} />
+        </Box>
+        <WprInlineChartLegend chartId="br" items={legendItems} onToggle={toggleSeries} />
       </Box>
     )
   }
 
-  return (
-    <WprChartShell
-      primaryControls={
-        <WprChartControlGroup label="View">
-          <ToggleButtonGroup
-            value={viewMode}
-            exclusive
-            size="small"
-            aria-label="Business Reports view mode"
-            onChange={(_event, nextMode: BusinessReportsViewMode | null) => {
-              if (nextMode !== null) {
-                setViewMode(nextMode)
-              }
-            }}
-            sx={businessReportsViewToggleGroupSx}
-          >
-            <ToggleButton value="weekly">Weekly</ToggleButton>
-            <ToggleButton value="daily">Daily</ToggleButton>
-          </ToggleButtonGroup>
-        </WprChartControlGroup>
-      }
-      secondaryControls={
-        <WprChartControlGroup label="Metrics">
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                sessions: !wowVisible.sessions,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.sessions, '#8fc7ff')}
-          >
-            Sessions
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                order_items: !wowVisible.order_items,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.order_items, '#f5a623')}
-          >
-            Order Item %
-          </Button>
-          <Button
-            size="small"
-            variant="outlined"
-            onClick={() => {
-              setWowVisible({
-                ...wowVisible,
-                unit_session: !wowVisible.unit_session,
-              })
-            }}
-            sx={chartToggleButtonSx(wowVisible.unit_session, '#d5ff62')}
-          >
-            Unit Session %
-          </Button>
-        </WprChartControlGroup>
-      }
+  const viewModeControl = (
+    <Box
+      sx={{
+        position: 'absolute',
+        top: 10,
+        right: 12,
+        zIndex: 2,
+      }}
     >
-      {chartBody}
+      <ToggleButtonGroup
+        value={viewMode}
+        exclusive
+        size="small"
+        aria-label="Business Reports view mode"
+        onChange={(_event, nextMode: BusinessReportsViewMode | null) => {
+          if (nextMode !== null) {
+            setViewMode(nextMode)
+          }
+        }}
+        sx={businessReportsViewToggleGroupSx}
+      >
+        <ToggleButton value="weekly">Weekly</ToggleButton>
+        <ToggleButton value="daily">Daily</ToggleButton>
+      </ToggleButtonGroup>
+    </Box>
+  )
+
+  return (
+    <WprChartShell>
+      <Box sx={{ position: 'relative', height: '100%' }}>
+        {viewModeControl}
+        {chartBody}
+      </Box>
     </WprChartShell>
   )
 }
@@ -542,21 +508,11 @@ export default function BusinessReportsTab({
   if (dailySeries !== undefined) {
     dailyChartSeries = dailySeries
   }
-  const chartWindowLabel = viewMode === 'daily'
-    ? dailyWindowLabel(dailyChartSeries)
-    : formatWeekWindowLabel(bundle.meta.baselineWindow, weekStartDates)
-  const footerItems = [
-    `Source: Business Reports`,
-    `Scope: detail page retail`,
-    `ASINs: ${viewModel.selectedIds.length} / ${viewModel.allIds.length}`,
-    `Target ASIN: ${bundle.businessReports.meta.targetAsin}`,
-    `Chart window: ${chartWindowLabel}`,
-  ]
 
   return (
     <Stack spacing={2}>
       <WprAnalyticsPanel
-        footer={<WprAnalyticsFooter items={footerItems} />}
+        footer={null}
       >
         <BusinessReportsChart
           viewMode={viewMode}
