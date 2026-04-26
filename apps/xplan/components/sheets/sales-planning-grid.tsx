@@ -48,6 +48,10 @@ import {
   parseNumericInput,
   sanitizeNumeric,
 } from '@/components/sheets/validators';
+import {
+  computeForecastWorkbookRow,
+  type ForecastWorkbookRow,
+} from '@/lib/calculations/workbook-parity';
 import { useMutationQueue } from '@/hooks/useMutationQueue';
 import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import { usePersistentState } from '@/hooks/usePersistentState';
@@ -78,20 +82,17 @@ type SalesRow = {
 type ColumnMeta = Record<string, { productId: string; field: string }>;
 type NestedHeaderCell = string | { label: string; colspan?: number; rowspan?: number };
 
-const editableMetrics = new Set(['actualSales', 'forecastSales']);
+const editableMetrics = new Set(['actualSales', 'forecastSales', 'finalSales']);
 const BASE_SALES_METRICS = [
-  'stockStart',
+  'inbound',
+  'threePl',
+  'fba',
+  'fbaCoverWeeks',
+  'totalCoverWeeks',
   'actualSales',
   'forecastSales',
-  'systemForecastSales',
   'finalSales',
-  'finalSalesError',
 ] as const;
-const STOCK_METRIC_OPTIONS = [
-  { id: 'stockWeeks', label: 'Cover (w)' },
-  { id: 'stockEnd', label: 'Stock Qty' },
-] as const;
-type StockMetricId = (typeof STOCK_METRIC_OPTIONS)[number]['id'];
 
 function isEditableMetric(field: string | undefined) {
   return Boolean(field && editableMetrics.has(field));
@@ -350,14 +351,7 @@ export function SalesPlanningGrid({
   const focusContext = useContext(SalesPlanningFocusContext);
   const focusProductId = focusContext?.focusProductId ?? 'ALL';
 
-  const [activeStockMetric, setActiveStockMetric] = usePersistentState<StockMetricId>(
-    'xplan:sales-grid:metric',
-    'stockWeeks',
-  );
-  const [showFinalError, setShowFinalError] = usePersistentState<boolean>(
-    'xplan:sales-grid:show-final-error',
-    false,
-  );
+  const activeStockMetric = 'fbaCoverWeeks';
 
   const warningThreshold = Number.isFinite(stockWarningWeeks)
     ? stockWarningWeeks
@@ -406,17 +400,7 @@ export function SalesPlanningGrid({
     [data, visibleRowIndices],
   );
 
-  const visibleMetrics = useMemo(() => {
-    const metrics = new Set<string>([
-      'stockStart',
-      'actualSales',
-      'forecastSales',
-      'systemForecastSales',
-    ]);
-    metrics.add(showFinalError ? 'finalSalesError' : 'finalSales');
-    metrics.add(activeStockMetric);
-    return metrics;
-  }, [activeStockMetric, showFinalError]);
+  const visibleMetrics = useMemo(() => new Set<string>(BASE_SALES_METRICS), []);
 
   const keyByProductField = useMemo(() => {
     const map = new Map<string, Record<string, string>>();
@@ -434,12 +418,12 @@ export function SalesPlanningGrid({
     const map = new Map<string, string>();
     for (const key of columnKeys) {
       const meta = columnMeta[key];
-      if (meta?.field === 'stockWeeks') {
+      if (meta?.field === activeStockMetric) {
         map.set(meta.productId, key);
       }
     }
     return map;
-  }, [columnKeys, columnMeta]);
+  }, [activeStockMetric, columnKeys, columnMeta]);
 
   const weekDateByNumber = useMemo(() => {
     const map = new Map<number, string>();
@@ -495,11 +479,7 @@ export function SalesPlanningGrid({
         : productOptions.filter((product) => product.id === focusProductId);
     return base.filter((product) => {
       const keys = keyByProductField.get(product.id) ?? {};
-      return (
-        BASE_SALES_METRICS.some((metric) => keys[metric]) &&
-        Boolean(keys.stockWeeks) &&
-        Boolean(keys.stockEnd)
-      );
+      return BASE_SALES_METRICS.some((metric) => keys[metric]);
     });
   }, [focusProductId, keyByProductField, productOptions]);
 
@@ -532,15 +512,14 @@ export function SalesPlanningGrid({
 
     displayedProducts.forEach((product) => {
       const keys = keyByProductField.get(product.id) ?? {};
-      const stockStartKey = keys.stockStart;
-      if (!stockStartKey) return;
-      const inboundKey = stockStartKey.replace(/_stockStart$/, '_hasInbound');
+      const inboundKey = keys.inbound;
+      if (!inboundKey) return;
 
       const inboundWeeks = new Set<number>();
       for (const row of data) {
         const week = Number(row?.weekNumber);
         if (!Number.isFinite(week) || !row) continue;
-        if (row[inboundKey] === 'true') inboundWeeks.add(week);
+        if (Number(row[inboundKey]) > 0) inboundWeeks.add(week);
       }
 
       map.set(product.id, inboundWeeks);
@@ -550,21 +529,14 @@ export function SalesPlanningGrid({
   }, [data, displayedProducts, keyByProductField]);
 
   const metricSequence = useMemo(() => {
-    return [
-      'stockStart',
-      'actualSales',
-      'forecastSales',
-      'systemForecastSales',
-      showFinalError ? 'finalSalesError' : 'finalSales',
-      activeStockMetric,
-    ];
-  }, [activeStockMetric, showFinalError]);
+    return [...BASE_SALES_METRICS];
+  }, []);
 
   const columns = useMemo(() => {
     const baseColumns = [
       columnHelper.accessor('weekLabel', {
         id: 'weekLabel',
-        header: () => 'Week',
+        header: () => 'WEEK',
         cell: (info) => (
           <span className="flex items-center gap-1">
             {info.getValue()}
@@ -578,12 +550,12 @@ export function SalesPlanningGrid({
       }),
       columnHelper.accessor('weekDate', {
         id: 'weekDate',
-        header: () => 'Date',
+        header: () => 'DATE',
         meta: { sticky: true, stickyOffset: 80, width: 120, kind: 'pinned' },
       }),
       columnHelper.accessor((row) => row.arrivalDetail ?? '', {
         id: 'arrivalDetail',
-        header: () => 'Inbound PO',
+        header: () => 'Notes',
         meta: { sticky: true, stickyOffset: 200, width: 140, kind: 'pinned' },
       }),
     ];
@@ -599,45 +571,15 @@ export function SalesPlanningGrid({
             id: key,
             header: () => {
               const labelMap: Record<string, string> = {
-                stockStart: 'Stock Start',
-                actualSales: 'Actual',
-                forecastSales: 'Planner',
-                systemForecastSales: 'System',
-                finalSales: 'Demand',
-                finalSalesError: '% Error',
-                stockWeeks: 'Cover (w)',
-                stockEnd: 'Stock Qty',
+                inbound: 'INBOUND',
+                threePl: '3PL',
+                fba: 'FBA',
+                fbaCoverWeeks: 'FBA COVER (W)',
+                totalCoverWeeks: 'TOTAL COVER (W)',
+                actualSales: 'ACTUAL',
+                forecastSales: 'PLANNER',
+                finalSales: 'FINAL',
               };
-
-              if (field === activeStockMetric) {
-                return (
-                  <button
-                    type="button"
-                    className="rounded border bg-secondary px-2 py-0.5 text-xs font-medium hover:bg-secondary/80"
-                    onClick={() =>
-                      preserveGridScroll(() =>
-                        setActiveStockMetric((prev) =>
-                          prev === 'stockWeeks' ? 'stockEnd' : 'stockWeeks',
-                        ),
-                      )
-                    }
-                  >
-                    {labelMap[field]}
-                  </button>
-                );
-              }
-
-              if (field === (showFinalError ? 'finalSalesError' : 'finalSales')) {
-                return (
-                  <button
-                    type="button"
-                    className="rounded border bg-secondary px-2 py-0.5 text-xs font-medium hover:bg-secondary/80"
-                    onClick={() => preserveGridScroll(() => setShowFinalError((prev) => !prev))}
-                  >
-                    {labelMap[field]}
-                  </button>
-                );
-              }
 
               return (
                 <span className="text-xs font-medium text-muted-foreground">
@@ -658,15 +600,10 @@ export function SalesPlanningGrid({
 
     return [...baseColumns, ...productColumns];
   }, [
-    activeStockMetric,
     columnHelper,
     displayedProducts,
     keyByProductField,
     metricSequence,
-    preserveGridScroll,
-    setActiveStockMetric,
-    setShowFinalError,
-    showFinalError,
   ]);
 
   const table = useReactTable({
@@ -746,103 +683,77 @@ export function SalesPlanningGrid({
         keysByField.set(meta.field, key);
       }
 
-      const stockStartKey = keysByField.get('stockStart');
+      const inboundKey = keysByField.get('inbound');
+      const threePlKey = keysByField.get('threePl');
+      const fbaKey = keysByField.get('fba');
+      const fbaCoverWeeksKey = keysByField.get('fbaCoverWeeks');
+      const totalCoverWeeksKey = keysByField.get('totalCoverWeeks');
       const actualSalesKey = keysByField.get('actualSales');
       const forecastSalesKey = keysByField.get('forecastSales');
-      const systemForecastSalesKey = keysByField.get('systemForecastSales');
       const finalSalesKey = keysByField.get('finalSales');
-      const finalSalesErrorKey = keysByField.get('finalSalesError');
-      const stockWeeksKey = keysByField.get('stockWeeks');
-      const stockEndKey = keysByField.get('stockEnd');
 
       if (
-        !stockStartKey ||
+        !inboundKey ||
+        !threePlKey ||
+        !fbaKey ||
+        !fbaCoverWeeksKey ||
+        !totalCoverWeeksKey ||
         !actualSalesKey ||
         !forecastSalesKey ||
-        !systemForecastSalesKey ||
-        !finalSalesKey ||
-        !finalSalesErrorKey ||
-        !stockWeeksKey ||
-        !stockEndKey
+        !finalSalesKey
       ) {
         return nextData;
       }
 
       const n = nextData.length;
-      const previousStockStart: number[] = new Array(n);
-      const previousStockEnd: number[] = new Array(n);
-      const actual: Array<number | null> = new Array(n);
-      const forecast: Array<number | null> = new Array(n);
-      const systemForecast: Array<number | null> = new Array(n);
-
-      for (let i = 0; i < n; i += 1) {
-        const row = nextData[i];
-        previousStockStart[i] = parseNumericInput(row?.[stockStartKey]) ?? 0;
-        previousStockEnd[i] = parseNumericInput(row?.[stockEndKey]) ?? 0;
-        actual[i] = parseNumericInput(row?.[actualSalesKey]);
-        forecast[i] = parseNumericInput(row?.[forecastSalesKey]);
-        systemForecast[i] = parseNumericInput(row?.[systemForecastSalesKey]);
-      }
-
-      const arrivalsKey = stockStartKey.replace(/_stockStart$/, '_arrivals');
-      const arrivals: number[] = new Array(n).fill(0);
-      for (let i = 0; i < n; i += 1) {
-        const row = nextData[i];
-        arrivals[i] = parseNumericInput(row?.[arrivalsKey]) ?? 0;
-      }
-
-      const baseStartOverrides = new Map<number, number>();
-      if (n > 0) {
-        baseStartOverrides.set(0, previousStockStart[0] - arrivals[0]);
-      }
-      for (let i = 1; i < n; i += 1) {
-        const baseStart = previousStockStart[i] - arrivals[i];
-        if (baseStart !== previousStockEnd[i - 1]) {
-          baseStartOverrides.set(i, baseStart);
-        }
-      }
-
-      const nextStockStart: number[] = new Array(n);
+      const nextThreePl: number[] = new Array(n);
+      const nextFba: number[] = new Array(n);
+      const nextFbaCoverWeeks: number[] = new Array(n);
+      const nextTotalCoverWeeks: number[] = new Array(n);
       const nextFinalSales: number[] = new Array(n);
-      const nextStockEnd: number[] = new Array(n);
-      const nextError: Array<number | null> = new Array(n);
       const nextDemandSource: string[] = new Array(n);
+      const finalSalesSourceKey = finalSalesKey.replace(/_finalSales$/, '_finalSalesSource');
 
-      nextStockStart[0] = previousStockStart[0];
+      let previousForecast: ForecastWorkbookRow | null = null;
 
       for (let i = 0; i < n; i += 1) {
-        const demand = actual[i] ?? forecast[i] ?? systemForecast[i] ?? 0;
-        nextFinalSales[i] = Math.max(0, demand);
-        nextStockEnd[i] = Math.max(0, nextStockStart[i] - nextFinalSales[i]);
+        const row = nextData[i];
+        const actual = parseNumericInput(row?.[actualSalesKey]);
+        const forecast = parseNumericInput(row?.[forecastSalesKey]);
+        const currentFinal = parseNumericInput(row?.[finalSalesKey]);
+        const sourceRaw = (row?.[finalSalesSourceKey] ?? '').trim();
+        const explicitFinal =
+          sourceRaw === 'OVERRIDE' || sourceRaw === 'SYSTEM' ? currentFinal : null;
+        const openingStock =
+          i === 0
+            ? (parseNumericInput(row?.[threePlKey]) ?? 0) + (parseNumericInput(row?.[fbaKey]) ?? 0)
+            : null;
+        const forecastRow = computeForecastWorkbookRow({
+          openingStock,
+          inbound: parseNumericInput(row?.[inboundKey]),
+          actual,
+          planner: forecast,
+          final: explicitFinal,
+          previous: previousForecast,
+        });
+        previousForecast = forecastRow;
+
+        nextThreePl[i] = forecastRow.threePl;
+        nextFba[i] = forecastRow.fba;
+        nextFbaCoverWeeks[i] = forecastRow.fbaCoverWeeks;
+        nextTotalCoverWeeks[i] = forecastRow.totalCoverWeeks;
+        nextFinalSales[i] = forecastRow.final;
 
         nextDemandSource[i] =
-          actual[i] != null
+          actual != null
             ? 'ACTUAL'
-            : forecast[i] != null
+            : forecast != null
               ? 'PLANNER'
-              : systemForecast[i] != null
-                ? 'SYSTEM'
-                : 'ZERO';
-
-        if (i + 1 < n) {
-          const baseStartOverride = baseStartOverrides.get(i + 1);
-          const baseStart = baseStartOverride != null ? baseStartOverride : nextStockEnd[i];
-          nextStockStart[i + 1] = baseStart + arrivals[i + 1];
-        }
-
-        if (actual[i] != null && forecast[i] != null && forecast[i] !== 0) {
-          nextError[i] = (actual[i]! - forecast[i]!) / Math.abs(forecast[i]!);
-        } else {
-          nextError[i] = null;
-        }
-      }
-
-      const nextStockWeeks: number[] = new Array(n);
-      for (let i = 0; i < n; i += 1) {
-        const demand = nextFinalSales[i] ?? 0;
-        const stockStart = nextStockStart[i] ?? 0;
-        nextStockWeeks[i] =
-          demand > 0 ? stockStart / demand : stockStart > 0 ? Number.POSITIVE_INFINITY : 0;
+                : sourceRaw === 'SYSTEM' && currentFinal != null
+                  ? 'SYSTEM'
+                  : sourceRaw === 'OVERRIDE' && currentFinal != null
+                    ? 'OVERRIDE'
+                    : 'ZERO';
       }
 
       if (Number.isFinite(warningThreshold) && warningThreshold > 0) {
@@ -854,7 +765,7 @@ export function SalesPlanningGrid({
           let hasBeenAbove = false;
           let breachIndex: number | null = null;
           for (let i = 0; i < n; i += 1) {
-            const weeksValue = nextStockWeeks[i];
+            const weeksValue = nextFbaCoverWeeks[i];
             if (!Number.isFinite(weeksValue)) {
               hasBeenAbove = true;
               continue;
@@ -908,31 +819,29 @@ export function SalesPlanningGrid({
       for (let i = 0; i < n; i += 1) {
         const row = nextData[i];
 
-        const stockStartValue = Number.isFinite(nextStockStart[i])
-          ? nextStockStart[i].toFixed(0)
-          : '';
+        const threePlValue = Number.isFinite(nextThreePl[i]) ? nextThreePl[i].toFixed(0) : '';
+        const fbaValue = Number.isFinite(nextFba[i]) ? nextFba[i].toFixed(0) : '';
         const finalSalesValue = Number.isFinite(nextFinalSales[i])
           ? nextFinalSales[i].toFixed(0)
           : '';
-        const stockEndValue = Number.isFinite(nextStockEnd[i]) ? nextStockEnd[i].toFixed(0) : '';
-        const stockWeeksValue = Number.isFinite(nextStockWeeks[i])
-          ? nextStockWeeks[i].toFixed(2)
+        const fbaCoverWeeksValue = Number.isFinite(nextFbaCoverWeeks[i])
+          ? nextFbaCoverWeeks[i].toFixed(2)
           : '∞';
-        const errorValue = nextError[i] == null ? '' : `${(nextError[i]! * 100).toFixed(1)}%`;
-        const demandSourceKey = finalSalesKey.replace(/_finalSales$/, '_finalSalesSource');
+        const totalCoverWeeksValue = Number.isFinite(nextTotalCoverWeeks[i])
+          ? nextTotalCoverWeeks[i].toFixed(2)
+          : '∞';
         const demandSourceValue = nextDemandSource[i] ?? '';
 
-        if (row?.[stockStartKey] !== stockStartValue)
-          changes.push([i, stockStartKey, stockStartValue]);
+        if (row?.[threePlKey] !== threePlValue) changes.push([i, threePlKey, threePlValue]);
+        if (row?.[fbaKey] !== fbaValue) changes.push([i, fbaKey, fbaValue]);
         if (row?.[finalSalesKey] !== finalSalesValue)
           changes.push([i, finalSalesKey, finalSalesValue]);
-        if (row?.[stockEndKey] !== stockEndValue) changes.push([i, stockEndKey, stockEndValue]);
-        if (row?.[stockWeeksKey] !== stockWeeksValue)
-          changes.push([i, stockWeeksKey, stockWeeksValue]);
-        if (row?.[finalSalesErrorKey] !== errorValue)
-          changes.push([i, finalSalesErrorKey, errorValue]);
-        if (row?.[demandSourceKey] !== demandSourceValue)
-          changes.push([i, demandSourceKey, demandSourceValue]);
+        if (row?.[fbaCoverWeeksKey] !== fbaCoverWeeksValue)
+          changes.push([i, fbaCoverWeeksKey, fbaCoverWeeksValue]);
+        if (row?.[totalCoverWeeksKey] !== totalCoverWeeksValue)
+          changes.push([i, totalCoverWeeksKey, totalCoverWeeksValue]);
+        if (row?.[finalSalesSourceKey] !== demandSourceValue)
+          changes.push([i, finalSalesSourceKey, demandSourceValue]);
       }
 
       const startIndex = Math.max(0, Math.min(n - 1, startRowIndex ?? 0));
@@ -1061,6 +970,12 @@ export function SalesPlanningGrid({
           // Update local state
           const current = next[absoluteRowIndex] ?? { ...row };
           current[edit.columnId] = edit.value;
+          if (colMeta.field === 'finalSales') {
+            current[edit.columnId.replace(/_finalSales$/, '_finalSalesSource')] = 'OVERRIDE';
+          } else if (colMeta.field === 'actualSales' || colMeta.field === 'forecastSales') {
+            current[edit.columnId.replace(/_(actualSales|forecastSales)$/, '_finalSalesSource')] =
+              '';
+          }
           next[absoluteRowIndex] = current;
 
           // Track for derived field recalculation
@@ -1181,6 +1096,12 @@ export function SalesPlanningGrid({
             ...(next[absoluteRowIndex] ?? {}),
           };
           current[edit.columnId] = edit.value;
+          if (colMeta.field === 'finalSales') {
+            current[edit.columnId.replace(/_finalSales$/, '_finalSalesSource')] = 'OVERRIDE';
+          } else if (colMeta.field === 'actualSales' || colMeta.field === 'forecastSales') {
+            current[edit.columnId.replace(/_(actualSales|forecastSales)$/, '_finalSalesSource')] =
+              '';
+          }
           touchedRows.set(absoluteRowIndex, current);
         });
 
@@ -2216,43 +2137,15 @@ export function SalesPlanningGrid({
   const renderMetricHeader = useCallback(
     (field: string) => {
       const labelMap: Record<string, string> = {
-        stockStart: 'Stock Start',
-        actualSales: 'Actual',
-        forecastSales: 'Planner',
-        systemForecastSales: 'System',
-        finalSales: 'Demand',
-        finalSalesError: '% Error',
-        stockWeeks: 'Cover (w)',
-        stockEnd: 'Stock Qty',
+        inbound: 'INBOUND',
+        threePl: '3PL',
+        fba: 'FBA',
+        fbaCoverWeeks: 'FBA COVER (W)',
+        totalCoverWeeks: 'TOTAL COVER (W)',
+        actualSales: 'ACTUAL',
+        forecastSales: 'PLANNER',
+        finalSales: 'FINAL',
       };
-
-      if (field === activeStockMetric) {
-        return (
-          <button
-            type="button"
-            className="rounded border bg-secondary px-2 py-0.5 text-xs font-medium hover:bg-secondary/80"
-            onClick={() =>
-              preserveGridScroll(() =>
-                setActiveStockMetric((prev) => (prev === 'stockWeeks' ? 'stockEnd' : 'stockWeeks')),
-              )
-            }
-          >
-            {labelMap[field]}
-          </button>
-        );
-      }
-
-      if (field === (showFinalError ? 'finalSalesError' : 'finalSales')) {
-        return (
-          <button
-            type="button"
-            className="rounded border bg-secondary px-2 py-0.5 text-xs font-medium hover:bg-secondary/80"
-            onClick={() => preserveGridScroll(() => setShowFinalError((prev) => !prev))}
-          >
-            {labelMap[field]}
-          </button>
-        );
-      }
 
       return (
         <span className="text-xs font-medium text-muted-foreground">
@@ -2260,13 +2153,7 @@ export function SalesPlanningGrid({
         </span>
       );
     },
-    [
-      activeStockMetric,
-      preserveGridScroll,
-      setActiveStockMetric,
-      setShowFinalError,
-      showFinalError,
-    ],
+    [],
   );
 
   return (
@@ -2313,9 +2200,9 @@ export function SalesPlanningGrid({
                     | { sticky?: boolean; stickyOffset?: number; width?: number }
                     | undefined;
                   const labelMap: Record<string, string> = {
-                    weekLabel: 'Week',
-                    weekDate: 'Date',
-                    arrivalDetail: 'Inbound PO',
+                    weekLabel: 'WEEK',
+                    weekDate: 'DATE',
+                    arrivalDetail: 'Notes',
                   };
                   return (
                     <TableHead

@@ -28,7 +28,7 @@ import {
   type POProfitabilityData,
 } from '@/components/sheets/po-profitability-section';
 import type { OpsInputRow } from '@/components/sheets/custom-ops-planning-grid';
-import type { OpsBatchRow } from '@/components/sheets/custom-ops-cost-grid';
+import { CustomOpsCostGrid, type OpsBatchRow } from '@/components/sheets/custom-ops-cost-grid';
 import type { OpsTimelineRow } from '@/components/sheets/ops-planning-timeline';
 import type { PurchasePaymentRow } from '@/components/sheets/custom-purchase-payments-grid';
 import type {
@@ -107,6 +107,14 @@ import type { PlanningCalendar } from '@/lib/planning';
 import { weekLabelForWeekNumber, type PlanningWeekConfig } from '@/lib/calculations/planning-week';
 import { formatDateDisplay, toIsoDate } from '@/lib/utils/dates';
 import {
+  computeForecastWorkbookRow,
+  computePoFinanceWorkbookRow,
+  computePoTableWorkbookRow,
+  EXCEL_FORECAST_METRICS,
+  type ForecastWorkbookRow,
+  type PoTableWorkbookInput,
+} from '@/lib/calculations/workbook-parity';
+import {
   sellerboardReportTimeZoneForRegion,
   currencyForRegion,
   localeForRegion,
@@ -116,14 +124,14 @@ import {
 } from '@/lib/strategy-region';
 
 const SALES_METRICS = [
-  'stockStart',
+  'inbound',
+  'threePl',
+  'fba',
+  'fbaCoverWeeks',
+  'totalCoverWeeks',
   'actualSales',
   'forecastSales',
-  'systemForecastSales',
   'finalSales',
-  'finalSalesError',
-  'stockWeeks',
-  'stockEnd',
 ] as const;
 type SalesMetric = (typeof SALES_METRICS)[number];
 
@@ -161,6 +169,16 @@ function toNumberSafe(value: number | bigint | null | undefined): number {
   if (typeof value === 'bigint') return Number(value);
   const numeric = Number(value);
   return Number.isNaN(numeric) ? 0 : numeric;
+}
+
+function toOptionalNumber(
+  value: number | bigint | Prisma.Decimal | null | undefined,
+): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'bigint') return Number(value);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function formatNumeric(value: number | null | undefined, fractionDigits = 2): string {
@@ -221,6 +239,8 @@ function serializePurchaseOrder(order: PurchaseOrderInput): PurchaseOrderSeriali
     quantity: Number(order.quantity ?? 0),
     poDate: serializeDate(order.poDate),
     poWeekNumber: order.poWeekNumber ?? null,
+    poClass: order.poClass ?? null,
+    inboundWeekOverride: serializeDate(order.inboundWeekOverride),
     productionWeeks: order.productionWeeks ?? null,
     sourceWeeks: order.sourceWeeks ?? null,
     oceanWeeks: order.oceanWeeks ?? null,
@@ -289,6 +309,11 @@ function serializePurchaseOrder(order: PurchaseOrderInput): PurchaseOrderSeriali
         overrideFbaFee: batch.overrideFbaFee ?? null,
         overrideReferralRate: batch.overrideReferralRate ?? null,
         overrideStoragePerMonth: batch.overrideStoragePerMonth ?? null,
+        cartonSide1Cm: batch.cartonSide1Cm ?? null,
+        cartonSide2Cm: batch.cartonSide2Cm ?? null,
+        cartonSide3Cm: batch.cartonSide3Cm ?? null,
+        cartonWeightKg: batch.cartonWeightKg ?? null,
+        unitsPerCarton: batch.unitsPerCarton ?? null,
       })) ?? [],
   };
 }
@@ -625,38 +650,32 @@ function columnKey(productIndex: number, metric: SalesMetric) {
 
 function metricHeader(metric: SalesMetric): NestedHeaderCell {
   switch (metric) {
-    case 'stockStart':
-      return 'Stock Start';
+    case 'inbound':
+      return EXCEL_FORECAST_METRICS[0];
+    case 'threePl':
+      return EXCEL_FORECAST_METRICS[1];
+    case 'fba':
+      return EXCEL_FORECAST_METRICS[2];
+    case 'fbaCoverWeeks':
+      return EXCEL_FORECAST_METRICS[3];
+    case 'totalCoverWeeks':
+      return EXCEL_FORECAST_METRICS[4];
     case 'actualSales':
-      return 'Actual';
+      return EXCEL_FORECAST_METRICS[5];
     case 'forecastSales':
-      return 'Planner';
-    case 'systemForecastSales':
-      return 'System';
+      return EXCEL_FORECAST_METRICS[6];
     case 'finalSales':
-      return {
-        label: 'Demand',
-        title: 'Demand precedence: Override (if set) → Actual → Planner → System.',
-      };
-    case 'finalSalesError':
-      return {
-        label: '% Error',
-        title: 'Percent error between actual and forecast sales when both values are present.',
-      };
-    case 'stockWeeks':
-      return {
-        label: 'Cover (w)',
-        title:
-          'Cover (weeks) = projected Stock Start ÷ projected Demand (higher is safer). ∞ means Demand is 0 for that week.',
-      };
-    case 'stockEnd':
-      return 'Stock Qty';
+      return EXCEL_FORECAST_METRICS[7];
     default:
       return metric;
   }
 }
 
-async function getProductSetupView(strategyId: string) {
+async function getProductSetupView(
+  strategyId: string,
+  activeYear: number,
+  strategyRegion: StrategyRegion,
+) {
   const prismaAny = prisma as unknown as Record<string, unknown>;
   const productDelegate = prismaAny.product as
     | { findMany: (args?: unknown) => Promise<Product[]> }
@@ -676,8 +695,22 @@ async function getProductSetupView(strategyId: string) {
         findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
       }
     | undefined;
+  const productSetupYearDelegate = prismaAny.productSetupYear as
+    | {
+        findMany: (args?: unknown) => Promise<
+          Array<{
+            productId: string;
+            openingStock: number | Prisma.Decimal | null;
+            nextYearOpeningOverride: number | Prisma.Decimal | null;
+            notes: string | null;
+            totalCoverThresholdWeeks: number | Prisma.Decimal | null;
+            fbaCoverThresholdWeeks: number | Prisma.Decimal | null;
+          }>
+        >;
+      }
+    | undefined;
 
-  const [products, businessParameters, leadStages, leadOverrides] = await Promise.all([
+  const [products, businessParameters, leadStages, leadOverrides, setupYears] = await Promise.all([
     safeFindMany<Product[]>(
       productDelegate,
       { where: { strategyId }, orderBy: { name: 'asc' } },
@@ -701,6 +734,12 @@ async function getProductSetupView(strategyId: string) {
       { where: { product: { strategyId } } },
       [],
       'leadTimeOverride',
+    ),
+    safeFindMany(
+      productSetupYearDelegate,
+      { where: { strategyId, year: activeYear } },
+      [],
+      'productSetupYear',
     ),
   ]);
 
@@ -765,6 +804,30 @@ async function getProductSetupView(strategyId: string) {
       name: product.name,
     }));
 
+  const setupByProductId = new Map(setupYears.map((row) => [row.productId, row]));
+  const workbookSetupRows = productRows.map((product) => {
+    const setupRow = setupByProductId.get(product.id);
+    return {
+      productId: product.id,
+      sku: product.sku,
+      openingStock: formatNumeric(toOptionalNumber(setupRow?.openingStock ?? null), 0),
+      nextYearOpeningOverride: formatNumeric(
+        toOptionalNumber(setupRow?.nextYearOpeningOverride ?? null),
+        0,
+      ),
+      notes: setupRow?.notes ?? '',
+      region: strategyRegion,
+      totalCoverThresholdWeeks: formatNumeric(
+        toOptionalNumber(setupRow?.totalCoverThresholdWeeks ?? null),
+        2,
+      ),
+      fbaCoverThresholdWeeks: formatNumeric(
+        toOptionalNumber(setupRow?.fbaCoverThresholdWeeks ?? null),
+        2,
+      ),
+    };
+  });
+
   const leadStageTemplateViews = mapLeadStageTemplates(leadStages).map((stage) => ({
     id: stage.id,
     label: stage.label,
@@ -790,6 +853,7 @@ async function getProductSetupView(strategyId: string) {
 
   return {
     products: productRows,
+    workbookSetupRows,
     operationsParameters,
     salesParameters,
     financeParameters,
@@ -1326,8 +1390,22 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
         findMany: (args?: unknown) => Promise<SalesWeekFinancialsRow[]>;
       }
     | undefined;
+  const productSetupYearDelegate = prismaAny.productSetupYear as
+    | {
+        findMany: (args?: unknown) => Promise<
+          Array<{
+            productId: string;
+            year: number;
+            openingStock: number | Prisma.Decimal | null;
+            totalCoverThresholdWeeks: number | Prisma.Decimal | null;
+            fbaCoverThresholdWeeks: number | Prisma.Decimal | null;
+          }>
+        >;
+      }
+    | undefined;
 
-  const [operations, salesRows, profitOverrideRows, cashOverrideRows] = await Promise.all([
+  const [operations, salesRows, profitOverrideRows, cashOverrideRows, productSetupYears] =
+    await Promise.all([
     loadOperationsContext(strategyId, planning.calendar),
     safeFindMany<SalesWeek[]>(
       salesDelegate,
@@ -1346,6 +1424,12 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
       { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
       [],
       'cashFlowWeek',
+    ),
+    safeFindMany(
+      productSetupYearDelegate,
+      { where: { strategyId } },
+      [],
+      'productSetupYear',
     ),
   ]);
 
@@ -1411,6 +1495,7 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
     derivedOrders,
     salesOverrides,
     profitOverrides,
+    productSetupYears,
     salesPlan,
     actualFinancials,
     profit,
@@ -1446,35 +1531,78 @@ async function getOpsPlanningView(
   const visibleOrders = derivedOrders;
   const visibleOrderIds = new Set(visibleOrders.map((item) => item.derived.id));
 
-  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }) => ({
-    id: input.id,
-    productId: input.productId,
-    orderCode: input.orderCode,
-    poDate: formatDate(input.poDate ?? null),
-    productionStart: toIsoDate(input.productionStart ?? null) ?? '',
-    productionComplete: toIsoDate(input.productionComplete ?? null) ?? '',
-    sourceDeparture: toIsoDate(input.sourceDeparture ?? null) ?? '',
-    portEta: toIsoDate(input.portEta ?? null) ?? '',
-    availableDate: toIsoDate(input.availableDate ?? null) ?? '',
-    productName,
-    shipName: input.shipName ?? '',
-    containerNumber: input.containerNumber ?? input.transportReference ?? '',
-    quantity: formatNumeric(input.quantity ?? null, 0),
-    pay1Date: formatDate(input.pay1Date ?? null),
-    productionWeeks: formatNumeric(derived.stageProfile.productionWeeks),
-    sourceWeeks: formatNumeric(derived.stageProfile.sourceWeeks),
-    oceanWeeks: formatNumeric(derived.stageProfile.oceanWeeks),
-    finalWeeks: formatNumeric(derived.stageProfile.finalWeeks),
-    sellingPrice: formatNumeric(input.overrideSellingPrice ?? null),
-    manufacturingCost: formatNumeric(input.overrideManufacturingCost ?? null),
-    freightCost: formatNumeric(input.overrideFreightCost ?? null),
-    tariffRate: formatPercentDecimal(input.overrideTariffRate ?? null),
-    tacosPercent: formatPercentDecimal(input.overrideTacosPercent ?? null),
-    fbaFee: formatNumeric(input.overrideFbaFee ?? null),
-    referralRate: formatPercentDecimal(input.overrideReferralRate ?? null),
-    storagePerMonth: formatNumeric(input.overrideStoragePerMonth ?? null),
-    status: input.status,
-  }));
+  const poWorkbookInputs: PoTableWorkbookInput[] = visibleOrders.map(({ input, derived }) => {
+    const primaryBatch = input.batchTableRows?.[0] ?? null;
+    const totalStageWeeks =
+      derived.stageProfile.productionWeeks +
+      derived.stageProfile.sourceWeeks +
+      derived.stageProfile.oceanWeeks +
+      derived.stageProfile.finalWeeks;
+    return {
+      orderCode: input.orderCode,
+      product: context.productNameById.get(primaryBatch?.productId ?? input.productId) ?? '',
+      quantity: input.quantity,
+      unitsPerCarton: primaryBatch?.unitsPerCarton ?? null,
+      cartonLengthCm: primaryBatch?.cartonSide1Cm ?? null,
+      cartonWidthCm: primaryBatch?.cartonSide2Cm ?? null,
+      cartonHeightCm: primaryBatch?.cartonSide3Cm ?? null,
+      mfgStart: derived.productionStart,
+      arrivalWeeks: derived.stageProfile.oceanWeeks,
+      warehouseWeeks: totalStageWeeks,
+      inboundWeekOverride: input.inboundWeekOverride ?? null,
+      region: strategyRegion,
+    };
+  });
+
+  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }, index) => {
+    const primaryBatch = input.batchTableRows?.[0] ?? null;
+    const workbookInput = poWorkbookInputs[index];
+    const workbookRow = workbookInput
+      ? computePoTableWorkbookRow(workbookInput, poWorkbookInputs, index)
+      : null;
+    return {
+      id: input.id,
+      productId: input.productId,
+      orderCode: input.orderCode,
+      poDate: formatDate(input.poDate ?? null),
+      poClass: input.poClass ?? '',
+      productionStart: toIsoDate(input.productionStart ?? derived.productionStart ?? null) ?? '',
+      productionComplete: toIsoDate(input.productionComplete ?? null) ?? '',
+      sourceDeparture: toIsoDate(input.sourceDeparture ?? null) ?? '',
+      portEta: toIsoDate(input.portEta ?? null) ?? '',
+      availableDate: toIsoDate(input.availableDate ?? null) ?? '',
+      inboundWeekOverride: toIsoDate(input.inboundWeekOverride ?? null) ?? '',
+      inboundWeek: toIsoDate(workbookRow?.inboundWeek ?? derived.availableDate ?? null) ?? '',
+      productName,
+      shipName: input.shipName ?? '',
+      containerNumber: input.containerNumber ?? input.transportReference ?? '',
+      quantity: formatNumeric(input.quantity ?? null, 0),
+      unitsPerCarton: formatNumeric(primaryBatch?.unitsPerCarton ?? null, 0),
+      carton: formatNumeric(workbookRow?.carton ?? null, 0),
+      cartonSide1Cm: formatNumeric(primaryBatch?.cartonSide1Cm ?? null, 2),
+      cartonSide2Cm: formatNumeric(primaryBatch?.cartonSide2Cm ?? null, 2),
+      cartonSide3Cm: formatNumeric(primaryBatch?.cartonSide3Cm ?? null, 2),
+      cbm: formatNumeric(workbookRow?.cbm ?? null, 3),
+      poTotalQty: formatNumeric(workbookRow?.poTotalQty ?? null, 0),
+      poFirstRow: formatNumeric(workbookRow?.poFirstRow ?? null, 0),
+      notes: input.notes ?? '',
+      region: strategyRegion,
+      pay1Date: formatDate(input.pay1Date ?? null),
+      productionWeeks: formatNumeric(derived.stageProfile.productionWeeks),
+      sourceWeeks: formatNumeric(derived.stageProfile.sourceWeeks),
+      oceanWeeks: formatNumeric(derived.stageProfile.oceanWeeks),
+      finalWeeks: formatNumeric(derived.stageProfile.finalWeeks),
+      sellingPrice: formatNumeric(input.overrideSellingPrice ?? null),
+      manufacturingCost: formatNumeric(input.overrideManufacturingCost ?? null),
+      freightCost: formatNumeric(input.overrideFreightCost ?? null),
+      tariffRate: formatPercentDecimal(input.overrideTariffRate ?? null),
+      tacosPercent: formatPercentDecimal(input.overrideTacosPercent ?? null),
+      fbaFee: formatNumeric(input.overrideFbaFee ?? null),
+      referralRate: formatPercentDecimal(input.overrideReferralRate ?? null),
+      storagePerMonth: formatNumeric(input.overrideStoragePerMonth ?? null),
+      status: input.status,
+    };
+  });
 
   const timelineRows: OpsTimelineRow[] = visibleOrders.map(({ derived, productName }) => ({
     id: derived.id,
@@ -1582,6 +1710,54 @@ async function getOpsPlanningView(
     }),
   );
 
+  const poFinanceLookupRows = rawPurchaseOrders
+    .filter((order) => visibleOrderIds.has(order.id))
+    .flatMap((order) => {
+      const derived = derivedByOrderId.get(order.id);
+      const batches = Array.isArray(order.batchTableRows) ? order.batchTableRows : [];
+      return batches.map((batch) => {
+        const totalStageWeeks = derived
+          ? derived.stageProfile.productionWeeks +
+            derived.stageProfile.sourceWeeks +
+            derived.stageProfile.oceanWeeks +
+            derived.stageProfile.finalWeeks
+          : null;
+        return {
+          orderCode: order.orderCode,
+          product: context.productNameById.get(batch.productId) ?? '',
+          quantity: toOptionalNumber(batch.quantity),
+          unitsPerCarton: toOptionalNumber(
+            (batch as BatchTableRow & { unitsPerCarton?: number | null }).unitsPerCarton ?? null,
+          ),
+          cartonLengthCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide1Cm?: Prisma.Decimal | number | null })
+              .cartonSide1Cm ?? null,
+          ),
+          cartonWidthCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide2Cm?: Prisma.Decimal | number | null })
+              .cartonSide2Cm ?? null,
+          ),
+          cartonHeightCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide3Cm?: Prisma.Decimal | number | null })
+              .cartonSide3Cm ?? null,
+          ),
+          mfgStart: derived?.productionStart ?? order.productionStart ?? null,
+          arrivalWeeks: derived?.stageProfile.oceanWeeks ?? null,
+          warehouseWeeks: totalStageWeeks,
+          inboundWeekOverride:
+            (order as PurchaseOrder & { inboundWeekOverride?: Date | null })
+              .inboundWeekOverride ?? null,
+          region: strategyRegion,
+        } satisfies PoTableWorkbookInput;
+      });
+    });
+  const poFinanceLookupDerived = poFinanceLookupRows.map((row, index) => ({
+    orderCode: row.orderCode,
+    product: row.product,
+    region: row.region,
+    carton: computePoTableWorkbookRow(row, poFinanceLookupRows, index).carton,
+  }));
+
   const batchRows = rawPurchaseOrders
     .filter((order) => visibleOrderIds.has(order.id))
     .flatMap((order) => {
@@ -1593,6 +1769,24 @@ async function getOpsPlanningView(
         batchCode: batch.batchCode ?? undefined,
         productId: batch.productId,
         productName: context.productNameById.get(batch.productId) ?? '',
+        carton: formatNumeric(
+          computePoFinanceWorkbookRow({
+            orderCode: order.orderCode,
+            product: context.productNameById.get(batch.productId) ?? '',
+            region: strategyRegion,
+            poTableRows: poFinanceLookupDerived,
+            sellPrice: null,
+            manufacturingCost: null,
+            freightCost: null,
+            tariffCost: null,
+            tacosPercent: null,
+            fbaFee: null,
+            referralPercent: null,
+            storageCost: null,
+          }).carton,
+          0,
+        ),
+        region: strategyRegion,
         quantity: formatNumeric(toNumberSafe(batch.quantity), 0),
         sellingPrice: formatNumeric(
           batch.overrideSellingPrice ?? order.overrideSellingPrice ?? null,
@@ -1818,9 +2012,9 @@ function getSalesPlanningView(
   const nestedHeaders: NestedHeaderCell[][] = hasProducts
     ? [
         ['', '', ''],
-        ['Week', 'Date', 'Inbound PO'],
+        ['WEEK', 'DATE', 'Notes'],
       ]
-    : [['Week', 'Date', 'Inbound PO']];
+    : [['WEEK', 'DATE', 'Notes']];
 
   productList.forEach((product, productIdx) => {
     nestedHeaders[0].push({ label: productLabel(product), colspan: SALES_METRICS.length });
@@ -1849,6 +2043,13 @@ function getSalesPlanningView(
   }
 
   const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
+  const setupYear = activeSegment?.year ?? null;
+  const setupByProductId = new Map(
+    financialData.productSetupYears
+      .filter((row) => setupYear == null || row.year === setupYear)
+      .map((row) => [row.productId, row]),
+  );
+  const previousForecastByProductId = new Map<string, ForecastWorkbookRow>();
 
   const segmentForWeek = (weekNumber: number): YearSegment | null => {
     if (!planning.yearSegments.length) return null;
@@ -1900,45 +2101,57 @@ function getSalesPlanningView(
         row[`p${productIdx}_hasInbound`] = 'true';
       }
       row[`p${productIdx}_arrivals`] = formatNumeric(derived?.arrivals ?? null, 0);
+      const setupRow = setupByProductId.get(product.id);
+      const forecastRow = computeForecastWorkbookRow({
+        openingStock: toOptionalNumber(setupRow?.openingStock ?? null),
+        inbound: derived?.arrivals ?? null,
+        actual: derived?.actualSales ?? null,
+        planner: derived?.forecastSales ?? null,
+        final: derived?.finalSales ?? null,
+        previous: previousForecastByProductId.get(product.id) ?? null,
+      });
+      previousForecastByProductId.set(product.id, forecastRow);
 
       SALES_METRICS.forEach((metric) => {
         const key = columnKey(productIdx, metric);
         switch (metric) {
-          case 'stockStart':
-            row[key] = formatNumeric(derived?.stockStart ?? null, 0);
+          case 'inbound':
+            row[key] = formatNumeric(forecastRow.inbound, 0);
+            break;
+          case 'threePl':
+            row[key] = formatNumeric(forecastRow.threePl, 0);
+            break;
+          case 'fba':
+            row[key] = formatNumeric(forecastRow.fba, 0);
+            break;
+          case 'fbaCoverWeeks':
+            if (!Number.isFinite(forecastRow.fbaCoverWeeks)) {
+              row[key] = '∞';
+            } else {
+              row[key] = formatNumeric(forecastRow.fbaCoverWeeks, 2);
+            }
+            break;
+          case 'totalCoverWeeks':
+            if (!Number.isFinite(forecastRow.totalCoverWeeks)) {
+              row[key] = '∞';
+            } else {
+              row[key] = formatNumeric(forecastRow.totalCoverWeeks, 2);
+            }
             break;
           case 'actualSales':
-            row[key] = formatNumeric(derived?.actualSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.actual, 0);
             break;
           case 'forecastSales':
-            row[key] = formatNumeric(derived?.forecastSales ?? null, 0);
-            break;
-          case 'systemForecastSales':
-            row[key] = formatNumeric(derived?.systemForecastSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.planner, 0);
             break;
           case 'finalSales':
-            row[key] = formatNumeric(derived?.finalSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.final, 0);
             if (derived?.finalSalesSource) {
               row[`p${productIdx}_finalSalesSource`] = derived.finalSalesSource;
             }
             if (derived?.systemForecastVersion) {
               row[`p${productIdx}_systemForecastVersion`] = derived.systemForecastVersion;
             }
-            break;
-          case 'finalSalesError':
-            row[key] = formatPercent(derived?.finalPercentError ?? null, 1);
-            break;
-          case 'stockWeeks':
-            if (derived?.stockWeeks == null) {
-              row[key] = '';
-            } else if (!Number.isFinite(derived.stockWeeks)) {
-              row[key] = '∞';
-            } else {
-              row[key] = formatNumeric(derived.stockWeeks, 2);
-            }
-            break;
-          case 'stockEnd':
-            row[key] = formatNumeric(derived?.stockEnd ?? null, 0);
             break;
           default:
             break;
@@ -2542,8 +2755,21 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       const allStrategyIds = strategies.map((s) => s.id);
       const [productSetupView, keyParametersByStrategyId] = await Promise.all([
         strategyId
-          ? getProductSetupView(strategyId)
-          : Promise.resolve({ products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] }),
+          ? getProductSetupView(
+              strategyId,
+              activeYear ?? new Date().getUTCFullYear(),
+              strategyRegion,
+            )
+          : Promise.resolve({
+              products: [],
+              workbookSetupRows: [],
+              operationsParameters: [],
+              salesParameters: [],
+              financeParameters: [],
+              leadStageTemplates: [],
+              leadTimeProfiles: {},
+              leadTimeOverrideIds: [],
+            }),
         getKeyParametersForAllStrategies(allStrategyIds),
       ]);
 
@@ -2552,7 +2778,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           strategies={strategies}
           activeStrategyId={resolvedStrategyId}
           viewer={viewer}
+          activeYear={activeYear ?? new Date().getUTCFullYear()}
           products={productSetupView.products}
+          workbookSetupRows={productSetupView.workbookSetupRows}
           operationsParameters={productSetupView.operationsParameters}
           salesParameters={productSetupView.salesParameters}
           financeParameters={productSetupView.financeParameters}
@@ -2748,7 +2976,28 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       );
       break;
     }
-    case '6-po-profitability': {
+    case '6-po-finances': {
+      const activeStrategyId = requireStrategyId();
+      const view = await getOpsPlanningView(
+        activeStrategyId,
+        strategyRegion,
+        planningCalendar,
+        activeSegment,
+      );
+      const productOptions = view.calculator.products
+        .map((product) => ({ id: product.id, name: productLabel(product) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      tabularContent = (
+        <CustomOpsCostGrid
+          rows={view.batchTableRows}
+          scrollKey={`po-finances:${activeStrategyId}`}
+          products={productOptions}
+        />
+      );
+      visualContent = tabularContent;
+      break;
+    }
+    case '8-po-profitability': {
       const activeStrategyId = requireStrategyId();
       const data = await getFinancialData();
       const view = getPOProfitabilityView(data, planningCalendar, reportAsOfDate);

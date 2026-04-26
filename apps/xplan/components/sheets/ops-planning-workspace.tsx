@@ -86,6 +86,8 @@ export type PurchaseOrderSerialized = {
   quantity: number;
   poDate?: string | null;
   poWeekNumber?: number | null;
+  poClass?: string | null;
+  inboundWeekOverride?: string | null;
   productionWeeks?: number | null;
   sourceWeeks?: number | null;
   oceanWeeks?: number | null;
@@ -154,6 +156,11 @@ export type PurchaseOrderSerialized = {
     overrideFbaFee?: number | null;
     overrideReferralRate?: number | null;
     overrideStoragePerMonth?: number | null;
+    cartonSide1Cm?: number | null;
+    cartonSide2Cm?: number | null;
+    cartonSide3Cm?: number | null;
+    cartonWeightKg?: number | null;
+    unitsPerCarton?: number | null;
   }>;
 };
 
@@ -215,6 +222,7 @@ interface OpsPlanningWorkspaceProps {
   calculator: OpsPlanningCalculatorPayload;
   timelineMonths: { start: string; end: string; label: string }[];
   mode?: 'tabular' | 'visual';
+  showPoFinanceTable?: boolean;
 }
 
 type ConfirmAction =
@@ -374,6 +382,8 @@ function deserializeOrders(
     quantity: order.quantity,
     poDate: parseDateValue(order.poDate),
     poWeekNumber: order.poWeekNumber ?? null,
+    poClass: order.poClass ?? null,
+    inboundWeekOverride: parseDateValue(order.inboundWeekOverride),
     productionWeeks: normalizeStageWeeks(
       'productionWeeks',
       order.productionWeeks ?? null,
@@ -448,6 +458,11 @@ function deserializeOrders(
         overrideFbaFee: batch.overrideFbaFee ?? null,
         overrideReferralRate: batch.overrideReferralRate ?? null,
         overrideStoragePerMonth: batch.overrideStoragePerMonth ?? null,
+        cartonSide1Cm: batch.cartonSide1Cm ?? null,
+        cartonSide2Cm: batch.cartonSide2Cm ?? null,
+        cartonSide3Cm: batch.cartonSide3Cm ?? null,
+        cartonWeightKg: batch.cartonWeightKg ?? null,
+        unitsPerCarton: batch.unitsPerCarton ?? null,
       })) ?? [],
   }));
 }
@@ -467,6 +482,8 @@ function mergeOrders(
         productId: row.productId,
         quantity: parseInteger(row.quantity, 0),
         poDate: parseDateValue(row.poDate),
+        poClass: row.poClass ? row.poClass : null,
+        inboundWeekOverride: parseDateValue(row.inboundWeekOverride),
         productionWeeks: normalizeStageWeeks(
           'productionWeeks',
           parseNumber(row.productionWeeks),
@@ -517,6 +534,8 @@ function mergeOrders(
       orderCode: row.orderCode,
       productId: row.productId,
       quantity: parseInteger(row.quantity, base.quantity ?? 0),
+      poClass: row.poClass ? row.poClass : null,
+      inboundWeekOverride: parseDateValue(row.inboundWeekOverride) ?? base.inboundWeekOverride ?? null,
       pay1Date: parseDateValue(row.pay1Date),
       productionWeeks: normalizeStageWeeks(
         'productionWeeks',
@@ -752,6 +771,7 @@ export function OpsPlanningWorkspace({
   calculator,
   timelineMonths,
   mode = 'tabular',
+  showPoFinanceTable = false,
 }: OpsPlanningWorkspaceProps) {
   const isVisualMode = mode === 'visual';
   const router = useRouter();
@@ -807,6 +827,8 @@ export function OpsPlanningWorkspace({
       batchCode: batch.batchCode ?? undefined,
       productId: batch.productId,
       productName: productNameIndex.get(batch.productId) ?? '',
+      carton: '',
+      region: '',
       quantity:
         batch.quantity == null
           ? ''
@@ -1409,6 +1431,8 @@ export function OpsPlanningWorkspace({
           batchCode: created.batchCode ?? undefined,
           productId: created.productId,
           productName: productNameIndex.get(created.productId) ?? '',
+          carton: '',
+          region: '',
           quantity: formatNumericInput(created.quantity ?? 0, 0),
           sellingPrice: '',
           manufacturingCost: '',
@@ -2320,21 +2344,23 @@ export function OpsPlanningWorkspace({
             </section>
           ) : null}
 
-          <CustomOpsCostGrid
-            rows={visibleBatches}
-            activeOrderId={activeOrderId}
-            activeBatchId={activeBatchId}
-            scrollKey={`ops-planning:batch:${strategyId}`}
-            onSelectOrder={(orderId) => setActiveOrderId(orderId)}
-            onSelectBatch={handleSelectBatch}
-            onRowsChange={handleBatchRowsChange}
-            onAddBatch={handleAddBatch}
-            onDeleteBatch={handleDeleteBatch}
-            disableAdd={isPending || !activeOrderId}
-            disableDelete={isPending}
-            products={productOptions}
-            onSync={handleCostSync}
-          />
+          {showPoFinanceTable ? (
+            <CustomOpsCostGrid
+              rows={visibleBatches}
+              activeOrderId={activeOrderId}
+              activeBatchId={activeBatchId}
+              scrollKey={`ops-planning:batch:${strategyId}`}
+              onSelectOrder={(orderId) => setActiveOrderId(orderId)}
+              onSelectBatch={handleSelectBatch}
+              onRowsChange={handleBatchRowsChange}
+              onAddBatch={handleAddBatch}
+              onDeleteBatch={handleDeleteBatch}
+              disableAdd={isPending || !activeOrderId}
+              disableDelete={isPending}
+              products={productOptions}
+              onSync={handleCostSync}
+            />
+          ) : null}
           <CustomPurchasePaymentsGrid
             payments={visiblePayments}
             activeOrderId={activeOrderId}

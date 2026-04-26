@@ -17,8 +17,6 @@ import { usePersistentScroll } from '@/hooks/usePersistentScroll';
 import {
   useOpsPlanningStore,
   type CellEdit,
-  type ProfitDisplayMode,
-  type TariffInputMode,
 } from '@/stores';
 import { cn } from '@/lib/utils';
 import { getSelectionBorderBoxShadow } from '@/lib/grid/selection-border';
@@ -52,6 +50,8 @@ export type OpsBatchRow = {
   batchCode?: string;
   productId: string;
   productName: string;
+  carton: string;
+  region: string;
   quantity: string;
   sellingPrice: string;
   manufacturingCost: string;
@@ -203,13 +203,12 @@ function normalizeRange(range: CellRange): {
 }
 
 const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
-  { key: 'orderCode', header: 'PO Code', width: 140, type: 'text', editable: false },
-  { key: 'productName', header: 'Product', width: 140, type: 'dropdown', editable: true },
-  { key: 'cartonSide1Cm', header: 'Carton', width: 120, type: 'carton', editable: true },
-  { key: 'quantity', header: 'Qty', width: 100, type: 'numeric', editable: true, precision: 0 },
+  { key: 'orderCode', header: 'PO CODE', width: 140, type: 'text', editable: false },
+  { key: 'productName', header: 'PRODUCT', width: 150, type: 'dropdown', editable: true },
+  { key: 'carton', header: 'CARTON', width: 100, type: 'numeric', editable: false, precision: 0 },
   {
     key: 'sellingPrice',
-    header: 'Sell $',
+    header: 'SELL $',
     width: 100,
     type: 'numeric',
     editable: true,
@@ -217,7 +216,7 @@ const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   },
   {
     key: 'manufacturingCost',
-    header: 'Mfg $',
+    header: 'MFG $',
     width: 100,
     type: 'numeric',
     editable: true,
@@ -225,7 +224,7 @@ const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   },
   {
     key: 'freightCost',
-    header: 'Freight $',
+    header: 'FREIGHT $',
     width: 100,
     type: 'numeric',
     editable: true,
@@ -233,18 +232,9 @@ const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
   },
 ];
 
-const TARIFF_RATE_COLUMN: ColumnDef = {
-  key: 'tariffRate',
-  header: 'Tariff %',
-  width: 110,
-  type: 'percent',
-  editable: true,
-  precision: 2,
-};
-
 const TARIFF_COST_COLUMN: ColumnDef = {
   key: 'tariffCost',
-  header: 'Tariff $',
+  header: 'TARIFF $',
   width: 120,
   type: 'numeric',
   editable: true,
@@ -254,7 +244,7 @@ const TARIFF_COST_COLUMN: ColumnDef = {
 const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   {
     key: 'tacosPercent',
-    header: 'TACoS %',
+    header: 'TACOS %',
     width: 110,
     type: 'percent',
     editable: true,
@@ -263,7 +253,7 @@ const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   { key: 'fbaFee', header: 'FBA $', width: 110, type: 'numeric', editable: true, precision: 3 },
   {
     key: 'referralRate',
-    header: 'Referral %',
+    header: 'REFERRAL %',
     width: 130,
     type: 'percent',
     editable: true,
@@ -271,23 +261,13 @@ const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   },
   {
     key: 'storagePerMonth',
-    header: 'Storage $',
+    header: 'STORAGE $',
     width: 120,
     type: 'numeric',
     editable: true,
     precision: 3,
   },
 ];
-
-// Units per carton column (separate from carton dimensions modal)
-const UNITS_PER_CARTON_COLUMN: ColumnDef = {
-  key: 'unitsPerCarton',
-  header: 'Units/Ctn',
-  width: 90,
-  type: 'numeric',
-  editable: true,
-  precision: 0,
-};
 
 /**
  * Compute total CBM for a batch row.
@@ -319,8 +299,6 @@ function computeCbm(row: OpsBatchRow): number | null {
   return cbmPerCarton * totalCartons;
 }
 
-// TariffInputMode and ProfitDisplayMode imported from @/stores
-
 const CELL_ID_PREFIX = 'xplan-ops-batch';
 
 function sanitizeDomId(value: string): string {
@@ -347,72 +325,43 @@ export function CustomOpsCostGrid({
   onSync,
 }: CustomOpsCostGridProps) {
   // Get state and actions from zustand store
-  const tariffInputMode = useOpsPlanningStore((s) => s.tariffInputMode);
-  const profitDisplayMode = useOpsPlanningStore((s) => s.profitDisplayMode);
-  const toggleTariffMode = useOpsPlanningStore((s) => s.toggleTariffMode);
-  const setProfitMode = useOpsPlanningStore((s) => s.setProfitMode);
   const recordEdits = useOpsPlanningStore((s) => s.recordEdits);
   const storeUndo = useOpsPlanningStore((s) => s.undo);
   const storeRedo = useOpsPlanningStore((s) => s.redo);
 
   const columns = useMemo(() => {
-    const tariffColumn = tariffInputMode === 'cost' ? TARIFF_COST_COLUMN : TARIFF_RATE_COLUMN;
-    const profitColumns: ColumnDef[] =
-      profitDisplayMode === 'percent'
-        ? [
-            {
-              key: 'grossProfit',
-              header: 'GP %',
-              width: 80,
-              type: 'percent',
-              editable: false,
-              precision: 2,
-              computed: true,
-            },
-            {
-              key: 'netProfit',
-              header: 'NP %',
-              width: 80,
-              type: 'percent',
-              editable: false,
-              precision: 2,
-              computed: true,
-            },
-          ]
-        : [
-              {
-                key: 'grossProfit',
-                header: 'GP $',
-                width: 90,
-                type: 'numeric',
-                editable: false,
-                precision: profitDisplayMode === 'total' ? 0 : 2,
-                computed: true,
-              },
-              {
-                key: 'netProfit',
-                header: 'NP $',
-                width: 90,
-                type: 'numeric',
-                editable: false,
-                precision: profitDisplayMode === 'total' ? 0 : 2,
-                computed: true,
-              },
-            ];
+    const tariffColumn = TARIFF_COST_COLUMN;
+    const profitColumns: ColumnDef[] = [
+      {
+        key: 'grossProfit',
+        header: 'GP $',
+        width: 90,
+        type: 'numeric',
+        editable: false,
+        precision: 2,
+        computed: true,
+      },
+      {
+        key: 'netProfit',
+        header: 'NP $',
+        width: 90,
+        type: 'numeric',
+        editable: false,
+        precision: 2,
+        computed: true,
+      },
+    ];
 
-    // Add computed CBM column
-    const cbmColumn: ColumnDef = {
-      key: 'cbm',
-      header: 'CBM',
-      width: 70,
-      type: 'numeric',
+    const regionColumn: ColumnDef = {
+      key: 'region',
+      header: 'REGION',
+      width: 95,
+      type: 'text',
       editable: false,
-      precision: 3,
-      computed: true,
     };
 
-    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, UNITS_PER_CARTON_COLUMN, cbmColumn, ...profitColumns];
-  }, [profitDisplayMode, tariffInputMode]);
+    return [...COLUMNS_BEFORE_TARIFF, tariffColumn, ...COLUMNS_AFTER_TARIFF, ...profitColumns, regionColumn];
+  }, []);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
   const [editingCell, setEditingCell] = useState<{
@@ -586,11 +535,6 @@ export function CustomOpsCostGrid({
       tableScrollRef.current?.focus();
     });
   }, []);
-
-  const toggleTariffInputMode = useCallback(() => {
-    cancelEditing();
-    toggleTariffMode();
-  }, [cancelEditing, toggleTariffMode]);
 
   const commitEdit = useCallback(
     (overrideValue?: string) => {
@@ -1453,37 +1397,13 @@ export function CustomOpsCostGrid({
     };
   }, []);
 
-  // Monetary fields that should be affected by the profit display mode (total vs per-unit)
-  const MONETARY_FIELDS: Set<keyof OpsBatchRow> = new Set([
-    'sellingPrice',
-    'manufacturingCost',
-    'freightCost',
-    'tariffCost',
-    'fbaFee',
-    'storagePerMonth',
-  ]);
-
   const formatDisplayValue = (row: OpsBatchRow, column: ColumnDef): string => {
     if (column.key === 'grossProfit' || column.key === 'netProfit') {
       const metrics = computeProfitMetrics(row);
       const precision = column.precision ?? 2;
 
       const raw =
-        column.key === 'grossProfit'
-          ? column.type === 'percent'
-            ? metrics.grossMargin
-            : profitDisplayMode === 'total'
-              ? metrics.grossProfitTotal
-              : metrics.grossProfitPerUnit
-          : column.type === 'percent'
-            ? metrics.netMargin
-            : profitDisplayMode === 'total'
-              ? metrics.netProfitTotal
-              : metrics.netProfitPerUnit;
-
-      if (column.type === 'percent') {
-        return `${(raw * 100).toFixed(precision)}%`;
-      }
+        column.key === 'grossProfit' ? metrics.grossProfitPerUnit : metrics.netProfitPerUnit;
 
       const formatter = new Intl.NumberFormat('en-US', {
         style: 'currency',
@@ -1517,8 +1437,10 @@ export function CustomOpsCostGrid({
     if (column.type === 'numeric') {
       const num = sanitizeNumeric(value);
       if (Number.isNaN(num)) return value;
-      // Don't show $ prefix for quantity or carton dimension fields
-      if (column.key === 'quantity' || column.key === 'unitsPerCarton') return num.toLocaleString();
+      // Don't show $ prefix for count or carton dimension fields
+      if (column.key === 'quantity' || column.key === 'unitsPerCarton' || column.key === 'carton') {
+        return num.toLocaleString();
+      }
       if (
         column.key === 'cartonSide1Cm' ||
         column.key === 'cartonSide2Cm' ||
@@ -1528,30 +1450,12 @@ export function CustomOpsCostGrid({
         return num.toFixed(column.precision ?? 2);
       }
 
-      // Apply total mode multiplier for monetary fields
-      if (MONETARY_FIELDS.has(column.key) && profitDisplayMode === 'total') {
-        const quantity = sanitizeNumeric(row.quantity);
-        const total = Number.isFinite(quantity) ? num * quantity : num;
-        const precision = profitDisplayMode === 'total' ? 0 : (column.precision ?? 2);
-        return `$${total.toFixed(precision).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-      }
-
       return `$${num.toFixed(column.precision ?? 2)}`;
     }
 
     if (column.type === 'percent') {
       const num = sanitizeNumeric(value);
       if (Number.isNaN(num)) return value;
-
-      // In total mode, show TACoS and Referral as dollar amounts
-      if (profitDisplayMode === 'total' && (column.key === 'tacosPercent' || column.key === 'referralRate')) {
-        const sellingPrice = sanitizeNumeric(row.sellingPrice);
-        const quantity = sanitizeNumeric(row.quantity);
-        if (Number.isFinite(sellingPrice) && Number.isFinite(quantity)) {
-          const dollarAmount = sellingPrice * num * quantity;
-          return `$${dollarAmount.toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-        }
-      }
 
       return `${(num * 100).toFixed(column.precision ?? 2)}%`;
     }
@@ -1703,16 +1607,8 @@ export function CustomOpsCostGrid({
                 const metrics = computeProfitMetrics(row);
                 const raw =
                   column.key === 'grossProfit'
-                    ? column.type === 'percent'
-                      ? metrics.grossMargin
-                      : profitDisplayMode === 'total'
-                        ? metrics.grossProfitTotal
-                        : metrics.grossProfitPerUnit
-                    : column.type === 'percent'
-                      ? metrics.netMargin
-                      : profitDisplayMode === 'total'
-                        ? metrics.netProfitTotal
-                        : metrics.netProfitPerUnit;
+                    ? metrics.grossProfitPerUnit
+                    : metrics.netProfitPerUnit;
                 if (raw > 0) return 'text-emerald-700 dark:text-emerald-300';
                 if (raw < 0) return 'text-rose-700 dark:text-rose-300';
                 return '';
@@ -1737,54 +1633,10 @@ export function CustomOpsCostGrid({
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300/80">
-            Batch Table
+            PO Finances Table
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-emerald-500/25 bg-emerald-500/10 p-0.5 text-xs font-semibold uppercase tracking-wide text-emerald-800 shadow-sm dark:border-emerald-300/40 dark:bg-emerald-300/15 dark:text-emerald-100">
-            <button
-              type="button"
-              onClick={() => setProfitMode('unit')}
-              className={cn(
-                'rounded-md px-2 py-1 transition',
-                profitDisplayMode === 'unit'
-                  ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
-              )}
-              aria-pressed={profitDisplayMode === 'unit'}
-              title="Show profit per unit"
-            >
-              Per unit
-            </button>
-            <button
-              type="button"
-              onClick={() => setProfitMode('total')}
-              className={cn(
-                'rounded-md px-2 py-1 transition',
-                profitDisplayMode === 'total'
-                  ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
-              )}
-              aria-pressed={profitDisplayMode === 'total'}
-              title="Show total profit for the batch"
-            >
-              Absolute
-            </button>
-            <button
-              type="button"
-              onClick={() => setProfitMode('percent')}
-              className={cn(
-                'rounded-md px-2 py-1 transition',
-                profitDisplayMode === 'percent'
-                  ? 'bg-white text-emerald-900 shadow-sm dark:bg-slate-900/60 dark:text-emerald-100'
-                  : 'text-emerald-800/80 hover:text-emerald-900 dark:text-emerald-100 dark:hover:text-white',
-              )}
-              aria-pressed={profitDisplayMode === 'percent'}
-              title="Show profit margins (%)"
-            >
-              %
-            </button>
-          </div>
           {onAddBatch ? (
             <button
               type="button"
@@ -1838,26 +1690,7 @@ export function CustomOpsCostGrid({
                     style={{ minWidth: column.width }}
                     className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
-                    {column.key === 'tariffRate' || column.key === 'tariffCost' ? (
-                      <button
-                        type="button"
-                        className="inline-flex w-full items-center justify-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-xs font-extrabold uppercase tracking-[0.12em] text-cyan-700 transition hover:bg-cyan-500/20 dark:border-cyan-300/35 dark:bg-cyan-300/10 dark:text-cyan-200 dark:hover:bg-cyan-300/20"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          toggleTariffInputMode();
-                        }}
-                        title={
-                          tariffInputMode === 'rate'
-                            ? 'Switch to Tariff $/unit'
-                            : 'Switch to Tariff %'
-                        }
-                      >
-                        {column.header}
-                      </button>
-                    ) : (
-                      column.header
-                    )}
+                    {column.header}
                   </TableHead>
                 ))}
               </TableRow>

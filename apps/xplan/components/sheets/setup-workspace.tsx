@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { StrategyTable } from '@/components/sheets/strategy-table';
 import { SetupDefaultsBand } from '@/components/sheets/setup-defaults-band';
 import { SetupProductTable } from '@/components/sheets/setup-product-table';
+import { WorkbookSetupTable, type WorkbookSetupRow } from '@/components/sheets/workbook-setup-table';
 
 type ParameterList = Array<{
   id: string;
@@ -73,8 +74,10 @@ type LeadTimeOverrideId = {
 type SetupWorkspaceProps = {
   strategies: Strategy[];
   activeStrategyId: string | null;
+  activeYear: number;
   viewer: { id: string | null; email: string | null; isSuperAdmin: boolean };
   products: Array<{ id: string; sku: string; name: string }>;
+  workbookSetupRows: WorkbookSetupRow[];
   operationsParameters: ParameterList;
   salesParameters: ParameterList;
   financeParameters: ParameterList;
@@ -85,6 +88,7 @@ type SetupWorkspaceProps = {
 };
 
 const TABS = [
+  { id: 'workbook' as const, label: 'Workbook Setup' },
   { id: 'strategies' as const, label: 'Strategies' },
   { id: 'defaults' as const, label: 'Defaults & Products' },
 ];
@@ -94,8 +98,10 @@ type TabId = (typeof TABS)[number]['id'];
 export function SetupWorkspace({
   strategies,
   activeStrategyId,
+  activeYear,
   viewer,
   products,
+  workbookSetupRows,
   operationsParameters,
   salesParameters,
   financeParameters,
@@ -104,11 +110,13 @@ export function SetupWorkspace({
   leadTimeOverrideIds,
   keyParametersByStrategyId,
 }: SetupWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('strategies');
+  const [activeTab, setActiveTab] = useState<TabId>(activeStrategyId ? 'workbook' : 'strategies');
 
   const hasStrategy = Boolean(activeStrategyId);
   const tabHelperText =
-    activeTab === 'strategies'
+    activeTab === 'workbook'
+      ? `${workbookSetupRows.length} SKU rows`
+      : activeTab === 'strategies'
       ? `${strategies.length} scenarios`
       : `${products.length} products`;
 
@@ -142,6 +150,14 @@ export function SetupWorkspace({
           activeStrategyId={activeStrategyId}
           viewer={viewer}
           keyParametersByStrategyId={keyParametersByStrategyId}
+        />
+      )}
+
+      {activeTab === 'workbook' && hasStrategy && (
+        <WorkbookSetupTable
+          strategyId={activeStrategyId!}
+          activeYear={activeYear}
+          rows={workbookSetupRows}
         />
       )}
 
