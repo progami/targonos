@@ -6,13 +6,13 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
 
-const LOG = '/tmp/daily-visuals.log'
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../../../../..')
 const NODE_BIN = process.execPath
 const RUN_LOG_WRITER = path.join(SCRIPT_DIR, '../../lib/write-monitoring-run-log.mjs')
 const MARKET = parseMarket(readMarketArg())
+const LOG = logPathForMarket(MARKET)
 const DEST = path.join(monitoringRootForMarket(MARKET), 'Daily', 'Visuals (Browser)')
 const CAPTURE_CHILD_TIMEOUT_MS = 210_000
 const MAX_CAPTURE_ATTEMPTS = 2
@@ -36,6 +36,11 @@ function parseMarket(raw) {
   if (value === 'us') return 'us'
   if (value === 'uk') return 'uk'
   throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+function logPathForMarket(market) {
+  if (market === 'us') return '/tmp/daily-visuals.log'
+  return `/tmp/daily-visuals-${market}.log`
 }
 
 function loadEnvFile(file) {
