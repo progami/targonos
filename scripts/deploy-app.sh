@@ -1090,6 +1090,13 @@ validate_plutus_qbo_env() {
   fi
 }
 
+validate_hermes_env() {
+  if [[ "${HERMES_AUTO_MIGRATE:-}" == "1" ]]; then
+    error "HERMES_AUTO_MIGRATE must be 0 for hosted hermes deployments"
+    exit 1
+  fi
+}
+
 require_non_empty_env_var() {
   local key="$1"
   local value="${!key:-}"
@@ -1104,8 +1111,8 @@ normalize_argus_media_backend() {
   local raw="${ARGUS_MEDIA_BACKEND:-}"
 
   if [[ -z "${raw//[[:space:]]/}" ]]; then
-    printf 'local'
-    return 0
+    error "ARGUS_MEDIA_BACKEND is required for argus deployments"
+    exit 1
   fi
 
   local normalized
@@ -1361,6 +1368,10 @@ apply_hosted_env_overrides
 
 if [[ "$app_key" == "plutus" ]]; then
   validate_plutus_qbo_env
+fi
+
+if [[ "$app_key" == "hermes" ]]; then
+  validate_hermes_env
 fi
 
 if [[ "$app_key" == "argus" ]]; then
