@@ -46,30 +46,30 @@ export class S3Service {
                 const documentType = this.sanitizeFilename(context.documentType);
                 return `transactions/${year}/${month}/${context.transactionId}/${documentType}_${timestamp}_${hash}_${sanitizedFilename}`;
             }
-            case 'fulfillment-order': {
+            case 'outbound-order': {
                 const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
-                const fulfillmentOrderNumber = context.fulfillmentOrderNumber
-                    ? this.sanitizeFilename(context.fulfillmentOrderNumber)
+                const outboundOrderNumber = context.outboundOrderNumber
+                    ? this.sanitizeFilename(context.outboundOrderNumber)
                     : null;
-                const fulfillmentOrderFolder = fulfillmentOrderNumber
-                    ? `${fulfillmentOrderNumber}--${context.fulfillmentOrderId}`
-                    : context.fulfillmentOrderId;
+                const outboundOrderFolder = outboundOrderNumber
+                    ? `${outboundOrderNumber}--${context.outboundOrderId}`
+                    : context.outboundOrderId;
                 const stage = this.sanitizeFilename(context.stage);
                 const documentType = this.sanitizeFilename(context.documentType);
-                return `fulfillment-orders/${tenant}/${fulfillmentOrderFolder}/${stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
+                return `outbound-orders/${tenant}/${outboundOrderFolder}/${stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
             }
-            case 'purchase-order': {
+            case 'inbound': {
                 const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
-                const purchaseOrderNumber = context.purchaseOrderNumber
-                    ? this.sanitizeFilename(context.purchaseOrderNumber)
+                const inboundOrderNumber = context.inboundOrderNumber
+                    ? this.sanitizeFilename(context.inboundOrderNumber)
                     : null;
-                const purchaseOrderFolder = purchaseOrderNumber
-                    ? `${purchaseOrderNumber}--${context.purchaseOrderId}`
-                    : context.purchaseOrderId;
+                const inboundOrderFolder = inboundOrderNumber
+                    ? `${inboundOrderNumber}--${context.inboundOrderId}`
+                    : context.inboundOrderId;
                 const documentType = this.sanitizeFilename(context.documentType);
-                // Keep all documents for a single PO under one stable prefix (no year/month sharding),
+                // Keep all documents for a single inbound order under one stable prefix (no year/month sharding),
                 // so uploads over multiple months don't scatter across folders.
-                return `purchase-orders/${tenant}/${purchaseOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
+                return `inbound/${tenant}/${inboundOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
             }
             case 'export-temp': {
                 const exportType = this.sanitizeFilename(context.exportType);
@@ -395,12 +395,12 @@ export function isValidFileContext(context) {
     switch (c.type) {
         case 'transaction':
             return typeof c.transactionId === 'string' && typeof c.documentType === 'string';
-        case 'purchase-order':
-            return (typeof c.purchaseOrderId === 'string' &&
+        case 'inbound':
+            return (typeof c.inboundOrderId === 'string' &&
                 ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
                 typeof c.documentType === 'string');
-        case 'fulfillment-order':
-            return (typeof c.fulfillmentOrderId === 'string' &&
+        case 'outbound-order':
+            return (typeof c.outboundOrderId === 'string' &&
                 ['PACKING', 'SHIPPING', 'DELIVERY'].includes(c.stage) &&
                 typeof c.documentType === 'string');
         case 'warehouse-rate-list':

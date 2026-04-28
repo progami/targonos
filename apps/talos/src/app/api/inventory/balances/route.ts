@@ -6,7 +6,7 @@ import {
   getPaginationSkipTake,
   createPaginatedResponse
 } from '@/lib/database/pagination'
-import { toPublicOrderNumber } from '@/lib/services/purchase-order-utils'
+import { toPublicOrderNumber } from '@/lib/services/inbound-utils'
 import { sanitizeSearchQuery } from '@/lib/security/input-sanitization'
 import { aggregateInventoryTransactions } from '@targon/ledger'
 import { withAuth } from '@/lib/api/auth-wrapper'
@@ -81,16 +81,16 @@ export const GET = withAuth(async (req, session) => {
     where: transactionWhere,
     orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
     include: {
-      purchaseOrder: {
+      inboundOrder: {
         select: { orderNumber: true },
       },
     },
   })
 
-  const ledgerTransactions = transactions.map(({ purchaseOrder, ...transaction }) => ({
+  const ledgerTransactions = transactions.map(({ inboundOrder, ...transaction }) => ({
     ...transaction,
     transactionDate: transaction.transactionDate,
-    purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
+    inboundOrderNumber: inboundOrder?.orderNumber ? toPublicOrderNumber(inboundOrder.orderNumber) : null,
   }))
 
   const aggregated = aggregateInventoryTransactions(ledgerTransactions)
@@ -148,8 +148,8 @@ export const GET = withAuth(async (req, session) => {
       lastTransactionId: balance.lastTransactionId ?? undefined,
       lastTransactionType: balance.lastTransactionType ?? undefined,
       lastTransactionReference: balance.lastTransactionReference ?? undefined,
-      purchaseOrderId: balance.purchaseOrderId ?? null,
-      purchaseOrderNumber: balance.purchaseOrderNumber ? toPublicOrderNumber(balance.purchaseOrderNumber) : null,
+      inboundOrderId: balance.inboundOrderId ?? null,
+      inboundOrderNumber: balance.inboundOrderNumber ? toPublicOrderNumber(balance.inboundOrderNumber) : null,
       receiveTransaction
     }
   })

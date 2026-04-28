@@ -26,8 +26,8 @@ export default async function OrdersRedirectPage({
   const resolvedSearchParams = (await Promise.resolve(searchParams)) ?? {}
   const queryString = serializeSearchParams(resolvedSearchParams)
   const target = queryString
-    ? `/operations/purchase-orders?${queryString}`
-    : '/operations/purchase-orders'
+    ? `/operations/inbound?${queryString}`
+    : '/operations/inbound'
 
   redirect(target)
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 
 /**
- * Backfill safe INV-* purchase order fields from existing documents (UK/US)
+ * Backfill safe INV-* inbound fields from existing documents (UK/US)
  * ------------------------------------------------------------------------
  *
  * Goals:
@@ -40,7 +40,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { parse as parseCsv } from 'csv-parse/sync'
 import * as XLSX from 'xlsx'
-import { InboundReceiveType, Prisma, PurchaseOrderDocumentStage } from '@targon/prisma-talos'
+import { InboundReceiveType, Prisma, InboundOrderDocumentStage } from '@targon/prisma-talos'
 import { buildLotReference, resolveOrderReferenceSeed } from '../../src/lib/services/supply-chain-reference-service'
 import { getTenantPrismaClient, disconnectAllTenants } from '../../src/lib/tenant/prisma-factory'
 import type { TenantCode } from '../../src/lib/tenant/constants'
@@ -75,20 +75,20 @@ type ExtractedValue<T> = {
   extractionMethod: 'pdftotext' | 'ocr' | 'text'
   docId: string | null
   documentType: string
-  stage: PurchaseOrderDocumentStage | null
+  stage: InboundOrderDocumentStage | null
 }
 
-type PurchaseOrderDocRow = {
+type InboundOrderDocRow = {
   id: string
   documentType: string
-  stage: PurchaseOrderDocumentStage
+  stage: InboundOrderDocumentStage
   fileName: string
   contentType: string
   size: number
   metadata: Prisma.JsonValue
 }
 
-type PurchaseOrderLineRow = {
+type InboundOrderLineRow = {
   id: string
   skuCode: string
   unitsOrdered: number
@@ -153,7 +153,7 @@ type MappingLineRow = {
 }
 
 type MappingOrderRow = {
-  purchaseOrderId: string
+  inboundOrderId: string
   orderNumber: string
   current: {
     expectedDate: string | null
@@ -311,7 +311,7 @@ function findBatchFolderPath(tenant: TenantCode, orderNumber: string): string | 
   return null
 }
 
-function findPurchaseOrderPdfPath(batchFolderPath: string): string | null {
+function findInboundOrderPdfPath(batchFolderPath: string): string | null {
   const matches: string[] = []
 
   const walk = (dirPath: string, depth: number) => {
@@ -326,7 +326,7 @@ function findPurchaseOrderPdfPath(batchFolderPath: string): string | null {
       }
       const lower = entry.name.toLowerCase()
       if (!lower.endsWith('.pdf')) continue
-      if (!lower.includes('purchase order')) continue
+      if (!lower.includes('inbound')) continue
       matches.push(fullPath)
     }
   }
@@ -480,7 +480,7 @@ function findTenantPiFilePathsByHint(tenant: TenantCode, options: { piNumberHint
   return matches
 }
 
-function findVendorPiNumberFromPurchaseOrder(text: string): string | null {
+function findVendorPiNumberFromInboundOrder(text: string): string | null {
   const match = text.match(/\bVENDOR\s+PI\b\s*[:：]?\s*PI\s*[-#:_ ]\s*([A-Z0-9][A-Z0-9-]{3,})\b/i)
   if (!match) return null
   const raw = (match[1] ?? '').trim().toUpperCase()
@@ -489,7 +489,7 @@ function findVendorPiNumberFromPurchaseOrder(text: string): string | null {
   return cleaned
 }
 
-function findPoDeliveryDate(text: string): { raw: string; iso: string; context: string } | null {
+function findInboundDeliveryDate(text: string): { raw: string; iso: string; context: string } | null {
   const lines = text
     .split(/\r?\n/g)
     .map((line) => line.trim())
@@ -507,7 +507,7 @@ function findPoDeliveryDate(text: string): { raw: string; iso: string; context: 
   return null
 }
 
-function findPoPaymentTerms(text: string): { raw: string; value: string; context: string } | null {
+function findInboundPaymentTerms(text: string): { raw: string; value: string; context: string } | null {
   const lines = text
     .split(/\r?\n/g)
     .map((line) => line.trim())
@@ -528,7 +528,7 @@ function findPoPaymentTerms(text: string): { raw: string; value: string; context
   return null
 }
 
-function extractPurchaseOrderLineItems(text: string): PiLineItem[] {
+function extractInboundOrderLineItems(text: string): PiLineItem[] {
   const lines = text
     .split(/\r?\n/g)
     .map((line) => line.trim())
@@ -686,14 +686,14 @@ function parseArgs(): ScriptOptions {
 
 function showHelp() {
   console.log(`
-Backfill safe INV-* PO fields from documents (UK/US)
+Backfill safe INV-* Inbound fields from documents (UK/US)
 
 Usage:
   pnpm --filter @targon/talos exec tsx scripts/migrations/backfill-uk-inv-fields-from-documents.ts --tenant=UK|US --csv=/abs/path/to/talos_batch_migration_state.csv --out=/abs/path/to/output.json [options]
 
 Options:
   --tenant=UK|US            Which tenant to process (default: UK)
-  --all                     Process all INV-* POs in the schema (ignores --csv/--offset/--limit behavior based on CSV)
+  --all                     Process all INV-* Inbounds in the schema (ignores --csv/--offset/--limit behavior based on CSV)
   --schema=main|dev         Target schema mode (default: main)
   --limit=N                 Only process first N matching rows
   --offset=N                Skip first N matching rows (default: 0)
@@ -741,7 +741,7 @@ function extractPiNumberFromFileName(fileName: string): string | null {
   return cleaned
 }
 
-function extractPiNumberFromDocumentRow(doc: PurchaseOrderDocRow): string | null {
+function extractPiNumberFromDocumentRow(doc: InboundOrderDocRow): string | null {
   const type = doc.documentType.trim()
   if (type.startsWith('pi_') && type !== 'pi_docs' && type !== 'pi_unknown') {
     const raw = type.slice('pi_'.length).trim()
@@ -765,7 +765,7 @@ function extractPackingListRefFromFileName(fileName: string): string | null {
   return cleaned
 }
 
-function getDocSourcePath(doc: PurchaseOrderDocRow): string | null {
+function getDocSourcePath(doc: InboundOrderDocRow): string | null {
   if (!doc.metadata) return null
   if (typeof doc.metadata !== 'object') return null
   if (Array.isArray(doc.metadata)) return null
@@ -1247,7 +1247,7 @@ function findPiPaymentTerms(text: string): { raw: string; value: string; context
   return null
 }
 
-function findVendorFromPurchaseOrder(text: string): { rawName: string; name: string; rawAddress: string | null; address: string | null; context: string } | null {
+function findVendorFromInboundOrder(text: string): { rawName: string; name: string; rawAddress: string | null; address: string | null; context: string } | null {
   const rawLines = text.split(/\r?\n/g)
   const headingIndex = rawLines.findIndex((line) => /\bVENDOR\b/i.test(line) && /\bSHIP\s+TO\b/i.test(line))
   if (headingIndex < 0) return null
@@ -2242,7 +2242,7 @@ async function main() {
 
   const orders = await (async () => {
     if (options.all) {
-      return prisma.purchaseOrder.findMany({
+      return prisma.inboundOrder.findMany({
         where: { isLegacy: false, orderNumber: { startsWith: 'INV-' } },
         select: {
           id: true,
@@ -2335,7 +2335,7 @@ async function main() {
       csvOrderNumbers.push(orderNumber)
     }
 
-    return prisma.purchaseOrder.findMany({
+    return prisma.inboundOrder.findMany({
       where: { orderNumber: { in: csvOrderNumbers } },
       select: {
         id: true,
@@ -2705,52 +2705,52 @@ async function main() {
           }
         }
 
-        const purchaseOrderPdfPath = findPurchaseOrderPdfPath(batchFolderPath)
-        if (purchaseOrderPdfPath && fs.existsSync(purchaseOrderPdfPath)) {
-          const { text, method, errors } = extractTextForFile(purchaseOrderPdfPath, {
+        const inboundOrderPdfPath = findInboundOrderPdfPath(batchFolderPath)
+        if (inboundOrderPdfPath && fs.existsSync(inboundOrderPdfPath)) {
+          const { text, method, errors } = extractTextForFile(inboundOrderPdfPath, {
             ocrMode: options.ocrMode,
             ocrPages: Math.max(options.ocrPages, 2),
           })
-          for (const error of errors) warnings.push(`purchase_order_pdf extract: ${error} (${purchaseOrderPdfPath})`)
+          for (const error of errors) warnings.push(`inbound_order_pdf extract: ${error} (${inboundOrderPdfPath})`)
           if (text.trim().length >= 40) {
-            const vendorPi = findVendorPiNumberFromPurchaseOrder(text)
+            const vendorPi = findVendorPiNumberFromInboundOrder(text)
             if (vendorPi) {
               proformaInvoiceNumberCandidates.push({
                 value: vendorPi,
                 raw: vendorPi,
-                context: 'purchase_order_pdf VENDOR PI',
-                sourcePath: purchaseOrderPdfPath,
+                context: 'inbound_order_pdf VENDOR PI',
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
             }
 
-            const delivery = findPoDeliveryDate(text)
+            const delivery = findInboundDeliveryDate(text)
             if (delivery) {
               expectedDateCandidates.push({
                 value: delivery.iso,
                 raw: delivery.raw,
                 context: delivery.context,
-                sourcePath: purchaseOrderPdfPath,
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
             }
 
-            const payment = findPoPaymentTerms(text)
+            const payment = findInboundPaymentTerms(text)
             if (payment) {
               paymentTermsCandidates.push({
                 value: payment.value,
                 raw: payment.raw,
                 context: payment.context,
-                sourcePath: purchaseOrderPdfPath,
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
             }
@@ -2761,24 +2761,24 @@ async function main() {
                 value: poIncoterms.value,
                 raw: poIncoterms.raw,
                 context: poIncoterms.context,
-                sourcePath: purchaseOrderPdfPath,
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
             }
 
-            const vendor = findVendorFromPurchaseOrder(text)
+            const vendor = findVendorFromInboundOrder(text)
             if (vendor) {
               counterpartyNameCandidates.push({
                 value: vendor.name,
                 raw: vendor.rawName,
                 context: vendor.context,
-                sourcePath: purchaseOrderPdfPath,
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
               if (vendor.address) {
@@ -2786,25 +2786,25 @@ async function main() {
                   value: vendor.address,
                   raw: vendor.rawAddress ?? vendor.address,
                   context: vendor.context,
-                  sourcePath: purchaseOrderPdfPath,
+                  sourcePath: inboundOrderPdfPath,
                   extractionMethod: method,
                   docId: null,
-                  documentType: 'purchase_order_pdf',
+                  documentType: 'inbound_order_pdf',
                   stage: null,
                 })
               }
             }
 
-            const poLineItems = extractPurchaseOrderLineItems(text)
-            for (const item of poLineItems) {
+            const inboundLineItems = extractInboundOrderLineItems(text)
+            for (const item of inboundLineItems) {
               piLineItemCandidates.push({
                 value: item,
                 raw: item.context,
                 context: item.context,
-                sourcePath: purchaseOrderPdfPath,
+                sourcePath: inboundOrderPdfPath,
                 extractionMethod: method,
                 docId: null,
-                documentType: 'purchase_order_pdf',
+                documentType: 'inbound_order_pdf',
                 stage: null,
               })
             }
@@ -3413,7 +3413,7 @@ async function main() {
 
     if (order.warehouseCode === null || order.warehouseName === null || order.receivedDate === null) {
       const transactions = await prisma.inventoryTransaction.findMany({
-        where: { purchaseOrderId: order.id },
+        where: { inboundOrderId: order.id },
         select: { warehouseCode: true, warehouseName: true, transactionDate: true },
       })
 
@@ -3464,7 +3464,7 @@ async function main() {
 
     const applied: MappingOrderRow['applied'] = {}
 
-    const updates: Prisma.PurchaseOrderUpdateInput = {}
+    const updates: Prisma.InboundOrderUpdateInput = {}
 
     const uniqueExpectedDate = findUniqueStrings(
       expectedDateCandidates
@@ -3810,7 +3810,7 @@ async function main() {
     const hasUpdates = Object.keys(updates).length > 0
     if (options.apply && hasUpdates) {
       if (!options.dryRun) {
-        await prisma.purchaseOrder.update({
+        await prisma.inboundOrder.update({
           where: { id: order.id },
           data: updates,
           select: { id: true },
@@ -3937,13 +3937,13 @@ async function main() {
 
         const piCost = piCostByUnitsOrdered.get(unitsOrdered)
 
-	        const createdData: Prisma.PurchaseOrderLineCreateInput = {
-	          purchaseOrder: { connect: { id: order.id } },
+	        const createdData: Prisma.InboundOrderLineCreateInput = {
+	          inboundOrder: { connect: { id: order.id } },
 	          skuCode,
 	          lotRef: (() => {
 	            const seed = resolveOrderReferenceSeed({
 	              orderNumber: order.orderNumber,
-	              poNumber: null,
+	               inboundNumber: null,
 	              skuGroup: null,
 	            })
 	            return buildLotReference(seed.sequence, seed.skuGroup, skuCode)
@@ -3988,7 +3988,7 @@ async function main() {
         }
 
         if (options.apply && !options.dryRun) {
-          const created = await prisma.purchaseOrderLine.create({ data: createdData, select: { id: true } })
+          const created = await prisma.inboundOrderLine.create({ data: createdData, select: { id: true } })
           createdLines += 1
           mappingLines.push({
             lineId: created.id,
@@ -4048,10 +4048,10 @@ async function main() {
       }
     }
 
-    for (const line of order.lines as PurchaseOrderLineRow[]) {
+    for (const line of order.lines as InboundOrderLineRow[]) {
       const lineWarnings: string[] = []
       const lineApplied: MappingLineRow['applied'] = {}
-      const lineUpdates: Prisma.PurchaseOrderLineUpdateInput = {}
+      const lineUpdates: Prisma.InboundOrderLineUpdateInput = {}
 
       const normalizedSku = normalizeSkuCode(line.skuCode)
       const skuKey = normalizedSku ? normalizedSku : line.skuCode
@@ -4186,7 +4186,7 @@ async function main() {
       const hasLineUpdates = Object.keys(lineUpdates).length > 0
       if (options.apply && hasLineUpdates) {
         if (!options.dryRun) {
-          await prisma.purchaseOrderLine.update({ where: { id: line.id }, data: lineUpdates, select: { id: true } })
+          await prisma.inboundOrderLine.update({ where: { id: line.id }, data: lineUpdates, select: { id: true } })
         }
 
         if (lineApplied.unitCost) updatedLineFields.unitCost += 1
@@ -4235,7 +4235,7 @@ async function main() {
     }
 
     mapping.push({
-      purchaseOrderId: order.id,
+      inboundOrderId: order.id,
       orderNumber: order.orderNumber,
       current: {
         expectedDate: order.expectedDate ? order.expectedDate.toISOString() : null,

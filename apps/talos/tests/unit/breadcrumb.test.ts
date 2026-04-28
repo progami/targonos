@@ -12,11 +12,11 @@ test('breadcrumb uses the current SKU info label for the Amazon SKU page', () =>
   assert.equal(labels.includes('Fba Fee Discrepancies'), false)
 })
 
-test('breadcrumb uses the Amazon shipments label for the operations shipment page', () => {
-  const labels = buildBreadcrumbItems('/talos/operations/fulfillment-orders').map(
+test('breadcrumb uses the outbound label for the operations shipment page', () => {
+  const labels = buildBreadcrumbItems('/talos/operations/outbound').map(
     (item) => item.label
   )
 
-  assert.deepEqual(labels, ['Amazon Shipments'])
-  assert.equal(labels.includes('Fulfillment Orders'), false)
+  assert.deepEqual(labels, ['Outbound'])
+  assert.equal(labels.includes('Outbound Orders'), false)
 })

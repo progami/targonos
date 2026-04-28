@@ -107,14 +107,14 @@ function StageTable({ snapshot }: { snapshot: DashboardOverviewSnapshot }) {
       cartons: snapshot.summary.factory.cartons,
       pallets: snapshot.summary.factory.pallets,
       units: snapshot.summary.factory.units,
-      count: `${formatNumber(snapshot.summary.factory.poCount)} POs`,
+      count: `${formatNumber(snapshot.summary.factory.poCount)} Inbound`,
     },
     {
       label: 'Transit',
       cartons: snapshot.summary.transit.cartons,
       pallets: snapshot.summary.transit.pallets,
       units: snapshot.summary.transit.units,
-      count: `${formatNumber(snapshot.summary.transit.poCount)} POs`,
+      count: `${formatNumber(snapshot.summary.transit.poCount)} Inbound`,
     },
     {
       label: 'Warehouse',

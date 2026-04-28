@@ -14,7 +14,7 @@ interface UserPermissionDetailProps {
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
-  purchase_order: 'Purchase Orders',
+  inbound_order: 'Inbound',
   user_management: 'User Management',
 }
 

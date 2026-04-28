@@ -148,19 +148,19 @@ export async function fetchFBAInventory(
 }
 
 /**
- * Create inbound shipment plan
+ * Create outbound shipment plan
  * @param items Items to include in shipment
  * @param shipToCountryCode Destination country code
  * @returns Promise<AmazonShipmentPlan>
  */
-export async function createInboundShipmentPlan(
+export async function createOutboundShipmentPlan(
  items: Array<{ sellerSKU: string; quantity: number }>,
  _shipToCountryCode: string = 'US'
 ): Promise<AmazonShipmentPlan | null> {
  // TODO: Implement SP API call to create shipment plan
  // POST /fba/inbound/v0/plans
  
- // console.log('Creating inbound shipment plan - Not yet implemented')
+ // console.log('Creating outbound shipment plan - Not yet implemented')
  return null
 }
 

@@ -1,10 +1,10 @@
-export interface InventoryPipelinePurchaseOrderLineInput {
+export interface InventoryPipelineInboundOrderLineInput {
   skuCode: string
   quantity: number
   unitsOrdered: number
 }
 
-export interface InventoryPipelinePurchaseOrderInput {
+export interface InventoryPipelineInboundOrderInput {
   id: string
   orderNumber: string
   status: string
@@ -27,7 +27,7 @@ export interface InventoryPipelinePurchaseOrderInput {
       warehouseName: string | null
     }
   }
-  lines: InventoryPipelinePurchaseOrderLineInput[]
+  lines: InventoryPipelineInboundOrderLineInput[]
 }
 
 export interface InventoryPipelineBalanceInput {
@@ -85,7 +85,7 @@ export interface InventoryPipelineSnapshot {
     totalCartons: number
     totalUnits: number
     activeSkus: number
-    purchaseOrderCount: number
+    inboundOrderCount: number
     warehouseCount: number
   }
   stages: {
@@ -114,7 +114,7 @@ function createStageAccumulator(): StageAccumulator {
   }
 }
 
-function sumOrderCartons(order: InventoryPipelinePurchaseOrderInput) {
+function sumOrderCartons(order: InventoryPipelineInboundOrderInput) {
   const manufacturingTotalCartons = order.stageData.manufacturing.totalCartons
   if (typeof manufacturingTotalCartons === 'number' && manufacturingTotalCartons > 0) {
     return manufacturingTotalCartons
@@ -123,11 +123,11 @@ function sumOrderCartons(order: InventoryPipelinePurchaseOrderInput) {
   return order.lines.reduce((sum, line) => sum + line.quantity, 0)
 }
 
-function sumOrderUnits(order: InventoryPipelinePurchaseOrderInput) {
+function sumOrderUnits(order: InventoryPipelineInboundOrderInput) {
   return order.lines.reduce((sum, line) => sum + line.unitsOrdered, 0)
 }
 
-function buildOrderSkuSet(order: InventoryPipelinePurchaseOrderInput) {
+function buildOrderSkuSet(order: InventoryPipelineInboundOrderInput) {
   const skuCodes = new Set<string>()
   order.lines.forEach((line) => {
     skuCodes.add(line.skuCode)
@@ -135,7 +135,7 @@ function buildOrderSkuSet(order: InventoryPipelinePurchaseOrderInput) {
   return skuCodes
 }
 
-function buildRouteLabel(order: InventoryPipelinePurchaseOrderInput) {
+function buildRouteLabel(order: InventoryPipelineInboundOrderInput) {
   const portOfLoading = order.stageData.ocean.portOfLoading
   const portOfDischarge = order.stageData.ocean.portOfDischarge
 
@@ -151,7 +151,7 @@ function buildRouteLabel(order: InventoryPipelinePurchaseOrderInput) {
   return null
 }
 
-function buildStageOrderRow(order: InventoryPipelinePurchaseOrderInput): InventoryPipelineOrderRow {
+function buildStageOrderRow(order: InventoryPipelineInboundOrderInput): InventoryPipelineOrderRow {
   const skuCodes = buildOrderSkuSet(order)
 
   return {
@@ -170,7 +170,7 @@ function buildStageOrderRow(order: InventoryPipelinePurchaseOrderInput): Invento
   }
 }
 
-function addOrderToStage(stage: StageAccumulator, order: InventoryPipelinePurchaseOrderInput) {
+function addOrderToStage(stage: StageAccumulator, order: InventoryPipelineInboundOrderInput) {
   stage.count += 1
   stage.cartons += sumOrderCartons(order)
   stage.units += sumOrderUnits(order)
@@ -218,7 +218,7 @@ function createStageSummary(
 }
 
 export function buildInventoryPipelineSnapshot(input: {
-  purchaseOrders: InventoryPipelinePurchaseOrderInput[]
+  inboundOrders: InventoryPipelineInboundOrderInput[]
   balances: InventoryPipelineBalanceInput[]
 }): InventoryPipelineSnapshot {
   const manufacturing = createStageAccumulator()
@@ -229,7 +229,7 @@ export function buildInventoryPipelineSnapshot(input: {
   const manufacturingRows: InventoryPipelineOrderRow[] = []
   const transitRows: InventoryPipelineOrderRow[] = []
 
-  input.purchaseOrders.forEach((order) => {
+  input.inboundOrders.forEach((order) => {
     const row = buildStageOrderRow(order)
     buildOrderSkuSet(order).forEach((skuCode) => {
       activeSkuCodes.add(skuCode)
@@ -316,7 +316,7 @@ export function buildInventoryPipelineSnapshot(input: {
       totalCartons: manufacturing.cartons + transit.cartons + warehouse.cartons,
       totalUnits: manufacturing.units + transit.units + warehouse.units,
       activeSkus: activeSkuCodes.size,
-      purchaseOrderCount: manufacturing.count + transit.count,
+      inboundOrderCount: manufacturing.count + transit.count,
       warehouseCount: warehouse.count,
     },
     stages: {

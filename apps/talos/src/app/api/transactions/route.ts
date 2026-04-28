@@ -161,8 +161,8 @@ export const GET = withAuth(async (request, _session) => {
         shippingCartonsPerPallet: true,
         unitsPerCarton: true,
         supplier: true,
-        purchaseOrderId: true,
-        purchaseOrderLineId: true,
+        inboundOrderId: true,
+        inboundOrderLineId: true,
         // Use snapshot data
         warehouseCode: true,
         warehouseName: true,
@@ -399,7 +399,7 @@ export const POST = withAuth(async (request, session) => {
         // VALIDATION FAILED - missing required fields
         return NextResponse.json(
           {
-            error: 'Missing required fields: PI/CI/PO number, date, and items',
+            error: 'Missing required fields: PI/CI/Inbound number, date, and items',
             debug: {
               refNumber: refNumber ?? 'MISSING',
               txDate: txDate ?? 'MISSING',
@@ -463,7 +463,7 @@ export const POST = withAuth(async (request, session) => {
      const createdByName = currentUser?.fullName ?? currentUser?.username ?? 'Unknown User'
 
     // Duplicate check removed - businesses may have legitimate duplicate references
-    // (e.g., multiple shipments with same PO number)
+    // (e.g., multiple shipments with same Inbound number)
 
     // Backdating check temporarily disabled - businesses need flexibility for corrections
     // TODO: Re-enable with override capability for admins

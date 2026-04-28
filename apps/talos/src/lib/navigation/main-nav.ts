@@ -69,8 +69,8 @@ export function buildMainNavigation(context: NavigationContext): NavSection[] {
     {
       title: 'Operations',
       items: [
-        createItem('Purchase Orders', '/operations/purchase-orders', FileText),
-        createItem('Amazon Shipments', '/operations/fulfillment-orders', Truck),
+        createItem('Inbound', '/operations/inbound', FileText),
+        createItem('Outbound', '/operations/outbound', Truck),
         createItem('Inventory Ledger', '/operations/inventory', BookOpen),
         createItem('Storage Ledger', '/operations/storage-ledger', Building),
         createItem('Financial Ledger', '/operations/financial-ledger', BarChart3),

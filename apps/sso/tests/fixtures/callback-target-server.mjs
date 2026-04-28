@@ -5,16 +5,16 @@ const port = 3321
 
 const routes = new Map([
   [
-    '/operations/purchase-orders',
+    '/operations/inbound',
     `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Purchase Orders</title>
+    <title>Inbound</title>
   </head>
   <body>
     <main>
-      <h1>Purchase Orders</h1>
+      <h1>Inbound</h1>
       <p>Talos callback target</p>
     </main>
   </body>

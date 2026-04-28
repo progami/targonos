@@ -57,12 +57,12 @@ function parseArgs(): ScriptOptions {
 
 function showHelp() {
   console.log(`
-Move Purchase Order PI Documents To ISSUED
+Move Inbound PI Documents To ISSUED
 
-Moves purchase_order_documents rows for PI documents (document_type LIKE 'pi_%')
+Moves inbound_order_documents rows for PI documents (document_type LIKE 'pi_%')
 from stage DRAFT -> ISSUED in each tenant schema.
 
-If both DRAFT and ISSUED rows exist for the same (purchase_order_id, document_type),
+If both DRAFT and ISSUED rows exist for the same (inbound_order_id, document_type),
 the newest upload wins and is stored in the ISSUED row.
 
 Usage:
@@ -88,7 +88,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   console.log(`\n[${tenant}] Migrating PI documents from DRAFT -> ISSUED`)
 
   const mergeNewerDraftIntoIssued = `
-    UPDATE "purchase_order_documents" i
+    UPDATE "inbound_order_documents" i
     SET
       "file_name" = d."file_name",
       "content_type" = d."content_type",
@@ -98,8 +98,8 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       "uploaded_by_id" = d."uploaded_by_id",
       "uploaded_by_name" = d."uploaded_by_name",
       "metadata" = d."metadata"
-    FROM "purchase_order_documents" d
-    WHERE i."purchase_order_id" = d."purchase_order_id"
+    FROM "inbound_order_documents" d
+    WHERE i."inbound_order_id" = d."inbound_order_id"
       AND i."document_type" = d."document_type"
       AND i."stage" = 'ISSUED'
       AND d."stage" = 'DRAFT'
@@ -108,27 +108,27 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
   `
 
   const moveDraftToIssuedWhenMissing = `
-    UPDATE "purchase_order_documents" d
+    UPDATE "inbound_order_documents" d
     SET "stage" = 'ISSUED'
     WHERE d."stage" = 'DRAFT'
       AND d."document_type" LIKE 'pi\\_%'
       AND NOT EXISTS (
         SELECT 1
-        FROM "purchase_order_documents" i
-        WHERE i."purchase_order_id" = d."purchase_order_id"
+        FROM "inbound_order_documents" i
+        WHERE i."inbound_order_id" = d."inbound_order_id"
           AND i."document_type" = d."document_type"
           AND i."stage" = 'ISSUED'
       );
   `
 
   const deleteRemainingDraftPiDocs = `
-    DELETE FROM "purchase_order_documents" d
+    DELETE FROM "inbound_order_documents" d
     WHERE d."stage" = 'DRAFT'
       AND d."document_type" LIKE 'pi\\_%'
       AND EXISTS (
         SELECT 1
-        FROM "purchase_order_documents" i
-        WHERE i."purchase_order_id" = d."purchase_order_id"
+        FROM "inbound_order_documents" i
+        WHERE i."inbound_order_id" = d."inbound_order_id"
           AND i."document_type" = d."document_type"
           AND i."stage" = 'ISSUED'
       );

@@ -14,7 +14,7 @@ import {
 import { cn } from '@/lib/utils'
 import { withBasePath } from '@/lib/utils/base-path'
 
-type SearchResultType = 'SKU' | 'PURCHASE_ORDER' | 'SUPPLIER' | 'WAREHOUSE'
+type SearchResultType = 'SKU' | 'INBOUND' | 'SUPPLIER' | 'WAREHOUSE'
 
 interface SearchResult {
   type: SearchResultType
@@ -28,7 +28,7 @@ function typeIcon(type: SearchResultType) {
   switch (type) {
     case 'SKU':
       return Package
-    case 'PURCHASE_ORDER':
+    case 'INBOUND':
       return FileText
     case 'SUPPLIER':
       return Users
@@ -43,8 +43,8 @@ function typeLabel(type: SearchResultType): string {
   switch (type) {
     case 'SKU':
       return 'Products'
-    case 'PURCHASE_ORDER':
-      return 'Purchase Orders'
+    case 'INBOUND':
+      return 'Inbound'
     case 'SUPPLIER':
       return 'Suppliers'
     case 'WAREHOUSE':
@@ -58,8 +58,8 @@ function typeBadge(type: SearchResultType): string {
   switch (type) {
     case 'SKU':
       return 'SKU'
-    case 'PURCHASE_ORDER':
-      return 'PO'
+    case 'INBOUND':
+      return 'Inbound'
     case 'SUPPLIER':
       return 'SUP'
     case 'WAREHOUSE':
@@ -90,7 +90,7 @@ export function CommandPalette() {
       groups.set(r.type, list)
     }
 
-    const order: SearchResultType[] = ['SKU', 'PURCHASE_ORDER', 'SUPPLIER', 'WAREHOUSE']
+    const order: SearchResultType[] = ['SKU', 'INBOUND', 'SUPPLIER', 'WAREHOUSE']
     return order
       .map((t) => ({ type: t, items: groups.get(t) ?? [] }))
       .filter((g) => g.items.length > 0)

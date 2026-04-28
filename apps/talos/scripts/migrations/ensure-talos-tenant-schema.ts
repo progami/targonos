@@ -345,19 +345,19 @@ const baselineChecks: SchemaCheck[] = [
   buildRequiredConstraintsCheck('amazon_fba_fee_alerts constraints', [
     'amazon_fba_fee_alerts_sku_id_fkey',
   ]),
-  buildRequiredEnumValuesCheck('PurchaseOrderStatus enum values', 'PurchaseOrderStatus', [
+  buildRequiredEnumValuesCheck('InboundOrderStatus enum values', 'InboundOrderStatus', [
     'ISSUED',
     'MANUFACTURING',
     'OCEAN',
     'WAREHOUSE',
     'CANCELLED',
   ]),
-  buildRequiredColumnsCheck('purchase_orders stage fields', 'purchase_orders', [
+  buildRequiredColumnsCheck('inbound_orders stage fields', 'inbound_orders', [
     'incoterms',
     'payment_terms',
     'counterparty_address',
   ]),
-  buildRequiredColumnsCheck('purchase_order_lines packaging columns', 'purchase_order_lines', [
+  buildRequiredColumnsCheck('inbound_order_lines packaging columns', 'inbound_order_lines', [
     'carton_dimensions_cm',
     'carton_side1_cm',
     'carton_side2_cm',
@@ -367,17 +367,17 @@ const baselineChecks: SchemaCheck[] = [
     'storage_cartons_per_pallet',
     'shipping_cartons_per_pallet',
   ]),
-  buildRequiredConstraintsCheck('purchase_order_lines pallet constraints', [
-    'purchase_order_lines_storage_cartons_per_pallet_check',
-    'purchase_order_lines_shipping_cartons_per_pallet_check',
+  buildRequiredConstraintsCheck('inbound_order_lines pallet constraints', [
+    'inbound_order_lines_storage_cartons_per_pallet_check',
+    'inbound_order_lines_shipping_cartons_per_pallet_check',
   ]),
-  buildTableExistsCheck('purchase_order_forwarding_costs table', 'purchase_order_forwarding_costs'),
+  buildTableExistsCheck('inbound_order_forwarding_costs table', 'inbound_order_forwarding_costs'),
   buildRequiredColumnsCheck(
-    'purchase_order_forwarding_costs columns',
-    'purchase_order_forwarding_costs',
+    'inbound_order_forwarding_costs columns',
+    'inbound_order_forwarding_costs',
     [
       'id',
-      'purchase_order_id',
+      'inbound_order_id',
       'warehouse_id',
       'cost_rate_id',
       'cost_name',
@@ -392,15 +392,15 @@ const baselineChecks: SchemaCheck[] = [
       'created_by_name',
     ]
   ),
-  buildRequiredIndexesCheck('purchase_order_forwarding_costs indexes', [
-    'purchase_order_forwarding_costs_purchase_order_id_idx',
-    'purchase_order_forwarding_costs_warehouse_id_idx',
-    'purchase_order_forwarding_costs_cost_rate_id_idx',
+  buildRequiredIndexesCheck('inbound_order_forwarding_costs indexes', [
+    'inbound_order_forwarding_costs_inbound_order_id_idx',
+    'inbound_order_forwarding_costs_warehouse_id_idx',
+    'inbound_order_forwarding_costs_cost_rate_id_idx',
   ]),
-  buildRequiredConstraintsCheck('purchase_order_forwarding_costs constraints', [
-    'purchase_order_forwarding_costs_purchase_order_id_fkey',
-    'purchase_order_forwarding_costs_warehouse_id_fkey',
-    'purchase_order_forwarding_costs_cost_rate_id_fkey',
+  buildRequiredConstraintsCheck('inbound_order_forwarding_costs constraints', [
+    'inbound_order_forwarding_costs_inbound_order_id_fkey',
+    'inbound_order_forwarding_costs_warehouse_id_fkey',
+    'inbound_order_forwarding_costs_cost_rate_id_fkey',
   ]),
 ]
 
@@ -694,79 +694,79 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         END IF;
       END $$;
     `,
-    // Pallet configuration fields now live on purchase order line snapshots + warehouse/SKU configs.
+    // Pallet configuration fields now live on inbound line snapshots + warehouse/SKU configs.
 
-    // Purchase order essentials (stage 1 / issued)
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'ISSUED'`,
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'MANUFACTURING'`,
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'OCEAN'`,
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'WAREHOUSE'`,
-    `ALTER TYPE "PurchaseOrderStatus" ADD VALUE IF NOT EXISTS 'CANCELLED'`,
-    `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "incoterms" text`,
-    `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "payment_terms" text`,
-    `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "counterparty_address" text`,
+    // Inbound essentials (stage 1 / issued)
+    `ALTER TYPE "InboundOrderStatus" ADD VALUE IF NOT EXISTS 'ISSUED'`,
+    `ALTER TYPE "InboundOrderStatus" ADD VALUE IF NOT EXISTS 'MANUFACTURING'`,
+    `ALTER TYPE "InboundOrderStatus" ADD VALUE IF NOT EXISTS 'OCEAN'`,
+    `ALTER TYPE "InboundOrderStatus" ADD VALUE IF NOT EXISTS 'WAREHOUSE'`,
+    `ALTER TYPE "InboundOrderStatus" ADD VALUE IF NOT EXISTS 'CANCELLED'`,
+    `ALTER TABLE "inbound_orders" ADD COLUMN IF NOT EXISTS "incoterms" text`,
+    `ALTER TABLE "inbound_orders" ADD COLUMN IF NOT EXISTS "payment_terms" text`,
+    `ALTER TABLE "inbound_orders" ADD COLUMN IF NOT EXISTS "counterparty_address" text`,
 
-    // Purchase order line snapshots (avoid dynamic SKU enrichment after creation)
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_dimensions_cm" text`,
+    // Inbound line snapshots (avoid dynamic SKU enrichment after creation)
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "carton_dimensions_cm" text`,
     `
       DO $$
       BEGIN
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_length_cm'
         ) AND NOT EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_side1_cm'
         ) THEN
-          ALTER TABLE "purchase_order_lines" RENAME COLUMN "carton_length_cm" TO "carton_side1_cm";
+          ALTER TABLE "inbound_order_lines" RENAME COLUMN "carton_length_cm" TO "carton_side1_cm";
         END IF;
 
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_width_cm'
         ) AND NOT EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_side2_cm'
         ) THEN
-          ALTER TABLE "purchase_order_lines" RENAME COLUMN "carton_width_cm" TO "carton_side2_cm";
+          ALTER TABLE "inbound_order_lines" RENAME COLUMN "carton_width_cm" TO "carton_side2_cm";
         END IF;
 
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_height_cm'
         ) AND NOT EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_side3_cm'
         ) THEN
-          ALTER TABLE "purchase_order_lines" RENAME COLUMN "carton_height_cm" TO "carton_side3_cm";
+          ALTER TABLE "inbound_order_lines" RENAME COLUMN "carton_height_cm" TO "carton_side3_cm";
         END IF;
       END $$;
     `,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_side1_cm" numeric(8, 2)`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_side2_cm" numeric(8, 2)`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_side3_cm" numeric(8, 2)`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "carton_side1_cm" numeric(8, 2)`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "carton_side2_cm" numeric(8, 2)`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "carton_side3_cm" numeric(8, 2)`,
     `
       DO $$
       BEGIN
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_length_cm'
         ) THEN
-          UPDATE purchase_order_lines
+          UPDATE inbound_order_lines
           SET carton_side1_cm = COALESCE(carton_side1_cm, carton_length_cm)
           WHERE carton_length_cm IS NOT NULL AND carton_side1_cm IS NULL;
         END IF;
@@ -774,10 +774,10 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_width_cm'
         ) THEN
-          UPDATE purchase_order_lines
+          UPDATE inbound_order_lines
           SET carton_side2_cm = COALESCE(carton_side2_cm, carton_width_cm)
           WHERE carton_width_cm IS NOT NULL AND carton_side2_cm IS NULL;
         END IF;
@@ -785,22 +785,22 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         IF EXISTS (
           SELECT 1 FROM information_schema.columns
           WHERE table_schema = current_schema()
-            AND table_name = 'purchase_order_lines'
+            AND table_name = 'inbound_order_lines'
             AND column_name = 'carton_height_cm'
         ) THEN
-          UPDATE purchase_order_lines
+          UPDATE inbound_order_lines
           SET carton_side3_cm = COALESCE(carton_side3_cm, carton_height_cm)
           WHERE carton_height_cm IS NOT NULL AND carton_side3_cm IS NULL;
         END IF;
       END $$;
     `,
-    `ALTER TABLE "purchase_order_lines" DROP COLUMN IF EXISTS "carton_length_cm"`,
-    `ALTER TABLE "purchase_order_lines" DROP COLUMN IF EXISTS "carton_width_cm"`,
-    `ALTER TABLE "purchase_order_lines" DROP COLUMN IF EXISTS "carton_height_cm"`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "carton_weight_kg" numeric(8, 3)`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "packaging_type" text`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "storage_cartons_per_pallet" integer`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "shipping_cartons_per_pallet" integer`,
+    `ALTER TABLE "inbound_order_lines" DROP COLUMN IF EXISTS "carton_length_cm"`,
+    `ALTER TABLE "inbound_order_lines" DROP COLUMN IF EXISTS "carton_width_cm"`,
+    `ALTER TABLE "inbound_order_lines" DROP COLUMN IF EXISTS "carton_height_cm"`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "carton_weight_kg" numeric(8, 3)`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "packaging_type" text`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "storage_cartons_per_pallet" integer`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "shipping_cartons_per_pallet" integer`,
     `
       DO $$
       BEGIN
@@ -809,11 +809,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           FROM pg_constraint c
           JOIN pg_class t ON t.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'purchase_order_lines_storage_cartons_per_pallet_check'
+          WHERE c.conname = 'inbound_order_lines_storage_cartons_per_pallet_check'
             AND n.nspname = current_schema()
         ) THEN
-          ALTER TABLE "purchase_order_lines"
-            ADD CONSTRAINT "purchase_order_lines_storage_cartons_per_pallet_check"
+          ALTER TABLE "inbound_order_lines"
+            ADD CONSTRAINT "inbound_order_lines_storage_cartons_per_pallet_check"
             CHECK (storage_cartons_per_pallet IS NULL OR storage_cartons_per_pallet > 0);
         END IF;
       END $$;
@@ -826,21 +826,21 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           FROM pg_constraint c
           JOIN pg_class t ON t.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'purchase_order_lines_shipping_cartons_per_pallet_check'
+          WHERE c.conname = 'inbound_order_lines_shipping_cartons_per_pallet_check'
             AND n.nspname = current_schema()
         ) THEN
-          ALTER TABLE "purchase_order_lines"
-            ADD CONSTRAINT "purchase_order_lines_shipping_cartons_per_pallet_check"
+          ALTER TABLE "inbound_order_lines"
+            ADD CONSTRAINT "inbound_order_lines_shipping_cartons_per_pallet_check"
             CHECK (shipping_cartons_per_pallet IS NULL OR shipping_cartons_per_pallet > 0);
         END IF;
       END $$;
     `,
 
-    // PO-level forwarding/cargo costs (allocated into cost ledger at receipt)
+    // Inbound-level forwarding/cargo costs (allocated into cost ledger at receipt)
     `
-      CREATE TABLE IF NOT EXISTS "purchase_order_forwarding_costs" (
+      CREATE TABLE IF NOT EXISTS "inbound_order_forwarding_costs" (
         "id" text NOT NULL,
-        "purchase_order_id" text NOT NULL,
+        "inbound_order_id" text NOT NULL,
         "warehouse_id" text NOT NULL,
         "cost_rate_id" text,
         "cost_name" text NOT NULL,
@@ -853,7 +853,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         "updated_at" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "created_by_id" text,
         "created_by_name" text,
-        CONSTRAINT "purchase_order_forwarding_costs_pkey" PRIMARY KEY ("id")
+        CONSTRAINT "inbound_order_forwarding_costs_pkey" PRIMARY KEY ("id")
       )
     `,
     `
@@ -864,12 +864,12 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           FROM pg_constraint c
           JOIN pg_class t ON t.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'purchase_order_forwarding_costs_purchase_order_id_fkey'
+          WHERE c.conname = 'inbound_order_forwarding_costs_inbound_order_id_fkey'
             AND n.nspname = current_schema()
         ) THEN
-          ALTER TABLE "purchase_order_forwarding_costs"
-            ADD CONSTRAINT "purchase_order_forwarding_costs_purchase_order_id_fkey"
-            FOREIGN KEY ("purchase_order_id") REFERENCES "purchase_orders"("id")
+          ALTER TABLE "inbound_order_forwarding_costs"
+            ADD CONSTRAINT "inbound_order_forwarding_costs_inbound_order_id_fkey"
+            FOREIGN KEY ("inbound_order_id") REFERENCES "inbound_orders"("id")
             ON DELETE CASCADE ON UPDATE CASCADE;
         END IF;
       END $$;
@@ -882,11 +882,11 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           FROM pg_constraint c
           JOIN pg_class t ON t.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'purchase_order_forwarding_costs_warehouse_id_fkey'
+          WHERE c.conname = 'inbound_order_forwarding_costs_warehouse_id_fkey'
             AND n.nspname = current_schema()
         ) THEN
-          ALTER TABLE "purchase_order_forwarding_costs"
-            ADD CONSTRAINT "purchase_order_forwarding_costs_warehouse_id_fkey"
+          ALTER TABLE "inbound_order_forwarding_costs"
+            ADD CONSTRAINT "inbound_order_forwarding_costs_warehouse_id_fkey"
             FOREIGN KEY ("warehouse_id") REFERENCES "warehouses"("id")
             ON DELETE RESTRICT ON UPDATE CASCADE;
         END IF;
@@ -900,19 +900,19 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           FROM pg_constraint c
           JOIN pg_class t ON t.oid = c.conrelid
           JOIN pg_namespace n ON n.oid = t.relnamespace
-          WHERE c.conname = 'purchase_order_forwarding_costs_cost_rate_id_fkey'
+          WHERE c.conname = 'inbound_order_forwarding_costs_cost_rate_id_fkey'
             AND n.nspname = current_schema()
         ) THEN
-          ALTER TABLE "purchase_order_forwarding_costs"
-            ADD CONSTRAINT "purchase_order_forwarding_costs_cost_rate_id_fkey"
+          ALTER TABLE "inbound_order_forwarding_costs"
+            ADD CONSTRAINT "inbound_order_forwarding_costs_cost_rate_id_fkey"
             FOREIGN KEY ("cost_rate_id") REFERENCES "cost_rates"("id")
             ON DELETE SET NULL ON UPDATE CASCADE;
         END IF;
       END $$;
     `,
-    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_purchase_order_id_idx" ON "purchase_order_forwarding_costs"("purchase_order_id")`,
-    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_warehouse_id_idx" ON "purchase_order_forwarding_costs"("warehouse_id")`,
-    `CREATE INDEX IF NOT EXISTS "purchase_order_forwarding_costs_cost_rate_id_idx" ON "purchase_order_forwarding_costs"("cost_rate_id")`,
+    `CREATE INDEX IF NOT EXISTS "inbound_order_forwarding_costs_inbound_order_id_idx" ON "inbound_order_forwarding_costs"("inbound_order_id")`,
+    `CREATE INDEX IF NOT EXISTS "inbound_order_forwarding_costs_warehouse_id_idx" ON "inbound_order_forwarding_costs"("warehouse_id")`,
+    `CREATE INDEX IF NOT EXISTS "inbound_order_forwarding_costs_cost_rate_id_idx" ON "inbound_order_forwarding_costs"("cost_rate_id")`,
   ]
 
   for (const statement of ddlStatements) {
