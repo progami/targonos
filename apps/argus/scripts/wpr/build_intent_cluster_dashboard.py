@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from common import resolve_wpr_paths
 from market_config import wpr_market_config
@@ -2346,6 +2346,44 @@ def recent_window_for_anchor(week_order: list[str], anchor_week: str) -> list[st
 def baseline_window_for_anchor(week_order: list[str], anchor_week: str) -> list[str]:
     anchor_index = week_order.index(anchor_week)
     return week_order[: anchor_index + 1]
+
+
+def week_start_date(week_meta: dict[str, dict[str, object]], week_label: str) -> date:
+    value = week_meta[week_label]["start_date"]
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return date.fromisoformat(value)
+    raise TypeError(f"Invalid start_date for {week_label}: {value!r}")
+
+
+def select_default_week_label(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> str:
+    completed_weeks = completed_week_order(week_order, week_meta, today)
+    return completed_weeks[-1]
+
+
+def completed_week_order(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> list[str]:
+    if today is None:
+        today = date.today()
+
+    completed_weeks: list[str] = []
+    for week_label in week_order:
+        start_date = week_start_date(week_meta, week_label)
+        if start_date + timedelta(days=7) <= today:
+            completed_weeks.append(week_label)
+
+    if not completed_weeks:
+        raise ValueError("No completed WPR weeks are available.")
+
+    return completed_weeks
 
 
 def build_brand_metrics_window(
@@ -10208,9 +10246,6 @@ def main() -> None:
             key=lambda item: int(item[1]),
         )
     ]
-    latest_week_label = week_order[-1]
-    latest_week_number = int(week_meta[latest_week_label]["week_number"])
-    latest_week_start = str(week_meta[latest_week_label]["start_date"])
     output_dir = WPR_PATHS.data_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -10259,12 +10294,18 @@ def main() -> None:
         windows_by_week[anchor_week] = window_bundle
         audits_by_week[anchor_week] = window_audit
 
-    default_bundle = windows_by_week[latest_week_label]
-    audit_output = audits_by_week[latest_week_label]
+    completed_weeks = completed_week_order(week_order, week_meta)
+    default_week_label = completed_weeks[-1]
+    default_bundle = windows_by_week[default_week_label]
+    audit_output = audits_by_week[default_week_label]
+    completed_week_start_dates = {
+        week_label: week_start_dates[week_label]
+        for week_label in completed_weeks
+    }
     payload = build_payload(
         default_bundle,
-        week_order,
-        week_start_dates,
+        completed_weeks,
+        completed_week_start_dates,
         source_overview,
         windows_by_week,
         change_log_by_week,
@@ -10286,7 +10327,7 @@ def main() -> None:
     write_summary_csv(
         csv_path,
         default_bundle["clusters"],
-        latest_week_label,
+        default_week_label,
         default_bundle["meta"]["recentWindow"],
         default_bundle["meta"]["baselineWindow"],
     )

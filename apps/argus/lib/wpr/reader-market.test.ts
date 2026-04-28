@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { getWprWeekSummary } from './reader'
+import { createWprWeekSummary, getWprWeekSummary } from './reader'
 
 function buildScpMetrics() {
   return {
@@ -151,4 +151,23 @@ test('getWprWeekSummary caches payloads by market and path', async () => {
 
   assert.equal(usSummary.defaultWeek, 'W16')
   assert.equal(ukSummary.defaultWeek, 'W07')
+})
+
+test('createWprWeekSummary excludes the current in-progress week by default', () => {
+  const summary = createWprWeekSummary({
+    defaultWeek: 'W18',
+    weeks: ['W16', 'W17', 'W18'],
+    weekStartDates: {
+      W16: '2026-04-12',
+      W17: '2026-04-19',
+      W18: '2026-04-26',
+    },
+  }, new Date('2026-04-28T16:00:00.000Z'))
+
+  assert.equal(summary.defaultWeek, 'W17')
+  assert.deepEqual(summary.weeks, ['W16', 'W17'])
+  assert.deepEqual(summary.weekStartDates, {
+    W16: '2026-04-12',
+    W17: '2026-04-19',
+  })
 })
