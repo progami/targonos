@@ -27,7 +27,7 @@ const hostedRouteChecks: HostedRouteCheck[] = [
   { name: 'argus', path: '/argus/wpr', visibleText: 'Weekly performance reporting' },
   { name: 'talos-dashboard', path: '/talos/dashboard', visibleText: 'Dashboard' },
   { name: 'talos-inventory', path: '/talos/operations/inventory', visibleText: 'Inventory' },
-  { name: 'talos-purchase-orders', path: '/talos/operations/purchase-orders', visibleText: 'Purchase Orders' },
+  { name: 'talos-inbound', path: '/talos/operations/inbound', visibleText: 'Inbound' },
   { name: 'talos-products', path: '/talos/config/products', visibleText: 'Products' },
 ]
 

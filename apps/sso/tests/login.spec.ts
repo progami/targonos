@@ -48,7 +48,7 @@ test('portal recovers from a stale encrypted session cookie and still redirects 
   ])
 
   const response = await page.request.get(
-    `${portalBaseUrl}/login/google?callbackUrl=${encodeURIComponent('/talos/operations/purchase-orders')}`,
+    `${portalBaseUrl}/login/google?callbackUrl=${encodeURIComponent('/talos/operations/inbound')}`,
     {
       maxRedirects: 0,
     },
