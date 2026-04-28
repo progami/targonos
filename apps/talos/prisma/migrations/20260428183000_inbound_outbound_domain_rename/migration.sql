@@ -112,6 +112,52 @@ SELECT pg_temp.talos_rename_index('idx_inventory_transactions_purchase_order_lin
 SELECT pg_temp.talos_rename_index('idx_inventory_transactions_fulfillment_order', 'idx_inventory_transactions_outbound_order');
 SELECT pg_temp.talos_rename_index('idx_inventory_transactions_fulfillment_order_line', 'idx_inventory_transactions_outbound_order_line');
 
+DO $$
+DECLARE
+  legacy_permission record;
+  target_permission_code text;
+  target_permission_id uuid;
+BEGIN
+  FOR legacy_permission IN
+    SELECT "id", "code"
+    FROM "permissions"
+    WHERE "code" LIKE 'po.%'
+       OR "code" LIKE 'fo.%'
+  LOOP
+    target_permission_code := regexp_replace(regexp_replace(legacy_permission."code", '^po\.', 'inbound.'), '^fo\.', 'outbound.');
+
+    SELECT "id"
+    INTO target_permission_id
+    FROM "permissions"
+    WHERE "code" = target_permission_code;
+
+    IF target_permission_id IS NOT NULL THEN
+      INSERT INTO "user_permissions" ("id", "user_id", "permission_id", "granted_by_id", "granted_at")
+      SELECT
+        md5(user_permission."id"::text || ':' || target_permission_id::text)::uuid,
+        user_permission."user_id",
+        target_permission_id,
+        user_permission."granted_by_id",
+        user_permission."granted_at"
+      FROM "user_permissions" user_permission
+      WHERE user_permission."permission_id" = legacy_permission."id"
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "user_permissions" existing_permission
+          WHERE existing_permission."user_id" = user_permission."user_id"
+            AND existing_permission."permission_id" = target_permission_id
+        );
+
+      DELETE FROM "user_permissions"
+      WHERE "permission_id" = legacy_permission."id";
+
+      DELETE FROM "permissions"
+      WHERE "id" = legacy_permission."id";
+    END IF;
+  END LOOP;
+END;
+$$;
+
 UPDATE "permissions"
 SET
   "code" = regexp_replace(regexp_replace("code", '^po\.', 'inbound.'), '^fo\.', 'outbound.'),
