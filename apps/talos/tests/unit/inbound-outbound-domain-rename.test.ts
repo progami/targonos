@@ -65,3 +65,41 @@ test('Prisma schema maps the renamed inbound and outbound database tables and co
   assert.equal(schema.includes(`@map("${legacyColumnMap}")`), false)
   assert.equal(schema.includes(`@map("${legacyOutboundColumnMap}")`), false)
 })
+
+test('inbound outbound migration merges pre-seeded permission codes before renaming legacy codes', () => {
+  const migration = readTalosFile(
+    'prisma/migrations/20260428183000_inbound_outbound_domain_rename/migration.sql',
+  )
+  const mergeBlockIndex = migration.indexOf('FOR legacy_permission IN')
+  const permissionUpdateIndex = migration.indexOf('UPDATE "permissions"')
+
+  assert.notEqual(mergeBlockIndex, -1)
+  assert.equal(mergeBlockIndex < permissionUpdateIndex, true)
+  assert.equal(migration.includes('target_permission_id'), true)
+  assert.equal(migration.includes('target_permission_id uuid'), false)
+  assert.equal(migration.includes('::uuid'), false)
+  assert.equal(migration.includes('legacy_permission."id"::text'), true)
+  assert.equal(migration.includes('user_permission."permission_id"::text'), true)
+  assert.equal(migration.includes('DELETE FROM "user_permissions"'), true)
+  assert.equal(migration.includes('DELETE FROM "permissions"'), true)
+  assert.equal(
+    migration.includes(
+      `regexp_replace(regexp_replace(legacy_permission."code", '^po\\.', 'inbound.'), '^fo\\.', 'outbound.')`,
+    ),
+    true,
+  )
+})
+
+test('inbound outbound migration does not update public counters without table privilege', () => {
+  const migration = readTalosFile(
+    'prisma/migrations/20260428183000_inbound_outbound_domain_rename/migration.sql',
+  )
+  const publicCounterIndex = migration.indexOf('"public"."global_reference_counters"')
+  const privilegeCheckIndex = migration.indexOf(
+    `has_table_privilege('public.global_reference_counters', 'UPDATE')`,
+  )
+
+  assert.notEqual(publicCounterIndex, -1)
+  assert.notEqual(privilegeCheckIndex, -1)
+  assert.equal(privilegeCheckIndex < migration.indexOf('UPDATE "public"."global_reference_counters"'), true)
+})
