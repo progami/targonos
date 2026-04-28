@@ -89,3 +89,17 @@ test('inbound outbound migration merges pre-seeded permission codes before renam
     true,
   )
 })
+
+test('inbound outbound migration does not update public counters without table privilege', () => {
+  const migration = readTalosFile(
+    'prisma/migrations/20260428183000_inbound_outbound_domain_rename/migration.sql',
+  )
+  const publicCounterIndex = migration.indexOf('"public"."global_reference_counters"')
+  const privilegeCheckIndex = migration.indexOf(
+    `has_table_privilege('public.global_reference_counters', 'UPDATE')`,
+  )
+
+  assert.notEqual(publicCounterIndex, -1)
+  assert.notEqual(privilegeCheckIndex, -1)
+  assert.equal(privilegeCheckIndex < migration.indexOf('UPDATE "public"."global_reference_counters"'), true)
+})

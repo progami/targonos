@@ -175,9 +175,11 @@ SET
 DO $$
 BEGIN
   IF to_regclass('"public"."global_reference_counters"') IS NOT NULL THEN
-    UPDATE "public"."global_reference_counters"
-    SET "counter_key" = regexp_replace("counter_key", '^po_sequence', 'inbound_sequence')
-    WHERE "counter_key" LIKE 'po_sequence%';
+    IF has_table_privilege('public.global_reference_counters', 'UPDATE') THEN
+      UPDATE "public"."global_reference_counters"
+      SET "counter_key" = regexp_replace("counter_key", '^po_sequence', 'inbound_sequence')
+      WHERE "counter_key" LIKE 'po_sequence%';
+    END IF;
   END IF;
 END;
 $$;
