@@ -76,6 +76,10 @@ test('inbound outbound migration merges pre-seeded permission codes before renam
   assert.notEqual(mergeBlockIndex, -1)
   assert.equal(mergeBlockIndex < permissionUpdateIndex, true)
   assert.equal(migration.includes('target_permission_id'), true)
+  assert.equal(migration.includes('target_permission_id uuid'), false)
+  assert.equal(migration.includes('::uuid'), false)
+  assert.equal(migration.includes('legacy_permission."id"::text'), true)
+  assert.equal(migration.includes('user_permission."permission_id"::text'), true)
   assert.equal(migration.includes('DELETE FROM "user_permissions"'), true)
   assert.equal(migration.includes('DELETE FROM "permissions"'), true)
   assert.equal(

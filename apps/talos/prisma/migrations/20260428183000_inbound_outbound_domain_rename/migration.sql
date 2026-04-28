@@ -116,7 +116,7 @@ DO $$
 DECLARE
   legacy_permission record;
   target_permission_code text;
-  target_permission_id uuid;
+  target_permission_id text;
 BEGIN
   FOR legacy_permission IN
     SELECT "id", "code"
@@ -126,7 +126,7 @@ BEGIN
   LOOP
     target_permission_code := regexp_replace(regexp_replace(legacy_permission."code", '^po\.', 'inbound.'), '^fo\.', 'outbound.');
 
-    SELECT "id"
+    SELECT "id"::text
     INTO target_permission_id
     FROM "permissions"
     WHERE "code" = target_permission_code;
@@ -134,18 +134,18 @@ BEGIN
     IF target_permission_id IS NOT NULL THEN
       INSERT INTO "user_permissions" ("id", "user_id", "permission_id", "granted_by_id", "granted_at")
       SELECT
-        md5(user_permission."id"::text || ':' || target_permission_id::text)::uuid,
+        md5(user_permission."id"::text || ':' || target_permission_id),
         user_permission."user_id",
         target_permission_id,
         user_permission."granted_by_id",
         user_permission."granted_at"
       FROM "user_permissions" user_permission
-      WHERE user_permission."permission_id" = legacy_permission."id"
+      WHERE user_permission."permission_id"::text = legacy_permission."id"::text
         AND NOT EXISTS (
           SELECT 1
           FROM "user_permissions" existing_permission
           WHERE existing_permission."user_id" = user_permission."user_id"
-            AND existing_permission."permission_id" = target_permission_id
+            AND existing_permission."permission_id"::text = target_permission_id
         );
 
       DELETE FROM "user_permissions"
