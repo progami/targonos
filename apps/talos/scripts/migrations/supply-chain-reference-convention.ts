@@ -90,7 +90,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
         COUNT(*) AS usage_count,
         MAX(inbound."created_at") AS last_used_at
       FROM "inbound_order_lines" pol
-      JOIN "inbound_orders" po
+      JOIN "inbound_orders" inbound
         ON inbound."id" = pol."inbound_order_id"
       GROUP BY
         pol."sku_code",
@@ -132,7 +132,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       WHERE s."sku_group" IS NOT NULL
       GROUP BY pol."inbound_order_id"
     )
-    UPDATE "inbound_orders" po
+    UPDATE "inbound_orders" inbound
     SET "sku_group" = olg."sku_group"
     FROM order_line_groups olg
     WHERE inbound."id" = olg."inbound_order_id"
@@ -152,7 +152,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
           NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^TG-[A-Z]{2}-([0-9]+)$'), ''),
           NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^IN-0*([0-9]+)$'), '')
         ) AS "sequence_text"
-      FROM "inbound_orders" po
+      FROM "inbound_orders" inbound
       WHERE inbound."is_legacy" = false
     )
     UPDATE "inbound_order_lines" pol
