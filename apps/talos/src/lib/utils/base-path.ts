@@ -45,6 +45,11 @@ function resolveInferencePath(pathname?: string): string {
  return ''
 }
 
+function isRootApiPath(path: string): boolean {
+ if (path === '/api') return true
+ return path.startsWith('/api/')
+}
+
 /**
  * Get the base path from environment or infer it from the active pathname.
  */
@@ -70,10 +75,15 @@ export function getBasePath(pathname?: string): string {
  */
 export function withBasePath(path: string, pathname?: string): string {
  const basePath = getBasePath(pathname)
- if (!basePath) return path
- 
  // Ensure path starts with /
  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+
+ if (!basePath) {
+  if (isRootApiPath(normalizedPath)) {
+   throw new Error(`Talos API paths require a base path; refusing root API path: ${normalizedPath}`)
+  }
+  return path
+ }
 
  if (normalizedPath === basePath || normalizedPath.startsWith(`${basePath}/`)) {
   return normalizedPath
