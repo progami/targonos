@@ -70,7 +70,7 @@ export function buildMainNavigation(context: NavigationContext): NavSection[] {
       title: 'Operations',
       items: [
         createItem('Purchase Orders', '/operations/purchase-orders', FileText),
-        createItem('Fulfillment Orders', '/operations/fulfillment-orders', Truck),
+        createItem('Amazon Shipments', '/operations/fulfillment-orders', Truck),
         createItem('Inventory Ledger', '/operations/inventory', BookOpen),
         createItem('Storage Ledger', '/operations/storage-ledger', Building),
         createItem('Financial Ledger', '/operations/financial-ledger', BarChart3),
