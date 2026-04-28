@@ -176,6 +176,14 @@ function InventoryPage() {
     throw loadError
   }
 
+  if (loading) {
+    return (
+      <PageContainer>
+        <PageLoading />
+      </PageContainer>
+    )
+  }
+
   if (!loading && summary === null) {
     throw new Error('Inventory summary is required')
   }
