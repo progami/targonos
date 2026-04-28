@@ -72,8 +72,6 @@ export interface InventoryBalance {
   lastTransactionReference?: string | null
   purchaseOrderId: string | null
   purchaseOrderNumber: string | null
-  fulfillmentOrderId?: string | null
-  fulfillmentOrderNumber?: string | null
   receiveTransaction?: {
     createdBy?: {
       fullName: string
