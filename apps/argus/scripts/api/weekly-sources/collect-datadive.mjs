@@ -9,11 +9,9 @@ import {
   latestCompleteWeek,
   loadMonitoringEnv,
   requireEnv,
+  wprSourceConfigForMarket,
   writeCsv,
 } from './lib/common.mjs'
-
-const NICHE_ID = '79IvywKLfF'
-const HERO_ASIN = 'B09HXC3NL8'
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
 const DATADIVE_BASE = path.join(WEEKLY_ROOT, 'Datadive (API)')
@@ -175,7 +173,7 @@ function writeCompetitorsCsv(file, competitors) {
   writeCsv(file, COMPETITOR_HEADERS, rows)
 }
 
-function writeRankRadarCsv(file, week, rankRadarId, rows) {
+function writeRankRadarCsv(file, week, sourceConfig, rankRadarId, rows) {
   const headers = [
     'Week Code',
     'Week Start',
@@ -205,9 +203,9 @@ function writeRankRadarCsv(file, week, rankRadarId, rows) {
         'Week Code': week.weekCode,
         'Week Start': week.weekStart,
         'Week End': week.weekEnd,
-        'Niche ID': NICHE_ID,
+        'Niche ID': sourceConfig.datadiveNicheId,
         'Rank Radar ID': rankRadarId,
-        'Hero ASIN': HERO_ASIN,
+        'Hero ASIN': sourceConfig.heroAsin,
         'Keyword ID': keywordId,
         Keyword: keyword,
         'Search Volume': searchVolume,
@@ -225,6 +223,7 @@ function writeRankRadarCsv(file, week, rankRadarId, rows) {
 async function main() {
   const { dryRun } = parseArgs()
   const week = latestCompleteWeek()
+  const sourceConfig = wprSourceConfigForMarket()
   const weekPrefix = `${week.weekCode}_${week.weekEnd}`
   const scopeLabel = `${week.weekCode} ${week.weekStart}..${week.weekEnd}`
 
@@ -243,17 +242,17 @@ async function main() {
   loadMonitoringEnv()
   const apiKey = requireEnv('DATADIVE_API_KEY')
 
-  const keywordsResponse = await datadiveJson(`https://api.datadive.tools/v1/niches/${NICHE_ID}/keywords`, apiKey)
-  const competitorsResponse = await datadiveJson(`https://api.datadive.tools/v1/niches/${NICHE_ID}/competitors`, apiKey)
-  const rankRadarList = await datadiveJson(`https://api.datadive.tools/v1/niches/rank-radars?nicheId=${NICHE_ID}`, apiKey)
+  const keywordsResponse = await datadiveJson(`https://api.datadive.tools/v1/niches/${sourceConfig.datadiveNicheId}/keywords`, apiKey)
+  const competitorsResponse = await datadiveJson(`https://api.datadive.tools/v1/niches/${sourceConfig.datadiveNicheId}/competitors`, apiKey)
+  const rankRadarList = await datadiveJson(`https://api.datadive.tools/v1/niches/rank-radars?nicheId=${sourceConfig.datadiveNicheId}`, apiKey)
 
   const keywords = Array.isArray(keywordsResponse?.data?.keywords) ? keywordsResponse.data.keywords : []
   const competitors = Array.isArray(competitorsResponse?.data?.competitors) ? competitorsResponse.data.competitors : []
   const rankRadars = Array.isArray(rankRadarList?.data?.data) ? rankRadarList.data.data : []
 
-  const selectedRankRadar = rankRadars.find((row) => row?.asin?.asin === HERO_ASIN) || rankRadars[0]
+  const selectedRankRadar = rankRadars.find((row) => row?.asin?.asin === sourceConfig.heroAsin)
   if (!selectedRankRadar?.id) {
-    throw new Error('No Datadive rank radar found for niche')
+    throw new Error(`No Datadive rank radar found for hero ASIN ${sourceConfig.heroAsin} in niche ${sourceConfig.datadiveNicheId}`)
   }
 
   const rankRadarDetail = await datadiveJson(
@@ -268,7 +267,7 @@ async function main() {
 
   writeKeywordCsv(keywordsFile, keywords)
   writeCompetitorsCsv(competitorsFile, competitors)
-  writeRankRadarCsv(rankRadarFile, week, selectedRankRadar.id, rankRows)
+  writeRankRadarCsv(rankRadarFile, week, sourceConfig, selectedRankRadar.id, rankRows)
 
   const manifestPath = path.join(DATADIVE_BASE, `${weekPrefix}_DD-Manifest.json`)
   fs.writeFileSync(
@@ -276,9 +275,10 @@ async function main() {
     JSON.stringify(
       {
         generatedAt: new Date().toISOString(),
+        market: sourceConfig.market,
         week,
-        nicheId: NICHE_ID,
-        heroAsin: HERO_ASIN,
+        nicheId: sourceConfig.datadiveNicheId,
+        heroAsin: sourceConfig.heroAsin,
         selectedRankRadarId: selectedRankRadar.id,
         counts: {
           keywords: keywords.length,

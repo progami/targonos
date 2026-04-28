@@ -11,8 +11,17 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_PATH = SCRIPT_DIR / "build_intent_cluster_dashboard.py"
 
 
-def load_module(data_dir: Path):
+def load_module(data_dir: Path, market: str = "us"):
     os.environ["WPR_DATA_DIR"] = str(data_dir)
+    os.environ["ARGUS_MARKET"] = market
+    os.environ["WPR_HERO_ASIN_US"] = "B09HXC3NL8"
+    os.environ["WPR_HERO_ASIN_UK"] = "B09HXC3NL8"
+    os.environ["WPR_COMPETITOR_ASIN_US"] = "B0DQDWV1SV"
+    os.environ["WPR_COMPETITOR_ASIN_UK"] = "B08QZHS7V6"
+    os.environ["WPR_COMPETITOR_BRAND_US"] = "Axgatoxe"
+    os.environ["WPR_COMPETITOR_BRAND_UK"] = "ARVO"
+    os.environ["DATADIVE_NICHE_ID_US"] = "79IvywKLfF"
+    os.environ["DATADIVE_NICHE_ID_UK"] = "NqAfkOXzuP"
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
     spec = spec_from_file_location(f"build_intent_cluster_dashboard_{id(data_dir)}", SCRIPT_PATH)
@@ -32,6 +41,23 @@ class ChangeLogDateFormatTest(unittest.TestCase):
             self.assertEqual(
                 module.format_change_log_date_label("2026-03-08"),
                 "08 Mar 2026 (Sunday)",
+            )
+
+
+class MarketTaxonomyTest(unittest.TestCase):
+    def test_uk_assigns_dust_sheet_terms_to_dust_sheet_cluster(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir, market="uk")
+
+            self.assertEqual(
+                module.assign_cluster("dust sheets for decorating"),
+                ("Dust Sheet", "Dust Sheet for Decorating"),
+            )
+            self.assertEqual(
+                module.assign_cluster("heavy duty dust sheet"),
+                ("Dust Sheet", "Dust Sheet"),
             )
 
 

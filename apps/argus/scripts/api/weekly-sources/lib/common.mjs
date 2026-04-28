@@ -50,6 +50,12 @@ export function loadMonitoringEnv() {
     mode = process.env.TARGONOS_ENV_MODE
   }
 
+  if (mode === 'local') {
+    loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+    loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
+    return
+  }
+
   loadEnvForApp({
     repoRoot: REPO_ROOT,
     appName: 'argus',
@@ -85,6 +91,41 @@ export function resolveArgusMarket(raw = readMarketArg(process.argv.slice(2)) ??
 
 export function marketEnvSuffix(market = resolveArgusMarket()) {
   return market.toUpperCase()
+}
+
+export function requireMarketEnv(baseName, market = resolveArgusMarket()) {
+  return requireEnv(`${baseName}_${marketEnvSuffix(market)}`)
+}
+
+export function parseAsinList(value, envName) {
+  const asins = String(value ?? '')
+    .split(/[\s,|]+/)
+    .map((asin) => asin.trim().toUpperCase())
+    .filter(Boolean)
+
+  if (!asins.length) {
+    throw new Error(`Missing required ASIN list env var: ${envName}`)
+  }
+
+  return asins
+}
+
+export function requireMarketAsinList(baseName, market = resolveArgusMarket()) {
+  const envName = `${baseName}_${marketEnvSuffix(market)}`
+  return parseAsinList(requireEnv(envName), envName)
+}
+
+export function wprSourceConfigForMarket(market = resolveArgusMarket()) {
+  return {
+    market,
+    heroAsin: requireMarketEnv('WPR_HERO_ASIN', market).toUpperCase(),
+    competitorAsin: requireMarketEnv('WPR_COMPETITOR_ASIN', market).toUpperCase(),
+    competitorBrand: requireMarketEnv('WPR_COMPETITOR_BRAND', market),
+    datadiveNicheId: requireMarketEnv('DATADIVE_NICHE_ID', market),
+    listingOurAsins: requireMarketAsinList('ARGUS_OUR_ASINS', market),
+    listingCompetitorSeedAsins: requireMarketAsinList('ARGUS_COMPETITOR_MAIN_ASINS', market),
+    listingHeroBsrAsins: requireMarketAsinList('ARGUS_HERO_BSR_ASINS', market),
+  }
 }
 
 export function salesRootForMarket(market = resolveArgusMarket()) {
