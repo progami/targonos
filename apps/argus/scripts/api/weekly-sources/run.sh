@@ -159,9 +159,9 @@ run_optional_step() {
 }
 
 run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
-run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
-run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $MARKET_FLAG $DRY_FLAG"
-run_optional_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $MARKET_FLAG $DRY_FLAG"
 run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
 run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $MARKET_FLAG $DRY_FLAG"
 
