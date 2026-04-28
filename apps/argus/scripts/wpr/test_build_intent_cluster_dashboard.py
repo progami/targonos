@@ -61,6 +61,38 @@ class MarketTaxonomyTest(unittest.TestCase):
             )
 
 
+class DefaultWeekSelectionTest(unittest.TestCase):
+    def test_defaults_to_latest_completed_week(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+            week_meta = {
+                "W17": {"week_number": 17, "week_label": "W17", "start_date": "2026-04-19"},
+                "W18": {"week_number": 18, "week_label": "W18", "start_date": "2026-04-26"},
+            }
+
+            self.assertEqual(
+                module.select_default_week_label(["W17", "W18"], week_meta, module.date(2026, 4, 28)),
+                "W17",
+            )
+
+    def test_completed_week_order_excludes_current_week(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+            week_meta = {
+                "W17": {"week_number": 17, "week_label": "W17", "start_date": "2026-04-19"},
+                "W18": {"week_number": 18, "week_label": "W18", "start_date": "2026-04-26"},
+            }
+
+            self.assertEqual(
+                module.completed_week_order(["W17", "W18"], week_meta, module.date(2026, 4, 28)),
+                ["W17"],
+            )
+
+
 class ListingChangeAggregationTest(unittest.TestCase):
     def test_groups_changes_by_timestamp_and_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
