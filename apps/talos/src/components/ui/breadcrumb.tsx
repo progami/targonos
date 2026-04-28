@@ -13,6 +13,7 @@ type BreadcrumbItem = {
 
 const ROUTE_LABELS = new Map<string, string>([
  ['/amazon/fba-fee-discrepancies', 'SKU Info'],
+ ['/operations/fulfillment-orders', 'Amazon Shipments'],
 ])
 
 function formatSegmentLabel(segment: string): string {

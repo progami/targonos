@@ -38,6 +38,14 @@ test('main navigation surfaces live Talos pages and keeps super-admin routes gat
 
   const operationsSection = staffNavigation.find((section) => section.title === 'Operations')
   assert.ok(operationsSection)
+  assert.equal(
+    operationsSection.items.find((item) => item.href === '/operations/fulfillment-orders')?.name,
+    'Amazon Shipments'
+  )
+  assert.equal(
+    operationsSection.items.some((item) => item.name === 'Fulfillment Orders'),
+    false
+  )
   assert.ok(
     operationsSection.items.some((item) => item.href === '/operations/storage-ledger')
   )
@@ -109,4 +117,21 @@ test('amazon SKU info page uses the current product label', () => {
 
   assert.equal(pageSource.includes('title="SKU Info"'), true)
   assert.equal(pageSource.includes('title="FBA Fee Discrepancies"'), false)
+})
+
+test('operations shipment page renders Amazon shipments only', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const pageSource = readFileSync(
+    path.join(talosRoot, 'src/app/operations/fulfillment-orders/page.tsx'),
+    'utf8'
+  )
+
+  assert.equal(pageSource.includes('AmazonShipmentsPanel'), true)
+  assert.equal(pageSource.includes('title="Amazon Shipments"'), true)
+  assert.equal(pageSource.includes('FulfillmentOrdersPanel'), false)
+  assert.equal(pageSource.includes('/api/fulfillment-orders'), false)
+  assert.equal(pageSource.includes('New Fulfillment Order'), false)
+  assert.equal(pageSource.includes('PageTabs'), false)
+  assert.equal(pageSource.includes('STATUS_CONFIGS'), false)
+  assert.equal(pageSource.includes('activeTab'), false)
 })
