@@ -86,6 +86,17 @@ test('validateSharedEnvEntries rejects public and app-owned keys', () => {
   ])
 })
 
+test('validateSharedEnvEntries allows tenant Amazon SP-API app credential keys', () => {
+  const entries = new Map([
+    ['AMAZON_SP_APP_CLIENT_ID_US', 'client-id-us'],
+    ['AMAZON_SP_APP_CLIENT_ID_UK', 'client-id-uk'],
+    ['AMAZON_SP_APP_CLIENT_SECRET_US', 'client-secret-us'],
+    ['AMAZON_SP_APP_CLIENT_SECRET_UK', 'client-secret-uk'],
+  ])
+
+  assert.deepEqual(validateSharedEnvEntries(entries, 'env/shared.local.env'), [])
+})
+
 test('parseBwRef decodes Bitwarden item and field names', () => {
   assert.deepEqual(
     parseBwRef('bw://Amazon%20SP-API%20credentials%20-%20plutus/AMAZON_REFRESH_TOKEN_US'),
