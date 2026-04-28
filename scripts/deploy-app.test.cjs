@@ -9,10 +9,18 @@ const deployScript = fs.readFileSync(path.join(rootDir, 'scripts', 'deploy-app.s
 const talosDbCommon = fs.readFileSync(path.join(rootDir, 'scripts', 'db', 'talos-db-common.sh'), 'utf8')
 const talosLoadEnv = fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'scripts', 'load-env.ts'), 'utf8')
 const authPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'packages', 'auth', 'package.json'), 'utf8'))
+const talosPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'package.json'), 'utf8'))
 
 test('auth package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
     authPackage.scripts['prisma:migrate:deploy'],
+    'prisma migrate deploy --schema prisma/schema.prisma',
+  )
+})
+
+test('talos package exposes a deploy-safe prisma migrate command', () => {
+  assert.equal(
+    talosPackage.scripts['db:migrate:deploy'],
     'prisma migrate deploy --schema prisma/schema.prisma',
   )
 })
@@ -81,6 +89,21 @@ test('talos deploy runs only changed migrations when deploy range is known', () 
   assert.match(
     deployScript,
     /if \[\[ "\$app_key" == "talos" && "\$changed_files_available" == "true" \]\]; then[\s\S]*?talos_changed_migrate_cmd="\$\(build_talos_changed_migrate_cmd\)"[\s\S]*?migrate_cmd=""/,
+  )
+})
+
+test('talos deploy always applies pending prisma migrations for both tenant schemas first', () => {
+  assert.match(
+    deployScript,
+    /talos_prisma_migrate_cmd="DATABASE_URL=\\"\\\$DATABASE_URL_US\\" pnpm --filter \$workspace db:migrate:deploy && DATABASE_URL=\\"\\\$DATABASE_URL_UK\\" pnpm --filter \$workspace db:migrate:deploy"/,
+  )
+  assert.match(
+    deployScript,
+    /talos_full_migrate_cmd="\$talos_prisma_migrate_cmd && pnpm --filter \$workspace db:migrate:tenant-schema/,
+  )
+  assert.match(
+    deployScript,
+    /local commands=\("\$talos_prisma_migrate_cmd"\)/,
   )
 })
 
