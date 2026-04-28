@@ -84,17 +84,13 @@ export const GET = withAuth(async (req, session) => {
       purchaseOrder: {
         select: { orderNumber: true },
       },
-      fulfillmentOrder: {
-        select: { foNumber: true },
-      },
     },
   })
 
-  const ledgerTransactions = transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
+  const ledgerTransactions = transactions.map(({ purchaseOrder, ...transaction }) => ({
     ...transaction,
     transactionDate: transaction.transactionDate,
     purchaseOrderNumber: purchaseOrder?.orderNumber ? toPublicOrderNumber(purchaseOrder.orderNumber) : null,
-    fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
   }))
 
   const aggregated = aggregateInventoryTransactions(ledgerTransactions)
@@ -154,8 +150,6 @@ export const GET = withAuth(async (req, session) => {
       lastTransactionReference: balance.lastTransactionReference ?? undefined,
       purchaseOrderId: balance.purchaseOrderId ?? null,
       purchaseOrderNumber: balance.purchaseOrderNumber ? toPublicOrderNumber(balance.purchaseOrderNumber) : null,
-      fulfillmentOrderId: balance.fulfillmentOrderId ?? null,
-      fulfillmentOrderNumber: balance.fulfillmentOrderNumber ?? null,
       receiveTransaction
     }
   })
