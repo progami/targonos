@@ -16,13 +16,17 @@ type CriticalResponseRecord = {
   url: string
 }
 
-const criticalStatusCodes = new Set([401, 403, 500, 502])
+const criticalStatusCodes = new Set([401, 403, 404, 500, 502])
 const trackedResourceTypes = new Set(['document', 'fetch', 'xhr'])
 const hostedErrorMarkers = [
   'Bad gateway',
   'Error code 502',
   "Unexpected token '<'",
 ] as const
+
+export function isHostedCriticalStatusCode(status: number): boolean {
+  return criticalStatusCodes.has(status)
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -168,7 +172,7 @@ export function installHostedResponseTracker(page: Page) {
     }
 
     const status = response.status()
-    if (!criticalStatusCodes.has(status)) {
+    if (!isHostedCriticalStatusCode(status)) {
       return
     }
 

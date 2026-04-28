@@ -25,6 +25,10 @@ const hostedRouteChecks: HostedRouteCheck[] = [
   { name: 'plutus', path: '/plutus/settlements', visibleText: 'Settlements' },
   { name: 'hermes', path: '/hermes/insights', visibleText: 'Insights' },
   { name: 'argus', path: '/argus/wpr', visibleText: 'Weekly performance reporting' },
+  { name: 'talos-dashboard', path: '/talos/dashboard', visibleText: 'Dashboard' },
+  { name: 'talos-inventory', path: '/talos/operations/inventory', visibleText: 'Inventory' },
+  { name: 'talos-purchase-orders', path: '/talos/operations/purchase-orders', visibleText: 'Purchase Orders' },
+  { name: 'talos-products', path: '/talos/config/products', visibleText: 'Products' },
 ]
 
 test.describe('hosted cross-app auth smoke', () => {
