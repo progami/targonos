@@ -65,3 +65,23 @@ test('Prisma schema maps the renamed inbound and outbound database tables and co
   assert.equal(schema.includes(`@map("${legacyColumnMap}")`), false)
   assert.equal(schema.includes(`@map("${legacyOutboundColumnMap}")`), false)
 })
+
+test('inbound outbound migration merges pre-seeded permission codes before renaming legacy codes', () => {
+  const migration = readTalosFile(
+    'prisma/migrations/20260428183000_inbound_outbound_domain_rename/migration.sql',
+  )
+  const mergeBlockIndex = migration.indexOf('FOR legacy_permission IN')
+  const permissionUpdateIndex = migration.indexOf('UPDATE "permissions"')
+
+  assert.notEqual(mergeBlockIndex, -1)
+  assert.equal(mergeBlockIndex < permissionUpdateIndex, true)
+  assert.equal(migration.includes('target_permission_id'), true)
+  assert.equal(migration.includes('DELETE FROM "user_permissions"'), true)
+  assert.equal(migration.includes('DELETE FROM "permissions"'), true)
+  assert.equal(
+    migration.includes(
+      `regexp_replace(regexp_replace(legacy_permission."code", '^po\\.', 'inbound.'), '^fo\\.', 'outbound.')`,
+    ),
+    true,
+  )
+})
