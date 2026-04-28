@@ -196,6 +196,10 @@ function allRootIds(bundle: WprWeekBundle): string[] {
   return bundle.clusters.map((cluster) => cluster.id)
 }
 
+export function allSelectableSqpRootIds(bundle: WprWeekBundle): string[] {
+  return allRootIds(bundle)
+}
+
 export function defaultSqpRootIds(bundle: WprWeekBundle): string[] {
   const rootIds = allRootIds(bundle)
   const rootIdSet = new Set(rootIds)
@@ -244,7 +248,7 @@ export function selectableSqpTermIdsForRoots(bundle: WprWeekBundle, rootIds: str
 }
 
 export function allSelectableSqpTermIds(bundle: WprWeekBundle): string[] {
-  return selectableSqpTermIdsForRoots(bundle, allRootIds(bundle))
+  return selectableSqpTermIdsForRoots(bundle, allSelectableSqpRootIds(bundle))
 }
 
 function selectedRootIdsList(bundle: WprWeekBundle, selectedRootIds: Set<string>): string[] {

@@ -3,10 +3,10 @@
 import { useEffect } from 'react'
 import { Box, Stack } from '@mui/material'
 import {
+  allSelectableSqpRootIds,
+  allSelectableSqpTermIds,
   createSqpSelectionViewModel,
-  defaultSqpRootIds,
   rootTermIds,
-  selectableSqpTermIdsForRoots,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { buildBundleWeekStartDateLookup } from '@/lib/wpr/week-display'
@@ -82,12 +82,10 @@ export default function SqpTab({
     const filteredExpandedIds = filterIds(expandedSqpRootIds, rootIdSet)
 
     if (!hasInitializedSqpSelection) {
-      const initialRootIds = defaultSqpRootIds(bundle)
-      const initialClusterId = initialRootIds[0]
       replaceState({
-        selectedClusterId: initialClusterId === undefined ? null : initialClusterId,
-        selectedSqpRootIds: new Set(initialRootIds),
-        selectedSqpTermIds: new Set(selectableSqpTermIdsForRoots(bundle, initialRootIds)),
+        selectedClusterId: null,
+        selectedSqpRootIds: new Set<string>(),
+        selectedSqpTermIds: new Set<string>(),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
@@ -229,12 +227,11 @@ export default function SqpTab({
   }
 
   const handleSelectAll = () => {
-    const initialRootIds = defaultSqpRootIds(bundle)
-    const initialClusterId = initialRootIds[0]
+    const rootIds = allSelectableSqpRootIds(bundle)
     replaceSqpSelection({
-      rootIds: initialRootIds,
-      termIds: selectableSqpTermIdsForRoots(bundle, initialRootIds),
-      clusterId: initialClusterId === undefined ? null : initialClusterId,
+      rootIds,
+      termIds: allSelectableSqpTermIds(bundle),
+      clusterId: firstSetMember(new Set(rootIds)),
       hasInitialized: true,
     })
   }
