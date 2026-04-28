@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  allSelectableSqpRootIds,
   allSelectableSqpTermIds,
   createSqpSelectionViewModel,
   defaultSqpRootIds,
@@ -475,6 +476,16 @@ test('allSelectableSqpTermIds returns every term shown in the selection table', 
     'cluster-1::term-1',
     'cluster-1::term-2',
     'cluster-2::term-1',
+  ])
+})
+
+test('allSelectableSqpRootIds returns every root shown in the selection table', () => {
+  const bundle = buildBundle()
+  bundle.defaultClusterIds = ['cluster-1']
+
+  assert.deepEqual(allSelectableSqpRootIds(bundle), [
+    'cluster-1',
+    'cluster-2',
   ])
 })
 
