@@ -82,7 +82,7 @@ function showHelp() {
 Remove DEFAULT SKU Batches
 
 Renames sku_batches.batch_code='DEFAULT' to a non-default code per SKU and updates all
-batch_lot references (inventory transactions, purchase order lines, goods receipts, etc.)
+batch_lot references (inventory transactions, inbound lines, goods receipts, etc.)
 so there are no remaining DEFAULT batches in the schema.
 
 Usage:
@@ -177,9 +177,9 @@ async function findReplacementCode(
 
   const referenceTables = [
     'inventory_transactions',
-    'purchase_order_lines',
+    'inbound_order_lines',
     'goods_receipt_lines',
-    'fulfillment_order_lines',
+    'outbound_order_lines',
     'storage_ledger',
   ]
 
@@ -248,9 +248,9 @@ async function applyForSchema(
 
     const updateTargets = [
       'inventory_transactions',
-      'purchase_order_lines',
+      'inbound_order_lines',
       'goods_receipt_lines',
-      'fulfillment_order_lines',
+      'outbound_order_lines',
       'storage_ledger',
     ]
 
@@ -270,7 +270,7 @@ async function applyForSchema(
   }
 
   const remainingDefaultLots: Array<{ table: string; count: number; skus: string[] }> = []
-  for (const tableName of ['inventory_transactions', 'purchase_order_lines', 'goods_receipt_lines', 'fulfillment_order_lines', 'storage_ledger']) {
+  for (const tableName of ['inventory_transactions', 'inbound_order_lines', 'goods_receipt_lines', 'outbound_order_lines', 'storage_ledger']) {
     if (!(await tableExists(client, schema, tableName))) continue
 
     const countResult = await client.query<{ count: string }>(

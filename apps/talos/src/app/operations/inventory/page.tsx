@@ -625,14 +625,14 @@ function InventoryPage() {
                     const sourceNumber =
                       movementType === 'negative'
                         ? balance.lastTransactionReference ?? null
-                        : balance.purchaseOrderNumber ?? null
+                        : balance.inboundOrderNumber ?? null
                     const sourceHref =
                       movementType === 'negative'
                         ? balance.lastTransactionId
                           ? `/operations/transactions/${balance.lastTransactionId}`
                           : null
-                        : balance.purchaseOrderId
-                          ? `/operations/purchase-orders/${balance.purchaseOrderId}`
+                        : balance.inboundOrderId
+                          ? `/operations/inbound/${balance.inboundOrderId}`
                           : null
                     const sourceDisplay = sourceNumber ?? (sourceHref ? 'View' : '—')
                     const firstReceiveMeta = balance.receiveTransaction

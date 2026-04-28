@@ -67,9 +67,9 @@ export function QuickStartGuide({ userRole }: QuickStartGuideProps) {
  },
  {
  title: 'Process Transactions',
- description: 'Create and progress purchase orders',
+ description: 'Create and progress inbound',
  icon: Package,
- link: '/operations/purchase-orders'
+ link: '/operations/inbound'
  },
  {
  title: 'Generate Reports',

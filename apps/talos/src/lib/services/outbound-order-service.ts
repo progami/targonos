@@ -1,0 +1,683 @@
+import { getTenantPrisma } from '@/lib/tenant/server'
+import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
+import { ValidationError, NotFoundError, ConflictError } from '@/lib/api'
+import { assertValidOutboundSourceWarehouse } from '@/lib/services/outbound-source-warehouse'
+import {
+  OutboundDestinationType,
+  OutboundOrderLineStatus,
+  OutboundOrderStatus,
+  Prisma,
+  TransactionType,
+} from '@targon/prisma-talos'
+import { calculatePalletValues } from '@/lib/utils/pallet-calculations'
+
+export interface OutboundUserContext {
+  id: string
+  name: string
+}
+
+export type CreateOutboundOrderLineInput = {
+  skuCode: string
+  skuDescription?: string
+  lotRef: string
+  quantity: number
+  notes?: string
+}
+
+export type CreateOutboundOrderInput = {
+  warehouseCode: string
+  warehouseName?: string
+  destinationType?: OutboundDestinationType
+  destinationName?: string
+  destinationAddress?: string
+  destinationCountry?: string
+  shippingCarrier?: string
+  shippingMethod?: string
+  trackingNumber?: string
+  externalReference?: string
+  amazonShipmentId?: string
+  amazonShipmentName?: string
+  amazonShipmentStatus?: string
+  amazonDestinationFulfillmentCenterId?: string
+  amazonLabelPrepType?: string
+  amazonBoxContentsSource?: string
+  amazonShipFromAddress?: Record<string, unknown> | null
+  amazonReferenceId?: string
+  amazonShipmentReference?: string
+  amazonShipperId?: string
+  amazonPickupNumber?: string
+  amazonPickupAppointmentId?: string
+  amazonDeliveryAppointmentId?: string
+  amazonLoadId?: string
+  amazonFreightBillNumber?: string
+  amazonBillOfLadingNumber?: string
+  amazonPickupWindowStart?: Date | string | null
+  amazonPickupWindowEnd?: Date | string | null
+  amazonDeliveryWindowStart?: Date | string | null
+  amazonDeliveryWindowEnd?: Date | string | null
+  amazonPickupAddress?: string
+  amazonPickupContactName?: string
+  amazonPickupContactPhone?: string
+  amazonDeliveryAddress?: string
+  amazonShipmentMode?: string
+  amazonBoxCount?: number | string | null
+  amazonPalletCount?: number | string | null
+  amazonCommodityDescription?: string
+  amazonDistanceMiles?: number | string | null
+  amazonBasePrice?: number | string | null
+  amazonFuelSurcharge?: number | string | null
+  amazonTotalPrice?: number | string | null
+  amazonCurrency?: string
+  notes?: string
+  lines: CreateOutboundOrderLineInput[]
+}
+
+export async function generateOutboundNumber(): Promise<string> {
+  const prisma = await getTenantPrisma()
+
+  const lastOutbound = await prisma.outboundOrder.findFirst({
+    where: { outboundNumber: { startsWith: 'Outbound-' } },
+    orderBy: { outboundNumber: 'desc' },
+    select: { outboundNumber: true },
+  })
+
+  let nextNumber = 1
+  if (lastOutbound?.outboundNumber) {
+    const match = lastOutbound.outboundNumber.match(/Outbound-(\d+)/)
+    if (match) {
+      nextNumber = parseInt(match[1], 10) + 1
+    }
+  }
+
+  return `Outbound-${nextNumber.toString().padStart(4, '0')}`
+}
+
+function normalizeSkuCode(value: string) {
+  return sanitizeForDisplay(value.trim())
+}
+
+function normalizeLotRef(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return sanitizeForDisplay(trimmed)
+}
+
+export async function listOutboundOrders() {
+  const prisma = await getTenantPrisma()
+  return prisma.outboundOrder.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { lines: true },
+  })
+}
+
+export async function getOutboundOrderById(id: string) {
+  const prisma = await getTenantPrisma()
+  const order = await prisma.outboundOrder.findUnique({
+    where: { id },
+    include: { lines: true, documents: true },
+  })
+
+  if (!order) {
+    throw new NotFoundError('Outbound order not found')
+  }
+
+  return order
+}
+
+export async function createOutboundOrder(
+  input: CreateOutboundOrderInput,
+  user: OutboundUserContext
+) {
+  if (!input.warehouseCode?.trim()) {
+    throw new ValidationError('Warehouse code is required')
+  }
+
+  if (!input.lines || input.lines.length === 0) {
+    throw new ValidationError('At least one line item is required')
+  }
+
+  const normalizedLines = input.lines.map(line => ({
+    skuCode: normalizeSkuCode(line.skuCode),
+    skuDescription: line.skuDescription?.trim()
+      ? sanitizeForDisplay(line.skuDescription.trim())
+      : undefined,
+    lotRef: normalizeLotRef(line.lotRef),
+    quantity: line.quantity,
+    notes: line.notes?.trim() ? sanitizeForDisplay(line.notes.trim()) : undefined,
+  }))
+
+  const keySet = new Set<string>()
+  for (const line of normalizedLines) {
+    if (!line.skuCode) {
+      throw new ValidationError('SKU code is required for all line items')
+    }
+    if (!line.lotRef) {
+      throw new ValidationError(`Lot ref is required for SKU ${line.skuCode}`)
+    }
+    if (!Number.isInteger(line.quantity) || line.quantity <= 0) {
+      throw new ValidationError(`Quantity must be a positive integer for SKU ${line.skuCode}`)
+    }
+    const key = `${line.skuCode.toLowerCase()}::${line.lotRef.toLowerCase()}`
+    if (keySet.has(key)) {
+      throw new ValidationError(
+        `Duplicate line detected for SKU ${line.skuCode} lot ${line.lotRef}. Combine quantities into a single line.`
+      )
+    }
+    keySet.add(key)
+  }
+
+  const prisma = await getTenantPrisma()
+
+  const warehouse = await prisma.warehouse.findFirst({
+    where: { code: sanitizeForDisplay(input.warehouseCode.trim()) },
+    select: { code: true, name: true, address: true, kind: true },
+  })
+
+  if (!warehouse) {
+    throw new ValidationError(`Warehouse not found: ${input.warehouseCode}`)
+  }
+
+  assertValidOutboundSourceWarehouse(warehouse)
+
+  const skuCodes = Array.from(new Set(normalizedLines.map(line => line.skuCode)))
+  const skus = await prisma.sku.findMany({
+    where: { skuCode: { in: skuCodes } },
+    select: { id: true, skuCode: true, description: true, isActive: true },
+  })
+  const skuByCode = new Map(skus.map(sku => [sku.skuCode, sku]))
+
+  for (const line of normalizedLines) {
+    const sku = skuByCode.get(line.skuCode)
+    if (!sku) {
+      throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
+    }
+    if (!sku.isActive) {
+      throw new ValidationError(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
+    }
+  }
+
+  const lotRefs = Array.from(new Set(normalizedLines.map(line => line.lotRef)))
+
+  const inventoryGrouped = await prisma.inventoryTransaction.groupBy({
+    by: ['skuCode', 'lotRef'],
+    where: {
+      warehouseCode: warehouse.code,
+      skuCode: { in: skuCodes },
+      lotRef: { in: lotRefs },
+    },
+    _sum: { cartonsIn: true, cartonsOut: true },
+  })
+
+  const availableCartonsByKey = new Map<string, number>()
+  for (const row of inventoryGrouped) {
+    const cartonsIn = row._sum.cartonsIn
+    const cartonsOut = row._sum.cartonsOut
+    const totalIn = typeof cartonsIn === 'number' ? cartonsIn : 0
+    const totalOut = typeof cartonsOut === 'number' ? cartonsOut : 0
+    availableCartonsByKey.set(`${row.skuCode}::${row.lotRef}`, totalIn - totalOut)
+  }
+
+  const inventoryIssues: string[] = []
+  for (const line of normalizedLines) {
+    const available = availableCartonsByKey.get(`${line.skuCode}::${line.lotRef}`)
+    const availableCartons = typeof available === 'number' ? available : 0
+
+    if (availableCartons < line.quantity) {
+      inventoryIssues.push(
+        `${line.skuCode} lot ${line.lotRef} (available ${availableCartons}, requested ${line.quantity})`
+      )
+    }
+  }
+
+  if (inventoryIssues.length > 0) {
+    throw new ValidationError(`Insufficient inventory: ${inventoryIssues.join('; ')}`)
+  }
+
+  const MAX_OUTBOUND_NUMBER_ATTEMPTS = 5
+
+  for (let attempt = 0; attempt < MAX_OUTBOUND_NUMBER_ATTEMPTS; attempt += 1) {
+    const outboundNumber = await generateOutboundNumber()
+
+    const normalizeOptionalString = (value?: string | null) =>
+      value?.trim() ? sanitizeForDisplay(value.trim()) : null
+
+    const parseOptionalDate = (value?: Date | string | null, label?: string) => {
+      if (!value) return null
+      const parsed = value instanceof Date ? value : new Date(value)
+      if (Number.isNaN(parsed.getTime())) {
+        throw new ValidationError(`${label ?? 'Date'} is invalid`)
+      }
+      return parsed
+    }
+
+    const parseOptionalNumber = (value: number | string | null | undefined, label: string) => {
+      if (value === null || value === undefined || value === '') return null
+      const parsed = typeof value === 'string' ? Number(value) : value
+      if (!Number.isFinite(parsed)) {
+        throw new ValidationError(`${label} must be a valid number`)
+      }
+      return parsed
+    }
+
+    const parseOptionalInt = (value: number | string | null | undefined, label: string) => {
+      if (value === null || value === undefined || value === '') return null
+      const parsed = typeof value === 'string' ? Number(value) : value
+      if (!Number.isInteger(parsed) || parsed < 0) {
+        throw new ValidationError(`${label} must be a non-negative integer`)
+      }
+      return parsed
+    }
+
+    const amazonShipFromAddress = input.amazonShipFromAddress
+      ? (JSON.parse(JSON.stringify(input.amazonShipFromAddress)) as Prisma.InputJsonValue)
+      : null
+
+    const amazonPickupWindowStart = parseOptionalDate(
+      input.amazonPickupWindowStart,
+      'Pickup window start'
+    )
+    const amazonPickupWindowEnd = parseOptionalDate(
+      input.amazonPickupWindowEnd,
+      'Pickup window end'
+    )
+    const amazonDeliveryWindowStart = parseOptionalDate(
+      input.amazonDeliveryWindowStart,
+      'Delivery window start'
+    )
+    const amazonDeliveryWindowEnd = parseOptionalDate(
+      input.amazonDeliveryWindowEnd,
+      'Delivery window end'
+    )
+
+    try {
+      return await prisma.outboundOrder.create({
+        data: {
+          outboundNumber,
+          status: OutboundOrderStatus.DRAFT,
+          warehouseCode: warehouse.code,
+          warehouseName: warehouse.name,
+          destinationType: input.destinationType ?? OutboundDestinationType.CUSTOMER,
+          destinationName: normalizeOptionalString(input.destinationName),
+          destinationAddress: normalizeOptionalString(input.destinationAddress),
+          destinationCountry: normalizeOptionalString(input.destinationCountry),
+          shippingCarrier: normalizeOptionalString(input.shippingCarrier),
+          shippingMethod: normalizeOptionalString(input.shippingMethod),
+          trackingNumber: normalizeOptionalString(input.trackingNumber),
+          externalReference: normalizeOptionalString(input.externalReference),
+          amazonShipmentId: normalizeOptionalString(input.amazonShipmentId),
+          amazonShipmentName: normalizeOptionalString(input.amazonShipmentName),
+          amazonShipmentStatus: normalizeOptionalString(input.amazonShipmentStatus),
+          amazonDestinationFulfillmentCenterId: normalizeOptionalString(
+            input.amazonDestinationFulfillmentCenterId
+          ),
+          amazonLabelPrepType: normalizeOptionalString(input.amazonLabelPrepType),
+          amazonBoxContentsSource: normalizeOptionalString(input.amazonBoxContentsSource),
+          amazonShipFromAddress,
+          amazonReferenceId: normalizeOptionalString(input.amazonReferenceId),
+          amazonShipmentReference: normalizeOptionalString(input.amazonShipmentReference),
+          amazonShipperId: normalizeOptionalString(input.amazonShipperId),
+          amazonPickupNumber: normalizeOptionalString(input.amazonPickupNumber),
+          amazonPickupAppointmentId: normalizeOptionalString(input.amazonPickupAppointmentId),
+          amazonDeliveryAppointmentId: normalizeOptionalString(input.amazonDeliveryAppointmentId),
+          amazonLoadId: normalizeOptionalString(input.amazonLoadId),
+          amazonFreightBillNumber: normalizeOptionalString(input.amazonFreightBillNumber),
+          amazonBillOfLadingNumber: normalizeOptionalString(input.amazonBillOfLadingNumber),
+          amazonPickupWindowStart,
+          amazonPickupWindowEnd,
+          amazonDeliveryWindowStart,
+          amazonDeliveryWindowEnd,
+          amazonPickupAddress: normalizeOptionalString(input.amazonPickupAddress),
+          amazonPickupContactName: normalizeOptionalString(input.amazonPickupContactName),
+          amazonPickupContactPhone: normalizeOptionalString(input.amazonPickupContactPhone),
+          amazonDeliveryAddress: normalizeOptionalString(input.amazonDeliveryAddress),
+          amazonShipmentMode: normalizeOptionalString(input.amazonShipmentMode),
+          amazonBoxCount: parseOptionalInt(input.amazonBoxCount, 'Box count'),
+          amazonPalletCount: parseOptionalInt(input.amazonPalletCount, 'Pallet count'),
+          amazonCommodityDescription: normalizeOptionalString(input.amazonCommodityDescription),
+          amazonDistanceMiles: parseOptionalNumber(input.amazonDistanceMiles, 'Distance (miles)'),
+          amazonBasePrice: parseOptionalNumber(input.amazonBasePrice, 'Base price'),
+          amazonFuelSurcharge: parseOptionalNumber(input.amazonFuelSurcharge, 'Fuel surcharge'),
+          amazonTotalPrice: parseOptionalNumber(input.amazonTotalPrice, 'Total price'),
+          amazonCurrency: normalizeOptionalString(input.amazonCurrency),
+          notes: normalizeOptionalString(input.notes),
+          createdById: user.id,
+          createdByName: user.name,
+          lines: {
+            create: normalizedLines.map(line => ({
+              skuCode: line.skuCode,
+              skuDescription:
+                line.skuDescription ?? skuByCode.get(line.skuCode)?.description ?? null,
+              lotRef: line.lotRef,
+              quantity: line.quantity,
+              status: OutboundOrderLineStatus.PENDING,
+              shippedQuantity: 0,
+              lineNotes: line.notes ?? null,
+            })),
+          },
+        },
+        include: { lines: true, documents: true },
+      })
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002' &&
+        Array.isArray(error.meta?.target) &&
+        error.meta?.target.includes('outbound_number')
+      ) {
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new ConflictError('Could not generate a unique outbound order number. Please try again.')
+}
+
+export function getValidNextOutboundStages(
+  currentStatus: OutboundOrderStatus
+): OutboundOrderStatus[] {
+  switch (currentStatus) {
+    case OutboundOrderStatus.DRAFT:
+      return [OutboundOrderStatus.SHIPPED, OutboundOrderStatus.CANCELLED]
+    case OutboundOrderStatus.SHIPPED:
+      return []
+    case OutboundOrderStatus.CANCELLED:
+      return []
+    default:
+      return []
+  }
+}
+
+export async function transitionOutboundOrderStage(
+  id: string,
+  targetStatus: OutboundOrderStatus,
+  stageData: {
+    shippedDate?: string | Date | null
+    deliveredDate?: string | Date | null
+    shippingCarrier?: string | null
+    shippingMethod?: string | null
+    trackingNumber?: string | null
+  },
+  user: OutboundUserContext
+) {
+  const prisma = await getTenantPrisma()
+
+  const order = await prisma.outboundOrder.findUnique({
+    where: { id },
+    include: { lines: true, documents: true },
+  })
+
+  if (!order) {
+    throw new NotFoundError('Outbound order not found')
+  }
+
+  const validNextStages = getValidNextOutboundStages(order.status)
+  if (!validNextStages.includes(targetStatus)) {
+    throw new ValidationError(`Invalid stage transition from ${order.status} to ${targetStatus}`)
+  }
+
+  if (targetStatus === OutboundOrderStatus.CANCELLED) {
+    return prisma.outboundOrder.update({
+      where: { id },
+      data: { status: OutboundOrderStatus.CANCELLED },
+      include: { lines: true, documents: true },
+    })
+  }
+
+  if (targetStatus !== OutboundOrderStatus.SHIPPED) {
+    throw new ValidationError('Unsupported outbound stage transition')
+  }
+
+  const shippedAtRaw = stageData.shippedDate ?? order.shippedDate ?? new Date()
+  const shippedAt = shippedAtRaw instanceof Date ? shippedAtRaw : new Date(shippedAtRaw)
+  if (Number.isNaN(shippedAt.getTime())) {
+    throw new ValidationError('Invalid shipped date')
+  }
+
+  const normalizeText = (value: string | null | undefined) => {
+    if (typeof value !== 'string') return null
+    const trimmed = value.trim()
+    return trimmed ? sanitizeForDisplay(trimmed) : null
+  }
+
+  if (order.destinationType === OutboundDestinationType.AMAZON_FBA) {
+    if (!order.amazonShipmentId?.trim()) {
+      throw new ValidationError('Amazon shipment ID is required to ship an Amazon FBA outbound order')
+    }
+
+    const statusRaw = order.amazonShipmentStatus
+    if (typeof statusRaw === 'string') {
+      const trimmed = statusRaw.trim()
+      if (trimmed) {
+        const blockedAmazonShipmentStatuses = new Set(['CANCELLED', 'CANCELED', 'DELETED'])
+        if (blockedAmazonShipmentStatuses.has(trimmed.toUpperCase())) {
+          throw new ValidationError(`Cannot ship: Amazon shipment status is ${trimmed}`)
+        }
+      }
+    }
+  } else {
+    if (!order.destinationName?.trim()) {
+      throw new ValidationError('Destination name is required to ship a non-Amazon outbound order')
+    }
+  }
+
+  const resolvedCarrier = normalizeText(stageData.shippingCarrier) ?? normalizeText(order.shippingCarrier)
+  const resolvedMethod = normalizeText(stageData.shippingMethod) ?? normalizeText(order.shippingMethod)
+
+  if (!resolvedCarrier) {
+    throw new ValidationError('Shipping carrier is required to ship an outbound order')
+  }
+
+  if (!resolvedMethod) {
+    throw new ValidationError('Shipping method is required to ship an outbound order')
+  }
+
+  const requiredDocuments: Array<{ stage: string; id: string; label: string }> = [
+    { stage: 'PACKING', id: 'carton_label', label: 'Carton Label' },
+    { stage: 'PACKING', id: 'pallete_label', label: 'Pallete Label' },
+    { stage: 'SHIPPING', id: 'cmr', label: 'CMR' },
+    { stage: 'SHIPPING', id: 'carrier_labels', label: 'Carrier Labels' },
+    { stage: 'SHIPPING', id: 'amazon_freight_invoice', label: 'Amazon Freight Invoice' },
+  ]
+
+  for (const req of requiredDocuments) {
+    const hasDoc = order.documents?.some(
+      doc => doc.stage === req.stage && doc.documentType === req.id
+    )
+    if (!hasDoc) {
+      throw new ValidationError(`${req.label} document is required before shipping`)
+    }
+  }
+
+  const warehouse = await prisma.warehouse.findFirst({
+    where: { code: order.warehouseCode },
+    select: { id: true, code: true, name: true, address: true },
+  })
+
+  if (!warehouse) {
+    throw new NotFoundError('Warehouse not found for outbound order')
+  }
+
+  if (!order.lines || order.lines.length === 0) {
+    throw new ValidationError('Cannot ship an outbound order with no lines')
+  }
+
+  const skuCodes = Array.from(new Set(order.lines.map(line => line.skuCode)))
+  const skus = await prisma.sku.findMany({
+    where: { skuCode: { in: skuCodes } },
+    select: {
+      id: true,
+      skuCode: true,
+      description: true,
+      unitsPerCarton: true,
+      unitDimensionsCm: true,
+      unitWeightKg: true,
+      cartonDimensionsCm: true,
+      cartonWeightKg: true,
+      packagingType: true,
+    },
+  })
+  const skuMap = new Map(skus.map(sku => [sku.skuCode, sku]))
+
+  const configs = await prisma.warehouseSkuStorageConfig.findMany({
+    where: {
+      warehouseId: warehouse.id,
+      skuId: { in: skus.map(sku => sku.id) },
+    },
+    select: {
+      skuId: true,
+      shippingCartonsPerPallet: true,
+    },
+  })
+  const configBySkuId = new Map(configs.map(config => [config.skuId, config]))
+
+  const referenceId = stageData.trackingNumber?.trim()
+    ? sanitizeForDisplay(stageData.trackingNumber.trim())
+    : (order.trackingNumber ?? order.outboundNumber)
+
+  return prisma.$transaction(async tx => {
+    for (const line of order.lines) {
+      if (line.status === OutboundOrderLineStatus.CANCELLED) {
+        continue
+      }
+
+      const sku = skuMap.get(line.skuCode)
+      if (!sku) {
+        throw new ValidationError(`SKU not found: ${line.skuCode}`)
+      }
+
+      const config = configBySkuId.get(sku.id) ?? null
+
+      const cartons = line.quantity
+      if (!Number.isInteger(cartons) || cartons <= 0) {
+        throw new ValidationError(`Invalid cartons quantity for SKU ${line.skuCode}`)
+      }
+
+      const shippingCartonsPerPallet = config?.shippingCartonsPerPallet ?? null
+
+      if (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0) {
+        throw new ValidationError(
+          `Shipping cartons per pallet is required for SKU ${line.skuCode}. Configure it in Config → Warehouses.`
+        )
+      }
+
+      const transactions = await tx.inventoryTransaction.findMany({
+        where: {
+          warehouseCode: warehouse.code,
+          skuCode: sku.skuCode,
+          lotRef: line.lotRef,
+          transactionDate: { lte: shippedAt },
+        },
+        select: { cartonsIn: true, cartonsOut: true, unitsPerCarton: true },
+      })
+
+      // Use unitsPerCarton from the inbound transaction for this lot (most accurate),
+      // falling back to the SKU master value
+      const inboundUnitsPerCarton = transactions.find(t => t.cartonsIn > 0)?.unitsPerCarton
+      const unitsPerCarton = inboundUnitsPerCarton ?? sku.unitsPerCarton
+
+      const currentCartons = transactions.reduce(
+        (sum, txn) => sum + Number(txn.cartonsIn || 0) - Number(txn.cartonsOut || 0),
+        0
+      )
+
+      if (currentCartons < cartons) {
+        throw new ValidationError(
+          `Insufficient inventory for SKU ${sku.skuCode} lot ${line.lotRef}. Available: ${currentCartons}, Requested: ${cartons}`
+        )
+      }
+
+      const { shippingPalletsOut } = calculatePalletValues({
+        transactionType: 'SHIP',
+        cartons,
+        shippingCartonsPerPallet,
+      })
+
+      if (shippingPalletsOut <= 0) {
+        throw new ValidationError('Total pallets is required for outbound shipments')
+      }
+
+      await tx.inventoryTransaction.create({
+        data: {
+          warehouseCode: warehouse.code,
+          warehouseName: warehouse.name,
+          warehouseAddress: warehouse.address,
+          skuCode: sku.skuCode,
+          skuDescription: line.skuDescription ?? sku.description,
+          unitDimensionsCm: sku.unitDimensionsCm,
+          unitWeightKg: sku.unitWeightKg,
+          cartonDimensionsCm: sku.cartonDimensionsCm,
+          cartonWeightKg: sku.cartonWeightKg,
+          packagingType: sku.packagingType,
+          unitsPerCarton,
+          lotRef: line.lotRef,
+          transactionType: TransactionType.SHIP,
+          referenceId,
+          cartonsIn: 0,
+          cartonsOut: cartons,
+          storagePalletsIn: 0,
+          shippingPalletsOut,
+          storageCartonsPerPallet: null,
+          shippingCartonsPerPallet,
+          shipName: order.destinationName ?? stageData.shippingCarrier ?? null,
+          trackingNumber: stageData.trackingNumber?.trim()
+            ? sanitizeForDisplay(stageData.trackingNumber.trim())
+            : (order.trackingNumber ?? null),
+          supplier: null,
+          attachments: null,
+          transactionDate: shippedAt,
+          pickupDate: shippedAt,
+          createdById: user.id,
+          createdByName: user.name,
+          outboundOrderId: order.id,
+          outboundOrderLineId: line.id,
+          isReconciled: false,
+          isDemo: false,
+        },
+      })
+
+      await tx.outboundOrderLine.update({
+        where: { id: line.id },
+        data: {
+          shippedQuantity: cartons,
+          status: OutboundOrderLineStatus.SHIPPED,
+        },
+      })
+    }
+
+    const deliveredAtRaw = stageData.deliveredDate ?? order.deliveredDate ?? null
+    const deliveredDate = deliveredAtRaw
+      ? deliveredAtRaw instanceof Date
+        ? deliveredAtRaw
+        : new Date(deliveredAtRaw)
+      : null
+
+    if (deliveredDate && Number.isNaN(deliveredDate.getTime())) {
+      throw new ValidationError('Invalid delivered date')
+    }
+    if (deliveredDate && deliveredDate < shippedAt) {
+      throw new ValidationError('Delivered date cannot be earlier than shipped date')
+    }
+
+    const updatedOrder = await tx.outboundOrder.update({
+      where: { id: order.id },
+      data: {
+        status: OutboundOrderStatus.SHIPPED,
+        shippedDate: shippedAt,
+        deliveredDate,
+        shippingCarrier: stageData.shippingCarrier?.trim()
+          ? sanitizeForDisplay(stageData.shippingCarrier.trim())
+          : order.shippingCarrier,
+        shippingMethod: stageData.shippingMethod?.trim()
+          ? sanitizeForDisplay(stageData.shippingMethod.trim())
+          : order.shippingMethod,
+        trackingNumber: stageData.trackingNumber?.trim()
+          ? sanitizeForDisplay(stageData.trackingNumber.trim())
+          : order.trackingNumber,
+      },
+      include: { lines: true, documents: true },
+    })
+
+    return updatedOrder
+  })
+}

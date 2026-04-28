@@ -1,6 +1,6 @@
 import { withAuth, ApiResponses, z } from '@/lib/api'
 import { getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma, PurchaseOrderStatus } from '@targon/prisma-talos'
+import { Prisma, InboundOrderStatus } from '@targon/prisma-talos'
 import { sanitizeForDisplay, sanitizeSearchQuery } from '@/lib/security/input-sanitization'
 import { hasAnyPermission } from '@/lib/services/permission-service'
 
@@ -21,7 +21,7 @@ const SupplierSchema = z.object({
 const UpdateSupplierSchema = SupplierSchema.partial()
 
 export const GET = withAuth(async (request, session) => {
-  const canViewSuppliers = await hasAnyPermission(session.user.id, ['po.create', 'po.edit'])
+  const canViewSuppliers = await hasAnyPermission(session.user.id, ['inbound.create', 'inbound.edit'])
   if (!canViewSuppliers) {
     return ApiResponses.forbidden('Insufficient permissions')
   }
@@ -222,14 +222,14 @@ export const DELETE = withAuth(async (request, session) => {
   }
 
   const [poRefs, txRefs] = await Promise.all([
-    prisma.purchaseOrder.count({
+    prisma.inboundOrder.count({
       where: {
         counterpartyName: {
           equals: supplier.name,
           mode: 'insensitive',
         },
         status: {
-          notIn: [PurchaseOrderStatus.CANCELLED],
+          notIn: [InboundOrderStatus.CANCELLED],
         },
       },
     }),
@@ -245,7 +245,7 @@ export const DELETE = withAuth(async (request, session) => {
 
   if (poRefs > 0 || txRefs > 0) {
     return ApiResponses.conflict(
-      `Cannot delete supplier "${supplier.name}". References found: purchase orders=${poRefs}, inventory transactions=${txRefs}.`
+      `Cannot delete supplier "${supplier.name}". References found: inbound=${poRefs}, inventory transactions=${txRefs}.`
     )
   }
 

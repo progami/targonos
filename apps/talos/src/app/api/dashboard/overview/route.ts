@@ -4,7 +4,7 @@ import { aggregateInventoryTransactions } from '@targon/ledger'
 import { withAuth } from '@/lib/api/auth-wrapper'
 import {
   buildDashboardOverviewSnapshot,
-  mapPurchaseOrderToDashboardOverviewInput,
+  mapInboundOrderToDashboardOverviewInput,
 } from '@/lib/dashboard/dashboard-overview'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
@@ -70,26 +70,26 @@ export const GET = withAuth(async (_request, session) => {
     transactionWhere.NOT = { warehouseCode: { in: blockedAmazonWarehouseCodes } }
   }
 
-  const purchaseOrderWhere: Prisma.PurchaseOrderWhereInput = {
+  const inboundOrderWhere: Prisma.InboundOrderWhereInput = {
     status: { in: ['MANUFACTURING', 'OCEAN'] },
   }
   if (resolvedWarehouseCodeFilter !== null) {
-    purchaseOrderWhere.warehouseCode = resolvedWarehouseCodeFilter
+    inboundOrderWhere.warehouseCode = resolvedWarehouseCodeFilter
   } else if (blockedAmazonWarehouseCodes.length > 0) {
-    purchaseOrderWhere.NOT = { warehouseCode: { in: blockedAmazonWarehouseCodes } }
+    inboundOrderWhere.NOT = { warehouseCode: { in: blockedAmazonWarehouseCodes } }
   }
 
-  const [transactions, purchaseOrders] = await Promise.all([
+  const [transactions, inboundOrders] = await Promise.all([
     prisma.inventoryTransaction.findMany({
       where: transactionWhere,
       orderBy: [{ transactionDate: 'asc' }, { createdAt: 'asc' }],
       include: {
-        purchaseOrder: { select: { orderNumber: true } },
-        fulfillmentOrder: { select: { foNumber: true } },
+        inboundOrder: { select: { orderNumber: true } },
+        outboundOrder: { select: { outboundNumber: true } },
       },
     }),
-    prisma.purchaseOrder.findMany({
-      where: purchaseOrderWhere,
+    prisma.inboundOrder.findMany({
+      where: inboundOrderWhere,
       orderBy: [{ updatedAt: 'desc' }],
       select: {
         id: true,
@@ -106,16 +106,16 @@ export const GET = withAuth(async (_request, session) => {
   ])
 
   const aggregated = aggregateInventoryTransactions(
-    transactions.map(({ purchaseOrder, fulfillmentOrder, ...transaction }) => ({
+    transactions.map(({ inboundOrder, outboundOrder, ...transaction }) => ({
       ...transaction,
-      purchaseOrderNumber: purchaseOrder?.orderNumber ?? null,
-      fulfillmentOrderNumber: fulfillmentOrder?.foNumber ?? null,
+      inboundOrderNumber: inboundOrder?.orderNumber ?? null,
+      outboundOrderNumber: outboundOrder?.outboundNumber ?? null,
     }))
   )
 
   return NextResponse.json(
     buildDashboardOverviewSnapshot({
-      purchaseOrders: purchaseOrders.map(mapPurchaseOrderToDashboardOverviewInput),
+      inboundOrders: inboundOrders.map(mapInboundOrderToDashboardOverviewInput),
       balances: aggregated.balances.map(balance => ({
         warehouseCode: balance.warehouseCode,
         warehouseName: balance.warehouseName,
@@ -126,8 +126,8 @@ export const GET = withAuth(async (_request, session) => {
       })),
       movements: transactions.map(
         ({
-          purchaseOrder: _purchaseOrder,
-          fulfillmentOrder: _fulfillmentOrder,
+          inboundOrder: _inboundOrder,
+          outboundOrder: _outboundOrder,
           ...transaction
         }) => ({
           id: transaction.id,

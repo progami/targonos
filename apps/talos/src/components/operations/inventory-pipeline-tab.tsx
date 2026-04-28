@@ -11,7 +11,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner'
 import type { InventoryBalance } from '@/hooks/useInventoryFilters'
 import {
   buildInventoryPipelineSnapshot,
-  type InventoryPipelinePurchaseOrderInput,
+  type InventoryPipelineInboundOrderInput,
 } from '@/lib/inventory/pipeline'
 
 type SelectedPipelineStage = 'manufacturing' | 'transit' | 'warehouse'
@@ -22,7 +22,7 @@ interface InventoryPipelineTabProps {
   enabled: boolean
 }
 
-interface PurchaseOrdersResponse {
+interface InboundOrdersResponse {
   data: Array<{
     id: string
     orderNumber: string
@@ -85,9 +85,9 @@ function formatPipelineDate(value: string | null) {
   return format(parsed, 'MMM d, yyyy')
 }
 
-function mapPurchaseOrders(
-  orders: PurchaseOrdersResponse['data']
-): InventoryPipelinePurchaseOrderInput[] {
+function mapInboundOrders(
+  orders: InboundOrdersResponse['data']
+): InventoryPipelineInboundOrderInput[] {
   return orders.map((order) => ({
     id: order.id,
     orderNumber: order.orderNumber,
@@ -109,67 +109,67 @@ export function InventoryPipelineTab({
   loadingBalances,
   enabled,
 }: InventoryPipelineTabProps) {
-  const [purchaseOrders, setPurchaseOrders] = useState<InventoryPipelinePurchaseOrderInput[]>([])
-  const [loadingPurchaseOrders, setLoadingPurchaseOrders] = useState(false)
-  const [hasLoadedPurchaseOrders, setHasLoadedPurchaseOrders] = useState(false)
+  const [inboundOrders, setInboundOrders] = useState<InventoryPipelineInboundOrderInput[]>([])
+  const [loadingInboundOrders, setLoadingInboundOrders] = useState(false)
+  const [hasLoadedInboundOrders, setHasLoadedInboundOrders] = useState(false)
   const [selectedStage, setSelectedStage] = useState<SelectedPipelineStage>('warehouse')
 
   useEffect(() => {
     if (!enabled) {
       return
     }
-    if (hasLoadedPurchaseOrders) {
+    if (hasLoadedInboundOrders) {
       return
     }
 
     let cancelled = false
 
-    const fetchPurchaseOrders = async () => {
+    const fetchInboundOrders = async () => {
       try {
-        setLoadingPurchaseOrders(true)
-        const response = await fetch(withBasePath('/api/purchase-orders'), {
+        setLoadingInboundOrders(true)
+        const response = await fetch(withBasePath('/api/inbound'), {
           credentials: 'include',
         })
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-          toast.error(`Failed to load purchase orders: ${errorData.error ?? response.statusText}`)
+          toast.error(`Failed to load inbound: ${errorData.error ?? response.statusText}`)
           return
         }
 
-        const payload = (await response.json()) as PurchaseOrdersResponse
+        const payload = (await response.json()) as InboundOrdersResponse
         if (cancelled) {
           return
         }
 
-        setPurchaseOrders(mapPurchaseOrders(payload.data))
-        setHasLoadedPurchaseOrders(true)
+        setInboundOrders(mapInboundOrders(payload.data))
+        setHasLoadedInboundOrders(true)
       } catch (_error) {
         toast.error('Failed to load inventory pipeline')
       } finally {
         if (!cancelled) {
-          setLoadingPurchaseOrders(false)
+          setLoadingInboundOrders(false)
         }
       }
     }
 
-    void fetchPurchaseOrders()
+    void fetchInboundOrders()
 
     return () => {
       cancelled = true
     }
-  }, [enabled, hasLoadedPurchaseOrders])
+  }, [enabled, hasLoadedInboundOrders])
 
   const snapshot = useMemo(() => {
     return buildInventoryPipelineSnapshot({
-      purchaseOrders,
+      inboundOrders,
       balances,
     })
-  }, [balances, purchaseOrders])
+  }, [balances, inboundOrders])
 
   const selectedStageMeta = STAGE_META[selectedStage]
   const selectedStageSummary = snapshot.stages[selectedStage]
-  const loading = loadingBalances || loadingPurchaseOrders
+  const loading = loadingBalances || loadingInboundOrders
 
   return (
     <div className="flex flex-col gap-4">
@@ -195,8 +195,8 @@ export function InventoryPipelineTab({
           size="sm"
         />
         <StatsCard
-          title="Open POs"
-          value={snapshot.summary.purchaseOrderCount}
+          title="Open Inbound"
+          value={snapshot.summary.inboundOrderCount}
           subtitle="Manufacturing + transit"
           size="sm"
         />
@@ -215,7 +215,7 @@ export function InventoryPipelineTab({
           const Icon = meta.icon
           const isActive = selectedStage === stageKey
           const countLabel =
-            stageKey === 'warehouse' ? `${stage.count} locations` : `${stage.count} POs`
+            stageKey === 'warehouse' ? `${stage.count} locations` : `${stage.count} Inbound`
 
           return (
             <button
@@ -300,7 +300,7 @@ export function InventoryPipelineTab({
               <thead>
                 <tr className="border-b bg-slate-50/60 dark:bg-slate-700/50">
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    PO
+                    Inbound
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Supplier
@@ -360,7 +360,7 @@ export function InventoryPipelineTab({
               <thead>
                 <tr className="border-b bg-slate-50/60 dark:bg-slate-700/50">
                   <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    PO
+                    Inbound
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Supplier
