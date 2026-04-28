@@ -17,22 +17,15 @@ let MONITORING_HOURLY_LISTINGS_DIR = ''
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
 const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
-const OUR_ASINS = ['B09HXC3NL8', 'B0CR1GSBQ9', 'B0FLKJ7WWM', 'B0FP66CWQ6']
-const COMPETITOR_SEED_ASINS = ['B0DQDWV1SV', 'B0CWS3848Y']
-const HERO_BSR_ASINS = ['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y']
+let CURRENT_OUR_ASINS = []
+let CURRENT_COMPETITOR_SEED_ASINS = []
+let CURRENT_OUR_ASIN_PRIORITY = new Map()
 const BSR_CHANGE_FIELDS = new Set([
   'root_bsr_rank',
   'root_bsr_category_id',
   'sub_bsr_rank',
   'sub_bsr_category_id',
 ])
-const OUR_ASIN_PRIORITY = new Map([
-  ['B09HXC3NL8', 0],
-  ['B0CR1GSBQ9', 1],
-  ['B0FLKJ7WWM', 2],
-  ['B0FP66CWQ6', 3],
-])
-
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
 }
@@ -102,23 +95,28 @@ function parseAsinList(value) {
     .filter(Boolean)
 }
 
-function getCompetitorMainAsins() {
-  const configuredAsins = parseAsinList(process.env.ARGUS_COMPETITOR_MAIN_ASINS || '')
-  return new Set(configuredAsins.length > 0 ? configuredAsins : COMPETITOR_SEED_ASINS)
+function requiredMarketAsinList(baseName, market) {
+  const envName = `${baseName}_${market.toUpperCase()}`
+  const asins = parseAsinList(requiredEnv(envName))
+  if (!asins.length) {
+    throw new Error(`Missing required ASIN list env var: ${envName}`)
+  }
+  return asins
 }
 
-function getHeroBsrAsins() {
-  const configuredHeroAsins = parseAsinList(process.env.ARGUS_HERO_BSR_ASINS ?? '')
-  if (configuredHeroAsins.length > 0) {
-    return new Set(configuredHeroAsins)
+function listingSourceConfigForMarket(market) {
+  return {
+    market,
+    listingOurAsins: requiredMarketAsinList('ARGUS_OUR_ASINS', market),
+    listingCompetitorSeedAsins: requiredMarketAsinList('ARGUS_COMPETITOR_MAIN_ASINS', market),
+    listingHeroBsrAsins: requiredMarketAsinList('ARGUS_HERO_BSR_ASINS', market),
   }
+}
 
-  const configuredLegacyAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS ?? '')
-  if (configuredLegacyAsins.length > 0) {
-    return new Set(configuredLegacyAsins)
-  }
-
-  return new Set(HERO_BSR_ASINS)
+function configureListingSource(config) {
+  CURRENT_OUR_ASINS = [...config.listingOurAsins]
+  CURRENT_COMPETITOR_SEED_ASINS = [...config.listingCompetitorSeedAsins]
+  CURRENT_OUR_ASIN_PRIORITY = new Map(CURRENT_OUR_ASINS.map((asin, index) => [asin, index]))
 }
 
 function resolveArgusDatasourceUrl() {
@@ -719,8 +717,8 @@ function sortRows(rows) {
   rows.sort((a, b) => {
     if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
     if (a.owner_type === 'our') {
-      const left = OUR_ASIN_PRIORITY.get(a.asin)
-      const right = OUR_ASIN_PRIORITY.get(b.asin)
+      const left = CURRENT_OUR_ASIN_PRIORITY.get(a.asin)
+      const right = CURRENT_OUR_ASIN_PRIORITY.get(b.asin)
       return (left ?? 99) - (right ?? 99)
     }
     return a.asin.localeCompare(b.asin)
@@ -741,8 +739,8 @@ function sortDiffs(diffs) {
 
     if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
     if (a.owner_type === 'our') {
-      const leftPriority = OUR_ASIN_PRIORITY.get(a.asin)
-      const rightPriority = OUR_ASIN_PRIORITY.get(b.asin)
+      const leftPriority = CURRENT_OUR_ASIN_PRIORITY.get(a.asin)
+      const rightPriority = CURRENT_OUR_ASIN_PRIORITY.get(b.asin)
       return (leftPriority ?? 99) - (rightPriority ?? 99)
     }
     return a.asin.localeCompare(b.asin)
@@ -1191,8 +1189,8 @@ function compareCanonicalEvents(left, right) {
   if (severityDelta !== 0) return severityDelta
   if (left.owner_type !== right.owner_type) return left.owner_type === 'our' ? -1 : 1
   if (left.owner_type === 'our') {
-    const leftPriority = OUR_ASIN_PRIORITY.get(left.asin)
-    const rightPriority = OUR_ASIN_PRIORITY.get(right.asin)
+    const leftPriority = CURRENT_OUR_ASIN_PRIORITY.get(left.asin)
+    const rightPriority = CURRENT_OUR_ASIN_PRIORITY.get(right.asin)
     return (leftPriority ?? 99) - (rightPriority ?? 99)
   }
   return left.asin.localeCompare(right.asin)
@@ -1235,7 +1233,7 @@ async function discoverCompetitorVariations(sp, marketplaceId) {
   const parentToChildren = new Map()
   const seedToParent = new Map()
 
-  for (const seedAsin of COMPETITOR_SEED_ASINS) {
+  for (const seedAsin of CURRENT_COMPETITOR_SEED_ASINS) {
     const seedCatalog = await fetchCatalog(sp, marketplaceId, seedAsin, ['relationships'])
     const relationships = parseRelationships(seedCatalog)
 
@@ -1251,12 +1249,12 @@ async function discoverCompetitorVariations(sp, marketplaceId) {
   const competitorAsins = []
   const add = (asin) => {
     if (!asin) return
-    if (OUR_ASINS.includes(asin)) return
+    if (CURRENT_OUR_ASINS.includes(asin)) return
     if (competitorAsins.includes(asin)) return
     competitorAsins.push(asin)
   }
 
-  for (const seedAsin of COMPETITOR_SEED_ASINS) {
+  for (const seedAsin of CURRENT_COMPETITOR_SEED_ASINS) {
     const parentAsin = seedToParent.get(seedAsin)
     if (parentAsin && parentToChildren.has(parentAsin)) {
       for (const childAsin of parentToChildren.get(parentAsin) || []) add(childAsin)
@@ -1308,9 +1306,9 @@ async function discoverOurSkus(sp, marketplaceId, sellerId) {
 }
 
 async function collectRows(sp, marketplaceId, sellerId) {
-  const ourAsinSet = new Set(OUR_ASINS)
+  const ourAsinSet = new Set(CURRENT_OUR_ASINS)
   const competitorAsins = await discoverCompetitorVariations(sp, marketplaceId)
-  const allAsins = [...OUR_ASINS, ...competitorAsins]
+  const allAsins = [...CURRENT_OUR_ASINS, ...competitorAsins]
   const asinToSku = await discoverOurSkus(sp, marketplaceId, sellerId)
 
   const now = new Date()
@@ -1842,8 +1840,10 @@ async function main() {
   MONITORING_HOURLY_LISTINGS_DIR = monitoringHourlyListingsDir(market)
   ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
 
-  const competitorMainAsins = getCompetitorMainAsins()
-  const heroBsrAsins = getHeroBsrAsins()
+  const listingSourceConfig = listingSourceConfigForMarket(market)
+  configureListingSource(listingSourceConfig)
+  const competitorMainAsins = new Set(listingSourceConfig.listingCompetitorSeedAsins)
+  const heroBsrAsins = new Set(listingSourceConfig.listingHeroBsrAsins)
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')

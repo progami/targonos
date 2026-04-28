@@ -17,6 +17,7 @@ import {
   marketEnvSuffix,
   orderHeaders,
   requireEnv,
+  wprSourceConfigForMarket,
   weekContextForRange,
   writeCsv,
 } from './lib/common.mjs'
@@ -24,9 +25,6 @@ import {
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const HERO_ASIN = 'B09HXC3NL8'
-const COMPETITOR_ASIN = 'B0DQDWV1SV'
-const TST_TARGET_ASINS = [HERO_ASIN, COMPETITOR_ASIN]
 const TST_REPORT_TYPE = 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
@@ -260,16 +258,20 @@ function parseArgs() {
   }
 }
 
-export function createManifestState(existingManifest, { weekCode, weekStart, weekEnd }) {
+export function createManifestState(existingManifest, { weekCode, weekStart, weekEnd }, sourceConfig) {
+  const targetAsins = [sourceConfig.heroAsin, sourceConfig.competitorAsin]
   return {
     generatedAt: new Date().toISOString(),
+    market: sourceConfig.market,
+    marketplaceId: sourceConfig.marketplaceId,
     weekCode,
     weekStart,
     weekEnd,
-    heroAsin: HERO_ASIN,
-    competitorAsin: COMPETITOR_ASIN,
+    heroAsin: sourceConfig.heroAsin,
+    competitorAsin: sourceConfig.competitorAsin,
+    competitorBrand: sourceConfig.competitorBrand,
     filterMode: 'clickedAsinAny',
-    targetAsins: [...TST_TARGET_ASINS],
+    targetAsins,
     reports: { ...(existingManifest?.reports ?? {}) },
   }
 }
@@ -544,10 +546,10 @@ function sameStringArray(left, right) {
   return true
 }
 
-function runTstFilter(rawPath, outputPath) {
+function runTstFilter(rawPath, outputPath, targetAsins) {
   const filterScript = path.join(__dirname, 'filter-tst.py')
   const args = [filterScript, '--input', rawPath, '--output', outputPath]
-  for (const asin of TST_TARGET_ASINS) {
+  for (const asin of targetAsins) {
     args.push('--target-asin', asin)
   }
   const result = spawnSync(
@@ -580,7 +582,14 @@ async function main() {
   const filteredTstPath = path.join(TST_DIR, `${weekPrefix}_TST.csv`)
   const manifestPath = path.join(SPAPI_MANIFEST_DIR, `${weekPrefix}_SPAPI-Manifest.json`)
   const existingManifest = readJsonFile(manifestPath)
-  const manifestState = createManifestState(existingManifest, { weekCode, weekStart, weekEnd })
+  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
+  const marketplaceId = requireEnv(`AMAZON_MARKETPLACE_ID_${envSuffix}`)
+  const sourceConfig = {
+    ...wprSourceConfigForMarket(ARGUS_MARKET),
+    marketplaceId,
+  }
+  const tstTargetAsins = [sourceConfig.heroAsin, sourceConfig.competitorAsin]
+  const manifestState = createManifestState(existingManifest, { weekCode, weekStart, weekEnd }, sourceConfig)
 
   if (dryRun) {
     console.log(`[SP-API][dry-run] scope=${scopeLabel}`)
@@ -596,10 +605,8 @@ async function main() {
 
   const appClientId = requireEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requireEnv('AMAZON_SP_APP_CLIENT_SECRET')
-  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
   const refreshToken = requireEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`)
   const region = requireEnv(`AMAZON_SP_API_REGION_${envSuffix}`)
-  const marketplaceId = requireEnv(`AMAZON_MARKETPLACE_ID_${envSuffix}`)
 
   const requireFromTalos = createRequire(TALOS_PACKAGE_JSON)
   const SellingPartnerAPI = requireFromTalos('amazon-sp-api')
@@ -623,6 +630,12 @@ async function main() {
     marketplaceIds: [marketplaceId],
   }
   const rememberReportId = (reportKey) => (reportId) => persistManifestReportId(manifestPath, manifestState, reportKey, reportId)
+  manifestState.market = sourceConfig.market
+  manifestState.marketplaceId = sourceConfig.marketplaceId
+  manifestState.heroAsin = sourceConfig.heroAsin
+  manifestState.competitorAsin = sourceConfig.competitorAsin
+  manifestState.competitorBrand = sourceConfig.competitorBrand
+  manifestState.targetAsins = tstTargetAsins
 
   const scpReportId = await resolveReportId(client, {
     reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
@@ -645,7 +658,7 @@ async function main() {
     reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
     reportWindow,
     label: `${scopeLabel} SQP`,
-    reportOptions: { reportPeriod: 'WEEK', asin: HERO_ASIN },
+    reportOptions: { reportPeriod: 'WEEK', asin: sourceConfig.heroAsin },
     manifestReportId: existingManifest?.reports?.sqpReportId,
     onReportCreated: rememberReportId('sqpReportId'),
   })
@@ -692,7 +705,7 @@ async function main() {
   const canReuseFilteredTst =
     existingManifest?.reports?.tstReportId === tstReportId &&
     existingManifest?.filterMode === 'clickedAsinAny' &&
-    sameStringArray(existingManifest?.targetAsins, TST_TARGET_ASINS) &&
+    sameStringArray(existingManifest?.targetAsins, tstTargetAsins) &&
     fs.existsSync(filteredTstPath)
 
   if (canReuseFilteredTst) {
@@ -702,7 +715,7 @@ async function main() {
     const rawTstPath = path.join('/tmp', `${weekPrefix}_TST.raw.json${String(tstDoc?.compressionAlgorithm || '').toUpperCase() === 'GZIP' ? '.gz' : ''}`)
 
     await downloadUrlToFile(tstDoc.url, rawTstPath)
-    runTstFilter(rawTstPath, filteredTstPath)
+    runTstFilter(rawTstPath, filteredTstPath, tstTargetAsins)
     fs.rmSync(rawTstPath, { force: true })
   }
 

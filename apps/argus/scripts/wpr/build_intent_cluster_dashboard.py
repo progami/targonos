@@ -6,7 +6,6 @@ import csv
 import html
 import json
 import math
-import os
 import re
 from collections import defaultdict
 from pathlib import Path
@@ -14,23 +13,17 @@ from statistics import mean
 from datetime import date, datetime
 
 from common import resolve_wpr_paths
+from market_config import wpr_market_config
 
 WPR_PATHS = resolve_wpr_paths()
 DATA_ROOT = WPR_PATHS.wpr_root
 WEEK_DIR_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
 ASIN_RE = re.compile(r"b0[a-z0-9]{8}$", re.IGNORECASE)
-DEFAULT_COMPETITOR_ASIN = "B0DQDWV1SV"
-DEFAULT_COMPETITOR_BRAND = "Axgatoxe"
-COMPETITOR_ASIN = (os.environ.get("WPR_COMPETITOR_ASIN") or DEFAULT_COMPETITOR_ASIN).strip()
-COMPETITOR_BRAND = (os.environ.get("WPR_COMPETITOR_BRAND") or DEFAULT_COMPETITOR_BRAND).strip()
-COMPETITOR_CONFIG_SOURCE = (
-    "env_override"
-    if (
-        (os.environ.get("WPR_COMPETITOR_ASIN") or "").strip()
-        or (os.environ.get("WPR_COMPETITOR_BRAND") or "").strip()
-    )
-    else "default"
-)
+MARKET_CONFIG = wpr_market_config()
+ARGUS_MARKET = MARKET_CONFIG.market
+COMPETITOR_ASIN = MARKET_CONFIG.competitor_asin
+COMPETITOR_BRAND = MARKET_CONFIG.competitor_brand
+COMPETITOR_CONFIG_SOURCE = "market_config"
 
 
 def parse_float(value: object) -> float:
@@ -164,6 +157,11 @@ def assign_cluster(term: str) -> tuple[str, str]:
     text = normalize_text(term)
     tokens = token_set(term)
 
+    if ARGUS_MARKET == "uk":
+        uk_cluster = assign_uk_cluster(term)
+        if uk_cluster is not None:
+            return uk_cluster
+
     if has_all(tokens, "dust", "barrier", "plastic"):
         return "Plastic", "Dust Barrier Plastic Sheeting"
     if has_all(tokens, "construction", "plastic", "dust"):
@@ -262,6 +260,20 @@ def should_skip_ppc_term(term: str) -> bool:
     if ASIN_RE.fullmatch(compact):
         return True
     return not re.search(r"[a-z]", compact)
+
+
+def assign_uk_cluster(term: str) -> tuple[str, str] | None:
+    tokens = token_set(term)
+
+    if has_all(tokens, "dust", "sheet"):
+        if has_any(tokens, "decorating", "decorator", "paint", "painting", "painter"):
+            return "Dust Sheet", "Dust Sheet for Decorating"
+        return "Dust Sheet", "Dust Sheet"
+
+    if has_all(tokens, "dust", "cover"):
+        return "Dust Sheet", "Dust Cover"
+
+    return None
 
 
 WEEK_FOLDER_GLOBS = ("Week * (Sun)", "Week * (Sun) (Partial)")
