@@ -78,6 +78,14 @@ HOURLY_LISTINGS_API_PLIST="$LAUNCH_AGENTS_DIR/$HOURLY_LISTINGS_API_LABEL.plist"
 DAILY_ACCOUNT_HEALTH_PLIST="$LAUNCH_AGENTS_DIR/$DAILY_ACCOUNT_HEALTH_LABEL.plist"
 WEEKLY_API_PLIST="$LAUNCH_AGENTS_DIR/$WEEKLY_API_LABEL.plist"
 
+if [ "$MARKET" = "us" ]; then
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
+else
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
+fi
+
 hourly_start_calendar_interval() {
   echo "  <key>StartCalendarInterval</key>"
   echo "  <array>"
@@ -133,6 +141,8 @@ cat > "$TRACKING_FETCH_PLIST" <<PLIST
     <string>https://os.targonglobal.com/argus</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
@@ -164,6 +174,15 @@ cat <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARGUS_MARKET</key>
+    <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>Label</key>
   <string>${HOURLY_LISTINGS_API_LABEL}</string>
   <key>ProgramArguments</key>
@@ -193,6 +212,15 @@ cat > "$DAILY_ACCOUNT_HEALTH_PLIST" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARGUS_MARKET</key>
+    <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>Label</key>
   <string>${DAILY_ACCOUNT_HEALTH_LABEL}</string>
   <key>ProgramArguments</key>
@@ -225,6 +253,15 @@ cat > "$WEEKLY_API_PLIST" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARGUS_MARKET</key>
+    <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>Label</key>
   <string>${WEEKLY_API_LABEL}</string>
   <key>ProgramArguments</key>

@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { wprSourceConfigForMarket } from './lib/common.mjs'
+process.env.ARGUS_SALES_ROOT_US = '/tmp/argus-us-sales'
+process.env.ARGUS_SALES_ROOT_UK = '/tmp/argus-uk-sales'
+
+const { wprSourceConfigForMarket } = await import('./lib/common.mjs')
 
 function withEnv(values, callback) {
   const previous = new Map()
