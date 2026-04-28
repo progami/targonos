@@ -2362,8 +2362,8 @@ def select_default_week_label(
     week_meta: dict[str, dict[str, object]],
     today: date | None = None,
 ) -> str:
-    completed_weeks = completed_week_order(week_order, week_meta, today)
-    return completed_weeks[-1]
+    chart_weeks = chart_week_order(week_order, week_meta, today)
+    return chart_weeks[-1]
 
 
 def completed_week_order(
@@ -2384,6 +2384,17 @@ def completed_week_order(
         raise ValueError("No completed WPR weeks are available.")
 
     return completed_weeks
+
+
+def chart_week_order(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> list[str]:
+    completed_weeks = completed_week_order(week_order, week_meta, today)
+    if len(completed_weeks) <= 1:
+        raise ValueError("No stable WPR chart weeks are available.")
+    return completed_weeks[:-1]
 
 
 def build_brand_metrics_window(
@@ -10294,18 +10305,18 @@ def main() -> None:
         windows_by_week[anchor_week] = window_bundle
         audits_by_week[anchor_week] = window_audit
 
-    completed_weeks = completed_week_order(week_order, week_meta)
-    default_week_label = completed_weeks[-1]
+    chart_weeks = chart_week_order(week_order, week_meta)
+    default_week_label = chart_weeks[-1]
     default_bundle = windows_by_week[default_week_label]
     audit_output = audits_by_week[default_week_label]
-    completed_week_start_dates = {
+    chart_week_start_dates = {
         week_label: week_start_dates[week_label]
-        for week_label in completed_weeks
+        for week_label in chart_weeks
     }
     payload = build_payload(
         default_bundle,
-        completed_weeks,
-        completed_week_start_dates,
+        chart_weeks,
+        chart_week_start_dates,
         source_overview,
         windows_by_week,
         change_log_by_week,

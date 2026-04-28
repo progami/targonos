@@ -98,15 +98,24 @@ function resolveCompletedWeeks(
   return completedWeeks;
 }
 
+function resolveStableWeeks(
+  weeks: WeekLabel[],
+  weekStartDates: Record<WeekLabel, string>,
+  today: Date,
+): WeekLabel[] {
+  const completedWeeks = resolveCompletedWeeks(weeks, weekStartDates, today);
+  if (completedWeeks.length <= 1) {
+    throw new Error('No stable WPR chart weeks are available.');
+  }
+
+  return completedWeeks.slice(0, completedWeeks.length - 1);
+}
+
 export function createWprWeekSummary(
   payload: Pick<WprPayload, 'defaultWeek' | 'weeks' | 'weekStartDates'>,
   today = new Date(),
 ): WprWeekSummaryResponse {
-  const weeks = resolveCompletedWeeks(payload.weeks, payload.weekStartDates, today);
-  if (weeks.length === 0) {
-    throw new Error('No completed WPR weeks are available.');
-  }
-
+  const weeks = resolveStableWeeks(payload.weeks, payload.weekStartDates, today);
   let defaultWeek = payload.defaultWeek;
   if (!weeks.includes(defaultWeek)) {
     defaultWeek = weeks[weeks.length - 1];

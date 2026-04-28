@@ -234,3 +234,16 @@ test('SQP and TST clear invalid persisted root selections instead of picking a f
     /if \(selectedCompetitorRootIds\.size > 0 && filteredRootIds\.length === 0\) \{[\s\S]*setSelectedCompetitorRootIds\(\[defaultRootId\]\)[\s\S]*setSelectedCompetitorTermIds\(competitorRootTermIds\(bundle, defaultRootId\)\)/,
   )
 })
+
+test('SQP header bulk select uses every selectable root and term', () => {
+  const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
+
+  assert.match(
+    sqpSource,
+    /const handleSelectAll = \(\) => \{[\s\S]*const rootIds = allSelectableSqpRootIds\(bundle\)[\s\S]*rootIds,[\s\S]*termIds: allSelectableSqpTermIds\(bundle\)/,
+  )
+  assert.doesNotMatch(
+    sqpSource,
+    /const handleSelectAll = \(\) => \{[\s\S]*defaultSqpRootIds\(bundle\)/,
+  )
+})
