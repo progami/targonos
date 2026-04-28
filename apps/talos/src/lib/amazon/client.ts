@@ -1,7 +1,7 @@
 import 'server-only'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { getMarketplaceCurrencyCode } from '@/lib/amazon/fees'
-import { buildInboundShipmentsQuery, resolveInboundShipmentsMarketplaceId } from '@/lib/amazon/inbound-shipments'
+import { buildOutboundShipmentsQuery, resolveOutboundShipmentsMarketplaceId } from '@/lib/amazon/outbound-shipments'
 import { getAmazonSpApiConfigFromEnv, type AmazonSpApiConfig } from '@/lib/amazon/config'
 
 type SellingPartnerApiClient = {
@@ -114,7 +114,7 @@ type AmazonFinancialEventsResponse = {
 
 type AmazonErrorDetail = { code?: string; message?: string; details?: string }
 
-type AmazonInboundShipment = {
+type AmazonOutboundShipment = {
   ShipmentId?: string
   ShipmentName?: string
   ShipFromAddress?: Record<string, unknown>
@@ -126,7 +126,7 @@ type AmazonInboundShipment = {
   ConfirmedNeedByDate?: string
 }
 
-type AmazonInboundShipmentItem = {
+type AmazonOutboundShipmentItem = {
   ShipmentId?: string
   SellerSKU?: string
   FulfillmentNetworkSKU?: string
@@ -137,17 +137,17 @@ type AmazonInboundShipmentItem = {
   PrepDetailsList?: unknown
 }
 
-type AmazonInboundShipmentsResponse = {
+type AmazonOutboundShipmentsResponse = {
   payload?: {
-    ShipmentData?: AmazonInboundShipment[]
+    ShipmentData?: AmazonOutboundShipment[]
     NextToken?: string
   }
   errors?: AmazonErrorDetail[]
 }
 
-type AmazonInboundShipmentItemsResponse = {
+type AmazonOutboundShipmentItemsResponse = {
   payload?: {
-    ItemData?: AmazonInboundShipmentItem[]
+    ItemData?: AmazonOutboundShipmentItem[]
     NextToken?: string
   }
   errors?: AmazonErrorDetail[]
@@ -169,7 +169,7 @@ type AmazonInboundPlanMatch = {
   transportationOptions: Record<string, unknown> | unknown[] | null
 }
 
-type AmazonInboundShipmentNormalized = {
+type AmazonOutboundShipmentNormalized = {
   shipmentId: string
   shipmentName?: string
   shipmentStatus?: string
@@ -538,22 +538,22 @@ export async function getInventory(tenantCode?: TenantCode) {
   }
 }
 
-export async function getInboundShipments(
+export async function getOutboundShipments(
   tenantCode?: TenantCode,
   options?: { nextToken?: string }
 ) {
   try {
     const config = getAmazonSpApiConfigFromEnv(tenantCode)
-    const marketplaceId = resolveInboundShipmentsMarketplaceId(tenantCode, config?.marketplaceId)
+    const marketplaceId = resolveOutboundShipmentsMarketplaceId(tenantCode, config?.marketplaceId)
 
     const response = await callAmazonApi<unknown>(tenantCode, {
       operation: 'getShipments',
       endpoint: 'fulfillmentInbound',
-      query: buildInboundShipmentsQuery(marketplaceId, options?.nextToken),
+      query: buildOutboundShipmentsQuery(marketplaceId, options?.nextToken),
     })
     return response
   } catch (_error) {
-    // console.error('Error fetching inbound shipments:', _error)
+    // console.error('Error fetching outbound shipments:', _error)
     throw _error
   }
 }
@@ -668,13 +668,13 @@ async function findInboundPlanForShipment(
   return null
 }
 
-function normalizeInboundShipmentDetails(params: {
+function normalizeOutboundShipmentDetails(params: {
   shipmentId: string
-  fbaShipment: AmazonInboundShipment | null
+  fbaShipment: AmazonOutboundShipment | null
   inboundPlanMatch: AmazonInboundPlanMatch | null
   awdShipment: Record<string, unknown> | null
   awdInboundOrder: Record<string, unknown> | null
-}): AmazonInboundShipmentNormalized {
+}): AmazonOutboundShipmentNormalized {
   const fbaRecord = params.fbaShipment ? (params.fbaShipment as Record<string, unknown>) : null
   const planShipment = params.inboundPlanMatch?.shipment ?? null
   const planRecord = params.inboundPlanMatch?.inboundPlan ?? null
@@ -715,8 +715,8 @@ function normalizeInboundShipmentDetails(params: {
       'referenceId',
       'ReferenceId',
       'referenceNumber',
-      'poNumber',
-      'purchaseOrderId',
+      'inboundNumber',
+      'inboundOrderId',
     ]
   )
 
@@ -747,7 +747,7 @@ function normalizeInboundShipmentDetails(params: {
   }
 }
 
-export async function getInboundShipmentDetails(shipmentId: string, tenantCode?: TenantCode) {
+export async function getOutboundShipmentDetails(shipmentId: string, tenantCode?: TenantCode) {
   const trimmedShipmentId = shipmentId.trim()
   if (!trimmedShipmentId) {
     throw new Error('Shipment ID is required')
@@ -760,13 +760,13 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
     throw new Error('Amazon marketplace ID is not configured')
   }
 
-  let shipment: AmazonInboundShipment | null = null
-  let items: AmazonInboundShipmentItem[] = []
+  let shipment: AmazonOutboundShipment | null = null
+  let items: AmazonOutboundShipmentItem[] = []
   let billOfLadingUrl: string | null = null
   let fbaError: string | null = null
 
   const shipmentResponse = await safeAmazonCall(() =>
-    callAmazonApi<AmazonInboundShipmentsResponse>(tenantCode, {
+    callAmazonApi<AmazonOutboundShipmentsResponse>(tenantCode, {
       operation: 'getShipments',
       endpoint: 'fulfillmentInbound',
       query: {
@@ -788,13 +788,13 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
         'shipments',
         'shipmentData',
       ])
-      shipment = (shipmentData[0] as AmazonInboundShipment | undefined) ?? null
+      shipment = (shipmentData[0] as AmazonOutboundShipment | undefined) ?? null
     }
   }
 
   if (shipment) {
     const itemsResponse = await safeAmazonCall(() =>
-      callAmazonApi<AmazonInboundShipmentItemsResponse>(tenantCode, {
+      callAmazonApi<AmazonOutboundShipmentItemsResponse>(tenantCode, {
         operation: 'getShipmentItemsByShipmentId',
         endpoint: 'fulfillmentInbound',
         path: {
@@ -833,7 +833,7 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
 
   const awdShipmentResponse = await safeAmazonCall(() =>
     callAmazonApi<Record<string, unknown>>(tenantCode, {
-      operation: 'getInboundShipment',
+      operation: 'getOutboundShipment',
       endpoint: 'amazonWarehousingAndDistribution',
       options: { version: '2024-05-09' },
       path: { shipmentId: trimmedShipmentId },
@@ -855,7 +855,7 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
 
   const awdInboundOrder = asRecord(awdInboundOrderResponse)
   const inboundPlanMatch = await findInboundPlanForShipment(trimmedShipmentId, tenantCode)
-  const normalized = normalizeInboundShipmentDetails({
+  const normalized = normalizeOutboundShipmentDetails({
     shipmentId: trimmedShipmentId,
     fbaShipment: shipment,
     inboundPlanMatch,

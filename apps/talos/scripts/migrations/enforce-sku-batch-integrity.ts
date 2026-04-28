@@ -291,7 +291,7 @@ async function applyForSchema(
           CREATE CONSTRAINT TRIGGER trg_sku_batches_require_batch
             AFTER INSERT OR UPDATE OR DELETE ON sku_batches
             DEFERRABLE INITIALLY DEFERRED
-            FOR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
+            OutboundR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
         END IF;
       END $$;
     `
@@ -309,7 +309,7 @@ async function applyForSchema(
           CREATE CONSTRAINT TRIGGER trg_skus_require_batch
             AFTER INSERT OR UPDATE ON skus
             DEFERRABLE INITIALLY DEFERRED
-            FOR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
+            OutboundR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
         END IF;
       END $$;
     `

@@ -51,10 +51,10 @@ export function aggregateInventoryTransactions(
         lastTransactionId: null,
         lastTransactionType: null,
         lastTransactionReference: null,
-        purchaseOrderId: null,
-        purchaseOrderNumber: null,
-        fulfillmentOrderId: null,
-        fulfillmentOrderNumber: null,
+        inboundOrderId: null,
+        inboundOrderNumber: null,
+        outboundOrderId: null,
+        outboundOrderNumber: null,
         firstReceive: undefined
       }
       balances.set(key, current)
@@ -77,17 +77,17 @@ export function aggregateInventoryTransactions(
       current.lastTransactionType = transaction.transactionType ?? null
       current.lastTransactionReference = transaction.referenceId ?? null
 
-      if (transaction.purchaseOrderId) {
-        const poIdChanged = current.purchaseOrderId !== transaction.purchaseOrderId
-        current.purchaseOrderId = transaction.purchaseOrderId
+      if (transaction.inboundOrderId) {
+        const poIdChanged = current.inboundOrderId !== transaction.inboundOrderId
+        current.inboundOrderId = transaction.inboundOrderId
 
-        if (transaction.purchaseOrderNumber) {
-          current.purchaseOrderNumber = transaction.purchaseOrderNumber
+        if (transaction.inboundOrderNumber) {
+          current.inboundOrderNumber = transaction.inboundOrderNumber
         } else if (poIdChanged) {
-          current.purchaseOrderNumber = null
+          current.inboundOrderNumber = null
         }
-      } else if (transaction.purchaseOrderNumber) {
-        current.purchaseOrderNumber = transaction.purchaseOrderNumber
+      } else if (transaction.inboundOrderNumber) {
+        current.inboundOrderNumber = transaction.inboundOrderNumber
       }
     }
 
@@ -157,8 +157,8 @@ export function aggregateInventoryTransactions(
 }
 
 function resolveInventoryBalanceSourceId(transaction: InventoryTransactionRecord): string {
-  if (transaction.purchaseOrderId) {
-    return transaction.purchaseOrderId
+  if (transaction.inboundOrderId) {
+    return transaction.inboundOrderId
   }
 
   if (transaction.transactionType === 'SHIP') {

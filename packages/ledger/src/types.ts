@@ -18,10 +18,10 @@ export interface InventoryTransactionRecord {
   createdByName?: string | null
   createdById?: string | null
   referenceId?: string | null
-  purchaseOrderId?: string | null
-  purchaseOrderNumber?: string | null
-  fulfillmentOrderId?: string | null
-  fulfillmentOrderNumber?: string | null
+  inboundOrderId?: string | null
+  inboundOrderNumber?: string | null
+  outboundOrderId?: string | null
+  outboundOrderNumber?: string | null
 }
 
 export interface InventoryReceiveMetadata {
@@ -47,10 +47,10 @@ export interface InventoryBalanceSnapshot {
   lastTransactionId?: string | null
   lastTransactionType?: string | null
   lastTransactionReference?: string | null
-  purchaseOrderId?: string | null
-  purchaseOrderNumber?: string | null
-  fulfillmentOrderId?: string | null
-  fulfillmentOrderNumber?: string | null
+  inboundOrderId?: string | null
+  inboundOrderNumber?: string | null
+  outboundOrderId?: string | null
+  outboundOrderNumber?: string | null
   firstReceive?: InventoryReceiveMetadata
 }
 

@@ -46,7 +46,7 @@ export const ERD_V10_ENTITY_COLUMNS = {
   lot: [
     'lot_id',
     'sku_id',
-    'po_id',
+    'inbound_id',
     'lot_ref',
     'qty_units',
     'units_per_carton',
@@ -61,9 +61,9 @@ export const ERD_V10_ENTITY_COLUMNS = {
     'status',
     'created_at',
   ],
-  purchase_order: [
-    'po_id',
-    'po_ref',
+  inbound_order: [
+    'inbound_id',
+    'inbound_ref',
     'sku_group',
     'supplier_id',
     'destination',
@@ -89,13 +89,13 @@ export const ERD_V10_ENTITY_COLUMNS = {
     'storage_cost',
     'supplier_credit_debit',
     'landed_total',
-    'po_pdf_url',
+    'inbound_pdf_url',
     'shipping_marks_url',
     'signed_pi_url',
     'box_artwork_url',
     'mfg_shipping_marks_url',
   ],
-  po_ci: ['lot_id', 'ci_id', 'qty_on_shipment'],
+  inbound_ci: ['lot_id', 'ci_id', 'qty_on_shipment'],
   commercial_invoice: [
     'ci_id',
     'ci_ref',

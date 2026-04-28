@@ -55,7 +55,7 @@ test('buildAppCallbackUrl preserves query strings for operations routes', () => 
   process.env.NEXT_PUBLIC_BASE_PATH = '/talos'
 
   assert.equal(
-    buildAppCallbackUrl('/operations/purchase-orders?tenant=UK', 'https://dev-os.targonglobal.com'),
-    'https://dev-os.targonglobal.com/talos/operations/purchase-orders?tenant=UK',
+    buildAppCallbackUrl('/operations/inbound?tenant=UK', 'https://dev-os.targonglobal.com'),
+    'https://dev-os.targonglobal.com/talos/operations/inbound?tenant=UK',
   )
 })

@@ -302,7 +302,7 @@ export default function SuppliersPanel({
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {searchTerm
                   ? 'Clear your search or create a new supplier.'
-                  : 'Create suppliers for consistent SKU defaults and purchase orders.'}
+                  : 'Create suppliers for consistent SKU defaults and inbound.'}
               </p>
             </div>
             {!searchTerm && (
@@ -489,7 +489,7 @@ export default function SuppliersPanel({
                     placeholder="e.g., Net 30, 50% deposit"
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
                 </div>
 
                 <div className="space-y-1">
@@ -502,14 +502,14 @@ export default function SuppliersPanel({
                     }
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   >
-                    <option value="">None (select on PO)</option>
+                    <option value="">None (select on Inbound)</option>
                     {INCOTERMS_OPTIONS.map(option => (
                       <option key={option} value={option}>
                         {option}
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
                 </div>
               </div>
             </div>

@@ -22,6 +22,22 @@ BEGIN
 END
 $$;
 
+DROP VIEW IF EXISTS
+  "discrepancy",
+  "grn_line_item",
+  "grn",
+  "goods_receipt",
+  "ci_allocation",
+  "po_ci",
+  "commercial_invoice",
+  "purchase_order",
+  "rfq",
+  "lot",
+  "warehouse",
+  "supplier",
+  "sku"
+CASCADE;
+
 ALTER TYPE "PurchaseOrderStatus" RENAME TO "PurchaseOrderStatus_old";
 
 CREATE TYPE "PurchaseOrderStatus" AS ENUM (

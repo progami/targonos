@@ -481,7 +481,7 @@ export function WarehouseRatesPanel({
           <h2 className="text-xl font-semibold text-foreground">{warehouseName}</h2>
           <p className="text-sm text-muted-foreground">Template Rates • {warehouseCode} • USD</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Used to prefill warehouse-stage costs in the PO workflow.
+            Used to prefill warehouse-stage costs in the Inbound workflow.
           </p>
         </div>
         <Badge className="bg-green-50 text-green-700 border-green-200">

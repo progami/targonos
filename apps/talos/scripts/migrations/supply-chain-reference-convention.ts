@@ -61,9 +61,9 @@ Supply Chain Reference Convention
 
 Ensures schema + backfills for:
 - skus.sku_group
-- purchase_orders.sku_group
-- purchase_order_lines.lot_ref
-- purchase_order_lines.production_date
+- inbound_orders.sku_group
+- inbound_order_lines.lot_ref
+- inbound_order_lines.production_date
 
 Usage:
   pnpm --filter @targon/talos tsx scripts/migrations/supply-chain-reference-convention.ts [options]
@@ -80,21 +80,21 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
 
   const statements = [
     `ALTER TABLE "skus" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
-    `ALTER TABLE "purchase_orders" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "lot_ref" TEXT`,
-    `ALTER TABLE "purchase_order_lines" ADD COLUMN IF NOT EXISTS "production_date" date`,
+    `ALTER TABLE "inbound_orders" ADD COLUMN IF NOT EXISTS "sku_group" TEXT`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "lot_ref" TEXT`,
+    `ALTER TABLE "inbound_order_lines" ADD COLUMN IF NOT EXISTS "production_date" date`,
     `WITH sku_reference_groups AS (
       SELECT
         pol."sku_code",
-        upper(substring(coalesce(po."po_number", po."order_number") FROM '^(?:INV|PO)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')) AS "sku_group",
+        upper(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^(?:INV|Inbound)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')) AS "sku_group",
         COUNT(*) AS usage_count,
-        MAX(po."created_at") AS last_used_at
-      FROM "purchase_order_lines" pol
-      JOIN "purchase_orders" po
-        ON po."id" = pol."purchase_order_id"
+        MAX(inbound."created_at") AS last_used_at
+      FROM "inbound_order_lines" pol
+      JOIN "inbound_orders" po
+        ON inbound."id" = pol."inbound_order_id"
       GROUP BY
         pol."sku_code",
-        upper(substring(coalesce(po."po_number", po."order_number") FROM '^(?:INV|PO)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$'))
+        upper(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^(?:INV|Inbound)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$'))
     ),
     best_sku_group AS (
       SELECT DISTINCT ON ("sku_code")
@@ -117,45 +117,45 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
     SET "sku_group" = 'PDS'
     WHERE "sku_group" IS NULL
       AND upper("sku_code") LIKE 'CS%'`,
-    `UPDATE "purchase_orders"
-    SET "sku_group" = upper(substring(coalesce("po_number", "order_number") FROM '^(?:INV|PO)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$'))
+    `UPDATE "inbound_orders"
+    SET "sku_group" = upper(substring(coalesce("inbound_number", "order_number") FROM '^(?:INV|Inbound)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$'))
     WHERE "sku_group" IS NULL
-      AND upper(substring(coalesce("po_number", "order_number") FROM '^(?:INV|PO)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')) IS NOT NULL`,
+      AND upper(substring(coalesce("inbound_number", "order_number") FROM '^(?:INV|Inbound)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')) IS NOT NULL`,
     `WITH order_line_groups AS (
       SELECT
-        pol."purchase_order_id",
+        pol."inbound_order_id",
         MIN(s."sku_group") AS "sku_group",
         COUNT(DISTINCT s."sku_group") AS group_count
-      FROM "purchase_order_lines" pol
+      FROM "inbound_order_lines" pol
       JOIN "skus" s
         ON s."sku_code" = pol."sku_code"
       WHERE s."sku_group" IS NOT NULL
-      GROUP BY pol."purchase_order_id"
+      GROUP BY pol."inbound_order_id"
     )
-    UPDATE "purchase_orders" po
+    UPDATE "inbound_orders" po
     SET "sku_group" = olg."sku_group"
     FROM order_line_groups olg
-    WHERE po."id" = olg."purchase_order_id"
-      AND po."sku_group" IS NULL
+    WHERE inbound."id" = olg."inbound_order_id"
+      AND inbound."sku_group" IS NULL
       AND olg.group_count = 1`,
     `WITH order_seed AS (
       SELECT
-        po."id" AS "purchase_order_id",
+        inbound."id" AS "inbound_order_id",
         COALESCE(
-          NULLIF(po."sku_group", ''),
-          upper(substring(coalesce(po."po_number", po."order_number") FROM '^(?:INV|PO)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')),
-          upper(substring(coalesce(po."po_number", po."order_number") FROM '^PO-[0-9]+-([A-Z0-9]+)$'))
+          NULLIF(inbound."sku_group", ''),
+          upper(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^(?:INV|Inbound)-[0-9]+[A-Z]?-([A-Z0-9]+)(?:-[A-Z]{2})?$')),
+          upper(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^Inbound-[0-9]+-([A-Z0-9]+)$'))
         ) AS "sku_group",
         COALESCE(
-          NULLIF(substring(coalesce(po."po_number", po."order_number") FROM '^PO-([0-9]+)-[A-Z0-9]+$'), ''),
-          NULLIF(substring(coalesce(po."po_number", po."order_number") FROM '^(?:INV|PO)-([0-9]+)[A-Z]?-[A-Z0-9]+(?:-[A-Z]{2})?$'), ''),
-          NULLIF(substring(coalesce(po."po_number", po."order_number") FROM '^TG-[A-Z]{2}-([0-9]+)$'), ''),
-          NULLIF(substring(coalesce(po."po_number", po."order_number") FROM '^PO-0*([0-9]+)$'), '')
+          NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^Inbound-([0-9]+)-[A-Z0-9]+$'), ''),
+          NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^(?:INV|Inbound)-([0-9]+)[A-Z]?-[A-Z0-9]+(?:-[A-Z]{2})?$'), ''),
+          NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^TG-[A-Z]{2}-([0-9]+)$'), ''),
+          NULLIF(substring(coalesce(inbound."inbound_number", inbound."order_number") FROM '^IN-0*([0-9]+)$'), '')
         ) AS "sequence_text"
-      FROM "purchase_orders" po
-      WHERE po."is_legacy" = false
+      FROM "inbound_orders" po
+      WHERE inbound."is_legacy" = false
     )
-    UPDATE "purchase_order_lines" pol
+    UPDATE "inbound_order_lines" pol
     SET "lot_ref" = format(
       'Lot-%s-%s-%s',
       (seed."sequence_text")::integer,
@@ -163,7 +163,7 @@ async function applyForTenant(tenant: TenantCode, options: ScriptOptions) {
       upper(regexp_replace(pol."sku_code", '[^A-Za-z0-9]', '', 'g'))
 	    )
 	    FROM order_seed seed
-	    WHERE pol."purchase_order_id" = seed."purchase_order_id"
+	    WHERE pol."inbound_order_id" = seed."inbound_order_id"
 	      AND seed."sku_group" IS NOT NULL
 	      AND seed."sequence_text" IS NOT NULL
 	      AND (pol."lot_ref" IS NULL OR btrim(pol."lot_ref") = '')`,

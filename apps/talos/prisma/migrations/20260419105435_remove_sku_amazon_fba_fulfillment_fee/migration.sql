@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE "skus" DROP COLUMN "amazon_fba_fulfillment_fee";
+ALTER TABLE "skus" DROP COLUMN IF EXISTS "amazon_fba_fulfillment_fee";

@@ -127,7 +127,7 @@ export const PUT = withAuthAndParams(async (request, params, _session) => {
         const normalized = normalizePackagingType(body.packagingType)
         if (!normalized) {
           return NextResponse.json(
-            { error: 'Invalid packaging type. Must be BOX or POLYBAG.' },
+            { error: 'Invalid packaging type. Must be BOX or InboundLYBAG.' },
             { status: 400 }
           )
         }
