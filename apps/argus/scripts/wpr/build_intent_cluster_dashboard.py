@@ -24,6 +24,29 @@ ARGUS_MARKET = MARKET_CONFIG.market
 COMPETITOR_ASIN = MARKET_CONFIG.competitor_asin
 COMPETITOR_BRAND = MARKET_CONFIG.competitor_brand
 COMPETITOR_CONFIG_SOURCE = "market_config"
+APP_ROOT = Path(__file__).resolve().parents[2]
+ASIN_LABELS_PATH = APP_ROOT / "lib" / "asin-labels.json"
+KNOWN_ASIN_LABELS = json.loads(ASIN_LABELS_PATH.read_text(encoding="utf-8"))
+
+
+def normalize_asin(value: object) -> str:
+    return str(value).strip().upper()
+
+
+def format_asin_display_name(asin_value: object) -> str:
+    asin = normalize_asin(asin_value)
+    label = KNOWN_ASIN_LABELS.get(asin)
+    if label is not None:
+        return label
+    return asin
+
+
+def format_asin_reference(asin_value: object) -> str:
+    asin = normalize_asin(asin_value)
+    label = KNOWN_ASIN_LABELS.get(asin)
+    if label is not None:
+        return f"{label} ({asin})"
+    return asin
 
 
 def parse_float(value: object) -> float:
@@ -3651,6 +3674,7 @@ def build_window_bundle(
 
 def build_html(data: dict[str, object]) -> str:
     data_json = json.dumps(data, separators=(",", ":"))
+    asin_labels_json = json.dumps(KNOWN_ASIN_LABELS, separators=(",", ":"))
     template = """<!doctype html>
 <html lang="en">
 <head>
@@ -5173,6 +5197,7 @@ def build_html(data: dict[str, object]) -> str:
 
 <script>
   var reportData = __DATA__;
+  var asinDisplayNames = __ASIN_LABELS__;
 
   var selectedWeekLabel = reportData.defaultWeek;
   var activeData = reportData.windowsByWeek[reportData.defaultWeek];
@@ -5640,7 +5665,7 @@ def build_html(data: dict[str, object]) -> str:
 
   function scpSortValueForRow(row, key) {
     var current = selectedWeekScpMetrics(row.weekly);
-    if (key === "asin") return row.asin;
+    if (key === "asin") return formatAsinDisplayName(row);
     if (key === "impressions") return current.impressions;
     if (key === "clicks") return current.clicks;
     if (key === "ctr") return current.ctr;
@@ -5659,7 +5684,7 @@ def build_html(data: dict[str, object]) -> str:
 
   function brSortValueForRow(row, key) {
     var current = selectedWeekBusinessMetrics(row.weekly);
-    if (key === "asin") return row.asin;
+    if (key === "asin") return formatAsinDisplayName(row);
     if (key === "weeks_present_selected_week") return row.weeks_present_selected_week;
     if (key === "sessions") return current.sessions;
     if (key === "page_views") return current.page_views;
@@ -5723,6 +5748,24 @@ def build_html(data: dict[str, object]) -> str:
     var div = document.createElement("div");
     div.textContent = value;
     return div.innerHTML;
+  }
+
+  function normalizeAsin(value) {
+    return String(value).trim().toUpperCase();
+  }
+
+  function formatAsinDisplayName(row) {
+    var asin = normalizeAsin(row.asin);
+    var label = asinDisplayNames[asin];
+    if (label !== undefined) return label;
+    return asin;
+  }
+
+  function formatAsinReference(value) {
+    var asin = normalizeAsin(value);
+    var label = asinDisplayNames[asin];
+    if (label !== undefined) return label + " (" + asin + ")";
+    return asin;
   }
 
   function clusterColor(cluster) {
@@ -8162,7 +8205,7 @@ def build_html(data: dict[str, object]) -> str:
       }
       html += '<tr class="' + rowClass.trim() + '" data-scp-asin-row="' + escapeHtml(row.id) + '">';
       html += '<td class="check-col"><input type="checkbox" data-scp-asin-checkbox="' + escapeHtml(row.id) + '"' + (selection.selectedIds.indexOf(row.id) !== -1 ? ' checked' : '') + '></td>';
-      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(row.asin) + '</div><div class="group-name-meta">' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
+      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(formatAsinDisplayName(row)) + '</div><div class="group-name-meta">' + escapeHtml(row.asin) + ' · ' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
       html += '<td>' + row.weeks_present_selected_week + '</td>';
       html += '<td>' + fmtNumber(current.impressions) + '</td>';
       html += '<td>' + fmtPct(safeDiv(current.impressions, total.impressions)) + '</td>';
@@ -8222,7 +8265,7 @@ def build_html(data: dict[str, object]) -> str:
       }
       html += '<tr class="' + rowClass.trim() + '" data-br-asin-row="' + escapeHtml(row.id) + '">';
       html += '<td class="check-col"><input type="checkbox" data-br-asin-checkbox="' + escapeHtml(row.id) + '"' + (selection.selectedIds.indexOf(row.id) !== -1 ? ' checked' : '') + '></td>';
-      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(row.asin) + '</div><div class="group-name-meta">' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
+      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(formatAsinDisplayName(row)) + '</div><div class="group-name-meta">' + escapeHtml(row.asin) + ' · ' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
       html += '<td>' + row.weeks_present_selected_week + '</td>';
       html += '<td>' + (hasWeek ? fmtNumber(current.sessions) : '—') + '</td>';
       html += '<td>' + (hasWeek ? fmtNumber(current.page_views) : '—') + '</td>';
@@ -9379,7 +9422,7 @@ def build_html(data: dict[str, object]) -> str:
       if (!summary && entry.highlights && entry.highlights.length > 0) {
         summary = entry.highlights.join(" | ");
       }
-      var asins = entry.asins && entry.asins.length > 0 ? entry.asins.join(", ") : "—";
+      var asins = entry.asins && entry.asins.length > 0 ? entry.asins.map(formatAsinReference).join(", ") : "—";
       var fields = entry.field_labels && entry.field_labels.length > 0 ? entry.field_labels.join(", ") : "—";
       html += '<tr>';
       html += '<td><span class="change-log-week">W' + escapeHtml(entry.week_label.replace(/^W/, "")) + '</span></td>';
@@ -10188,7 +10231,7 @@ def build_html(data: dict[str, object]) -> str:
 </body>
 </html>
 """
-    return template.replace("__DATA__", data_json)
+    return template.replace("__DATA__", data_json).replace("__ASIN_LABELS__", asin_labels_json)
 
 
 

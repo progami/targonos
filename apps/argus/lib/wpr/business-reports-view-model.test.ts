@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createBusinessReportsSelectionViewModel } from './business-reports-view-model'
+import { createBusinessReportsSelectionViewModel, sortBusinessReportsRows } from './business-reports-view-model'
 import type {
   WprBusinessAsinRow,
   WprBusinessDailyPoint,
@@ -205,4 +205,16 @@ test('createBusinessReportsSelectionViewModel returns all rows when every ASIN i
   assert.equal(vm.current?.buy_box_percentage, (0.75 * 180 + 0.6 * 90) / 270)
   assert.equal(vm.weekly.length, window.weekly.length)
   assert.equal(vm.isAllSelected, true)
+})
+
+test('sortBusinessReportsRows orders the ASIN column by readable product name', () => {
+  const window = buildBusinessWindow()
+  const rows = [
+    buildBusinessAsinRow('asin-a', 'B09HXC3NL8', window.asins[0].current_week, window.asins[0].weekly),
+    buildBusinessAsinRow('asin-b', 'B0DQDWV1SV', window.asins[1].current_week, window.asins[1].weekly),
+  ]
+
+  const sorted = sortBusinessReportsRows(rows, { key: 'asin', dir: 'asc' }, 'W16')
+
+  assert.deepEqual(sorted.map((row) => row.asin), ['B0DQDWV1SV', 'B09HXC3NL8'])
 })
