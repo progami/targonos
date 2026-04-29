@@ -204,6 +204,12 @@ function getApprovalSourceLabel(actionKind: CaseReportActionKind): string {
       throw new Error(`Approval is not supported for action kind: ${actionKind}`)
     case 'collect_evidence':
       throw new Error(`Approval is not supported for action kind: ${actionKind}`)
+    case 'verify_credit':
+      throw new Error(`Approval is not supported for action kind: ${actionKind}`)
+    case 'verify_reimbursement':
+      throw new Error(`Approval is not supported for action kind: ${actionKind}`)
+    case 'catalog_reparent':
+      throw new Error(`Approval is not supported for action kind: ${actionKind}`)
   }
 }
 

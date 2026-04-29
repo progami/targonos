@@ -127,6 +127,36 @@ test('parseCaseReportSnapshotJson normalizes looping rows to Watching', () => {
               assessment: 'Amazon is still looping.',
               next_step: 'Wait for an Amazon update.',
             },
+            {
+              category: 'action_due',
+              issue: 'Catalog rebuild decision',
+              case_id: '12451160542',
+              days_ago: '0 days ago',
+              status: 'Answered',
+              evidence: 'Amazon replied today.',
+              assessment: 'A catalog decision is pending.',
+              next_step: 'Decide whether to reparent.',
+            },
+            {
+              category: 'waiting_on_amazon',
+              issue: 'B09HXC3NL8 bin check images',
+              case_id: '12443947122',
+              days_ago: '1 day ago',
+              status: 'Work in progress',
+              evidence: 'Amazon is still investigating.',
+              assessment: 'Keep watching.',
+              next_step: 'Wait for Amazon.',
+            },
+            {
+              category: 'fallback_evidence',
+              issue: 'Verification fallback route',
+              case_id: '12339319152',
+              days_ago: '2 days ago',
+              status: 'Transferred',
+              evidence: 'Fallback evidence is preserved.',
+              assessment: 'Keep the evidence visible.',
+              next_step: 'Hold until the primary path changes.',
+            },
           ],
         },
       ],
@@ -134,6 +164,116 @@ test('parseCaseReportSnapshotJson normalizes looping rows to Watching', () => {
   )
 
   assert.equal(report.sections[0]?.rows[0]?.category, 'Watching')
+  assert.equal(report.sections[0]?.rows[1]?.category, 'Action due')
+  assert.equal(report.sections[0]?.rows[2]?.category, 'Watching')
+  assert.equal(report.sections[0]?.rows[3]?.category, 'Watching')
+})
+
+test('readCaseReportBundleFromCaseRoot accepts case-agent action kinds', async () => {
+  const caseRoot = mkdtempSync(path.join(tmpdir(), 'argus-cases-'))
+  const reportsDir = path.join(caseRoot, 'reports')
+  mkdirSync(reportsDir, { recursive: true })
+
+  writeFileSync(
+    path.join(caseRoot, 'case.json'),
+    JSON.stringify(
+      {
+        market: 'UK',
+        generated_at: '2026-04-29T06:12:29-05:00',
+        tracked_case_ids: ['12451160542', '12447795762', '19550165441'],
+        cases: {
+          '12451160542': {
+            case_id: '12451160542',
+            title: 'Catalog rebuild decision',
+            entity: 'NIGS LTD',
+            amazon_status: 'Answered',
+            our_status: 'needs_review',
+            created: '2026-04-24',
+            last_reply: '2026-04-29',
+            next_action: 'Decide whether to ask Amazon to reparent the catalog family.',
+            next_action_date: '2026-04-29',
+            linked_cases: '',
+            action_kind: 'catalog_reparent',
+            approval_required: false,
+          },
+          '12447795762': {
+            case_id: '12447795762',
+            title: 'Reimbursement verification',
+            entity: 'NIGS LTD',
+            amazon_status: 'Work in progress',
+            our_status: 'waiting_on_amazon',
+            created: '2026-04-22',
+            last_reply: '2026-04-28',
+            next_action: 'Verify whether the promised reimbursement posted.',
+            next_action_date: '2026-04-30',
+            linked_cases: '',
+            action_kind: 'verify_reimbursement',
+            approval_required: false,
+          },
+          '19550165441': {
+            case_id: '19550165441',
+            title: 'Shipping label credit verification',
+            entity: 'TARGON',
+            amazon_status: 'Work in progress',
+            our_status: 'waiting_on_amazon',
+            created: '2026-04-06',
+            last_reply: '2026-04-29',
+            next_action: 'Verify whether the approved credit posted in Payments.',
+            next_action_date: '2026-04-30',
+            linked_cases: '',
+            action_kind: 'verify_credit',
+            approval_required: false,
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  )
+
+  writeReportSnapshot(reportsDir, '2026-04-29', 'UK', [
+    {
+      entity: 'NIGS LTD',
+      rows: [
+        {
+          category: 'Watching',
+          issue: 'Catalog rebuild decision',
+          case_id: '12451160542',
+          days_ago: '0 days ago',
+          status: 'Answered',
+          evidence: 'Amazon replied today.',
+          assessment: 'A catalog decision is pending.',
+          next_step: 'Decide whether to reparent.',
+        },
+        {
+          category: 'Watching',
+          issue: 'Reimbursement verification',
+          case_id: '12447795762',
+          days_ago: '1 day ago',
+          status: 'Work in progress',
+          evidence: 'Amazon promised reimbursement.',
+          assessment: 'Payment posting still needs verification.',
+          next_step: 'Check the payment ledger.',
+        },
+        {
+          category: 'Watching',
+          issue: 'Shipping label credit verification',
+          case_id: '19550165441',
+          days_ago: '0 days ago',
+          status: 'Work in progress',
+          evidence: 'Amazon approved a partial credit.',
+          assessment: 'Payment posting still needs verification.',
+          next_step: 'Check Payments.',
+        },
+      ],
+    },
+  ])
+
+  const bundle = await readCaseReportBundleFromCaseRoot(caseRoot, 'uk')
+
+  assert.equal(bundle.caseRecordsById['12451160542']?.actionKind, 'catalog_reparent')
+  assert.equal(bundle.caseRecordsById['12447795762']?.actionKind, 'verify_reimbursement')
+  assert.equal(bundle.caseRecordsById['19550165441']?.actionKind, 'verify_credit')
 })
 
 test('readCaseReportBundleFromCaseRoot resolves the latest dated report and tracked cases', async () => {
