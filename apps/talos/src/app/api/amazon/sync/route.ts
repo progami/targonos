@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma, getCurrentTenantCode } from '@/lib/tenant/server'
 import { getInventory, getCatalogItem } from '@/lib/amazon/client'
 import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
+import { truncateToDecimalPlaces } from '@/lib/number-precision'
 import { formatDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import type { Session } from 'next-auth'
@@ -17,13 +18,13 @@ function convertMeasurementToCm(value: number, unit: string | undefined): number
   const normalized = unit.trim().toLowerCase()
   if (!normalized) return null
   if (normalized === 'inches' || normalized === 'inch' || normalized === 'in') {
-    return Number((value * 2.54).toFixed(2))
+    return truncateToDecimalPlaces(value * 2.54, 2)
   }
   if (normalized === 'centimeters' || normalized === 'centimetres' || normalized === 'cm') {
-    return Number(value.toFixed(2))
+    return truncateToDecimalPlaces(value, 2)
   }
   if (normalized === 'millimeters' || normalized === 'millimetres' || normalized === 'mm') {
-    return Number((value / 10).toFixed(2))
+    return truncateToDecimalPlaces(value / 10, 2)
   }
   return null
 }
@@ -72,16 +73,16 @@ function convertWeightToKg(value: number, unit: string | undefined): number | nu
   const normalized = unit.trim().toLowerCase()
   if (!normalized) return null
   if (normalized === 'kilograms' || normalized === 'kilogram' || normalized === 'kg') {
-    return Number(value.toFixed(3))
+    return truncateToDecimalPlaces(value, 2)
   }
   if (normalized === 'pounds' || normalized === 'pound' || normalized === 'lb' || normalized === 'lbs') {
-    return Number((value * 0.453592).toFixed(3))
+    return truncateToDecimalPlaces(value * 0.453592, 2)
   }
   if (normalized === 'grams' || normalized === 'gram' || normalized === 'g') {
-    return Number((value / 1000).toFixed(3))
+    return truncateToDecimalPlaces(value / 1000, 2)
   }
   if (normalized === 'ounces' || normalized === 'ounce' || normalized === 'oz') {
-    return Number((value * 0.0283495).toFixed(3))
+    return truncateToDecimalPlaces(value * 0.0283495, 2)
   }
   return null
 }
