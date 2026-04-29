@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { withAuthAndParams } from '@/lib/api/auth-wrapper'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import { skuResponseSelect } from '@/lib/skus/sku-select'
 import { apiLogger } from '@/lib/logger'
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,7 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
     const prisma = await getTenantPrisma()
     const sku = await prisma.sku.findUnique({
       where: { id },
+      select: skuResponseSelect,
     })
 
     if (!sku) {
@@ -106,12 +108,12 @@ export const PUT = withAuthAndParams(async (request, params, _session) => {
         value => value !== undefined && value !== null
       )
 
-	    if (itemInputProvided && !itemTriplet) {
-	      return NextResponse.json(
-	        { error: 'Item dimensions must be a valid LxWxH triple' },
-	        { status: 400 }
-	      )
-	    }
+    if (itemInputProvided && !itemTriplet) {
+      return NextResponse.json(
+        { error: 'Item dimensions must be a valid LxWxH triple' },
+        { status: 400 }
+      )
+    }
     if (cartonInputProvided && !cartonTriplet) {
       return NextResponse.json(
         { error: 'Carton dimensions must be a valid LxWxH triple' },
@@ -164,6 +166,7 @@ export const PUT = withAuthAndParams(async (request, params, _session) => {
         cartonWeightKg: body.cartonWeightKg,
         packagingType,
       },
+      select: skuResponseSelect,
     })
 
     return NextResponse.json(updatedSku)
@@ -186,6 +189,7 @@ export const DELETE = withAuthAndParams(async (_request, params, _session) => {
     // Check if SKU has related data
     const sku = await prisma.sku.findUnique({
       where: { id },
+      select: { id: true, skuCode: true },
     })
 
     if (!sku) {

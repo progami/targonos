@@ -12,7 +12,7 @@ interface SearchResult {
   href: string
 }
 
-export const GET = withAuth(async (request) => {
+export const GET = withAuth(async request => {
   const { searchParams } = new URL(request.url)
   const rawQuery = searchParams.get('q') ?? ''
   const query = sanitizeSearchQuery(rawQuery).trim()
@@ -46,7 +46,7 @@ export const GET = withAuth(async (request) => {
         id: sku.id,
         title: sku.skuCode,
         subtitle: sku.description ?? undefined,
-        href: `/config/products?editSkuId=${encodeURIComponent(sku.id)}`,
+        href: `/amazon/fba-fee-discrepancies?search=${encodeURIComponent(sku.skuCode)}&editSkuId=${encodeURIComponent(sku.id)}`,
       })
     }
 

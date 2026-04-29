@@ -2,11 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import * as discrepancies from '../../src/lib/amazon/fba-fee-discrepancies'
-import type {
-  ApiSkuRow,
-  ComparisonSkuSourceRow,
-} from '../../src/lib/amazon/fba-fee-discrepancies'
-import { calculateSizeTierForTenant } from '../../src/lib/amazon/fees'
+import { parseCatalogItemPackageDimensions } from '../../src/lib/amazon/catalog-normalization'
+import type { ApiSkuRow, ComparisonSkuSourceRow } from '../../src/lib/amazon/fba-fee-discrepancies'
+import {
+  isReferenceInputUnitSystemAllowedForTenant,
+  normalizeReferenceInputForStorage,
+} from '../../src/lib/amazon/reference-input'
+import { getSizeTierOptionsForTenant, isAllowedSizeTierForTenant } from '../../src/lib/amazon/fees'
+import { formatDimensionTripletDisplayFromCm } from '../../src/lib/measurements'
 
 function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
   const referenceTriplet = {
@@ -15,22 +18,15 @@ function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
     side3Cm: 10,
   }
   const referenceWeightKg = 0.2
+  const assignedSizeTier = 'Small Standard-Size'
 
   return {
     id: 'sku_1',
     skuCode: 'CS-010',
     description: 'Test SKU',
     asin: 'B000TEST01',
-    fbaFulfillmentFee: 3.21,
-    amazonFbaFulfillmentFee: 3.21,
-    amazonListingPrice: 19.99,
-    amazonSizeTier: calculateSizeTierForTenant(
-      'US',
-      referenceTriplet.side1Cm,
-      referenceTriplet.side2Cm,
-      referenceTriplet.side3Cm,
-      referenceWeightKg
-    ),
+    sizeTier: assignedSizeTier,
+    amazonSizeTier: assignedSizeTier,
     referenceItemPackageDimensionsCm: null,
     referenceItemPackageSide1Cm: referenceTriplet.side1Cm,
     referenceItemPackageSide2Cm: referenceTriplet.side2Cm,
@@ -59,6 +55,7 @@ function createComparisonSkuSourceRow(
     side3Cm: 10,
   }
   const referenceWeightKg = 0.2
+  const assignedSizeTier = 'Small Standard-Size'
 
   return {
     id: 'sku_1',
@@ -66,14 +63,8 @@ function createComparisonSkuSourceRow(
     description: 'Test SKU',
     asin: 'B000TEST01',
     category: 'Toys',
-    fbaFulfillmentFee: 3.21,
-    amazonSizeTier: calculateSizeTierForTenant(
-      'US',
-      referenceTriplet.side1Cm,
-      referenceTriplet.side2Cm,
-      referenceTriplet.side3Cm,
-      referenceWeightKg
-    ),
+    sizeTier: assignedSizeTier,
+    amazonSizeTier: assignedSizeTier,
     unitDimensionsCm: null,
     unitSide1Cm: referenceTriplet.side1Cm,
     unitSide2Cm: referenceTriplet.side2Cm,
@@ -93,7 +84,7 @@ function createComparisonSkuSourceRow(
   }
 }
 
-test('computeComparison marks identical fees with different Amazon package measurements as mismatch', () => {
+test('computeComparison marks matching assigned tiers as match even when dimensions differ', () => {
   const comparison = discrepancies.computeComparison(
     createSkuRow({
       amazonItemPackageSide1Cm: 12,
@@ -103,12 +94,11 @@ test('computeComparison marks identical fees with different Amazon package measu
     'US'
   )
 
-  assert.equal(comparison.status, 'MISMATCH')
-  assert.equal(comparison.hasPhysicalMismatch, true)
-  assert.equal(comparison.feeDifference, 0)
+  assert.equal(comparison.status, 'MATCH')
+  assert.equal(comparison.hasSizeTierMismatch, false)
 })
 
-test('computeComparison marks incomplete Amazon comparison data as error', () => {
+test('computeComparison marks incomplete Amazon tier data as missing Amazon tier', () => {
   const comparison = discrepancies.computeComparison(
     createSkuRow({
       amazonSizeTier: null,
@@ -116,74 +106,333 @@ test('computeComparison marks incomplete Amazon comparison data as error', () =>
     'US'
   )
 
-  assert.equal(comparison.status, 'ERROR')
+  assert.equal(comparison.status, 'MISSING_AMAZON')
   assert.deepEqual(comparison.amazon.missingFields, ['Amazon size tier'])
 })
 
-test('status label shows physical mismatch when fees still align', () => {
+test('computeComparison marks assigned size tier mismatch without reference fee data', () => {
   const comparison = discrepancies.computeComparison(
     createSkuRow({
-      amazonItemPackageSide1Cm: 12,
-      amazonItemPackageSide2Cm: 10,
-      amazonItemPackageSide3Cm: 10,
+      sizeTier: 'Small Standard-Size',
+      amazonSizeTier: 'Large Standard-Size',
     }),
     'US'
   )
 
+  assert.equal(comparison.status, 'MISMATCH')
+  assert.equal(comparison.hasSizeTierMismatch, true)
   assert.equal(typeof discrepancies.getComparisonStatusLabel, 'function')
   if (typeof discrepancies.getComparisonStatusLabel !== 'function') return
 
-  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Physical mismatch')
+  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Size tier mismatch')
 })
 
-test('status label shows overcharge when only the fee differs', () => {
+test('computeComparison marks missing assigned reference size tier as missing reference', () => {
   const comparison = discrepancies.computeComparison(
     createSkuRow({
-      amazonFbaFulfillmentFee: 3.71,
+      sizeTier: null,
     }),
     'US'
   )
 
+  assert.equal(comparison.status, 'MISSING_REFERENCE')
+  assert.deepEqual(comparison.reference.missingFields, ['Reference size tier'])
+})
+
+test('computeComparison does not need fee fields when assigned size tiers match', () => {
+  const comparison = discrepancies.computeComparison(createSkuRow(), 'US')
+
   assert.equal(typeof discrepancies.getComparisonStatusLabel, 'function')
   if (typeof discrepancies.getComparisonStatusLabel !== 'function') return
 
-  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Overcharge')
+  assert.equal(comparison.status, 'MATCH')
+  assert.equal(discrepancies.getComparisonStatusLabel(comparison), 'Size tier match')
 })
 
-test('buildComparisonSkuRow keeps the stored reference fee from the API selection', () => {
+test('computeComparison treats missing Amazon fee as match when assigned size tiers match', () => {
+  const comparison = discrepancies.computeComparison(createSkuRow(), 'US')
+
+  assert.equal(comparison.status, 'MATCH')
+  assert.equal(comparison.hasSizeTierMismatch, false)
+})
+
+test('buildComparisonSkuRow does not expose stored reference FBA fulfillment fee', () => {
   assert.equal(typeof discrepancies.buildComparisonSkuRow, 'function')
   if (typeof discrepancies.buildComparisonSkuRow !== 'function') return
 
   const resolved = discrepancies.buildComparisonSkuRow(
     createComparisonSkuSourceRow({
-      fbaFulfillmentFee: 9.87,
+      sizeTier: 'Large Standard-Size',
     })
   )
 
-  assert.equal(resolved.fbaFulfillmentFee, 9.87)
-  assert.equal(resolved.amazonFbaFulfillmentFee, null)
+  assert.equal(Object.prototype.hasOwnProperty.call(resolved, 'fbaFulfillmentFee'), false)
+  assert.equal(Object.prototype.hasOwnProperty.call(resolved, 'amazonFbaFulfillmentFee'), false)
+  assert.equal(resolved.sizeTier, 'Large Standard-Size')
   assert.equal(resolved.referenceItemPackageWeightKg, 0.2)
 })
 
-test('hydrateComparisonSkuRow keeps the stored reference fee and refreshes only Amazon fee data', async () => {
-  assert.equal(typeof discrepancies.hydrateComparisonSkuRow, 'function')
-  if (typeof discrepancies.hydrateComparisonSkuRow !== 'function') return
+test('live catalog merge preserves stored Amazon package data when package attributes are absent', () => {
+  const merge = (discrepancies as unknown as Record<string, unknown>).mergeAmazonCatalogPackageData
+  assert.equal(typeof merge, 'function')
+  if (typeof merge !== 'function') return
 
-  const hydrated = await discrepancies.hydrateComparisonSkuRow(
-    discrepancies.buildComparisonSkuRow(
-      createComparisonSkuSourceRow({
-      fbaFulfillmentFee: 99.99,
-      amazonSizeTier: 'Large Standard-Size',
-      })
-    ),
-    'US',
-    {
-      loadListingPrice: async () => 24.5,
-      loadAmazonFees: async () => ({ fbaFees: 6.66, sizeTier: 'Small Bulky' }),
-    }
+  const storedAmazonRow = createSkuRow({
+    amazonSizeTier: 'Large Envelope',
+    amazonItemPackageDimensionsCm: '2.39x21.11x27',
+    amazonItemPackageSide1Cm: 2.39,
+    amazonItemPackageSide2Cm: 21.11,
+    amazonItemPackageSide3Cm: 27,
+    amazonItemPackageWeightKg: 0.331,
+  })
+
+  const resolved = merge(storedAmazonRow, {
+    packageTriplet: null,
+    packageWeightKg: null,
+    sizeTier: null,
+  }) as ApiSkuRow
+
+  assert.equal(resolved.amazonSizeTier, 'Large Envelope')
+  assert.equal(resolved.amazonItemPackageDimensionsCm, '2.39x21.11x27')
+  assert.equal(resolved.amazonItemPackageSide1Cm, 2.39)
+  assert.equal(resolved.amazonItemPackageSide2Cm, 21.11)
+  assert.equal(resolved.amazonItemPackageSide3Cm, 27)
+  assert.equal(resolved.amazonItemPackageWeightKg, 0.331)
+})
+
+test('SKU Info dimensions are side 1, side 2, side 3 ordered shortest to longest', () => {
+  const comparison = discrepancies.computeComparison(
+    createSkuRow({
+      referenceItemPackageSide1Cm: 27,
+      referenceItemPackageSide2Cm: 21,
+      referenceItemPackageSide3Cm: 1.7,
+      amazonItemPackageSide1Cm: 27,
+      amazonItemPackageSide2Cm: 2.39,
+      amazonItemPackageSide3Cm: 21.11,
+    }),
+    'UK'
   )
 
-  assert.equal(hydrated.fbaFulfillmentFee, 99.99)
-  assert.equal(hydrated.amazonFbaFulfillmentFee, 6.66)
-  assert.equal(hydrated.amazonSizeTier, 'Small Bulky')
+  assert.deepEqual(comparison.reference.triplet, {
+    side1Cm: 1.7,
+    side2Cm: 21,
+    side3Cm: 27,
+  })
+  assert.deepEqual(comparison.amazon.triplet, {
+    side1Cm: 2.39,
+    side2Cm: 21.11,
+    side3Cm: 27,
+  })
+  assert.equal(
+    formatDimensionTripletDisplayFromCm(comparison.reference.triplet, 'metric'),
+    '1.7×21×27 cm'
+  )
+})
+
+test('Amazon catalog package dimensions normalize to shortest middle longest sides', () => {
+  const parsed = parseCatalogItemPackageDimensions({
+    item_package_dimensions: [
+      {
+        length: { value: 27, unit: 'centimeters' },
+        width: { value: 2.39, unit: 'centimeters' },
+        height: { value: 21.11, unit: 'centimeters' },
+      },
+    ],
+  })
+
+  assert.deepEqual(parsed, {
+    side1Cm: 2.39,
+    side2Cm: 21.11,
+    side3Cm: 27,
+  })
+})
+
+test('assigned size tier option validation allows tenant options and rejects invalid names', () => {
+  const ukSizeTiers = getSizeTierOptionsForTenant('UK')
+  const firstUkTier = ukSizeTiers[0]
+  assert.equal(isAllowedSizeTierForTenant('US', 'Small Bulky'), true)
+  assert.equal(typeof firstUkTier, 'string')
+  if (typeof firstUkTier !== 'string') return
+
+  assert.equal(isAllowedSizeTierForTenant('UK', firstUkTier), true)
+  assert.equal(isAllowedSizeTierForTenant('US', 'Invalid invented tier'), false)
+})
+
+test('computeComparison uses user-entered reference tier without recalculating from package sides', () => {
+  const comparison = discrepancies.computeComparison(
+    createSkuRow({
+      referenceItemPackageSide1Cm: 1,
+      referenceItemPackageSide2Cm: 1,
+      referenceItemPackageSide3Cm: 1,
+      referenceItemPackageWeightKg: 0.01,
+      sizeTier: 'Large Bulky',
+      amazonSizeTier: 'Large Bulky',
+    }),
+    'US'
+  )
+
+  assert.equal(comparison.reference.sizeTier, 'Large Bulky')
+  assert.equal(comparison.amazon.sizeTier, 'Large Bulky')
+  assert.equal(comparison.status, 'MATCH')
+  assert.equal(comparison.hasSizeTierMismatch, false)
+})
+
+test('buildComparisonSkuRow keeps user reference input separate from Amazon data', () => {
+  const comparisonRow = discrepancies.buildComparisonSkuRow(
+    createComparisonSkuSourceRow({
+      sizeTier: 'Large Standard-Size',
+      amazonSizeTier: 'Small Standard-Size',
+      unitSide1Cm: 3,
+      unitSide2Cm: 12,
+      unitSide3Cm: 20,
+      unitWeightKg: 0.44,
+      amazonItemPackageSide1Cm: 2,
+      amazonItemPackageSide2Cm: 10,
+      amazonItemPackageSide3Cm: 18,
+      amazonReferenceWeightKg: 0.31,
+    })
+  )
+  const comparison = discrepancies.computeComparison(comparisonRow, 'US')
+
+  assert.equal(comparison.reference.sizeTier, 'Large Standard-Size')
+  assert.deepEqual(comparison.reference.triplet, {
+    side1Cm: 3,
+    side2Cm: 12,
+    side3Cm: 20,
+  })
+  assert.equal(comparison.reference.shipping.unitWeightKg, 0.44)
+  assert.equal(comparison.amazon.sizeTier, 'Small Standard-Size')
+  assert.deepEqual(comparison.amazon.triplet, {
+    side1Cm: 2,
+    side2Cm: 10,
+    side3Cm: 18,
+  })
+  assert.equal(comparison.amazon.shipping.unitWeightKg, 0.31)
+  assert.equal(comparison.status, 'MISMATCH')
+})
+
+test('comparison labels come from size tier status only', () => {
+  const mismatch = discrepancies.computeComparison(
+    createSkuRow({
+      sizeTier: 'Small Standard-Size',
+      amazonSizeTier: 'Large Standard-Size',
+    }),
+    'US'
+  )
+  const missingAmazon = discrepancies.computeComparison(
+    createSkuRow({
+      amazonSizeTier: null,
+    }),
+    'US'
+  )
+
+  assert.equal(discrepancies.getComparisonStatusLabel(mismatch), 'Size tier mismatch')
+  assert.equal(discrepancies.getComparisonStatusLabel(missingAmazon), 'No Amazon tier')
+})
+
+test('SKU Info summary data only returns nonzero compact status counts', () => {
+  const helpers = discrepancies as unknown as Record<string, unknown>
+  const summarizeComparisonStatuses = helpers.summarizeComparisonStatuses
+  const buildComparisonSummaryItems = helpers.buildComparisonSummaryItems
+  assert.equal(typeof summarizeComparisonStatuses, 'function')
+  assert.equal(typeof buildComparisonSummaryItems, 'function')
+  if (typeof summarizeComparisonStatuses !== 'function') return
+  if (typeof buildComparisonSummaryItems !== 'function') return
+
+  const rows = [
+    {
+      comparison: discrepancies.computeComparison(
+        createSkuRow({
+          id: 'sku_match',
+          sizeTier: 'Small Standard-Size',
+          amazonSizeTier: 'Small Standard-Size',
+        }),
+        'US'
+      ),
+    },
+    {
+      comparison: discrepancies.computeComparison(
+        createSkuRow({
+          id: 'sku_mismatch',
+          sizeTier: 'Small Standard-Size',
+          amazonSizeTier: 'Large Standard-Size',
+        }),
+        'US'
+      ),
+    },
+    {
+      comparison: discrepancies.computeComparison(
+        createSkuRow({
+          id: 'sku_missing_amazon',
+          amazonSizeTier: null,
+        }),
+        'US'
+      ),
+    },
+  ]
+
+  const summary = summarizeComparisonStatuses(rows)
+  const summaryItems = buildComparisonSummaryItems(summary)
+
+  assert.deepEqual(summary, {
+    mismatch: 1,
+    match: 1,
+    warning: 1,
+    pending: 0,
+  })
+  assert.deepEqual(summaryItems, [
+    { key: 'mismatch', count: 1, label: 'mismatch' },
+    { key: 'match', count: 1, label: 'match' },
+    { key: 'warning', count: 1, label: 'warning' },
+  ])
+  assert.deepEqual(
+    buildComparisonSummaryItems({
+      mismatch: 0,
+      match: 0,
+      warning: 0,
+      pending: 0,
+    }),
+    []
+  )
+})
+
+test('reference input normalizes US inches and pounds before database storage', () => {
+  const normalized = normalizeReferenceInputForStorage({
+    inputUnitSystem: 'imperial',
+    unitSide1: 1,
+    unitSide2: 8,
+    unitSide3: 10,
+    unitWeight: 1,
+  })
+
+  assert.deepEqual(normalized.storage.unitDimensionsCm, '2.54x20.32x25.4')
+  assert.equal(normalized.storage.unitSide1Cm, 2.54)
+  assert.equal(normalized.storage.unitSide2Cm, 20.32)
+  assert.equal(normalized.storage.unitSide3Cm, 25.4)
+  assert.equal(Math.abs(Number(normalized.storage.unitWeightKg) - 0.45359237) < 0.000001, true)
+})
+
+test('reference input keeps UK centimeters and kilograms before database storage', () => {
+  const normalized = normalizeReferenceInputForStorage({
+    inputUnitSystem: 'metric',
+    unitSide1: 2.5,
+    unitSide2: 20,
+    unitSide3: 30,
+    unitWeight: 0.75,
+  })
+
+  assert.deepEqual(normalized.storage, {
+    unitDimensionsCm: '2.5x20x30',
+    unitSide1Cm: 2.5,
+    unitSide2Cm: 20,
+    unitSide3Cm: 30,
+    unitWeightKg: 0.75,
+  })
+})
+
+test('reference input unit system is scoped to the active tenant', () => {
+  assert.equal(isReferenceInputUnitSystemAllowedForTenant('US', 'imperial'), true)
+  assert.equal(isReferenceInputUnitSystemAllowedForTenant('US', 'metric'), false)
+  assert.equal(isReferenceInputUnitSystemAllowedForTenant('UK', 'metric'), true)
+  assert.equal(isReferenceInputUnitSystemAllowedForTenant('UK', 'imperial'), false)
 })
