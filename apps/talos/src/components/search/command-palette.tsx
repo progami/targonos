@@ -2,15 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import {
-  Search,
-  Package,
-  FileText,
-  Users,
-  Building,
-  Loader2,
-  X,
-} from '@/lib/lucide-icons'
+import { Search, Package, FileText, Users, Building, Loader2, X } from '@/lib/lucide-icons'
 import { cn } from '@/lib/utils'
 import { withBasePath } from '@/lib/utils/base-path'
 
@@ -42,7 +34,7 @@ function typeIcon(type: SearchResultType) {
 function typeLabel(type: SearchResultType): string {
   switch (type) {
     case 'SKU':
-      return 'Products'
+      return 'SKU Info'
     case 'INBOUND':
       return 'Inbound'
     case 'SUPPLIER':
@@ -91,9 +83,7 @@ export function CommandPalette() {
     }
 
     const order: SearchResultType[] = ['SKU', 'INBOUND', 'SUPPLIER', 'WAREHOUSE']
-    return order
-      .map((t) => ({ type: t, items: groups.get(t) ?? [] }))
-      .filter((g) => g.items.length > 0)
+    return order.map(t => ({ type: t, items: groups.get(t) ?? [] })).filter(g => g.items.length > 0)
   }, [results])
 
   const flatResults = useMemo(() => results, [results])
@@ -135,12 +125,12 @@ export function CommandPalette() {
 
       if (e.key === 'ArrowDown') {
         e.preventDefault()
-        setSelectedIdx((idx) => Math.min(flatResults.length - 1, idx + 1))
+        setSelectedIdx(idx => Math.min(flatResults.length - 1, idx + 1))
         return
       }
       if (e.key === 'ArrowUp') {
         e.preventDefault()
-        setSelectedIdx((idx) => Math.max(0, idx - 1))
+        setSelectedIdx(idx => Math.max(0, idx - 1))
         return
       }
       if (e.key === 'Enter') {
@@ -227,10 +217,7 @@ export function CommandPalette() {
   return (
     <div className="fixed inset-0 z-50">
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={close}
-      />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={close} />
 
       {/* Dialog */}
       <div className="fixed left-1/2 top-[15%] w-full max-w-xl -translate-x-1/2">
@@ -242,15 +229,13 @@ export function CommandPalette() {
               ref={inputRef}
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={e => setQuery(e.target.value)}
               placeholder="Search products, orders, suppliers..."
               className="flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500 text-slate-900 dark:text-slate-100"
               autoComplete="off"
               autoFocus
             />
-            {loading && (
-              <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
-            )}
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
             <button
               onClick={close}
               className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -260,21 +245,18 @@ export function CommandPalette() {
           </div>
 
           {/* Results */}
-          <div
-            ref={listRef}
-            className="max-h-[60vh] overflow-y-auto p-2"
-          >
-            {error && (
-              <div className="px-3 py-4 text-center text-sm text-red-500">
-                {error}
-              </div>
-            )}
+          <div ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
+            {error && <div className="px-3 py-4 text-center text-sm text-red-500">{error}</div>}
 
             {!error && query.length < 2 && (
               <div className="px-3 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                 <p>Type at least 2 characters to search</p>
                 <p className="mt-2 text-xs">
-                  Press <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">Esc</kbd> to close
+                  Press{' '}
+                  <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">
+                    Esc
+                  </kbd>{' '}
+                  to close
                 </p>
               </div>
             )}
@@ -285,12 +267,12 @@ export function CommandPalette() {
               </div>
             )}
 
-            {grouped.map((group) => (
+            {grouped.map(group => (
               <div key={group.type} className="mb-2">
                 <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {typeLabel(group.type)}
                 </div>
-                {group.items.map((item) => {
+                {group.items.map(item => {
                   currentFlatIdx++
                   const isSelected = currentFlatIdx === selectedIdx
                   const Icon = typeIcon(item.type)
@@ -351,13 +333,22 @@ export function CommandPalette() {
           {/* Footer hint */}
           <div className="border-t border-slate-200 dark:border-slate-700 dark:border-slate-700 px-4 py-2 text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span>
-              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">↑↓</kbd> to navigate
+              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">
+                ↑↓
+              </kbd>{' '}
+              to navigate
             </span>
             <span>
-              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">Enter</kbd> to select
+              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">
+                Enter
+              </kbd>{' '}
+              to select
             </span>
             <span>
-              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">Esc</kbd> to close
+              <kbd className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-xs">
+                Esc
+              </kbd>{' '}
+              to close
             </span>
           </div>
         </div>

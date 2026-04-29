@@ -192,7 +192,9 @@ export async function createOutboundOrder(
       throw new ValidationError(`SKU ${line.skuCode} not found. Create the SKU first.`)
     }
     if (!sku.isActive) {
-      throw new ValidationError(`SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`)
+      throw new ValidationError(
+        `SKU ${sku.skuCode} is inactive. Reactivate it in Amazon → SKU Info first.`
+      )
     }
   }
 
@@ -442,7 +444,9 @@ export async function transitionOutboundOrderStage(
 
   if (order.destinationType === OutboundDestinationType.AMAZON_FBA) {
     if (!order.amazonShipmentId?.trim()) {
-      throw new ValidationError('Amazon shipment ID is required to ship an Amazon FBA outbound order')
+      throw new ValidationError(
+        'Amazon shipment ID is required to ship an Amazon FBA outbound order'
+      )
     }
 
     const statusRaw = order.amazonShipmentStatus
@@ -461,8 +465,10 @@ export async function transitionOutboundOrderStage(
     }
   }
 
-  const resolvedCarrier = normalizeText(stageData.shippingCarrier) ?? normalizeText(order.shippingCarrier)
-  const resolvedMethod = normalizeText(stageData.shippingMethod) ?? normalizeText(order.shippingMethod)
+  const resolvedCarrier =
+    normalizeText(stageData.shippingCarrier) ?? normalizeText(order.shippingCarrier)
+  const resolvedMethod =
+    normalizeText(stageData.shippingMethod) ?? normalizeText(order.shippingMethod)
 
   if (!resolvedCarrier) {
     throw new ValidationError('Shipping carrier is required to ship an outbound order')

@@ -1,0 +1,71 @@
+import {
+  convertLengthToCm,
+  convertWeightToKg,
+  getDefaultUnitSystem,
+  type UnitSystem,
+} from '@/lib/measurements'
+import {
+  formatDimensionTripletCm,
+  resolveDimensionTripletCm,
+  sortDimensionTripletCm,
+  type DimensionTriplet,
+} from '@/lib/sku-dimensions'
+import type { TenantCode } from '@/lib/tenant/constants'
+
+export type ReferenceInputPayload = {
+  inputUnitSystem: UnitSystem
+  unitSide1: number | null
+  unitSide2: number | null
+  unitSide3: number | null
+  unitWeight: number | null
+}
+
+export type ReferenceStoragePayload = {
+  unitDimensionsCm: string | null
+  unitSide1Cm: number | null
+  unitSide2Cm: number | null
+  unitSide3Cm: number | null
+  unitWeightKg: number | null
+}
+
+export type NormalizedReferenceInput = {
+  unitTriplet: DimensionTriplet | null
+  storage: ReferenceStoragePayload
+}
+
+export function isReferenceInputUnitSystemAllowedForTenant(
+  tenantCode: TenantCode,
+  inputUnitSystem: UnitSystem
+): boolean {
+  return inputUnitSystem === getDefaultUnitSystem(tenantCode)
+}
+
+export function normalizeReferenceInputForStorage(
+  input: ReferenceInputPayload
+): NormalizedReferenceInput {
+  const rawSide1Cm =
+    input.unitSide1 === null ? null : convertLengthToCm(input.unitSide1, input.inputUnitSystem)
+  const rawSide2Cm =
+    input.unitSide2 === null ? null : convertLengthToCm(input.unitSide2, input.inputUnitSystem)
+  const rawSide3Cm =
+    input.unitSide3 === null ? null : convertLengthToCm(input.unitSide3, input.inputUnitSystem)
+  const rawTriplet = resolveDimensionTripletCm({
+    side1Cm: rawSide1Cm,
+    side2Cm: rawSide2Cm,
+    side3Cm: rawSide3Cm,
+  })
+  const unitTriplet = rawTriplet ? sortDimensionTripletCm(rawTriplet) : null
+  const unitWeightKg =
+    input.unitWeight === null ? null : convertWeightToKg(input.unitWeight, input.inputUnitSystem)
+
+  return {
+    unitTriplet,
+    storage: {
+      unitDimensionsCm: unitTriplet ? formatDimensionTripletCm(unitTriplet) : null,
+      unitSide1Cm: unitTriplet ? unitTriplet.side1Cm : null,
+      unitSide2Cm: unitTriplet ? unitTriplet.side2Cm : null,
+      unitSide3Cm: unitTriplet ? unitTriplet.side3Cm : null,
+      unitWeightKg,
+    },
+  }
+}
