@@ -6,6 +6,7 @@ import { getAmazonSpApiConfigFromEnv, type AmazonSpApiConfig } from '@/lib/amazo
 
 type SellingPartnerApiClient = {
   callAPI: (params: Record<string, unknown>) => Promise<unknown>
+  download: (document: unknown) => Promise<unknown>
 }
 
 type AmazonInventorySummary = {
@@ -143,6 +144,15 @@ type AmazonOutboundShipmentsResponse = {
     NextToken?: string
   }
   errors?: AmazonErrorDetail[]
+}
+
+type AmazonReportsResponse = {
+  reports?: Array<{
+    reportId?: string
+    reportDocumentId?: string
+    createdTime?: string
+    processingStatus?: string
+  }>
 }
 
 type AmazonOutboundShipmentItemsResponse = {
@@ -454,6 +464,53 @@ export function getAmazonClient(tenantCode?: TenantCode): SellingPartnerApiClien
   const client = createAmazonClient(config)
   clientCache.set(key, client)
   return client
+}
+
+export async function getLatestAmazonReportDocumentText(
+  tenantCode: TenantCode,
+  reportType: string
+): Promise<string | null> {
+  const config = getAmazonSpApiConfigFromEnv(tenantCode)
+  if (!config) return null
+  const createdSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const reportsResponse = await callAmazonApi<AmazonReportsResponse>(tenantCode, {
+    operation: 'getReports',
+    endpoint: 'reports',
+    query: {
+      reportTypes: [reportType],
+      processingStatuses: ['DONE'],
+      marketplaceIds: [config.marketplaceId],
+      createdSince,
+    },
+  })
+
+  const reports = Array.isArray(reportsResponse.reports) ? reportsResponse.reports : []
+  let latestReport: AmazonReportsResponse['reports'][number] | null = null
+  for (const report of reports) {
+    if (!report.reportDocumentId) continue
+    if (latestReport === null) {
+      latestReport = report
+      continue
+    }
+    if (String(report.createdTime) > String(latestReport.createdTime)) {
+      latestReport = report
+    }
+  }
+
+  if (latestReport === null) return null
+  if (!latestReport.reportDocumentId) return null
+
+  const reportDocument = await callAmazonApi<unknown>(tenantCode, {
+    operation: 'getReportDocument',
+    endpoint: 'reports',
+    path: { reportDocumentId: latestReport.reportDocumentId },
+  })
+
+  const downloaded = await getAmazonClient(tenantCode).download(reportDocument)
+  if (Buffer.isBuffer(downloaded)) return downloaded.toString('utf8')
+  if (typeof downloaded === 'string') return downloaded
+  return String(downloaded)
 }
 
 export async function getListingsItems(

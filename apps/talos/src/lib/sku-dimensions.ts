@@ -1,15 +1,13 @@
+import { formatTruncatedDecimal } from '@/lib/number-precision'
+
 export type DimensionTriplet = {
   side1Cm: number
   side2Cm: number
   side3Cm: number
 }
 
-function stripTrailingZeros(value: string): string {
-  return value.includes('.') ? value.replace(/\.?0+$/, '') : value
-}
-
 function formatNumber(value: number, decimals: number): string {
-  return stripTrailingZeros(value.toFixed(decimals))
+  return formatTruncatedDecimal(value, decimals)
 }
 
 export function parseDimensionTriplet(value: string | null | undefined): DimensionTriplet | null {

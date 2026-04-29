@@ -7,8 +7,14 @@ import {
 import {
   buildComparisonSkuRow,
   mergeAmazonCatalogPackageData,
+  type AmazonCatalogPackageData,
 } from '@/lib/amazon/fba-fee-discrepancies'
-import { calculateSizeTierForTenant, isAllowedSizeTierForTenant } from '@/lib/amazon/fees'
+import {
+  loadLatestFbaFeePreviewReportRows,
+  resolveFbaFeePreviewRow,
+  type FbaFeePreviewReportRow,
+} from '@/lib/amazon/fba-fee-preview-report'
+import { isAllowedSizeTierForTenant } from '@/lib/amazon/fees'
 import {
   escapeRegex,
   sanitizeForDisplay,
@@ -80,27 +86,35 @@ type ComparisonSkuDatabaseRow = Prisma.SkuGetPayload<{
   select: typeof comparisonSkuSelect
 }>
 
-async function buildLiveAmazonComparisonRow(row: ComparisonSkuDatabaseRow, tenantCode: TenantCode) {
+async function buildLiveAmazonComparisonRow(
+  row: ComparisonSkuDatabaseRow,
+  tenantCode: TenantCode,
+  feePreviewRows: FbaFeePreviewReportRow[]
+) {
   const comparisonRow = buildComparisonSkuRow(row)
   const asin = typeof row.asin === 'string' ? row.asin.trim() : ''
+
+  const feePreviewRow = resolveFbaFeePreviewRow(feePreviewRows, row.skuCode, asin ? asin : null)
+  if (feePreviewRow) {
+    const feePreviewData: AmazonCatalogPackageData = {
+      packageTriplet: feePreviewRow.packageTriplet,
+      packageWeightKg: feePreviewRow.packageWeightKg,
+      sizeTier: feePreviewRow.sizeTier,
+    }
+    return mergeAmazonCatalogPackageData(comparisonRow, feePreviewData)
+  }
+
   if (!asin) return comparisonRow
 
   const catalog = await getCatalogItem(asin, tenantCode)
   const attributes = catalog.attributes
   const amazonPackageTriplet = attributes ? parseCatalogItemPackageDimensions(attributes) : null
   const amazonPackageWeightKg = attributes ? parseCatalogItemPackageWeightKg(attributes) : null
-  const amazonSizeTier = calculateSizeTierForTenant(
-    tenantCode,
-    amazonPackageTriplet ? amazonPackageTriplet.side1Cm : null,
-    amazonPackageTriplet ? amazonPackageTriplet.side2Cm : null,
-    amazonPackageTriplet ? amazonPackageTriplet.side3Cm : null,
-    amazonPackageWeightKg
-  )
 
   return mergeAmazonCatalogPackageData(comparisonRow, {
     packageTriplet: amazonPackageTriplet,
     packageWeightKg: amazonPackageWeightKg,
-    sizeTier: amazonSizeTier,
+    sizeTier: null,
   })
 }
 
@@ -139,8 +153,9 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
     select: comparisonSkuSelect,
   })
 
+  const feePreviewRows = await loadLatestFbaFeePreviewReportRows(tenantCode)
   const comparisonSkus = await Promise.all(
-    skus.map(sku => buildLiveAmazonComparisonRow(sku, tenantCode))
+    skus.map(sku => buildLiveAmazonComparisonRow(sku, tenantCode, feePreviewRows))
   )
 
   return ApiResponses.success({ skus: comparisonSkus, total, page, pageSize })
@@ -191,6 +206,7 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
     select: comparisonSkuSelect,
   })
 
-  const comparisonSku = await buildLiveAmazonComparisonRow(updatedSku, tenantCode)
+  const feePreviewRows = await loadLatestFbaFeePreviewReportRows(tenantCode)
+  const comparisonSku = await buildLiveAmazonComparisonRow(updatedSku, tenantCode, feePreviewRows)
   return ApiResponses.success(comparisonSku)
 })
