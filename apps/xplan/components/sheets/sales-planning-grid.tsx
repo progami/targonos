@@ -87,11 +87,11 @@ const BASE_SALES_METRICS = [
   'inbound',
   'threePl',
   'fba',
-  'fbaCoverWeeks',
-  'totalCoverWeeks',
   'actualSales',
   'forecastSales',
   'finalSales',
+  'fbaCoverWeeks',
+  'totalCoverWeeks',
 ] as const;
 
 type SalesMetricField = (typeof BASE_SALES_METRICS)[number];
@@ -100,11 +100,11 @@ const SALES_METRIC_LABELS: Record<SalesMetricField, string> = {
   inbound: 'INBOUND',
   threePl: '3PL',
   fba: 'FBA',
+  actualSales: 'ACTUAL',
+  forecastSales: 'FORECAST',
+  finalSales: 'FINAL',
   fbaCoverWeeks: 'FBA COVER (W)',
   totalCoverWeeks: 'TOTAL COVER (W)',
-  actualSales: 'ACTUAL',
-  forecastSales: 'PLANNER',
-  finalSales: 'FINAL',
 };
 
 const SALES_METRIC_COLUMN_WIDTHS: Record<SalesMetricField, number> = {
@@ -1956,7 +1956,7 @@ export function SalesPlanningGrid({
             : sourceRaw === 'ACTUAL'
               ? 'Actual'
               : sourceRaw === 'PLANNER'
-                ? 'Planner'
+                ? 'Forecast'
                 : sourceRaw === 'SYSTEM'
                   ? 'System'
                   : sourceRaw
@@ -1967,7 +1967,7 @@ export function SalesPlanningGrid({
           sourceRaw === 'ACTUAL'
             ? 'Act'
             : sourceRaw === 'PLANNER'
-              ? 'Plan'
+              ? 'Fcst'
               : sourceRaw === 'SYSTEM'
                 ? 'Sys'
                 : sourceRaw === 'OVERRIDE'

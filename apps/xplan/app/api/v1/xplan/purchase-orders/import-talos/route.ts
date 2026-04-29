@@ -55,6 +55,11 @@ type StageParameterRow = {
   valueNumeric?: Prisma.Decimal | number | null;
 };
 
+type ProductSkuRow = {
+  id: string;
+  sku: string | null;
+};
+
 const STAGE_DEFAULT_LABEL_SET = Object.values(OPS_STAGE_DEFAULT_LABELS);
 
 function buildStageDefaultsMap(rows: StageParameterRow[]): StageDefaultsMap {
@@ -86,7 +91,38 @@ function resolveStageDefaultWeeks(map: StageDefaultsMap, label: string): number 
   return 1;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function normalizeSkuKey(value: string): string {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function buildProductBySku(products: ProductSkuRow[]): Map<string, string> {
+  const productBySku = new Map<string, string>();
+  for (const product of products) {
+    const sku = product.sku?.trim();
+    if (!sku) continue;
+    const normalizedSku = normalizeSkuKey(sku);
+    const keys = normalizedSku === sku ? [sku] : [sku, normalizedSku];
+    for (const key of keys) {
+      const existingProductId = productBySku.get(key);
+      if (existingProductId && existingProductId !== product.id) {
+        throw new Error(`Ambiguous X-Plan product SKU mapping for "${sku}"`);
+      }
+      productBySku.set(key, product.id);
+    }
+  }
+  return productBySku;
+}
+
+function resolveProductIdForSku(productBySku: Map<string, string>, skuCode: string): string | null {
+  const exact = productBySku.get(skuCode);
+  if (exact) return exact;
+  const normalizedSku = normalizeSkuKey(skuCode);
+  if (!normalizedSku) return null;
+  return productBySku.get(normalizedSku) ?? null;
+}
 
 function toUtcDateOnly(value: Date | null | undefined): Date | null {
   if (!value) return null;
@@ -104,6 +140,15 @@ const XPLAN_STATUS_VALUES = new Set<string>([
   'WAREHOUSE',
   'CANCELLED',
 ]);
+const TALOS_SOURCE_SYSTEM = 'TALOS';
+const MIGRATION_NOTE_PREFIX = 'Migrated from ';
+
+function isMigratedPurchaseOrder(row: {
+  sourceSystem: string | null;
+  notes: string | null;
+}): boolean {
+  return row.sourceSystem == null && row.notes != null && row.notes.startsWith(MIGRATION_NOTE_PREFIX);
+}
 
 function mapTalosStatus(value: string): XPlanPurchaseOrderStatus {
   const normalized = value
@@ -116,18 +161,17 @@ function mapTalosStatus(value: string): XPlanPurchaseOrderStatus {
 
   switch (normalized) {
     case 'RFQ':
+    case 'AWAITING_PROOF':
+    case 'REVIEW':
+    case 'POSTED':
       return 'ISSUED';
     case 'CLOSED':
     case 'ARCHIVED':
     case 'REJECTED':
+    case 'CANCELLED':
       return 'CANCELLED';
-    case 'POSTED':
-    case 'SHIPPED':
-    case 'REVIEW':
-    case 'AWAITING_PROOF':
-      return 'WAREHOUSE';
     default:
-      return 'ISSUED';
+      throw new Error(`Unsupported Talos purchase order status "${value}"`);
   }
 }
 
@@ -144,10 +188,32 @@ type CreatedOrderSummary = {
   reference: string;
 };
 
+const ORDER_CODE_CONFLICT_SELECT = {
+  id: true,
+  orderCode: true,
+  sourceSystem: true,
+  notes: true,
+} as const;
+
+type OrderCodeConflictRow = {
+  id: string;
+  orderCode: string;
+  sourceSystem: string | null;
+  notes: string | null;
+};
+
 type TalosPurchaseOrderLine = {
+  id: string;
   skuCode: string;
   unitsOrdered: number;
+  quantity: number;
   lotRef?: string | null;
+  unitsPerCarton?: number | null;
+  cartonSide1Cm?: unknown;
+  cartonSide2Cm?: unknown;
+  cartonSide3Cm?: unknown;
+  cartonWeightKg?: unknown;
+  unitCost?: unknown;
 };
 
 type TalosPurchaseOrderContainer = {
@@ -156,10 +222,12 @@ type TalosPurchaseOrderContainer = {
 
 type TalosPurchaseOrderRecord = {
   id: string;
-  poNumber: string | null;
+  inboundNumber: string | null;
   orderNumber: string;
   status: string;
   createdAt: Date;
+  updatedAt: Date;
+  totalCartons?: number | null;
   manufacturingStartDate?: Date | null;
   manufacturingStart?: Date | null;
   actualCompletionDate?: Date | null;
@@ -180,6 +248,44 @@ type TalosPurchaseOrderRecord = {
   lines: TalosPurchaseOrderLine[];
   containers: TalosPurchaseOrderContainer[];
 };
+
+type TalosBatchCreateRow = {
+  skuCode: string;
+  productId: string;
+  batchCode: string | null;
+  quantity: number;
+  sourceSystem: string;
+  sourceLineId: string;
+  sourceUpdatedAt: Date;
+  unitsPerCarton: number | null;
+  cartonSide1Cm: number | null;
+  cartonSide2Cm: number | null;
+  cartonSide3Cm: number | null;
+  cartonWeightKg: number | null;
+  overrideManufacturingCost: number | null;
+};
+
+function talosOrderReference(purchaseOrder: TalosPurchaseOrderRecord): string {
+  const inboundNumber = purchaseOrder.inboundNumber?.trim();
+  if (inboundNumber && inboundNumber.length > 0) return inboundNumber;
+  return purchaseOrder.orderNumber.trim();
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function validateTalosCartonTotals(purchaseOrder: TalosPurchaseOrderRecord): string | null {
+  const expectedCartons = purchaseOrder.totalCartons;
+  if (expectedCartons == null) return null;
+
+  const lineCartons = purchaseOrder.lines.reduce((sum, line) => sum + line.quantity, 0);
+  if (lineCartons === expectedCartons) return null;
+
+  return `Talos line carton total (${lineCartons}) does not match PO total cartons (${expectedCartons})`;
+}
 
 export const POST = withXPlanAuth(async (request: Request, session) => {
   const body = await request.json().catch(() => null);
@@ -225,13 +331,8 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
 
   if (references.length === 1) {
     const reference = references[0];
-    const where =
-      UUID_RE.test(reference) === true
-        ? { OR: [{ id: reference }, { poNumber: reference }, { orderNumber: reference }] }
-        : { OR: [{ poNumber: reference }, { orderNumber: reference }] };
-
-    const purchaseOrder = await talos.purchaseOrder.findFirst({
-      where,
+    const purchaseOrder = await talos.inboundOrder.findUnique({
+      where: { id: reference },
       include: { lines: true, containers: true },
     });
 
@@ -241,7 +342,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
 
     talosPurchaseOrders = [purchaseOrder as TalosPurchaseOrderRecord];
   } else {
-    const orders = await talos.purchaseOrder.findMany({
+    const orders = await talos.inboundOrder.findMany({
       where: { id: { in: references } },
       include: { lines: true, containers: true },
     });
@@ -269,20 +370,11 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
   const planning = await loadPlanningCalendar(weekStartsOn);
   const calendar = planning.calendar;
 
-  const allSkuCodes = Array.from(
-    new Set(
-      talosPurchaseOrders.flatMap((purchaseOrder) =>
-        purchaseOrder.lines
-          .map((line) => line.skuCode.trim())
-          .filter((skuCode) => skuCode.length > 0),
-      ),
-    ),
-  );
   const products = await prisma.product.findMany({
-    where: { strategyId, sku: { in: allSkuCodes } },
+    where: { strategyId },
     select: { id: true, sku: true },
   });
-  const productBySku = new Map(products.map((product) => [product.sku, product.id]));
+  const productBySku = buildProductBySku(products);
 
   const buildFailure = (
     purchaseOrder: TalosPurchaseOrderRecord,
@@ -290,7 +382,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     orderCode?: string | null,
   ): ImportFailure => ({
     reference: purchaseOrder.id,
-    orderCode: orderCode ?? purchaseOrder.poNumber?.trim() ?? purchaseOrder.orderNumber.trim(),
+    orderCode: orderCode ?? talosOrderReference(purchaseOrder),
     error,
   });
 
@@ -325,7 +417,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     portEtaWeekNumber: number | null;
     availableDate: Date | null;
     availableWeekNumber: number | null;
-    batchRows: Array<{ skuCode: string; batchCode: string | null; quantity: number }>;
+    batchRows: TalosBatchCreateRow[];
   }) => {
     const shipName = purchaseOrder.vesselName?.trim();
     const containerNumber = purchaseOrder.containers
@@ -344,6 +436,10 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
       productId: primaryProductId,
       orderCode: resolvedOrderCode,
       quantity: purchaseOrder.lines.reduce((sum, line) => sum + line.unitsOrdered, 0),
+      sourceSystem: TALOS_SOURCE_SYSTEM,
+      sourceId: purchaseOrder.id,
+      sourceReference: talosOrderReference(purchaseOrder),
+      sourceUpdatedAt: purchaseOrder.updatedAt,
       poDate,
       poWeekNumber,
       productionWeeks: new Prisma.Decimal(
@@ -375,9 +471,18 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
       status: mapTalosStatus(String(purchaseOrder.status)),
       batchTableRows: {
         create: batchRows.map((row) => ({
-          productId: productBySku.get(row.skuCode)!,
+          productId: row.productId,
           quantity: row.quantity,
           batchCode: row.batchCode,
+          sourceSystem: row.sourceSystem,
+          sourceLineId: row.sourceLineId,
+          sourceUpdatedAt: row.sourceUpdatedAt,
+          unitsPerCarton: row.unitsPerCarton,
+          cartonSide1Cm: row.cartonSide1Cm,
+          cartonSide2Cm: row.cartonSide2Cm,
+          cartonSide3Cm: row.cartonSide3Cm,
+          cartonWeightKg: row.cartonWeightKg,
+          overrideManufacturingCost: row.overrideManufacturingCost,
         })),
       },
     };
@@ -387,6 +492,9 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     purchaseOrder: TalosPurchaseOrderRecord,
     resolvedOrderCode: string,
   ): { error: string } | { data: ReturnType<typeof buildPurchaseOrderCreateData> } => {
+    const cartonTotalError = validateTalosCartonTotals(purchaseOrder);
+    if (cartonTotalError) return { error: cartonTotalError } as const;
+
     const skuCodes = Array.from(
       new Set(
         purchaseOrder.lines
@@ -394,14 +502,14 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
           .filter((skuCode) => skuCode.length > 0),
       ),
     );
-    const missingSkus = skuCodes.filter((skuCode) => !productBySku.has(skuCode));
+    const missingSkus = skuCodes.filter((skuCode) => !resolveProductIdForSku(productBySku, skuCode));
     if (missingSkus.length > 0) {
       return { error: `Create these products in X-Plan first: ${missingSkus.join(', ')}` } as const;
     }
 
     const primaryLine = purchaseOrder.lines.find((line) => line.skuCode.trim().length > 0) ?? null;
     const primarySku = primaryLine?.skuCode.trim() ?? '';
-    const primaryProductId = primarySku ? productBySku.get(primarySku) : null;
+    const primaryProductId = primarySku ? resolveProductIdForSku(productBySku, primarySku) : null;
     if (!primaryProductId) {
       return { error: `Missing X-Plan product for sku "${primarySku}"` } as const;
     }
@@ -441,11 +549,24 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     const availableWeekNumber = availableDate ? weekNumberForDate(availableDate, calendar) : null;
 
     const batchRows = purchaseOrder.lines
-      .map((line) => ({
-        skuCode: line.skuCode.trim(),
-        batchCode: line.lotRef?.trim() ? line.lotRef.trim() : null,
-        quantity: line.unitsOrdered,
-      }))
+      .map((line): TalosBatchCreateRow => {
+        const skuCode = line.skuCode.trim();
+        return {
+          skuCode,
+          productId: resolveProductIdForSku(productBySku, skuCode)!,
+          batchCode: line.lotRef?.trim() ? line.lotRef.trim() : null,
+          quantity: line.unitsOrdered,
+          sourceSystem: TALOS_SOURCE_SYSTEM,
+          sourceLineId: line.id,
+          sourceUpdatedAt: purchaseOrder.updatedAt,
+          unitsPerCarton: line.unitsPerCarton ?? null,
+          cartonSide1Cm: toOptionalNumber(line.cartonSide1Cm),
+          cartonSide2Cm: toOptionalNumber(line.cartonSide2Cm),
+          cartonSide3Cm: toOptionalNumber(line.cartonSide3Cm),
+          cartonWeightKg: toOptionalNumber(line.cartonWeightKg),
+          overrideManufacturingCost: toOptionalNumber(line.unitCost),
+        };
+      })
       .filter((row) => row.skuCode.length > 0);
 
     return {
@@ -469,25 +590,6 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     };
   };
 
-  const preferredOrderCodes = talosPurchaseOrders.map((purchaseOrder, index) => {
-    const preferredCodeRaw = purchaseOrder.poNumber
-      ? purchaseOrder.poNumber
-      : purchaseOrder.orderNumber;
-    const preferredCode = preferredCodeRaw.trim();
-    const resolvedOrderCode =
-      orderCodeOverride && references.length === 1 && index === 0
-        ? orderCodeOverride
-        : preferredCode;
-    return { reference: purchaseOrder.id, orderCode: resolvedOrderCode };
-  });
-  const existingOrders = await prisma.purchaseOrder.findMany({
-    where: {
-      strategyId,
-      orderCode: { in: preferredOrderCodes.map((entry) => entry.orderCode) },
-    },
-    select: { orderCode: true },
-  });
-  const existingOrderCodes = new Set(existingOrders.map((order) => order.orderCode));
   const reservedOrderCodes = new Set<string>();
   const createdOrders: CreatedOrderSummary[] = [];
   const failed: ImportFailure[] = [...notFoundFailures];
@@ -505,10 +607,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
         continue;
       }
 
-      const preferredCodeRaw = purchaseOrder.poNumber
-        ? purchaseOrder.poNumber
-        : purchaseOrder.orderNumber;
-      const preferredCode = preferredCodeRaw.trim();
+      const preferredCode = talosOrderReference(purchaseOrder);
       const resolvedOrderCode =
         orderCodeOverride && references.length === 1 ? orderCodeOverride : preferredCode;
 
@@ -525,7 +624,19 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
         continue;
       }
 
-      if (existingOrderCodes.has(resolvedOrderCode) || reservedOrderCodes.has(resolvedOrderCode)) {
+      const existingSourceOrder = await prisma.purchaseOrder.findUnique({
+        where: {
+          strategyId_sourceSystem_sourceId: {
+            strategyId,
+            sourceSystem: TALOS_SOURCE_SYSTEM,
+            sourceId: purchaseOrder.id,
+          },
+        },
+        select: { id: true, orderCode: true },
+      });
+      let persistedTarget: { id: string; orderCode: string } | null = existingSourceOrder;
+
+      if (!persistedTarget && reservedOrderCodes.has(resolvedOrderCode)) {
         if (references.length === 1) {
           return NextResponse.json(
             { error: 'A purchase order with this code already exists.' },
@@ -542,6 +653,33 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
         continue;
       }
 
+      if (!persistedTarget) {
+        const orderCodeConflict = (await prisma.purchaseOrder.findUnique({
+          where: { strategyId_orderCode: { strategyId, orderCode: resolvedOrderCode } },
+          select: ORDER_CODE_CONFLICT_SELECT,
+        })) as OrderCodeConflictRow | null;
+        if (orderCodeConflict) {
+          if (isMigratedPurchaseOrder(orderCodeConflict)) {
+            persistedTarget = { id: orderCodeConflict.id, orderCode: orderCodeConflict.orderCode };
+          } else {
+            if (references.length === 1) {
+              return NextResponse.json(
+                { error: 'A purchase order with this code already exists.' },
+                { status: 409 },
+              );
+            }
+            failed.push(
+              buildFailure(
+                purchaseOrder,
+                'A purchase order with this code already exists.',
+                resolvedOrderCode,
+              ),
+            );
+            continue;
+          }
+        }
+      }
+
       const createData = buildCreateData(purchaseOrder, resolvedOrderCode);
       if ('error' in createData) {
         if (references.length === 1) {
@@ -552,15 +690,27 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
       }
 
       try {
-        const created = await prisma.purchaseOrder.create({
-          data: createData.data,
-          select: { id: true, orderCode: true, quantity: true },
-        });
-        reservedOrderCodes.add(created.orderCode);
+        const persisted = persistedTarget
+          ? await prisma.purchaseOrder.update({
+              where: { id: persistedTarget.id },
+              data: {
+                ...createData.data,
+                batchTableRows: {
+                  deleteMany: {},
+                  create: createData.data.batchTableRows.create,
+                },
+              },
+              select: { id: true, orderCode: true, quantity: true },
+            })
+          : await prisma.purchaseOrder.create({
+              data: createData.data,
+              select: { id: true, orderCode: true, quantity: true },
+            });
+        reservedOrderCodes.add(persisted.orderCode);
         createdOrders.push({
-          id: created.id,
-          orderCode: created.orderCode,
-          quantity: Number(created.quantity),
+          id: persisted.id,
+          orderCode: persisted.orderCode,
+          quantity: Number(persisted.quantity),
           reference: purchaseOrder.id,
         });
       } catch (error) {

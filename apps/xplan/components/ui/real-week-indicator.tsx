@@ -9,22 +9,18 @@ type RealWeekIndicatorProps = {
 };
 
 export function RealWeekIndicator({
-  hasActualData,
   isIncompleteWeek,
   className,
 }: RealWeekIndicatorProps) {
-  if (!hasActualData) return null;
+  if (!isIncompleteWeek) return null;
 
   return (
     <span
       className={cn(
-        'inline-block rounded-full',
-        isIncompleteWeek
-          ? 'w-2.5 h-2.5 bg-warning-400 ring-2 ring-warning-200 dark:ring-warning-700 animate-pulse'
-          : 'w-2 h-2 bg-success-500',
+        'inline-block h-2.5 w-2.5 rounded-full bg-success-500 ring-2 ring-success-200 dark:ring-success-700',
         className,
       )}
-      title={isIncompleteWeek ? 'Current week (in progress)' : 'Actuals'}
+      title="Current week"
     />
   );
 }
