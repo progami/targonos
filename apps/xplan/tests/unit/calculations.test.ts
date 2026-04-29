@@ -16,6 +16,7 @@ import {
   computePurchaseOrderDerived,
   computeSalesPlan,
 } from '@/lib/calculations';
+import { mapPurchaseOrders } from '@/lib/calculations/adapters';
 import type {
   BusinessParameterMap,
   LeadTimeProfile,
@@ -369,6 +370,37 @@ describe('computeSalesPlan', () => {
     expect(gadgetArrival?.arrivals).toBe(180);
     expect(gadgetArrival?.arrivalOrders[0]?.productId).toBe(productTwo.id);
     expect(gadgetArrival?.arrivalOrders[0]?.quantity).toBe(180);
+  });
+
+  it('maps purchase order totals from batch quantities', () => {
+    const mapped = mapPurchaseOrders([
+      {
+        id: 'po-multi',
+        orderCode: 'PO-MULTI',
+        productId: product.id,
+        quantity: 999,
+        status: 'ISSUED',
+        payments: [],
+        batchTableRows: [
+          {
+            id: 'batch-1',
+            purchaseOrderId: 'po-multi',
+            productId: product.id,
+            quantity: 120,
+          },
+          {
+            id: 'batch-2',
+            purchaseOrderId: 'po-multi',
+            productId: 'prod-2',
+            quantity: 180,
+          },
+        ],
+      } as any,
+    ]);
+
+    expect(mapped[0]?.quantity).toBe(300);
+    expect(mapped[0]?.productId).toBe(product.id);
+    expect(mapped[0]?.batchTableRows).toHaveLength(2);
   });
 
   it('computes weeks of cover from projected demand', () => {

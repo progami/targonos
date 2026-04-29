@@ -1,5 +1,6 @@
-import { signIn } from '@/lib/auth'
+import { auth, signIn } from '@/lib/auth'
 import { appendExpiredAuthCookieHeaders } from '@/lib/auth-cookie-clear'
+import { resolvePortalCallbackTarget } from '@/lib/callback-target'
 import { requireAuthEnv } from '@/lib/required-auth-env'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
@@ -23,6 +24,20 @@ function isRecoverableAuthError(error: unknown): boolean {
 export async function GET(request: NextRequest) {
   const callbackUrl = request.nextUrl.searchParams.get('callbackUrl') ?? '/'
   const hasRetried = request.nextUrl.searchParams.get('retry') === '1'
+  const session = await auth()
+
+  if (session) {
+    const target = resolvePortalCallbackTarget({
+      targetUrl: callbackUrl,
+      portalBaseUrl: requireAuthEnv('NEXTAUTH_URL'),
+    })
+
+    if (target) {
+      return NextResponse.redirect(target)
+    }
+
+    return NextResponse.redirect(new URL('/', request.url))
+  }
 
   try {
     const redirectUrl = await signIn('google', { redirect: false, redirectTo: callbackUrl })
