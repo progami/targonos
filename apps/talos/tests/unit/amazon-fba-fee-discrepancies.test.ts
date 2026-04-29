@@ -165,6 +165,30 @@ test('computeComparison treats missing Amazon fee as match when assigned size ti
   assert.equal(comparison.hasSizeTierMismatch, false)
 })
 
+test('UK shipping weight uses package weight when it exceeds dimensional weight', () => {
+  const shipping = discrepancies.computeShippingWeights(
+    { side1Cm: 5, side2Cm: 10, side3Cm: 10 },
+    0.5,
+    null,
+    'UK'
+  )
+
+  assert.equal(shipping.dimensionalWeightKg, 0.1)
+  assert.equal(shipping.shippingWeightKg, 0.5)
+})
+
+test('UK shipping weight uses dimensional weight when it exceeds package weight', () => {
+  const shipping = discrepancies.computeShippingWeights(
+    { side1Cm: 10, side2Cm: 20, side3Cm: 30 },
+    0.5,
+    null,
+    'UK'
+  )
+
+  assert.equal(shipping.dimensionalWeightKg, 1.2)
+  assert.equal(shipping.shippingWeightKg, 1.2)
+})
+
 test('buildComparisonSkuRow does not expose stored reference FBA fulfillment fee', () => {
   assert.equal(typeof discrepancies.buildComparisonSkuRow, 'function')
   if (typeof discrepancies.buildComparisonSkuRow !== 'function') return
@@ -300,6 +324,22 @@ test('SKU Info measurement display truncates down to two decimals instead of rou
     '2.59×21×26.89 cm'
   )
   assert.equal(formatWeightDisplayFromKg(0.30999, 'metric', 2), '0.3 kg')
+})
+
+test('SKU Info reference table uses inline edit controls for editable reference values only', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const pageSource = readFileSync(
+    path.join(talosRoot, 'src/app/amazon/fba-fee-discrepancies/page.tsx'),
+    'utf8'
+  )
+
+  assert.equal(pageSource.includes('Reference Input'), false)
+  assert.equal(pageSource.includes('Edit reference data for'), false)
+  assert.equal(pageSource.includes('Edit package sides for'), true)
+  assert.equal(pageSource.includes('Edit package weight for'), true)
+  assert.equal(pageSource.includes('Edit size tier for'), true)
+  assert.equal(pageSource.includes('Edit dimensional weight for'), false)
+  assert.equal(pageSource.includes('Edit shipping weight for'), false)
 })
 
 test('SKU Info API does not calculate Amazon size tier from catalog dimensions', () => {

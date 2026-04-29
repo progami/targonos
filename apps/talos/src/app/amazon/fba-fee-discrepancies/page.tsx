@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
@@ -160,6 +160,40 @@ function UnitNumberInput({
         {unit}
       </span>
     </div>
+  )
+}
+
+function ReferenceRowLabel({ children, editable = false }: { children: ReactNode; editable?: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      {editable ? (
+        <Edit2 className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+      ) : null}
+      <span>{children}</span>
+    </div>
+  )
+}
+
+function EditableReferenceValue({
+  row,
+  ariaLabelPrefix,
+  children,
+  onEdit,
+}: {
+  row: ComputedRow
+  ariaLabelPrefix: string
+  children: ReactNode
+  onEdit: (row: ComputedRow) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onEdit(row)}
+      className="inline-flex max-w-full items-center justify-center rounded-md px-2 py-1 text-center text-xs leading-tight text-slate-700 transition-colors hover:bg-slate-100 hover:text-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-cyan-300"
+      aria-label={`${ariaLabelPrefix} ${row.sku.skuCode}`}
+    >
+      {children}
+    </button>
   )
 }
 
@@ -506,26 +540,6 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
-                      Reference Input
-                    </td>
-                    {pageRows.map(row => (
-                      <td key={row.sku.id} className="px-4 py-2 text-center">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openReferenceEditor(row)}
-                          className="h-7 px-2 text-xs"
-                          aria-label={`Edit reference data for ${row.sku.skuCode}`}
-                        >
-                          <Edit2 className="mr-1 h-3.5 w-3.5" />
-                          Edit
-                        </Button>
-                      </td>
-                    ))}
-                  </tr>
-                  <tr className="bg-white dark:bg-slate-800">
-                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
                       ASIN
                     </td>
                     {pageRows.map(row => (
@@ -539,34 +553,46 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
-                      Package Sides
+                      <ReferenceRowLabel editable>Package Sides</ReferenceRowLabel>
                     </td>
                     {pageRows.map(row => (
                       <td
                         key={row.sku.id}
                         className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs"
                       >
-                        {formatDimensionTripletDisplayFromCm(
-                          row.comparison.reference.triplet,
-                          unitSystem
-                        )}
+                        <EditableReferenceValue
+                          row={row}
+                          ariaLabelPrefix="Edit package sides for"
+                          onEdit={openReferenceEditor}
+                        >
+                          {formatDimensionTripletDisplayFromCm(
+                            row.comparison.reference.triplet,
+                            unitSystem
+                          )}
+                        </EditableReferenceValue>
                       </td>
                     ))}
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
-                      Package Weight
+                      <ReferenceRowLabel editable>Package Weight</ReferenceRowLabel>
                     </td>
                     {pageRows.map(row => (
                       <td
                         key={row.sku.id}
                         className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs"
                       >
-                        {formatWeightDisplayFromKg(
-                          row.comparison.reference.shipping.unitWeightKg,
-                          unitSystem,
-                          2
-                        )}
+                        <EditableReferenceValue
+                          row={row}
+                          ariaLabelPrefix="Edit package weight for"
+                          onEdit={openReferenceEditor}
+                        >
+                          {formatWeightDisplayFromKg(
+                            row.comparison.reference.shipping.unitWeightKg,
+                            unitSystem,
+                            2
+                          )}
+                        </EditableReferenceValue>
                       </td>
                     ))}
                   </tr>
@@ -606,14 +632,20 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                   </tr>
                   <tr className="bg-white dark:bg-slate-800">
                     <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
-                      Size Tier
+                      <ReferenceRowLabel editable>Size Tier</ReferenceRowLabel>
                     </td>
                     {pageRows.map(row => (
                       <td
                         key={row.sku.id}
                         className="px-4 py-2 text-center text-slate-700 dark:text-slate-300 text-xs"
                       >
-                        {row.comparison.reference.sizeTier ?? '—'}
+                        <EditableReferenceValue
+                          row={row}
+                          ariaLabelPrefix="Edit size tier for"
+                          onEdit={openReferenceEditor}
+                        >
+                          {row.comparison.reference.sizeTier ?? '—'}
+                        </EditableReferenceValue>
                       </td>
                     ))}
                   </tr>
