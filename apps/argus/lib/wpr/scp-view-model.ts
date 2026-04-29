@@ -1,3 +1,4 @@
+import { formatAsinDisplayName } from '@/lib/product-labels'
 import type { WprSortDirection, WprSortState } from './dashboard-state'
 import type { WeekLabel, WprScpAsinRow, WprScpMetrics, WprScpWeekMetrics, WprScpWindow } from './types'
 
@@ -251,7 +252,7 @@ export function scpSortValueForRow(
   selectedWeek: WeekLabel,
 ): number | string {
   const current = selectedWeekScpMetrics(row.weekly, selectedWeek)
-  if (key === 'asin') return row.asin
+  if (key === 'asin') return formatAsinDisplayName(row)
   if (key === 'weeks_present_selected_week') return selectedWeekScpRecord(row.weekly, selectedWeek) === null ? 0 : 1
   if (key === 'impressions') return current.impressions
   if (key === 'clicks') return current.clicks

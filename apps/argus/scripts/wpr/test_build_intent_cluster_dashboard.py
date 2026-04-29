@@ -61,6 +61,31 @@ class MarketTaxonomyTest(unittest.TestCase):
             )
 
 
+class AsinLabelFormattingTest(unittest.TestCase):
+    def test_formats_known_asins_with_readable_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+
+            self.assertEqual(
+                module.format_asin_reference("B09HXC3NL8"),
+                "Caelum Star 6 Pack 12x9 ft Extra Large (B09HXC3NL8)",
+            )
+            self.assertEqual(
+                module.format_asin_reference("B08QZHS7V6"),
+                "ARVO 3 Pack 12ft x 9ft Plastic Dust Sheets (B08QZHS7V6)",
+            )
+
+    def test_unknown_asin_references_remain_raw(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+
+            self.assertEqual(module.format_asin_reference("B000000001"), "B000000001")
+
+
 class DefaultWeekSelectionTest(unittest.TestCase):
     def test_defaults_to_latest_stable_week(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
