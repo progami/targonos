@@ -565,7 +565,7 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                         {formatWeightDisplayFromKg(
                           row.comparison.reference.shipping.unitWeightKg,
                           unitSystem,
-                          3
+                          2
                         )}
                       </td>
                     ))}
@@ -582,7 +582,7 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                         {formatWeightDisplayFromKg(
                           row.comparison.reference.shipping.dimensionalWeightKg,
                           unitSystem,
-                          3
+                          2
                         )}
                       </td>
                     ))}
@@ -655,7 +655,7 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                         {formatWeightDisplayFromKg(
                           row.comparison.amazon.shipping.unitWeightKg,
                           unitSystem,
-                          3
+                          2
                         )}
                       </td>
                     ))}
@@ -672,7 +672,7 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                         {formatWeightDisplayFromKg(
                           row.comparison.amazon.shipping.dimensionalWeightKg,
                           unitSystem,
-                          3
+                          2
                         )}
                       </td>
                     ))}

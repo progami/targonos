@@ -4,6 +4,7 @@ import {
   getDefaultUnitSystem,
   type UnitSystem,
 } from '@/lib/measurements'
+import { truncateToDecimalPlaces } from '@/lib/number-precision'
 import {
   formatDimensionTripletCm,
   resolveDimensionTripletCm,
@@ -44,11 +45,17 @@ export function normalizeReferenceInputForStorage(
   input: ReferenceInputPayload
 ): NormalizedReferenceInput {
   const rawSide1Cm =
-    input.unitSide1 === null ? null : convertLengthToCm(input.unitSide1, input.inputUnitSystem)
+    input.unitSide1 === null
+      ? null
+      : truncateToDecimalPlaces(convertLengthToCm(input.unitSide1, input.inputUnitSystem), 2)
   const rawSide2Cm =
-    input.unitSide2 === null ? null : convertLengthToCm(input.unitSide2, input.inputUnitSystem)
+    input.unitSide2 === null
+      ? null
+      : truncateToDecimalPlaces(convertLengthToCm(input.unitSide2, input.inputUnitSystem), 2)
   const rawSide3Cm =
-    input.unitSide3 === null ? null : convertLengthToCm(input.unitSide3, input.inputUnitSystem)
+    input.unitSide3 === null
+      ? null
+      : truncateToDecimalPlaces(convertLengthToCm(input.unitSide3, input.inputUnitSystem), 2)
   const rawTriplet = resolveDimensionTripletCm({
     side1Cm: rawSide1Cm,
     side2Cm: rawSide2Cm,
@@ -56,7 +63,9 @@ export function normalizeReferenceInputForStorage(
   })
   const unitTriplet = rawTriplet ? sortDimensionTripletCm(rawTriplet) : null
   const unitWeightKg =
-    input.unitWeight === null ? null : convertWeightToKg(input.unitWeight, input.inputUnitSystem)
+    input.unitWeight === null
+      ? null
+      : truncateToDecimalPlaces(convertWeightToKg(input.unitWeight, input.inputUnitSystem), 2)
 
   return {
     unitTriplet,

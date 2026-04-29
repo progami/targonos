@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
 import test from 'node:test'
 
 import * as discrepancies from '../../src/lib/amazon/fba-fee-discrepancies'
@@ -8,8 +10,15 @@ import {
   isReferenceInputUnitSystemAllowedForTenant,
   normalizeReferenceInputForStorage,
 } from '../../src/lib/amazon/reference-input'
+import {
+  parseFbaFeePreviewReport,
+  resolveFbaFeePreviewRow,
+} from '../../src/lib/amazon/fba-fee-preview-report'
 import { getSizeTierOptionsForTenant, isAllowedSizeTierForTenant } from '../../src/lib/amazon/fees'
-import { formatDimensionTripletDisplayFromCm } from '../../src/lib/measurements'
+import {
+  formatDimensionTripletDisplayFromCm,
+  formatWeightDisplayFromKg,
+} from '../../src/lib/measurements'
 
 function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
   const referenceTriplet = {
@@ -247,6 +256,63 @@ test('Amazon catalog package dimensions normalize to shortest middle longest sid
   })
 })
 
+test('FBA fee preview report normalizes Seller Central size tier bands and package measurements', () => {
+  const report = [
+    'sku\tasin\tlongest-side\tmedian-side\tshortest-side\tunit-of-dimension\titem-package-weight\tunit-of-weight\tproduct-size-weight-band',
+    'CS 007\tB09HXC3NL8\t26.8\t21.0\t2.5\tcentimeters\t309.99\tgrams\tStandardEnvelope',
+  ].join('\n')
+  const rows = parseFbaFeePreviewReport(report, 'UK')
+  const row = resolveFbaFeePreviewRow(rows, 'CS 007', 'B09HXC3NL8')
+
+  assert.deepEqual(row, {
+    sku: 'CS 007',
+    asin: 'B09HXC3NL8',
+    packageTriplet: {
+      side1Cm: 2.5,
+      side2Cm: 21,
+      side3Cm: 26.8,
+    },
+    packageWeightKg: 0.3,
+    sizeTier: 'Standard Envelope',
+  })
+})
+
+test('Amazon report package measurements truncate down instead of rounding up', () => {
+  const report = [
+    'sku\tasin\tlongest-side\tmedian-side\tshortest-side\tunit-of-dimension\titem-package-weight\tunit-of-weight\tproduct-size-weight-band',
+    'ROUNDING\tB0ROUNDING\t26.899\t21.009\t2.599\tcentimeters\t309.99\tgrams\tStandardEnvelope',
+  ].join('\n')
+  const rows = parseFbaFeePreviewReport(report, 'UK')
+  const row = resolveFbaFeePreviewRow(rows, 'ROUNDING', 'B0ROUNDING')
+
+  assert.equal(row?.packageTriplet?.side1Cm, 2.59)
+  assert.equal(row?.packageTriplet?.side2Cm, 21)
+  assert.equal(row?.packageTriplet?.side3Cm, 26.89)
+  assert.equal(row?.packageWeightKg, 0.3)
+})
+
+test('SKU Info measurement display truncates down to two decimals instead of rounding', () => {
+  assert.equal(
+    formatDimensionTripletDisplayFromCm(
+      { side1Cm: 2.599, side2Cm: 21.009, side3Cm: 26.899 },
+      'metric'
+    ),
+    '2.59×21×26.89 cm'
+  )
+  assert.equal(formatWeightDisplayFromKg(0.30999, 'metric', 2), '0.3 kg')
+})
+
+test('SKU Info API does not calculate Amazon size tier from catalog dimensions', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const routeSource = readFileSync(
+    path.join(talosRoot, 'src/app/api/amazon/fba-fee-discrepancies/route.ts'),
+    'utf8'
+  )
+
+  assert.equal(routeSource.includes('calculateSizeTierForTenant'), false)
+  assert.equal(routeSource.includes('loadLatestFbaFeePreviewReportRows'), true)
+})
+
 test('assigned size tier option validation allows tenant options and rejects invalid names', () => {
   const ukSizeTiers = getSizeTierOptionsForTenant('UK')
   const firstUkTier = ukSizeTiers[0]
@@ -409,7 +475,7 @@ test('reference input normalizes US inches and pounds before database storage', 
   assert.equal(normalized.storage.unitSide1Cm, 2.54)
   assert.equal(normalized.storage.unitSide2Cm, 20.32)
   assert.equal(normalized.storage.unitSide3Cm, 25.4)
-  assert.equal(Math.abs(Number(normalized.storage.unitWeightKg) - 0.45359237) < 0.000001, true)
+  assert.equal(normalized.storage.unitWeightKg, 0.45)
 })
 
 test('reference input keeps UK centimeters and kilograms before database storage', () => {
