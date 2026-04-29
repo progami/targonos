@@ -1,8 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
-import {
-  readCaseReportBundle,
-  type CaseReportMarketSlug,
-} from '@/lib/cases/reader';
+import { CasesUnavailablePage } from '@/components/cases/cases-unavailable-page';
+import { resolveLatestCaseReportRouteState } from '@/lib/cases/route-state';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,14 +12,20 @@ type MarketLatestPageProps = {
 
 export default async function MarketLatestCaseReportPage({ params }: MarketLatestPageProps) {
   const { market } = await params;
-  let reportDate: string;
+  const routeState = await resolveLatestCaseReportRouteState(market);
 
-  try {
-    const bundle = await readCaseReportBundle(market as CaseReportMarketSlug);
-    reportDate = bundle.reportDate;
-  } catch {
+  if (routeState.kind === 'not_found') {
     notFound();
   }
 
-  redirect(`/cases/${market}/${reportDate}`);
+  if (routeState.kind === 'unavailable') {
+    return (
+      <CasesUnavailablePage
+        marketLabel={routeState.marketLabel}
+        marketSlug={routeState.marketSlug}
+      />
+    );
+  }
+
+  redirect(`/cases/${routeState.marketSlug}/${routeState.reportDate}`);
 }

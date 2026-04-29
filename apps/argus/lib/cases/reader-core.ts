@@ -94,12 +94,24 @@ export type CaseReportBundle = ParsedCaseReport & {
   generatedAt: string | null;
 };
 
+export function isCaseReportMarketSlug(value: string): value is CaseReportMarketSlug {
+  return Object.prototype.hasOwnProperty.call(CASE_MARKETS, value);
+}
+
+export function isCaseReportDate(value: string): boolean {
+  return REPORT_DATE_PATTERN.test(value);
+}
+
 function resolveMarketConfig(marketSlug: CaseReportMarketSlug) {
   const market = CASE_MARKETS[marketSlug];
   if (market === undefined) {
     throw new Error(`Unsupported case report market: ${marketSlug}`);
   }
   return market;
+}
+
+export function readCaseReportMarketLabel(marketSlug: CaseReportMarketSlug): string {
+  return resolveMarketConfig(marketSlug).label;
 }
 
 function readRequiredObject(
