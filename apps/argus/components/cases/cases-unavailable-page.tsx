@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import { Alert, Box, Button, Stack, Typography } from '@mui/material'
