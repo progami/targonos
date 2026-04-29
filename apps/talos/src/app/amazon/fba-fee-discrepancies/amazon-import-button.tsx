@@ -216,7 +216,9 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
       const payload = await response.json().catch(() => null)
       if (!response.ok) {
         const message =
-          typeof payload?.error === 'string' && payload.error.trim() ? payload.error : 'Validation failed'
+          typeof payload?.error === 'string' && payload.error.trim()
+            ? payload.error
+            : 'Validation failed'
         throw new Error(message)
       }
 
@@ -257,7 +259,15 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
     }
 
     return true
-  }, [importing, validating, selectedSkuCodes, validation, validatedKey, selectionKey, validationBySku])
+  }, [
+    importing,
+    validating,
+    selectedSkuCodes,
+    validation,
+    validatedKey,
+    selectionKey,
+    validationBySku,
+  ])
 
   const handleImport = async () => {
     if (!canImport) return
@@ -335,10 +345,17 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">Import from Amazon</h3>
-                <p className="text-sm text-muted-foreground">Select products to import into your catalog</p>
+                <p className="text-sm text-muted-foreground">
+                  Select products to import into your catalog
+                </p>
               </div>
             </div>
-            <Button onClick={handleClose} variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+            <Button
+              onClick={handleClose}
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            >
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -347,15 +364,23 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
           <div className="border-b bg-slate-50 dark:bg-slate-900 px-6 py-3">
             <div className="flex items-center gap-2">
               {/* Step 1: Select */}
-              <div className={`flex items-center gap-2 ${currentStep === 'select' ? 'text-cyan-600 dark:text-cyan-400' : selectedSkuCodes.size > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
-                  currentStep === 'select'
-                    ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
-                    : selectedSkuCodes.size > 0
-                      ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                }`}>
-                  {selectedSkuCodes.size > 0 && currentStep !== 'select' ? <Check className="h-3.5 w-3.5" /> : '1'}
+              <div
+                className={`flex items-center gap-2 ${currentStep === 'select' ? 'text-cyan-600 dark:text-cyan-400' : selectedSkuCodes.size > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}
+              >
+                <div
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                    currentStep === 'select'
+                      ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                      : selectedSkuCodes.size > 0
+                        ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {selectedSkuCodes.size > 0 && currentStep !== 'select' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    '1'
+                  )}
                 </div>
                 <span className="text-sm font-medium">Select</span>
                 {selectedSkuCodes.size > 0 && (
@@ -368,27 +393,39 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
               <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
 
               {/* Step 2: Validate */}
-              <div className={`flex items-center gap-2 ${
-                currentStep === 'validate'
-                  ? 'text-cyan-600 dark:text-cyan-400'
-                  : validation && validatedKey === selectionKey
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-slate-400 dark:text-slate-500'
-              }`}>
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+              <div
+                className={`flex items-center gap-2 ${
                   currentStep === 'validate'
-                    ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                    ? 'text-cyan-600 dark:text-cyan-400'
                     : validation && validatedKey === selectionKey
-                      ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                }`}>
-                  {validation && validatedKey === selectionKey && currentStep === 'import' ? <Check className="h-3.5 w-3.5" /> : '2'}
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-slate-400 dark:text-slate-500'
+                }`}
+              >
+                <div
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                    currentStep === 'validate'
+                      ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                      : validation && validatedKey === selectionKey
+                        ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {validation && validatedKey === selectionKey && currentStep === 'import' ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    '2'
+                  )}
                 </div>
                 <span className="text-sm font-medium">Validate</span>
                 {validation && validatedKey === selectionKey && (
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    invalidCount > 0 ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300' : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
-                  }`}>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      invalidCount > 0
+                        ? 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'
+                        : 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                    }`}
+                  >
                     {validCount}/{selectedSkuCodes.size} ready
                   </span>
                 )}
@@ -397,16 +434,24 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
               <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600" />
 
               {/* Step 3: Import */}
-              <div className={`flex items-center gap-2 ${
-                result && result.imported > 0 ? 'text-emerald-600 dark:text-emerald-400' : currentStep === 'import' ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'
-              }`}>
-                <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+              <div
+                className={`flex items-center gap-2 ${
                   result && result.imported > 0
-                    ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                    ? 'text-emerald-600 dark:text-emerald-400'
                     : currentStep === 'import'
-                      ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                }`}>
+                      ? 'text-cyan-600 dark:text-cyan-400'
+                      : 'text-slate-400 dark:text-slate-500'
+                }`}
+              >
+                <div
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium ${
+                    result && result.imported > 0
+                      ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
+                      : currentStep === 'import'
+                        ? 'bg-cyan-100 dark:bg-cyan-900/50 text-cyan-700 dark:text-cyan-300'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                  }`}
+                >
                   {result && result.imported > 0 ? <Check className="h-3.5 w-3.5" /> : '3'}
                 </div>
                 <span className="text-sm font-medium">Import</span>
@@ -427,12 +472,16 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full bg-slate-400" />
-                      <span className="text-muted-foreground">{preview.summary.existingCount} existing</span>
+                      <span className="text-muted-foreground">
+                        {preview.summary.existingCount} existing
+                      </span>
                     </div>
                     {preview.summary.blockedCount > 0 && (
                       <div className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full bg-rose-500" />
-                        <span className="text-muted-foreground">{preview.summary.blockedCount} blocked</span>
+                        <span className="text-muted-foreground">
+                          {preview.summary.blockedCount} blocked
+                        </span>
                       </div>
                     )}
                   </div>
@@ -487,7 +536,13 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                 variant="ghost"
                 size="sm"
                 onClick={selectAllNew}
-                disabled={!preview || importing || validating || loadingPreview || selectableItems.length === 0}
+                disabled={
+                  !preview ||
+                  importing ||
+                  validating ||
+                  loadingPreview ||
+                  selectableItems.length === 0
+                }
                 className="text-muted-foreground"
               >
                 Select all
@@ -517,12 +572,23 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                       <input
                         type="checkbox"
                         className="h-4 w-4 rounded border-slate-300 accent-cyan-600"
-                        checked={selectableItems.length > 0 && selectableItems.every(item => item.skuCode && selectedSkuCodes.has(item.skuCode.toUpperCase()))}
+                        checked={
+                          selectableItems.length > 0 &&
+                          selectableItems.every(
+                            item => item.skuCode && selectedSkuCodes.has(item.skuCode.toUpperCase())
+                          )
+                        }
                         onChange={e => {
                           if (e.target.checked) selectAllNew()
                           else clearSelection()
                         }}
-                        disabled={!preview || importing || validating || loadingPreview || selectableItems.length === 0}
+                        disabled={
+                          !preview ||
+                          importing ||
+                          validating ||
+                          loadingPreview ||
+                          selectableItems.length === 0
+                        }
                       />
                     </th>
                     <th className="px-4 py-3 w-[180px]">SKU</th>
@@ -574,7 +640,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   ) : (
                     filteredItems.map(item => {
                       const skuKey = item.skuCode?.toUpperCase() ?? null
-                      const isSelectable = Boolean(skuKey) && (item.status === 'new' || item.status === 'existing')
+                      const isSelectable =
+                        Boolean(skuKey) && (item.status === 'new' || item.status === 'existing')
                       const checked = skuKey ? selectedSkuCodes.has(skuKey) : false
                       const validationDetail = skuKey ? validationBySku.get(skuKey) : undefined
                       const validationStatus = validationDetail?.status
@@ -609,12 +676,17 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                           </td>
                           <td className="px-4 py-3">
                             <div className="font-medium text-foreground">{item.skuCode ?? '—'}</div>
-                            <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={item.sellerSku}>
+                            <div
+                              className="text-xs text-muted-foreground truncate max-w-[160px]"
+                              title={item.sellerSku}
+                            >
                               {item.sellerSku}
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <span className="font-mono text-xs text-muted-foreground">{item.asin ?? '—'}</span>
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {item.asin ?? '—'}
+                            </span>
                             {item.listingType === 'PARENT' && (
                               <div className="mt-0.5">
                                 <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300">
@@ -624,7 +696,10 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="text-foreground line-clamp-2 text-sm" title={item.title ?? undefined}>
+                            <div
+                              className="text-foreground line-clamp-2 text-sm"
+                              title={item.title ?? undefined}
+                            >
                               {item.title ?? '—'}
                             </div>
                             {isInvalid && validationDetail?.message && (
@@ -634,7 +709,9 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                               </div>
                             )}
                             {item.reason && !isInvalid && (
-                              <div className="mt-1 text-xs text-muted-foreground truncate">{item.reason}</div>
+                              <div className="mt-1 text-xs text-muted-foreground truncate">
+                                {item.reason}
+                              </div>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -667,11 +744,17 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
 
           {/* Import Results */}
           {result && (
-            <div className={`border-t px-6 py-4 ${result.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20'}`}>
+            <div
+              className={`border-t px-6 py-4 ${result.errors.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20' : 'bg-emerald-50 dark:bg-emerald-900/20'}`}
+            >
               <div className="flex items-start gap-3">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  result.errors.length > 0 ? 'bg-amber-100 dark:bg-amber-900/50' : 'bg-emerald-100 dark:bg-emerald-900/50'
-                }`}>
+                <div
+                  className={`flex h-8 w-8 items-center justify-center rounded-full ${
+                    result.errors.length > 0
+                      ? 'bg-amber-100 dark:bg-amber-900/50'
+                      : 'bg-emerald-100 dark:bg-emerald-900/50'
+                  }`}
+                >
                   {result.errors.length > 0 ? (
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   ) : (
@@ -680,7 +763,9 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                 </div>
                 <div className="flex-1">
                   <div className="font-medium text-foreground">
-                    {result.errors.length > 0 ? 'Import completed with warnings' : 'Import successful'}
+                    {result.errors.length > 0
+                      ? 'Import completed with warnings'
+                      : 'Import successful'}
                   </div>
                   <div className="mt-1 text-sm text-muted-foreground">
                     {result.imported} SKU{result.imported !== 1 ? 's' : ''} imported
@@ -689,10 +774,14 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                   {result.errors.length > 0 && (
                     <div className="mt-2 text-xs text-muted-foreground">
                       {result.errors.slice(0, 3).map((err, i) => (
-                        <div key={i} className="truncate">{err}</div>
+                        <div key={i} className="truncate">
+                          {err}
+                        </div>
                       ))}
                       {result.errors.length > 3 && (
-                        <div className="text-muted-foreground">+{result.errors.length - 3} more</div>
+                        <div className="text-muted-foreground">
+                          +{result.errors.length - 3} more
+                        </div>
                       )}
                     </div>
                   )}
@@ -706,7 +795,8 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
             <div className="text-sm text-muted-foreground">
               {selectedSkuCodes.size > 0 ? (
                 <span>
-                  <span className="font-semibold text-foreground">{selectedSkuCodes.size}</span> selected
+                  <span className="font-semibold text-foreground">{selectedSkuCodes.size}</span>{' '}
+                  selected
                   {validation && validatedKey === selectionKey && validCount > 0 && (
                     <span className="ml-2 text-emerald-600 dark:text-emerald-400">
                       ({validCount} ready to import)
@@ -746,20 +836,14 @@ export function AmazonImportButton({ onImportComplete }: { onImportComplete?: ()
                 </Button>
               ) : null}
 
-              <Button
-                onClick={handleImport}
-                disabled={!canImport}
-                className="gap-2 min-w-[120px]"
-              >
+              <Button onClick={handleImport} disabled={!canImport} className="gap-2 min-w-[120px]">
                 {importing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Importing...
                   </>
                 ) : (
-                  <>
-                    Import{canImport ? ` (${validCount})` : ''}
-                  </>
+                  <>Import{canImport ? ` (${validCount})` : ''}</>
                 )}
               </Button>
             </div>

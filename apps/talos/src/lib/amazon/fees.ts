@@ -15,9 +15,35 @@ export type AmazonProductFeesParseResult = {
   feeBreakdown: Array<{ feeType: string; amount: number | null; currencyCode: string | null }>
 }
 
+export const US_SIZE_TIER_OPTIONS = [
+  'Small Standard-Size',
+  'Large Standard-Size',
+  'Small Bulky',
+  'Large Bulky',
+  'Extra-Large 0 to 50 lb',
+  'Extra-Large 50+ to 70 lb',
+  'Extra-Large 70+ to 150 lb',
+  'Extra-Large 150+ lb',
+  'Overmax 0 to 150 lb',
+  'Small and Light',
+] as const
+
+export const UK_SIZE_TIER_OPTIONS = ukFees.UK_SIZE_TIER_DEFINITIONS_2026.map(entry => entry.tier)
+
 export function getMarketplaceCurrencyCode(tenantCode?: TenantCode): string {
   if (tenantCode === 'UK') return 'GBP'
   return 'USD'
+}
+
+export function getSizeTierOptionsForTenant(tenantCode: TenantCode): readonly string[] {
+  if (tenantCode === 'UK') return UK_SIZE_TIER_OPTIONS
+  return US_SIZE_TIER_OPTIONS
+}
+
+export function isAllowedSizeTierForTenant(tenantCode: TenantCode, sizeTier: string): boolean {
+  const trimmed = sizeTier.trim()
+  if (!trimmed) return false
+  return getSizeTierOptionsForTenant(tenantCode).includes(trimmed)
 }
 
 const REFERRAL_CATEGORY_ALIASES_2026 = new Map<string, string>([

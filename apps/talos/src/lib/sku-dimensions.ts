@@ -32,6 +32,14 @@ export function formatDimensionTripletCm(value: DimensionTriplet, decimals: numb
   )}`
 }
 
+export function sortDimensionTripletCm(value: DimensionTriplet): DimensionTriplet {
+  const sorted = [value.side1Cm, value.side2Cm, value.side3Cm].sort((a, b) => a - b)
+  const side1Cm = sorted[0]
+  const side2Cm = sorted[1]
+  const side3Cm = sorted[2]
+  return { side1Cm, side2Cm, side3Cm }
+}
+
 export function coerceFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null
   if (typeof value === 'number') {

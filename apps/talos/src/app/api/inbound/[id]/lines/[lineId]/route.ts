@@ -404,7 +404,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
       if (!sku.isActive) {
         return ApiResponses.badRequest(
-          `SKU ${sku.skuCode} is inactive. Reactivate it in Config → Products first.`
+          `SKU ${sku.skuCode} is inactive. Reactivate it in Amazon → SKU Info first.`
         )
       }
 
@@ -417,7 +417,7 @@ export const PATCH = withAuthAndParams(async (request: NextRequest, params, _ses
 
       if (!effectiveSkuGroup) {
         return ApiResponses.badRequest(
-          `SKU group is required for SKU ${sku.skuCode}. Set it in Config → Products before updating this line.`
+          `SKU group is required for SKU ${sku.skuCode}. Set it in Amazon → SKU Info before updating this line.`
         )
       }
 

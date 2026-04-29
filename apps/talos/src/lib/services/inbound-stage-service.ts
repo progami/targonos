@@ -18,10 +18,7 @@ import {
 import { NotFoundError, ValidationError, ConflictError } from '@/lib/api'
 import { canApproveStageTransition, hasPermission, isSuperAdmin } from './permission-service'
 import { auditLog } from '@/lib/security/audit-logger'
-import {
-  normalizeInboundCostCurrency,
-  INBOUND_BASE_CURRENCY,
-} from '@/lib/constants/cost-currency'
+import { normalizeInboundCostCurrency, INBOUND_BASE_CURRENCY } from '@/lib/constants/cost-currency'
 import { toPublicOrderNumber } from './inbound-utils'
 import {
   buildCommercialInvoiceReference,
@@ -1075,9 +1072,7 @@ async function validateTransitionGate(params: {
     ]
 
     for (const field of oceanFields) {
-      const value = resolveOrderString(
-        field.key as keyof StageTransitionInput & keyof InboundOrder
-      )
+      const value = resolveOrderString(field.key as keyof StageTransitionInput & keyof InboundOrder)
       if (!value) {
         recordGateIssue(issues, field.issueKey, `${field.label} is required`)
       }
@@ -1602,7 +1597,7 @@ export async function createInboundOrder(
     for (const skuRecord of skus) {
       if (typeof skuRecord.skuGroup !== 'string' || skuRecord.skuGroup.trim().length === 0) {
         throw new ValidationError(
-          `SKU ${skuRecord.skuCode} is missing SKU group. Set SKU group in Config → Products before creating this Inbound.`
+          `SKU ${skuRecord.skuCode} is missing SKU group. Set SKU group in Amazon → SKU Info before creating this Inbound.`
         )
       }
       skuGroups.add(normalizeSkuGroup(skuRecord.skuGroup))
@@ -2137,9 +2132,7 @@ export async function transitionInboundOrderStage(
       allocationsByLineId.set(lineId, shipNowCartons)
     }
 
-    const activeLines = order.lines.filter(
-      line => line.status !== InboundOrderLineStatus.CANCELLED
-    )
+    const activeLines = order.lines.filter(line => line.status !== InboundOrderLineStatus.CANCELLED)
 
     const shippingLineUpdates: Array<{
       lineId: string
