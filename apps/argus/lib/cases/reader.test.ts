@@ -4,7 +4,10 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import {
+  isCaseReportDate,
+  isCaseReportMarketSlug,
   parseCaseReportSnapshotJson,
+  readCaseReportMarketLabel,
   readCaseReportBundleFromCaseRoot,
 } from './reader-core'
 
@@ -91,6 +94,18 @@ test('parseCaseReportSnapshotJson extracts entity sections and case rows', () =>
   assert.equal(report.sections[0]?.rows[0]?.nextStep, 'Reply from the primary inbox.')
   assert.equal(report.sections[1]?.entity, 'NIGS LTD')
   assert.equal(report.sections[1]?.rows[0]?.issue, 'Weights and dimensions review')
+})
+
+test('case report route helpers identify supported markets and report dates', () => {
+  assert.equal(isCaseReportMarketSlug('us'), true)
+  assert.equal(isCaseReportMarketSlug('uk'), true)
+  assert.equal(isCaseReportMarketSlug('usa'), false)
+  assert.equal(isCaseReportMarketSlug(''), false)
+  assert.equal(readCaseReportMarketLabel('us'), 'USA - Dust Sheets')
+  assert.equal(readCaseReportMarketLabel('uk'), 'UK - Dust Sheets')
+  assert.equal(isCaseReportDate('2026-04-29'), true)
+  assert.equal(isCaseReportDate('2026-4-29'), false)
+  assert.equal(isCaseReportDate('current'), false)
 })
 
 test('parseCaseReportSnapshotJson normalizes looping rows to Watching', () => {
