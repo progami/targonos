@@ -20,3 +20,11 @@ test('case market pages keep supported-market data load failures out of Next 404
   assert.doesNotMatch(datedMarketSource, /try\s*\{/)
   assert.doesNotMatch(datedMarketSource, /catch\s*\{\s*notFound\(\)\s*;?\s*\}/)
 })
+
+test('case unavailable page is a client component because MUI receives sx functions', () => {
+  const unavailablePageSource = readRouteSource(
+    '../../../components/cases/cases-unavailable-page.tsx',
+  )
+
+  assert.match(unavailablePageSource, /^'use client'\n/)
+})
