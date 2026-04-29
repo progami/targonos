@@ -28,6 +28,7 @@ import {
 } from '@/components/sheet-toolbar';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
+import { comparePurchaseOrderCodes } from '@/lib/purchase-order-ordering';
 
 export type POStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'CANCELLED';
 
@@ -347,7 +348,8 @@ export function POProfitabilitySection({
       return [...result].sort((a, b) => {
         const dateA = a.availableDate ? new Date(a.availableDate).getTime() : 0;
         const dateB = b.availableDate ? new Date(b.availableDate).getTime() : 0;
-        return dateA - dateB;
+        if (dateA !== dateB) return dateA - dateB;
+        return comparePurchaseOrderCodes(a.orderCode, b.orderCode);
       });
     }
 
@@ -394,7 +396,8 @@ export function POProfitabilitySection({
     return Array.from(poMap.values()).sort((a, b) => {
       const dateA = a.availableDate ? new Date(a.availableDate).getTime() : 0;
       const dateB = b.availableDate ? new Date(b.availableDate).getTime() : 0;
-      return dateA - dateB;
+      if (dateA !== dateB) return dateA - dateB;
+      return comparePurchaseOrderCodes(a.orderCode, b.orderCode);
     });
   }, [data, statusFilter, skuFilter]);
 
@@ -428,19 +431,26 @@ export function POProfitabilitySection({
   const locale = localeForRegion(strategyRegion);
   const currency = currencyForRegion(strategyRegion);
 
+  const normalizeDisplayNumber = (value: number) => {
+    const roundedZero = Math.abs(value) < 0.0000001 ? 0 : value;
+    return Object.is(roundedZero, -0) ? 0 : roundedZero;
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       maximumFractionDigits: valueDisplay === 'PER_UNIT' ? 2 : 0,
-    }).format(value);
+    }).format(normalizeDisplayNumber(value));
   };
 
-  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const formatPercent = (value: number) => `${normalizeDisplayNumber(value).toFixed(1)}%`;
+  const formatUnits = (value: number) => normalizeDisplayNumber(Math.round(value)).toLocaleString();
   const formatMoney = (value: number, units: number) => {
+    const normalizedUnits = normalizeDisplayNumber(units);
     if (valueDisplay === 'PER_UNIT') {
-      if (!units) return formatCurrency(0);
-      return formatCurrency(value / units);
+      if (normalizedUnits === 0) return formatCurrency(0);
+      return formatCurrency(value / normalizedUnits);
     }
     return formatCurrency(value);
   };
@@ -510,7 +520,7 @@ export function POProfitabilitySection({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No purchase orders available for analysis.
+            No {mode === 'REAL' ? 'real' : 'projected'} PO profitability rows available.
           </p>
         </CardContent>
       </Card>
@@ -822,11 +832,11 @@ export function POProfitabilitySection({
                         key={row.id}
                         className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-slate-200"
                       >
-                        {row.units.toLocaleString()}
+                        {formatUnits(row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/30">
-                      {summary.totalUnits.toLocaleString()}
+                      {formatUnits(summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
