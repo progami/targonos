@@ -15,6 +15,7 @@ import {
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
 import WprWeekSelect from '@/components/wpr/wpr-week-select'
+import { formatAsinDisplayName } from '@/lib/product-labels'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -221,7 +222,7 @@ export default function BusinessReportsSelectionTable({
                   </TableCell>
                   <MetricCell
                     align="left"
-                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${currentRecord === null ? 0 : 1} / 1 weeks`}
+                    value={`${formatAsinDisplayName(row)}\n${row.asin} · ${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${currentRecord === null ? 0 : 1} / 1 weeks`}
                   />
                   <MetricCell align="right" value={formatCount(currentRecord === null ? 0 : 1)} />
                   <MetricCell align="right" value={sessionsValue} />

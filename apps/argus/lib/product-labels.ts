@@ -1,3 +1,5 @@
+import asinLabels from './asin-labels.json'
+
 export interface ProductLabelSource {
   asin: string
   label?: string | null
@@ -14,10 +16,22 @@ export interface AmazonTitleLabelSource {
   title?: string | null
 }
 
+export const KNOWN_ASIN_LABELS: Record<string, string> = asinLabels
+
 function clean(value: string | null | undefined): string {
   if (value === null) return ''
   if (value === undefined) return ''
   return value.trim()
+}
+
+function normalizeAsin(value: string): string {
+  return value.trim().toUpperCase()
+}
+
+function knownAsinLabel(asin: string): string {
+  const label = KNOWN_ASIN_LABELS[asin]
+  if (label !== undefined) return label
+  return ''
 }
 
 function firstText(values: Array<string | null | undefined>): string {
@@ -51,7 +65,7 @@ function limitWords(text: string, maxWords: number): string {
 }
 
 export function formatProductLabel(source: ProductLabelSource): string {
-  const asin = source.asin.trim().toUpperCase()
+  const asin = normalizeAsin(source.asin)
   const label = clean(source.label)
   if (label.length > 0 && label.toUpperCase() !== asin) return label
 
@@ -68,7 +82,7 @@ export function formatProductLabel(source: ProductLabelSource): string {
 }
 
 export function formatAmazonTitleLabel(source: AmazonTitleLabelSource): string {
-  const asin = source.asin.trim().toUpperCase()
+  const asin = normalizeAsin(source.asin)
   const title = clean(source.title)
   if (title.length === 0) return asin
 
@@ -77,4 +91,22 @@ export function formatAmazonTitleLabel(source: AmazonTitleLabelSource): string {
   const titleLabel = limitWords(titleWithoutBrand, 6)
   if (titleLabel.length === 0) return brand
   return titleLabel
+}
+
+export function formatAsinDisplayName(source: ProductLabelSource): string {
+  const asin = normalizeAsin(source.asin)
+  const label = formatProductLabel(source)
+  if (label !== asin) return label
+
+  const asinLabel = knownAsinLabel(asin)
+  if (asinLabel.length > 0) return asinLabel
+
+  return asin
+}
+
+export function formatAsinReference(asinValue: string): string {
+  const asin = normalizeAsin(asinValue)
+  const displayName = formatAsinDisplayName({ asin })
+  if (displayName === asin) return asin
+  return `${displayName} (${asin})`
 }

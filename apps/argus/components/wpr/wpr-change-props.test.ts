@@ -247,3 +247,15 @@ test('SQP header bulk select uses every selectable root and term', () => {
     /const handleSelectAll = \(\) => \{[\s\S]*defaultSqpRootIds\(bundle\)/,
   )
 })
+
+test('WPR ASIN surfaces render readable ASIN labels with raw ASIN traceability', () => {
+  const scpSelectionSource = readFileSync(new URL('./tabs/scp-selection-table.tsx', import.meta.url), 'utf8')
+  const brSelectionSource = readFileSync(new URL('./tabs/business-reports-selection-table.tsx', import.meta.url), 'utf8')
+  const changelogSource = readFileSync(new URL('./change-timeline.tsx', import.meta.url), 'utf8')
+
+  assert.match(scpSelectionSource, /formatAsinDisplayName\(row\)/)
+  assert.match(scpSelectionSource, /\$\{row\.asin\}/)
+  assert.match(brSelectionSource, /formatAsinDisplayName\(row\)/)
+  assert.match(brSelectionSource, /\$\{row\.asin\}/)
+  assert.match(changelogSource, /formatAsinReference/)
+})
