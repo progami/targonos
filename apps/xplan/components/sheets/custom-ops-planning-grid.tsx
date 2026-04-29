@@ -47,16 +47,9 @@ export type OpsInputRow = {
   containerNumber: string;
   productName: string;
   quantity: string;
-  unitsPerCarton: string;
-  carton: string;
-  cartonSide1Cm: string;
-  cartonSide2Cm: string;
-  cartonSide3Cm: string;
-  cbm: string;
-  poTotalQty: string;
-  poFirstRow: string;
   notes: string;
   region: string;
+  sourceType?: string;
   pay1Date: string;
   productionWeeks: string;
   sourceWeeks: string;
@@ -109,14 +102,6 @@ const STAGE_OVERRIDE_FIELDS: Record<StageWeeksKey, StageOverrideKey> = STAGE_CON
 
 const NUMERIC_PRECISION: Partial<Record<keyof OpsInputRow, number>> = {
   quantity: 0,
-  unitsPerCarton: 0,
-  carton: 0,
-  cartonSide1Cm: 2,
-  cartonSide2Cm: 2,
-  cartonSide3Cm: 2,
-  cbm: 3,
-  poTotalQty: 0,
-  poFirstRow: 0,
   productionWeeks: 2,
   sourceWeeks: 2,
   oceanWeeks: 2,
@@ -133,14 +118,6 @@ const NUMERIC_PRECISION: Partial<Record<keyof OpsInputRow, number>> = {
 
 const NUMERIC_FIELDS = new Set<keyof OpsInputRow>([
   'quantity',
-  'unitsPerCarton',
-  'carton',
-  'cartonSide1Cm',
-  'cartonSide2Cm',
-  'cartonSide3Cm',
-  'cbm',
-  'poTotalQty',
-  'poFirstRow',
   'productionWeeks',
   'sourceWeeks',
   'oceanWeeks',
@@ -450,46 +427,10 @@ function formatPurchaseOrderStatus(value: string): string {
 }
 
 const COLUMNS: ColumnDef[] = [
+  { key: 'region', header: 'REGION', width: 95, type: 'text', editable: false },
   { key: 'orderCode', header: 'PO CODE', width: 150, type: 'text', editable: true },
-  { key: 'productName', header: 'PRODUCT', width: 180, type: 'text', editable: false },
-  { key: 'quantity', header: 'QTY', width: 95, type: 'numeric', editable: true, precision: 0 },
-  {
-    key: 'unitsPerCarton',
-    header: 'UNITS/CTN',
-    width: 110,
-    type: 'numeric',
-    editable: false,
-    precision: 0,
-  },
-  { key: 'carton', header: 'CARTON', width: 95, type: 'numeric', editable: false, precision: 0 },
-  {
-    key: 'cartonSide1Cm',
-    header: 'CTN L (CM)',
-    width: 115,
-    type: 'numeric',
-    editable: false,
-    precision: 2,
-  },
-  {
-    key: 'cartonSide2Cm',
-    header: 'CTN W (CM)',
-    width: 115,
-    type: 'numeric',
-    editable: false,
-    precision: 2,
-  },
-  {
-    key: 'cartonSide3Cm',
-    header: 'CTN H (CM)',
-    width: 115,
-    type: 'numeric',
-    editable: false,
-    precision: 2,
-  },
-  { key: 'cbm', header: 'CBM', width: 95, type: 'numeric', editable: false, precision: 3 },
+  { key: 'quantity', header: 'QTY', width: 95, type: 'numeric', editable: false, precision: 0 },
   { key: 'productionStart', header: 'MFG START', width: 130, type: 'date', editable: true },
-  { key: 'shipName', header: 'SHIP', width: 160, type: 'text', editable: true },
-  { key: 'containerNumber', header: 'CONTAINER #', width: 160, type: 'text', editable: true },
   {
     key: 'status',
     header: 'STATUS',
@@ -498,79 +439,16 @@ const COLUMNS: ColumnDef[] = [
     editable: true,
     options: PURCHASE_ORDER_STATUS_OPTIONS,
   },
-  { key: 'poClass', header: 'PO CLASS', width: 140, type: 'text', editable: true },
-  {
-    key: 'productionWeeks',
-    header: 'MFG (WK)',
-    headerWeeks: 'MFG (WK)',
-    headerDates: 'Mfg Done',
-    width: 130,
-    type: 'stage',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'sourceWeeks',
-    header: 'DEPART (WK)',
-    headerWeeks: 'DEPART (WK)',
-    headerDates: 'Departure',
-    width: 130,
-    type: 'stage',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'oceanWeeks',
-    header: 'ARRIVAL (WK)',
-    headerWeeks: 'ARRIVAL (WK)',
-    headerDates: 'Port Arrival',
-    width: 130,
-    type: 'stage',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'finalWeeks',
-    header: 'WH (WK)',
-    headerWeeks: 'WH (WK)',
-    headerDates: 'Warehouse',
-    width: 130,
-    type: 'stage',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'inboundWeekOverride',
-    header: 'INBOUND WK OVERRIDE',
-    width: 170,
-    type: 'date',
-    editable: true,
-  },
+  { key: 'shipName', header: 'SHIP', width: 150, type: 'text', editable: true },
+  { key: 'containerNumber', header: 'TRANSPORT REF', width: 160, type: 'text', editable: true },
   {
     key: 'inboundWeek',
-    header: 'INBOUND WK',
+    header: 'INBOUND WEEK',
     width: 130,
     type: 'date',
     editable: false,
   },
-  {
-    key: 'poTotalQty',
-    header: 'PO TOTAL QTY',
-    width: 130,
-    type: 'numeric',
-    editable: false,
-    precision: 0,
-  },
-  { key: 'notes', header: 'NOTES', width: 190, type: 'text', editable: true },
-  {
-    key: 'poFirstRow',
-    header: 'PO FIRST ROW',
-    width: 135,
-    type: 'numeric',
-    editable: false,
-    precision: 0,
-  },
-  { key: 'region', header: 'REGION', width: 95, type: 'text', editable: false },
+  { key: 'sourceType', header: 'SOURCE', width: 120, type: 'text', editable: false },
 ];
 
 // StageMode imported from @/stores
@@ -2321,7 +2199,7 @@ export function CustomOpsPlanningGrid({
       <TableHead
         key={column.key}
         style={{ minWidth: column.width }}
-        className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
+        className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-3 py-2 text-left text-xs font-semibold text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
       >
         {isStageColumn ? (
           <button
