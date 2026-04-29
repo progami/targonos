@@ -62,7 +62,7 @@ export function WprSelectionPanel({
         {toolbar}
       </Box>
 
-      <TableContainer sx={{ maxHeight: tableMaxHeight }}>{children}</TableContainer>
+      <TableContainer sx={{ maxHeight: tableMaxHeight, overflowX: 'auto' }}>{children}</TableContainer>
     </Box>
   )
 }

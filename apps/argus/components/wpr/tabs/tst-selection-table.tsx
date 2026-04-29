@@ -57,22 +57,27 @@ type Recommendation = {
 type TstColumn = {
   key: TstSortKey
   label: string
+  width: number
 }
 
+const TST_CHECKBOX_COLUMN_WIDTH = 48
+
 const TST_COLUMNS: TstColumn[] = [
-  { key: 'term', label: 'Term' },
-  { key: 'search_frequency_rank', label: 'SFR' },
-  { key: 'weeks_present', label: 'Weeks' },
-  { key: 'our_click_share', label: 'Our Click %' },
-  { key: 'competitor_click_share', label: 'Comp Click %' },
-  { key: 'click_gap', label: 'Click Gap' },
-  { key: 'our_purchase_share', label: 'Our Purch %' },
-  { key: 'competitor_purchase_share', label: 'Comp Purch %' },
-  { key: 'purchase_gap', label: 'Purch Gap' },
-  { key: 'issue', label: 'Issue' },
-  { key: 'priority', label: 'Priority' },
-  { key: 'tst_pool', label: 'TST Pool' },
+  { key: 'term', label: 'Term', width: 300 },
+  { key: 'search_frequency_rank', label: 'SFR', width: 50 },
+  { key: 'weeks_present', label: 'Wks', width: 48 },
+  { key: 'our_click_share', label: 'Our Clk', width: 62 },
+  { key: 'competitor_click_share', label: 'Comp Clk', width: 68 },
+  { key: 'click_gap', label: 'Clk Gap', width: 62 },
+  { key: 'our_purchase_share', label: 'Our Purch', width: 62 },
+  { key: 'competitor_purchase_share', label: 'Comp Purch', width: 68 },
+  { key: 'purchase_gap', label: 'Purch Gap', width: 62 },
+  { key: 'issue', label: 'Issue', width: 104 },
+  { key: 'priority', label: 'Prio', width: 72 },
+  { key: 'tst_pool', label: 'Pool', width: 74 },
 ]
+
+const TST_TABLE_WIDTH = TST_CHECKBOX_COLUMN_WIDTH + TST_COLUMNS.reduce((total, column) => total + column.width, 0)
 
 function toTstSortKey(value: string): TstSortKey {
   if (
@@ -380,6 +385,53 @@ function formatPctDelta(value: number): string {
   return `${sign}${formatPercent(value, 1)}`
 }
 
+function rootCoverageSummary(row: TstSelectionRootRow): string {
+  return `${row.coveredTermCount} / ${row.sqpTermCount} SQP terms covered · ${formatPercent(row.coverageRate, 1)}`
+}
+
+function selectedRootCount(viewModel: TstSelectionViewModel): number {
+  if (viewModel.rootIds.length > 0) {
+    return viewModel.rootIds.length
+  }
+
+  return viewModel.rootRows.length
+}
+
+function panelCoverageSummary(viewModel: TstSelectionViewModel): string {
+  return `${selectedRootCount(viewModel)} roots · ${viewModel.coveredTermCount} / ${viewModel.sqpTermCount} SQP terms covered · ${formatPercent(viewModel.coverageRate, 1)}`
+}
+
+function headerCellSx(width: number) {
+  return {
+    ...wprSelectionHeaderCellSx,
+    width,
+    px: 1,
+    py: 1.1,
+    fontSize: '0.67rem',
+    lineHeight: 1.18,
+    verticalAlign: 'middle',
+    overflow: 'hidden',
+  }
+}
+
+function sortLabelSx(align: 'left' | 'right') {
+  return {
+    width: '100%',
+    minWidth: 0,
+    justifyContent: align === 'left' ? 'flex-start' : 'flex-end',
+    color: textSecondary,
+    textAlign: align,
+    whiteSpace: 'normal',
+    wordBreak: 'normal',
+    lineHeight: 1.15,
+    '& .MuiTableSortLabel-icon': {
+      color: 'rgba(255,255,255,0.4) !important',
+      flexShrink: 0,
+      mx: 0.25,
+    },
+  }
+}
+
 function Pill({
   label,
   kind,
@@ -409,6 +461,8 @@ function Pill({
     background = 'rgba(52,211,153,0.1)'
   }
 
+  const visibleLabel = compactRecommendationLabel(label)
+
   return (
     <Box
       component="span"
@@ -421,20 +475,37 @@ function Pill({
         border: `1px solid ${borderColor}`,
         bgcolor: background,
         color,
+        display: 'inline-block',
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        verticalAlign: 'middle',
         whiteSpace: 'nowrap',
       }}
     >
-      {label}
+      {visibleLabel}
     </Box>
   )
+}
+
+function compactRecommendationLabel(label: string): string {
+  if (label === 'Low Confidence') return 'Low conf.'
+  if (label === 'Visibility / Traffic + Conversion / PDP') return 'Traffic + PDP'
+  if (label === 'Visibility / Traffic') return 'Traffic'
+  if (label === 'Conversion / PDP') return 'PDP'
+  if (label === 'Winning / Defend') return 'Defend'
+
+  return label
 }
 
 function MetricCell({
   align = 'right',
   children,
+  wrap = false,
 }: {
   align?: 'left' | 'right' | 'center'
   children: React.ReactNode
+  wrap?: boolean
 }) {
   return (
     <TableCell
@@ -442,6 +513,13 @@ function MetricCell({
       sx={{
         ...wprSelectionMetricCellSx,
         color: textSecondary,
+        px: 1,
+        py: 1.05,
+        lineHeight: 1.25,
+        whiteSpace: wrap ? 'normal' : 'nowrap',
+        overflow: wrap ? 'visible' : 'hidden',
+        textOverflow: wrap ? 'clip' : 'ellipsis',
+        verticalAlign: 'middle',
       }}
     >
       {children}
@@ -449,11 +527,27 @@ function MetricCell({
   )
 }
 
+function PoolCell({
+  clickShare,
+  purchaseShare,
+}: {
+  clickShare: number
+  purchaseShare: number
+}) {
+  return (
+    <MetricCell wrap>
+      <Stack spacing={0} sx={{ alignItems: 'flex-end', lineHeight: 1.2 }}>
+        <Box component="span">{`C ${formatPercent(clickShare, 1)}`}</Box>
+        <Box component="span">{`P ${formatPercent(purchaseShare, 1)}`}</Box>
+      </Stack>
+    </MetricCell>
+  )
+}
+
 export default function TstSelectionTable({
   selectedWeek,
   weeks,
   weekStartDates,
-  competitorBrand,
   familyOrder,
   viewModel,
   expandedRootIds,
@@ -490,11 +584,11 @@ export default function TstSelectionTable({
 
   const columns = TST_COLUMNS.map((column) => {
     if (column.key === 'competitor_click_share') {
-      return { ...column, label: `${competitorBrand} Click %` }
+      return { ...column, label: 'Comp Clk' }
     }
 
     if (column.key === 'competitor_purchase_share') {
-      return { ...column, label: `${competitorBrand} Purch %` }
+      return { ...column, label: 'Comp Purch' }
     }
 
     return column
@@ -503,7 +597,7 @@ export default function TstSelectionTable({
   return (
     <WprSelectionPanel
       title="TST Selection"
-      summary={`${viewModel.rootIds.length} roots · ${viewModel.selectedTermIds.length} terms`}
+      summary={panelCoverageSummary(viewModel)}
       toolbar={(
         <WprWeekSelect
           label="Table week"
@@ -514,10 +608,16 @@ export default function TstSelectionTable({
         />
       )}
     >
-        <Table stickyHeader size="small" sx={{ minWidth: 1320 }}>
+        <Table stickyHeader size="small" sx={{ minWidth: TST_TABLE_WIDTH, tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: TST_CHECKBOX_COLUMN_WIDTH }} />
+            {columns.map((column) => (
+              <col key={column.key} style={{ width: column.width }} />
+            ))}
+          </colgroup>
           <TableHead>
             <TableRow>
-              <TableCell padding="checkbox" sx={wprSelectionHeaderCellSx}>
+              <TableCell padding="checkbox" sx={headerCellSx(TST_CHECKBOX_COLUMN_WIDTH)}>
                 <Checkbox
                   size="small"
                   checked={allTermsChecked}
@@ -536,7 +636,7 @@ export default function TstSelectionTable({
                 <TableCell
                   key={column.key}
                   align={column.key === 'term' ? 'left' : 'right'}
-                  sx={wprSelectionHeaderCellSx}
+                  sx={headerCellSx(column.width)}
                 >
                   <TableSortLabel
                     active={sortState.key === column.key}
@@ -547,12 +647,7 @@ export default function TstSelectionTable({
                         dir: nextSortDirection(sortState, column.key),
                       })
                     }}
-                    sx={{
-                      color: textSecondary,
-                      '& .MuiTableSortLabel-icon': {
-                        color: 'rgba(255,255,255,0.4) !important',
-                      },
-                    }}
+                    sx={sortLabelSx(column.key === 'term' ? 'left' : 'right')}
                   >
                     {column.label}
                   </TableSortLabel>
@@ -625,8 +720,8 @@ export default function TstSelectionTable({
                               }}
                             />
                           </TableCell>
-                          <MetricCell align="left">
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                          <MetricCell align="left" wrap>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                               <Box
                                 component="button"
                                 type="button"
@@ -635,9 +730,10 @@ export default function TstSelectionTable({
                                   onToggleExpanded(row.id)
                                 }}
                                 sx={{
-                                  mt: 0.35,
                                   width: 22,
+                                  minWidth: 22,
                                   height: 22,
+                                  flexShrink: 0,
                                   borderRadius: '50%',
                                   border: '1px solid rgba(255,255,255,0.12)',
                                   bgcolor: 'rgba(255,255,255,0.03)',
@@ -649,12 +745,12 @@ export default function TstSelectionTable({
                               >
                                 {rowIsExpanded ? '▾' : '▸'}
                               </Box>
-                              <Stack spacing={0.25}>
-                                <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+                              <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                                <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color: 'rgba(255,255,255,0.9)', lineHeight: 1.18 }}>
                                   {row.label}
                                 </Typography>
-                                <Typography sx={{ fontSize: '0.68rem', color: textMuted }}>
-                                  {`${row.selectedCount} / ${row.totalCount} terms selected`}
+                                <Typography sx={{ fontSize: '0.68rem', color: textMuted, lineHeight: 1.18, whiteSpace: 'nowrap' }}>
+                                  {rootCoverageSummary(row)}
                                 </Typography>
                               </Stack>
                             </Box>
@@ -673,9 +769,10 @@ export default function TstSelectionTable({
                           <MetricCell align="center">
                             <Pill label={recommendation.priority} kind={recommendation.priority_class} />
                           </MetricCell>
-                          <MetricCell>
-                            {`${formatPercent(row.current.coverage.avg_click_pool_share, 1)} click · ${formatPercent(row.current.coverage.avg_purchase_pool_share, 1)} purch`}
-                          </MetricCell>
+                          <PoolCell
+                            clickShare={row.current.coverage.avg_click_pool_share}
+                            purchaseShare={row.current.coverage.avg_purchase_pool_share}
+                          />
                         </TableRow>
 
                         {rowIsExpanded
@@ -705,9 +802,9 @@ export default function TstSelectionTable({
                                       }}
                                     />
                                   </TableCell>
-                                  <MetricCell align="left">
+                                  <MetricCell align="left" wrap>
                                     <Box sx={{ pl: 4 }}>
-                                      <Typography sx={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.84)' }}>
+                                      <Typography sx={{ fontSize: '0.74rem', color: 'rgba(255,255,255,0.84)', lineHeight: 1.2 }}>
                                         {termRow.label}
                                       </Typography>
                                     </Box>
@@ -728,9 +825,10 @@ export default function TstSelectionTable({
                                   <MetricCell align="center">
                                     <Pill label={termRecommendation.priority} kind={termRecommendation.priority_class} />
                                   </MetricCell>
-                                  <MetricCell>
-                                    {`${formatPercent(termRow.current.avg_click_pool_share, 1)} click · ${formatPercent(termRow.current.avg_purchase_pool_share, 1)} purch`}
-                                  </MetricCell>
+                                  <PoolCell
+                                    clickShare={termRow.current.avg_click_pool_share}
+                                    purchaseShare={termRow.current.avg_purchase_pool_share}
+                                  />
                                 </TableRow>
                               )
                             })
