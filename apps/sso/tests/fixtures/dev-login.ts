@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test'
 import { encode } from 'next-auth/jwt'
 
 export const portalBaseUrl = 'http://127.0.0.1:3320'
-export const talosBaseUrl = 'http://localhost:3321/operations/purchase-orders'
+export const talosBaseUrl = 'http://localhost:3321/operations/inbound'
 export const demoEmail = 'e2e@targonglobal.com'
 export const sessionCookieName = 'targon.next-auth.session-token'
 const portalAuthSecret = 'playwright-portal-auth-secret-000000000000'

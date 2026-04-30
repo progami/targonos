@@ -17,7 +17,7 @@ const sampleData: Record<string, unknown[]> = {
  'Warehouse': 'MAIN',
  'SKU Code': 'SKU001',
  'Lot': 'Lot-1-PDS-SKU001',
- 'Reference': 'PO-12345',
+ 'Reference': 'IN-12345',
  'Cartons In': 100,
  'Cartons Out': 0,
  'Storage Pallets In': 4,

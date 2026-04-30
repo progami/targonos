@@ -1,6 +1,9 @@
-import { calculateSizeTierForTenant } from '@/lib/amazon/fees'
 import { LB_PER_KG } from '@/lib/measurements'
-import { resolveDimensionTripletCm } from '@/lib/sku-dimensions'
+import {
+  formatDimensionTripletCm,
+  resolveDimensionTripletCm,
+  sortDimensionTripletCm,
+} from '@/lib/sku-dimensions'
 import type { TenantCode } from '@/lib/tenant/constants'
 
 export type AlertStatus =
@@ -9,7 +12,7 @@ export type AlertStatus =
   | 'MISMATCH'
   | 'NO_ASIN'
   | 'MISSING_REFERENCE'
-  | 'ERROR'
+  | 'MISSING_AMAZON'
 
 type DecimalLike = { toString(): string }
 type ApiNumberValue = number | string | DecimalLike | null
@@ -20,9 +23,7 @@ export type ApiSkuRow = {
   description: string
   asin: string | null
   category?: string | null
-  fbaFulfillmentFee: ApiNumberValue
-  amazonFbaFulfillmentFee: ApiNumberValue
-  amazonListingPrice: ApiNumberValue
+  sizeTier: string | null
   amazonSizeTier: string | null
   referenceItemPackageDimensionsCm: string | null
   referenceItemPackageSide1Cm: ApiNumberValue
@@ -47,7 +48,7 @@ export type ComparisonSkuSourceRow = {
   description: string
   asin: string | null
   category?: string | null
-  fbaFulfillmentFee: ApiNumberValue
+  sizeTier: string | null
   amazonSizeTier: string | null
   unitDimensionsCm: string | null
   unitSide1Cm: ApiNumberValue
@@ -80,38 +81,45 @@ export type Comparison = {
     triplet: DimensionTriplet | null
     shipping: ShippingWeights
     sizeTier: string | null
-    expectedFee: number | null
     missingFields: string[]
   }
   amazon: {
     triplet: DimensionTriplet | null
     shipping: ShippingWeights
     sizeTier: string | null
-    fee: number | null
     missingFields: string[]
   }
-  feeDifference: number | null
-  hasPhysicalMismatch: boolean
+  hasSizeTierMismatch: boolean
 }
 
-export type LiveAmazonFeeResult = {
-  fbaFees: number | null
+export type ComparisonSummaryCounts = {
+  mismatch: number
+  match: number
+  warning: number
+  pending: number
+}
+
+export type ComparisonSummaryItem = {
+  key: string
+  count: number
+  label: string
+}
+
+export const COMPARISON_WARNING_STATUSES = new Set<AlertStatus>([
+  'NO_ASIN',
+  'MISSING_REFERENCE',
+  'MISSING_AMAZON',
+])
+
+export type AmazonCatalogPackageData = {
+  packageTriplet: DimensionTriplet | null
+  packageWeightKg: number | null
   sizeTier: string | null
 }
-
-export type ComparisonRowHydratorDeps = {
-  loadListingPrice: (asin: string, tenantCode: TenantCode) => Promise<number | null>
-  loadAmazonFees: (sellerSku: string, listingPrice: number, tenantCode: TenantCode) => Promise<LiveAmazonFeeResult>
-}
-
-const DIMENSION_TOLERANCE_CM = 0.05
-const WEIGHT_TOLERANCE_KG = 0.005
 
 export function buildComparisonSkuRow(row: ComparisonSkuSourceRow): ApiSkuRow {
   return {
     ...row,
-    amazonListingPrice: null,
-    amazonFbaFulfillmentFee: null,
     referenceItemPackageDimensionsCm: row.unitDimensionsCm,
     referenceItemPackageSide1Cm: row.unitSide1Cm,
     referenceItemPackageSide2Cm: row.unitSide2Cm,
@@ -123,6 +131,31 @@ export function buildComparisonSkuRow(row: ComparisonSkuSourceRow): ApiSkuRow {
     amazonItemPackageSide3Cm: row.amazonItemPackageSide3Cm,
     amazonItemPackageWeightKg: row.amazonReferenceWeightKg,
   }
+}
+
+export function mergeAmazonCatalogPackageData(
+  row: ApiSkuRow,
+  catalogData: AmazonCatalogPackageData
+): ApiSkuRow {
+  const next: ApiSkuRow = { ...row }
+
+  if (catalogData.packageTriplet !== null) {
+    const packageTriplet = sortDimensionTripletCm(catalogData.packageTriplet)
+    next.amazonItemPackageDimensionsCm = formatDimensionTripletCm(packageTriplet)
+    next.amazonItemPackageSide1Cm = packageTriplet.side1Cm
+    next.amazonItemPackageSide2Cm = packageTriplet.side2Cm
+    next.amazonItemPackageSide3Cm = packageTriplet.side3Cm
+  }
+
+  if (catalogData.packageWeightKg !== null) {
+    next.amazonItemPackageWeightKg = catalogData.packageWeightKg
+  }
+
+  if (catalogData.sizeTier !== null) {
+    next.amazonSizeTier = catalogData.sizeTier
+  }
+
+  return next
 }
 
 export function parseDecimalNumber(value: unknown): number | null {
@@ -198,7 +231,9 @@ export function computeShippingWeights(
 
   const unitWeightLb = unitWeightKg === null ? null : unitWeightKg * LB_PER_KG
   const dimensionalWeightLb =
-    triplet === null ? null : computeDimensionalWeightLbWithMinWidthHeight(triplet, usesMinWidthHeight(sizeTier))
+    triplet === null
+      ? null
+      : computeDimensionalWeightLbWithMinWidthHeight(triplet, usesMinWidthHeight(sizeTier))
 
   let chargeableWeightLb: number | null = null
   let usesUnitOnly = false
@@ -247,58 +282,21 @@ export function computeShippingWeights(
   return { unitWeightKg, dimensionalWeightKg, shippingWeightKg }
 }
 
-function dimensionsMatch(reference: DimensionTriplet | null, amazon: DimensionTriplet | null): boolean {
-  if (reference === null || amazon === null) return true
-  const referenceSides = [reference.side1Cm, reference.side2Cm, reference.side3Cm].sort((a, b) => a - b)
-  const amazonSides = [amazon.side1Cm, amazon.side2Cm, amazon.side3Cm].sort((a, b) => a - b)
-  return referenceSides.every((referenceSide, index) => {
-    const amazonSide = amazonSides[index]
-    return Math.abs(referenceSide - amazonSide) <= DIMENSION_TOLERANCE_CM
-  })
-}
-
-function weightsMatch(reference: number | null, amazon: number | null): boolean {
-  if (reference === null || amazon === null) return true
-  return Math.abs(reference - amazon) <= WEIGHT_TOLERANCE_KG
-}
-
-function physicalMeasurementsMatch(params: {
-  referenceTriplet: DimensionTriplet | null
-  amazonTriplet: DimensionTriplet | null
-  referenceShipping: ShippingWeights
-  amazonShipping: ShippingWeights
-  referenceSizeTier: string | null
-  amazonSizeTier: string | null
-}): boolean {
-  if (!dimensionsMatch(params.referenceTriplet, params.amazonTriplet)) return false
-  if (!weightsMatch(params.referenceShipping.unitWeightKg, params.amazonShipping.unitWeightKg)) return false
-  if (!weightsMatch(params.referenceShipping.shippingWeightKg, params.amazonShipping.shippingWeightKg)) return false
-  if (params.referenceSizeTier !== params.amazonSizeTier) return false
-  return true
-}
-
-function resolveReferenceSizeTier(row: ApiSkuRow, tenantCode: TenantCode): {
+function resolveReferenceData(row: ApiSkuRow): {
   referenceTriplet: DimensionTriplet | null
   referenceWeightKg: number | null
   referenceSizeTier: string | null
 } {
-  const referenceTriplet = resolveDimensionTripletCm({
+  const rawReferenceTriplet = resolveDimensionTripletCm({
     side1Cm: row.referenceItemPackageSide1Cm,
     side2Cm: row.referenceItemPackageSide2Cm,
     side3Cm: row.referenceItemPackageSide3Cm,
     legacy: row.referenceItemPackageDimensionsCm,
   })
+  const referenceTriplet = rawReferenceTriplet ? sortDimensionTripletCm(rawReferenceTriplet) : null
   const referenceWeightKg = parseDecimalNumber(row.referenceItemPackageWeightKg)
-  const referenceSizeTier =
-    referenceTriplet && referenceWeightKg !== null
-      ? calculateSizeTierForTenant(
-          tenantCode,
-          referenceTriplet.side1Cm,
-          referenceTriplet.side2Cm,
-          referenceTriplet.side3Cm,
-          referenceWeightKg
-        )
-      : null
+  const assignedReferenceTier = typeof row.sizeTier === 'string' ? row.sizeTier.trim() : ''
+  const referenceSizeTier = assignedReferenceTier ? assignedReferenceTier : null
 
   return {
     referenceTriplet,
@@ -307,77 +305,43 @@ function resolveReferenceSizeTier(row: ApiSkuRow, tenantCode: TenantCode): {
   }
 }
 
-export async function hydrateComparisonSkuRow(
-  row: ApiSkuRow,
-  tenantCode: TenantCode,
-  deps: ComparisonRowHydratorDeps
-): Promise<ApiSkuRow> {
-  if (typeof row.asin !== 'string') return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
-
-  const asin = row.asin.trim()
-  if (!asin) return { ...row, amazonFbaFulfillmentFee: null, amazonListingPrice: null }
-
-  const listingPrice = await deps.loadListingPrice(asin, tenantCode)
-
-  let amazonFee: number | null = null
-  let amazonSizeTier = row.amazonSizeTier
-  if (listingPrice !== null) {
-    const liveAmazonFees = await deps.loadAmazonFees(row.skuCode, listingPrice, tenantCode)
-    amazonFee = liveAmazonFees.fbaFees
-    if (liveAmazonFees.sizeTier !== null) {
-      amazonSizeTier = liveAmazonFees.sizeTier
-    }
-  }
-
-  return {
-    ...row,
-    amazonFbaFulfillmentFee: amazonFee,
-    amazonListingPrice: listingPrice,
-    amazonSizeTier,
-  }
-}
-
 export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Comparison {
-  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceSizeTier(row, tenantCode)
-  const referenceShipping = computeShippingWeights(referenceTriplet, referenceWeightKg, referenceSizeTier, tenantCode)
+  const { referenceTriplet, referenceWeightKg, referenceSizeTier } = resolveReferenceData(row)
+  const referenceShipping = computeShippingWeights(
+    referenceTriplet,
+    referenceWeightKg,
+    referenceSizeTier,
+    tenantCode
+  )
 
-  const amazonTriplet = resolveDimensionTripletCm({
+  const rawAmazonTriplet = resolveDimensionTripletCm({
     side1Cm: row.amazonItemPackageSide1Cm,
     side2Cm: row.amazonItemPackageSide2Cm,
     side3Cm: row.amazonItemPackageSide3Cm,
     legacy: row.amazonItemPackageDimensionsCm,
   })
+  const amazonTriplet = rawAmazonTriplet ? sortDimensionTripletCm(rawAmazonTriplet) : null
   const amazonWeightKg = parseDecimalNumber(row.amazonItemPackageWeightKg)
   let amazonSizeTier: string | null = null
   if (typeof row.amazonSizeTier === 'string') {
     const trimmed = row.amazonSizeTier.trim()
     if (trimmed) amazonSizeTier = trimmed
   }
-  const amazonShipping = computeShippingWeights(amazonTriplet, amazonWeightKg, amazonSizeTier, tenantCode)
-
-  const expectedFee = parseDecimalNumber(row.fbaFulfillmentFee)
-  const amazonFee = parseDecimalNumber(row.amazonFbaFulfillmentFee)
-  const feeDifference = expectedFee === null || amazonFee === null ? null : amazonFee - expectedFee
+  const amazonShipping = computeShippingWeights(
+    amazonTriplet,
+    amazonWeightKg,
+    amazonSizeTier,
+    tenantCode
+  )
 
   const referenceMissingFields: string[] = []
-  if (expectedFee === null) referenceMissingFields.push('Reference FBA fulfillment fee')
-  if (referenceTriplet === null) referenceMissingFields.push('Item package dimensions')
-  if (referenceWeightKg === null) referenceMissingFields.push('Item package weight')
+  if (referenceSizeTier === null) referenceMissingFields.push('Reference size tier')
 
   const amazonMissingFields: string[] = []
-  if (amazonFee === null) amazonMissingFields.push('Amazon FBA fulfillment fee')
   if (amazonSizeTier === null) amazonMissingFields.push('Amazon size tier')
-  if (amazonTriplet === null) amazonMissingFields.push('Amazon item package dimensions')
-  if (amazonWeightKg === null) amazonMissingFields.push('Amazon item package weight')
 
-  const hasPhysicalMismatch = physicalMeasurementsMatch({
-    referenceTriplet,
-    amazonTriplet,
-    referenceShipping,
-    amazonShipping,
-    referenceSizeTier,
-    amazonSizeTier,
-  }) === false
+  const hasSizeTierMismatch =
+    referenceSizeTier !== null && amazonSizeTier !== null && referenceSizeTier !== amazonSizeTier
 
   let status: AlertStatus = 'UNKNOWN'
   if (!row.asin) {
@@ -385,17 +349,12 @@ export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Compa
   } else if (referenceMissingFields.length > 0) {
     status = 'MISSING_REFERENCE'
   } else if (amazonMissingFields.length > 0) {
-    status = 'ERROR'
+    status = 'MISSING_AMAZON'
   } else {
-    const expectedRounded = expectedFee === null ? null : Number(expectedFee.toFixed(2))
-    const amazonRounded = amazonFee === null ? null : Number(amazonFee.toFixed(2))
-
-    if (hasPhysicalMismatch) {
+    if (hasSizeTierMismatch) {
       status = 'MISMATCH'
-    } else if (expectedRounded !== null && amazonRounded !== null && expectedRounded === amazonRounded) {
+    } else {
       status = 'MATCH'
-    } else if (expectedRounded !== null && amazonRounded !== null) {
-      status = 'MISMATCH'
     }
   }
 
@@ -405,31 +364,74 @@ export function computeComparison(row: ApiSkuRow, tenantCode: TenantCode): Compa
       triplet: referenceTriplet,
       shipping: referenceShipping,
       sizeTier: referenceSizeTier,
-      expectedFee,
       missingFields: referenceMissingFields,
     },
     amazon: {
       triplet: amazonTriplet,
       shipping: amazonShipping,
       sizeTier: amazonSizeTier,
-      fee: amazonFee,
       missingFields: amazonMissingFields,
     },
-    feeDifference,
-    hasPhysicalMismatch,
+    hasSizeTierMismatch,
   }
 }
 
 export function getComparisonStatusLabel(comparison: Comparison): string {
-  if (comparison.status === 'MATCH') return 'Correct'
+  if (comparison.status === 'MATCH') return 'Size tier match'
   if (comparison.status === 'MISMATCH') {
-    if (comparison.hasPhysicalMismatch) return 'Physical mismatch'
-    if (comparison.feeDifference !== null && comparison.feeDifference > 0) return 'Overcharge'
-    if (comparison.feeDifference !== null && comparison.feeDifference < 0) return 'Undercharge'
-    throw new Error('MISMATCH comparison is missing a physical mismatch or fee delta')
+    return 'Size tier mismatch'
   }
-  if (comparison.status === 'MISSING_REFERENCE') return 'No ref'
+  if (comparison.status === 'MISSING_REFERENCE') return 'No reference tier'
   if (comparison.status === 'NO_ASIN') return 'No ASIN'
-  if (comparison.status === 'ERROR') return 'Error'
+  if (comparison.status === 'MISSING_AMAZON') return 'No Amazon tier'
   return 'Pending'
+}
+
+export function summarizeComparisonStatuses(
+  rows: readonly { comparison: { status: AlertStatus } }[]
+): ComparisonSummaryCounts {
+  const counts: ComparisonSummaryCounts = { mismatch: 0, match: 0, warning: 0, pending: 0 }
+  for (const row of rows) {
+    const status = row.comparison.status
+    if (status === 'MISMATCH') counts.mismatch += 1
+    else if (status === 'MATCH') counts.match += 1
+    else if (COMPARISON_WARNING_STATUSES.has(status)) counts.warning += 1
+    else counts.pending += 1
+  }
+  return counts
+}
+
+export function buildComparisonSummaryItems(
+  summary: ComparisonSummaryCounts
+): ComparisonSummaryItem[] {
+  const items: ComparisonSummaryItem[] = []
+  if (summary.mismatch > 0) {
+    items.push({
+      key: 'mismatch',
+      count: summary.mismatch,
+      label: summary.mismatch === 1 ? 'mismatch' : 'mismatches',
+    })
+  }
+  if (summary.match > 0) {
+    items.push({
+      key: 'match',
+      count: summary.match,
+      label: summary.match === 1 ? 'match' : 'matches',
+    })
+  }
+  if (summary.warning > 0) {
+    items.push({
+      key: 'warning',
+      count: summary.warning,
+      label: summary.warning === 1 ? 'warning' : 'warnings',
+    })
+  }
+  if (summary.pending > 0) {
+    items.push({
+      key: 'pending',
+      count: summary.pending,
+      label: 'pending',
+    })
+  }
+  return items
 }

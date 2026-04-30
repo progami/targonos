@@ -12,9 +12,13 @@ import {
 import { sanitizeForDisplay } from '@/lib/security/input-sanitization'
 import {
   parseAmazonProductFees,
-  calculateSizeTierForTenant,
   getReferralFeePercentForTenant,
 } from '@/lib/amazon/fees'
+import {
+  loadLatestFbaFeePreviewReportRows,
+  resolveFbaFeePreviewRow,
+} from '@/lib/amazon/fba-fee-preview-report'
+import { truncateToDecimalPlaces } from '@/lib/number-precision'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
@@ -121,13 +125,13 @@ function convertMeasurementToCm(value: number, unit: string | undefined): number
   const normalized = unit.trim().toLowerCase()
   if (!normalized) return null
   if (normalized === 'inches' || normalized === 'inch' || normalized === 'in') {
-    return Number((value * 2.54).toFixed(2))
+    return truncateToDecimalPlaces(value * 2.54, 2)
   }
   if (normalized === 'centimeters' || normalized === 'centimetres' || normalized === 'cm') {
-    return Number(value.toFixed(2))
+    return truncateToDecimalPlaces(value, 2)
   }
   if (normalized === 'millimeters' || normalized === 'millimetres' || normalized === 'mm') {
-    return Number((value / 10).toFixed(2))
+    return truncateToDecimalPlaces(value / 10, 2)
   }
   return null
 }
@@ -147,19 +151,19 @@ function parseCatalogItemPackageWeightKg(attributes: {
   if (!normalized) return null
 
   if (normalized === 'kilograms' || normalized === 'kilogram' || normalized === 'kg') {
-    return Number(raw.toFixed(3))
+    return truncateToDecimalPlaces(raw, 2)
   }
 
   if (normalized === 'pounds' || normalized === 'pound' || normalized === 'lb' || normalized === 'lbs') {
-    return Number((raw * 0.453592).toFixed(3))
+    return truncateToDecimalPlaces(raw * 0.453592, 2)
   }
 
   if (normalized === 'grams' || normalized === 'gram' || normalized === 'g') {
-    return Number((raw / 1000).toFixed(3))
+    return truncateToDecimalPlaces(raw / 1000, 2)
   }
 
   if (normalized === 'ounces' || normalized === 'ounce' || normalized === 'oz') {
-    return Number((raw * 0.0283495).toFixed(3))
+    return truncateToDecimalPlaces(raw * 0.0283495, 2)
   }
 
   return null
@@ -180,19 +184,19 @@ function parseCatalogItemWeightKg(attributes: {
   if (!normalized) return null
 
   if (normalized === 'kilograms' || normalized === 'kilogram' || normalized === 'kg') {
-    return Number(raw.toFixed(3))
+    return truncateToDecimalPlaces(raw, 2)
   }
 
   if (normalized === 'pounds' || normalized === 'pound' || normalized === 'lb' || normalized === 'lbs') {
-    return Number((raw * 0.453592).toFixed(3))
+    return truncateToDecimalPlaces(raw * 0.453592, 2)
   }
 
   if (normalized === 'grams' || normalized === 'gram' || normalized === 'g') {
-    return Number((raw / 1000).toFixed(3))
+    return truncateToDecimalPlaces(raw / 1000, 2)
   }
 
   if (normalized === 'ounces' || normalized === 'ounce' || normalized === 'oz') {
-    return Number((raw * 0.0283495).toFixed(3))
+    return truncateToDecimalPlaces(raw * 0.0283495, 2)
   }
 
   return null
@@ -450,6 +454,7 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
 
   const listingResponse = await getListingsItems(tenantCode, { limit: 250 })
   const listings = listingResponse.items
+  const feePreviewRows = await loadLatestFbaFeePreviewReportRows(tenantCode)
 
   const listingBySkuCode = new Map<string, (typeof listings)[number]>()
   for (const listing of listings) {
@@ -639,15 +644,17 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
       )
     }
 
-    const calculatedSizeTier = calculateSizeTierForTenant(
-      tenantCode,
-      unitTriplet?.side1Cm ?? null,
-      unitTriplet?.side2Cm ?? null,
-      unitTriplet?.side3Cm ?? null,
-      unitWeightKg
-    )
-    if (calculatedSizeTier) {
-      amazonSizeTier = calculatedSizeTier
+    const feePreviewRow = resolveFbaFeePreviewRow(feePreviewRows, skuCode, asin)
+    if (feePreviewRow) {
+      if (feePreviewRow.packageTriplet) {
+        unitTriplet = feePreviewRow.packageTriplet
+      }
+      if (feePreviewRow.packageWeightKg !== null) {
+        unitWeightKg = feePreviewRow.packageWeightKg
+      }
+      if (feePreviewRow.sizeTier !== null) {
+        amazonSizeTier = feePreviewRow.sizeTier
+      }
     }
 
     try {

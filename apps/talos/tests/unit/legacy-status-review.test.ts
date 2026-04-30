@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { formatLegacyPurchaseOrderReviewRow } from '../../src/lib/purchase-orders/legacy-status-review'
+import { formatLegacyInboundOrderReviewRow } from '../../src/lib/inbound/legacy-status-review'
 
-test('formats a legacy purchase-order review row for shipped workflow statuses', () => {
-  const result = formatLegacyPurchaseOrderReviewRow({
-    id: 'po_123',
-    poNumber: 'PO-16-PDS',
+test('formats a legacy inbound review row for shipped workflow statuses', () => {
+  const result = formatLegacyInboundOrderReviewRow({
+    id: 'inbound_123',
+    inboundNumber: 'IN-16-PDS',
     status: 'SHIPPED',
     postedAt: null,
     warehouseCode: 'AMZN-US',
@@ -15,8 +15,8 @@ test('formats a legacy purchase-order review row for shipped workflow statuses',
   })
 
   assert.deepEqual(result, {
-    id: 'po_123',
-    poNumber: 'PO-16-PDS',
+    id: 'inbound_123',
+    inboundNumber: 'IN-16-PDS',
     currentStatus: 'SHIPPED',
     posted: false,
     warehouseCode: 'AMZN-US',
@@ -25,10 +25,10 @@ test('formats a legacy purchase-order review row for shipped workflow statuses',
   })
 })
 
-test('formats legacy purchase-order review rows when shippedDate is string or null', () => {
-  const withStringDate = formatLegacyPurchaseOrderReviewRow({
-    id: 'po_456',
-    poNumber: 'PO-17-PDS',
+test('formats legacy inbound review rows when shippedDate is string or null', () => {
+  const withStringDate = formatLegacyInboundOrderReviewRow({
+    id: 'inbound_456',
+    inboundNumber: 'IN-17-PDS',
     status: 'CLOSED',
     postedAt: '2026-04-01T08:15:00.000Z',
     warehouseCode: 'AMZN-US',
@@ -37,8 +37,8 @@ test('formats legacy purchase-order review rows when shippedDate is string or nu
   })
 
   assert.deepEqual(withStringDate, {
-    id: 'po_456',
-    poNumber: 'PO-17-PDS',
+    id: 'inbound_456',
+    inboundNumber: 'IN-17-PDS',
     currentStatus: 'CLOSED',
     posted: true,
     warehouseCode: 'AMZN-US',
@@ -46,9 +46,9 @@ test('formats legacy purchase-order review rows when shippedDate is string or nu
     shippedDate: '2026-03-31',
   })
 
-  const withNullDate = formatLegacyPurchaseOrderReviewRow({
-    id: 'po_789',
-    poNumber: null,
+  const withNullDate = formatLegacyInboundOrderReviewRow({
+    id: 'inbound_789',
+     inboundNumber: null,
     status: 'REJECTED',
     postedAt: null,
     warehouseCode: null,
@@ -57,8 +57,8 @@ test('formats legacy purchase-order review rows when shippedDate is string or nu
   })
 
   assert.deepEqual(withNullDate, {
-    id: 'po_789',
-    poNumber: null,
+    id: 'inbound_789',
+     inboundNumber: null,
     currentStatus: 'REJECTED',
     posted: false,
     warehouseCode: null,

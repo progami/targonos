@@ -6,7 +6,7 @@ import {
   canRegionUseWarehouseCode,
   type TalosRegion,
 } from '@/lib/warehouses/amazon-warehouse'
-import { isAmazonVirtualWarehouse } from '@/lib/services/fulfillment-source-warehouse'
+import { isAmazonVirtualWarehouse } from '@/lib/services/outbound-source-warehouse'
 import { warehouseListSelect } from './list-query'
 export const dynamic = 'force-dynamic'
 

@@ -45,7 +45,7 @@ export default defineConfig({
       {
         command: 'node tests/fixtures/callback-target-server.mjs',
         cwd: __dirname,
-        url: 'http://127.0.0.1:3321/operations/purchase-orders',
+        url: 'http://127.0.0.1:3321/operations/inbound',
         reuseExistingServer: false,
       },
     ],

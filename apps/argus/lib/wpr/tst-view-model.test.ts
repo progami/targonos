@@ -7,6 +7,7 @@ import type {
   WprCluster,
   WprCompetitorSummary,
   WprScpWindow,
+  WprSqpTerm,
   WprTstObserved,
   WprTstTermRow,
   WprTstWeeklyWindow,
@@ -108,6 +109,50 @@ function buildWeeklyWindow(weekLabel: 'W15' | 'W16', termRows: WprTstTermRow[], 
     week_label: weekLabel,
     week_number: weekLabel === 'W15' ? 15 : 16,
     start_date: weekLabel === 'W15' ? '2026-04-05' : '2026-04-12',
+  }
+}
+
+function buildSqpTerm(clusterId: string, cluster: string, family: string, term: string): WprSqpTerm {
+  return {
+    id: `${clusterId}-${term.replaceAll(' ', '-')}`,
+    term,
+    family,
+    cluster,
+    cluster_id: clusterId,
+    weekly: [],
+    selection_status: 'primary',
+    selection_reason: 'Selected-week SQP volume',
+    selection_volume_selected_week: 10,
+    selection_volume_baseline_13w: 10,
+    coverage: {
+      weeks_sqp: 1,
+      weeks_rank: 0,
+      weeks_ppc: 0,
+      has_sqp: true,
+      recent_4w: { weeks_sqp: 1, weeks_rank: 0, weeks_ppc: 0, has_sqp: true },
+      baseline_to_anchor: { weeks_sqp: 1, weeks_rank: 0, weeks_ppc: 0, has_sqp: true },
+    },
+    observed: {
+      current_week: buildEmptyObservedWindow(),
+      recent_4w: buildEmptyObservedWindow(),
+      baseline_13w: buildEmptyObservedWindow(),
+    },
+    benchmark: { competitor: buildCompetitor() },
+    search_volume: 0,
+    query_volume: 0,
+    query_volume_baseline: 0,
+    volume_score: 0,
+    market_ctr: 0,
+    market_cvr: 0,
+    asin_ctr: 0,
+    asin_cvr: 0,
+    impression_share: 0,
+    click_share: 0,
+    cart_add_share: 0,
+    asin_cart_add_rate: 0,
+    purchase_share: 0,
+    competitor_rank: null,
+    competitor_visibility: null,
   }
 }
 
@@ -290,6 +335,48 @@ function buildCluster(id: string, cluster: string, family: string, weekly: WprTs
   }
 }
 
+function buildEmptyObservedWindow() {
+  return {
+    week_label: 'W16' as const,
+    week_number: 16,
+    start_date: '2026-04-12',
+    market_impressions: 0,
+    asin_impressions: 0,
+    market_clicks: 0,
+    asin_clicks: 0,
+    market_cart_adds: 0,
+    asin_cart_adds: 0,
+    market_purchases: 0,
+    asin_purchases: 0,
+    query_volume: 0,
+    ppc_impressions: 0,
+    ppc_clicks: 0,
+    ppc_spend: 0,
+    ppc_sales: 0,
+    ppc_orders: 0,
+    rank_weight: 0,
+    rank_sum: 0,
+    rank_span_sum: 0,
+    rank_term_count: 0,
+    rank_weeks: 0,
+    weeks_in_window: 0,
+    avg_rank: null,
+    rank_volatility: null,
+    market_ctr: 0,
+    market_cvr: 0,
+    asin_ctr: 0,
+    asin_cvr: 0,
+    impression_share: 0,
+    click_share: 0,
+    cart_add_rate: 0,
+    asin_cart_add_rate: 0,
+    cart_add_share: 0,
+    purchase_share: 0,
+    ppc_acos: 0,
+    ppc_cvr: 0,
+  }
+}
+
 function buildBundle(): WprWeekBundle {
   const rootOneWeekly = [
     buildWeeklyWindow('W15', [
@@ -305,6 +392,13 @@ function buildBundle(): WprWeekBundle {
   const rootTwoWeekly = [
     buildWeeklyWindow('W15', [buildTermRow('term 3', { competitor_purchase_share: 0.2, our_purchase_share: 0.22, purchase_gap: 0.02 })]),
     buildWeeklyWindow('W16', [buildTermRow('term 3', { competitor_purchase_share: 0.18, our_purchase_share: 0.24, purchase_gap: 0.06 })]),
+  ]
+  const rootOneSqpTerms = [
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term 1'),
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term 2'),
+  ]
+  const rootTwoSqpTerms = [
+    buildSqpTerm('cluster-2', 'Root Two', 'Family B', 'term 3'),
   ]
 
   return {
@@ -334,8 +428,11 @@ function buildBundle(): WprWeekBundle {
     shareClusterIds: ['cluster-1'],
     ppcClusterIds: ['cluster-1', 'cluster-2'],
     defaultClusterIds: ['cluster-1'],
-    sqpTerms: [],
-    sqpClusterTerms: {},
+    sqpTerms: [...rootOneSqpTerms, ...rootTwoSqpTerms],
+    sqpClusterTerms: {
+      'cluster-1': rootOneSqpTerms.map((term) => term.id),
+      'cluster-2': rootTwoSqpTerms.map((term) => term.id),
+    },
     sqpGlobalTermIds: [],
     regression: { slope: 0, intercept: 0 },
     brandMetrics: {
@@ -458,7 +555,7 @@ test('createTstViewModel derives root and term table rows from the selected week
     selectedWeek: 'W15',
   })
 
-  assert.equal(weekFifteenVm.rootRows[0]?.current.observed.competitor_purchase_share, 0.28)
+  assert.equal(weekFifteenVm.rootRows[0]?.current.observed.competitor_purchase_share, 0.265)
 
   const weekSixteenVm = createTstViewModel({
     bundle: buildBundle(),
@@ -472,4 +569,55 @@ test('createTstViewModel derives root and term table rows from the selected week
   )
 
   assert.equal(selectedTermRow?.current.purchase_gap, -0.06)
+})
+
+test('createTstViewModel reports TST coverage against SQP-backed terms', () => {
+  const bundle = buildBundle()
+  const rootOneSqpTerms = [
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term 1'),
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term 2'),
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term missing from tst'),
+  ]
+  const rootTwoSqpTerms = bundle.sqpTerms.filter((term) => term.cluster_id === 'cluster-2')
+  bundle.sqpTerms = [...rootOneSqpTerms, ...rootTwoSqpTerms]
+  bundle.sqpClusterTerms = {
+    'cluster-1': rootOneSqpTerms.map((term) => term.id),
+    'cluster-2': rootTwoSqpTerms.map((term) => term.id),
+  }
+
+  const vm = createTstViewModel({
+    bundle,
+    selectedRootIds: new Set(['cluster-1']),
+    selectedTermIds: new Set(),
+    selectedWeek: 'W16',
+  })
+
+  assert.equal(vm.rootRows[0]?.coveredTermCount, 2)
+  assert.equal(vm.rootRows[0]?.sqpTermCount, 3)
+  assert.equal(vm.rootRows[0]?.coverageRate, 2 / 3)
+})
+
+test('createTstViewModel filters root TST metrics to SQP-backed terms', () => {
+  const bundle = buildBundle()
+  const rootOneSqpTerms = [
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term 1'),
+    buildSqpTerm('cluster-1', 'Root One', 'Family A', 'term missing from tst'),
+  ]
+  const rootTwoSqpTerms = bundle.sqpTerms.filter((term) => term.cluster_id === 'cluster-2')
+  bundle.sqpTerms = [...rootOneSqpTerms, ...rootTwoSqpTerms]
+  bundle.sqpClusterTerms = {
+    'cluster-1': rootOneSqpTerms.map((term) => term.id),
+    'cluster-2': rootTwoSqpTerms.map((term) => term.id),
+  }
+
+  const vm = createTstViewModel({
+    bundle,
+    selectedRootIds: new Set(['cluster-1']),
+    selectedTermIds: new Set(),
+    selectedWeek: 'W16',
+  })
+
+  assert.equal(vm.rootRows[0]?.coveredTermCount, 1)
+  assert.equal(vm.rootRows[0]?.current.coverage.terms_covered, 1)
+  assert.equal(vm.rootRows[0]?.current.term_rows.map((row) => row.term).join(','), 'term 1')
 })

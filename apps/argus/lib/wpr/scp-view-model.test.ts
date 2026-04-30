@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createScpSelectionViewModel } from './scp-view-model'
+import { createScpSelectionViewModel, sortScpRows } from './scp-view-model'
 import type { WprScpAsinRow, WprScpMetrics, WprScpWeekMetrics, WprScpWindow } from './types'
 
 function buildScpMetrics(overrides: Partial<WprScpMetrics>): WprScpMetrics {
@@ -182,4 +182,16 @@ test('createScpSelectionViewModel returns an empty selection when no ASINs are s
   assert.equal(vm.current, null)
   assert.deepEqual(vm.weekly, [])
   assert.equal(vm.isAllSelected, false)
+})
+
+test('sortScpRows orders the ASIN column by readable product name', () => {
+  const window = buildScpWindow()
+  const rows = [
+    buildScpAsinRow('asin-a', 'B09HXC3NL8', window.asins[0].current_week, window.asins[0].weekly),
+    buildScpAsinRow('asin-b', 'B0DQDWV1SV', window.asins[1].current_week, window.asins[1].weekly),
+  ]
+
+  const sorted = sortScpRows(rows, { key: 'asin', dir: 'asc' }, 'W16', null)
+
+  assert.deepEqual(sorted.map((row) => row.asin), ['B0DQDWV1SV', 'B09HXC3NL8'])
 })

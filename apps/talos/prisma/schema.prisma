@@ -63,7 +63,7 @@ model UserPermission {
   @@map("user_permissions")
 }
 
-model PoProductAssignment {
+model InboundProductAssignment {
   userEmail      String   @map("user_email")
   skuCode        String   @map("sku_code")
   createdAt      DateTime @default(now()) @map("created_at")
@@ -72,7 +72,7 @@ model PoProductAssignment {
   @@id([userEmail, skuCode])
   @@index([userEmail])
   @@index([skuCode])
-  @@map("po_product_assignments")
+  @@map("inbound_product_assignments")
 }
 
 model Warehouse {
@@ -91,7 +91,7 @@ model Warehouse {
   createdAt          DateTime   @default(now()) @map("created_at")
   updatedAt          DateTime   @updatedAt @map("updated_at")
   costRates          CostRate[]
-  forwardingCosts    PurchaseOrderForwardingCost[]
+  forwardingCosts    InboundOrderForwardingCost[]
   skuStorageConfigs  WarehouseSkuStorageConfig[]
   users              User[]
 
@@ -238,7 +238,7 @@ model CostRate {
   createdById   String       @map("created_by")
   createdBy     User         @relation(fields: [createdById], references: [id])
   warehouse     Warehouse    @relation(fields: [warehouseId], references: [id])
-  purchaseOrderForwardingCosts PurchaseOrderForwardingCost[]
+  inboundOrderForwardingCosts InboundOrderForwardingCost[]
 
   @@unique([warehouseId, costName, effectiveDate])
   @@index([warehouseId, costName, effectiveDate])
@@ -281,14 +281,14 @@ model InventoryTransaction {
   trackingNumber           String?            @map("tracking_number")
   attachments              Json?
   supplier                 String?            @map("supplier")
-  purchaseOrderId          String?            @map("purchase_order_id")
-  purchaseOrderLineId      String?            @map("purchase_order_line_id")
-  fulfillmentOrderId       String?            @map("fulfillment_order_id")
-  fulfillmentOrderLineId   String?            @map("fulfillment_order_line_id")
-  purchaseOrder            PurchaseOrder?     @relation("TransactionPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  purchaseOrderLine        PurchaseOrderLine? @relation("TransactionPurchaseOrderLine", fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
-  fulfillmentOrder         FulfillmentOrder?  @relation("TransactionFulfillmentOrder", fields: [fulfillmentOrderId], references: [id], onDelete: SetNull)
-  fulfillmentOrderLine     FulfillmentOrderLine? @relation("TransactionFulfillmentOrderLine", fields: [fulfillmentOrderLineId], references: [id], onDelete: SetNull)
+  inboundOrderId          String?            @map("inbound_order_id")
+  inboundOrderLineId      String?            @map("inbound_order_line_id")
+  outboundOrderId       String?            @map("outbound_order_id")
+  outboundOrderLineId   String?            @map("outbound_order_line_id")
+  inboundOrder            InboundOrder?     @relation("TransactionInboundOrder", fields: [inboundOrderId], references: [id], onDelete: SetNull)
+  inboundOrderLine        InboundOrderLine? @relation("TransactionInboundOrderLine", fields: [inboundOrderLineId], references: [id], onDelete: SetNull)
+  outboundOrder         OutboundOrder?  @relation("TransactionOutboundOrder", fields: [outboundOrderId], references: [id], onDelete: SetNull)
+  outboundOrderLine     OutboundOrderLine? @relation("TransactionOutboundOrderLine", fields: [outboundOrderLineId], references: [id], onDelete: SetNull)
   costLedger               CostLedger[]
   financialLedgerEntries   FinancialLedgerEntry[] @relation("FinancialLedgerInventoryTransaction")
 
@@ -297,22 +297,22 @@ model InventoryTransaction {
   @@index([transactionDate(sort: Desc)], map: "idx_inventory_transactions_date")
   @@index([warehouseCode, skuCode, lotRef], map: "idx_inventory_transactions_warehouse_sku_lot")
   @@index([createdAt(sort: Desc)], map: "idx_inventory_transactions_created_at")
-  @@index([purchaseOrderId], map: "idx_inventory_transactions_purchase_order")
-  @@index([purchaseOrderLineId], map: "idx_inventory_transactions_purchase_order_line")
-  @@index([fulfillmentOrderId], map: "idx_inventory_transactions_fulfillment_order")
-  @@index([fulfillmentOrderLineId], map: "idx_inventory_transactions_fulfillment_order_line")
+  @@index([inboundOrderId], map: "idx_inventory_transactions_inbound_order")
+  @@index([inboundOrderLineId], map: "idx_inventory_transactions_inbound_order_line")
+  @@index([outboundOrderId], map: "idx_inventory_transactions_outbound_order")
+  @@index([outboundOrderLineId], map: "idx_inventory_transactions_outbound_order_line")
   @@map("inventory_transactions")
 }
 
-model PurchaseOrder {
+model InboundOrder {
   id               String              @id @default(uuid())
   orderNumber      String              @map("order_number")
   skuGroup         String?             @map("sku_group")
-  poNumber         String?             @unique @map("po_number") // Auto-generated PO-0001 format
+  inboundNumber         String?             @unique @map("inbound_number") // Auto-generated IN-0001 format
   splitGroupId     String?             @map("split_group_id")
   splitParentId    String?             @map("split_parent_id")
-  type             PurchaseOrderType
-  status           PurchaseOrderStatus @default(ISSUED)
+  type             InboundOrderType
+  status           InboundOrderStatus @default(ISSUED)
   counterpartyName String?             @map("counterparty_name")
   counterpartyAddress String?          @map("counterparty_address")
   notes            String?
@@ -324,9 +324,9 @@ model PurchaseOrder {
   rfqPdfGeneratedAt DateTime?          @map("rfq_pdf_generated_at")
   rfqPdfGeneratedById String?          @map("rfq_pdf_generated_by_id")
   rfqPdfGeneratedByName String?        @map("rfq_pdf_generated_by_name")
-  poPdfGeneratedAt  DateTime?          @map("po_pdf_generated_at")
-  poPdfGeneratedById String?           @map("po_pdf_generated_by_id")
-  poPdfGeneratedByName String?         @map("po_pdf_generated_by_name")
+  inboundPdfGeneratedAt  DateTime?          @map("inbound_pdf_generated_at")
+  inboundPdfGeneratedById String?           @map("inbound_pdf_generated_by_id")
+  inboundPdfGeneratedByName String?         @map("inbound_pdf_generated_by_name")
   shippingMarksGeneratedAt DateTime?   @map("shipping_marks_generated_at")
   shippingMarksGeneratedById String?   @map("shipping_marks_generated_by_id")
   shippingMarksGeneratedByName String? @map("shipping_marks_generated_by_name")
@@ -446,15 +446,15 @@ model PurchaseOrder {
   shippedById            String?   @map("shipped_by_id")
   shippedByName          String?   @map("shipped_by_name")
 
-  lines         PurchaseOrderLine[]
-  containers    PurchaseOrderContainer[]
-  documents     PurchaseOrderDocument[]
-  proformaInvoices PurchaseOrderProformaInvoice[]
-  transactions  InventoryTransaction[]   @relation("TransactionPurchaseOrder")
+  lines         InboundOrderLine[]
+  containers    InboundOrderContainer[]
+  documents     InboundOrderDocument[]
+  proformaInvoices InboundOrderProformaInvoice[]
+  transactions  InventoryTransaction[]   @relation("TransactionInboundOrder")
   grns          Grn[]
-  invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLinePurchaseOrder")
-  forwardingCosts PurchaseOrderForwardingCost[]
-  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrder")
+  invoiceLines  WarehouseInvoiceLine[]   @relation("WarehouseInvoiceLineInboundOrder")
+  forwardingCosts InboundOrderForwardingCost[]
+  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerInboundOrder")
 
   @@unique([orderNumber])
   @@index([status])
@@ -462,16 +462,16 @@ model PurchaseOrder {
   @@index([isLegacy])
   @@index([warehouseCode])
   @@index([splitGroupId])
-  @@map("purchase_orders")
+  @@map("inbound_orders")
 }
 
-model FulfillmentOrder {
+model OutboundOrder {
   id                  String                 @id @default(uuid())
-  foNumber             String                 @unique @map("fo_number") // FO-0001 format
-  status               FulfillmentOrderStatus @default(DRAFT)
+  outboundNumber             String                 @unique @map("outbound_number") // OUT-0001 format
+  status               OutboundOrderStatus @default(DRAFT)
   warehouseCode        String                 @map("warehouse_code")
   warehouseName        String                 @map("warehouse_name")
-  destinationType      FulfillmentDestinationType @default(CUSTOMER) @map("destination_type")
+  destinationType      OutboundDestinationType @default(CUSTOMER) @map("destination_type")
   destinationName      String?                @map("destination_name")
   destinationAddress   String?                @map("destination_address")
   destinationCountry   String?                @map("destination_country")
@@ -520,21 +520,21 @@ model FulfillmentOrder {
   createdAt            DateTime               @default(now()) @map("created_at")
   updatedAt            DateTime               @updatedAt @map("updated_at")
 
-  lines                FulfillmentOrderLine[]
-  documents            FulfillmentOrderDocument[]
-  transactions         InventoryTransaction[] @relation("TransactionFulfillmentOrder")
+  lines                OutboundOrderLine[]
+  documents            OutboundOrderDocument[]
+  transactions         InventoryTransaction[] @relation("TransactionOutboundOrder")
 
   @@index([status])
   @@index([warehouseCode])
   @@index([amazonShipmentId])
-  @@map("fulfillment_orders")
+  @@map("outbound_orders")
 }
 
-model FulfillmentOrderDocument {
+model OutboundOrderDocument {
   id                  String                    @id @default(uuid())
-  fulfillmentOrderId  String                    @map("fulfillment_order_id")
-  fulfillmentOrder    FulfillmentOrder          @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
-  stage               FulfillmentOrderDocumentStage @map("stage")
+  outboundOrderId  String                    @map("outbound_order_id")
+  outboundOrder    OutboundOrder          @relation(fields: [outboundOrderId], references: [id], onDelete: Cascade)
+  stage               OutboundOrderDocumentStage @map("stage")
   documentType        String                    @map("document_type")
   fileName            String                    @map("file_name")
   contentType         String                    @map("content_type")
@@ -545,53 +545,53 @@ model FulfillmentOrderDocument {
   uploadedByName      String?                   @map("uploaded_by_name")
   metadata            Json?                     @map("metadata")
 
-  @@unique([fulfillmentOrderId, stage, documentType])
-  @@index([fulfillmentOrderId])
+  @@unique([outboundOrderId, stage, documentType])
+  @@index([outboundOrderId])
   @@index([stage])
   @@index([documentType])
-  @@map("fulfillment_order_documents")
+  @@map("outbound_order_documents")
 }
 
-model FulfillmentOrderLine {
+model OutboundOrderLine {
   id                 String                @id @default(uuid())
-  fulfillmentOrderId String                @map("fulfillment_order_id")
-  fulfillmentOrder   FulfillmentOrder      @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
+  outboundOrderId String                @map("outbound_order_id")
+  outboundOrder   OutboundOrder      @relation(fields: [outboundOrderId], references: [id], onDelete: Cascade)
   skuCode            String                @map("sku_code")
   skuDescription     String?               @map("sku_description")
   lotRef             String                @map("lot_ref")
   quantity           Int
-  status             FulfillmentOrderLineStatus @default(PENDING)
+  status             OutboundOrderLineStatus @default(PENDING)
   shippedQuantity    Int                   @default(0) @map("shipped_quantity")
   lineNotes          String?               @map("line_notes")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
-  transactions       InventoryTransaction[] @relation("TransactionFulfillmentOrderLine")
+  transactions       InventoryTransaction[] @relation("TransactionOutboundOrderLine")
 
-  @@unique([fulfillmentOrderId, skuCode, lotRef])
-  @@index([fulfillmentOrderId])
-  @@map("fulfillment_order_lines")
+  @@unique([outboundOrderId, skuCode, lotRef])
+  @@index([outboundOrderId])
+  @@map("outbound_order_lines")
 }
 
-model PurchaseOrderProformaInvoice {
+model InboundOrderProformaInvoice {
   id              String        @id @default(uuid())
-  purchaseOrderId String        @map("purchase_order_id")
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundOrderId String        @map("inbound_order_id")
+  inboundOrder   InboundOrder @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
   piNumber        String        @map("pi_number")
   invoiceDate     DateTime?     @map("invoice_date")
   createdAt       DateTime      @default(now()) @map("created_at")
   createdById     String?       @map("created_by_id")
   createdByName   String?       @map("created_by_name")
 
-  @@unique([purchaseOrderId, piNumber])
-  @@index([purchaseOrderId])
-  @@map("purchase_order_proforma_invoices")
+  @@unique([inboundOrderId, piNumber])
+  @@index([inboundOrderId])
+  @@map("inbound_order_proforma_invoices")
 }
 
-model PurchaseOrderDocument {
+model InboundOrderDocument {
   id              String                   @id @default(uuid())
-  purchaseOrderId String                   @map("purchase_order_id")
-  purchaseOrder   PurchaseOrder            @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  stage           PurchaseOrderDocumentStage @map("stage")
+  inboundOrderId String                   @map("inbound_order_id")
+  inboundOrder   InboundOrder            @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
+  stage           InboundOrderDocumentStage @map("stage")
   documentType    String                   @map("document_type")
   fileName        String                   @map("file_name")
   contentType     String                   @map("content_type")
@@ -602,16 +602,16 @@ model PurchaseOrderDocument {
   uploadedByName  String?                  @map("uploaded_by_name")
   metadata        Json?                    @map("metadata")
 
-  @@unique([purchaseOrderId, stage, documentType])
-  @@index([purchaseOrderId])
+  @@unique([inboundOrderId, stage, documentType])
+  @@index([inboundOrderId])
   @@index([stage])
   @@index([documentType])
-  @@map("purchase_order_documents")
+  @@map("inbound_order_documents")
 }
 
-model PurchaseOrderForwardingCost {
+model InboundOrderForwardingCost {
   id              String   @id @default(uuid())
-  purchaseOrderId String   @map("purchase_order_id")
+  inboundOrderId String   @map("inbound_order_id")
   warehouseId     String   @map("warehouse_id")
   costRateId      String?  @map("cost_rate_id")
   costName        String   @map("cost_name")
@@ -625,20 +625,20 @@ model PurchaseOrderForwardingCost {
   createdById     String?  @map("created_by_id")
   createdByName   String?  @map("created_by_name")
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundOrder InboundOrder @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
   warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   costRate      CostRate?     @relation(fields: [costRateId], references: [id], onDelete: SetNull)
 
-  @@index([purchaseOrderId])
+  @@index([inboundOrderId])
   @@index([warehouseId])
   @@index([costRateId])
-  @@map("purchase_order_forwarding_costs")
+  @@map("inbound_order_forwarding_costs")
 }
 
-model PurchaseOrderLine {
+model InboundOrderLine {
   id                String                  @id @default(uuid())
-  purchaseOrderId   String                  @map("purchase_order_id")
-  purchaseOrder     PurchaseOrder           @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundOrderId   String                  @map("inbound_order_id")
+  inboundOrder     InboundOrder           @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
   skuCode           String                  @map("sku_code")
   skuDescription    String?                 @map("sku_description")
   lotRef            String                  @map("lot_ref")
@@ -665,41 +665,41 @@ model PurchaseOrderLine {
   unitCost          Decimal?                @map("unit_cost") @db.Decimal(12, 4)
   totalCost         Decimal?                @map("total_cost") @db.Decimal(12, 2)
   currency          String                  @default("USD")
-  status            PurchaseOrderLineStatus @default(PENDING)
+  status            InboundOrderLineStatus @default(PENDING)
   postedQuantity    Int                     @default(0) @map("posted_quantity")
   quantityReceived  Int?                    @map("quantity_received") // Filled at WAREHOUSE stage
   lineNotes         String?                 @map("line_notes")
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
-  transactions      InventoryTransaction[]  @relation("TransactionPurchaseOrderLine")
-  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerPurchaseOrderLine")
+  transactions      InventoryTransaction[]  @relation("TransactionInboundOrderLine")
+  financialLedgerEntries FinancialLedgerEntry[] @relation("FinancialLedgerInboundOrderLine")
   grnLines          GrnLine[]
   invoiceLines      WarehouseInvoiceLine[]
 
-  @@unique([purchaseOrderId, skuCode])
-  @@index([purchaseOrderId])
-  @@map("purchase_order_lines")
+  @@unique([inboundOrderId, skuCode])
+  @@index([inboundOrderId])
+  @@map("inbound_order_lines")
 }
 
-model PurchaseOrderContainer {
+model InboundOrderContainer {
   id              String        @id @default(uuid())
-  purchaseOrderId String        @map("purchase_order_id")
-  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundOrderId String        @map("inbound_order_id")
+  inboundOrder   InboundOrder @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
   containerNumber String        @map("container_number")
   containerSize   String        @map("container_size") // 20FT, 40FT, 40HC, 45HC
   sealNumber      String?       @map("seal_number")
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")
 
-  @@unique([purchaseOrderId, containerNumber])
-  @@index([purchaseOrderId])
-  @@map("purchase_order_containers")
+  @@unique([inboundOrderId, containerNumber])
+  @@index([inboundOrderId])
+  @@map("inbound_order_containers")
 }
 
 model Grn {
   id              String             @id @default(uuid())
-  purchaseOrderId String             @map("purchase_order_id")
-  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inboundOrderId String             @map("inbound_order_id")
+  inboundOrder   InboundOrder      @relation(fields: [inboundOrderId], references: [id], onDelete: Cascade)
   status          GrnStatus          @default(DRAFT)
   referenceNumber String?            @map("reference_number")
   receivedAt      DateTime           @default(now()) @map("received_at")
@@ -714,7 +714,7 @@ model Grn {
   updatedAt       DateTime           @updatedAt @map("updated_at")
   lines           GrnLine[]
 
-  @@index([purchaseOrderId])
+  @@index([inboundOrderId])
   @@index([warehouseCode])
   @@map("goods_receipts")
 }
@@ -723,8 +723,8 @@ model GrnLine {
   id                       String                 @id @default(uuid())
   grnId                    String                 @map("goods_receipt_id")
   grn                      Grn                    @relation(fields: [grnId], references: [id], onDelete: Cascade)
-  purchaseOrderLineId      String?                @map("purchase_order_line_id")
-  purchaseOrderLine        PurchaseOrderLine?     @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+  inboundOrderLineId      String?                @map("inbound_order_line_id")
+  inboundOrderLine        InboundOrderLine?     @relation(fields: [inboundOrderLineId], references: [id], onDelete: SetNull)
   skuCode                  String                 @map("sku_code")
   skuDescription           String?                @map("sku_description")
   lotRef                   String?                @map("lot_ref")
@@ -738,7 +738,7 @@ model GrnLine {
   invoiceLines             WarehouseInvoiceLine[]
 
   @@index([grnId])
-  @@index([purchaseOrderLineId])
+  @@index([inboundOrderLineId])
   @@map("goods_receipt_lines")
 }
 
@@ -769,10 +769,10 @@ model WarehouseInvoiceLine {
   id                  String             @id @default(uuid())
   warehouseInvoiceId  String             @map("warehouse_invoice_id")
   warehouseInvoice    WarehouseInvoice   @relation(fields: [warehouseInvoiceId], references: [id], onDelete: Cascade)
-  purchaseOrderId     String?            @map("purchase_order_id")
-  purchaseOrder       PurchaseOrder?     @relation("WarehouseInvoiceLinePurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  purchaseOrderLineId String?            @map("purchase_order_line_id")
-  purchaseOrderLine   PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+  inboundOrderId     String?            @map("inbound_order_id")
+  inboundOrder       InboundOrder?     @relation("WarehouseInvoiceLineInboundOrder", fields: [inboundOrderId], references: [id], onDelete: SetNull)
+  inboundOrderLineId String?            @map("inbound_order_line_id")
+  inboundOrderLine   InboundOrderLine? @relation(fields: [inboundOrderLineId], references: [id], onDelete: SetNull)
   grnLineId           String?            @map("goods_receipt_line_id")
   grnLine             GrnLine?           @relation(fields: [grnLineId], references: [id], onDelete: SetNull)
   chargeCode          String             @map("charge_code")
@@ -786,7 +786,7 @@ model WarehouseInvoiceLine {
   updatedAt           DateTime           @updatedAt @map("updated_at")
 
   @@index([warehouseInvoiceId])
-  @@index([purchaseOrderId])
+  @@index([inboundOrderId])
   @@index([grnLineId])
   @@map("warehouse_invoice_lines")
 }
@@ -866,8 +866,8 @@ model FinancialLedgerEntry {
   lotRef               String?                  @map("lot_ref")
   inventoryTransactionId String?                @map("inventory_transaction_id")
   storageLedgerId      String?                  @map("storage_ledger_id")
-  purchaseOrderId      String?                  @map("purchase_order_id")
-  purchaseOrderLineId  String?                  @map("purchase_order_line_id")
+  inboundOrderId      String?                  @map("inbound_order_id")
+  inboundOrderLineId  String?                  @map("inbound_order_line_id")
   effectiveAt          DateTime                 @map("effective_at")
   createdAt            DateTime                 @default(now()) @map("created_at")
   createdByName        String                   @map("created_by_name")
@@ -875,14 +875,14 @@ model FinancialLedgerEntry {
 
   inventoryTransaction InventoryTransaction? @relation("FinancialLedgerInventoryTransaction", fields: [inventoryTransactionId], references: [id], onDelete: SetNull)
   storageLedger        StorageLedger?        @relation("FinancialLedgerStorageLedger", fields: [storageLedgerId], references: [id], onDelete: SetNull)
-  purchaseOrder        PurchaseOrder?        @relation("FinancialLedgerPurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  purchaseOrderLine    PurchaseOrderLine?    @relation("FinancialLedgerPurchaseOrderLine", fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+  inboundOrder        InboundOrder?        @relation("FinancialLedgerInboundOrder", fields: [inboundOrderId], references: [id], onDelete: SetNull)
+  inboundOrderLine    InboundOrderLine?    @relation("FinancialLedgerInboundOrderLine", fields: [inboundOrderLineId], references: [id], onDelete: SetNull)
 
   @@unique([sourceType, sourceId])
   @@index([warehouseCode])
   @@index([category])
   @@index([effectiveAt])
-  @@index([purchaseOrderId])
+  @@index([inboundOrderId])
   @@map("financial_ledger")
 }
 
@@ -977,15 +977,15 @@ enum TransactionType {
   @@map("TransactionType")
 }
 
-enum PurchaseOrderType {
+enum InboundOrderType {
   PURCHASE
   ADJUSTMENT
   FULFILLMENT // Legacy - kept for backward compatibility
 
-  @@map("PurchaseOrderType")
+  @@map("InboundOrderType")
 }
 
-enum PurchaseOrderStatus {
+enum InboundOrderStatus {
   // Active inbound workflow (WAREHOUSE is the final operational stage)
   ISSUED
   MANUFACTURING
@@ -1000,47 +1000,47 @@ enum PurchaseOrderStatus {
   REVIEW
   POSTED
 
-  @@map("PurchaseOrderStatus")
+  @@map("InboundOrderStatus")
 }
 
-enum FulfillmentOrderStatus {
+enum OutboundOrderStatus {
   DRAFT
   SHIPPED
   CANCELLED
 
-  @@map("FulfillmentOrderStatus")
+  @@map("OutboundOrderStatus")
 }
 
-enum FulfillmentOrderLineStatus {
+enum OutboundOrderLineStatus {
   PENDING
   SHIPPED
   CANCELLED
 
-  @@map("FulfillmentOrderLineStatus")
+  @@map("OutboundOrderLineStatus")
 }
 
-enum FulfillmentDestinationType {
+enum OutboundDestinationType {
   CUSTOMER
   AMAZON_FBA
   TRANSFER
 
-  @@map("FulfillmentDestinationType")
+  @@map("OutboundDestinationType")
 }
 
-enum FulfillmentOrderDocumentStage {
+enum OutboundOrderDocumentStage {
   PACKING
   SHIPPING
   DELIVERY
 
-  @@map("FulfillmentOrderDocumentStage")
+  @@map("OutboundOrderDocumentStage")
 }
 
-enum PurchaseOrderLineStatus {
+enum InboundOrderLineStatus {
   PENDING
   POSTED
   CANCELLED
 
-  @@map("PurchaseOrderLineStatus")
+  @@map("InboundOrderLineStatus")
 }
 
 enum InboundReceiveType {
@@ -1060,7 +1060,7 @@ enum OutboundShipMode {
   @@map("OutboundShipMode")
 }
 
-enum PurchaseOrderDocumentStage {
+enum InboundOrderDocumentStage {
   DRAFT // Dormant compatibility only. Active Talos uploads start at ISSUED.
   RFQ
   ISSUED
@@ -1068,7 +1068,7 @@ enum PurchaseOrderDocumentStage {
   OCEAN
   WAREHOUSE
 
-  @@map("PurchaseOrderDocumentStage")
+  @@map("InboundOrderDocumentStage")
 }
 
 enum GrnStatus {

@@ -4,9 +4,9 @@ import {
   CostCategory,
   FinancialLedgerCategory,
   FinancialLedgerSourceType,
-  PurchaseOrderType,
+  InboundOrderType,
   GrnStatus,
-  PurchaseOrderLineStatus,
+  InboundOrderLineStatus,
   TransactionType,
 } from '@targon/prisma-talos'
 import { ValidationError, ConflictError, NotFoundError } from '@/lib/api'
@@ -14,14 +14,14 @@ import {
   SYSTEM_FALLBACK_ID,
   SYSTEM_FALLBACK_NAME,
   toPublicOrderNumber,
-} from '@/lib/services/purchase-order-utils'
+} from '@/lib/services/inbound-utils'
 import {
   buildGoodsReceiptReference,
   getNextGoodsReceiptSequence,
   resolveOrderReferenceSeed,
 } from '@/lib/services/supply-chain-reference-service'
 import { buildTacticalCostLedgerEntries } from '@/lib/costing/tactical-costing'
-import { assertPurchaseOrderMutable } from '@/lib/purchase-orders/workflow'
+import { assertInboundOrderMutable } from '@/lib/inbound/workflow'
 import { recordStorageCostEntry } from '@/services/storageCost.service'
 
 function toFinancialCategory(costCategory: CostCategory) {
@@ -38,7 +38,7 @@ export interface UserContext {
 }
 
 export interface GrnLineInput {
-  purchaseOrderLineId: string
+  inboundOrderLineId: string
   quantity: number
   lotRef?: string | null
   storageCartonsPerPallet?: number | null
@@ -47,21 +47,21 @@ export interface GrnLineInput {
 }
 
 export interface CreateGrnInput {
-  purchaseOrderId: string
+  inboundOrderId: string
   referenceNumber?: string | null
   receivedAt?: Date | null
   notes?: string | null
   lines: GrnLineInput[]
 }
 
-export async function listGrns(filter?: { purchaseOrderId?: string | null }) {
+export async function listGrns(filter?: { inboundOrderId?: string | null }) {
   const prisma = await getTenantPrisma()
   const notes = await prisma.grn.findMany({
-    where: filter?.purchaseOrderId ? { purchaseOrderId: filter.purchaseOrderId } : undefined,
+    where: filter?.inboundOrderId ? { inboundOrderId: filter.inboundOrderId } : undefined,
     orderBy: { createdAt: 'desc' },
     include: {
       lines: true,
-      purchaseOrder: {
+      inboundOrder: {
         select: {
           id: true,
           orderNumber: true,
@@ -83,7 +83,7 @@ export async function getGrnById(id: string) {
     where: { id },
     include: {
       lines: true,
-      purchaseOrder: {
+      inboundOrder: {
         select: {
           id: true,
           orderNumber: true,
@@ -110,30 +110,30 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
 
   const prisma = await getTenantPrisma()
   return prisma.$transaction(async tx => {
-    const purchaseOrder = await tx.purchaseOrder.findUnique({
-      where: { id: input.purchaseOrderId },
+    const inboundOrder = await tx.inboundOrder.findUnique({
+      where: { id: input.inboundOrderId },
     })
 
-    if (!purchaseOrder) {
-      throw new NotFoundError('Purchase order not found')
+    if (!inboundOrder) {
+      throw new NotFoundError('Inbound not found')
     }
 
-    assertPurchaseOrderMutable({
-      status: purchaseOrder.status,
-      postedAt: purchaseOrder.postedAt,
+    assertInboundOrderMutable({
+      status: inboundOrder.status,
+      postedAt: inboundOrder.postedAt,
     })
 
-    if (!purchaseOrder.warehouseCode || !purchaseOrder.warehouseName) {
+    if (!inboundOrder.warehouseCode || !inboundOrder.warehouseName) {
       throw new ValidationError(
-        'Select a warehouse on the purchase order before creating a GRN'
+        'Select a warehouse on the inbound before creating a GRN'
       )
     }
 
     const receivedAt = input.receivedAt ?? new Date()
     const orderReferenceSeed = resolveOrderReferenceSeed({
-      orderNumber: purchaseOrder.orderNumber,
-      poNumber: purchaseOrder.poNumber,
-      skuGroup: purchaseOrder.skuGroup,
+      orderNumber: inboundOrder.orderNumber,
+      inboundNumber: inboundOrder.inboundNumber,
+      skuGroup: inboundOrder.skuGroup,
     })
     const nextGrnSequence = await getNextGoodsReceiptSequence(tx, orderReferenceSeed.skuGroup)
     const generatedGrnReference = buildGoodsReceiptReference(
@@ -143,41 +143,41 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
 
     const note = await tx.grn.create({
       data: {
-        purchaseOrderId: input.purchaseOrderId,
+        inboundOrderId: input.inboundOrderId,
         status: GrnStatus.DRAFT,
         referenceNumber: generatedGrnReference,
         receivedAt,
         receivedById: user.id ?? null,
         receivedByName: user.name ?? null,
-        warehouseCode: purchaseOrder.warehouseCode,
-        warehouseName: purchaseOrder.warehouseName,
+        warehouseCode: inboundOrder.warehouseCode,
+        warehouseName: inboundOrder.warehouseName,
         notes: input.notes ?? null,
         lines: {
           create: await Promise.all(
             input.lines.map(async line => {
-              const poLine = await tx.purchaseOrderLine.findUnique({
-                where: { id: line.purchaseOrderLineId },
+              const inboundLine = await tx.inboundOrderLine.findUnique({
+                where: { id: line.inboundOrderLineId },
               })
 
-              if (!poLine || poLine.purchaseOrderId !== input.purchaseOrderId) {
-                throw new ValidationError('Line does not belong to the purchase order')
+              if (!inboundLine || inboundLine.inboundOrderId !== input.inboundOrderId) {
+                throw new ValidationError('Line does not belong to the inbound')
               }
 
-              const expectedLotRef = poLine.lotRef
+              const expectedLotRef = inboundLine.lotRef
               if (!expectedLotRef) {
-                throw new ValidationError(`Lot reference missing for SKU ${poLine.skuCode}`)
+                throw new ValidationError(`Lot reference missing for SKU ${inboundLine.skuCode}`)
               }
 
               if (line.lotRef && line.lotRef !== expectedLotRef) {
                 throw new ValidationError(
-                  `Lot ref mismatch for SKU ${poLine.skuCode}. Expected ${expectedLotRef}.`
+                  `Lot ref mismatch for SKU ${inboundLine.skuCode}. Expected ${expectedLotRef}.`
                 )
               }
 
               return {
-                purchaseOrderLineId: line.purchaseOrderLineId,
-                skuCode: poLine.skuCode,
-                skuDescription: poLine.skuDescription,
+                inboundOrderLineId: line.inboundOrderLineId,
+                skuCode: inboundLine.skuCode,
+                skuDescription: inboundLine.skuDescription,
                 lotRef: expectedLotRef,
                 quantity: line.quantity,
                 storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,
@@ -190,7 +190,7 @@ export async function createGrn(input: CreateGrnInput, user: UserContext) {
       },
       include: {
         lines: true,
-        purchaseOrder: {
+        inboundOrder: {
           select: {
             id: true,
             orderNumber: true,
@@ -231,16 +231,16 @@ export async function cancelGrn(id: string) {
   })
 }
 
-function formatGrnOrderNumber<T extends { purchaseOrder: { orderNumber: string } | null }>(
+function formatGrnOrderNumber<T extends { inboundOrder: { orderNumber: string } | null }>(
   note: T
 ): T {
-  const purchaseOrder = note.purchaseOrder
-  if (!purchaseOrder) return note
+  const inboundOrder = note.inboundOrder
+  if (!inboundOrder) return note
   return {
     ...note,
-    purchaseOrder: {
-      ...purchaseOrder,
-      orderNumber: toPublicOrderNumber(purchaseOrder.orderNumber),
+    inboundOrder: {
+      ...inboundOrder,
+      orderNumber: toPublicOrderNumber(inboundOrder.orderNumber),
     },
   } as T
 }
@@ -261,7 +261,7 @@ export async function postGrn(id: string, _user: UserContext) {
       where: { id },
       include: {
         lines: true,
-        purchaseOrder: {
+        inboundOrder: {
           include: { lines: true },
         },
       },
@@ -275,29 +275,29 @@ export async function postGrn(id: string, _user: UserContext) {
       throw new ConflictError('Only draft notes can be posted')
     }
 
-    const po = existingNote.purchaseOrder
-    if (!po) {
-      throw new NotFoundError('Purchase order missing for GRN')
+    const inbound = existingNote.inboundOrder
+    if (!inbound) {
+      throw new NotFoundError('Inbound missing for GRN')
     }
-    assertPurchaseOrderMutable({
-      status: po.status,
-      postedAt: po.postedAt,
+    assertInboundOrderMutable({
+      status: inbound.status,
+      postedAt: inbound.postedAt,
     })
 
     const warehouse = await tx.warehouse.findFirst({
-      where: { code: po.warehouseCode },
+      where: { code: inbound.warehouseCode },
       select: { id: true, code: true, name: true },
     })
 
     if (!warehouse) {
-      throw new NotFoundError('Warehouse not found for GRN purchase order')
+      throw new NotFoundError('Warehouse not found for GRN inbound')
     }
 
     const transactionType = (() => {
-      switch (po.type) {
-        case PurchaseOrderType.PURCHASE:
+      switch (inbound.type) {
+        case InboundOrderType.PURCHASE:
           return TransactionType.RECEIVE
-        case PurchaseOrderType.FULFILLMENT:
+        case InboundOrderType.FULFILLMENT:
           return TransactionType.SHIP
         default:
           return TransactionType.ADJUST_IN
@@ -309,27 +309,27 @@ export async function postGrn(id: string, _user: UserContext) {
     const transactionDate = existingNote.receivedAt ?? new Date()
 
     for (const line of existingNote.lines) {
-      if (!line.purchaseOrderLineId) {
-        throw new ValidationError('GRN line missing purchase order line reference')
+      if (!line.inboundOrderLineId) {
+        throw new ValidationError('GRN line missing inbound line reference')
       }
 
-      const poLine = po.lines.find(l => l.id === line.purchaseOrderLineId)
-      if (!poLine) {
-        throw new NotFoundError('Purchase order line not found')
+      const inboundLine = inbound.lines.find(l => l.id === line.inboundOrderLineId)
+      if (!inboundLine) {
+        throw new NotFoundError('Inbound line not found')
       }
 
-      if (poLine.status === PurchaseOrderLineStatus.CANCELLED) {
+      if (inboundLine.status === InboundOrderLineStatus.CANCELLED) {
         throw new ConflictError('Cannot post against a cancelled line')
       }
 
-      const newPostedQuantity = poLine.postedQuantity + line.quantity
+      const newPostedQuantity = inboundLine.postedQuantity + line.quantity
       const lineStatus =
-        newPostedQuantity >= poLine.quantity
-          ? PurchaseOrderLineStatus.POSTED
-          : PurchaseOrderLineStatus.PENDING
+        newPostedQuantity >= inboundLine.quantity
+          ? InboundOrderLineStatus.POSTED
+          : InboundOrderLineStatus.PENDING
 
-      await tx.purchaseOrderLine.update({
-        where: { id: poLine.id },
+      await tx.inboundOrderLine.update({
+        where: { id: inboundLine.id },
         data: {
           postedQuantity: newPostedQuantity,
           quantityReceived: newPostedQuantity,
@@ -340,16 +340,16 @@ export async function postGrn(id: string, _user: UserContext) {
       await tx.grnLine.update({
         where: { id: line.id },
         data: {
-          varianceQuantity: newPostedQuantity - poLine.quantity,
+          varianceQuantity: newPostedQuantity - inboundLine.quantity,
         },
       })
     }
 
-    const allLines = await tx.purchaseOrderLine.findMany({
-      where: { purchaseOrderId: po.id },
+    const allLines = await tx.inboundOrderLine.findMany({
+      where: { inboundOrderId: inbound.id },
     })
 
-    const allPosted = allLines.every(line => line.status === PurchaseOrderLineStatus.POSTED)
+    const allPosted = allLines.every(line => line.status === InboundOrderLineStatus.POSTED)
 
     await tx.grn.update({
       where: { id },
@@ -359,9 +359,9 @@ export async function postGrn(id: string, _user: UserContext) {
       },
     })
 
-    if (allPosted && !po.postedAt) {
-      await tx.purchaseOrder.update({
-        where: { id: po.id },
+    if (allPosted && !inbound.postedAt) {
+      await tx.inboundOrder.update({
+        where: { id: inbound.id },
         data: {
           postedAt: new Date(),
         },
@@ -370,8 +370,8 @@ export async function postGrn(id: string, _user: UserContext) {
 
     const created: Array<{
       id: string
-      purchaseOrderId: string
-      purchaseOrderLineId: string
+      inboundOrderId: string
+      inboundOrderLineId: string
       warehouseCode: string
       warehouseName: string
       skuCode: string
@@ -386,27 +386,27 @@ export async function postGrn(id: string, _user: UserContext) {
     }> = []
 
     for (const line of existingNote.lines) {
-      if (!line.purchaseOrderLineId) {
-        throw new ValidationError('GRN line missing purchase order line reference')
+      if (!line.inboundOrderLineId) {
+        throw new ValidationError('GRN line missing inbound line reference')
       }
 
-      const poLine = po.lines.find(l => l.id === line.purchaseOrderLineId)
-      if (!poLine) {
-        throw new NotFoundError('Purchase order line not found')
+      const inboundLine = inbound.lines.find(l => l.id === line.inboundOrderLineId)
+      if (!inboundLine) {
+        throw new NotFoundError('Inbound line not found')
       }
 
-      const sku = await tx.sku.findFirst({ where: { skuCode: poLine.skuCode } })
+      const sku = await tx.sku.findFirst({ where: { skuCode: inboundLine.skuCode } })
       if (!sku) {
-        throw new ValidationError(`SKU not found: ${poLine.skuCode}`)
+        throw new ValidationError(`SKU not found: ${inboundLine.skuCode}`)
       }
 
-      const lotRef = poLine.lotRef
+      const lotRef = inboundLine.lotRef
       if (!lotRef) {
-        throw new ValidationError(`Lot reference missing for SKU ${poLine.skuCode}`)
+        throw new ValidationError(`Lot reference missing for SKU ${inboundLine.skuCode}`)
       }
 
       if (line.lotRef && line.lotRef !== lotRef) {
-        throw new ValidationError(`Lot ref mismatch for SKU ${poLine.skuCode}. Expected ${lotRef}.`)
+        throw new ValidationError(`Lot ref mismatch for SKU ${inboundLine.skuCode}. Expected ${lotRef}.`)
       }
 
       const config = await tx.warehouseSkuStorageConfig.findFirst({
@@ -417,53 +417,53 @@ export async function postGrn(id: string, _user: UserContext) {
         },
       })
 
-      const unitsPerCarton = poLine.unitsPerCarton
+      const unitsPerCarton = inboundLine.unitsPerCarton
 
       const storageCartonsPerPallet =
         line.storageCartonsPerPallet ??
-        poLine.storageCartonsPerPallet ??
+        inboundLine.storageCartonsPerPallet ??
         config?.storageCartonsPerPallet ??
         null
       const shippingCartonsPerPallet =
         line.shippingCartonsPerPallet ??
-        poLine.shippingCartonsPerPallet ??
+        inboundLine.shippingCartonsPerPallet ??
         config?.shippingCartonsPerPallet ??
         null
 
       if (isInbound && (!storageCartonsPerPallet || storageCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Storage cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
+          `Storage cartons per pallet is required for SKU ${inboundLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
       if (isInbound && (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
+          `Shipping cartons per pallet is required for SKU ${inboundLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
       if (!isInbound && (!shippingCartonsPerPallet || shippingCartonsPerPallet <= 0)) {
         throw new ValidationError(
-          `Shipping cartons per pallet is required for SKU ${poLine.skuCode}. Configure it in Config → Warehouses.`
+          `Shipping cartons per pallet is required for SKU ${inboundLine.skuCode}. Configure it in Config → Warehouses.`
         )
       }
 
       const createdTx = await tx.inventoryTransaction.create({
         data: {
-          warehouseCode: po.warehouseCode,
-          warehouseName: po.warehouseName,
+          warehouseCode: inbound.warehouseCode,
+          warehouseName: inbound.warehouseName,
           warehouseAddress: null,
-          skuCode: poLine.skuCode,
-          skuDescription: poLine.skuDescription ?? sku.description,
+          skuCode: inboundLine.skuCode,
+          skuDescription: inboundLine.skuDescription ?? sku.description,
           unitDimensionsCm: sku?.unitDimensionsCm ?? null,
           unitWeightKg: sku?.unitWeightKg ?? null,
-          cartonDimensionsCm: poLine.cartonDimensionsCm ?? sku.cartonDimensionsCm,
-          cartonWeightKg: poLine.cartonWeightKg ?? sku.cartonWeightKg,
-          packagingType: poLine.packagingType ?? sku.packagingType,
+          cartonDimensionsCm: inboundLine.cartonDimensionsCm ?? sku.cartonDimensionsCm,
+          cartonWeightKg: inboundLine.cartonWeightKg ?? sku.cartonWeightKg,
+          packagingType: inboundLine.packagingType ?? sku.packagingType,
           unitsPerCarton,
           lotRef,
           transactionType,
-          referenceId: existingNote.referenceNumber ?? toPublicOrderNumber(po.orderNumber),
+          referenceId: existingNote.referenceNumber ?? toPublicOrderNumber(inbound.orderNumber),
           cartonsIn: isInbound ? line.quantity : 0,
           cartonsOut: isInbound ? 0 : line.quantity,
           storagePalletsIn: isInbound
@@ -477,13 +477,13 @@ export async function postGrn(id: string, _user: UserContext) {
           transactionDate,
           pickupDate: transactionDate,
           shipName: !isInbound
-            ? (existingNote.referenceNumber ?? po.counterpartyName ?? null)
+            ? (existingNote.referenceNumber ?? inbound.counterpartyName ?? null)
             : null,
           trackingNumber: null,
-          supplier: isInbound ? (po.counterpartyName ?? null) : null,
+          supplier: isInbound ? (inbound.counterpartyName ?? null) : null,
           attachments: (line.attachments as Prisma.JsonValue) ?? null,
-          purchaseOrderId: po.id,
-          purchaseOrderLineId: poLine.id,
+          inboundOrderId: inbound.id,
+          inboundOrderLineId: inboundLine.id,
           createdById: SYSTEM_FALLBACK_ID,
           createdByName: SYSTEM_FALLBACK_NAME,
           isReconciled: false,
@@ -491,8 +491,8 @@ export async function postGrn(id: string, _user: UserContext) {
         },
         select: {
           id: true,
-          purchaseOrderId: true,
-          purchaseOrderLineId: true,
+          inboundOrderId: true,
+          inboundOrderLineId: true,
           warehouseCode: true,
           warehouseName: true,
           skuCode: true,
@@ -553,8 +553,8 @@ export async function postGrn(id: string, _user: UserContext) {
       try {
         ledgerEntries = buildTacticalCostLedgerEntries({
           transactionType,
-          receiveType: transactionType === TransactionType.RECEIVE ? po.receiveType : null,
-          shipMode: transactionType === TransactionType.SHIP ? po.shipMode : null,
+          receiveType: transactionType === TransactionType.RECEIVE ? inbound.receiveType : null,
+          shipMode: transactionType === TransactionType.SHIP ? inbound.shipMode : null,
           ratesByCostName,
           lines: created.map(t => ({
             transactionId: t.id,
@@ -617,8 +617,8 @@ export async function postGrn(id: string, _user: UserContext) {
             skuDescription: txRow.skuDescription,
             lotRef: txRow.lotRef,
             inventoryTransactionId: row.transactionId,
-            purchaseOrderId: txRow.purchaseOrderId,
-            purchaseOrderLineId: txRow.purchaseOrderLineId,
+            inboundOrderId: txRow.inboundOrderId,
+            inboundOrderLineId: txRow.inboundOrderLineId,
             effectiveAt: row.createdAt,
             createdAt: row.createdAt,
             createdByName: row.createdByName,
@@ -638,7 +638,7 @@ export async function postGrn(id: string, _user: UserContext) {
       where: { id },
       include: {
         lines: true,
-        purchaseOrder: {
+        inboundOrder: {
           select: {
             id: true,
             orderNumber: true,

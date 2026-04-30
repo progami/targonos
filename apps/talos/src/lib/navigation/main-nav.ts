@@ -5,7 +5,6 @@ import {
   Building,
   FileText,
   Home,
-  Package,
   Shield,
   Truck,
   Users,
@@ -43,12 +42,11 @@ function createItem(
 }
 
 export function buildMainNavigation(context: NavigationContext): NavSection[] {
-  const amazonItems = AMAZON_WORKSPACE_TOOLS.map((tool) =>
+  const amazonItems = AMAZON_WORKSPACE_TOOLS.map(tool =>
     createItem(tool.name, tool.href, tool.icon, tool.matchMode)
   )
 
   const configurationItems = [
-    createItem('Products', '/config/products', Package),
     createItem('Suppliers', '/config/suppliers', Users),
     createItem('Warehouses', '/config/warehouses', Building),
   ]
@@ -69,8 +67,8 @@ export function buildMainNavigation(context: NavigationContext): NavSection[] {
     {
       title: 'Operations',
       items: [
-        createItem('Purchase Orders', '/operations/purchase-orders', FileText),
-        createItem('Fulfillment Orders', '/operations/fulfillment-orders', Truck),
+        createItem('Inbound', '/operations/inbound', FileText),
+        createItem('Outbound', '/operations/outbound', Truck),
         createItem('Inventory Ledger', '/operations/inventory', BookOpen),
         createItem('Storage Ledger', '/operations/storage-ledger', Building),
         createItem('Financial Ledger', '/operations/financial-ledger', BarChart3),

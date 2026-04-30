@@ -123,15 +123,35 @@ def http_json(url, method='GET', headers=None, payload=None, timeout=90):
         return error.code, parsed
 
 
-def get_access_token(env):
+def market_env(env, base_name, market):
+    key = f'{base_name}_{market.upper()}'
+    value = env.get(key)
+    if not value:
+        raise RuntimeError(f'Missing env var: {key}')
+    return value
+
+
+def ads_env_for_market(env, market):
+    keys = [
+        'AMAZON_ADS_API_BASE_URL',
+        'AMAZON_ADS_CLIENT_ID',
+        'AMAZON_ADS_CLIENT_SECRET',
+        'AMAZON_ADS_REFRESH_TOKEN',
+        'AMAZON_ADS_PROFILE_ID',
+        'AMAZON_LWA_TOKEN_URL',
+    ]
+    return {key: market_env(env, key, market) for key in keys}
+
+
+def get_access_token(ads_env):
     payload = urllib.parse.urlencode({
         'grant_type': 'refresh_token',
-        'refresh_token': env['AMAZON_ADS_REFRESH_TOKEN'],
-        'client_id': env['AMAZON_ADS_CLIENT_ID'],
-        'client_secret': env['AMAZON_ADS_CLIENT_SECRET'],
+        'refresh_token': ads_env['AMAZON_ADS_REFRESH_TOKEN'],
+        'client_id': ads_env['AMAZON_ADS_CLIENT_ID'],
+        'client_secret': ads_env['AMAZON_ADS_CLIENT_SECRET'],
     }).encode('utf-8')
     request = urllib.request.Request(
-        env['AMAZON_LWA_TOKEN_URL'],
+        ads_env['AMAZON_LWA_TOKEN_URL'],
         data=payload,
         method='POST',
         headers={'content-type': 'application/x-www-form-urlencoded;charset=UTF-8'},
@@ -229,10 +249,19 @@ def create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base,
 
 def get_report_status(base_url, headers, report_id):
     endpoint = f'{base_url}/reporting/reports/{report_id}'
-    status, resp = http_json(endpoint, method='GET', headers=headers)
-    if status != 200:
-        raise RuntimeError(f'poll failed for report {report_id}: {status} {resp}')
-    return resp
+    for attempt in range(1, 4):
+        try:
+            status, resp = http_json(endpoint, method='GET', headers=headers)
+        except urllib.error.URLError:
+            if attempt == 3:
+                raise
+            time.sleep(attempt)
+            continue
+        if status != 200:
+            raise RuntimeError(f'poll failed for report {report_id}: {status} {resp}')
+        return resp
+
+    raise RuntimeError(f'poll failed for report {report_id}')
 
 
 def download_rows(download_url):
@@ -306,8 +335,13 @@ def manifest_entry_for(reports, key, suffix):
     return None
 
 
-def can_reuse_key_output(existing_manifest, week, key, entries):
+def can_reuse_key_output(existing_manifest, week, key, entries, ads_metadata):
     if not existing_manifest:
+        return False
+
+    if existing_manifest.get('market') != ads_metadata['market']:
+        return False
+    if str(existing_manifest.get('profileId') or '') != str(ads_metadata['profileId']):
         return False
 
     manifest_reports = existing_manifest.get('reports') or {}
@@ -452,7 +486,7 @@ def report_configs():
     }
 
 
-def run_week(base_url, headers, week):
+def run_week(base_url, headers, week, ads_metadata):
     tasks = []
     configs = report_configs()
     manifest_path = MANIFEST_ROOT / f"{week['code']}_{week['endDate']}_SP-Manifest.json"
@@ -461,7 +495,7 @@ def run_week(base_url, headers, week):
     skipped_keys = set()
 
     for key, entries in configs.items():
-        if can_reuse_key_output(existing_manifest, week, key, entries):
+        if can_reuse_key_output(existing_manifest, week, key, entries, ads_metadata):
             outputs[key] = dict((existing_manifest.get('outputs') or {}).get(key) or {})
             print(f'[{week["code"]}] reuse existing {key} output file={output_path_for_week(week, key)}', flush=True)
             skipped_keys.add(key)
@@ -545,6 +579,9 @@ def run_week(base_url, headers, week):
 
     manifest = {
         'generatedAt': datetime.utcnow().isoformat() + 'Z',
+        'market': ads_metadata['market'],
+        'profileId': ads_metadata['profileId'],
+        'adsApiBaseUrl': ads_metadata['adsApiBaseUrl'],
         'week': week,
         'pollIntervalSec': POLL_INTERVAL_SEC,
         'maxWaitSec': MAX_WAIT_SECONDS,
@@ -607,30 +644,24 @@ def main():
             print(f'[SP-Ads][dry-run] {DEST_ROOT / subdir / file_name}')
         return
 
-    required = [
-        'AMAZON_ADS_API_BASE_URL',
-        'AMAZON_ADS_CLIENT_ID',
-        'AMAZON_ADS_CLIENT_SECRET',
-        'AMAZON_ADS_REFRESH_TOKEN',
-        'AMAZON_ADS_PROFILE_ID',
-        'AMAZON_LWA_TOKEN_URL',
-    ]
-    missing = [key for key in required if not env.get(key)]
-    if missing:
-        raise RuntimeError(f'Missing env vars: {missing}')
-
-    token = get_access_token(env)
-    base_url = env['AMAZON_ADS_API_BASE_URL'].rstrip('/')
+    ads_env = ads_env_for_market(env, market)
+    token = get_access_token(ads_env)
+    base_url = ads_env['AMAZON_ADS_API_BASE_URL'].rstrip('/')
     headers = {
         'Authorization': f'Bearer {token}',
-        'Amazon-Advertising-API-ClientId': env['AMAZON_ADS_CLIENT_ID'],
-        'Amazon-Advertising-API-Scope': str(env['AMAZON_ADS_PROFILE_ID']),
+        'Amazon-Advertising-API-ClientId': ads_env['AMAZON_ADS_CLIENT_ID'],
+        'Amazon-Advertising-API-Scope': str(ads_env['AMAZON_ADS_PROFILE_ID']),
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     }
+    ads_metadata = {
+        'market': market,
+        'profileId': str(ads_env['AMAZON_ADS_PROFILE_ID']),
+        'adsApiBaseUrl': base_url,
+    }
 
     print(f'=== {week["code"]} {week["startDate"]}..{week["endDate"]} ===', flush=True)
-    run_week(base_url, headers, week)
+    run_week(base_url, headers, week, ads_metadata)
 
 
 if __name__ == '__main__':

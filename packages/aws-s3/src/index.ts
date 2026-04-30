@@ -58,22 +58,22 @@ export interface S3ObjectStreamResult {
 export type FileContext =
   | { type: 'transaction'; transactionId: string; documentType: string }
   | {
-      type: 'purchase-order';
-      purchaseOrderId: string;
+      type: 'inbound';
+      inboundOrderId: string;
       /** Optional tenant code (e.g., US/UK) to keep multi-tenant uploads organized in S3. */
       tenantCode?: string;
-      /** Optional public order number (e.g., PO-0001) to keep PO uploads human-navigable in S3. */
-      purchaseOrderNumber?: string;
+      /** Optional public order number (e.g., IN-0001) to keep inbound uploads human-navigable in S3. */
+      inboundOrderNumber?: string;
       stage: 'RFQ' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
       documentType: string;
     }
   | {
-      type: 'fulfillment-order';
-      fulfillmentOrderId: string;
+      type: 'outbound-order';
+      outboundOrderId: string;
       /** Optional tenant code (e.g., US/UK) to keep multi-tenant uploads organized in S3. */
       tenantCode?: string;
-      /** Optional public order number (e.g., FO-0001) to keep FO uploads human-navigable in S3. */
-      fulfillmentOrderNumber?: string;
+      /** Optional public order number (e.g., OUT-0001) to keep outbound uploads human-navigable in S3. */
+      outboundOrderNumber?: string;
       stage: 'PACKING' | 'SHIPPING' | 'DELIVERY';
       documentType: string;
     }
@@ -135,32 +135,32 @@ export class S3Service {
         const documentType = this.sanitizeFilename(context.documentType);
         return `transactions/${year}/${month}/${context.transactionId}/${documentType}_${timestamp}_${hash}_${sanitizedFilename}`;
       }
-      case 'fulfillment-order': {
+      case 'outbound-order': {
         const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
-        const fulfillmentOrderNumber = context.fulfillmentOrderNumber
-          ? this.sanitizeFilename(context.fulfillmentOrderNumber)
+        const outboundOrderNumber = context.outboundOrderNumber
+          ? this.sanitizeFilename(context.outboundOrderNumber)
           : null;
-        const fulfillmentOrderFolder = fulfillmentOrderNumber
-          ? `${fulfillmentOrderNumber}--${context.fulfillmentOrderId}`
-          : context.fulfillmentOrderId;
+        const outboundOrderFolder = outboundOrderNumber
+          ? `${outboundOrderNumber}--${context.outboundOrderId}`
+          : context.outboundOrderId;
         const stage = this.sanitizeFilename(context.stage);
         const documentType = this.sanitizeFilename(context.documentType);
 
-        return `fulfillment-orders/${tenant}/${fulfillmentOrderFolder}/${stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
+        return `outbound-orders/${tenant}/${outboundOrderFolder}/${stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
       }
-      case 'purchase-order': {
+      case 'inbound': {
         const tenant = context.tenantCode ? this.sanitizeFilename(context.tenantCode) : 'unknown';
-        const purchaseOrderNumber = context.purchaseOrderNumber
-          ? this.sanitizeFilename(context.purchaseOrderNumber)
+        const inboundOrderNumber = context.inboundOrderNumber
+          ? this.sanitizeFilename(context.inboundOrderNumber)
           : null;
-        const purchaseOrderFolder = purchaseOrderNumber
-          ? `${purchaseOrderNumber}--${context.purchaseOrderId}`
-          : context.purchaseOrderId;
+        const inboundOrderFolder = inboundOrderNumber
+          ? `${inboundOrderNumber}--${context.inboundOrderId}`
+          : context.inboundOrderId;
         const documentType = this.sanitizeFilename(context.documentType);
 
-        // Keep all documents for a single PO under one stable prefix (no year/month sharding),
+        // Keep all documents for a single inbound order under one stable prefix (no year/month sharding),
         // so uploads over multiple months don't scatter across folders.
-        return `purchase-orders/${tenant}/${purchaseOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
+        return `inbound/${tenant}/${inboundOrderFolder}/${context.stage}/${documentType}/${timestamp}_${hash}_${sanitizedFilename}`;
       }
       case 'export-temp': {
         const exportType = this.sanitizeFilename(context.exportType);
@@ -508,15 +508,15 @@ export function isValidFileContext(context: unknown): context is FileContext {
   switch (c.type) {
     case 'transaction':
       return typeof c.transactionId === 'string' && typeof c.documentType === 'string';
-    case 'purchase-order':
+    case 'inbound':
       return (
-        typeof c.purchaseOrderId === 'string' &&
+        typeof c.inboundOrderId === 'string' &&
         ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE', 'SHIPPED'].includes(c.stage) &&
         typeof c.documentType === 'string'
       );
-    case 'fulfillment-order':
+    case 'outbound-order':
       return (
-        typeof c.fulfillmentOrderId === 'string' &&
+        typeof c.outboundOrderId === 'string' &&
         ['PACKING', 'SHIPPING', 'DELIVERY'].includes(c.stage) &&
         typeof c.documentType === 'string'
       );

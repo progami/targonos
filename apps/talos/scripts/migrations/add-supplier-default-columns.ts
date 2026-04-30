@@ -59,7 +59,7 @@ function showHelp() {
   console.log(`
 Add Supplier Default Columns
 
-Adds supplier-level defaults used by PO creation autofill:
+Adds supplier-level defaults used by Inbound creation autofill:
   - suppliers.default_payment_terms
   - suppliers.default_incoterms
 

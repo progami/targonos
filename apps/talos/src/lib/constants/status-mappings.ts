@@ -3,8 +3,8 @@
  * Centralizes badge classes, labels, and other status-related UI configurations.
  */
 
-// Purchase order statuses, including legacy values kept for read compatibility.
-export type POStatus =
+// Inbound statuses, including legacy values kept for read compatibility.
+export type InboundStatus =
   | 'ISSUED'
   | 'MANUFACTURING'
   | 'OCEAN'
@@ -15,7 +15,7 @@ export type POStatus =
   | 'REVIEW'
   | 'POSTED'
 
-export type POType = 'PURCHASE' | 'ADJUSTMENT'
+export type InboundType = 'PURCHASE' | 'ADJUSTMENT'
 
 // Transaction Types
 export type TxType = 'RECEIVE' | 'SHIP' | 'ADJUST_IN' | 'ADJUST_OUT'
@@ -23,13 +23,13 @@ export type TxType = 'RECEIVE' | 'SHIP' | 'ADJUST_IN' | 'ADJUST_OUT'
 // GRN Status
 export type GRNStatus = 'DRAFT' | 'POSTED' | 'CANCELLED' | 'RECONCILED'
 
-// PO Line Status
-export type POLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
+// Inbound Line Status
+export type InboundLineStatus = 'PENDING' | 'POSTED' | 'CANCELLED'
 
 /**
- * Badge CSS classes for Purchase Order statuses (5-stage state machine)
+ * Badge CSS classes for Inbound statuses (5-stage state machine)
  */
-export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
+export const INBOUND_STATUS_BADGE_CLASSES: Record<InboundStatus, string> = {
   ISSUED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   MANUFACTURING: 'bg-amber-50 text-amber-700 border border-amber-200',
   OCEAN: 'bg-blue-50 text-blue-700 border border-blue-200',
@@ -42,9 +42,9 @@ export const PO_STATUS_BADGE_CLASSES: Record<POStatus, string> = {
 }
 
 /**
- * Human-readable labels for Purchase Order statuses (5-stage state machine)
+ * Human-readable labels for Inbound statuses (5-stage state machine)
  */
-export const PO_STATUS_LABELS: Record<POStatus, string> = {
+export const INBOUND_STATUS_LABELS: Record<InboundStatus, string> = {
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Transit',
@@ -57,21 +57,21 @@ export const PO_STATUS_LABELS: Record<POStatus, string> = {
 }
 
 /**
- * Badge CSS classes for Purchase Order types
+ * Badge CSS classes for Inbound types
  */
-export const PO_TYPE_BADGE_CLASSES: Record<POType | 'FULFILLMENT', string> = {
+export const INBOUND_TYPE_BADGE_CLASSES: Record<InboundType | 'FULFILLMENT', string> = {
   PURCHASE: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   ADJUSTMENT: 'bg-muted text-muted-foreground border border-muted',
   FULFILLMENT: 'bg-red-50 text-red-700 border border-red-200', // Legacy
 }
 
 /**
- * Human-readable labels for Purchase Order types
+ * Human-readable labels for Inbound types
  */
-export const PO_TYPE_LABELS: Record<POType | 'FULFILLMENT', string> = {
-  PURCHASE: 'Purchase Order',
+export const INBOUND_TYPE_LABELS: Record<InboundType | 'FULFILLMENT', string> = {
+  PURCHASE: 'Inbound',
   ADJUSTMENT: 'Adjustment',
-  FULFILLMENT: 'Fulfillment', // Legacy
+  FULFILLMENT: 'Outbound', // Legacy
 }
 
 /**
@@ -115,18 +115,18 @@ export const GRN_STATUS_LABELS: Record<GRNStatus, string> = {
 }
 
 /**
- * Badge CSS classes for PO Line statuses
+ * Badge CSS classes for Inbound Line statuses
  */
-export const PO_LINE_STATUS_BADGE_CLASSES: Record<POLineStatus, string> = {
+export const INBOUND_LINE_STATUS_BADGE_CLASSES: Record<InboundLineStatus, string> = {
   PENDING: 'bg-amber-50 text-amber-700 border border-amber-200',
   POSTED: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
   CANCELLED: 'bg-red-50 text-red-700 border border-red-200',
 }
 
 /**
- * Human-readable labels for PO Line statuses
+ * Human-readable labels for Inbound Line statuses
  */
-export const PO_LINE_STATUS_LABELS: Record<POLineStatus, string> = {
+export const INBOUND_LINE_STATUS_LABELS: Record<InboundLineStatus, string> = {
   PENDING: 'Pending',
   POSTED: 'Posted',
   CANCELLED: 'Cancelled',
@@ -135,31 +135,31 @@ export const PO_LINE_STATUS_LABELS: Record<POLineStatus, string> = {
 /**
  * Helper function to get status badge class with fallback
  */
-export function getStatusBadgeClass(status: string, type: 'po' | 'tx' | 'mn' | 'poLine'): string {
+export function getStatusBadgeClass(status: string, type: 'inbound' | 'tx' | 'mn' | 'inboundLine'): string {
   switch (type) {
-    case 'po':
-      return PO_STATUS_BADGE_CLASSES[status as POStatus]
+    case 'inbound':
+      return INBOUND_STATUS_BADGE_CLASSES[status as InboundStatus]
     case 'tx':
       return TX_TYPE_BADGE_CLASSES[status as TxType]
     case 'mn':
       return GRN_STATUS_BADGE_CLASSES[status as GRNStatus]
-    case 'poLine':
-      return PO_LINE_STATUS_BADGE_CLASSES[status as POLineStatus]
+    case 'inboundLine':
+      return INBOUND_LINE_STATUS_BADGE_CLASSES[status as InboundLineStatus]
   }
 }
 
 /**
  * Helper function to get status label with fallback
  */
-export function getStatusLabel(status: string, type: 'po' | 'tx' | 'mn' | 'poLine'): string {
+export function getStatusLabel(status: string, type: 'inbound' | 'tx' | 'mn' | 'inboundLine'): string {
   switch (type) {
-    case 'po':
-      return PO_STATUS_LABELS[status as POStatus]
+    case 'inbound':
+      return INBOUND_STATUS_LABELS[status as InboundStatus]
     case 'tx':
       return TX_TYPE_LABELS[status as TxType]
     case 'mn':
       return GRN_STATUS_LABELS[status as GRNStatus]
-    case 'poLine':
-      return PO_LINE_STATUS_LABELS[status as POLineStatus]
+    case 'inboundLine':
+      return INBOUND_LINE_STATUS_LABELS[status as InboundLineStatus]
   }
 }

@@ -15,16 +15,28 @@ import { withAppBasePath } from '@/lib/base-path';
 
 export type WorkbookSetupRow = {
   productId: string;
-  sku: string;
-  openingStock: string;
-  nextYearOpeningOverride: string;
-  notes: string;
   region: 'US' | 'UK';
-  totalCoverThresholdWeeks: string;
-  fbaCoverThresholdWeeks: string;
+  workbookSku: string;
+  displaySku: string;
+  friendlyName: string;
+  price: string;
+  demandProxySku: string;
+  proxyRatio: string;
+  manualGrowthMultiplier: string;
+  active: string;
+  stockWeekStart: string;
+  openingFbaUnits: string;
+  openingThreeplUnits: string;
+  openingTotalUnits: string;
+  totalThresholdW: string;
+  fbaThresholdW: string;
+  pack: string;
+  micron: string;
+  notes: string;
 };
 
-type EditableField = Exclude<keyof WorkbookSetupRow, 'productId' | 'sku' | 'region'>;
+type DisplayField = Exclude<keyof WorkbookSetupRow, 'productId'>;
+type EditableField = 'totalThresholdW' | 'fbaThresholdW' | 'notes';
 
 type WorkbookSetupTableProps = {
   strategyId: string;
@@ -32,22 +44,82 @@ type WorkbookSetupTableProps = {
   rows: WorkbookSetupRow[];
 };
 
-const FIELD_LABELS: Record<EditableField, string> = {
-  openingStock: 'Opening Stock',
-  nextYearOpeningOverride: 'Opening Override',
-  notes: 'Notes',
-  totalCoverThresholdWeeks: 'Total Threshold (W)',
-  fbaCoverThresholdWeeks: 'FBA Threshold (W)',
+type SetupColumn = {
+  key: DisplayField;
+  label: string;
+  width: string;
+  editable?: 'number' | 'text';
+  align?: 'right' | 'center';
 };
 
-function normalizeNumber(value: string, integer: boolean): string {
+const SETUP_COLUMNS: SetupColumn[] = [
+  { key: 'region', label: 'region', width: 'min-w-[6rem]', align: 'center' },
+  { key: 'workbookSku', label: 'sku', width: 'min-w-[9rem]' },
+  { key: 'displaySku', label: 'display_sku', width: 'min-w-[9rem]' },
+  { key: 'friendlyName', label: 'friendly_name', width: 'min-w-[13rem]' },
+  { key: 'price', label: 'price', width: 'min-w-[7rem]', align: 'right' },
+  { key: 'demandProxySku', label: 'demand_proxy_sku', width: 'min-w-[11rem]' },
+  { key: 'proxyRatio', label: 'proxy_ratio', width: 'min-w-[8rem]', align: 'right' },
+  {
+    key: 'manualGrowthMultiplier',
+    label: 'manual_growth_multiplier',
+    width: 'min-w-[13rem]',
+    align: 'right',
+  },
+  { key: 'active', label: 'active', width: 'min-w-[6rem]', align: 'center' },
+  { key: 'stockWeekStart', label: 'stock_week_start', width: 'min-w-[10rem]' },
+  { key: 'openingFbaUnits', label: 'opening_fba_units', width: 'min-w-[11rem]', align: 'right' },
+  {
+    key: 'openingThreeplUnits',
+    label: 'opening_threepl_units',
+    width: 'min-w-[13rem]',
+    align: 'right',
+  },
+  {
+    key: 'openingTotalUnits',
+    label: 'opening_total_units',
+    width: 'min-w-[12rem]',
+    align: 'right',
+  },
+  {
+    key: 'totalThresholdW',
+    label: 'total_threshold_w',
+    width: 'min-w-[10rem]',
+    editable: 'number',
+    align: 'right',
+  },
+  {
+    key: 'fbaThresholdW',
+    label: 'fba_threshold_w',
+    width: 'min-w-[10rem]',
+    editable: 'number',
+    align: 'right',
+  },
+  { key: 'pack', label: 'pack', width: 'min-w-[6rem]', align: 'right' },
+  { key: 'micron', label: 'micron', width: 'min-w-[6rem]', align: 'right' },
+  { key: 'notes', label: 'notes', width: 'min-w-[16rem]', editable: 'text' },
+];
+
+const FIELD_LABELS: Record<EditableField, string> = {
+  totalThresholdW: 'total_threshold_w',
+  fbaThresholdW: 'fba_threshold_w',
+  notes: 'notes',
+};
+
+const SERVER_FIELDS: Record<EditableField, string> = {
+  totalThresholdW: 'totalCoverThresholdWeeks',
+  fbaThresholdW: 'fbaCoverThresholdWeeks',
+  notes: 'notes',
+};
+
+function normalizeNumber(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
   const parsed = Number(trimmed.replace(/[$,%\s]/g, '').replace(/,/g, ''));
   if (!Number.isFinite(parsed)) {
     throw new Error('Invalid number');
   }
-  return integer ? String(Math.round(parsed)) : parsed.toFixed(2);
+  return parsed.toFixed(2);
 }
 
 export function WorkbookSetupTable({ strategyId, activeYear, rows }: WorkbookSetupTableProps) {
@@ -68,7 +140,7 @@ export function WorkbookSetupTable({ strategyId, activeYear, rows }: WorkbookSet
         body: JSON.stringify({
           strategyId,
           year: activeYear,
-          updates: [{ productId, values: { [field]: value } }],
+          updates: [{ productId, values: { [SERVER_FIELDS[field]]: value } }],
         }),
       });
       if (!response.ok) {
@@ -90,11 +162,11 @@ export function WorkbookSetupTable({ strategyId, activeYear, rows }: WorkbookSet
     );
   };
 
-  const handleNumberBlur = (productId: string, field: EditableField, integer: boolean) => {
+  const handleNumberBlur = (productId: string, field: EditableField) => {
     const row = localRows.find((candidate) => candidate.productId === productId);
     if (!row) return;
     try {
-      const normalized = normalizeNumber(row[field], integer);
+      const normalized = normalizeNumber(row[field]);
       updateField(productId, field, normalized);
       void saveField(productId, field, normalized);
     } catch {
@@ -111,102 +183,79 @@ export function WorkbookSetupTable({ strategyId, activeYear, rows }: WorkbookSet
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/70 hover:bg-muted/70">
-              <TableHead className="h-9 min-w-[9rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                SKU
-              </TableHead>
-              <TableHead className="h-9 min-w-[10rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                Opening Stock {activeYear}
-              </TableHead>
-              <TableHead className="h-9 min-w-[12rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                {activeYear + 1} Opening Override
-              </TableHead>
-              <TableHead className="h-9 min-w-[15rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                Notes
-              </TableHead>
-              <TableHead className="h-9 min-w-[7rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                REGION
-              </TableHead>
-              <TableHead className="h-9 min-w-[11rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                Total Threshold (W)
-              </TableHead>
-              <TableHead className="h-9 min-w-[10rem] whitespace-nowrap text-xs font-bold uppercase tracking-wide">
-                FBA Threshold (W)
-              </TableHead>
+              {SETUP_COLUMNS.map((column) => (
+                <TableHead
+                  key={column.key}
+                  className={`h-9 ${column.width} whitespace-nowrap text-xs font-bold tracking-wide`}
+                >
+                  {column.label}
+                </TableHead>
+              ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {localRows.map((row) => (
               <TableRow key={row.productId} className="h-9">
-                <TableCell className="h-9 whitespace-nowrap px-3 py-0 text-sm font-semibold">
-                  {row.sku}
-                </TableCell>
-                <TableCell className="h-9 p-0">
-                  <Input
-                    value={row.openingStock}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateField(row.productId, 'openingStock', event.target.value)
-                    }
-                    onBlur={() => handleNumberBlur(row.productId, 'openingStock', true)}
-                    disabled={savingCell === `${row.productId}:openingStock`}
-                    className={`${inputClassName} text-right tabular-nums`}
-                  />
-                </TableCell>
-                <TableCell className="h-9 p-0">
-                  <Input
-                    value={row.nextYearOpeningOverride}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateField(row.productId, 'nextYearOpeningOverride', event.target.value)
-                    }
-                    onBlur={() =>
-                      handleNumberBlur(row.productId, 'nextYearOpeningOverride', true)
-                    }
-                    disabled={savingCell === `${row.productId}:nextYearOpeningOverride`}
-                    className={`${inputClassName} text-right tabular-nums`}
-                  />
-                </TableCell>
-                <TableCell className="h-9 p-0">
-                  <Input
-                    value={row.notes}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateField(row.productId, 'notes', event.target.value)
-                    }
-                    onBlur={() => saveField(row.productId, 'notes', row.notes)}
-                    disabled={savingCell === `${row.productId}:notes`}
-                    className={inputClassName}
-                  />
-                </TableCell>
-                <TableCell className="h-9 whitespace-nowrap px-3 py-0 text-sm font-semibold">
-                  {row.region}
-                </TableCell>
-                <TableCell className="h-9 p-0">
-                  <Input
-                    value={row.totalCoverThresholdWeeks}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateField(row.productId, 'totalCoverThresholdWeeks', event.target.value)
-                    }
-                    onBlur={() =>
-                      handleNumberBlur(row.productId, 'totalCoverThresholdWeeks', false)
-                    }
-                    disabled={savingCell === `${row.productId}:totalCoverThresholdWeeks`}
-                    className={`${inputClassName} text-right tabular-nums`}
-                  />
-                </TableCell>
-                <TableCell className="h-9 p-0">
-                  <Input
-                    value={row.fbaCoverThresholdWeeks}
-                    onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                      updateField(row.productId, 'fbaCoverThresholdWeeks', event.target.value)
-                    }
-                    onBlur={() => handleNumberBlur(row.productId, 'fbaCoverThresholdWeeks', false)}
-                    disabled={savingCell === `${row.productId}:fbaCoverThresholdWeeks`}
-                    className={`${inputClassName} text-right tabular-nums`}
-                  />
-                </TableCell>
+                {SETUP_COLUMNS.map((column) => {
+                  const value = row[column.key];
+                  const alignClass =
+                    column.align === 'right'
+                      ? 'text-right tabular-nums'
+                      : column.align === 'center'
+                        ? 'text-center'
+                        : '';
+
+                  if (column.editable === 'number') {
+                    const field = column.key as EditableField;
+                    return (
+                      <TableCell key={column.key} className="h-9 p-0">
+                        <Input
+                          value={value}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateField(row.productId, field, event.target.value)
+                          }
+                          onBlur={() => handleNumberBlur(row.productId, field)}
+                          disabled={savingCell === `${row.productId}:${field}`}
+                          className={`${inputClassName} text-right tabular-nums`}
+                        />
+                      </TableCell>
+                    );
+                  }
+
+                  if (column.editable === 'text') {
+                    const field = column.key as EditableField;
+                    return (
+                      <TableCell key={column.key} className="h-9 p-0">
+                        <Input
+                          value={value}
+                          onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                            updateField(row.productId, field, event.target.value)
+                          }
+                          onBlur={() => saveField(row.productId, field, value)}
+                          disabled={savingCell === `${row.productId}:${field}`}
+                          className={inputClassName}
+                        />
+                      </TableCell>
+                    );
+                  }
+
+                  return (
+                    <TableCell
+                      key={column.key}
+                      className={`h-9 whitespace-nowrap px-3 py-0 text-sm ${alignClass}`}
+                    >
+                      {value}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
             {localRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-16 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={SETUP_COLUMNS.length}
+                  className="h-16 text-center text-sm text-muted-foreground"
+                >
                   No active SKU rows.
                 </TableCell>
               </TableRow>

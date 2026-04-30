@@ -1,3 +1,4 @@
+import { formatAsinDisplayName } from '@/lib/product-labels'
 import type { WprSortDirection, WprSortState } from './dashboard-state'
 import type {
   WeekLabel,
@@ -288,7 +289,7 @@ export function businessReportsSortValueForRow(
   selectedWeek: WeekLabel,
 ): number | string {
   const current = selectedWeekBusinessMetrics(row.weekly, selectedWeek)
-  if (key === 'asin') return row.asin
+  if (key === 'asin') return formatAsinDisplayName(row)
   if (key === 'weeks_present_selected_week') return selectedWeekBusinessRecord(row.weekly, selectedWeek) === null ? 0 : 1
   if (key === 'sessions') return current.sessions
   if (key === 'page_views') return current.page_views

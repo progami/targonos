@@ -89,11 +89,11 @@ export async function getInventory() {
  return getMockData('getInventorySummaries')
 }
 
-export async function getInboundShipments(
+export async function getOutboundShipments(
   _tenantCode?: unknown,
   _options?: { nextToken?: string }
 ) {
- // console.log('Mock: Fetching inbound shipments')
+ // console.log('Mock: Fetching outbound shipments')
  return getMockData('getShipments')
 }
 

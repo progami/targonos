@@ -95,6 +95,10 @@ export interface PurchaseOrderInput {
   status: PurchaseOrderStatus;
   statusIcon?: string | null;
   notes?: string | null;
+  sourceSystem?: string | null;
+  sourceId?: string | null;
+  sourceReference?: string | null;
+  sourceUpdatedAt?: Date | null;
   payments?: PurchaseOrderPaymentInput[];
   overrideSellingPrice?: number | null;
   overrideManufacturingCost?: number | null;

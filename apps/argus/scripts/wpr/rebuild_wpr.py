@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import filecmp
 import shutil
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -13,6 +14,8 @@ import re
 
 from common import resolve_wpr_paths
 
+
+csv.field_size_limit(sys.maxsize)
 
 WPR_PATHS = resolve_wpr_paths()
 WPR_ROOT = WPR_PATHS.wpr_root

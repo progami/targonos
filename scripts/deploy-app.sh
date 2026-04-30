@@ -145,7 +145,12 @@ build_talos_changed_migrate_cmd() {
     return 0
   fi
 
-  local commands=()
+  if any_changed_under "apps/talos/prisma/migrations/"; then
+    printf '%s' "$talos_full_migrate_cmd"
+    return 0
+  fi
+
+  local commands=("$talos_prisma_migrate_cmd")
 
   any_changed "apps/talos/scripts/migrations/ensure-talos-tenant-schema.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:tenant-schema")
@@ -169,26 +174,22 @@ build_talos_changed_migrate_cmd() {
     commands+=("pnpm --filter $workspace db:migrate:warehouse-billing-config")
   any_changed "apps/talos/scripts/migrations/add-warehouse-sku-storage-configs.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs")
-  any_changed "apps/talos/scripts/migrations/add-purchase-order-document-table.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:purchase-order-documents")
-  any_changed "apps/talos/scripts/migrations/add-fulfillment-orders-foundation.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:fulfillment-orders-foundation")
-  any_changed "apps/talos/scripts/migrations/add-fulfillment-orders-amazon-fields.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields")
+  any_changed "apps/talos/scripts/migrations/add-inbound-document-table.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-documents")
+  any_changed "apps/talos/scripts/migrations/add-outbound-orders-foundation.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:outbound-orders-foundation")
+  any_changed "apps/talos/scripts/migrations/add-outbound-orders-amazon-fields.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:outbound-orders-amazon-fields")
   any_changed "apps/talos/scripts/migrations/replace-batch-with-lot-ref.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref")
-  any_changed "apps/talos/scripts/migrations/add-po-product-assignments.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:po-product-assignments")
+  any_changed "apps/talos/scripts/migrations/add-inbound-product-assignments.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-product-assignments")
   any_changed "apps/talos/scripts/migrations/supply-chain-reference-convention.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:supply-chain-reference-convention")
   any_changed "apps/talos/scripts/migrations/ensure-erd-v10-views.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:erd-v10-views")
-  any_changed "apps/talos/scripts/migrations/normalize-po-base-currency.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:po-base-currency")
-
-  if [[ ${#commands[@]} -eq 0 ]]; then
-    return 1
-  fi
+  any_changed "apps/talos/scripts/migrations/normalize-inbound-base-currency.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-base-currency")
 
   join_commands "${commands[@]}"
 }
@@ -201,6 +202,7 @@ deploy_git_sha="${DEPLOY_GIT_SHA:-}"
 deploy_base_sha="${DEPLOY_BASE_SHA:-}"
 deploy_head_sha="${DEPLOY_HEAD_SHA:-}"
 migrate_cmd=""
+talos_prisma_migrate_cmd=""
 talos_full_migrate_cmd=""
 install_mode=""
 changed_files_available="false"
@@ -273,7 +275,8 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/talos"
     pm2_name="${PM2_PREFIX}-talos"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    talos_full_migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-billing-config && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:po-base-currency"
+    talos_prisma_migrate_cmd="DATABASE_URL=\"\$DATABASE_URL_US\" pnpm --filter $workspace db:migrate:deploy && DATABASE_URL=\"\$DATABASE_URL_UK\" pnpm --filter $workspace db:migrate:deploy"
+    talos_full_migrate_cmd="$talos_prisma_migrate_cmd && pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-billing-config && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:inbound-documents && pnpm --filter $workspace db:migrate:outbound-orders-foundation && pnpm --filter $workspace db:migrate:outbound-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:inbound-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:inbound-base-currency"
     migrate_cmd="$talos_full_migrate_cmd"
     build_cmd="pnpm --filter $workspace build"
     ;;

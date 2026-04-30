@@ -15,6 +15,7 @@ import { clsx } from 'clsx';
 import type { PurchaseTimelineProps } from '@/lib/planning/timeline';
 import { PurchaseTimelineOrder, TimelineStageKey } from '@/lib/planning/timeline';
 import { Tooltip } from '@/components/ui/tooltip';
+import { comparePurchaseOrderCodes } from '@/lib/purchase-order-ordering';
 
 const stagePalette: Record<
   TimelineStageKey,
@@ -141,7 +142,7 @@ export function PurchaseTimeline({
       .sort((a, b) => {
         const aTime = a.orderStart?.getTime() ?? Number.POSITIVE_INFINITY;
         const bTime = b.orderStart?.getTime() ?? Number.POSITIVE_INFINITY;
-        if (aTime === bTime) return a.orderCode.localeCompare(b.orderCode);
+        if (aTime === bTime) return comparePurchaseOrderCodes(a.orderCode, b.orderCode);
         return aTime - bTime;
       });
   }, [orders]);

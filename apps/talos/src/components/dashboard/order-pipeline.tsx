@@ -10,7 +10,7 @@ interface OrderPipelineProps {
     inTransit: number
     atWarehouse: number
   }
-  pendingFulfillmentOrders: number
+  pendingOutboundOrders: number
 }
 
 const stages = [
@@ -20,15 +20,15 @@ const stages = [
   { key: 'atWarehouse', label: 'Warehouse', filter: 'WAREHOUSE' },
 ] as const
 
-export function OrderPipeline({ pipeline, pendingFulfillmentOrders }: OrderPipelineProps) {
-  const totalPOs = Object.values(pipeline).reduce((sum, count) => sum + count, 0)
+export function OrderPipeline({ pipeline, pendingOutboundOrders }: OrderPipelineProps) {
+  const totalInbound = Object.values(pipeline).reduce((sum, count) => sum + count, 0)
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5">
       <div className="flex items-center gap-2 mb-4">
         <FileText className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Order Pipeline</h3>
-        <span className="text-xs text-slate-500 dark:text-slate-400">({totalPOs} active POs)</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">({totalInbound} active Inbound)</span>
       </div>
 
       {/* Pipeline stages */}
@@ -38,7 +38,7 @@ export function OrderPipeline({ pipeline, pendingFulfillmentOrders }: OrderPipel
           return (
             <div key={stage.key} className="flex items-center">
               <Link
-                href={`/operations/purchase-orders?status=${stage.filter}`}
+                href={`/operations/inbound?status=${stage.filter}`}
                 className="flex flex-col items-center px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors min-w-[80px]"
               >
                 <span className={`text-lg font-bold ${count > 0 ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'}`}>
@@ -56,18 +56,18 @@ export function OrderPipeline({ pipeline, pendingFulfillmentOrders }: OrderPipel
         })}
       </div>
 
-      {/* Pending FOs */}
+      {/* Pending Outbounds */}
       <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
         <Link
-          href="/operations/fulfillment-orders?status=DRAFT"
+          href="/operations/outbound?status=DRAFT"
           className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
         >
           <div className="flex items-center gap-2">
             <Truck className="h-4 w-4 text-slate-400 dark:text-slate-500" />
-            <span className="text-sm text-slate-600 dark:text-slate-400">Pending Fulfillment Orders</span>
+            <span className="text-sm text-slate-600 dark:text-slate-400">Pending Outbound Orders</span>
           </div>
-          <span className={`text-sm font-semibold ${pendingFulfillmentOrders > 0 ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'}`}>
-            {pendingFulfillmentOrders}
+          <span className={`text-sm font-semibold ${pendingOutboundOrders > 0 ? 'text-cyan-600 dark:text-cyan-400' : 'text-slate-400 dark:text-slate-500'}`}>
+            {pendingOutboundOrders}
           </span>
         </Link>
       </div>

@@ -2,7 +2,7 @@ import { withAuth, ApiResponses, z } from '@/lib/api'
 import { createGrn, listGrns, type CreateGrnInput } from '@/lib/services/grn-service'
 
 const lineSchema = z.object({
- purchaseOrderLineId: z.string().min(1, 'Purchase order line is required'),
+ inboundOrderLineId: z.string().min(1, 'Inbound line is required'),
  quantity: z.number().int('Quantity must be an integer').positive('Quantity must be greater than zero'),
  lotRef: z.string().trim().min(1, 'Lot ref cannot be empty').optional().nullable(),
  storageCartonsPerPallet: z.number().int().positive().optional().nullable(),
@@ -11,7 +11,7 @@ const lineSchema = z.object({
 })
 
 const createSchema = z.object({
- purchaseOrderId: z.string().min(1, 'Purchase order is required'),
+ inboundOrderId: z.string().min(1, 'Inbound is required'),
  referenceNumber: z.string().trim().optional().nullable(),
  receivedAt: z.string().optional().nullable(),
  notes: z.string().optional().nullable(),
@@ -20,9 +20,9 @@ const createSchema = z.object({
 
 export const GET = withAuth(async (request) => {
  const searchParams = request.nextUrl.searchParams
- const purchaseOrderId = searchParams.get('purchaseOrderId')
+ const inboundOrderId = searchParams.get('inboundOrderId')
 
- const notes = await listGrns({ purchaseOrderId: purchaseOrderId ?? undefined })
+ const notes = await listGrns({ inboundOrderId: inboundOrderId ?? undefined })
  return ApiResponses.success({ data: notes })
 })
 
@@ -47,12 +47,12 @@ export const POST = withAuth(async (request, session) => {
  }
 
  const payload: CreateGrnInput = {
- purchaseOrderId: parsed.data.purchaseOrderId,
+ inboundOrderId: parsed.data.inboundOrderId,
  referenceNumber: parsed.data.referenceNumber ?? null,
  receivedAt,
  notes: parsed.data.notes ?? null,
  lines: parsed.data.lines.map(line => ({
- purchaseOrderLineId: line.purchaseOrderLineId,
+ inboundOrderLineId: line.inboundOrderLineId,
  quantity: line.quantity,
  lotRef: line.lotRef ?? null,
  storageCartonsPerPallet: line.storageCartonsPerPallet ?? null,

@@ -46,7 +46,7 @@ export default function TstTab({
     const rootIdSet = new Set(bundle.clusters.map((cluster) => cluster.id))
     const allowedTermIds = new Set<string>()
     for (const cluster of bundle.clusters) {
-      for (const termId of competitorRootTermIds(bundle, cluster.id, selectedWeek)) {
+      for (const termId of competitorRootTermIds(bundle, cluster.id)) {
         allowedTermIds.add(termId)
       }
     }
@@ -114,7 +114,7 @@ export default function TstTab({
   const handleSetRootSelection = (rootId: string, shouldSelect: boolean) => {
     const nextRootIds = new Set(selectedCompetitorRootIds)
     const nextTermIds = new Set(selectedCompetitorTermIds)
-    const termIds = competitorRootTermIds(bundle, rootId, selectedWeek)
+    const termIds = competitorRootTermIds(bundle, rootId)
 
     if (shouldSelect) {
       nextRootIds.add(rootId)
@@ -144,7 +144,7 @@ export default function TstTab({
     }
 
     let rootStillSelected = false
-    for (const candidateTermId of competitorRootTermIds(bundle, rootId, selectedWeek)) {
+    for (const candidateTermId of competitorRootTermIds(bundle, rootId)) {
       if (nextTermIds.has(candidateTermId)) {
         rootStillSelected = true
         break
@@ -204,7 +204,7 @@ export default function TstTab({
           setSelectedCompetitorRootIds(bundle.clusters.map((cluster) => cluster.id))
           const allTermIds: string[] = []
           for (const cluster of bundle.clusters) {
-            allTermIds.push(...competitorRootTermIds(bundle, cluster.id, selectedWeek))
+            allTermIds.push(...competitorRootTermIds(bundle, cluster.id))
           }
           setSelectedCompetitorTermIds(allTermIds)
           setHasInitializedCompetitorSelection(true)

@@ -29,7 +29,7 @@ export function aggregateInventoryTransactions(
   const balances = new Map<string, BalanceAccumulator>()
 
   for (const transaction of transactions) {
-    const sourceId = transaction.fulfillmentOrderId ?? transaction.purchaseOrderId ?? '_none_'
+    const sourceId = resolveInventoryBalanceSourceId(transaction)
     const key = [transaction.warehouseCode, transaction.skuCode, transaction.lotRef, sourceId].join('::')
     let current = balances.get(key)
 
@@ -51,10 +51,10 @@ export function aggregateInventoryTransactions(
         lastTransactionId: null,
         lastTransactionType: null,
         lastTransactionReference: null,
-        purchaseOrderId: null,
-        purchaseOrderNumber: null,
-        fulfillmentOrderId: null,
-        fulfillmentOrderNumber: null,
+        inboundOrderId: null,
+        inboundOrderNumber: null,
+        outboundOrderId: null,
+        outboundOrderNumber: null,
         firstReceive: undefined
       }
       balances.set(key, current)
@@ -77,30 +77,17 @@ export function aggregateInventoryTransactions(
       current.lastTransactionType = transaction.transactionType ?? null
       current.lastTransactionReference = transaction.referenceId ?? null
 
-      if (transaction.purchaseOrderId) {
-        const poIdChanged = current.purchaseOrderId !== transaction.purchaseOrderId
-        current.purchaseOrderId = transaction.purchaseOrderId
+      if (transaction.inboundOrderId) {
+        const poIdChanged = current.inboundOrderId !== transaction.inboundOrderId
+        current.inboundOrderId = transaction.inboundOrderId
 
-        if (transaction.purchaseOrderNumber) {
-          current.purchaseOrderNumber = transaction.purchaseOrderNumber
+        if (transaction.inboundOrderNumber) {
+          current.inboundOrderNumber = transaction.inboundOrderNumber
         } else if (poIdChanged) {
-          current.purchaseOrderNumber = null
+          current.inboundOrderNumber = null
         }
-      } else if (transaction.purchaseOrderNumber) {
-        current.purchaseOrderNumber = transaction.purchaseOrderNumber
-      }
-
-      if (transaction.fulfillmentOrderId) {
-        const foIdChanged = current.fulfillmentOrderId !== transaction.fulfillmentOrderId
-        current.fulfillmentOrderId = transaction.fulfillmentOrderId
-
-        if (transaction.fulfillmentOrderNumber) {
-          current.fulfillmentOrderNumber = transaction.fulfillmentOrderNumber
-        } else if (foIdChanged) {
-          current.fulfillmentOrderNumber = null
-        }
-      } else if (transaction.fulfillmentOrderNumber) {
-        current.fulfillmentOrderNumber = transaction.fulfillmentOrderNumber
+      } else if (transaction.inboundOrderNumber) {
+        current.inboundOrderNumber = transaction.inboundOrderNumber
       }
     }
 
@@ -167,6 +154,22 @@ export function aggregateInventoryTransactions(
       lotsOutOfStock: balanceArray.length - lotsWithInventory
     }
   }
+}
+
+function resolveInventoryBalanceSourceId(transaction: InventoryTransactionRecord): string {
+  if (transaction.inboundOrderId) {
+    return transaction.inboundOrderId
+  }
+
+  if (transaction.transactionType === 'SHIP') {
+    if (!transaction.referenceId) {
+      throw new Error('SHIP inventory transactions must provide referenceId')
+    }
+
+    return transaction.referenceId
+  }
+
+  return '_none_'
 }
 
 function resolveCartonsPerPallet(balance: BalanceAccumulator): number {

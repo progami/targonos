@@ -1,4 +1,5 @@
 import type { DimensionTriplet } from '@/lib/sku-dimensions'
+import { formatTruncatedDecimal } from '@/lib/number-precision'
 import type { TenantCode } from '@/lib/tenant/constants'
 
 export type UnitSystem = 'metric' | 'imperial'
@@ -21,12 +22,8 @@ export function getWeightUnitLabel(unitSystem: UnitSystem): 'kg' | 'lb' {
   return 'kg'
 }
 
-function stripTrailingZeros(value: string): string {
-  return value.includes('.') ? value.replace(/\.?0+$/, '') : value
-}
-
 function formatNumber(value: number, decimals: number): string {
-  return stripTrailingZeros(value.toFixed(decimals))
+  return formatTruncatedDecimal(value, decimals)
 }
 
 export function convertLengthFromCm(valueCm: number, unitSystem: UnitSystem): number {
@@ -65,7 +62,7 @@ export function formatLengthFromCm(valueCm: number, unitSystem: UnitSystem, deci
   return formatNumber(convertLengthFromCm(valueCm, unitSystem), decimals)
 }
 
-export function formatWeightFromKg(valueKg: number, unitSystem: UnitSystem, decimals: number = 3): string {
+export function formatWeightFromKg(valueKg: number, unitSystem: UnitSystem, decimals: number = 2): string {
   return formatNumber(convertWeightFromKg(valueKg, unitSystem), decimals)
 }
 

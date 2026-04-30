@@ -28,7 +28,7 @@ export function hasTenantAccessForCode(session: Session, currentTenant: TenantCo
  * Throws TenantAccessError if there's a mismatch.
  *
  * When the client explicitly sends an x-tenant header (e.g. for cross-region
- * purchase orders), the middleware sets x-tenant-override=1. In that case
+ * inbound), the middleware sets x-tenant-override=1. In that case
  * the tenant-membership check is skipped because the request already carries
  * an explicit tenant override.
  */

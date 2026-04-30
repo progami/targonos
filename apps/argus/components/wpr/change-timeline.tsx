@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { getPublicBasePath } from '@/lib/base-path';
 import { appendMarketParam, type ArgusMarket } from '@/lib/argus-market';
+import { formatAsinReference } from '@/lib/product-labels';
 import {
   formatWprChangeCategory,
   getWprChangeCategoryColor,
@@ -118,12 +119,12 @@ const chipSx = {
   whiteSpace: 'nowrap' as const,
 };
 
-function compactList(values: string[]): string {
+function compactAsinList(values: string[]): string {
   if (values.length === 0) {
     return '—';
   }
 
-  return values.join(', ');
+  return values.map((value) => formatAsinReference(value)).join(', ');
 }
 
 function summaryText(entry: WprChangeLogEntry): string {
@@ -454,7 +455,7 @@ export default function ChangeTimeline({
                           whiteSpace: 'normal',
                         }}
                       >
-                        {compactList(entry.asins)}
+                        {compactAsinList(entry.asins)}
                       </Typography>
                     </Box>
 

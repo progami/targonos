@@ -206,6 +206,10 @@ model PurchaseOrder {
   statusIcon                   String?
   weeksUntilArrival            Int?
   notes                        String?
+  sourceSystem                 String?
+  sourceId                     String?
+  sourceReference              String?
+  sourceUpdatedAt              DateTime?
   createdAt                    DateTime               @default(now())
   updatedAt                    DateTime               @updatedAt
   overrideSellingPrice         Decimal?               @db.Decimal(10, 2)
@@ -223,9 +227,11 @@ model PurchaseOrder {
   payments                     PurchaseOrderPayment[]
 
   @@unique([strategyId, orderCode])
+  @@unique([strategyId, sourceSystem, sourceId])
   @@index([strategyId])
   @@index([orderCode])
   @@index([status])
+  @@index([sourceSystem, sourceId])
 }
 
 model BatchTableRow {
@@ -249,6 +255,9 @@ model BatchTableRow {
   cartonSide3Cm             Decimal?      @db.Decimal(8, 2) // Height in cm
   cartonWeightKg            Decimal?      @db.Decimal(8, 3)
   unitsPerCarton            Int?
+  sourceSystem              String?
+  sourceLineId              String?
+  sourceUpdatedAt           DateTime?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @updatedAt
   product                   Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -256,6 +265,7 @@ model BatchTableRow {
 
   @@index([purchaseOrderId])
   @@index([productId])
+  @@index([sourceSystem, sourceLineId])
 }
 
 model PurchaseOrderPayment {

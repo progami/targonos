@@ -37,6 +37,9 @@ export interface TstSelectionRootRow {
   family: string
   selectedCount: number
   totalCount: number
+  coveredTermCount: number
+  sqpTermCount: number
+  coverageRate: number
   checked: boolean
   partial: boolean
   current: TstWeeklySelection
@@ -59,6 +62,9 @@ export interface TstSelectionViewModel {
   scopeType: TstSelectionScope
   allTermIds: string[]
   selectedTermIds: string[]
+  coveredTermCount: number
+  sqpTermCount: number
+  coverageRate: number
   rootRows: TstSelectionRootRow[]
   termRowsByRoot: Record<string, TstSelectionTermRow[]>
 }
@@ -199,28 +205,46 @@ function selectedWeekTermRows(cluster: WprCluster, selectedWeek: WeekLabel): Wpr
   return selectedWindow.term_rows
 }
 
+function sqpTermsById(bundle: WprWeekBundle) {
+  return new Map(bundle.sqpTerms.map((term) => [term.id, term]))
+}
+
+function clusterById(bundle: WprWeekBundle, clusterId: string): WprCluster {
+  const cluster = bundle.clusters.find((item) => item.id === clusterId)
+  if (cluster === undefined) {
+    throw new Error(`Missing TST cluster ${clusterId}`)
+  }
+
+  return cluster
+}
+
 export function competitorRootTermIds(
   bundle: WprWeekBundle,
   clusterId: string,
-  selectedWeek: WeekLabel,
 ): string[] {
-  const cluster = bundle.clusters.find((item) => item.id === clusterId)
-  if (cluster === undefined) {
-    return []
+  const cluster = clusterById(bundle, clusterId)
+  const sqpTermIds = bundle.sqpClusterTerms[cluster.id]
+  if (sqpTermIds === undefined) {
+    throw new Error(`Missing SQP term ids for TST root ${cluster.id}`)
   }
+  const terms = sqpTermsById(bundle)
 
-  return selectedWeekTermRows(cluster, selectedWeek).map((row) =>
-    competitorTermKey(cluster.cluster, row.term),
-  )
+  return sqpTermIds.map((termId) => {
+    const term = terms.get(termId)
+    if (term === undefined) {
+      throw new Error(`Missing SQP term ${termId} for TST root ${cluster.id}`)
+    }
+
+    return competitorTermKey(cluster.cluster, term.term)
+  })
 }
 
 function competitorSelectedTermsForRoot(
   bundle: WprWeekBundle,
   clusterId: string,
   selectedTermIds: Set<string>,
-  selectedWeek: WeekLabel,
 ): string[] {
-  return competitorRootTermIds(bundle, clusterId, selectedWeek).filter((termId) =>
+  return competitorRootTermIds(bundle, clusterId).filter((termId) =>
     selectedTermIds.has(termId),
   )
 }
@@ -237,8 +261,14 @@ function buildRootRows(
   selectedWeek: WeekLabel,
 ): TstSelectionRootRow[] {
   return bundle.clusters.map((cluster) => {
-    const allIds = competitorRootTermIds(bundle, cluster.id, selectedWeek)
-    const selectedIds = competitorSelectedTermsForRoot(bundle, cluster.id, selectedTermIds, selectedWeek)
+    const allIds = competitorRootTermIds(bundle, cluster.id)
+    const selectedIds = competitorSelectedTermsForRoot(bundle, cluster.id, selectedTermIds)
+    const coveredTermIds = new Set(
+      selectedWeekTermRows(cluster, selectedWeek)
+        .map((row) => competitorTermKey(cluster.cluster, row.term))
+        .filter((termId) => allIds.includes(termId)),
+    )
+    const coveredTermCount = coveredTermIds.size
 
     return {
       id: cluster.id,
@@ -246,9 +276,12 @@ function buildRootRows(
       family: cluster.family,
       selectedCount: selectedIds.length,
       totalCount: allIds.length,
+      coveredTermCount,
+      sqpTermCount: allIds.length,
+      coverageRate: safeDiv(coveredTermCount, allIds.length),
       checked: allIds.length > 0 && selectedIds.length === allIds.length,
       partial: selectedIds.length > 0 && selectedIds.length < allIds.length,
-      current: selectedWeekTstCompare(cluster.tstCompare.weekly, selectedWeek),
+      current: selectedWeekSqpTstCompare(bundle, cluster, selectedWeek),
     }
   })
 }
@@ -260,22 +293,27 @@ function buildTermRowsByRoot(
 ): Record<string, TstSelectionTermRow[]> {
   const rowsByRoot: Record<string, TstSelectionTermRow[]> = {}
   for (const cluster of bundle.clusters) {
-    const rows = selectedWeekTermRows(cluster, selectedWeek)
-      .map((row) => {
-        const id = competitorTermKey(cluster.cluster, row.term)
-        return {
-          id,
-          rootId: cluster.id,
-          label: row.term,
-          checked: selectedTermIds.has(id),
-          current: {
-            ...row,
-            root: cluster.cluster,
-            termId: id,
-          },
-        }
+    const allIds = new Set(competitorRootTermIds(bundle, cluster.id))
+    const rows: TstSelectionTermRow[] = []
+    for (const row of selectedWeekTermRows(cluster, selectedWeek)) {
+      const id = competitorTermKey(cluster.cluster, row.term)
+      if (!allIds.has(id)) {
+        continue
+      }
+
+      rows.push({
+        id,
+        rootId: cluster.id,
+        label: row.term,
+        checked: selectedTermIds.has(id),
+        current: {
+          ...row,
+          root: cluster.cluster,
+          termId: id,
+        },
       })
-      .sort((left, right) => compareByTstTermPriority(left.current, right.current))
+    }
+    rows.sort((left, right) => compareByTstTermPriority(left.current, right.current))
     rowsByRoot[cluster.id] = rows
   }
 
@@ -289,6 +327,22 @@ function firstCompetitor(bundle: WprWeekBundle): WprCompetitorSummary {
   }
 
   return competitor
+}
+
+function selectedWeekSqpTstCompare(
+  bundle: WprWeekBundle,
+  cluster: WprCluster,
+  selectedWeek: WeekLabel,
+): TstWeeklySelection {
+  const current = selectedWeekTstCompare(cluster.tstCompare.weekly, selectedWeek)
+  const selectedIds = new Set(competitorRootTermIds(bundle, cluster.id))
+  const filtered = filterTstCompareByTermIds(current, [cluster.cluster], selectedIds, selectedIds.size)
+  return {
+    ...filtered,
+    week_label: current.week_label,
+    week_number: current.week_number,
+    start_date: current.start_date,
+  }
 }
 
 function combineTstWindowCompare(
@@ -338,11 +392,12 @@ function filterTstCompareByTermIds(
   compare: TstCompareSelection | TstWeeklySelection,
   rootLabels: string[],
   selectedIds: Set<string>,
+  termsTotal: number,
 ): TstCompareSelection {
   const filtered = emptyTstSelectionBase()
   filtered.source = compare.source
   filtered.method = compare.method
-  filtered.coverage.terms_total = compare.coverage.terms_total
+  filtered.coverage.terms_total = termsTotal
   filtered.coverage.weeks_present = compare.coverage.weeks_present
 
   for (const row of compare.term_rows) {
@@ -453,7 +508,7 @@ function filterTstWeeklySeriesByTermIds(
   selectedIds: Set<string>,
 ): TstWeeklySelection[] {
   return weeklySeries.map((weekCompare) => {
-    const filtered = filterTstCompareByTermIds(weekCompare, rootLabels, selectedIds)
+    const filtered = filterTstCompareByTermIds(weekCompare, rootLabels, selectedIds, selectedIds.size)
     return {
       ...filtered,
       week_label: weekCompare.week_label,
@@ -488,6 +543,12 @@ export function createTstViewModel(input: {
   const rootIds = selectedCompetitorRootIdsList(bundle, selectedRootIds)
   const rootRows = buildRootRows(bundle, selectedTermIds, selectedWeek)
   const termRowsByRoot = buildTermRowsByRoot(bundle, selectedTermIds, selectedWeek)
+  const coverageRows = rootIds.length > 0
+    ? rootRows.filter((row) => rootIds.includes(row.id))
+    : rootRows
+  const coveredTermCount = coverageRows.reduce((sum, row) => sum + row.coveredTermCount, 0)
+  const sqpTermCount = coverageRows.reduce((sum, row) => sum + row.sqpTermCount, 0)
+  const coverageRate = safeDiv(coveredTermCount, sqpTermCount)
 
   if (rootIds.length === 0) {
     return {
@@ -499,6 +560,9 @@ export function createTstViewModel(input: {
       scopeType: 'empty',
       allTermIds: [],
       selectedTermIds: [],
+      coveredTermCount,
+      sqpTermCount,
+      coverageRate,
       rootRows,
       termRowsByRoot,
     }
@@ -506,13 +570,10 @@ export function createTstViewModel(input: {
 
   if (rootIds.length === 1) {
     const rootId = rootIds[0]
-    const cluster = bundle.clusters.find((item) => item.id === rootId)
-    if (cluster === undefined) {
-      throw new Error(`Missing TST root ${rootId}`)
-    }
+    const cluster = clusterById(bundle, rootId)
 
-    const allTermIds = competitorRootTermIds(bundle, rootId, selectedWeek)
-    const selectedIds = competitorSelectedTermsForRoot(bundle, rootId, selectedTermIds, selectedWeek)
+    const allTermIds = competitorRootTermIds(bundle, rootId)
+    const selectedIds = competitorSelectedTermsForRoot(bundle, rootId, selectedTermIds)
     if (selectedIds.length === 0) {
       return {
         rootIds,
@@ -523,16 +584,20 @@ export function createTstViewModel(input: {
         scopeType: 'no-terms',
         allTermIds,
         selectedTermIds: [],
+        coveredTermCount,
+        sqpTermCount,
+        coverageRate,
         rootRows,
         termRowsByRoot,
       }
     }
 
+    const weekly = filterTstWeeklySeriesByTermIds(
+      cluster.tstCompare.weekly.map(toWeeklySelection),
+      [cluster.cluster],
+      new Set(selectedIds),
+    )
     const fullSelection = selectedIds.length === allTermIds.length
-    let weekly = cluster.tstCompare.weekly.map(toWeeklySelection)
-    if (!fullSelection) {
-      weekly = filterTstWeeklySeriesByTermIds(weekly, [cluster.cluster], new Set(selectedIds))
-    }
 
     return {
       rootIds,
@@ -543,6 +608,9 @@ export function createTstViewModel(input: {
       scopeType: fullSelection ? 'root' : selectedIds.length === 1 ? 'term' : 'multi-term',
       allTermIds,
       selectedTermIds: selectedIds,
+      coveredTermCount,
+      sqpTermCount,
+      coverageRate,
       rootRows,
       termRowsByRoot,
     }
@@ -550,7 +618,7 @@ export function createTstViewModel(input: {
 
   const allTermIds: string[] = []
   for (const rootId of rootIds) {
-    allTermIds.push(...competitorRootTermIds(bundle, rootId, selectedWeek))
+    allTermIds.push(...competitorRootTermIds(bundle, rootId))
   }
 
   const selectedIds = allTermIds.filter((termId) => selectedTermIds.has(termId))
@@ -574,16 +642,20 @@ export function createTstViewModel(input: {
       scopeType: 'no-terms',
       allTermIds,
       selectedTermIds: [],
+      coveredTermCount,
+      sqpTermCount,
+      coverageRate,
       rootRows,
       termRowsByRoot,
     }
   }
 
+  const weekly = filterTstWeeklySeriesByTermIds(
+    combineTstWeeklySeries(bundle, rootIds),
+    rootLabels,
+    new Set(selectedIds),
+  )
   const fullSelection = selectedIds.length === allTermIds.length
-  let weekly = combineTstWeeklySeries(bundle, rootIds)
-  if (!fullSelection) {
-    weekly = filterTstWeeklySeriesByTermIds(weekly, rootLabels, new Set(selectedIds))
-  }
 
   return {
     rootIds,
@@ -594,6 +666,9 @@ export function createTstViewModel(input: {
     scopeType: fullSelection ? 'multi-root' : 'multi-root-term',
     allTermIds,
     selectedTermIds: selectedIds,
+    coveredTermCount,
+    sqpTermCount,
+    coverageRate,
     rootRows,
     termRowsByRoot,
   }
@@ -615,5 +690,5 @@ export function createTstWindowCompareSelection(input: {
     throw new Error('rootLabels are required when filtering TST terms')
   }
 
-  return filterTstCompareByTermIds(selection, input.rootLabels, input.selectedTermIds)
+  return filterTstCompareByTermIds(selection, input.rootLabels, input.selectedTermIds, input.selectedTermIds.size)
 }

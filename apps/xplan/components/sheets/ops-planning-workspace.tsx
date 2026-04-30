@@ -1287,40 +1287,58 @@ export function OpsPlanningWorkspace({
         list.push(row);
         rowsByOrder.set(row.purchaseOrderId, list);
       }
+      const quantityByOrder = new Map(
+        Array.from(rowsByOrder.entries()).map(([orderId, rows]) => [
+          orderId,
+          rows.reduce((sum, row) => sum + parseInteger(row.quantity, 0), 0),
+        ]),
+      );
 
-      setOrders((previous) => {
-        const next = previous.map((order) => {
-          const updates = rowsByOrder.get(order.id);
-          if (!updates || updates.length === 0) return order;
-          const batches = [...(order.batchTableRows ?? [])];
-          for (const update of updates) {
-            const batchIndex = batches.findIndex((batch) => batch.id === update.id);
-            if (batchIndex === -1) continue;
-            const tariffCost = parseNumber(update.tariffCost);
-            const tariffRate = parsePercent(update.tariffRate);
-            batches[batchIndex] = {
-              ...batches[batchIndex],
-              productId: update.productId,
-              quantity: parseInteger(update.quantity, batches[batchIndex].quantity ?? 0),
-              overrideSellingPrice: parseNumber(update.sellingPrice),
-              overrideManufacturingCost: parseNumber(update.manufacturingCost),
-              overrideFreightCost: parseNumber(update.freightCost),
-              overrideTariffCost: tariffCost,
-              overrideTariffRate: tariffCost != null ? null : tariffRate,
-              overrideTacosPercent: parsePercent(update.tacosPercent),
-              overrideFbaFee: parseNumber(update.fbaFee),
-              overrideReferralRate: parsePercent(update.referralRate),
-              overrideStoragePerMonth: parseNumber(update.storagePerMonth),
-            } as BatchTableRowInput;
-          }
-          const totalQuantity = batches.reduce((sum, batch) => sum + (batch.quantity ?? 0), 0);
-          return { ...order, batchTableRows: batches, quantity: totalQuantity };
-        });
-        ordersRef.current = next;
-        return next;
+      const nextOrders = ordersRef.current.map((order) => {
+        const updates = rowsByOrder.get(order.id);
+        if (!updates || updates.length === 0) return order;
+        const batches = [...(order.batchTableRows ?? [])];
+        for (const update of updates) {
+          const batchIndex = batches.findIndex((batch) => batch.id === update.id);
+          if (batchIndex === -1) continue;
+          const tariffCost = parseNumber(update.tariffCost);
+          const tariffRate = parsePercent(update.tariffRate);
+          batches[batchIndex] = {
+            ...batches[batchIndex],
+            productId: update.productId,
+            quantity: parseInteger(update.quantity, batches[batchIndex].quantity ?? 0),
+            overrideSellingPrice: parseNumber(update.sellingPrice),
+            overrideManufacturingCost: parseNumber(update.manufacturingCost),
+            overrideFreightCost: parseNumber(update.freightCost),
+            overrideTariffCost: tariffCost,
+            overrideTariffRate: tariffCost != null ? null : tariffRate,
+            overrideTacosPercent: parsePercent(update.tacosPercent),
+            overrideFbaFee: parseNumber(update.fbaFee),
+            overrideReferralRate: parsePercent(update.referralRate),
+            overrideStoragePerMonth: parseNumber(update.storagePerMonth),
+          } as BatchTableRowInput;
+        }
+        const totalQuantity = batches.reduce((sum, batch) => sum + (batch.quantity ?? 0), 0);
+        return { ...order, batchTableRows: batches, quantity: totalQuantity };
       });
+      ordersRef.current = nextOrders;
+      setOrders(nextOrders);
 
-      applyTimelineUpdate(ordersRef.current, inputRowsRef.current, paymentRowsRef.current);
+      let nextInputRows = inputRowsRef.current;
+      const recalculatedInputRows = inputRowsRef.current.map((row) => {
+        const totalQuantity = quantityByOrder.get(row.id);
+        if (totalQuantity == null) return row;
+        const formattedQuantity = formatNumericInput(totalQuantity, 0);
+        if (row.quantity === formattedQuantity) return row;
+        return { ...row, quantity: formattedQuantity };
+      });
+      if (recalculatedInputRows.some((row, index) => row !== inputRowsRef.current[index])) {
+        nextInputRows = recalculatedInputRows;
+        inputRowsRef.current = recalculatedInputRows;
+        setInputRows(recalculatedInputRows);
+      }
+
+      applyTimelineUpdate(nextOrders, nextInputRows, paymentRowsRef.current);
     },
     [applyTimelineUpdate],
   );
@@ -2029,8 +2047,8 @@ export function OpsPlanningWorkspace({
                         Import purchase order from Talos
                       </AlertDialogTitle>
                       <AlertDialogDescription className="mt-1">
-                        Select one or more Talos POs to create new rows and copy line items into the
-                        Batch table.
+                        Select one or more Talos POs to import or refresh rows and copy line items
+                        into the Batch table.
                       </AlertDialogDescription>
                     </div>
 
@@ -2107,6 +2125,10 @@ export function OpsPlanningWorkspace({
                       <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-300">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading purchase orders…
+                      </div>
+                    ) : talosImportError ? (
+                      <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
+                        Talos purchase orders unavailable.
                       </div>
                     ) : talosOrders.length === 0 ? (
                       <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
@@ -2217,8 +2239,9 @@ export function OpsPlanningWorkspace({
                   </label>
                   <div className="flex items-end justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 dark:border-[#1a3a54] dark:bg-white/5 dark:text-slate-300">
                     <span>
-                      Showing latest {TALOS_PO_RESULTS_LIMIT.toLocaleString()}. Select all shown to
-                      bulk import this list.
+                      {talosImportError
+                        ? 'Resolve the Talos connection and refresh.'
+                        : `Showing latest ${TALOS_PO_RESULTS_LIMIT.toLocaleString()}. Select all shown to bulk import this list.`}
                     </span>
                   </div>
                 </div>

@@ -3,7 +3,7 @@
 /**
  * Demo Seed Script
  * Uses public API endpoints to create demo users, warehouses, cost rates,
- * purchase orders, and inventory transactions. No direct database access.
+ * inbound, and inventory transactions. No direct database access.
  */
 
 const args = process.argv.slice(2)
@@ -59,7 +59,7 @@ async function main() {
   }
   console.log('==================================================\n')
   console.log('Next steps:')
-  console.log('  • Open /operations/inventory to review purchase orders and stock levels')
+  console.log('  • Open /operations/inventory to review inbound and stock levels')
   console.log('  • Open /operations/transactions to inspect RECEIVE/SHIP history')
   console.log('==================================================')
 }
