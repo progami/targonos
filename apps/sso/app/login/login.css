@@ -130,6 +130,7 @@
 
 .login-brand-title {
   color: var(--login-text-primary);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
   font-size: 20px;
   line-height: 1.1;
   font-weight: 600;
@@ -158,6 +159,7 @@
 .login-title {
   margin: 0;
   color: var(--login-text-primary);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
   max-width: 15ch;
   display: grid;
   gap: 8px;
@@ -201,6 +203,7 @@
 .login-panel-title {
   margin: 0;
   color: var(--login-text-primary);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
   font-size: clamp(2rem, 3vw, 2.9rem);
   line-height: 0.96;
   letter-spacing: -0.05em;

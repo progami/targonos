@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
   const errorParam = asString(params.error)
   const error = typeof errorParam === 'string' ? errorParam : ''
   const errorMessage = error === '' ? '' : getErrorMessage(error)
-  const loginSubtitle = 'Use your targonglobal.com Google account to enter the launcher.'
+  const loginSubtitle = 'Authenticate once to reach the TargonOS launcher and every workspace your role can open.'
   const session = await auth()
 
   if (session) {
@@ -96,8 +96,8 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
             />
             <div className="login-story-copy login-story-copy--compact">
               <h1 className="login-title login-title--compact">
-                <span className="login-title-primary">Private Label Engine</span>
-                <span className="login-title-secondary">for Targon Products.</span>
+                <span className="login-title-primary">One operating layer</span>
+                <span className="login-title-secondary">for Targon work.</span>
               </h1>
             </div>
           </div>
