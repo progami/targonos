@@ -77,6 +77,13 @@ TRACKING_FETCH_PLIST="$LAUNCH_AGENTS_DIR/$TRACKING_FETCH_LABEL.plist"
 HOURLY_LISTINGS_API_PLIST="$LAUNCH_AGENTS_DIR/$HOURLY_LISTINGS_API_LABEL.plist"
 DAILY_ACCOUNT_HEALTH_PLIST="$LAUNCH_AGENTS_DIR/$DAILY_ACCOUNT_HEALTH_LABEL.plist"
 WEEKLY_API_PLIST="$LAUNCH_AGENTS_DIR/$WEEKLY_API_LABEL.plist"
+if [ "$MARKET" = "us" ]; then
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
+else
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
+fi
 
 if [ "$MARKET" = "us" ]; then
   ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
