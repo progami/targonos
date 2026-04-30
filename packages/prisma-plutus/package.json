@@ -2,6 +2,10 @@
   "name": "@targon/prisma-plutus",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "build": "pnpm -C ../../apps/plutus db:generate",
+    "type-check": "pnpm -C ../../apps/plutus db:generate"
+  },
   "sideEffects": false,
   "main": "generated/index.js",
   "types": "generated/index.d.ts",
