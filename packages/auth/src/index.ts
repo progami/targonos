@@ -234,6 +234,9 @@ export interface DecodePortalSessionOptions {
 }
 
 export function isWorktreeDevAuthEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') {
+    return false;
+  }
   const raw = process.env.TARGON_WORKTREE_DEV_AUTH;
   if (!raw) {
     return false;

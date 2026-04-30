@@ -466,6 +466,7 @@ test('hasCapability returns false without authz even when dev bypass env is set'
 })
 
 test('decodePortalSession returns the dedicated worktree dev session without cookies', async () => {
+  process.env.NODE_ENV = 'development'
   process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
   process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
   process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
@@ -527,6 +528,7 @@ test('decodePortalSession returns the dedicated worktree dev session without coo
 })
 
 test('getCurrentAuthz resolves authz from the dedicated worktree dev session', async () => {
+  process.env.NODE_ENV = 'development'
   process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
   process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
   process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
@@ -559,4 +561,29 @@ test('getCurrentAuthz resolves authz from the dedicated worktree dev session', a
       },
     },
   })
+})
+
+test('decodePortalSession ignores worktree dev auth in production', async () => {
+  process.env.NODE_ENV = 'production'
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 1,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US'],
+      },
+    },
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: null,
+    appId: 'talos',
+  })
+
+  assert.equal(payload, null)
 })
