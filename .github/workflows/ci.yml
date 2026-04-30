@@ -190,10 +190,6 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
       - name: Require promotion PR to come from dev
         shell: bash
         run: |
@@ -202,14 +198,71 @@ jobs:
             exit 1
           fi
       - name: Require the exact dev SHA to have passed push CI
-        env:
-          GITHUB_API_URL: ${{ github.api_url }}
-          GITHUB_TOKEN: ${{ github.token }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PROMOTION_BRANCH: dev
-          PROMOTION_WORKFLOW_ID: ci.yml
-        run: node scripts/verify-promotion-ready.mjs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const headSha = context.payload.pull_request?.head?.sha
+            const branch = 'dev'
+            const workflow_id = 'ci.yml'
+
+            if (!headSha || typeof headSha !== 'string') {
+              core.setFailed('Pull request head SHA is missing.')
+              return
+            }
+
+            const branchPayload = await github.rest.repos.getBranch({
+              owner,
+              repo,
+              branch,
+            })
+            const branchSha = branchPayload.data?.commit?.sha
+            if (!branchSha || typeof branchSha !== 'string') {
+              core.setFailed(`GitHub branch payload for ${branch} is missing commit.sha.`)
+              return
+            }
+
+            if (branchSha !== headSha) {
+              core.setFailed(
+                `Promotion PR head ${headSha} does not match the current dev tip ${branchSha}.`,
+              )
+              return
+            }
+
+            let page = 1
+            let matchingRun = null
+            while (!matchingRun) {
+              const runsPayload = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id,
+                branch,
+                event: 'push',
+                status: 'completed',
+                per_page: 100,
+                page,
+              })
+
+              const pageRuns = Array.isArray(runsPayload.data?.workflow_runs)
+                ? runsPayload.data.workflow_runs
+                : []
+              matchingRun = pageRuns.find((run) => run?.head_sha === headSha && run?.conclusion === 'success')
+
+              if (matchingRun || pageRuns.length < 100) {
+                break
+              }
+              page += 1
+            }
+
+            if (!matchingRun) {
+              core.setFailed(
+                `No successful dev push CI run found for ${headSha}. Merge to dev and wait for CI before promoting to main.`,
+              )
+              return
+            }
+
+            core.info(`Found successful dev push CI run ${matchingRun.html_url} for ${headSha}.`)
 
   build-test:
     needs:
