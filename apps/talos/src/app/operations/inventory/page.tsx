@@ -176,6 +176,14 @@ function InventoryPage() {
     throw loadError
   }
 
+  if (loading) {
+    return (
+      <PageContainer>
+        <PageLoading />
+      </PageContainer>
+    )
+  }
+
   if (!loading && summary === null) {
     throw new Error('Inventory summary is required')
   }
@@ -615,16 +623,22 @@ function InventoryPage() {
                           : ('neutral' as const)
 
                     const sourceNumber =
-                      balance.fulfillmentOrderNumber ?? balance.purchaseOrderNumber ?? null
-                    const sourceHref = balance.fulfillmentOrderId
-                      ? `/operations/fulfillment-orders/${balance.fulfillmentOrderId}`
-                      : balance.purchaseOrderId
-                        ? `/operations/purchase-orders/${balance.purchaseOrderId}`
-                        : null
+                      movementType === 'negative'
+                        ? balance.lastTransactionReference ?? null
+                        : balance.inboundOrderNumber ?? null
+                    const sourceHref =
+                      movementType === 'negative'
+                        ? balance.lastTransactionId
+                          ? `/operations/transactions/${balance.lastTransactionId}`
+                          : null
+                        : balance.inboundOrderId
+                          ? `/operations/inbound/${balance.inboundOrderId}`
+                          : null
                     const sourceDisplay = sourceNumber ?? (sourceHref ? 'View' : '—')
                     const firstReceiveMeta = balance.receiveTransaction
                       ? `First receive: ${formatLedgerTimestamp(balance.receiveTransaction.transactionDate) ?? '—'} by ${balance.receiveTransaction.createdBy?.fullName ?? 'Unknown'}`
                       : null
+                    const sourceTitle = [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n')
                     let warehouseDisplay = balance.warehouse.code
                     if (warehouseDisplay.length === 0) {
                       warehouseDisplay = balance.warehouse.name
@@ -640,9 +654,7 @@ function InventoryPage() {
                       >
                         <td
                           className="px-2 py-2 text-sm font-semibold text-foreground truncate"
-                          title={
-                            [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n') || undefined
-                          }
+                          title={sourceTitle.length > 0 ? sourceTitle : undefined}
                         >
                           {sourceHref ? (
                             <Link

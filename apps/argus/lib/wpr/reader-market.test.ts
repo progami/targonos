@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { getWprWeekSummary } from './reader'
+import { createWprWeekSummary, getWprWeekSummary } from './reader'
 
 function buildScpMetrics() {
   return {
@@ -106,30 +106,43 @@ function buildWeekBundle(anchorWeek: string) {
   }
 }
 
-function writePayload(dataDir: string, week: string) {
-  const bundle = buildWeekBundle(week)
+const weekStartDateByLabel: Record<string, string> = {
+  W07: '2026-02-08',
+  W08: '2026-02-15',
+  W16: '2026-04-12',
+  W17: '2026-04-19',
+  W18: '2026-04-26',
+}
+
+function writePayload(dataDir: string, stableWeek: string, latestCompletedWeek: string) {
+  const currentWeek = 'W18'
+  const weeks = [stableWeek, latestCompletedWeek, currentWeek]
+  const windowsByWeek: Record<string, ReturnType<typeof buildWeekBundle>> = {}
+  const weekStartDates: Record<string, string> = {}
+  const changeLogByWeek: Record<string, unknown[]> = {}
+  for (const week of weeks) {
+    windowsByWeek[week] = buildWeekBundle(week)
+    weekStartDates[week] = weekStartDateByLabel[week]
+    changeLogByWeek[week] = []
+  }
+  const bundle = windowsByWeek[currentWeek]
   writeFileSync(
     path.join(dataDir, 'wpr-data-latest.json'),
     JSON.stringify({
       ...bundle,
-      defaultWeek: week,
-      weekStartDates: {
-        [week]: '2026-04-12',
-      },
+      defaultWeek: currentWeek,
+      weeks,
+      weekStartDates,
       sourceOverview: {
-        week_labels: [week],
-        latest_week: week,
-        weeks_with_data: 1,
+        week_labels: weeks,
+        latest_week: currentWeek,
+        weeks_with_data: weeks.length,
         source_completeness: 'ok',
         critical_gaps: [],
         matrix: [],
       },
-      windowsByWeek: {
-        [week]: bundle,
-      },
-      changeLogByWeek: {
-        [week]: [],
-      },
+      windowsByWeek,
+      changeLogByWeek,
       audit: {},
     }),
   )
@@ -138,8 +151,8 @@ function writePayload(dataDir: string, week: string) {
 test('getWprWeekSummary caches payloads by market and path', async () => {
   const usDataDir = mkdtempSync(path.join(tmpdir(), 'argus-wpr-us-'))
   const ukDataDir = mkdtempSync(path.join(tmpdir(), 'argus-wpr-uk-'))
-  writePayload(usDataDir, 'W16')
-  writePayload(ukDataDir, 'W07')
+  writePayload(usDataDir, 'W16', 'W17')
+  writePayload(ukDataDir, 'W07', 'W08')
 
   process.env.ARGUS_SALES_ROOT_US = path.join(usDataDir, '..', '..')
   process.env.ARGUS_SALES_ROOT_UK = path.join(ukDataDir, '..', '..')
@@ -151,4 +164,22 @@ test('getWprWeekSummary caches payloads by market and path', async () => {
 
   assert.equal(usSummary.defaultWeek, 'W16')
   assert.equal(ukSummary.defaultWeek, 'W07')
+})
+
+test('createWprWeekSummary excludes current and newest completed weeks by default', () => {
+  const summary = createWprWeekSummary({
+    defaultWeek: 'W18',
+    weeks: ['W16', 'W17', 'W18'],
+    weekStartDates: {
+      W16: '2026-04-12',
+      W17: '2026-04-19',
+      W18: '2026-04-26',
+    },
+  }, new Date('2026-04-28T16:00:00.000Z'))
+
+  assert.equal(summary.defaultWeek, 'W16')
+  assert.deepEqual(summary.weeks, ['W16'])
+  assert.deepEqual(summary.weekStartDates, {
+    W16: '2026-04-12',
+  })
 })

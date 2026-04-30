@@ -5,14 +5,14 @@ import { sanitizeSearchQuery } from '@/lib/security/input-sanitization'
 export const dynamic = 'force-dynamic'
 
 interface SearchResult {
-  type: 'SKU' | 'PURCHASE_ORDER' | 'SUPPLIER' | 'WAREHOUSE'
+  type: 'SKU' | 'INBOUND' | 'SUPPLIER' | 'WAREHOUSE'
   id: string
   title: string
   subtitle?: string
   href: string
 }
 
-export const GET = withAuth(async (request) => {
+export const GET = withAuth(async request => {
   const { searchParams } = new URL(request.url)
   const rawQuery = searchParams.get('q') ?? ''
   const query = sanitizeSearchQuery(rawQuery).trim()
@@ -46,16 +46,16 @@ export const GET = withAuth(async (request) => {
         id: sku.id,
         title: sku.skuCode,
         subtitle: sku.description ?? undefined,
-        href: `/config/products?editSkuId=${encodeURIComponent(sku.id)}`,
+        href: `/amazon/fba-fee-discrepancies?search=${encodeURIComponent(sku.skuCode)}&editSkuId=${encodeURIComponent(sku.id)}`,
       })
     }
 
-    // Search Purchase Orders
-    const purchaseOrders = await prisma.purchaseOrder.findMany({
+    // Search Inbound
+    const inboundOrders = await prisma.inboundOrder.findMany({
       where: {
         OR: [
           { orderNumber: { contains: query, mode: 'insensitive' } },
-          { poNumber: { contains: query, mode: 'insensitive' } },
+          { inboundNumber: { contains: query, mode: 'insensitive' } },
           { notes: { contains: query, mode: 'insensitive' } },
           { counterpartyName: { contains: query, mode: 'insensitive' } },
         ],
@@ -64,13 +64,13 @@ export const GET = withAuth(async (request) => {
       orderBy: { updatedAt: 'desc' },
     })
 
-    for (const po of purchaseOrders) {
+    for (const inbound of inboundOrders) {
       results.push({
-        type: 'PURCHASE_ORDER',
-        id: po.id,
-        title: po.poNumber ?? po.orderNumber,
-        subtitle: po.counterpartyName ?? undefined,
-        href: `/operations/purchase-orders/${po.id}`,
+        type: 'INBOUND',
+        id: inbound.id,
+        title: inbound.inboundNumber ?? inbound.orderNumber,
+        subtitle: inbound.counterpartyName ?? undefined,
+        href: `/operations/inbound/${inbound.id}`,
       })
     }
 

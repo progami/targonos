@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   buildDashboardOverviewSnapshot,
-  mapPurchaseOrderToDashboardOverviewInput,
+  mapInboundOrderToDashboardOverviewInput,
   type DashboardOverviewBalanceInput,
   type DashboardOverviewSnapshot,
-  type DashboardOverviewPurchaseOrderInput,
+  type DashboardOverviewInboundOrderInput,
 } from './dashboard-overview'
 
 process.env.NEXT_PUBLIC_APP_URL ??= 'http://localhost:3000'
@@ -29,10 +29,10 @@ const loadResolveDashboardOverviewWarehouseCodeFilter = async () => {
 }
 
 test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehouse totals', () => {
-  const purchaseOrders: DashboardOverviewPurchaseOrderInput[] = [
+  const inboundOrders: DashboardOverviewInboundOrderInput[] = [
     {
-      id: 'po-mfg-1',
-      orderNumber: 'PO-1001',
+      id: 'inbound-mfg-1',
+      orderNumber: 'IN-1001',
       status: 'MANUFACTURING',
       counterpartyName: 'Ningbo Mills',
       warehouseCode: 'TCL-CHINO',
@@ -42,8 +42,8 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
       totalUnits: 960,
     },
     {
-      id: 'po-ocean-1',
-      orderNumber: 'PO-1002',
+      id: 'inbound-ocean-1',
+      orderNumber: 'IN-1002',
       status: 'OCEAN',
       counterpartyName: 'Ningbo Mills',
       warehouseCode: 'TCL-CHINO',
@@ -81,7 +81,7 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
     },
   ]
 
-  const snapshot = buildDashboardOverviewSnapshot({ purchaseOrders, balances, movements: [] })
+  const snapshot = buildDashboardOverviewSnapshot({ inboundOrders, balances, movements: [] })
 
   const expectedSnapshot: DashboardOverviewSnapshot = {
     summary: {
@@ -133,7 +133,7 @@ test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehous
 
 test('buildDashboardOverviewSnapshot sorts warehouses by cartons descending', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     movements: [],
     balances: [
       {
@@ -163,7 +163,7 @@ test('buildDashboardOverviewSnapshot sorts warehouses by cartons descending', ()
 
 test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     movements: [],
     balances: [
       {
@@ -199,7 +199,7 @@ test('buildDashboardOverviewSnapshot skips zero-value warehouse balances', () =>
 
 test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     movements: [],
     balances: [
       {
@@ -235,7 +235,7 @@ test('buildDashboardOverviewSnapshot keeps negative warehouse balances visible',
 
 test('buildDashboardOverviewSnapshot excludes Amazon FBA pallets from warehouse totals', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     movements: [],
     balances: [
       {
@@ -278,7 +278,7 @@ test('buildDashboardOverviewSnapshot excludes Amazon FBA pallets from warehouse 
 
 test('buildDashboardOverviewSnapshot returns recent inbound and outbound movements', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     balances: [],
     movements: [
       {
@@ -377,7 +377,7 @@ test('buildDashboardOverviewSnapshot uses createdAt to rank same-day recent move
   }))
 
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     balances: [],
     movements,
   })
@@ -390,7 +390,7 @@ test('buildDashboardOverviewSnapshot uses createdAt to rank same-day recent move
 
 test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed grouping key', () => {
   const snapshot = buildDashboardOverviewSnapshot({
-    purchaseOrders: [],
+    inboundOrders: [],
     movements: [],
     balances: [
       {
@@ -425,10 +425,10 @@ test('buildDashboardOverviewSnapshot normalizes warehouse codes to the trimmed g
   ])
 })
 
-test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', () => {
-  const mapped = mapPurchaseOrderToDashboardOverviewInput({
-    id: 'po-null-pallets',
-    orderNumber: 'PO-2001',
+test('mapInboundOrderToDashboardOverviewInput preserves missing pallet data', () => {
+  const mapped = mapInboundOrderToDashboardOverviewInput({
+    id: 'inbound-null-pallets',
+    orderNumber: 'IN-2001',
     status: 'MANUFACTURING',
     counterpartyName: null,
     warehouseCode: 'TCL-CHINO',
@@ -442,12 +442,12 @@ test('mapPurchaseOrderToDashboardOverviewInput preserves missing pallet data', (
   assert.equal(mapped.totalUnits, 420)
 })
 
-test('mapPurchaseOrderToDashboardOverviewInput throws on unsupported purchase order status', () => {
+test('mapInboundOrderToDashboardOverviewInput throws on unsupported inbound status', () => {
   assert.throws(
     () =>
-      mapPurchaseOrderToDashboardOverviewInput({
-        id: 'po-invalid-status',
-        orderNumber: 'PO-2002',
+      mapInboundOrderToDashboardOverviewInput({
+        id: 'inbound-invalid-status',
+        orderNumber: 'IN-2002',
         status: 'CLOSED',
         counterpartyName: null,
         warehouseCode: 'TCL-CHINO',
@@ -456,7 +456,7 @@ test('mapPurchaseOrderToDashboardOverviewInput throws on unsupported purchase or
         totalPallets: 4,
         lines: [{ unitsOrdered: 420 }],
       }),
-    /Unsupported purchase order status: CLOSED/
+    /Unsupported inbound status: CLOSED/
   )
 })
 
@@ -464,7 +464,7 @@ test('buildDashboardOverviewSnapshot throws when warehouseCode is blank even on 
   assert.throws(
     () =>
       buildDashboardOverviewSnapshot({
-        purchaseOrders: [],
+        inboundOrders: [],
         movements: [],
         balances: [
           {
@@ -486,10 +486,10 @@ test('buildDashboardOverviewSnapshot throws when pallet data is missing', () => 
     () =>
       buildDashboardOverviewSnapshot({
         movements: [],
-        purchaseOrders: [
+        inboundOrders: [
           {
-            id: 'po-null-pallets',
-            orderNumber: 'PO-2001',
+            id: 'inbound-null-pallets',
+            orderNumber: 'IN-2001',
             status: 'MANUFACTURING',
             counterpartyName: null,
             warehouseCode: 'TCL-CHINO',

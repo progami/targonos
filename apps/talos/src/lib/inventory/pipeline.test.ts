@@ -5,10 +5,10 @@ import { buildInventoryPipelineSnapshot } from './pipeline'
 
 test('buildInventoryPipelineSnapshot groups stock by stage and warehouse', () => {
   const snapshot = buildInventoryPipelineSnapshot({
-    purchaseOrders: [
+    inboundOrders: [
       {
-        id: 'po-mfg',
-        orderNumber: 'PO-1001',
+        id: 'inbound-mfg',
+        orderNumber: 'IN-1001',
         status: 'MANUFACTURING',
         counterpartyName: 'Factory Alpha',
         warehouseCode: null,
@@ -35,8 +35,8 @@ test('buildInventoryPipelineSnapshot groups stock by stage and warehouse', () =>
         ],
       },
       {
-        id: 'po-ocean',
-        orderNumber: 'PO-2001',
+        id: 'inbound-ocean',
+        orderNumber: 'IN-2001',
         status: 'OCEAN',
         counterpartyName: 'Factory Beta',
         warehouseCode: null,
@@ -95,7 +95,7 @@ test('buildInventoryPipelineSnapshot groups stock by stage and warehouse', () =>
     totalCartons: 185,
     totalUnits: 2220,
     activeSkus: 3,
-    purchaseOrderCount: 2,
+    inboundOrderCount: 2,
     warehouseCount: 2,
   })
 

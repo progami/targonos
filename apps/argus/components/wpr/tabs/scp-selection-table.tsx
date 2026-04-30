@@ -15,6 +15,7 @@ import {
   wprSelectionMetricCellSx,
 } from '@/components/wpr/wpr-selection-panel'
 import WprWeekSelect from '@/components/wpr/wpr-week-select'
+import { formatAsinDisplayName } from '@/lib/product-labels'
 import { getBulkSelectionAction } from '@/lib/wpr/bulk-selection'
 import type { WprSortDirection, WprSortState } from '@/lib/wpr/dashboard-state'
 import {
@@ -208,7 +209,7 @@ export default function ScpSelectionTable({
                   </TableCell>
                   <MetricCell
                     align="left"
-                    value={`${row.asin}\n${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${weeksPresent} / 1 weeks`}
+                    value={`${formatAsinDisplayName(row)}\n${row.asin} · ${row.is_target ? 'Target ASIN' : 'Catalog ASIN'} · ${weeksPresent} / 1 weeks`}
                   />
                   <MetricCell align="right" value={formatCount(weeksPresent)} />
                   <MetricCell align="right" value={formatCount(current.impressions)} />

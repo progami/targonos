@@ -59,7 +59,7 @@ function showHelp() {
   console.log(`
 Add Supplier Banking Details
 
-Adds suppliers.banking_details (freeform banking instructions) for PO PDFs and payment workflows.
+Adds suppliers.banking_details (freeform banking instructions) for Inbound PDFs and payment workflows.
 
 Usage:
   pnpm --filter @targon/talos tsx scripts/migrations/add-supplier-banking-details.ts [options]

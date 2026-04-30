@@ -31,13 +31,13 @@ type WarehouseAuditRow = {
   name: string
 }
 
-type PurchaseOrderAuditRow = {
+type InboundOrderAuditRow = {
   id: string
-  poNumber: string | null
+  inboundNumber: string | null
   warehouseCode: string
 }
 
-type FulfillmentOrderAuditRow = {
+type OutboundOrderAuditRow = {
   id: string
   foNumber: string
   warehouseCode: string
@@ -194,8 +194,8 @@ async function reportTenant(tenant: TenantCode, options: ScriptOptions) {
 
     const [
       warehouses,
-      purchaseOrders,
-      fulfillmentOrders,
+      inboundOrders,
+      outboundOrders,
       inventoryTransactions,
       goodsReceipts,
       warehouseInvoices,
@@ -210,15 +210,15 @@ async function reportTenant(tenant: TenantCode, options: ScriptOptions) {
         WHERE "code" = 'AMZN'
         ORDER BY "name" ASC, "id" ASC
       `),
-      client.query<PurchaseOrderAuditRow>(`
-        SELECT "id", "po_number" AS "poNumber", "warehouse_code" AS "warehouseCode"
-        FROM "purchase_orders"
+      client.query<InboundOrderAuditRow>(`
+        SELECT "id", "inbound_number" AS "inboundNumber", "warehouse_code" AS "warehouseCode"
+        FROM "inbound_orders"
         WHERE "warehouse_code" = 'AMZN'
         ORDER BY "created_at" ASC, "id" ASC
       `),
-      client.query<FulfillmentOrderAuditRow>(`
-        SELECT "id", "fo_number" AS "foNumber", "warehouse_code" AS "warehouseCode"
-        FROM "fulfillment_orders"
+      client.query<OutboundOrderAuditRow>(`
+        SELECT "id", "outbound_number" AS "foNumber", "warehouse_code" AS "warehouseCode"
+        FROM "outbound_orders"
         WHERE "warehouse_code" = 'AMZN'
         ORDER BY "created_at" ASC, "id" ASC
       `),
@@ -279,8 +279,8 @@ async function reportTenant(tenant: TenantCode, options: ScriptOptions) {
     console.log(`\n[${tenant}] database=${context.database} schema=${context.schema}`)
     console.log(`Mode: ${options.dryRun ? 'dry-run' : 'report-only'}`)
     printSection('warehouses.code', warehouses.rows)
-    printSection('purchase_orders.warehouse_code', purchaseOrders.rows)
-    printSection('fulfillment_orders.warehouse_code', fulfillmentOrders.rows)
+    printSection('inbound_orders.warehouse_code', inboundOrders.rows)
+    printSection('outbound_orders.warehouse_code', outboundOrders.rows)
     printSection('inventory_transactions.warehouse_code', inventoryTransactions.rows)
     printSection('goods_receipts.warehouse_code', goodsReceipts.rows)
     printSection('warehouse_invoices.warehouse_code', warehouseInvoices.rows)

@@ -24,3 +24,12 @@ test('formatMonitoringLabel uses title identity before brand when size is missin
     '6 Pack 12x9 ft Extra Large',
   )
 })
+
+test('formatMonitoringLabel uses known ASIN names when label lookup only has the ASIN', () => {
+  assert.equal(
+    formatMonitoringLabel({
+      asin: 'B0CWS3848Y',
+    }),
+    'Ecotez 6 Pack 12 x 9 ft Plastic Drop Cloth',
+  )
+})

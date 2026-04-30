@@ -55,6 +55,12 @@ export function loadMonitoringEnv() {
     mode = process.env.TARGONOS_ENV_MODE
   }
 
+  if (mode === 'local') {
+    loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+    loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
+    return
+  }
+
   loadEnvForApp({
     repoRoot: REPO_ROOT,
     appName: 'argus',

@@ -1,6 +1,8 @@
 import { withAuth, withRole, ApiResponses, z } from '@/lib/api'
-import { getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma, type Sku } from '@targon/prisma-talos'
+import { isAllowedSizeTierForTenant } from '@/lib/amazon/fees'
+import type { TenantCode } from '@/lib/tenant/constants'
+import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
+import { Prisma } from '@targon/prisma-talos'
 import {
   sanitizeForDisplay,
   sanitizeSearchQuery,
@@ -8,9 +10,10 @@ import {
 } from '@/lib/security/input-sanitization'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import { SKU_FIELD_LIMITS } from '@/lib/sku-constants'
+import { skuResponseSelect, type SkuResponseRow } from '@/lib/skus/sku-select'
 export const dynamic = 'force-dynamic'
 
-type SkuWithCounts = Sku & { _count: { inventoryTransactions: number } }
+type SkuWithCounts = SkuResponseRow & { _count: { inventoryTransactions: number } }
 
 // Validation schemas with sanitization
 const supplierIdSchema = z.preprocess(value => {
@@ -98,7 +101,6 @@ const skuSchemaBase = z.object({
       return sanitized ? sanitized : null
     }),
   referralFeePercent: z.number().min(0).max(100).optional().nullable(),
-  fbaFulfillmentFee: z.number().min(0).optional().nullable(),
   amazonCategory: z
     .string()
     .trim()
@@ -202,6 +204,16 @@ const createSkuSchema = refineDimensions(
 
 const updateSkuSchema = refineDimensions(skuSchemaBase.partial())
 
+function validateAssignedSizeTier(
+  sizeTier: string | null | undefined,
+  tenantCode: TenantCode
+): string | null {
+  if (sizeTier === undefined) return null
+  if (sizeTier === null) return null
+  if (isAllowedSizeTierForTenant(tenantCode, sizeTier)) return null
+  return 'Invalid size tier'
+}
+
 // GET /api/skus - List SKUs
 export const GET = withAuth(async (request, _session) => {
   const prisma = await getTenantPrisma()
@@ -226,6 +238,7 @@ export const GET = withAuth(async (request, _session) => {
   const skus = await prisma.sku.findMany({
     where,
     orderBy: { skuCode: 'asc' },
+    select: skuResponseSelect,
   })
 
   // Get transaction counts for all SKUs in a single query
@@ -259,8 +272,14 @@ export const GET = withAuth(async (request, _session) => {
 // POST /api/skus - Create new SKU
 export const POST = withRole(['admin', 'staff'], async (request, _session) => {
   const prisma = await getTenantPrisma()
+  const tenantCode = await getCurrentTenantCode()
   const body = await request.json()
   const validatedData = createSkuSchema.parse(body)
+
+  const sizeTierValidationError = validateAssignedSizeTier(validatedData.sizeTier, tenantCode)
+  if (sizeTierValidationError !== null) {
+    return ApiResponses.badRequest(sizeTierValidationError)
+  }
 
   if (
     validatedData.defaultSupplierId &&
@@ -337,7 +356,6 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         subcategory: validatedData.subcategory ?? null,
         sizeTier: validatedData.sizeTier ?? null,
         referralFeePercent: validatedData.referralFeePercent ?? null,
-        fbaFulfillmentFee: validatedData.fbaFulfillmentFee ?? null,
         amazonCategory: validatedData.amazonCategory ?? null,
         amazonSizeTier: validatedData.amazonSizeTier ?? null,
         amazonReferralFeePercent: validatedData.amazonReferralFeePercent ?? null,
@@ -357,17 +375,19 @@ export const POST = withRole(['admin', 'staff'], async (request, _session) => {
         itemWeightKg: validatedData.itemWeightKg ?? null,
         isActive: validatedData.isActive !== undefined ? validatedData.isActive : true,
       },
+      select: skuResponseSelect,
     })
 
     return created
   })
 
-  return ApiResponses.created<Sku>(sku)
+  return ApiResponses.created<SkuResponseRow>(sku)
 })
 
 // PATCH /api/skus - Update SKU
 export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
   const prisma = await getTenantPrisma()
+  const tenantCode = await getCurrentTenantCode()
   const searchParams = request.nextUrl.searchParams
   const skuId = searchParams.get('id')
 
@@ -377,6 +397,11 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
 
   const body = await request.json()
   const validatedData = updateSkuSchema.parse(body)
+
+  const sizeTierValidationError = validateAssignedSizeTier(validatedData.sizeTier, tenantCode)
+  if (sizeTierValidationError !== null) {
+    return ApiResponses.badRequest(sizeTierValidationError)
+  }
 
   if (
     validatedData.defaultSupplierId &&
@@ -496,9 +521,10 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
   const updatedSku = await prisma.sku.update({
     where: { id: skuId },
     data: updateData,
+    select: skuResponseSelect,
   })
 
-  return ApiResponses.success<Sku>(updatedSku)
+  return ApiResponses.success<SkuResponseRow>(updatedSku)
 })
 
 // DELETE /api/skus - Delete SKU
@@ -514,6 +540,7 @@ export const DELETE = withRole(['admin'], async (request, _session) => {
   // Check if SKU exists
   const sku = await prisma.sku.findUnique({
     where: { id: skuId },
+    select: { id: true, skuCode: true },
   })
 
   if (!sku) {

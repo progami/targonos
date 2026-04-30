@@ -3,10 +3,10 @@
 /**
  * Backfill missing UK batch documents into Talos main schema (main_talos_uk)
  * -----------------------------------------------------------------------
- * This is a second-pass script intended to run AFTER the UK INV POs exist.
+ * This is a second-pass script intended to run AFTER the UK INV Inbounds exist.
  *
  * It:
- * - Finds INV-* purchase orders from `talos_batch_migration_state.csv`
+ * - Finds INV-* inbound from `talos_batch_migration_state.csv`
  * - Uploads missing PI docs (stage=ISSUED, document_type=pi_*)
  * - Uploads missing Cube Master docs (stage=WAREHOUSE, document_type=cube_master)
  *
@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url'
 import { parse as parseCsv } from 'csv-parse/sync'
 import * as XLSX from 'xlsx'
 import { S3Service } from '@targon/aws-s3'
-import { Prisma, PurchaseOrderDocumentStage } from '@targon/prisma-talos'
+import { Prisma, InboundOrderDocumentStage } from '@targon/prisma-talos'
 import { getTenantPrismaClient, disconnectAllTenants } from '../../src/lib/tenant/prisma-factory'
 import type { TenantCode } from '../../src/lib/tenant/constants'
 
@@ -50,7 +50,7 @@ const MIGRATION_USER_NAME = 'Talos Migration'
 const SHARED_DRIVES_ROOT =
   '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives'
 
-type S3PurchaseOrderDocumentStage =
+type S3InboundOrderDocumentStage =
   | 'RFQ'
   | 'ISSUED'
   | 'MANUFACTURING'
@@ -249,7 +249,7 @@ function extractPiNumberFromText(text: string): string | null {
 
   const piNumberMatch =
     text.match(
-      /(?:P[-/ ]?I(?:\s*(?:No\.?|#))?|PI(?:\s*(?:No\.?|#))?|PINo\.?|P\.I\.(?:\s*No\.?)?|INVOICE\s*NO\.?|INVOICE\s*NO|PO#)\s*[:#：]?\s*([A-Z0-9- ./]{5,})/i
+      /(?:P[-/ ]?I(?:\s*(?:No\.?|#))?|PI(?:\s*(?:No\.?|#))?|PINo\.?|P\.I\.(?:\s*No\.?)?|INVOICE\s*NO\.?|INVOICE\s*NO|Inbound#)\s*[:#：]?\s*([A-Z0-9- ./]{5,})/i
     ) ?? null
   if (piNumberMatch) {
     const cleaned = normalize(piNumberMatch[1])
@@ -370,9 +370,9 @@ function buildOrderNumber(tenant: TenantCode, batchIdRaw: string, variant: strin
   return `INV-${normalizedBatch}-${normalizedVariant}-${tenant}`
 }
 
-function toS3PurchaseOrderDocumentStage(
+function toS3InboundOrderDocumentStage(
   stage: string
-): S3PurchaseOrderDocumentStage {
+): S3InboundOrderDocumentStage {
   switch (stage) {
     case 'DRAFT':
       return 'ISSUED'
@@ -388,28 +388,28 @@ function toS3PurchaseOrderDocumentStage(
       return 'WAREHOUSE'
   }
 
-  throw new Error(`Unsupported purchase-order document stage for S3 upload: ${stage}`)
+  throw new Error(`Unsupported inbound document stage for S3 upload: ${stage}`)
 }
 
-async function uploadPurchaseOrderDocument(params: {
+async function uploadInboundOrderDocument(params: {
   prisma: Prisma.TransactionClient
   tenant: TenantCode
   s3: S3Service | null
-  purchaseOrderId: string
-  purchaseOrderNumber: string
-  stage: PurchaseOrderDocumentStage
+  inboundOrderId: string
+  inboundOrderNumber: string
+  stage: InboundOrderDocumentStage
   documentType: string
   filePath: string
   dryRun: boolean
 }) {
   if (!fs.existsSync(params.filePath)) {
-    throw new Error(`Missing file for ${params.purchaseOrderNumber} ${params.documentType}: ${params.filePath}`)
+    throw new Error(`Missing file for ${params.inboundOrderNumber} ${params.documentType}: ${params.filePath}`)
   }
 
-  const existingDoc = await params.prisma.purchaseOrderDocument.findUnique({
+  const existingDoc = await params.prisma.inboundOrderDocument.findUnique({
     where: {
-      purchaseOrderId_stage_documentType: {
-        purchaseOrderId: params.purchaseOrderId,
+      inboundOrderId_stage_documentType: {
+        inboundOrderId: params.inboundOrderId,
         stage: params.stage,
         documentType: params.documentType,
       },
@@ -423,13 +423,13 @@ async function uploadPurchaseOrderDocument(params: {
 
   const fileName = path.basename(params.filePath)
   const fileBuffer = fs.readFileSync(params.filePath)
-  const s3Stage = toS3PurchaseOrderDocumentStage(params.stage)
+  const s3Stage = toS3InboundOrderDocumentStage(params.stage)
   const s3Key = params.s3.generateKey(
     {
-      type: 'purchase-order',
-      purchaseOrderId: params.purchaseOrderId,
+      type: 'inbound',
+      inboundOrderId: params.inboundOrderId,
       tenantCode: params.tenant,
-      purchaseOrderNumber: params.purchaseOrderNumber,
+      inboundOrderNumber: params.inboundOrderNumber,
       stage: s3Stage,
       documentType: params.documentType,
     },
@@ -438,17 +438,17 @@ async function uploadPurchaseOrderDocument(params: {
   const uploadResult = await params.s3.uploadFile(fileBuffer, s3Key, {
     metadata: {
       tenantCode: params.tenant,
-      purchaseOrderId: params.purchaseOrderId,
-      orderNumber: params.purchaseOrderNumber,
+      inboundOrderId: params.inboundOrderId,
+      orderNumber: params.inboundOrderNumber,
       stage: params.stage,
       documentType: params.documentType,
       sourcePath: params.filePath,
     },
   })
 
-  await params.prisma.purchaseOrderDocument.create({
+  await params.prisma.inboundOrderDocument.create({
     data: {
-      purchaseOrderId: params.purchaseOrderId,
+      inboundOrderId: params.inboundOrderId,
       stage: params.stage,
       documentType: params.documentType,
       fileName,
@@ -502,18 +502,18 @@ async function main() {
       throw new Error(`Batch folder not found for ${orderNumber}: ${batchFolder}`)
     }
 
-    const order = await prisma.purchaseOrder.findUnique({
+    const order = await prisma.inboundOrder.findUnique({
       where: { orderNumber },
       select: { id: true, orderNumber: true },
     })
     if (!order) {
-      throw new Error(`Purchase order not found for ${orderNumber}`)
+      throw new Error(`Inbound not found for ${orderNumber}`)
     }
 
-    const existingPi = await prisma.purchaseOrderDocument.findFirst({
+    const existingPi = await prisma.inboundOrderDocument.findFirst({
       where: {
-        purchaseOrderId: order.id,
-        stage: PurchaseOrderDocumentStage.ISSUED,
+        inboundOrderId: order.id,
+        stage: InboundOrderDocumentStage.ISSUED,
         documentType: { startsWith: 'pi_' },
       },
       select: { id: true },
@@ -532,13 +532,13 @@ async function main() {
         const piNumber = extractPiNumberFromText(piText)
         const piDocType = piNumber ? `pi_${piNumber.toLowerCase()}` : 'pi_unknown'
 
-        const created = await uploadPurchaseOrderDocument({
+        const created = await uploadInboundOrderDocument({
           prisma,
           tenant,
           s3,
-          purchaseOrderId: order.id,
-          purchaseOrderNumber: order.orderNumber,
-          stage: PurchaseOrderDocumentStage.ISSUED,
+          inboundOrderId: order.id,
+          inboundOrderNumber: order.orderNumber,
+          stage: InboundOrderDocumentStage.ISSUED,
           documentType: piDocType,
           filePath: pickedPi,
           dryRun: options.dryRun,
@@ -547,10 +547,10 @@ async function main() {
       }
     }
 
-    const existingCube = await prisma.purchaseOrderDocument.findFirst({
+    const existingCube = await prisma.inboundOrderDocument.findFirst({
       where: {
-        purchaseOrderId: order.id,
-        stage: PurchaseOrderDocumentStage.WAREHOUSE,
+        inboundOrderId: order.id,
+        stage: InboundOrderDocumentStage.WAREHOUSE,
         documentType: 'cube_master',
       },
       select: { id: true },
@@ -564,13 +564,13 @@ async function main() {
       })
       const pickedCube = pickBest(cubeCandidates, scoreCubeCandidate)
       if (pickedCube) {
-        const created = await uploadPurchaseOrderDocument({
+        const created = await uploadInboundOrderDocument({
           prisma,
           tenant,
           s3,
-          purchaseOrderId: order.id,
-          purchaseOrderNumber: order.orderNumber,
-          stage: PurchaseOrderDocumentStage.WAREHOUSE,
+          inboundOrderId: order.id,
+          inboundOrderNumber: order.orderNumber,
+          stage: InboundOrderDocumentStage.WAREHOUSE,
           documentType: 'cube_master',
           filePath: pickedCube,
           dryRun: options.dryRun,

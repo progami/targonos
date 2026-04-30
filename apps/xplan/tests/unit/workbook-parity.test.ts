@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   EXCEL_FORECAST_METRICS,
-  EXCEL_PO_FINANCE_COLUMNS,
-  EXCEL_PO_TABLE_COLUMNS,
   computeForecastWorkbookRow,
   computePoFinanceWorkbookRow,
   computePoTableWorkbookRow,
@@ -14,61 +12,27 @@ const mfgStart = new Date('2026-04-17T00:00:00.000Z')
 describe('workbook visible column parity', () => {
   it('keeps the Excel setup columns year-specific', () => {
     expect(excelSetupColumns(2026)).toEqual([
-      'SKU',
-      'Opening Stock 2026',
-      '2027 Opening Override',
-      'Notes',
-      'REGION',
-      'Total Threshold (W)',
-      'FBA Threshold (W)',
+      'region',
+      'workbook_sku',
+      'display_sku',
+      'friendly_name',
+      'price',
+      'demand_proxy_sku',
+      'proxy_ratio',
+      'manual_growth_multiplier',
+      'active',
+      'stock_week_start',
+      'opening_fba_units',
+      'opening_threepl_units',
+      'opening_total_units',
+      'total_threshold_w',
+      'fba_threshold_w',
+      'pack',
+      'micron',
+      'notes',
     ])
   })
 
-  it('keeps the Excel PO Table labels separate from PO finance labels', () => {
-    expect(EXCEL_PO_TABLE_COLUMNS).toEqual([
-      'PO CODE',
-      'PRODUCT',
-      'QTY',
-      'UNITS/CTN',
-      'CARTON',
-      'CTN L (CM)',
-      'CTN W (CM)',
-      'CTN H (CM)',
-      'CBM',
-      'MFG START',
-      'SHIP',
-      'CONTAINER #',
-      'STATUS',
-      'PO CLASS',
-      'MFG (WK)',
-      'DEPART (WK)',
-      'ARRIVAL (WK)',
-      'WH (WK)',
-      'INBOUND WK OVERRIDE',
-      'INBOUND WK',
-      'PO TOTAL QTY',
-      'NOTES',
-      'PO FIRST ROW',
-      'REGION',
-    ])
-
-    expect(EXCEL_PO_FINANCE_COLUMNS).toEqual([
-      'PO CODE',
-      'PRODUCT',
-      'CARTON',
-      'SELL $',
-      'MFG $',
-      'FREIGHT $',
-      'TARIFF $',
-      'TACOS %',
-      'FBA $',
-      'REFERRAL %',
-      'STORAGE $',
-      'GP $',
-      'NP $',
-      'REGION',
-    ])
-  })
 })
 
 describe('workbook PO table parity', () => {
@@ -153,11 +117,11 @@ describe('workbook forecast parity', () => {
       'INBOUND',
       '3PL',
       'FBA',
+      'ACTUAL',
+      'FORECAST',
+      'FINAL',
       'FBA COVER (W)',
       'TOTAL COVER (W)',
-      'ACTUAL',
-      'PLANNER',
-      'FINAL',
     ])
   })
 

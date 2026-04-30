@@ -1,12 +1,12 @@
 export type TalosPermissionRole = 'admin' | 'staff'
 
 const STAFF_BASELINE_PERMISSION_CODES = new Set<string>([
-  'po.create',
-  'po.edit',
-  'po.cancel',
-  'fo.create',
-  'fo.edit',
-  'fo.stage',
+  'inbound.create',
+  'inbound.edit',
+  'inbound.cancel',
+  'outbound.create',
+  'outbound.edit',
+  'outbound.stage',
 ])
 
 export function hasRoleBaselinePermission(
@@ -15,7 +15,7 @@ export function hasRoleBaselinePermission(
 ): boolean {
   switch (role) {
     case 'admin':
-      return permissionCode.startsWith('po.') || permissionCode.startsWith('fo.')
+      return ['inbound.', 'outbound.'].some((prefix) => permissionCode.startsWith(prefix))
     case 'staff':
       return STAFF_BASELINE_PERMISSION_CODES.has(permissionCode)
   }

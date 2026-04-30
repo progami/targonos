@@ -68,9 +68,15 @@ export ARGUS_MARKET="$MARKET"
 WPR_WORKSPACE="$(cd "$(dirname "$WPR_DATA_DIR")" && pwd)"
 REBUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/rebuild_wpr.py"
 BUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/build_intent_cluster_dashboard.py"
+VALIDATE_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/validate_sources.py"
 
 if [ ! -f "$REBUILD_SCRIPT" ]; then
   echo "Missing rebuild script: $REBUILD_SCRIPT" >&2
+  exit 1
+fi
+
+if [ ! -f "$VALIDATE_SCRIPT" ]; then
+  echo "Missing source validation script: $VALIDATE_SCRIPT" >&2
   exit 1
 fi
 
@@ -82,6 +88,7 @@ fi
 echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace sync starting (market=$MARKET, trigger=$TRIGGER)"
 echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace: $WPR_WORKSPACE"
 
+"$PYTHON_BIN" "$VALIDATE_SCRIPT"
 "$PYTHON_BIN" "$REBUILD_SCRIPT"
 "$PYTHON_BIN" "$BUILD_SCRIPT"
 

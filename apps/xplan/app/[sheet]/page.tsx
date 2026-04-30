@@ -13,7 +13,6 @@ import {
   ProfitAndLossFiltersProvider,
   ProfitAndLossHeaderControls,
 } from '@/components/sheets/fin-planning-pl-grid';
-import { SellerboardSyncControl } from '@/components/sheets/sellerboard-sync-control';
 import { CashFlowGrid } from '@/components/sheets/fin-planning-cash-grid';
 import { SheetViewToggle, type SheetViewMode } from '@/components/sheet-view-toggle';
 import { SHEET_TOOLBAR_GROUP, SHEET_TOOLBAR_LABEL } from '@/components/sheet-toolbar';
@@ -116,16 +115,18 @@ import {
   weekStartsOnForRegion,
   type StrategyRegion,
 } from '@/lib/strategy-region';
+import { purchaseOrderSourceType } from '@/lib/purchase-order-source';
+import { comparePurchaseOrderRows } from '@/lib/purchase-order-ordering';
 
 const SALES_METRICS = [
   'inbound',
   'threePl',
   'fba',
-  'fbaCoverWeeks',
-  'totalCoverWeeks',
   'actualSales',
   'forecastSales',
   'finalSales',
+  'fbaCoverWeeks',
+  'totalCoverWeeks',
 ] as const;
 type SalesMetric = (typeof SALES_METRICS)[number];
 
@@ -155,6 +156,14 @@ function formatDate(value: Date | string | null | undefined): string {
 function productLabel(product: { sku?: string | null; name: string }): string {
   const sku = typeof product.sku === 'string' ? product.sku.trim() : '';
   return sku.length ? sku : product.name;
+}
+
+const TALOS_TRANSPORT_PLACEHOLDERS = new Set(['NUMBER', 'STATED']);
+
+function formatTransportReference(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return '';
+  return TALOS_TRANSPORT_PLACEHOLDERS.has(trimmed.toUpperCase()) ? '' : trimmed;
 }
 
 function toNumberSafe(value: number | bigint | null | undefined): number {
@@ -603,15 +612,15 @@ function metricHeader(metric: SalesMetric): NestedHeaderCell {
       return EXCEL_FORECAST_METRICS[1];
     case 'fba':
       return EXCEL_FORECAST_METRICS[2];
-    case 'fbaCoverWeeks':
-      return EXCEL_FORECAST_METRICS[3];
-    case 'totalCoverWeeks':
-      return EXCEL_FORECAST_METRICS[4];
     case 'actualSales':
-      return EXCEL_FORECAST_METRICS[5];
+      return EXCEL_FORECAST_METRICS[3];
     case 'forecastSales':
-      return EXCEL_FORECAST_METRICS[6];
+      return EXCEL_FORECAST_METRICS[4];
     case 'finalSales':
+      return EXCEL_FORECAST_METRICS[5];
+    case 'fbaCoverWeeks':
+      return EXCEL_FORECAST_METRICS[6];
+    case 'totalCoverWeeks':
       return EXCEL_FORECAST_METRICS[7];
     default:
       return metric;
@@ -668,6 +677,8 @@ async function getProductSetupView(
       id: product.id,
       sku: product.sku ?? '',
       name: product.name,
+      price: formatNumeric(toOptionalNumber(product.sellingPrice), 2),
+      isActive: product.isActive,
     }));
 
   const setupByProductId = new Map(setupYears.map((row) => [row.productId, row]));
@@ -675,22 +686,30 @@ async function getProductSetupView(
     const setupRow = setupByProductId.get(product.id);
     return {
       productId: product.id,
-      sku: product.sku,
-      openingStock: formatNumeric(toOptionalNumber(setupRow?.openingStock ?? null), 0),
-      nextYearOpeningOverride: formatNumeric(
-        toOptionalNumber(setupRow?.nextYearOpeningOverride ?? null),
-        0,
-      ),
-      notes: setupRow?.notes ?? '',
       region: strategyRegion,
-      totalCoverThresholdWeeks: formatNumeric(
+      workbookSku: product.sku,
+      displaySku: product.sku,
+      friendlyName: product.name,
+      price: product.price,
+      demandProxySku: '',
+      proxyRatio: '',
+      manualGrowthMultiplier: '',
+      active: product.isActive ? 'TRUE' : 'FALSE',
+      stockWeekStart: '',
+      openingFbaUnits: '',
+      openingThreeplUnits: '',
+      openingTotalUnits: '',
+      totalThresholdW: formatNumeric(
         toOptionalNumber(setupRow?.totalCoverThresholdWeeks ?? null),
         2,
       ),
-      fbaCoverThresholdWeeks: formatNumeric(
+      fbaThresholdW: formatNumeric(
         toOptionalNumber(setupRow?.fbaCoverThresholdWeeks ?? null),
         2,
       ),
+      pack: '',
+      micron: '',
+      notes: setupRow?.notes ?? '',
     };
   });
 
@@ -806,7 +825,9 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     batchesByOrder.set(batch.purchaseOrderId, list);
   }
 
-  const purchaseOrdersWithBatches = purchaseOrders.map((order) => ({
+  const orderedPurchaseOrders = [...purchaseOrders].sort(comparePurchaseOrderRows);
+
+  const purchaseOrdersWithBatches = orderedPurchaseOrders.map((order) => ({
     ...order,
     batchTableRows: (batchesByOrder.get(order.id) ?? []) as BatchTableRow[],
   })) as Array<
@@ -926,22 +947,42 @@ async function ensureDefaultSupplierInvoices({
       }
 
       if (existing) {
-        const updatePayload: UpdatePaymentInput = {
-          paymentIndex: planned.paymentIndex,
-          category: planned.category,
-          label: planned.label,
-          dueDateDefault,
-          dueWeekNumberDefault,
-        };
+        const updatePayload: UpdatePaymentInput = {};
 
-        if (existingDueDateSource === 'SYSTEM') {
-          updatePayload.dueDate = dueDate;
-          updatePayload.dueWeekNumber = dueWeekNumber;
-          updatePayload.dueDateSource = 'SYSTEM';
+        if (existing.paymentIndex !== planned.paymentIndex) {
+          updatePayload.paymentIndex = planned.paymentIndex;
+        }
+        if (!nullableStringsMatch(existing.category, planned.category)) {
+          updatePayload.category = planned.category;
+        }
+        if (!nullableStringsMatch(existing.label, planned.label)) {
+          updatePayload.label = planned.label;
+        }
+        if (!datesMatch(existing.dueDateDefault, dueDateDefault)) {
+          updatePayload.dueDateDefault = dueDateDefault;
+        }
+        if (!nullableNumbersMatch(existing.dueWeekNumberDefault, dueWeekNumberDefault)) {
+          updatePayload.dueWeekNumberDefault = dueWeekNumberDefault;
         }
 
-        updatePayload.amountExpected = amountExpectedDecimal;
-        updatePayload.percentage = percentageDecimal;
+        if (existingDueDateSource === 'SYSTEM') {
+          if (!datesMatch(existing.dueDate, dueDate)) {
+            updatePayload.dueDate = dueDate;
+          }
+          if (!nullableNumbersMatch(existing.dueWeekNumber, dueWeekNumber)) {
+            updatePayload.dueWeekNumber = dueWeekNumber;
+          }
+          if (existing.dueDateSource !== 'SYSTEM') {
+            updatePayload.dueDateSource = 'SYSTEM';
+          }
+        }
+
+        if (!nullableDecimalsMatch(existing.amountExpected, amountExpectedDecimal)) {
+          updatePayload.amountExpected = amountExpectedDecimal;
+        }
+        if (!nullableDecimalsMatch(existing.percentage, percentageDecimal)) {
+          updatePayload.percentage = percentageDecimal;
+        }
 
         if (Object.keys(updatePayload).length > 0) {
           updates.push(updatePurchaseOrderPayment(existing.id, updatePayload, paymentsDelegate));
@@ -990,6 +1031,37 @@ async function ensureDefaultSupplierInvoices({
 }
 
 type PaymentDueDateSource = 'SYSTEM' | 'USER';
+
+function datesMatch(a: Date | null | undefined, b: Date | null | undefined): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return a.getTime() === b.getTime();
+}
+
+function nullableNumbersMatch(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+function nullableStringsMatch(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+function nullableDecimalsMatch(
+  a: Prisma.Decimal | number | string | null | undefined,
+  b: Prisma.Decimal | null,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  const aNumber = Number(a);
+  const bNumber = Number(b);
+  return Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber === bNumber;
+}
 
 const PAYMENT_METADATA_MISSING_REGEX =
   /Unknown argument `(?:category|label|amountExpected|amountPaid|dueWeekNumber|dueWeekNumberDefault)`/;
@@ -1195,43 +1267,27 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
         findMany: (args?: unknown) => Promise<SalesWeekFinancialsRow[]>;
       }
     | undefined;
-  const productSetupYearDelegate = prismaAny.productSetupYear as
-    | {
-        findMany: (args?: unknown) => Promise<
-          Array<{
-            productId: string;
-            year: number;
-            openingStock: number | Prisma.Decimal | null;
-            totalCoverThresholdWeeks: number | Prisma.Decimal | null;
-            fbaCoverThresholdWeeks: number | Prisma.Decimal | null;
-          }>
-        >;
-      }
-    | undefined;
-
-  const [operations, salesRows, profitOverrideRows, cashOverrideRows, productSetupYears] =
-    await Promise.all([
-      loadOperationsContext(strategyId, planning.calendar),
-      safeFindMany<SalesWeek[]>(
-        salesDelegate,
-        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-        [],
-        'salesWeek',
-      ),
-      safeFindMany<ProfitAndLossWeek[]>(
-        profitDelegate,
-        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-        [],
-        'profitAndLossWeek',
-      ),
-      safeFindMany<CashFlowWeek[]>(
-        cashDelegate,
-        { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
-        [],
-        'cashFlowWeek',
-      ),
-      safeFindMany(productSetupYearDelegate, { where: { strategyId } }, [], 'productSetupYear'),
-    ]);
+  const [operations, salesRows, profitOverrideRows, cashOverrideRows] = await Promise.all([
+    loadOperationsContext(strategyId, planning.calendar),
+    safeFindMany<SalesWeek[]>(
+      salesDelegate,
+      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+      [],
+      'salesWeek',
+    ),
+    safeFindMany<ProfitAndLossWeek[]>(
+      profitDelegate,
+      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+      [],
+      'profitAndLossWeek',
+    ),
+    safeFindMany<CashFlowWeek[]>(
+      cashDelegate,
+      { where: { strategyId }, orderBy: { weekNumber: 'asc' } },
+      [],
+      'cashFlowWeek',
+    ),
+  ]);
 
   // SalesWeekFinancials table may not exist yet - gracefully handle missing table
   let financialsRows: SalesWeekFinancialsRow[] = [];
@@ -1295,7 +1351,6 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
     derivedOrders,
     salesOverrides,
     profitOverrides,
-    productSetupYears,
     salesPlan,
     actualFinancials,
     profit,
@@ -1331,62 +1386,30 @@ async function getOpsPlanningView(
   const visibleOrders = derivedOrders;
   const visibleOrderIds = new Set(visibleOrders.map((item) => item.derived.id));
 
-  const poWorkbookInputs: PoTableWorkbookInput[] = visibleOrders.map(({ input, derived }) => {
-    const primaryBatch = input.batchTableRows?.[0] ?? null;
-    const totalStageWeeks =
-      derived.stageProfile.productionWeeks +
-      derived.stageProfile.sourceWeeks +
-      derived.stageProfile.oceanWeeks +
-      derived.stageProfile.finalWeeks;
-    return {
-      orderCode: input.orderCode,
-      product: context.productNameById.get(primaryBatch?.productId ?? input.productId) ?? '',
-      quantity: input.quantity,
-      unitsPerCarton: primaryBatch?.unitsPerCarton ?? null,
-      cartonLengthCm: primaryBatch?.cartonSide1Cm ?? null,
-      cartonWidthCm: primaryBatch?.cartonSide2Cm ?? null,
-      cartonHeightCm: primaryBatch?.cartonSide3Cm ?? null,
-      mfgStart: derived.productionStart,
-      arrivalWeeks: derived.stageProfile.oceanWeeks,
-      warehouseWeeks: totalStageWeeks,
-      inboundWeekOverride: input.inboundWeekOverride ?? null,
-      region: strategyRegion,
-    };
-  });
-
-  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }, index) => {
-    const primaryBatch = input.batchTableRows?.[0] ?? null;
-    const workbookInput = poWorkbookInputs[index];
-    const workbookRow = workbookInput
-      ? computePoTableWorkbookRow(workbookInput, poWorkbookInputs, index)
-      : null;
+  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }) => {
     return {
       id: input.id,
       productId: input.productId,
       orderCode: input.orderCode,
       poDate: formatDate(input.poDate ?? null),
       poClass: input.poClass ?? '',
-      productionStart: toIsoDate(input.productionStart ?? derived.productionStart ?? null) ?? '',
+      productionStart: toIsoDate(input.productionStart ?? null) ?? '',
       productionComplete: toIsoDate(input.productionComplete ?? null) ?? '',
       sourceDeparture: toIsoDate(input.sourceDeparture ?? null) ?? '',
       portEta: toIsoDate(input.portEta ?? null) ?? '',
       availableDate: toIsoDate(input.availableDate ?? null) ?? '',
       inboundWeekOverride: toIsoDate(input.inboundWeekOverride ?? null) ?? '',
-      inboundWeek: toIsoDate(workbookRow?.inboundWeek ?? derived.availableDate ?? null) ?? '',
+      inboundWeek: toIsoDate(derived.availableDate ?? null) ?? '',
       productName,
       shipName: input.shipName ?? '',
-      containerNumber: input.containerNumber ?? input.transportReference ?? '',
+      containerNumber: formatTransportReference(input.containerNumber ?? input.transportReference),
       quantity: formatNumeric(input.quantity ?? null, 0),
-      unitsPerCarton: formatNumeric(primaryBatch?.unitsPerCarton ?? null, 0),
-      carton: formatNumeric(workbookRow?.carton ?? null, 0),
-      cartonSide1Cm: formatNumeric(primaryBatch?.cartonSide1Cm ?? null, 2),
-      cartonSide2Cm: formatNumeric(primaryBatch?.cartonSide2Cm ?? null, 2),
-      cartonSide3Cm: formatNumeric(primaryBatch?.cartonSide3Cm ?? null, 2),
-      cbm: formatNumeric(workbookRow?.cbm ?? null, 3),
-      poTotalQty: formatNumeric(workbookRow?.poTotalQty ?? null, 0),
-      poFirstRow: formatNumeric(workbookRow?.poFirstRow ?? null, 0),
       notes: input.notes ?? '',
       region: strategyRegion,
+      sourceType: purchaseOrderSourceType({
+        sourceSystem: input.sourceSystem ?? null,
+        notes: input.notes,
+      }),
       pay1Date: formatDate(input.pay1Date ?? null),
       productionWeeks: formatNumeric(derived.stageProfile.productionWeeks),
       sourceWeeks: formatNumeric(derived.stageProfile.sourceWeeks),
@@ -1831,12 +1854,6 @@ function getSalesPlanningView(
   }
 
   const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
-  const setupYear = activeSegment?.year ?? null;
-  const setupByProductId = new Map(
-    financialData.productSetupYears
-      .filter((row) => setupYear == null || row.year === setupYear)
-      .map((row) => [row.productId, row]),
-  );
   const previousForecastByProductId = new Map<string, ForecastWorkbookRow>();
 
   const segmentForWeek = (weekNumber: number): YearSegment | null => {
@@ -1889,9 +1906,8 @@ function getSalesPlanningView(
         row[`p${productIdx}_hasInbound`] = 'true';
       }
       row[`p${productIdx}_arrivals`] = formatNumeric(derived?.arrivals ?? null, 0);
-      const setupRow = setupByProductId.get(product.id);
       const forecastRow = computeForecastWorkbookRow({
-        openingStock: toOptionalNumber(setupRow?.openingStock ?? null),
+        openingStock: null,
         inbound: derived?.arrivals ?? null,
         actual: derived?.actualSales ?? null,
         planner: derived?.forecastSales ?? null,
@@ -2629,13 +2645,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       controls.push(
         <SalesPlanningFocusControl key="sales-focus" productOptions={view.productOptions} />,
       );
-      controls.push(
-        <SellerboardSyncControl
-          key="sellerboard-sync"
-          strategyId={activeStrategyId}
-          strategyRegion={strategyRegion}
-        />,
-      );
       wrapLayout = (node) => (
         <SalesPlanningFocusProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
@@ -2688,13 +2697,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         reportAsOfDate,
       );
       controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
-      controls.push(
-        <SellerboardSyncControl
-          key="sellerboard-sync"
-          strategyId={activeStrategyId}
-          strategyRegion={strategyRegion}
-        />,
-      );
       wrapLayout = (node) => (
         <ProfitAndLossFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
@@ -2779,7 +2781,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           products={productOptions}
         />
       );
-      visualContent = tabularContent;
       break;
     }
     case '8-po-profitability': {
@@ -2789,40 +2790,57 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       const productOptions = data.operations.productInputs
         .map((product) => ({ id: product.id, name: productLabel(product) }))
         .sort((a, b) => a.name.localeCompare(b.name));
+      const hasPoProfitabilityData = [view.projected.data, view.real.data].some(
+        (rows) => rows.length > 0,
+      );
 
-      controls.push(
-        <POProfitabilityHeaderControls
-          key="po-profitability-controls"
-          productOptions={productOptions}
-        />,
-      );
-      wrapLayout = (node) => (
-        <POProfitabilityFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
-          {node}
-        </POProfitabilityFiltersProvider>
-      );
-      visualContent = (
-        <POProfitabilitySection
-          strategyRegion={strategyRegion}
-          datasets={view}
-          productOptions={productOptions}
-          title="Margin trends"
-          description="Performance across purchase orders by arrival date"
-          showChart
-          showTable={false}
-        />
-      );
-      tabularContent = (
-        <POProfitabilitySection
-          strategyRegion={strategyRegion}
-          datasets={view}
-          productOptions={productOptions}
-          title="P&L breakdown"
-          description="FIFO-based PO-level P&L (Projected vs Real)"
-          showChart={false}
-          showTable
-        />
-      );
+      if (hasPoProfitabilityData) {
+        controls.push(
+          <POProfitabilityHeaderControls
+            key="po-profitability-controls"
+            productOptions={productOptions}
+          />,
+        );
+        wrapLayout = (node) => (
+          <POProfitabilityFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
+            {node}
+          </POProfitabilityFiltersProvider>
+        );
+        visualContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="Margin trends"
+            description="Performance across purchase orders by arrival date"
+            showChart
+            showTable={false}
+          />
+        );
+        tabularContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="P&L breakdown"
+            description="FIFO-based PO-level P&L (Projected vs Real)"
+            showChart={false}
+            showTable
+          />
+        );
+      } else {
+        tabularContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="P&L breakdown"
+            description="FIFO-based PO-level P&L (Projected vs Real)"
+            showChart={false}
+            showTable
+          />
+        );
+      }
       break;
     }
     case '7-fin-planning-cash-flow': {

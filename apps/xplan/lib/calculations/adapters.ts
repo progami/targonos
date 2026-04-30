@@ -163,6 +163,22 @@ export function mapPurchaseOrders(
           : order.notes != null
             ? String(order.notes)
             : null,
+      sourceSystem:
+        typeof (order as PurchaseOrder & { sourceSystem?: string | null }).sourceSystem ===
+        'string'
+          ? (order as PurchaseOrder & { sourceSystem?: string }).sourceSystem
+          : null,
+      sourceId:
+        typeof (order as PurchaseOrder & { sourceId?: string | null }).sourceId === 'string'
+          ? (order as PurchaseOrder & { sourceId?: string }).sourceId
+          : null,
+      sourceReference:
+        typeof (order as PurchaseOrder & { sourceReference?: string | null }).sourceReference ===
+        'string'
+          ? (order as PurchaseOrder & { sourceReference?: string }).sourceReference
+          : null,
+      sourceUpdatedAt:
+        (order as PurchaseOrder & { sourceUpdatedAt?: Date | null }).sourceUpdatedAt ?? null,
       overrideSellingPrice:
         order.overrideSellingPrice != null ? coerceNumber(order.overrideSellingPrice) : null,
       overrideManufacturingCost:

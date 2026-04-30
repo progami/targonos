@@ -39,8 +39,9 @@ class RebuildWprTest(unittest.TestCase):
             account_health_root = monitoring_root / "Daily" / "Account Health Dashboard (API)"
             account_health_root.mkdir(parents=True, exist_ok=True)
             with (account_health_root / "account-health.csv").open("w", newline="", encoding="utf-8") as handle:
-                writer = csv.DictWriter(handle, fieldnames=["date"])
+                writer = csv.DictWriter(handle, fieldnames=["date", "payload"])
                 writer.writeheader()
+                writer.writerow({"date": "2026-01-03", "payload": "x" * 150_000})
 
             voc_root = monitoring_root / "Daily" / "Voice of the Customer (Manual)"
             voc_root.mkdir(parents=True, exist_ok=True)

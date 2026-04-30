@@ -6,6 +6,9 @@ const CASE_REPORT_ACTION_KINDS = [
   'monitor',
   'checkpoint',
   'collect_evidence',
+  'verify_credit',
+  'verify_reimbursement',
+  'catalog_reparent',
   'send_email',
   'send_case_reply',
   'send_forum_post',
@@ -94,12 +97,24 @@ export type CaseReportBundle = ParsedCaseReport & {
   generatedAt: string | null;
 };
 
+export function isCaseReportMarketSlug(value: string): value is CaseReportMarketSlug {
+  return Object.prototype.hasOwnProperty.call(CASE_MARKETS, value);
+}
+
+export function isCaseReportDate(value: string): boolean {
+  return REPORT_DATE_PATTERN.test(value);
+}
+
 function resolveMarketConfig(marketSlug: CaseReportMarketSlug) {
   const market = CASE_MARKETS[marketSlug];
   if (market === undefined) {
     throw new Error(`Unsupported case report market: ${marketSlug}`);
   }
   return market;
+}
+
+export function readCaseReportMarketLabel(marketSlug: CaseReportMarketSlug): string {
+  return resolveMarketConfig(marketSlug).label;
 }
 
 function readRequiredObject(
@@ -140,8 +155,39 @@ function readRequiredBoolean(
 }
 
 function normalizeCaseReportCategory(category: string): string {
-  if (category === 'looping') {
-    return 'Watching';
+  switch (category) {
+    case 'Action due':
+      return 'Action due';
+    case 'New case':
+      return 'New case';
+    case 'Forum watch':
+      return 'Forum watch';
+    case 'Watching':
+      return 'Watching';
+    case 'action_due':
+      return 'Action due';
+    case 'needs_review':
+      return 'Action due';
+    case 'approval_required':
+      return 'Action due';
+    case 'new_case':
+      return 'New case';
+    case 'forum_watch':
+      return 'Forum watch';
+    case 'watching':
+      return 'Watching';
+    case 'looping':
+      return 'Watching';
+    case 'waiting_on_amazon':
+      return 'Watching';
+    case 'superseded':
+      return 'Watching';
+    case 'fallback_evidence':
+      return 'Watching';
+    case 'closed_by_amazon_but_not_done':
+      return 'Watching';
+    case 'closed_done':
+      return 'Watching';
   }
 
   return category;
@@ -234,6 +280,12 @@ function actionKindAllowsApproval(actionKind: CaseReportActionKind): boolean {
     case 'checkpoint':
       return false;
     case 'collect_evidence':
+      return false;
+    case 'verify_credit':
+      return false;
+    case 'verify_reimbursement':
+      return false;
+    case 'catalog_reparent':
       return false;
   }
 }

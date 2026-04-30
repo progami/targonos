@@ -12,11 +12,11 @@ import {
 
 const permissionCatalog = [
   {
-    id: 'po-approve',
-    code: 'po.approve',
-    name: 'Approve PO',
+    id: 'inbound-approve',
+    code: 'inbound.approve',
+    name: 'Approve Inbound',
     description: null,
-    category: 'purchase_order',
+    category: 'inbound_order',
   },
   {
     id: 'users-manage',
@@ -57,15 +57,15 @@ const users = [
   },
 ] as const
 
-test('admin baseline includes purchase-order and fulfillment-order permissions', () => {
-  assert.equal(hasRoleBaselinePermission('admin', 'po.approve'), true)
-  assert.equal(hasRoleBaselinePermission('admin', 'fo.edit'), true)
+test('admin baseline includes inbound and outbound-order permissions', () => {
+  assert.equal(hasRoleBaselinePermission('admin', 'inbound.approve'), true)
+  assert.equal(hasRoleBaselinePermission('admin', 'outbound.edit'), true)
   assert.equal(hasRoleBaselinePermission('admin', 'users.manage'), false)
 })
 
 test('staff baseline only includes the fixed Talos staff permission set', () => {
-  assert.equal(hasRoleBaselinePermission('staff', 'po.create'), true)
-  assert.equal(hasRoleBaselinePermission('staff', 'fo.stage'), true)
+  assert.equal(hasRoleBaselinePermission('staff', 'inbound.create'), true)
+  assert.equal(hasRoleBaselinePermission('staff', 'outbound.stage'), true)
   assert.equal(hasRoleBaselinePermission('staff', 'users.manage'), false)
 })
 
@@ -104,7 +104,7 @@ test('groupPermissionRows preserves catalog order by category', () => {
 
   assert.deepEqual(
     grouped.map((group) => group.category),
-    ['purchase_order', 'user_management']
+    ['inbound_order', 'user_management']
   )
-  assert.equal(grouped[0].rows[0].code, 'po.approve')
+  assert.equal(grouped[0].rows[0].code, 'inbound.approve')
 })

@@ -69,6 +69,12 @@ export type OpsBatchRow = {
   cbm?: string;
   grossProfit?: string;
   netProfit?: string;
+  poClass?: string;
+  status?: string;
+  sourceType?: string;
+  productCost?: string;
+  landedCost?: string;
+  financeNotes?: string;
 };
 
 interface CustomOpsCostGridProps {
@@ -200,77 +206,69 @@ function normalizeRange(range: CellRange): {
   };
 }
 
-const COLUMNS_BEFORE_TARIFF: ColumnDef[] = [
+const FINANCE_COLUMNS: ColumnDef[] = [
+  { key: 'region', header: 'REGION', width: 95, type: 'text', editable: false },
   { key: 'orderCode', header: 'PO CODE', width: 140, type: 'text', editable: false },
-  { key: 'productName', header: 'PRODUCT', width: 150, type: 'dropdown', editable: true },
-  { key: 'carton', header: 'CARTON', width: 100, type: 'numeric', editable: false, precision: 0 },
+  { key: 'productName', header: 'SKU', width: 150, type: 'dropdown', editable: true },
+  { key: 'quantity', header: 'QTY', width: 100, type: 'numeric', editable: true, precision: 0 },
+  { key: 'carton', header: 'CARTONS', width: 100, type: 'numeric', editable: false, precision: 0 },
   {
-    key: 'sellingPrice',
-    header: 'SELL $',
+    key: 'cbm',
+    header: 'CBM',
     width: 100,
     type: 'numeric',
-    editable: true,
-    precision: 2,
+    editable: false,
+    precision: 3,
+    computed: true,
   },
   {
     key: 'manufacturingCost',
-    header: 'MFG $',
+    header: 'UNIT COST',
     width: 100,
     type: 'numeric',
     editable: true,
     precision: 3,
+  },
+  {
+    key: 'productCost',
+    header: 'PRODUCT COST',
+    width: 120,
+    type: 'numeric',
+    editable: false,
+    precision: 2,
+    computed: true,
   },
   {
     key: 'freightCost',
-    header: 'FREIGHT $',
+    header: 'FREIGHT COST',
     width: 100,
     type: 'numeric',
     editable: true,
     precision: 3,
   },
-];
-
-const TARIFF_COST_COLUMN: ColumnDef = {
-  key: 'tariffCost',
-  header: 'TARIFF $',
-  width: 120,
-  type: 'numeric',
-  editable: true,
-  precision: 3,
-};
-
-const COLUMNS_AFTER_TARIFF: ColumnDef[] = [
   {
-    key: 'tacosPercent',
-    header: 'TACOS %',
-    width: 110,
-    type: 'percent',
-    editable: true,
-    precision: 2,
-  },
-  { key: 'fbaFee', header: 'FBA $', width: 110, type: 'numeric', editable: true, precision: 3 },
-  {
-    key: 'referralRate',
-    header: 'REFERRAL %',
-    width: 130,
-    type: 'percent',
-    editable: true,
-    precision: 2,
-  },
-  {
-    key: 'storagePerMonth',
-    header: 'STORAGE $',
+    key: 'tariffCost',
+    header: 'DUTY COST',
     width: 120,
     type: 'numeric',
     editable: true,
     precision: 3,
+  },
+  {
+    key: 'landedCost',
+    header: 'LANDED COST',
+    width: 120,
+    type: 'numeric',
+    editable: false,
+    precision: 2,
+    computed: true,
   },
 ];
 
 const BATCH_COLUMNS: ColumnDef[] = [
   { key: 'orderCode', header: 'PO CODE', width: 140, type: 'text', editable: false },
   { key: 'batchCode', header: 'BATCH', width: 120, type: 'text', editable: false },
-  { key: 'productName', header: 'PRODUCT', width: 160, type: 'dropdown', editable: true },
+  { key: 'productName', header: 'SKU', width: 160, type: 'dropdown', editable: true },
   { key: 'quantity', header: 'QTY', width: 100, type: 'numeric', editable: true, precision: 0 },
   {
     key: 'unitsPerCarton',
@@ -354,6 +352,18 @@ function computeCbm(row: OpsBatchRow): number | null {
   return cbmPerCarton * totalCartons;
 }
 
+function formatStatusDisplay(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .split('_')
+    .map((part) => {
+      const first = part[0];
+      return first ? `${first.toUpperCase()}${part.slice(1)}` : part;
+    })
+    .join(' ');
+}
+
 const CELL_ID_PREFIX = 'xplan-ops-batch';
 
 function sanitizeDomId(value: string): string {
@@ -387,44 +397,7 @@ export function CustomOpsCostGrid({
 
   const columns = useMemo(() => {
     if (tableKind === 'batch') return BATCH_COLUMNS;
-
-    const tariffColumn = TARIFF_COST_COLUMN;
-    const profitColumns: ColumnDef[] = [
-      {
-        key: 'grossProfit',
-        header: 'GP $',
-        width: 90,
-        type: 'numeric',
-        editable: false,
-        precision: 2,
-        computed: true,
-      },
-      {
-        key: 'netProfit',
-        header: 'NP $',
-        width: 90,
-        type: 'numeric',
-        editable: false,
-        precision: 2,
-        computed: true,
-      },
-    ];
-
-    const regionColumn: ColumnDef = {
-      key: 'region',
-      header: 'REGION',
-      width: 95,
-      type: 'text',
-      editable: false,
-    };
-
-    return [
-      ...COLUMNS_BEFORE_TARIFF,
-      tariffColumn,
-      ...COLUMNS_AFTER_TARIFF,
-      ...profitColumns,
-      regionColumn,
-    ];
+    return FINANCE_COLUMNS;
   }, [tableKind]);
 
   const [localRows, setLocalRows] = useState<OpsBatchRow[]>(rows);
@@ -1526,11 +1499,18 @@ export function CustomOpsCostGrid({
       return formatter.format(raw);
     }
 
-    // Handle computed CBM column
     if (column.key === 'cbm') {
+      const value = row.cbm?.trim();
+      if (value) return value;
       const cbm = computeCbm(row);
-      if (cbm === null) return '-';
+      if (cbm === null) return '';
       return cbm.toFixed(column.precision ?? 3);
+    }
+
+    if (column.key === 'status') {
+      const value = row.status;
+      if (value == null) return '';
+      return formatStatusDisplay(value);
     }
 
     // Handle carton dimensions display (L×W×H)
@@ -1746,7 +1726,7 @@ export function CustomOpsCostGrid({
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-cyan-700 dark:text-cyan-300/80">
-            {tableKind === 'batch' ? 'Batch Table' : 'PO Finances Table'}
+            {tableKind === 'batch' ? 'Batch Table' : 'Batch Finance Table'}
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -1801,7 +1781,7 @@ export function CustomOpsCostGrid({
                   <TableHead
                     key={column.key}
                     style={{ minWidth: column.width }}
-                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold uppercase tracking-[0.12em] text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
+                    className="sticky top-0 z-10 h-10 whitespace-nowrap border-b border-r bg-muted px-2 py-2 text-left text-xs font-semibold text-cyan-700 last:border-r-0 dark:text-cyan-300/80"
                   >
                     {column.header}
                   </TableHead>

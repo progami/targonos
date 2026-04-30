@@ -1,6 +1,6 @@
 import { isAmazonWarehouseCode } from '@/lib/warehouses/amazon-warehouse'
 
-export interface DashboardOverviewPurchaseOrderInput {
+export interface DashboardOverviewInboundOrderInput {
   id: string
   orderNumber: string
   status: 'MANUFACTURING' | 'OCEAN'
@@ -12,7 +12,7 @@ export interface DashboardOverviewPurchaseOrderInput {
   totalUnits: number
 }
 
-export type DashboardOverviewPurchaseOrderRow = {
+export type DashboardOverviewInboundOrderRow = {
   id: string
   orderNumber: string
   status: string
@@ -94,7 +94,7 @@ function hasOnHandInventory(balance: DashboardOverviewBalanceInput) {
   )
 }
 
-function sumRequiredPallets(orders: DashboardOverviewPurchaseOrderInput[]) {
+function sumRequiredPallets(orders: DashboardOverviewInboundOrderInput[]) {
   let total = 0
 
   for (const order of orders) {
@@ -110,7 +110,7 @@ function sumRequiredPallets(orders: DashboardOverviewPurchaseOrderInput[]) {
 
 function parseDashboardOverviewStatus(
   status: string
-): DashboardOverviewPurchaseOrderInput['status'] {
+): DashboardOverviewInboundOrderInput['status'] {
   if (status === 'MANUFACTURING') {
     return status
   }
@@ -119,7 +119,7 @@ function parseDashboardOverviewStatus(
     return status
   }
 
-  throw new Error(`Unsupported purchase order status: ${status}`)
+  throw new Error(`Unsupported inbound status: ${status}`)
 }
 
 function warehouseCarriesPallets(warehouseCode: string) {
@@ -178,9 +178,9 @@ function buildRecentMovements(
     .map(movement => mapDashboardMovement(movement, direction))
 }
 
-export function mapPurchaseOrderToDashboardOverviewInput(
-  order: DashboardOverviewPurchaseOrderRow
-): DashboardOverviewPurchaseOrderInput {
+export function mapInboundOrderToDashboardOverviewInput(
+  order: DashboardOverviewInboundOrderRow
+): DashboardOverviewInboundOrderInput {
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -195,16 +195,16 @@ export function mapPurchaseOrderToDashboardOverviewInput(
 }
 
 export function buildDashboardOverviewSnapshot({
-  purchaseOrders,
+  inboundOrders,
   balances,
   movements,
 }: {
-  purchaseOrders: DashboardOverviewPurchaseOrderInput[]
+  inboundOrders: DashboardOverviewInboundOrderInput[]
   balances: DashboardOverviewBalanceInput[]
   movements: DashboardOverviewMovementInput[]
 }): DashboardOverviewSnapshot {
-  const factoryOrders = purchaseOrders.filter(order => order.status === 'MANUFACTURING')
-  const transitOrders = purchaseOrders.filter(order => order.status === 'OCEAN')
+  const factoryOrders = inboundOrders.filter(order => order.status === 'MANUFACTURING')
+  const transitOrders = inboundOrders.filter(order => order.status === 'OCEAN')
 
   const warehouseMap = new Map<
     string,

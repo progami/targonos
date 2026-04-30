@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { formatAmazonTitleLabel, formatProductLabel } from './product-labels'
+import { formatAmazonTitleLabel, formatAsinDisplayName, formatAsinReference, formatProductLabel } from './product-labels'
 
 test('formatProductLabel prefers a curated non-ASIN label', () => {
   assert.equal(
@@ -44,4 +44,30 @@ test('formatAmazonTitleLabel creates a short title label', () => {
     }),
     'Portable greenhouse kit with reinforced cover',
   )
+})
+
+test('formatAsinDisplayName maps tracked ASINs to readable product names', () => {
+  assert.equal(formatAsinDisplayName({ asin: 'b09hxc3nl8' }), 'Caelum Star 6 Pack 12x9 ft Extra Large')
+  assert.equal(formatAsinDisplayName({ asin: 'B0DQDWV1SV' }), 'Axgatoxe 6-Pack 12 x 9 ft Plastic Drop Cloth')
+  assert.equal(formatAsinDisplayName({ asin: 'B08QZHS7V6' }), 'ARVO 3 Pack 12ft x 9ft Plastic Dust Sheets')
+})
+
+test('formatAsinDisplayName still prefers explicit product metadata', () => {
+  assert.equal(
+    formatAsinDisplayName({
+      asin: 'B09HXC3NL8',
+      label: 'White Greenhouse',
+      brand: 'Targon',
+      size: '12 x 9',
+    }),
+    'White Greenhouse',
+  )
+})
+
+test('formatAsinReference keeps the raw ASIN available after the readable name', () => {
+  assert.equal(
+    formatAsinReference('B09HXC3NL8'),
+    'Caelum Star 6 Pack 12x9 ft Extra Large (B09HXC3NL8)',
+  )
+  assert.equal(formatAsinReference('B000000001'), 'B000000001')
 })

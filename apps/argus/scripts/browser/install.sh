@@ -71,6 +71,13 @@ WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/$WEEKLY_LABEL.plist"
 DAILY_VISUALS_PLIST="$LAUNCH_AGENTS_DIR/$DAILY_VISUALS_LABEL.plist"
 LEGACY_DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 BROWSER_DAILY_AH_SCRIPT="$SCRIPT_DIR/daily-account-health/collect.sh"
+if [ "$MARKET" = "us" ]; then
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
+else
+  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
+  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
+fi
 
 bootout_if_loaded() {
   local label="$1"
@@ -123,6 +130,15 @@ cat > "$WEEKLY_PLIST" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARGUS_MARKET</key>
+    <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>Label</key>
   <string>${WEEKLY_LABEL}</string>
   <key>ProgramArguments</key>
@@ -157,6 +173,15 @@ cat > "$DAILY_VISUALS_PLIST" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>ARGUS_MARKET</key>
+    <string>${MARKET}</string>
+    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_SALES_ROOT}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>Label</key>
   <string>${DAILY_VISUALS_LABEL}</string>
   <key>ProgramArguments</key>

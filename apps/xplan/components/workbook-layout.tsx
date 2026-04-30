@@ -15,8 +15,6 @@ import Toolbar from '@mui/material/Toolbar';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
-import ToggleButton from '@mui/material/ToggleButton';
-import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { TimeZoneClocks } from '@/components/timezone-clocks';
 
@@ -32,14 +30,16 @@ function TargonWordmark({ className }: { className?: string }) {
         alt="Targon"
         width={112}
         height={24}
-        className="h-6 w-auto dark:hidden"
+        className="dark:hidden"
+        style={{ width: 'auto', height: '24px' }}
       />
       <Image
         src={`${assetBasePath}/brand/logo-inverted.svg`}
         alt="Targon"
         width={112}
         height={24}
-        className="hidden h-6 w-auto dark:block"
+        className="hidden dark:block"
+        style={{ width: 'auto', height: '24px' }}
       />
     </div>
   );
@@ -270,37 +270,23 @@ export function WorkbookLayout({
         >
           Year
         </Typography>
-        <ToggleButtonGroup
+        <select
           value={resolvedYear}
-          exclusive
-          onChange={(_e, val) => { if (val != null) handleYearSelect(val); }}
-          size="small"
+          onChange={(event) => handleYearSelect(Number(event.target.value))}
+          disabled={isNavigationBusy}
           aria-label="Select year"
-          sx={{
-            '& .MuiToggleButton-root': {
-              px: 1.25,
-              py: 0.5,
-              fontSize: '0.75rem',
-              fontWeight: 500,
-              '&.Mui-selected': {
-                bgcolor: 'secondary.main',
-                color: '#fff',
-                '&:hover': { bgcolor: 'secondary.main' },
-              },
-            },
-          }}
+          className="h-8 rounded-md border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-900 shadow-sm outline-none transition focus:border-cyan-600 focus:ring-1 focus:ring-cyan-600 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
         >
           {sortedYears.map((segment) => (
-            <ToggleButton
+            <option
               key={segment.year}
               value={segment.year}
-              disabled={isNavigationBusy && segment.year === resolvedYear}
             >
               {segment.year}
               {segment.weekCount > 0 ? ` (${segment.weekCount}w)` : ''}
-            </ToggleButton>
+            </option>
           ))}
-        </ToggleButtonGroup>
+        </select>
       </Box>
     );
   }, [handleYearSelect, isNavigationBusy, isYearAwareSheet, resolvedYear, sortedYears]);
