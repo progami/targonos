@@ -17,6 +17,7 @@ const GENERATED_DIR = path.join(ROOT_DIR, '.codex', 'generated')
 const PORTS_ENV_PATH = path.join(GENERATED_DIR, 'ports.env')
 const WORKTREE_APPS_PATH = path.join(GENERATED_DIR, 'dev.worktree.apps.json')
 const ENV_ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/
+const WORKTREE_PRISMA_CONNECTION_LIMIT = '1'
 
 const APP_BASE_PATHS = {
   talos: '/talos',
@@ -90,12 +91,14 @@ function requireEnvValue(values, key, label) {
 function stripSchema(databaseUrl) {
   const url = new URL(databaseUrl)
   url.searchParams.delete('schema')
+  url.searchParams.set('connection_limit', WORKTREE_PRISMA_CONNECTION_LIMIT)
   return url.toString()
 }
 
 function withSchema(databaseUrl, schema) {
   const url = new URL(databaseUrl)
   url.searchParams.set('schema', schema)
+  url.searchParams.set('connection_limit', WORKTREE_PRISMA_CONNECTION_LIMIT)
   return url.toString()
 }
 
