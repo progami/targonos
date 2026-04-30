@@ -1,0 +1,40 @@
+.targonos-version-badge,
+body {
+  background-color: oklch(10% 0.022 238);
+}
+
+.targonos-version-badge {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 50;
+  border: 1px solid oklch(72% 0.035 220 / 0.16);
+  border-radius: 9999px;
+  background: oklch(12% 0.024 236 / 0.72);
+  color: oklch(86% 0.023 220 / 0.82);
+  padding: 8px 12px;
+  font-family: var(--font-mono), var(--font-sans), sans-serif;
+  font-size: 12px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  backdrop-filter: blur(12px);
+}
+
+body:has([data-portal-version-badge="true"]) > .targonos-version-badge {
+  display: none;
+}
+
+.targonos-version-badge:focus-visible {
+  outline: 2px solid oklch(78% 0.15 190);
+  outline-offset: 3px;
+}
+
+@media (max-width: 640px) {
+  .targonos-version-badge {
+    position: static;
+    display: inline-flex;
+    width: fit-content;
+    margin: 0 12px 12px auto;
+  }
+}
