@@ -21,6 +21,11 @@ function isJsonContentType(contentType: string): boolean {
  return lowerContentType.includes('+json')
 }
 
+function shouldRewriteAbsoluteRootApiUrl(input: URL): boolean {
+ if (typeof window === 'undefined') return false
+ return input.origin === window.location.origin
+}
+
 function guardJsonResponse(response: Response, requestPath: string): Response {
  const originalJson = response.json.bind(response)
  Object.defineProperty(response, 'json', {
@@ -59,9 +64,11 @@ function patchGlobalFetch() {
   }
  } else if (input instanceof URL) {
   if (isRootApiPath(input.pathname)) {
-   const resolvedPath = buildTalosApiPath(input.pathname)
-   input = new URL(resolvedPath + input.search + input.hash, input.origin)
-   apiRequestPath = `${resolvedPath}${input.search}`
+   if (shouldRewriteAbsoluteRootApiUrl(input)) {
+    const resolvedPath = buildTalosApiPath(input.pathname)
+    input = new URL(resolvedPath + input.search + input.hash, input.origin)
+    apiRequestPath = `${resolvedPath}${input.search}`
+   }
   } else if (isTalosApiPath(input.pathname)) {
    apiRequestPath = `${input.pathname}${input.search}`
   }
