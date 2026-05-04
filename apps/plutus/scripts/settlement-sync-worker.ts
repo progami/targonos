@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
 import { buildSyntheticUkSettlementId } from '@/lib/amazon-finances/uk-settlement-id';
+import { parseSettlementSyncWorkerPostMode } from '@/lib/amazon-finances/settlement-sync-post-mode';
 import {
   isSettlementDocNumber,
   normalizeSettlementDocNumber,
@@ -384,7 +385,7 @@ async function maybeRunAutopost() {
   return deps.runAutopostCheck();
 }
 
-async function runTick(input: { lookbackDays: number }): Promise<void> {
+async function runTick(input: { lookbackDays: number; postToQbo: boolean }): Promise<void> {
   const deps = await getWorkerDeps();
   const now = new Date();
   const startDate = buildLookbackStartDate({ now, lookbackDays: input.lookbackDays });
@@ -401,7 +402,7 @@ async function runTick(input: { lookbackDays: number }): Promise<void> {
       const result = await deps.syncUsSettlementsFromSpApiFinances({
         startDate,
         settlementIds: missingUsSettlementIds,
-        postToQbo: true,
+        postToQbo: input.postToQbo,
         process: false,
       });
 
@@ -429,7 +430,7 @@ async function runTick(input: { lookbackDays: number }): Promise<void> {
       const result = await deps.syncUkSettlementsFromSpApiFinances({
         startDate,
         settlementIds: missingUkSettlementIds,
-        postToQbo: true,
+        postToQbo: input.postToQbo,
         process: false,
       });
 
@@ -489,20 +490,23 @@ async function main(): Promise<void> {
     }
   }
 
+  const qboPostMode = parseSettlementSyncWorkerPostMode(process.env.PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE);
+
   log('info', 'Worker started', {
     intervalMinutes,
     lookbackDays,
+    qboPostMode: qboPostMode.mode,
     runOnce,
   });
 
   if (runOnce) {
-    await runTick({ lookbackDays });
+    await runTick({ lookbackDays, postToQbo: qboPostMode.postToQbo });
     return;
   }
 
   while (true) {
     try {
-      await runTick({ lookbackDays });
+      await runTick({ lookbackDays, postToQbo: qboPostMode.postToQbo });
     } catch (error) {
       log('error', 'Settlement sync tick failed', {
         error: error instanceof Error ? error.message : String(error),
