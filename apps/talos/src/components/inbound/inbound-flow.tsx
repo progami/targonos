@@ -58,6 +58,7 @@ import {
 } from '@/lib/inbound-line-costs'
 import { formatDimensionTripletCm, resolveDimensionTripletCm } from '@/lib/sku-dimensions'
 import {
+  CARTON_DIMENSION_UNIT_SYSTEM,
   convertLengthToCm,
   convertWeightFromKg,
   convertWeightToKg,
@@ -841,7 +842,8 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
   const { data: session, status } = useSession()
   const tenantRegion: TenantCode = session?.user?.region ?? 'US'
   const unitSystem = getDefaultUnitSystem(tenantRegion)
-  const lengthUnit = getLengthUnitLabel(unitSystem)
+  const cartonUnitSystem = CARTON_DIMENSION_UNIT_SYSTEM
+  const cartonLengthUnit = getLengthUnitLabel(cartonUnitSystem)
   const weightUnit = getWeightUnitLabel(unitSystem)
   const isCreate = props.mode === 'create'
   const orderId = props.orderId
@@ -1294,12 +1296,12 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
       }
 
       void patchOrderLine(lineId, {
-        cartonSide1Cm: convertLengthToCm(side1, unitSystem),
-        cartonSide2Cm: convertLengthToCm(side2, unitSystem),
-        cartonSide3Cm: convertLengthToCm(side3, unitSystem),
+        cartonSide1Cm: convertLengthToCm(side1, cartonUnitSystem),
+        cartonSide2Cm: convertLengthToCm(side2, cartonUnitSystem),
+        cartonSide3Cm: convertLengthToCm(side3, cartonUnitSystem),
       })
     },
-    [patchOrderLine, unitSystem]
+    [cartonUnitSystem, patchOrderLine]
   )
 
   const refreshForwardingCosts = useCallback(async () => {
@@ -3531,7 +3533,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                               Country
                             </th>
                             <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[172px]">
-                              Carton Size ({lengthUnit})
+                              Carton Size ({cartonLengthUnit})
                             </th>
                             <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                               Net ({weightUnit})
@@ -3732,7 +3734,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           placeholder="L"
                                           defaultValue={
                                             line.cartonSide1Cm != null
-                                              ? formatLengthFromCm(line.cartonSide1Cm, unitSystem)
+                                              ? formatLengthFromCm(line.cartonSide1Cm, cartonUnitSystem)
                                               : ''
                                           }
                                           data-carton-side-line={line.id}
@@ -3751,7 +3753,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           placeholder="W"
                                           defaultValue={
                                             line.cartonSide2Cm != null
-                                              ? formatLengthFromCm(line.cartonSide2Cm, unitSystem)
+                                              ? formatLengthFromCm(line.cartonSide2Cm, cartonUnitSystem)
                                               : ''
                                           }
                                           data-carton-side-line={line.id}
@@ -3770,7 +3772,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           placeholder="H"
                                           defaultValue={
                                             line.cartonSide3Cm != null
-                                              ? formatLengthFromCm(line.cartonSide3Cm, unitSystem)
+                                              ? formatLengthFromCm(line.cartonSide3Cm, cartonUnitSystem)
                                               : ''
                                           }
                                           data-carton-side-line={line.id}
@@ -3785,7 +3787,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                     ) : (
                                       <span className="text-xs text-slate-700 dark:text-slate-300">
                                         {cartonTriplet
-                                          ? `${formatLengthFromCm(cartonTriplet.side1Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, unitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, unitSystem)}`
+                                          ? `${formatLengthFromCm(cartonTriplet.side1Cm, cartonUnitSystem)}×${formatLengthFromCm(cartonTriplet.side2Cm, cartonUnitSystem)}×${formatLengthFromCm(cartonTriplet.side3Cm, cartonUnitSystem)}`
                                           : '—'}
                                       </span>
                                     )}
@@ -4310,7 +4312,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                               Country
                             </th>
                             <th className="text-left font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[172px]">
-                              Carton Size ({lengthUnit})
+                              Carton Size ({cartonLengthUnit})
                             </th>
                             <th className="text-right font-medium text-muted-foreground px-2 py-2 whitespace-nowrap text-xs w-[84px]">
                               Net ({weightUnit})
@@ -4488,7 +4490,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                         placeholder="L"
                                         value={
                                           line.cartonSide1Cm != null
-                                            ? formatLengthFromCm(line.cartonSide1Cm, unitSystem)
+                                            ? formatLengthFromCm(line.cartonSide1Cm, cartonUnitSystem)
                                             : ''
                                         }
                                         onChange={e => {
@@ -4498,7 +4500,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           const next =
                                             nextInput === null
                                               ? null
-                                              : convertLengthToCm(nextInput, unitSystem)
+                                              : convertLengthToCm(nextInput, cartonUnitSystem)
                                           updateLine(current => {
                                             const triplet = resolveDimensionTripletCm({
                                               side1Cm: next,
@@ -4525,7 +4527,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                         placeholder="W"
                                         value={
                                           line.cartonSide2Cm != null
-                                            ? formatLengthFromCm(line.cartonSide2Cm, unitSystem)
+                                            ? formatLengthFromCm(line.cartonSide2Cm, cartonUnitSystem)
                                             : ''
                                         }
                                         onChange={e => {
@@ -4535,7 +4537,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           const next =
                                             nextInput === null
                                               ? null
-                                              : convertLengthToCm(nextInput, unitSystem)
+                                              : convertLengthToCm(nextInput, cartonUnitSystem)
                                           updateLine(current => {
                                             const triplet = resolveDimensionTripletCm({
                                               side1Cm: current.cartonSide1Cm ?? null,
@@ -4562,7 +4564,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                         placeholder="H"
                                         value={
                                           line.cartonSide3Cm != null
-                                            ? formatLengthFromCm(line.cartonSide3Cm, unitSystem)
+                                            ? formatLengthFromCm(line.cartonSide3Cm, cartonUnitSystem)
                                             : ''
                                         }
                                         onChange={e => {
@@ -4572,7 +4574,7 @@ export function InboundOrderFlow(props: InboundOrderFlowProps) {
                                           const next =
                                             nextInput === null
                                               ? null
-                                              : convertLengthToCm(nextInput, unitSystem)
+                                              : convertLengthToCm(nextInput, cartonUnitSystem)
                                           updateLine(current => {
                                             const triplet = resolveDimensionTripletCm({
                                               side1Cm: current.cartonSide1Cm ?? null,
