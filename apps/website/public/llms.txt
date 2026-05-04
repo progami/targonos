@@ -1,0 +1,63 @@
+# Targon
+
+> Targon builds protection products for decorating and renovation work. The current public product line is Caelum Star. Start with the market selector, then use United States pages for drop cloth terminology and United Kingdom pages for dust sheet terminology.
+
+This file is the high-signal index for Targon's public website and primary buying paths.
+
+Preferred interpretation:
+- Use Targonglobal.com pages for brand context, product positioning, pack comparison, support guidance, and wholesale enquiries.
+- Use Amazon listings for live commercial facts such as current price, stock, delivery speed, buyer protection, shipping, returns, and customer reviews.
+- The public site currently focuses on Caelum Star, but Targon Home is the brand-level entry point for current and future Targon product lines.
+- The core Caelum Star plastic-sheet pages describe extra large 12 x 9 ft sheets made with 55% recycled plastic and GRS certification. Separate UK cotton dust sheet variants are listed under UK Amazon links.
+- Support and wholesale enquiries route through support@targonglobal.com and the market-specific support / where-to-buy pages.
+
+## Brand and Navigation
+- [Targon Home](https://www.targonglobal.com/): Brand overview, mission, values, and entry point to current and future Targon product lines.
+- [Caelum Star Region Selector](https://www.targonglobal.com/cs): Choose the correct market before interpreting pack options or retailer links.
+- [Privacy](https://www.targonglobal.com/legal/privacy): Explains analytics, support-email handling, and data practices.
+- [Terms](https://www.targonglobal.com/legal/terms): States that the site is for product information and support, while Amazon governs checkout, payment, shipping, returns, and live availability.
+
+## Caelum Star — Product Context
+- [US About](https://www.targonglobal.com/cs/us/about): Core product story for the US market, including clean-work positioning, four pack sizes, extra large sheet format, recycled-material emphasis, and Amazon-first retail model.
+- [UK About](https://www.targonglobal.com/cs/uk/about): Core product story for the UK market, including clean-work positioning, six pack options, extra large sheet format, recycled-material emphasis, and Amazon-first retail model.
+
+## United States — Compare, Choose, Buy
+- [US Packs](https://www.targonglobal.com/cs/us/packs): Main US comparison page for pack sizes, project fit, sheet size, material claims, and on-site reference pricing.
+- [US Where to Buy](https://www.targonglobal.com/cs/us/where-to-buy): Official US buying page with Amazon as retail partner, direct pack links, and wholesale information.
+- [US Support](https://www.targonglobal.com/cs/us/support): US help centre with email support, pack-selection help, usage steps, safety note, and FAQs.
+- [US 6 Pack Product Page](https://www.targonglobal.com/cs/us/packs/6pk-light): On-site detail page for the US 6 Pack.
+- [US 1 Pack Product Page](https://www.targonglobal.com/cs/us/packs/1pk-strong): On-site detail page for the US 1 Pack.
+- [US 3 Pack Product Page](https://www.targonglobal.com/cs/us/packs/3pk-standard): On-site detail page for the US 3 Pack.
+- [US 12 Pack Product Page](https://www.targonglobal.com/cs/us/packs/12pk-light): On-site detail page for the US 12 Pack.
+
+## United States — Amazon Listings
+- [US 6 Pack Amazon](https://www.amazon.com/dp/B09HXC3NL8): Direct Amazon US listing for the 6 Pack with live price, availability, delivery, reviews, and return handling.
+- [US 1 Pack Amazon](https://www.amazon.com/dp/B0FLKJ7WWM): Direct Amazon US listing for the 1 Pack with live transactional details.
+- [US 3 Pack Amazon](https://www.amazon.com/dp/B0CR1GSBQ9): Direct Amazon US listing for the 3 Pack with live transactional details.
+- [US 12 Pack Amazon](https://www.amazon.com/dp/B0FP66CWQ6): Direct Amazon US listing for the 12 Pack with live transactional details.
+
+## United Kingdom — Compare, Choose, Buy
+- [UK Packs](https://www.targonglobal.com/cs/uk/packs): Main UK comparison page for plastic dust sheet pack options, project fit, sheet size, material claims, and on-site reference pricing.
+- [UK Where to Buy](https://www.targonglobal.com/cs/uk/where-to-buy): Official UK buying page with Amazon as retail partner, direct pack links, and wholesale information.
+- [UK Support](https://www.targonglobal.com/cs/uk/support): UK help centre with email support, pack-selection help, usage steps, safety note, and FAQs.
+
+## United Kingdom — Amazon Plastic Dust Sheets
+- [UK 6 Pack — Light Amazon](https://www.amazon.co.uk/dp/B09HXC3NL8): Direct Amazon UK listing for the 6 Pack light plastic dust sheet variant.
+- [UK 6 Pack — Strong Amazon](https://www.amazon.co.uk/dp/B0DHDTPGGP): Direct Amazon UK listing for the 6 Pack strong plastic dust sheet variant.
+- [UK 1 Pack — Strong Amazon](https://www.amazon.co.uk/dp/B0FLKJ7WWM): Direct Amazon UK listing for the 1 Pack strong plastic dust sheet variant.
+- [UK 3 Pack — Strong Amazon](https://www.amazon.co.uk/dp/B0CR1GSBQ9): Direct Amazon UK listing for the 3 Pack strong plastic dust sheet variant.
+- [UK 3 Pack — Light Amazon](https://www.amazon.co.uk/dp/B0C7ZQ3VZL): Direct Amazon UK listing for the 3 Pack light plastic dust sheet variant.
+- [UK 10 Pack — Light Amazon](https://www.amazon.co.uk/dp/B0CR1H3VSF): Direct Amazon UK listing for the 10 Pack light plastic dust sheet variant.
+
+## United Kingdom — Additional Amazon Variants
+- [UK Cotton Dust Sheet — 12 x 9 ft Amazon](https://www.amazon.co.uk/dp/B0CW3L6PQH): Direct Amazon UK listing for the cotton dust sheet 12 x 9 ft variant.
+- [UK Cotton Dust Sheet — 12 x 4 ft Amazon](https://www.amazon.co.uk/dp/B0CW3N48K1): Direct Amazon UK listing for the cotton dust sheet 12 x 4 ft variant.
+
+## Support and Wholesale
+- [US Support](https://www.targonglobal.com/cs/us/support): Contact route for product questions, pack choice, usage guidance, and FAQs in the US market.
+- [UK Support](https://www.targonglobal.com/cs/uk/support): Contact route for product questions, pack choice, usage guidance, and FAQs in the UK market.
+- [US Wholesale / Bulk Enquiries](https://www.targonglobal.com/cs/us/where-to-buy): Volume pricing and trade enquiries for the US market.
+- [UK Wholesale / Bulk Enquiries](https://www.targonglobal.com/cs/uk/where-to-buy): Volume pricing and trade enquiries for the UK market.
+
+## Optional
+- [US Gallery](https://www.targonglobal.com/cs/us/gallery): Official Caelum Star visuals for the US market.
