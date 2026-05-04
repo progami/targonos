@@ -859,7 +859,6 @@ export default function SettlementsPage() {
                               onClick={() => router.push(settlementHref)}
                               dropdownItems={[
                                 { label: 'Open settlement', onClick: () => router.push(settlementHref) },
-                                { label: 'History', onClick: () => router.push(`${settlementHref}?tab=history`) },
                                 {
                                   label: 'Sync from Amazon',
                                   onClick: () =>

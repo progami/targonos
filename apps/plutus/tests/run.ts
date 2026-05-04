@@ -650,6 +650,20 @@ test('buildSettlementHistoryViewModel orders compact rows newest-first', () => {
   assert.equal(history[2]?.kind, 'posted');
 });
 
+test('settlement detail source does not expose the removed analysis tab', () => {
+  const source = readFileSync('app/settlements/[region]/[settlementId]/page.tsx', 'utf8');
+
+  assert.equal(source.includes('label="Analysis"'), false);
+  assert.equal(source.includes('value="analysis"'), false);
+  assert.equal(source.includes("tab', 'analysis'"), false);
+});
+
+test('settlements list no longer links to removed history tab alias', () => {
+  const source = readFileSync('app/settlements/page.tsx', 'utf8');
+
+  assert.equal(source.includes('?tab=history'), false);
+});
+
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
   assert.equal(normalizeSettlementMarketplaceQuery('UK'), 'UK');
   assert.equal(normalizeSettlementMarketplaceQuery('us'), 'US');
@@ -1238,6 +1252,37 @@ test('buildUsSettlementDraftFromSpApiFinances maps compensated clawback adjustme
           PostedDate: '2026-04-04T08:00:00.000Z',
           AdjustmentType: 'COMPENSATED_CLAWBACK',
           AdjustmentAmount: { CurrencyCode: 'USD', CurrencyAmount: -4.26 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments.length, 1);
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get(
+      'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Compensated Clawback',
+    ),
+    -426,
+  );
+});
+
+test('buildUkSettlementDraftFromSpApiFinances maps compensated clawback adjustments', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-COMPENSATED-CLAWBACK-UK-1',
+    eventGroupId: 'GROUP-COMPENSATED-CLAWBACK-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -4.26 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          AdjustmentType: 'COMPENSATED_CLAWBACK',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: -4.26 },
         },
       ],
     },
