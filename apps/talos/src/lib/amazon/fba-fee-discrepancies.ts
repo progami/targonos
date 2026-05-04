@@ -40,6 +40,11 @@ export type ApiSkuRow = {
   itemSide2Cm: ApiNumberValue
   itemSide3Cm: ApiNumberValue
   itemWeightKg: ApiNumberValue
+  masterCartonDimensionsCm: string | null
+  masterCartonSide1Cm: ApiNumberValue
+  masterCartonSide2Cm: ApiNumberValue
+  masterCartonSide3Cm: ApiNumberValue
+  masterCartonSourceOrderNumber: string | null
 }
 
 export type ComparisonSkuSourceRow = {
@@ -60,6 +65,11 @@ export type ComparisonSkuSourceRow = {
   itemSide2Cm: ApiNumberValue
   itemSide3Cm: ApiNumberValue
   itemWeightKg: ApiNumberValue
+  masterCartonDimensionsCm: string | null
+  masterCartonSide1Cm: ApiNumberValue
+  masterCartonSide2Cm: ApiNumberValue
+  masterCartonSide3Cm: ApiNumberValue
+  masterCartonSourceOrderNumber: string | null
   amazonItemPackageDimensionsCm: string | null
   amazonItemPackageSide1Cm: ApiNumberValue
   amazonItemPackageSide2Cm: ApiNumberValue
@@ -156,6 +166,33 @@ export function mergeAmazonCatalogPackageData(
   }
 
   return next
+}
+
+export function resolveMasterCartonTripletCm(row: Pick<
+  ApiSkuRow,
+  | 'masterCartonDimensionsCm'
+  | 'masterCartonSide1Cm'
+  | 'masterCartonSide2Cm'
+  | 'masterCartonSide3Cm'
+>): DimensionTriplet | null {
+  return resolveDimensionTripletCm({
+    side1Cm: row.masterCartonSide1Cm,
+    side2Cm: row.masterCartonSide2Cm,
+    side3Cm: row.masterCartonSide3Cm,
+    legacy: row.masterCartonDimensionsCm,
+  })
+}
+
+export function formatMasterCartonSizeCm(row: Pick<
+  ApiSkuRow,
+  | 'masterCartonDimensionsCm'
+  | 'masterCartonSide1Cm'
+  | 'masterCartonSide2Cm'
+  | 'masterCartonSide3Cm'
+>): string {
+  const triplet = resolveMasterCartonTripletCm(row)
+  if (triplet === null) return '—'
+  return `${formatDimensionTripletCm(triplet).replace(/x/g, '×')} cm`
 }
 
 export function parseDecimalNumber(value: unknown): number | null {

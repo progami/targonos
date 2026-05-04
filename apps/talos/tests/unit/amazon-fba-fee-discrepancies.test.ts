@@ -51,6 +51,11 @@ function createSkuRow(overrides: Partial<ApiSkuRow> = {}): ApiSkuRow {
     itemSide2Cm: null,
     itemSide3Cm: null,
     itemWeightKg: null,
+    masterCartonDimensionsCm: null,
+    masterCartonSide1Cm: null,
+    masterCartonSide2Cm: null,
+    masterCartonSide3Cm: null,
+    masterCartonSourceOrderNumber: null,
     ...overrides,
   }
 }
@@ -84,6 +89,11 @@ function createComparisonSkuSourceRow(
     itemSide2Cm: null,
     itemSide3Cm: null,
     itemWeightKg: null,
+    masterCartonDimensionsCm: null,
+    masterCartonSide1Cm: null,
+    masterCartonSide2Cm: null,
+    masterCartonSide3Cm: null,
+    masterCartonSourceOrderNumber: null,
     amazonItemPackageDimensionsCm: null,
     amazonItemPackageSide1Cm: referenceTriplet.side1Cm,
     amazonItemPackageSide2Cm: referenceTriplet.side2Cm,
@@ -262,6 +272,32 @@ test('SKU Info dimensions are side 1, side 2, side 3 ordered shortest to longest
   )
 })
 
+test('master carton size uses last PO carton dimensions in stored centimeters without regional conversion', () => {
+  const helpers = discrepancies as unknown as {
+    resolveMasterCartonTripletCm?: (row: ApiSkuRow) => discrepancies.DimensionTriplet | null
+    formatMasterCartonSizeCm?: (row: ApiSkuRow) => string
+  }
+  assert.equal(typeof helpers.resolveMasterCartonTripletCm, 'function')
+  assert.equal(typeof helpers.formatMasterCartonSizeCm, 'function')
+  if (typeof helpers.resolveMasterCartonTripletCm !== 'function') return
+  if (typeof helpers.formatMasterCartonSizeCm !== 'function') return
+
+  const row = createSkuRow({
+    masterCartonDimensionsCm: '50.8x25.4x2.54',
+    masterCartonSide1Cm: 50.8,
+    masterCartonSide2Cm: 25.4,
+    masterCartonSide3Cm: 2.54,
+    masterCartonSourceOrderNumber: 'PO-20-PDS',
+  })
+
+  assert.deepEqual(helpers.resolveMasterCartonTripletCm(row), {
+    side1Cm: 50.8,
+    side2Cm: 25.4,
+    side3Cm: 2.54,
+  })
+  assert.equal(helpers.formatMasterCartonSizeCm(row), '50.8×25.4×2.54 cm')
+})
+
 test('Amazon catalog package dimensions normalize to shortest middle longest sides', () => {
   const parsed = parseCatalogItemPackageDimensions({
     item_package_dimensions: [
@@ -351,6 +387,21 @@ test('SKU Info API does not calculate Amazon size tier from catalog dimensions',
 
   assert.equal(routeSource.includes('calculateSizeTierForTenant'), false)
   assert.equal(routeSource.includes('loadLatestFbaFeePreviewReportRows'), true)
+})
+
+test('SKU Info API loads master carton size from active tenant inbound order lines', () => {
+  const talosRoot = path.resolve(__dirname, '..', '..')
+  const routeSource = readFileSync(
+    path.join(talosRoot, 'src/app/api/amazon/fba-fee-discrepancies/route.ts'),
+    'utf8'
+  )
+
+  assert.equal(routeSource.includes('loadLatestMasterCartonBySkuCode'), true)
+  assert.equal(routeSource.includes('inboundOrderLine.findMany'), true)
+  assert.equal(routeSource.includes('resolveMasterCartonTripletCm(masterCartonFields) === null'), true)
+  assert.equal(routeSource.includes('cartonSide1Cm: { not: null }'), false)
+  assert.equal(routeSource.includes('DATABASE_URL_US'), false)
+  assert.equal(routeSource.includes('DATABASE_URL_UK'), false)
 })
 
 test('assigned size tier option validation allows tenant options and rejects invalid names', () => {

@@ -7,7 +7,9 @@ import {
 import {
   buildComparisonSkuRow,
   mergeAmazonCatalogPackageData,
+  resolveMasterCartonTripletCm,
   type AmazonCatalogPackageData,
+  type ApiSkuRow,
 } from '@/lib/amazon/fba-fee-discrepancies'
 import {
   loadLatestFbaFeePreviewReportRows,
@@ -26,7 +28,7 @@ import {
 } from '@/lib/amazon/reference-input'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { getCurrentTenantCode, getTenantPrisma } from '@/lib/tenant/server'
-import { Prisma } from '@targon/prisma-talos'
+import { InboundOrderLineStatus, InboundOrderStatus, Prisma } from '@targon/prisma-talos'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,8 +88,97 @@ type ComparisonSkuDatabaseRow = Prisma.SkuGetPayload<{
   select: typeof comparisonSkuSelect
 }>
 
+type MasterCartonFields = Pick<
+  ApiSkuRow,
+  | 'masterCartonDimensionsCm'
+  | 'masterCartonSide1Cm'
+  | 'masterCartonSide2Cm'
+  | 'masterCartonSide3Cm'
+  | 'masterCartonSourceOrderNumber'
+>
+
+const emptyMasterCartonFields: MasterCartonFields = {
+  masterCartonDimensionsCm: null,
+  masterCartonSide1Cm: null,
+  masterCartonSide2Cm: null,
+  masterCartonSide3Cm: null,
+  masterCartonSourceOrderNumber: null,
+}
+
+const latestMasterCartonLineSelect = {
+  skuCode: true,
+  cartonDimensionsCm: true,
+  cartonSide1Cm: true,
+  cartonSide2Cm: true,
+  cartonSide3Cm: true,
+  inboundOrder: {
+    select: {
+      orderNumber: true,
+      createdAt: true,
+    },
+  },
+} satisfies Prisma.InboundOrderLineSelect
+
+type LatestMasterCartonLine = Prisma.InboundOrderLineGetPayload<{
+  select: typeof latestMasterCartonLineSelect
+}>
+
+function buildMasterCartonFields(line: LatestMasterCartonLine): MasterCartonFields {
+  return {
+    masterCartonDimensionsCm: line.cartonDimensionsCm,
+    masterCartonSide1Cm: line.cartonSide1Cm,
+    masterCartonSide2Cm: line.cartonSide2Cm,
+    masterCartonSide3Cm: line.cartonSide3Cm,
+    masterCartonSourceOrderNumber: line.inboundOrder.orderNumber,
+  }
+}
+
+function attachMasterCartonFields<T extends ComparisonSkuDatabaseRow>(
+  sku: T,
+  masterCartonBySkuCode: Map<string, MasterCartonFields>
+): T & MasterCartonFields {
+  const masterCartonFields = masterCartonBySkuCode.get(sku.skuCode)
+  return {
+    ...sku,
+    ...(masterCartonFields === undefined ? emptyMasterCartonFields : masterCartonFields),
+  }
+}
+
+async function loadLatestMasterCartonBySkuCode(
+  prisma: Prisma.TransactionClient,
+  skuCodes: string[]
+): Promise<Map<string, MasterCartonFields>> {
+  if (skuCodes.length === 0) return new Map()
+
+  const lines = await prisma.inboundOrderLine.findMany({
+    where: {
+      skuCode: { in: skuCodes },
+      status: { not: InboundOrderLineStatus.CANCELLED },
+      inboundOrder: {
+        status: { not: InboundOrderStatus.CANCELLED },
+      },
+    },
+    orderBy: [
+      { inboundOrder: { createdAt: 'desc' } },
+      { createdAt: 'desc' },
+      { id: 'desc' },
+    ],
+    select: latestMasterCartonLineSelect,
+  })
+
+  const bySkuCode = new Map<string, MasterCartonFields>()
+  for (const line of lines) {
+    if (bySkuCode.has(line.skuCode)) continue
+    const masterCartonFields = buildMasterCartonFields(line)
+    if (resolveMasterCartonTripletCm(masterCartonFields) === null) continue
+    bySkuCode.set(line.skuCode, masterCartonFields)
+  }
+
+  return bySkuCode
+}
+
 async function buildLiveAmazonComparisonRow(
-  row: ComparisonSkuDatabaseRow,
+  row: ComparisonSkuDatabaseRow & MasterCartonFields,
   tenantCode: TenantCode,
   feePreviewRows: FbaFeePreviewReportRow[]
 ) {
@@ -154,8 +245,18 @@ export const GET = withRole(['admin', 'staff'], async (request, _session) => {
   })
 
   const feePreviewRows = await loadLatestFbaFeePreviewReportRows(tenantCode)
+  const masterCartonBySkuCode = await loadLatestMasterCartonBySkuCode(
+    prisma,
+    skus.map(sku => sku.skuCode)
+  )
   const comparisonSkus = await Promise.all(
-    skus.map(sku => buildLiveAmazonComparisonRow(sku, tenantCode, feePreviewRows))
+    skus.map(sku =>
+      buildLiveAmazonComparisonRow(
+        attachMasterCartonFields(sku, masterCartonBySkuCode),
+        tenantCode,
+        feePreviewRows
+      )
+    )
   )
 
   return ApiResponses.success({ skus: comparisonSkus, total, page, pageSize })
@@ -207,6 +308,11 @@ export const PATCH = withRole(['admin', 'staff'], async (request, _session) => {
   })
 
   const feePreviewRows = await loadLatestFbaFeePreviewReportRows(tenantCode)
-  const comparisonSku = await buildLiveAmazonComparisonRow(updatedSku, tenantCode, feePreviewRows)
+  const masterCartonBySkuCode = await loadLatestMasterCartonBySkuCode(prisma, [updatedSku.skuCode])
+  const comparisonSku = await buildLiveAmazonComparisonRow(
+    attachMasterCartonFields(updatedSku, masterCartonBySkuCode),
+    tenantCode,
+    feePreviewRows
+  )
   return ApiResponses.success(comparisonSku)
 })

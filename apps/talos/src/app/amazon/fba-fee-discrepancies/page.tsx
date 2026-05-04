@@ -10,6 +10,7 @@ import {
   type AlertStatus,
   type ApiSkuRow,
   computeComparison,
+  formatMasterCartonSizeCm,
   getComparisonStatusLabel,
   summarizeComparisonStatuses,
 } from '@/lib/amazon/fba-fee-discrepancies'
@@ -570,6 +571,24 @@ function AmazonFbaFeeDiscrepanciesPageContent() {
                             unitSystem
                           )}
                         </EditableReferenceValue>
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-white dark:bg-slate-800">
+                    <td className="px-4 py-2 font-medium text-slate-700 dark:text-slate-300 sticky left-0 bg-white dark:bg-slate-800 z-10">
+                      Master Carton Size
+                    </td>
+                    {pageRows.map(row => (
+                      <td
+                        key={row.sku.id}
+                        className="px-4 py-2 text-center tabular-nums text-slate-700 dark:text-slate-300 text-xs"
+                      >
+                        <div>{formatMasterCartonSizeCm(row.sku)}</div>
+                        {row.sku.masterCartonSourceOrderNumber ? (
+                          <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                            {row.sku.masterCartonSourceOrderNumber}
+                          </div>
+                        ) : null}
                       </td>
                     ))}
                   </tr>
