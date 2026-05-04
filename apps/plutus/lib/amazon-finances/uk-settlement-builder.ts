@@ -173,6 +173,8 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
   if (type === 'MISSING_FROM_INBOUND') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Missing From Inbound';
   if (type === 'REVERSAL_REIMBURSEMENT')
     return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';
+  if (type === 'COMPENSATED_CLAWBACK')
+    return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Compensated Clawback';
   return null;
 }
 
