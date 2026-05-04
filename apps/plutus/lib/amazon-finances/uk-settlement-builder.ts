@@ -1008,28 +1008,14 @@ export function buildQboJournalEntriesFromUkSettlementDraft(input: {
       const abs = Math.abs(cents);
       const amount = abs / 100;
 
-      // Amazon uses FundTransferStatus to describe payout success for positive settlements.
-      // Negative settlements are charged to the payment method and typically show FundTransferStatus=Unknown,
-      // but still need a "Payment to Amazon" line so the charge can be matched in QBO.
-      const transferSucceeded = input.draft.fundTransferStatus === 'Succeeded';
-
       if (cents > 0) {
-        if (transferSucceeded) {
-          lines.push({
-            accountId: input.bankAccountId,
-            postingType: 'Debit',
-            amount,
-            description: 'Transfer to Bank',
-          });
-        } else {
-          const description = `Settlement Control (FundTransferStatus=${input.draft.fundTransferStatus})`;
-          lines.push({
-            accountId: input.settlementControlAccountId,
-            postingType: 'Debit',
-            amount,
-            description,
-          });
-        }
+        const description = `Settlement Control (FundTransferStatus=${input.draft.fundTransferStatus})`;
+        lines.push({
+          accountId: input.settlementControlAccountId,
+          postingType: 'Debit',
+          amount,
+          description,
+        });
       } else {
         lines.push({
           accountId: input.paymentAccountId,
