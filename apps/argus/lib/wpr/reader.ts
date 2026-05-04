@@ -1,5 +1,7 @@
-import { stat, readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import { text as readStreamAsText } from 'node:stream/consumers';
 import { DEFAULT_ARGUS_MARKET, getArgusMarketConfig, type ArgusMarket } from '@/lib/argus-market';
 import { assertWprPayloadContract } from './payload-contract';
 import type {
@@ -26,6 +28,10 @@ function resolveLatestJsonPath(market: ArgusMarket): string {
   return join(getArgusMarketConfig(market).wprDataDir, 'wpr-data-latest.json');
 }
 
+async function readPayloadFile(path: string): Promise<string> {
+  return readStreamAsText(createReadStream(path, { encoding: 'utf8' }));
+}
+
 async function loadPayload(market: ArgusMarket): Promise<WprPayload> {
   const path = resolveLatestJsonPath(market);
   const fileStats = await stat(path);
@@ -35,7 +41,7 @@ async function loadPayload(market: ArgusMarket): Promise<WprPayload> {
     return cacheState.payload;
   }
 
-  const raw = await readFile(path, 'utf8');
+  const raw = await readPayloadFile(path);
   const payload = JSON.parse(raw) as unknown;
   assertWprPayloadContract(payload);
   cacheByMarket.set(market, {
