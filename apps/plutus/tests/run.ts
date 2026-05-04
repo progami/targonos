@@ -48,8 +48,20 @@ import {
 } from '../lib/plutus/shipment-fee-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
-import { buildUsSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/us-settlement-builder';
-import { buildUkSettlementDraftFromSpApiFinances } from '../lib/amazon-finances/uk-settlement-builder';
+import {
+  buildQboJournalEntriesFromUsSettlementDraft,
+  buildUsSettlementDraftFromSpApiFinances,
+} from '../lib/amazon-finances/us-settlement-builder';
+import {
+  buildQboJournalEntriesFromUkSettlementDraft,
+  buildUkSettlementDraftFromSpApiFinances,
+} from '../lib/amazon-finances/uk-settlement-builder';
+import {
+  parseSettlementSyncCliPostFlag,
+  parseSettlementSyncWorkerPostMode,
+} from '../lib/amazon-finances/settlement-sync-post-mode';
+import { POST as postUsSpApiSettlementSync } from '../app/api/plutus/settlements/spapi/us/sync/route';
+import { POST as postUkSpApiSettlementSync } from '../app/api/plutus/settlements/spapi/uk/sync/route';
 import {
   buildSyntheticUkSettlementId,
   extractEventGroupIdFromSyntheticUkSettlementId,
@@ -3902,6 +3914,136 @@ test('fetchAuditSourceData queries purchases bills journal entries transfers and
     qboFullHistoryAuditDeps.fetch = originalFetch;
     qboFullHistoryAuditDeps.sleep = originalSleep;
   }
+});
+
+test('settlement sync worker post mode fails closed', () => {
+  assert.throws(() => parseSettlementSyncWorkerPostMode(undefined), /PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE/);
+  assert.throws(() => parseSettlementSyncWorkerPostMode(''), /PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE/);
+  assert.throws(() => parseSettlementSyncWorkerPostMode('true'), /PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE/);
+  assert.equal(parseSettlementSyncWorkerPostMode('read_only').postToQbo, false);
+  assert.equal(parseSettlementSyncWorkerPostMode('post_qbo').postToQbo, true);
+});
+
+test('settlement sync CLI post flag is explicit', () => {
+  assert.throws(() => parseSettlementSyncCliPostFlag([], 'US SP-API settlement sync'), /--post-qbo or --no-post/);
+  assert.throws(
+    () => parseSettlementSyncCliPostFlag(['--post-qbo', '--no-post'], 'US SP-API settlement sync'),
+    /Only one QBO posting flag/,
+  );
+  assert.deepEqual(parseSettlementSyncCliPostFlag(['--post-qbo', '--start-date', '2026-05-01'], 'US SP-API settlement sync'), {
+    postToQbo: true,
+    argv: ['--start-date', '2026-05-01'],
+  });
+  assert.deepEqual(parseSettlementSyncCliPostFlag(['--no-post', '--start-date', '2026-05-01'], 'US SP-API settlement sync'), {
+    postToQbo: false,
+    argv: ['--start-date', '2026-05-01'],
+  });
+});
+
+test('SP-API settlement sync routes require explicit postToQbo', async () => {
+  const request = new Request('https://plutus.test/api/plutus/settlements/spapi/us/sync', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ startDate: '2026-05-01' }),
+  });
+  const response = await postUsSpApiSettlementSync(request);
+  const payload = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.match(String(payload.details ?? payload.error), /postToQbo/);
+
+  const ukRequest = new Request('https://plutus.test/api/plutus/settlements/spapi/uk/sync', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ startDate: '2026-05-01' }),
+  });
+  const ukResponse = await postUkSpApiSettlementSync(ukRequest);
+  const ukPayload = await ukResponse.json();
+
+  assert.equal(ukResponse.status, 400);
+  assert.match(String(ukPayload.details ?? ukPayload.error), /postToQbo/);
+});
+
+test('successful US settlement payouts post to settlement control instead of bank account', () => {
+  const entries = buildQboJournalEntriesFromUsSettlementDraft({
+    draft: {
+      settlementId: '26189598301',
+      eventGroupId: 'group-us',
+      timeZone: 'America/Los_Angeles',
+      originalTotalCents: 11934,
+      fundTransferStatus: 'Succeeded',
+      segments: [
+        {
+          seq: 1,
+          yearMonth: '2026-05',
+          startIsoDay: '2026-04-16',
+          endIsoDay: '2026-04-30',
+          txnDate: '2026-04-30',
+          docNumber: 'US-260416-260430-S1',
+          memoTotalsCents: new Map([['Amazon Sales - Principal - US-PDS', 11934]]),
+          auditRows: [],
+        },
+      ],
+    } as any,
+    privateNote: 'test',
+    settlementControlAccountId: 'control',
+    bankAccountId: 'bank',
+    paymentAccountId: 'payment',
+    accountIdByMemo: new Map([['Amazon Sales - Principal - US-PDS', 'sales']]),
+  });
+
+  assert.equal(entries[0]!.lines.some((line) => line.accountId === 'bank'), false);
+  assert.equal(
+    entries[0]!.lines.some(
+      (line) =>
+        line.accountId === 'control' &&
+        line.postingType === 'Debit' &&
+        line.amount === 119.34 &&
+        line.description === 'Settlement Control (FundTransferStatus=Succeeded)',
+    ),
+    true,
+  );
+});
+
+test('successful UK settlement payouts post to settlement control instead of bank account', () => {
+  const entries = buildQboJournalEntriesFromUkSettlementDraft({
+    draft: {
+      settlementId: 'EG-group-uk',
+      eventGroupId: 'group-uk',
+      timeZone: 'Europe/London',
+      originalTotalCents: 1394696,
+      fundTransferStatus: 'Succeeded',
+      segments: [
+        {
+          seq: 1,
+          yearMonth: '2026-04',
+          startIsoDay: '2026-04-01',
+          endIsoDay: '2026-04-21',
+          txnDate: '2026-04-21',
+          docNumber: 'UK-260401-260421-S1',
+          memoTotalsCents: new Map([['Amazon Sales - Principal - UK-PDS', 1394696]]),
+          auditRows: [],
+        },
+      ],
+    } as any,
+    privateNote: 'test',
+    settlementControlAccountId: 'control',
+    bankAccountId: 'bank',
+    paymentAccountId: 'payment',
+    accountIdByMemo: new Map([['Amazon Sales - Principal - UK-PDS', 'sales']]),
+  });
+
+  assert.equal(entries[0]!.lines.some((line) => line.accountId === 'bank'), false);
+  assert.equal(
+    entries[0]!.lines.some(
+      (line) =>
+        line.accountId === 'control' &&
+        line.postingType === 'Debit' &&
+        line.amount === 13946.96 &&
+        line.description === 'Settlement Control (FundTransferStatus=Succeeded)',
+    ),
+    true,
+  );
 });
 
 
