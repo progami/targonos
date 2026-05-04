@@ -3,7 +3,8 @@ export function getSettlementDisplayId(input: {
   childDocNumbers: readonly string[];
 }): string {
   const sourceSettlementId = input.sourceSettlementId.trim()
-  if (!sourceSettlementId.startsWith('EG-')) {
+  const canonicalPostingDocNumber = /^(?:US|UK)-\d{6}-\d{6}-S\d+(?:-[A-Z])?$/
+  if (canonicalPostingDocNumber.test(sourceSettlementId)) {
     return sourceSettlementId
   }
 

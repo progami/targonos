@@ -408,6 +408,16 @@ test('getSettlementDisplayId keeps human-readable source settlement ids unchange
   );
 });
 
+test('getSettlementDisplayId prefers posting doc numbers over raw Amazon settlement ids', () => {
+  assert.equal(
+    getSettlementDisplayId({
+      sourceSettlementId: '26189598301',
+      childDocNumbers: ['US-260416-260430-S1'],
+    }),
+    'US-260416-260430-S1',
+  );
+});
+
 test('getSettlementDisplayId hides EG-prefixed source settlement ids behind the first posting doc number', () => {
   assert.equal(
     getSettlementDisplayId({
@@ -662,6 +672,62 @@ test('settlements list no longer links to removed history tab alias', () => {
   const source = readFileSync('app/settlements/page.tsx', 'utf8');
 
   assert.equal(source.includes('?tab=history'), false);
+});
+
+test('settlements list does not expose manual sync or auto-process controls', () => {
+  const source = readFileSync('app/settlements/page.tsx', 'utf8');
+
+  assert.equal(source.includes('Sync from Amazon'), false);
+  assert.equal(source.includes('Auto-process'), false);
+  assert.equal(source.includes('/api/plutus/autopost/check'), false);
+});
+
+test('settlement detail source does not expose processing or rollback controls', () => {
+  const source = readFileSync('app/settlements/[region]/[settlementId]/page.tsx', 'utf8');
+
+  assert.equal(source.includes('Process settlement'), false);
+  assert.equal(source.includes('Reprocess settlement'), false);
+  assert.equal(source.includes('Rollback'), false);
+  assert.equal(source.includes('Repair'), false);
+  assert.equal(source.includes('/process'), false);
+  assert.equal(source.includes("action: 'rollback'"), false);
+});
+
+test('settlement mutation routes require explicit human approval', () => {
+  const routes = [
+    'app/api/plutus/autopost/check/route.ts',
+    'app/api/plutus/autopost/route.ts',
+    'app/api/plutus/settlements/[region]/[settlementId]/route.ts',
+    'app/api/plutus/settlements/[region]/[settlementId]/process/route.ts',
+    'app/api/plutus/settlements/journal-entry/[id]/route.ts',
+    'app/api/plutus/settlements/journal-entry/[id]/process/route.ts',
+    'app/api/plutus/settlements/spapi/us/sync/route.ts',
+    'app/api/plutus/settlements/spapi/uk/sync/route.ts',
+  ];
+
+  for (const route of routes) {
+    const source = readFileSync(route, 'utf8');
+    assert.equal(source.includes('requireHumanApprovalHeader'), true, route);
+  }
+});
+
+test('settlement sync worker disables autopost unless explicitly enabled by env', () => {
+  const source = readFileSync('scripts/settlement-sync-worker.ts', 'utf8');
+
+  assert.equal(source.includes('PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED'), true);
+});
+
+test('ecosystem config runs settlement sync workers in explicit read-only QBO mode', () => {
+  const source = readFileSync('../../ecosystem.config.js', 'utf8');
+
+  assert.match(
+    source,
+    /name: 'dev-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'[\s\S]*PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0'/,
+  );
+  assert.match(
+    source,
+    /name: 'main-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'[\s\S]*PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0'/,
+  );
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {

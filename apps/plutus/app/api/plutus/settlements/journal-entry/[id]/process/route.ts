@@ -6,6 +6,7 @@ import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { loadAuditRowsFromDb } from '@/lib/plutus/audit-data';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { HumanApprovalError, requireHumanApprovalHeader } from '@/lib/plutus/human-approval';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +16,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
+    requireHumanApprovalHeader(req, 'Settlement processing');
     const { id: settlementJournalEntryId } = await context.params;
 
     const connection = await getQboConnection();
@@ -74,6 +76,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json(processed.result, { status: 200 });
   } catch (error) {
+    if (error instanceof HumanApprovalError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     if (error instanceof QboAuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
