@@ -18,13 +18,17 @@ type HostedRouteCheck = {
 }
 
 const hostedRouteChecks: HostedRouteCheck[] = [
-  { name: 'portal', path: '/', visibleText: 'TargonOS Portal' },
+  { name: 'portal', path: '/', visibleText: 'Control plane' },
   { name: 'atlas', path: '/atlas/employees', visibleText: 'Employees' },
   { name: 'kairos', path: '/kairos/forecasts', visibleText: 'Forecasts' },
   { name: 'xplan', path: '/xplan/1-setup', visibleText: 'Setup' },
   { name: 'plutus', path: '/plutus/settlements', visibleText: 'Settlements' },
   { name: 'hermes', path: '/hermes/insights', visibleText: 'Insights' },
   { name: 'argus', path: '/argus/wpr', visibleText: 'Weekly performance reporting' },
+  { name: 'talos-dashboard', path: '/talos/dashboard', visibleText: 'Dashboard' },
+  { name: 'talos-inventory', path: '/talos/operations/inventory', visibleText: 'Inventory' },
+  { name: 'talos-inbound', path: '/talos/operations/inbound', visibleText: 'Inbound' },
+  { name: 'talos-products', path: '/talos/config/products', visibleText: 'Products' },
 ]
 
 test.describe('hosted cross-app auth smoke', () => {
@@ -106,7 +110,8 @@ test.describe('hosted cross-app auth smoke', () => {
       })
 
       await page.goto(hostedRoute('/talos'), { waitUntil: 'domcontentloaded' })
-      await expect(page.getByText('Select your region to continue', { exact: false })).toBeVisible({
+      await expect(page.getByRole('heading', { name: 'TALOS' })).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByText('Select your region', { exact: false })).toBeVisible({
         timeout: 20_000,
       })
 
@@ -114,7 +119,7 @@ test.describe('hosted cross-app auth smoke', () => {
       expect(tenantCurrentResponse.ok()).toBe(true)
 
       const usRegionCard = page.getByRole('button', {
-        name: /US United States America\/Los Angeles Enter/i,
+        name: /US.*United States.*America\s*\/\s*Los Angeles.*Enter region/i,
       })
       await expect(usRegionCard).toBeVisible({ timeout: 20_000 })
       await expect(usRegionCard).toBeEnabled()

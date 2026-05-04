@@ -8,8 +8,8 @@ function requireEnv(name: string): string {
   return value
 }
 
-const portalBaseUrl = requireEnv('PORTAL_BASE_URL')
-const atlasBaseUrl = requireEnv('ATLAS_BASE_URL')
+export const portalBaseUrl = requireEnv('NEXT_PUBLIC_PORTAL_AUTH_URL')
+export const atlasBaseUrl = requireEnv('NEXT_PUBLIC_APP_URL')
 
 export async function loginToAtlas(page: Page) {
   await page.goto(`${portalBaseUrl}/login?callbackUrl=${encodeURIComponent(atlasBaseUrl)}`, {

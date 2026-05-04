@@ -40,21 +40,21 @@ export type FileContext = {
     transactionId: string;
     documentType: string;
 } | {
-    type: 'purchase-order';
-    purchaseOrderId: string;
+    type: 'inbound';
+    inboundOrderId: string;
     /** Optional tenant code (e.g., US/UK) to keep multi-tenant uploads organized in S3. */
     tenantCode?: string;
-    /** Optional public order number (e.g., PO-0001) to keep PO uploads human-navigable in S3. */
-    purchaseOrderNumber?: string;
+    /** Optional public order number (e.g., IN-0001) to keep inbound uploads human-navigable in S3. */
+    inboundOrderNumber?: string;
     stage: 'RFQ' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
     documentType: string;
 } | {
-    type: 'fulfillment-order';
-    fulfillmentOrderId: string;
+    type: 'outbound-order';
+    outboundOrderId: string;
     /** Optional tenant code (e.g., US/UK) to keep multi-tenant uploads organized in S3. */
     tenantCode?: string;
-    /** Optional public order number (e.g., FO-0001) to keep FO uploads human-navigable in S3. */
-    fulfillmentOrderNumber?: string;
+    /** Optional public order number (e.g., OUT-0001) to keep outbound uploads human-navigable in S3. */
+    outboundOrderNumber?: string;
     stage: 'PACKING' | 'SHIPPING' | 'DELIVERY';
     documentType: string;
 } | {

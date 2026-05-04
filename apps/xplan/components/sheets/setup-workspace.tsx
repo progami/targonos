@@ -3,15 +3,11 @@
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { StrategyTable } from '@/components/sheets/strategy-table';
-import { SetupDefaultsBand } from '@/components/sheets/setup-defaults-band';
 import { SetupProductTable } from '@/components/sheets/setup-product-table';
-
-type ParameterList = Array<{
-  id: string;
-  label: string;
-  value: string;
-  type: 'numeric' | 'text';
-}>;
+import {
+  WorkbookSetupTable,
+  type WorkbookSetupRow,
+} from '@/components/sheets/workbook-setup-table';
 
 type Strategy = {
   id: string;
@@ -51,42 +47,20 @@ type Strategy = {
   };
 };
 
-type LeadStageTemplateView = {
-  id: string;
-  label: string;
-  defaultWeeks: number;
-  sequence: number;
-};
-
-type LeadTimeProfileView = {
-  productionWeeks: number;
-  sourceWeeks: number;
-  oceanWeeks: number;
-  finalWeeks: number;
-};
-
-type LeadTimeOverrideId = {
-  productId: string;
-  stageTemplateId: string;
-};
-
 type SetupWorkspaceProps = {
   strategies: Strategy[];
   activeStrategyId: string | null;
+  activeYear: number;
   viewer: { id: string | null; email: string | null; isSuperAdmin: boolean };
   products: Array<{ id: string; sku: string; name: string }>;
-  operationsParameters: ParameterList;
-  salesParameters: ParameterList;
-  financeParameters: ParameterList;
-  leadStageTemplates: LeadStageTemplateView[];
-  leadTimeProfiles: Record<string, LeadTimeProfileView>;
-  leadTimeOverrideIds: LeadTimeOverrideId[];
+  workbookSetupRows: WorkbookSetupRow[];
   keyParametersByStrategyId: Record<string, Array<{ label: string; value: string }>>;
 };
 
 const TABS = [
+  { id: 'workbook' as const, label: 'Workbook Setup' },
   { id: 'strategies' as const, label: 'Strategies' },
-  { id: 'defaults' as const, label: 'Defaults & Products' },
+  { id: 'products' as const, label: 'Products' },
 ];
 
 type TabId = (typeof TABS)[number]['id'];
@@ -94,54 +68,46 @@ type TabId = (typeof TABS)[number]['id'];
 export function SetupWorkspace({
   strategies,
   activeStrategyId,
+  activeYear,
   viewer,
   products,
-  operationsParameters,
-  salesParameters,
-  financeParameters,
-  leadStageTemplates,
-  leadTimeProfiles,
-  leadTimeOverrideIds,
+  workbookSetupRows,
   keyParametersByStrategyId,
 }: SetupWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('strategies');
+  const [activeTab, setActiveTab] = useState<TabId>(activeStrategyId ? 'workbook' : 'strategies');
 
   const hasStrategy = Boolean(activeStrategyId);
+  const tabHelperText =
+    activeTab === 'workbook'
+      ? `${workbookSetupRows.length} SKU rows`
+      : activeTab === 'strategies'
+        ? `${strategies.length} scenarios`
+        : `${products.length} products`;
 
   return (
-    <div className="space-y-6">
-      {/* Heading */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
-          Setup
-        </h1>
-        <p className="mt-0.5 text-sm text-muted-foreground">
-          Strategies, defaults, and product configuration
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-[16px] border border-slate-200/80 bg-white/90 p-2 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.34)] dark:border-slate-700/70 dark:bg-slate-950/50 lg:flex-row lg:items-center lg:justify-between">
+        <div className="inline-flex flex-wrap gap-1 rounded-[12px] bg-slate-100/90 p-1 dark:bg-slate-900/70">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'rounded-[9px] px-3.5 py-2 text-sm font-semibold transition-colors',
+                activeTab === tab.id
+                  ? 'bg-white text-slate-950 shadow-sm dark:bg-[#0d3048] dark:text-white'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 dark:hover:text-white',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <p className="px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-300">
+          {tabHelperText}
         </p>
       </div>
 
-      {/* Sub-tabs */}
-      <div className="flex gap-6 border-b border-slate-200 dark:border-[#0b3a52]">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'relative pb-2.5 text-sm font-semibold transition-colors',
-              activeTab === tab.id
-                ? 'text-cyan-700 dark:text-[#00C2B9]'
-                : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300',
-            )}
-          >
-            {tab.label}
-            {activeTab === tab.id && (
-              <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-cyan-500 dark:bg-[#00C2B9]" />
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Strategies tab — flat table */}
       {activeTab === 'strategies' && (
         <StrategyTable
           strategies={strategies}
@@ -151,23 +117,16 @@ export function SetupWorkspace({
         />
       )}
 
-      {activeTab === 'defaults' && hasStrategy && (
-        <div className="space-y-6">
-          <SetupDefaultsBand
-            strategyId={activeStrategyId!}
-            operationsParameters={operationsParameters}
-            salesParameters={salesParameters}
-            financeParameters={financeParameters}
-          />
-          <SetupProductTable
-            strategyId={activeStrategyId!}
-            products={products}
-            leadStageTemplates={leadStageTemplates}
-            leadTimeProfiles={leadTimeProfiles}
-            leadTimeOverrideIds={leadTimeOverrideIds}
-            operationsParameters={operationsParameters}
-          />
-        </div>
+      {activeTab === 'workbook' && hasStrategy && (
+        <WorkbookSetupTable
+          strategyId={activeStrategyId!}
+          activeYear={activeYear}
+          rows={workbookSetupRows}
+        />
+      )}
+
+      {activeTab === 'products' && hasStrategy && (
+        <SetupProductTable strategyId={activeStrategyId!} products={products} />
       )}
     </div>
   );

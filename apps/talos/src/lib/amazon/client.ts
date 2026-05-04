@@ -1,11 +1,12 @@
 import 'server-only'
 import type { TenantCode } from '@/lib/tenant/constants'
 import { getMarketplaceCurrencyCode } from '@/lib/amazon/fees'
-
-type SellingPartnerApiRegion = 'eu' | 'na' | 'fe'
+import { buildOutboundShipmentsQuery, resolveOutboundShipmentsMarketplaceId } from '@/lib/amazon/outbound-shipments'
+import { getAmazonSpApiConfigFromEnv, type AmazonSpApiConfig } from '@/lib/amazon/config'
 
 type SellingPartnerApiClient = {
   callAPI: (params: Record<string, unknown>) => Promise<unknown>
+  download: (document: unknown) => Promise<unknown>
 }
 
 type AmazonInventorySummary = {
@@ -114,7 +115,7 @@ type AmazonFinancialEventsResponse = {
 
 type AmazonErrorDetail = { code?: string; message?: string; details?: string }
 
-type AmazonInboundShipment = {
+type AmazonOutboundShipment = {
   ShipmentId?: string
   ShipmentName?: string
   ShipFromAddress?: Record<string, unknown>
@@ -126,7 +127,7 @@ type AmazonInboundShipment = {
   ConfirmedNeedByDate?: string
 }
 
-type AmazonInboundShipmentItem = {
+type AmazonOutboundShipmentItem = {
   ShipmentId?: string
   SellerSKU?: string
   FulfillmentNetworkSKU?: string
@@ -137,17 +138,26 @@ type AmazonInboundShipmentItem = {
   PrepDetailsList?: unknown
 }
 
-type AmazonInboundShipmentsResponse = {
+type AmazonOutboundShipmentsResponse = {
   payload?: {
-    ShipmentData?: AmazonInboundShipment[]
+    ShipmentData?: AmazonOutboundShipment[]
     NextToken?: string
   }
   errors?: AmazonErrorDetail[]
 }
 
-type AmazonInboundShipmentItemsResponse = {
+type AmazonReportsResponse = {
+  reports?: Array<{
+    reportId?: string
+    reportDocumentId?: string
+    createdTime?: string
+    processingStatus?: string
+  }>
+}
+
+type AmazonOutboundShipmentItemsResponse = {
   payload?: {
-    ItemData?: AmazonInboundShipmentItem[]
+    ItemData?: AmazonOutboundShipmentItem[]
     NextToken?: string
   }
   errors?: AmazonErrorDetail[]
@@ -169,7 +179,7 @@ type AmazonInboundPlanMatch = {
   transportationOptions: Record<string, unknown> | unknown[] | null
 }
 
-type AmazonInboundShipmentNormalized = {
+type AmazonOutboundShipmentNormalized = {
   shipmentId: string
   shipmentName?: string
   shipmentStatus?: string
@@ -187,22 +197,6 @@ async function callAmazonApi<T>(tenantCode: TenantCode | undefined, params: Reco
   const client = getAmazonClient(tenantCode)
   return (await client.callAPI(params)) as T
 }
-
-type AmazonSpApiConfig = {
-  region: SellingPartnerApiRegion
-  refreshToken: string
-  marketplaceId: string
-  appClientId: string
-  appClientSecret: string
-  sellerId?: string
-}
-
-const AMAZON_BASE_REQUIRED_ENV_VARS = [
-  'AMAZON_SP_APP_CLIENT_ID',
-  'AMAZON_SP_APP_CLIENT_SECRET',
-] as const
-
-const AMAZON_TENANT_REQUIRED_ENV_VARS = ['AMAZON_REFRESH_TOKEN'] as const
 
 const clientCache = new Map<string, SellingPartnerApiClient>()
 
@@ -237,33 +231,6 @@ function setCachedPrice(asin: string, tenantCode: TenantCode | undefined, price:
       }
     }
   }
-}
-
-function normalizeRegion(value: string): SellingPartnerApiRegion | null {
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'eu' || normalized === 'na' || normalized === 'fe') {
-    return normalized
-  }
-  return null
-}
-
-function readEnvVar(name: string): string | undefined {
-  const value = process.env[name]
-  if (!value) return undefined
-  const trimmed = value.trim()
-  return trimmed.length > 0 ? trimmed : undefined
-}
-
-function getDefaultMarketplaceId(tenantCode: TenantCode | undefined): string | undefined {
-  if (tenantCode === 'US') return 'ATVPDKIKX0DER'
-  if (tenantCode === 'UK') return 'A1F83G8C2ARO7P'
-  return undefined
-}
-
-function getDefaultRegion(tenantCode: TenantCode | undefined): SellingPartnerApiRegion {
-  if (tenantCode === 'US') return 'na'
-  if (tenantCode === 'UK') return 'eu'
-  return 'eu'
 }
 
 function extractAmazonErrors(response: { errors?: AmazonErrorDetail[] } | null | undefined): string[] {
@@ -458,72 +425,6 @@ function toRecordArray(values: unknown[]): Record<string, unknown>[] {
     .filter((value): value is Record<string, unknown> => Boolean(value))
 }
 
-function getAmazonSpApiConfigFromEnv(tenantCode?: TenantCode): AmazonSpApiConfig | null {
-  const isProduction = process.env.NODE_ENV === 'production'
-  const anyAmazonEnvConfigured =
-    AMAZON_BASE_REQUIRED_ENV_VARS.some((name) => Boolean(readEnvVar(name))) ||
-    AMAZON_TENANT_REQUIRED_ENV_VARS.some((name) => Boolean(readEnvVar(name) || readEnvVar(`${name}_US`) || readEnvVar(`${name}_UK`)))
-
-  if (!anyAmazonEnvConfigured) {
-    if (isProduction) {
-      throw new Error(
-        'Amazon SP-API not configured. Missing env vars: AMAZON_SP_APP_CLIENT_ID, AMAZON_SP_APP_CLIENT_SECRET, AMAZON_REFRESH_TOKEN[_US|_UK]'
-      )
-    }
-
-    return null
-  }
-
-  const appClientId = readEnvVar('AMAZON_SP_APP_CLIENT_ID')
-  const appClientSecret = readEnvVar('AMAZON_SP_APP_CLIENT_SECRET')
-
-  const refreshToken = tenantCode
-    ? readEnvVar(`AMAZON_REFRESH_TOKEN_${tenantCode}`)
-    : readEnvVar('AMAZON_REFRESH_TOKEN')
-
-  const marketplaceId =
-    (tenantCode ? readEnvVar(`AMAZON_MARKETPLACE_ID_${tenantCode}`) : readEnvVar('AMAZON_MARKETPLACE_ID')) ||
-    getDefaultMarketplaceId(tenantCode)
-
-  const regionRaw =
-    (tenantCode ? readEnvVar(`AMAZON_SP_API_REGION_${tenantCode}`) : readEnvVar('AMAZON_SP_API_REGION')) ||
-    getDefaultRegion(tenantCode)
-  const region = normalizeRegion(regionRaw)
-
-  const sellerId = tenantCode
-    ? readEnvVar(`AMAZON_SELLER_ID_${tenantCode}`)
-    : readEnvVar('AMAZON_SELLER_ID')
-
-  const missing: string[] = []
-  if (!appClientId) missing.push('AMAZON_SP_APP_CLIENT_ID')
-  if (!appClientSecret) missing.push('AMAZON_SP_APP_CLIENT_SECRET')
-
-  if (!refreshToken) {
-    missing.push(tenantCode ? `AMAZON_REFRESH_TOKEN_${tenantCode}` : 'AMAZON_REFRESH_TOKEN')
-  }
-  if (!marketplaceId) {
-    missing.push(tenantCode ? `AMAZON_MARKETPLACE_ID_${tenantCode}` : 'AMAZON_MARKETPLACE_ID')
-  }
-
-  if (missing.length > 0) {
-    throw new Error(`Amazon SP-API not configured. Missing env vars: ${missing.join(', ')}`)
-  }
-
-  if (!region) {
-    const key = tenantCode ? `AMAZON_SP_API_REGION_${tenantCode}` : 'AMAZON_SP_API_REGION'
-    throw new Error(`Invalid ${key} value "${regionRaw}". Expected one of: eu, na, fe.`)
-  }
-
-  return {
-    region,
-    refreshToken,
-    marketplaceId,
-    appClientId,
-    appClientSecret,
-    sellerId: sellerId || undefined,
-  }
-}
-
 function getCacheKey(config: AmazonSpApiConfig) {
   return `${config.region}:${config.marketplaceId}:${config.refreshToken}`
 }
@@ -563,6 +464,53 @@ export function getAmazonClient(tenantCode?: TenantCode): SellingPartnerApiClien
   const client = createAmazonClient(config)
   clientCache.set(key, client)
   return client
+}
+
+export async function getLatestAmazonReportDocumentText(
+  tenantCode: TenantCode,
+  reportType: string
+): Promise<string | null> {
+  const config = getAmazonSpApiConfigFromEnv(tenantCode)
+  if (!config) return null
+  const createdSince = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  const reportsResponse = await callAmazonApi<AmazonReportsResponse>(tenantCode, {
+    operation: 'getReports',
+    endpoint: 'reports',
+    query: {
+      reportTypes: [reportType],
+      processingStatuses: ['DONE'],
+      marketplaceIds: [config.marketplaceId],
+      createdSince,
+    },
+  })
+
+  const reports = Array.isArray(reportsResponse.reports) ? reportsResponse.reports : []
+  let latestReport: AmazonReportsResponse['reports'][number] | null = null
+  for (const report of reports) {
+    if (!report.reportDocumentId) continue
+    if (latestReport === null) {
+      latestReport = report
+      continue
+    }
+    if (String(report.createdTime) > String(latestReport.createdTime)) {
+      latestReport = report
+    }
+  }
+
+  if (latestReport === null) return null
+  if (!latestReport.reportDocumentId) return null
+
+  const reportDocument = await callAmazonApi<unknown>(tenantCode, {
+    operation: 'getReportDocument',
+    endpoint: 'reports',
+    path: { reportDocumentId: latestReport.reportDocumentId },
+  })
+
+  const downloaded = await getAmazonClient(tenantCode).download(reportDocument)
+  if (Buffer.isBuffer(downloaded)) return downloaded.toString('utf8')
+  if (typeof downloaded === 'string') return downloaded
+  return String(downloaded)
 }
 
 export async function getListingsItems(
@@ -647,29 +595,22 @@ export async function getInventory(tenantCode?: TenantCode) {
   }
 }
 
-export async function getInboundShipments(
+export async function getOutboundShipments(
   tenantCode?: TenantCode,
-  options?: { nextToken?: string; includeCancelled?: boolean }
+  options?: { nextToken?: string }
 ) {
   try {
     const config = getAmazonSpApiConfigFromEnv(tenantCode)
-    const nextToken = options?.nextToken?.trim()
-    const includeCancelled = options?.includeCancelled === true
-    const shipmentStatusList = includeCancelled
-      ? ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED', 'CANCELLED', 'DELETED']
-      : ['WORKING', 'SHIPPED', 'RECEIVING', 'CLOSED']
-    const baseQuery = {
-      MarketplaceId: config?.marketplaceId ?? process.env.AMAZON_MARKETPLACE_ID,
-      ShipmentStatusList: shipmentStatusList,
-    }
+    const marketplaceId = resolveOutboundShipmentsMarketplaceId(tenantCode, config?.marketplaceId)
+
     const response = await callAmazonApi<unknown>(tenantCode, {
       operation: 'getShipments',
       endpoint: 'fulfillmentInbound',
-      query: nextToken ? { ...baseQuery, NextToken: nextToken } : baseQuery,
+      query: buildOutboundShipmentsQuery(marketplaceId, options?.nextToken),
     })
     return response
   } catch (_error) {
-    // console.error('Error fetching inbound shipments:', _error)
+    // console.error('Error fetching outbound shipments:', _error)
     throw _error
   }
 }
@@ -784,13 +725,13 @@ async function findInboundPlanForShipment(
   return null
 }
 
-function normalizeInboundShipmentDetails(params: {
+function normalizeOutboundShipmentDetails(params: {
   shipmentId: string
-  fbaShipment: AmazonInboundShipment | null
+  fbaShipment: AmazonOutboundShipment | null
   inboundPlanMatch: AmazonInboundPlanMatch | null
   awdShipment: Record<string, unknown> | null
   awdInboundOrder: Record<string, unknown> | null
-}): AmazonInboundShipmentNormalized {
+}): AmazonOutboundShipmentNormalized {
   const fbaRecord = params.fbaShipment ? (params.fbaShipment as Record<string, unknown>) : null
   const planShipment = params.inboundPlanMatch?.shipment ?? null
   const planRecord = params.inboundPlanMatch?.inboundPlan ?? null
@@ -831,8 +772,8 @@ function normalizeInboundShipmentDetails(params: {
       'referenceId',
       'ReferenceId',
       'referenceNumber',
-      'poNumber',
-      'purchaseOrderId',
+      'inboundNumber',
+      'inboundOrderId',
     ]
   )
 
@@ -863,7 +804,7 @@ function normalizeInboundShipmentDetails(params: {
   }
 }
 
-export async function getInboundShipmentDetails(shipmentId: string, tenantCode?: TenantCode) {
+export async function getOutboundShipmentDetails(shipmentId: string, tenantCode?: TenantCode) {
   const trimmedShipmentId = shipmentId.trim()
   if (!trimmedShipmentId) {
     throw new Error('Shipment ID is required')
@@ -876,13 +817,13 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
     throw new Error('Amazon marketplace ID is not configured')
   }
 
-  let shipment: AmazonInboundShipment | null = null
-  let items: AmazonInboundShipmentItem[] = []
+  let shipment: AmazonOutboundShipment | null = null
+  let items: AmazonOutboundShipmentItem[] = []
   let billOfLadingUrl: string | null = null
   let fbaError: string | null = null
 
   const shipmentResponse = await safeAmazonCall(() =>
-    callAmazonApi<AmazonInboundShipmentsResponse>(tenantCode, {
+    callAmazonApi<AmazonOutboundShipmentsResponse>(tenantCode, {
       operation: 'getShipments',
       endpoint: 'fulfillmentInbound',
       query: {
@@ -904,13 +845,13 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
         'shipments',
         'shipmentData',
       ])
-      shipment = (shipmentData[0] as AmazonInboundShipment | undefined) ?? null
+      shipment = (shipmentData[0] as AmazonOutboundShipment | undefined) ?? null
     }
   }
 
   if (shipment) {
     const itemsResponse = await safeAmazonCall(() =>
-      callAmazonApi<AmazonInboundShipmentItemsResponse>(tenantCode, {
+      callAmazonApi<AmazonOutboundShipmentItemsResponse>(tenantCode, {
         operation: 'getShipmentItemsByShipmentId',
         endpoint: 'fulfillmentInbound',
         path: {
@@ -949,7 +890,7 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
 
   const awdShipmentResponse = await safeAmazonCall(() =>
     callAmazonApi<Record<string, unknown>>(tenantCode, {
-      operation: 'getInboundShipment',
+      operation: 'getOutboundShipment',
       endpoint: 'amazonWarehousingAndDistribution',
       options: { version: '2024-05-09' },
       path: { shipmentId: trimmedShipmentId },
@@ -971,7 +912,7 @@ export async function getInboundShipmentDetails(shipmentId: string, tenantCode?:
 
   const awdInboundOrder = asRecord(awdInboundOrderResponse)
   const inboundPlanMatch = await findInboundPlanForShipment(trimmedShipmentId, tenantCode)
-  const normalized = normalizeInboundShipmentDetails({
+  const normalized = normalizeOutboundShipmentDetails({
     shipmentId: trimmedShipmentId,
     fbaShipment: shipment,
     inboundPlanMatch,

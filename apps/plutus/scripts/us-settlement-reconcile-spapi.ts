@@ -1,4 +1,5 @@
 import { promises as fs } from 'node:fs';
+import { loadSharedPlutusEnv } from './shared-env';
 
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
 import {
@@ -14,7 +15,7 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 
 type CliOptions = {
   startDate: string;
-  amazonEnvPath: string;
+  amazonEnvPath: string | null;
   plutusEnvPath: string;
   onlySettlementIds: string[] | null;
   maxMismatchLines: number;
@@ -246,7 +247,7 @@ function buildBrandLabelByBrandName(input: {
 
 function parseArgs(argv: string[]): CliOptions {
   let startDate = '2025-12-01';
-  let amazonEnvPath = '../talos/.env.local';
+  let amazonEnvPath: string | null = null;
   let plutusEnvPath = '.env.local';
   let onlySettlementIds: string[] | null = null;
   let maxMismatchLines = 25;
@@ -351,7 +352,11 @@ async function fetchUsSettlementJournalEntries(input: {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
 
-  await loadAmazonEnvFile(options.amazonEnvPath);
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  } else {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
   await loadPlutusEnvFile(options.plutusEnvPath);
 
   const { db } = await import('@/lib/db');

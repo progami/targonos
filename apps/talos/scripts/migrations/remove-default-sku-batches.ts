@@ -9,6 +9,8 @@ import type { TenantCode } from '../../src/lib/tenant/constants'
 
 type SchemaTier = 'main' | 'dev'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   schemaTiers: SchemaTier[]
@@ -23,15 +25,7 @@ type DefaultBatchRow = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {
@@ -88,7 +82,7 @@ function showHelp() {
 Remove DEFAULT SKU Batches
 
 Renames sku_batches.batch_code='DEFAULT' to a non-default code per SKU and updates all
-batch_lot references (inventory transactions, purchase order lines, goods receipts, etc.)
+batch_lot references (inventory transactions, inbound lines, goods receipts, etc.)
 so there are no remaining DEFAULT batches in the schema.
 
 Usage:
@@ -183,9 +177,9 @@ async function findReplacementCode(
 
   const referenceTables = [
     'inventory_transactions',
-    'purchase_order_lines',
+    'inbound_order_lines',
     'goods_receipt_lines',
-    'fulfillment_order_lines',
+    'outbound_order_lines',
     'storage_ledger',
   ]
 
@@ -254,9 +248,9 @@ async function applyForSchema(
 
     const updateTargets = [
       'inventory_transactions',
-      'purchase_order_lines',
+      'inbound_order_lines',
       'goods_receipt_lines',
-      'fulfillment_order_lines',
+      'outbound_order_lines',
       'storage_ledger',
     ]
 
@@ -276,7 +270,7 @@ async function applyForSchema(
   }
 
   const remainingDefaultLots: Array<{ table: string; count: number; skus: string[] }> = []
-  for (const tableName of ['inventory_transactions', 'purchase_order_lines', 'goods_receipt_lines', 'fulfillment_order_lines', 'storage_ledger']) {
+  for (const tableName of ['inventory_transactions', 'inbound_order_lines', 'goods_receipt_lines', 'outbound_order_lines', 'storage_ledger']) {
     if (!(await tableExists(client, schema, tableName))) continue
 
     const countResult = await client.query<{ count: string }>(

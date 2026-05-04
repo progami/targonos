@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 
 import { QboAuthError } from '@/lib/qbo/api';
+import { ExplicitPostToQboError, requireExplicitPostToQbo } from '@/lib/amazon-finances/settlement-sync-post-mode';
 import { syncUkSettlementsFromSpApiFinances } from '@/lib/amazon-finances/uk-settlement-sync';
 
 export const runtime = 'nodejs';
@@ -15,7 +16,7 @@ export async function POST(req: Request) {
     const startDate = typeof body.startDate === 'string' ? body.startDate : '';
     const endDate = typeof body.endDate === 'string' ? body.endDate : undefined;
     const settlementIds = Array.isArray(body.settlementIds) ? (body.settlementIds as unknown[]).map((v) => String(v)) : undefined;
-    const postToQbo = body.postToQbo === undefined ? true : body.postToQbo === true;
+    const postToQbo = requireExplicitPostToQbo(body, 'UK SP-API settlement sync');
     const process = body.process === true;
 
     const result = await syncUkSettlementsFromSpApiFinances({
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof QboAuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+    if (error instanceof ExplicitPostToQboError) {
+      return NextResponse.json({ error: 'Invalid settlement sync posting mode', details: error.message }, { status: 400 });
     }
 
     logger.error('UK SP-API settlement sync failed', { error });

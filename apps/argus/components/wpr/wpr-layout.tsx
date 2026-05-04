@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import { useWprWeeksQuery } from '@/hooks/use-wpr';
 import { useWprStore } from '@/stores/wpr-store';
+import { DEFAULT_ARGUS_MARKET } from '@/lib/argus-market';
 
 const TAB_ITEMS = [
   { href: '/wpr', label: 'SQP' },
@@ -33,7 +34,7 @@ function resolveTabValue(pathname: string): string {
 
 export default function WprLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { data, error } = useWprWeeksQuery();
+  const { data, error } = useWprWeeksQuery(DEFAULT_ARGUS_MARKET);
   const selectedWeek = useWprStore((state) => state.selectedWeek);
   const setSelectedWeek = useWprStore((state) => state.setSelectedWeek);
   const activeTab = resolveTabValue(pathname);

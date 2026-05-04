@@ -1,14 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { loginToAtlas } from '../fixtures/auth'
-
-const atlasBaseUrl = process.env.ATLAS_BASE_URL
-if (!atlasBaseUrl) {
-  throw new Error('ATLAS_BASE_URL must be defined for Atlas e2e tests.')
-}
+import { atlasBaseUrl, loginToAtlas } from '../fixtures/auth'
 
 test('Atlas redirects to portal sign-in when signed out', async ({ page }) => {
   await page.goto(`${atlasBaseUrl}/tasks`, { waitUntil: 'domcontentloaded' })
-  await expect(page.getByText('TargonOS Portal')).toBeVisible()
+  await expect(page).toHaveURL(/\/login\?callbackUrl=/)
+  const callbackUrl = await page.locator('input[name="callbackUrl"]').inputValue()
+  expect(new URL(callbackUrl).pathname).toBe('/atlas/tasks')
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible()
 })
 

@@ -13,6 +13,8 @@
   --ring: 0 194 185;
 
   --radius-card: 24px;
+  --tg-header-height: 65px;
+  --tg-panel-height: calc(100svh - var(--tg-header-height));
 }
 
 html {
@@ -146,7 +148,8 @@ button:focus-visible,
 
 html.tg-home {
   scroll-behavior: smooth;
-  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--tg-header-height);
+  scroll-snap-type: y proximity;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -174,18 +177,19 @@ body.tg-home footer {
   margin-top: 0;
 }
 
-.tg-snap {
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-  min-height: 100svh;
-  position: relative;
-  overflow: hidden;
+.tg-section-eyebrow {
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.36em;
+  line-height: 1.1;
+  text-transform: uppercase;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .tg-snap {
-    scroll-snap-stop: normal;
-  }
+.tg-snap {
+  scroll-snap-align: start;
+  min-height: var(--tg-panel-height);
+  position: relative;
+  overflow: hidden;
 }
 
 /*
@@ -193,12 +197,12 @@ body.tg-home footer {
 */
 
 body.tg-home .tg-values {
-  min-height: 100svh;
+  min-height: var(--tg-panel-height);
 }
 
 body.tg-home .tg-value-row {
   height: 100%;
-  min-height: 100svh;
+  min-height: var(--tg-panel-height);
   display: flex;
   flex-direction: column;
 }
@@ -212,7 +216,7 @@ body.tg-home .tg-value-row {
 body.tg-home .tg-value-panel {
   position: relative;
   flex: 1 1 0%;
-  min-height: 25vh;
+  min-height: calc(var(--tg-panel-height) / 4);
   overflow: hidden;
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   transition: flex-grow 700ms cubic-bezier(0.25, 1, 0.5, 1);

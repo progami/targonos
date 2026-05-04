@@ -1,14 +1,17 @@
 import { promises as fs } from 'node:fs';
 
+import { parseSettlementSyncCliPostFlag } from '@/lib/amazon-finances/settlement-sync-post-mode';
 import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
+import { loadSharedPlutusEnv } from './shared-env';
 
 type CliOptions = {
   startDate: string;
   endDate: string | undefined;
-  amazonEnvPath: string;
+  amazonEnvPath: string | null;
   plutusEnvPath: string;
   apply: boolean;
   resync: boolean;
+  postToQbo: boolean;
 };
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
@@ -72,19 +75,23 @@ function requireIsoDay(value: unknown, label: string): string {
 }
 
 function parseArgs(argv: string[]): CliOptions {
+  const willResync = !argv.includes('--no-resync');
+  const postFlag = willResync
+    ? parseSettlementSyncCliPostFlag(argv, 'UK SP-API settlement reset resync')
+    : { postToQbo: false, argv };
   let startDate = '2025-12-01';
   let endDate: string | undefined;
-  let amazonEnvPath = '../talos/.env.local';
+  let amazonEnvPath: string | null = null;
   let plutusEnvPath = '.env.local';
   let apply = false;
   let resync = true;
 
   let i = 0;
-  while (i < argv.length) {
-    const arg = argv[i]!;
+  while (i < postFlag.argv.length) {
+    const arg = postFlag.argv[i]!;
 
     if (arg === '--start-date') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --start-date');
       startDate = next;
       i += 2;
@@ -92,7 +99,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--end-date') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --end-date');
       endDate = next;
       i += 2;
@@ -100,7 +107,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--amazon-env') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --amazon-env');
       amazonEnvPath = next;
       i += 2;
@@ -108,7 +115,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--plutus-env') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --plutus-env');
       plutusEnvPath = next;
       i += 2;
@@ -130,7 +137,7 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { startDate, endDate, amazonEnvPath, plutusEnvPath, apply, resync };
+  return { startDate, endDate, amazonEnvPath, plutusEnvPath, apply, resync, postToQbo: postFlag.postToQbo };
 }
 
 function buildQboJournalHref(journalEntryId: string): string {
@@ -196,7 +203,11 @@ async function main(): Promise<void> {
   const startDate = requireIsoDay(options.startDate, 'startDate');
   const endDate = options.endDate === undefined ? undefined : requireIsoDay(options.endDate, 'endDate');
 
-  await loadAmazonEnvFile(options.amazonEnvPath);
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  } else {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
   await loadPlutusEnvFile(options.plutusEnvPath);
 
   const { db } = await import('@/lib/db');
@@ -524,7 +535,7 @@ async function main(): Promise<void> {
     resyncResult = await syncUkSettlementsFromSpApiFinances({
       startDate,
       endDate,
-      postToQbo: true,
+      postToQbo: options.postToQbo,
       process: true,
     });
   }
@@ -533,7 +544,7 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         dryRun: false,
-        options: { startDate, endDate, resync: options.resync },
+        options: { startDate, endDate, resync: options.resync, postToQbo: options.postToQbo },
         totals: {
           deletedQboJournalEntries: deletedCount,
           skippedQboJournalEntries: skippedCount,

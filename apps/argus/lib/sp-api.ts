@@ -1,7 +1,8 @@
 import 'server-only'
 import { callAmazonApi } from '@targon/amazon-sp-api'
+import type { TenantCode } from '@targon/amazon-sp-api'
 
-const MARKETPLACE_ID = process.env.AMAZON_MARKETPLACE_ID!
+type ArgusSpApiMarket = 'us' | 'uk'
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -181,26 +182,47 @@ function pickCatalogImageUrl(images: CatalogItemResponse['images'], fallback: st
   return fallback ?? null
 }
 
+function tenantCodeForMarket(market: ArgusSpApiMarket): TenantCode {
+  if (market === 'us') return 'US'
+  if (market === 'uk') return 'UK'
+  throw new Error(`Unsupported Argus SP-API market: ${market}`)
+}
+
+function marketplaceIdForMarket(market: ArgusSpApiMarket): string {
+  const tenantCode = tenantCodeForMarket(market)
+  const envName = `AMAZON_MARKETPLACE_ID_${tenantCode}`
+  const value = process.env[envName]
+  if (!value || !value.trim()) {
+    throw new Error(`${envName} is required for Argus SP-API.`)
+  }
+  return value.trim()
+}
+
 // ─── Public API ─────────────────────────────────────────────────
 
 /**
  * Fetch competitive pricing for up to 20 ASINs via the SP-API
  * getCompetitivePricing operation. Returns price, BSR, and offer count.
  */
-export async function getCompetitivePricing(asins: string[]): Promise<CompetitivePricingResult[]> {
+export async function getCompetitivePricing(
+  asins: string[],
+  market: ArgusSpApiMarket = 'us'
+): Promise<CompetitivePricingResult[]> {
   const results: CompetitivePricingResult[] = []
+  const tenantCode = tenantCodeForMarket(market)
+  const marketplaceId = marketplaceIdForMarket(market)
 
   // SP-API allows up to 20 ASINs per request
   for (let i = 0; i < asins.length; i += 20) {
     const chunk = asins.slice(i, i + 20)
 
     const response = await callAmazonApi<CompetitivePriceItem[] | { payload?: CompetitivePriceItem[] }>(
-      undefined,
+      tenantCode,
       {
         operation: 'getCompetitivePricing',
         endpoint: 'productPricing',
         query: {
-          MarketplaceId: MARKETPLACE_ID,
+          MarketplaceId: marketplaceId,
           ItemType: 'Asin',
           Asins: chunk,
           ItemCondition: 'New',
@@ -257,14 +279,20 @@ export async function getCompetitivePricing(asins: string[]): Promise<Competitiv
  * Fetch catalog item details with sales ranks for a single ASIN.
  * Returns title, brand, image, and BSR data.
  */
-export async function getCatalogItemWithRanks(asin: string): Promise<CatalogResult> {
-  const response = await callAmazonApi<CatalogItemResponse>(undefined, {
+export async function getCatalogItemWithRanks(
+  asin: string,
+  market: ArgusSpApiMarket = 'us'
+): Promise<CatalogResult> {
+  const tenantCode = tenantCodeForMarket(market)
+  const marketplaceId = marketplaceIdForMarket(market)
+
+  const response = await callAmazonApi<CatalogItemResponse>(tenantCode, {
     operation: 'getCatalogItem',
     endpoint: 'catalogItems',
     options: { version: '2022-04-01' },
     path: { asin },
     query: {
-      marketplaceIds: [MARKETPLACE_ID],
+      marketplaceIds: [marketplaceId],
       includedData: ['summaries', 'salesRanks', 'images'],
     },
   })

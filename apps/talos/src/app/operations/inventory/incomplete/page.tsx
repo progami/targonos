@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
 import { useSession } from '@/hooks/usePortalSession'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { PageContainer, PageContent, PageHeaderSection } from '@/components/layout/page-container'
@@ -108,7 +108,7 @@ export default function InventoryIncompletePage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/inventory/incomplete')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/inventory/incomplete'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

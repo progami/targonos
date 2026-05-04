@@ -1787,7 +1787,7 @@ ${overflowRow}
 <tr>
 <td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:14px 24px; text-align:center;">
   <div style="font-family:${F}; font-size:11px; color:#94a3b8;">
-    Automated alert from Argus &middot; Targon Global
+    Automated alert from Argus &middot; Targon
   </div>
 </td>
 </tr>

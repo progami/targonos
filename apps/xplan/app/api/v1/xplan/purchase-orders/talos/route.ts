@@ -50,14 +50,14 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
   const query = parsed.data.q?.trim();
   const limit = parsed.data.limit ?? 250;
 
-  const orders = await talos.purchaseOrder.findMany({
+  const orders = await talos.inboundOrder.findMany({
     where: {
       type: 'PURCHASE',
-      status: { notIn: ['CANCELLED', 'REJECTED'] },
+      status: { notIn: ['CANCELLED'] },
       ...(query
         ? {
             OR: [
-              { poNumber: { contains: query, mode: 'insensitive' } },
+              { inboundNumber: { contains: query, mode: 'insensitive' } },
               { orderNumber: { contains: query, mode: 'insensitive' } },
               { counterpartyName: { contains: query, mode: 'insensitive' } },
               { factoryName: { contains: query, mode: 'insensitive' } },
@@ -67,7 +67,7 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
     },
     select: {
       id: true,
-      poNumber: true,
+      inboundNumber: true,
       orderNumber: true,
       status: true,
       counterpartyName: true,
@@ -84,16 +84,23 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
       vesselName: true,
       createdAt: true,
       updatedAt: true,
-      _count: { select: { lines: true, containers: true } },
+      lines: { select: { id: true } },
+      containers: { select: { id: true } },
     },
-    orderBy: { updatedAt: 'desc' },
+    orderBy: [
+      { manufacturingStartDate: 'asc' },
+      { expectedCompletionDate: 'asc' },
+      { expectedDate: 'asc' },
+      { inboundNumber: 'asc' },
+      { orderNumber: 'asc' },
+    ],
     take: limit,
   });
 
   return NextResponse.json({
     orders: orders.map((order) => ({
       id: order.id,
-      poNumber: order.poNumber,
+      poNumber: order.inboundNumber,
       orderNumber: order.orderNumber,
       status: order.status,
       counterpartyName: order.counterpartyName,
@@ -110,8 +117,8 @@ export const GET = withXPlanAuth(async (request: Request, session) => {
       vesselName: order.vesselName,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      lineCount: order._count.lines,
-      containerCount: order._count.containers,
+      lineCount: order.lines.length,
+      containerCount: order.containers.length,
     })),
   });
 });

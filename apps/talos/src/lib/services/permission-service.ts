@@ -364,14 +364,14 @@ export async function getAllUsersWithPermissions(): Promise<
 
 // Stage transition permission codes
 export const STAGE_TRANSITION_PERMISSIONS = {
-  RFQ_TO_ISSUED: 'po.approve.draft_to_manufacturing',
-  RFQ_TO_MANUFACTURING: 'po.approve.draft_to_manufacturing',
-  ISSUED_TO_MANUFACTURING: 'po.approve.draft_to_manufacturing',
+  RFQ_TO_ISSUED: 'inbound.approve.draft_to_manufacturing',
+  RFQ_TO_MANUFACTURING: 'inbound.approve.draft_to_manufacturing',
+  ISSUED_TO_MANUFACTURING: 'inbound.approve.draft_to_manufacturing',
   // Legacy keys using DRAFT (pre-RFQ rename)
-  DRAFT_TO_ISSUED: 'po.approve.draft_to_manufacturing',
-  DRAFT_TO_MANUFACTURING: 'po.approve.draft_to_manufacturing',
-  MANUFACTURING_TO_OCEAN: 'po.approve.manufacturing_to_ocean',
-  OCEAN_TO_WAREHOUSE: 'po.approve.ocean_to_warehouse',
+  DRAFT_TO_ISSUED: 'inbound.approve.draft_to_manufacturing',
+  DRAFT_TO_MANUFACTURING: 'inbound.approve.draft_to_manufacturing',
+  MANUFACTURING_TO_OCEAN: 'inbound.approve.manufacturing_to_ocean',
+  OCEAN_TO_WAREHOUSE: 'inbound.approve.ocean_to_warehouse',
 } as const
 
 /**

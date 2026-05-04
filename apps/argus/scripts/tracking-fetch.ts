@@ -10,10 +10,32 @@ import os from 'node:os'
 import path from 'node:path'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://os.targonglobal.com/argus'
-const LOG_PATH = '/tmp/argus-tracking-fetch.log'
+const MARKET = parseMarket(readMarketArg())
+const LOG_PATH = logPathForMarket(MARKET)
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../../..')
 const RUN_LOG_WRITER = path.join(SCRIPT_DIR, 'lib/write-monitoring-run-log.mjs')
+
+function readMarketArg(): string | undefined {
+  const argv = process.argv.slice(2)
+  const index = argv.indexOf('--market')
+  if (index < 0) return process.env.ARGUS_MARKET
+  return argv[index + 1]
+}
+
+function parseMarket(raw: string | undefined): 'us' | 'uk' {
+  if (raw === undefined) return 'us'
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+function logPathForMarket(market: 'us' | 'uk'): string {
+  if (market === 'us') return '/tmp/argus-tracking-fetch.log'
+  return `/tmp/argus-tracking-fetch-${market}.log`
+}
 
 function loadEnvFile(file: string) {
   if (!fs.existsSync(file)) return
@@ -41,7 +63,8 @@ function loadEnvFile(file: string) {
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
-    return error.stack || error.message
+    if (error.stack) return error.stack
+    return error.message
   }
 
   return String(error)
@@ -68,6 +91,8 @@ function writeRunLog(options: {
     RUN_LOG_WRITER,
     '--job-id',
     'tracking-fetch',
+    '--market',
+    MARKET,
     '--status',
     options.status,
     '--summary',
@@ -108,7 +133,7 @@ async function main() {
       throw new Error('Missing ARGUS_TRACKING_FETCH_TOKEN (expected in apps/argus/.env.local)')
     }
 
-    const url = `${APP_URL}/api/tracking/fetch`
+    const url = `${APP_URL.replace(/\/+$/g, '')}/api/tracking/fetch?market=${MARKET}`
     console.log(`[tracking-fetch] POSTing to ${url}`)
 
     const res = await fetch(url, {
@@ -117,7 +142,7 @@ async function main() {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ triggeredBy: 'cron' }),
+      body: JSON.stringify({ triggeredBy: 'cron', market: MARKET }),
     })
 
     const json = await res.json()

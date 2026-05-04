@@ -1,0 +1,184 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { emptySqpMetrics, type SqpWeeklyPoint } from '../../../lib/wpr/sqp-view-model'
+import type { WprChangeLogEntry } from '../../../lib/wpr/types'
+import { SQP_WOW_SERIES, SqpWeeklySvg } from './sqp-weekly-panel'
+
+function buildMetrics(overrides: Partial<SqpWeeklyPoint['metrics']>): SqpWeeklyPoint['metrics'] {
+  return {
+    ...emptySqpMetrics(),
+    ...overrides,
+  }
+}
+
+const weekly: SqpWeeklyPoint[] = [
+  {
+    week_label: 'W01',
+    week_number: 1,
+    start_date: '2026-01-01',
+    metrics: buildMetrics({
+      query_volume: 1000,
+      impression_share: 0.08,
+      asin_ctr: 0.12,
+      market_ctr: 0.1,
+      asin_cart_add_rate: 0.09,
+      cart_add_rate: 0.08,
+      asin_cvr: 0.07,
+      market_cvr: 0.05,
+    }),
+  },
+  {
+    week_label: 'W02',
+    week_number: 2,
+    start_date: '2026-01-08',
+    metrics: buildMetrics({
+      query_volume: 1300,
+      impression_share: 0.12,
+      asin_ctr: 0.15,
+      market_ctr: 0.1,
+      asin_cart_add_rate: 0.11,
+      cart_add_rate: 0.1,
+      asin_cvr: 0.08,
+      market_cvr: 0.05,
+    }),
+  },
+]
+
+const changeEntries: WprChangeLogEntry[] = [
+  {
+    id: 'chg-1',
+    kind: 'listing',
+    source: 'LISTING ATTRIBUTES',
+    week_label: 'W02',
+    week_number: 2,
+    timestamp: '2026-01-08T00:00:00Z',
+    date_label: '08 Jan 2026',
+    title: 'Content update across 4 ASINs',
+    summary: 'Backend terms',
+    category: 'CONTENT',
+    asins: ['B09HXC3NL8'],
+    field_labels: ['Backend terms'],
+  },
+  {
+    id: 'chg-2',
+    kind: 'listing',
+    source: 'LISTING ATTRIBUTES',
+    week_label: 'W02',
+    week_number: 2,
+    timestamp: '2026-01-08T00:00:00Z',
+    date_label: '08 Jan 2026',
+    title: 'Price update across 4 ASINs',
+    summary: 'Buy box landed price',
+    category: 'PRICING',
+    asins: ['B09HXC3NL8'],
+    field_labels: ['Buy box landed price'],
+  },
+]
+
+const allSeriesVisible = {
+  impr: true,
+  ctr: true,
+  atc: true,
+  cvr: true,
+}
+
+test('SQP weekly chart renders hover tooltip content for the active week', () => {
+  const markup = renderToStaticMarkup(
+    <SqpWeeklySvg
+      weekly={weekly}
+      changeEntries={changeEntries}
+      visibleSeries={SQP_WOW_SERIES}
+      seriesVisibility={allSeriesVisible}
+      qVolVisible={true}
+      width={800}
+      height={320}
+      hoveredIndex={1}
+      onHoverIndexChange={() => {}}
+      onToggleQVol={() => {}}
+      onToggleSeries={() => {}}
+    />,
+  )
+
+  assert.match(markup, /data-hover-tooltip=\"sqp\"/)
+  assert.match(markup, /W02 · 08 Jan - 14 Jan 26 · 2 changes/)
+  assert.match(markup, /Content/)
+  assert.match(markup, /Content update across 4 ASINs/)
+  assert.match(markup, /Backend terms/)
+  assert.match(markup, /Pricing/)
+  assert.match(markup, /Price update across 4 ASINs/)
+  assert.match(markup, /Buy box landed price/)
+  assert.doesNotMatch(markup, /tracked changes/)
+  assert.match(markup, /Impr Share/)
+  assert.match(markup, /CTR x/)
+  assert.match(markup, /1\.50x/)
+  assert.match(markup, /Q Vol/)
+  assert.doesNotMatch(markup, /Q Vol WoW/)
+  assert.doesNotMatch(markup, /300 \/ \+30\.0%/)
+  assert.doesNotMatch(markup, /Q Vol Trend/)
+})
+
+test('SQP weekly chart omits hover tooltip markup when no week is active', () => {
+  const markup = renderToStaticMarkup(
+    <SqpWeeklySvg
+      weekly={weekly}
+      changeEntries={changeEntries}
+      visibleSeries={SQP_WOW_SERIES}
+      seriesVisibility={allSeriesVisible}
+      qVolVisible={true}
+      width={800}
+      height={320}
+      hoveredIndex={null}
+      onHoverIndexChange={() => {}}
+      onToggleQVol={() => {}}
+      onToggleSeries={() => {}}
+    />,
+  )
+
+  assert.doesNotMatch(markup, /data-hover-tooltip=\"sqp\"/)
+  assert.doesNotMatch(markup, /W02 · 08 Jan - 14 Jan 26 · 2 changes/)
+  assert.match(markup, /data-chart-legend=\"sqp\"/)
+})
+
+test('SQP weekly chart renders query volume as normalized line only', () => {
+  const markup = renderToStaticMarkup(
+    <SqpWeeklySvg
+      weekly={weekly}
+      changeEntries={changeEntries}
+      visibleSeries={SQP_WOW_SERIES}
+      seriesVisibility={allSeriesVisible}
+      qVolVisible={true}
+      width={800}
+      height={320}
+      hoveredIndex={null}
+      onHoverIndexChange={() => {}}
+      onToggleQVol={() => {}}
+      onToggleSeries={() => {}}
+    />,
+  )
+
+  assert.match(markup, /data-series=\"query-volume-line\"/)
+  assert.doesNotMatch(markup, /data-series=\"query-volume-bars\"/)
+  assert.doesNotMatch(markup, /data-qvol-summary=\"true\"/)
+  assert.doesNotMatch(markup, /Q Vol 1\.0k to 1\.3k \(\+30\.0%\)/)
+  assert.match(markup, /SQP normalized query volume line/)
+  assert.match(markup, /data-chart-legend=\"sqp\"/)
+  assert.match(markup, /data-legend-item=\"qvol\"/)
+  assert.match(markup, /data-active=\"true\"/)
+  assert.doesNotMatch(markup, /tabindex=/)
+  assert.doesNotMatch(markup, /aria-pressed=/)
+})
+
+test('SQP weekly chart keeps controls in the centered legend instead of separate metric buttons', () => {
+  const source = readFileSync(new URL('./sqp-weekly-panel.tsx', import.meta.url), 'utf8')
+
+  assert.match(source, /<WprChartShell/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*title=/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*description=/)
+  assert.doesNotMatch(source, /<WprChartShell[^>]*changeSummary=/)
+  assert.doesNotMatch(source, /<WprChartControlGroup/)
+  assert.doesNotMatch(source, /<Button/)
+  assert.match(source, /data-chart-legend="sqp"/)
+})

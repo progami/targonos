@@ -1,10 +1,27 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Afacad, Azeret_Mono, Funnel_Display } from 'next/font/google';
+import { getPublicVersion, getPublicVersionHref } from '@/lib/public-build-metadata';
+import './layout.css';
 
-const inter = Inter({
+const afacad = Afacad({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
+  variable: '--font-sans',
+});
+
+const funnelDisplay = Funnel_Display({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-display',
+});
+
+const azeretMono = Azeret_Mono({
+  subsets: ['latin'],
+  weight: ['500', '600'],
+  display: 'swap',
+  variable: '--font-mono',
 });
 
 export const metadata: Metadata = {
@@ -19,19 +36,13 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0';
-  const explicitReleaseUrl = process.env.NEXT_PUBLIC_RELEASE_URL || undefined;
-  const commitSha = process.env.NEXT_PUBLIC_COMMIT_SHA || undefined;
-  const commitUrl = commitSha
-    ? `https://github.com/progami/targonos/commit/${commitSha}`
-    : undefined;
-  const inferredReleaseUrl = `https://github.com/progami/targonos/releases/tag/v${version}`;
-  const versionHref = explicitReleaseUrl ?? commitUrl ?? inferredReleaseUrl;
+  const version = getPublicVersion();
+  const versionHref = getPublicVersionHref();
 
   return (
     <html lang="en">
       <body
-        className={inter.className}
+        className={`${afacad.className} ${afacad.variable} ${funnelDisplay.variable} ${azeretMono.variable}`}
         style={{
           margin: 0,
           padding: 0,
@@ -44,21 +55,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href={versionHref}
           target="_blank"
           rel="noopener noreferrer"
-          style={{
-            position: 'fixed',
-            right: 12,
-            bottom: 12,
-            zIndex: 50,
-            fontSize: 12,
-            lineHeight: 1.2,
-            padding: '6px 10px',
-            borderRadius: 9999,
-            border: '1px solid rgba(15, 23, 42, 0.18)',
-            background: 'rgba(255, 255, 255, 0.85)',
-            color: 'rgba(15, 23, 42, 0.75)',
-            textDecoration: 'none',
-            backdropFilter: 'blur(8px)',
-          }}
+          className="targonos-version-badge"
           aria-label={`TargonOS version v${version}`}
         >
           TargonOS v{version}

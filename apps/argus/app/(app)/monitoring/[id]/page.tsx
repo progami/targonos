@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import {
   Alert,
   Box,
@@ -31,6 +31,7 @@ import type {
   MonitoringChangeEvent,
   MonitoringSnapshotRecord,
 } from '@/lib/monitoring/types'
+import { readAppJsonOrThrow } from '@/lib/fetch-json'
 import { formatMonitoringLabel } from '@/lib/monitoring/labels'
 import {
   CategoryChip,
@@ -44,13 +45,14 @@ import {
   formatMoney,
   humanizeFieldName,
 } from '@/components/monitoring/ui'
-
-const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
+import { appendMarketParam, parseArgusMarket } from '@/lib/argus-market'
 
 type RangeValue = '24h' | '7d' | '30d' | 'all'
 
 export default function TrackingDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
+  const market = parseArgusMarket(searchParams.get('market'))
   const asin = String(params.id ?? '').trim().toUpperCase()
   const [detail, setDetail] = useState<MonitoringAsinDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -64,11 +66,9 @@ export default function TrackingDetailPage() {
       try {
         setLoading(true)
         setError(null)
-        const response = await fetch(`${basePath}/api/monitoring/asins/${asin}`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load ASIN monitoring detail.')
-        }
+        const payload = await readAppJsonOrThrow<MonitoringAsinDetail>(
+          appendMarketParam(`/api/monitoring/asins/${asin}`, market),
+        )
         if (!cancelled) {
           setDetail(payload)
           setLoading(false)
@@ -88,7 +88,7 @@ export default function TrackingDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [asin])
+  }, [asin, market])
 
   const filteredSnapshots = useMemo(
     () => filterSnapshots(detail?.snapshots ?? [], range),
@@ -131,9 +131,9 @@ export default function TrackingDetailPage() {
   return (
     <Box sx={{ maxWidth: 1480, mx: 'auto', pb: 4 }}>
       <Stack spacing={3}>
-        <Button
-          component={Link}
-          href="/monitoring"
+          <Button
+            component={Link}
+            href={appendMarketParam('/monitoring', market)}
           startIcon={<ArrowBackIcon />}
           sx={{ alignSelf: 'flex-start' }}
         >

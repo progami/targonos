@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface EbcComparisonTableProps {
   headline: string | null
   bodyText: string | null
@@ -15,10 +17,13 @@ export function EbcComparisonTable({ headline, bodyText, images }: EbcComparison
       <div className="grid grid-cols-3 gap-4 lg:grid-cols-5">
         {images.map((img, i) => (
           <div key={i} className="text-center space-y-1">
-            <img
+            <Image
               src={img.src}
               alt={img.alt ?? `Product ${i + 1}`}
-              className="w-full rounded"
+              width={800}
+              height={800}
+              unoptimized
+              className="h-auto w-full rounded"
             />
             {img.alt && (
               <p className="text-xs text-[#333]">{img.alt}</p>

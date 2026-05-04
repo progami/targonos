@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface EbcFullImageProps {
   headline: string | null
   bodyText: string | null
@@ -10,10 +12,13 @@ export function EbcFullImage({ headline, bodyText, images }: EbcFullImageProps) 
   return (
     <div className="space-y-3">
       {images[0] && (
-        <img
+        <Image
           src={images[0].src}
           alt={images[0].alt ?? 'Product image'}
-          className="w-full rounded-lg"
+          width={1200}
+          height={1200}
+          unoptimized
+          className="h-auto w-full rounded-lg"
         />
       )}
       {headline && (

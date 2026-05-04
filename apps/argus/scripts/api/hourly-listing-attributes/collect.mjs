@@ -11,27 +11,21 @@ const __dirname = path.dirname(__filename)
 const REPO_ROOT = path.resolve(__dirname, '../../../../../')
 const ARGUS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/argus/package.json')
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
+const { loadEnvForApp } = createRequire(import.meta.url)(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
 
-const MONITORING_HOURLY_LISTINGS_DIR = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring/Hourly/Listing Attributes (API)'
+let MONITORING_HOURLY_LISTINGS_DIR = ''
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
 const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
-const OUR_ASINS = ['B09HXC3NL8', 'B0CR1GSBQ9', 'B0FLKJ7WWM', 'B0FP66CWQ6']
-const COMPETITOR_SEED_ASINS = ['B0DQDWV1SV', 'B0CWS3848Y']
-const HERO_BSR_ASINS = ['B09HXC3NL8', 'B0DQDWV1SV', 'B0CWS3848Y']
+let CURRENT_OUR_ASINS = []
+let CURRENT_COMPETITOR_SEED_ASINS = []
+let CURRENT_OUR_ASIN_PRIORITY = new Map()
 const BSR_CHANGE_FIELDS = new Set([
   'root_bsr_rank',
   'root_bsr_category_id',
   'sub_bsr_rank',
   'sub_bsr_category_id',
 ])
-const OUR_ASIN_PRIORITY = new Map([
-  ['B09HXC3NL8', 0],
-  ['B0CR1GSBQ9', 1],
-  ['B0FLKJ7WWM', 2],
-  ['B0FP66CWQ6', 3],
-])
-
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
 }
@@ -68,6 +62,30 @@ function requiredEnv(name) {
   return value.trim()
 }
 
+function readMarketArg() {
+  const argv = process.argv.slice(2)
+  const index = argv.indexOf('--market')
+  if (index < 0) {
+    return process.env.ARGUS_MARKET
+  }
+  return argv[index + 1]
+}
+
+function resolveArgusMarket() {
+  const raw = readMarketArg()
+  if (raw === undefined) return 'us'
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+function monitoringHourlyListingsDir(market) {
+  const salesRoot = requiredEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`)
+  return path.join(salesRoot, 'Monitoring', 'Hourly', 'Listing Attributes (API)')
+}
+
 function parseAsinList(value) {
   if (!value || typeof value !== 'string') return []
 
@@ -77,23 +95,28 @@ function parseAsinList(value) {
     .filter(Boolean)
 }
 
-function getCompetitorMainAsins() {
-  const configuredAsins = parseAsinList(process.env.ARGUS_COMPETITOR_MAIN_ASINS || '')
-  return new Set(configuredAsins.length > 0 ? configuredAsins : COMPETITOR_SEED_ASINS)
+function requiredMarketAsinList(baseName, market) {
+  const envName = `${baseName}_${market.toUpperCase()}`
+  const asins = parseAsinList(requiredEnv(envName))
+  if (!asins.length) {
+    throw new Error(`Missing required ASIN list env var: ${envName}`)
+  }
+  return asins
 }
 
-function getHeroBsrAsins() {
-  const configuredHeroAsins = parseAsinList(process.env.ARGUS_HERO_BSR_ASINS ?? '')
-  if (configuredHeroAsins.length > 0) {
-    return new Set(configuredHeroAsins)
+function listingSourceConfigForMarket(market) {
+  return {
+    market,
+    listingOurAsins: requiredMarketAsinList('ARGUS_OUR_ASINS', market),
+    listingCompetitorSeedAsins: requiredMarketAsinList('ARGUS_COMPETITOR_MAIN_ASINS', market),
+    listingHeroBsrAsins: requiredMarketAsinList('ARGUS_HERO_BSR_ASINS', market),
   }
+}
 
-  const configuredLegacyAsins = parseAsinList(process.env.ARGUS_MAIN_BSR_EMAIL_ASINS ?? '')
-  if (configuredLegacyAsins.length > 0) {
-    return new Set(configuredLegacyAsins)
-  }
-
-  return new Set(HERO_BSR_ASINS)
+function configureListingSource(config) {
+  CURRENT_OUR_ASINS = [...config.listingOurAsins]
+  CURRENT_COMPETITOR_SEED_ASINS = [...config.listingCompetitorSeedAsins]
+  CURRENT_OUR_ASIN_PRIORITY = new Map(CURRENT_OUR_ASINS.map((asin, index) => [asin, index]))
 }
 
 function resolveArgusDatasourceUrl() {
@@ -694,8 +717,8 @@ function sortRows(rows) {
   rows.sort((a, b) => {
     if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
     if (a.owner_type === 'our') {
-      const left = OUR_ASIN_PRIORITY.get(a.asin)
-      const right = OUR_ASIN_PRIORITY.get(b.asin)
+      const left = CURRENT_OUR_ASIN_PRIORITY.get(a.asin)
+      const right = CURRENT_OUR_ASIN_PRIORITY.get(b.asin)
       return (left ?? 99) - (right ?? 99)
     }
     return a.asin.localeCompare(b.asin)
@@ -716,8 +739,8 @@ function sortDiffs(diffs) {
 
     if (a.owner_type !== b.owner_type) return a.owner_type === 'our' ? -1 : 1
     if (a.owner_type === 'our') {
-      const leftPriority = OUR_ASIN_PRIORITY.get(a.asin)
-      const rightPriority = OUR_ASIN_PRIORITY.get(b.asin)
+      const leftPriority = CURRENT_OUR_ASIN_PRIORITY.get(a.asin)
+      const rightPriority = CURRENT_OUR_ASIN_PRIORITY.get(b.asin)
       return (leftPriority ?? 99) - (rightPriority ?? 99)
     }
     return a.asin.localeCompare(b.asin)
@@ -1166,8 +1189,8 @@ function compareCanonicalEvents(left, right) {
   if (severityDelta !== 0) return severityDelta
   if (left.owner_type !== right.owner_type) return left.owner_type === 'our' ? -1 : 1
   if (left.owner_type === 'our') {
-    const leftPriority = OUR_ASIN_PRIORITY.get(left.asin)
-    const rightPriority = OUR_ASIN_PRIORITY.get(right.asin)
+    const leftPriority = CURRENT_OUR_ASIN_PRIORITY.get(left.asin)
+    const rightPriority = CURRENT_OUR_ASIN_PRIORITY.get(right.asin)
     return (leftPriority ?? 99) - (rightPriority ?? 99)
   }
   return left.asin.localeCompare(right.asin)
@@ -1210,7 +1233,7 @@ async function discoverCompetitorVariations(sp, marketplaceId) {
   const parentToChildren = new Map()
   const seedToParent = new Map()
 
-  for (const seedAsin of COMPETITOR_SEED_ASINS) {
+  for (const seedAsin of CURRENT_COMPETITOR_SEED_ASINS) {
     const seedCatalog = await fetchCatalog(sp, marketplaceId, seedAsin, ['relationships'])
     const relationships = parseRelationships(seedCatalog)
 
@@ -1226,12 +1249,12 @@ async function discoverCompetitorVariations(sp, marketplaceId) {
   const competitorAsins = []
   const add = (asin) => {
     if (!asin) return
-    if (OUR_ASINS.includes(asin)) return
+    if (CURRENT_OUR_ASINS.includes(asin)) return
     if (competitorAsins.includes(asin)) return
     competitorAsins.push(asin)
   }
 
-  for (const seedAsin of COMPETITOR_SEED_ASINS) {
+  for (const seedAsin of CURRENT_COMPETITOR_SEED_ASINS) {
     const parentAsin = seedToParent.get(seedAsin)
     if (parentAsin && parentToChildren.has(parentAsin)) {
       for (const childAsin of parentToChildren.get(parentAsin) || []) add(childAsin)
@@ -1283,9 +1306,9 @@ async function discoverOurSkus(sp, marketplaceId, sellerId) {
 }
 
 async function collectRows(sp, marketplaceId, sellerId) {
-  const ourAsinSet = new Set(OUR_ASINS)
+  const ourAsinSet = new Set(CURRENT_OUR_ASINS)
   const competitorAsins = await discoverCompetitorVariations(sp, marketplaceId)
-  const allAsins = [...OUR_ASINS, ...competitorAsins]
+  const allAsins = [...CURRENT_OUR_ASINS, ...competitorAsins]
   const asinToSku = await discoverOurSkus(sp, marketplaceId, sellerId)
 
   const now = new Date()
@@ -1787,7 +1810,7 @@ ${overflowRow}
 <tr>
 <td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:14px 24px; text-align:center;">
   <div style="font-family:${F}; font-size:11px; color:#94a3b8;">
-    Automated alert from Argus &middot; Targon Global
+    Automated alert from Argus &middot; Targon
   </div>
 </td>
 </tr>
@@ -1799,22 +1822,35 @@ ${overflowRow}
 }
 
 async function main() {
+  let envMode = 'local'
+  if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
+    envMode = process.env.ARGUS_ENV_MODE
+  } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
+    envMode = process.env.TARGONOS_ENV_MODE
+  }
+
+  loadEnvForApp({
+    repoRoot: REPO_ROOT,
+    appName: 'argus',
+    mode: envMode,
+    targetEnv: process.env,
+  })
+  const market = resolveArgusMarket()
+  const envSuffix = market.toUpperCase()
+  MONITORING_HOURLY_LISTINGS_DIR = monitoringHourlyListingsDir(market)
   ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
 
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
-
-  const competitorMainAsins = getCompetitorMainAsins()
-  const heroBsrAsins = getHeroBsrAsins()
+  const listingSourceConfig = listingSourceConfigForMarket(market)
+  configureListingSource(listingSourceConfig)
+  const competitorMainAsins = new Set(listingSourceConfig.listingCompetitorSeedAsins)
+  const heroBsrAsins = new Set(listingSourceConfig.listingHeroBsrAsins)
 
   const appClientId = requiredEnv('AMAZON_SP_APP_CLIENT_ID')
   const appClientSecret = requiredEnv('AMAZON_SP_APP_CLIENT_SECRET')
-  const refreshToken = requiredEnv('AMAZON_REFRESH_TOKEN_US')
-  const region = requiredEnv('AMAZON_SP_API_REGION_US')
-  const marketplaceId = requiredEnv('AMAZON_MARKETPLACE_ID_US')
-  const sellerId = requiredEnv('AMAZON_SELLER_ID_US')
+  const refreshToken = requiredEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`)
+  const region = requiredEnv(`AMAZON_SP_API_REGION_${envSuffix}`)
+  const marketplaceId = requiredEnv(`AMAZON_MARKETPLACE_ID_${envSuffix}`)
+  const sellerId = requiredEnv(`AMAZON_SELLER_ID_${envSuffix}`)
   const trackedAsinMarketplace = resolveTrackedAsinMarketplace(marketplaceId)
   const trackedLabelsByAsin = await loadTrackedAsinLabels(trackedAsinMarketplace)
 

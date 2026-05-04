@@ -4,6 +4,8 @@ type ApiErrorPayload = {
   error?: unknown;
 };
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 function errorMessageFromPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const rec = payload as ApiErrorPayload;
@@ -26,13 +28,30 @@ export async function fetchJson<TResponse>(path: string, init?: RequestInit): Pr
     throw new Error('fetchJson expects an absolute path starting with "/"');
   }
 
-  const response = await fetch(withAppBasePath(path), {
-    ...init,
-    headers: {
-      accept: 'application/json',
-      ...init?.headers,
-    },
-  });
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeoutSignal])
+    : timeoutSignal;
+
+  let response: Response;
+  try {
+    response = await fetch(withAppBasePath(path), {
+      ...init,
+      signal,
+      headers: {
+        accept: 'application/json',
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      throw new Error('Request timed out.');
+    }
+    if (error instanceof DOMException && error.name === 'AbortError' && timeoutSignal.aborted) {
+      throw new Error('Request timed out.');
+    }
+    throw error;
+  }
 
   const payload = await readJsonSafely(response);
 
@@ -43,4 +62,3 @@ export async function fetchJson<TResponse>(path: string, init?: RequestInit): Pr
 
   return payload as TResponse;
 }
-

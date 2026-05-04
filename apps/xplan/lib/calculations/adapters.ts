@@ -1,7 +1,5 @@
 import type {
   Product,
-  LeadStageTemplate,
-  LeadTimeOverride,
   BusinessParameter,
   PurchaseOrder,
   PurchaseOrderPayment,
@@ -15,8 +13,6 @@ import { coerceNumber, parseNumber } from '@/lib/utils/numbers';
 import {
   BusinessParameterInput,
   CashFlowWeekInput,
-  LeadStageOverrideInput,
-  LeadStageTemplateInput,
   ProductInput,
   ProfitAndLossWeekInput,
   PurchaseOrderInput,
@@ -44,23 +40,6 @@ export function mapProducts(products: Product[]): ProductInput[] {
     fbaFee: coerceNumber(product.fbaFee),
     amazonReferralRate: coerceNumber(product.amazonReferralRate),
     storagePerMonth: coerceNumber(product.storagePerMonth),
-  }));
-}
-
-export function mapLeadStageTemplates(stages: LeadStageTemplate[]): LeadStageTemplateInput[] {
-  return stages.map((stage) => ({
-    id: stage.id,
-    label: stage.label,
-    defaultWeeks: coerceNumber(stage.defaultWeeks),
-    sequence: stage.sequence,
-  }));
-}
-
-export function mapLeadOverrides(overrides: LeadTimeOverride[]): LeadStageOverrideInput[] {
-  return overrides.map((override) => ({
-    productId: override.productId,
-    stageTemplateId: override.stageTemplateId,
-    durationWeeks: coerceNumber(override.durationWeeks),
   }));
 }
 
@@ -106,6 +85,24 @@ export function mapPurchaseOrders(
               batch.overrideReferralRate != null ? Number(batch.overrideReferralRate) : null,
             overrideStoragePerMonth:
               batch.overrideStoragePerMonth != null ? Number(batch.overrideStoragePerMonth) : null,
+            cartonSide1Cm:
+              (batch as BatchTableRow & { cartonSide1Cm?: unknown }).cartonSide1Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide1Cm?: unknown }).cartonSide1Cm)
+                : null,
+            cartonSide2Cm:
+              (batch as BatchTableRow & { cartonSide2Cm?: unknown }).cartonSide2Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide2Cm?: unknown }).cartonSide2Cm)
+                : null,
+            cartonSide3Cm:
+              (batch as BatchTableRow & { cartonSide3Cm?: unknown }).cartonSide3Cm != null
+                ? Number((batch as BatchTableRow & { cartonSide3Cm?: unknown }).cartonSide3Cm)
+                : null,
+            cartonWeightKg:
+              (batch as BatchTableRow & { cartonWeightKg?: unknown }).cartonWeightKg != null
+                ? Number((batch as BatchTableRow & { cartonWeightKg?: unknown }).cartonWeightKg)
+                : null,
+            unitsPerCarton:
+              (batch as BatchTableRow & { unitsPerCarton?: number | null }).unitsPerCarton ?? null,
           }),
         )
       : [];
@@ -120,6 +117,10 @@ export function mapPurchaseOrders(
       quantity: batches.length > 0 ? totalBatchQuantity : coerceNumber(order.quantity),
       poDate: order.poDate ?? null,
       poWeekNumber: order.poWeekNumber ?? null,
+      poClass: (order as PurchaseOrder & { poClass?: string | null }).poClass ?? null,
+      inboundWeekOverride:
+        (order as PurchaseOrder & { inboundWeekOverride?: Date | null }).inboundWeekOverride ??
+        null,
       productionWeeks: normalizePositiveDecimal(order.productionWeeks),
       sourceWeeks: normalizePositiveDecimal(order.sourceWeeks),
       oceanWeeks: normalizePositiveDecimal(order.oceanWeeks),
@@ -162,6 +163,22 @@ export function mapPurchaseOrders(
           : order.notes != null
             ? String(order.notes)
             : null,
+      sourceSystem:
+        typeof (order as PurchaseOrder & { sourceSystem?: string | null }).sourceSystem ===
+        'string'
+          ? (order as PurchaseOrder & { sourceSystem?: string }).sourceSystem
+          : null,
+      sourceId:
+        typeof (order as PurchaseOrder & { sourceId?: string | null }).sourceId === 'string'
+          ? (order as PurchaseOrder & { sourceId?: string }).sourceId
+          : null,
+      sourceReference:
+        typeof (order as PurchaseOrder & { sourceReference?: string | null }).sourceReference ===
+        'string'
+          ? (order as PurchaseOrder & { sourceReference?: string }).sourceReference
+          : null,
+      sourceUpdatedAt:
+        (order as PurchaseOrder & { sourceUpdatedAt?: Date | null }).sourceUpdatedAt ?? null,
       overrideSellingPrice:
         order.overrideSellingPrice != null ? coerceNumber(order.overrideSellingPrice) : null,
       overrideManufacturingCost:
@@ -205,8 +222,7 @@ export function mapPurchaseOrders(
 export function mapSalesWeeks(rows: SalesWeek[]): SalesWeekInput[] {
   return rows.map((row) => {
     const explicitHasActualData = (row as SalesWeek & { hasActualData?: boolean }).hasActualData;
-    const hasActualData =
-      explicitHasActualData === true ? true : row.actualSales != null;
+    const hasActualData = explicitHasActualData === true ? true : row.actualSales != null;
     return {
       id: row.id,
       productId: row.productId,

@@ -8,19 +8,38 @@ import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
-import { Button } from '@/components/Button';
 
-const navLinks = [
+const productNavLinks = [
   { label: 'Packs', href: '/cs/us/packs' },
   { label: 'Where to buy', href: '/cs/us/where-to-buy' },
   { label: 'Support', href: '/cs/us/support' },
   { label: 'About', href: '/cs/us/about' }
 ];
 
+const homeNavLinks = [
+  { label: 'Purpose', href: '#purpose' },
+  { label: 'Mission', href: '#mission' },
+  { label: 'Vision', href: '#vision' },
+  { label: 'Values', href: '#values' },
+  { label: 'Our Brands', href: '#products' }
+];
+
 export function Header() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const navLinks = pathname === '/' ? homeNavLinks : productNavLinks;
+  const isActiveLink = (href: string) => {
+    if (href.startsWith('#')) {
+      return false;
+    }
+
+    if (pathname === href) {
+      return true;
+    }
+
+    return pathname.startsWith(`${href}/`);
+  };
 
   // Close the mobile menu on navigation.
   useEffect(() => {
@@ -38,11 +57,11 @@ export function Header() {
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 border-b border-white/10 bg-[#002C51] transition-shadow',
+        'sticky top-0 z-50 border-b border-white/10 bg-[#002C51]/80 backdrop-blur-md transition-shadow supports-[backdrop-filter]:bg-[#002C51]/65',
         scrolled ? 'shadow-[0_1px_0_rgba(0,0,0,0.55)]' : null
       )}
     >
-      <Container className="flex h-16 items-center justify-between">
+      <Container className="flex h-16 items-center justify-between md:grid md:grid-cols-[1fr_auto_1fr]">
         <Link
           href="/"
           aria-label={site.name}
@@ -60,7 +79,7 @@ export function Header() {
 
         <nav className="hidden items-center gap-6 md:flex">
           {navLinks.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+            const active = isActiveLink(l.href);
             return (
               <Link
                 key={l.href}
@@ -77,13 +96,7 @@ export function Header() {
           })}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="accent">
-            <Link href="/cs">
-              Caelum Star
-            </Link>
-          </Button>
-
+        <div className="flex items-center justify-end">
           <button
             type="button"
             onClick={() => setMobileOpen((v) => !v)}
@@ -106,11 +119,12 @@ export function Header() {
           <Container className="py-4">
             <div className="grid gap-2">
               {navLinks.map((l) => {
-                const active = pathname === l.href || pathname.startsWith(`${l.href}/`);
+                const active = isActiveLink(l.href);
                 return (
                   <Link
                     key={l.href}
                     href={l.href}
+                    onClick={() => setMobileOpen(false)}
                     className={cn(
                       'rounded-pill px-4 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 hover:text-white',
                       active ? 'bg-white/5 text-white' : null

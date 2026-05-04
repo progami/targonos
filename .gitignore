@@ -65,6 +65,10 @@ apps/archived/**/prisma/*.db*
 
 # Env
 .env*
+env/shared.local.env
+env/shared.dev.env
+env/shared.production.env
+!env/shared.dev.ci.env
 *.mcp.json
 !apps/wms/.env.dev.ci
 !apps/xplan/.env.dev.ci
@@ -73,6 +77,8 @@ apps/archived/**/prisma/*.db*
 !apps/sso/.env.dev.ci
 !apps/plutus/.env.dev.ci
 !apps/argus/.env.dev.ci
+!apps/hermes/.env.dev.ci
+!apps/website/.env.dev.ci
 
 # Editor
 .DS_Store
@@ -93,3 +99,31 @@ LMB.zip
 
 # Claude Code
 .claude/
+.codex/generated/
+
+# Local agent/Codex runtime artifacts
+.superpowers/
+.codex/env-templates/
+.codex/environments/
+.codex/generated/
+.codex/runtime/
+.codex/worktree-overrides.txt
+.codex/scripts/assert-shared-sso-env.mjs
+.codex/scripts/resolve-shared-sso-env.mjs
+.codex/scripts/run-kairos-ml.sh
+.codex/scripts/run-shared-portal.sh
+.codex/scripts/run-worktree-app.sh
+.codex/scripts/show-worktree-ports.sh
+.codex/scripts/start-worktree-stack.sh
+.codex/scripts/worktree-ports.mjs
+.codex/scripts/worktree-ports.test.mjs
+docs/superpowers/plans/2026-04-16-*.md
+docs/superpowers/plans/2026-04-19-*.md
+apps/sso/public/brand/targon-once-in-a-lifetime.jpg
+apps/sso/public/brand/targon-wordmark-inverted.svg
+scripts/ensure-worktree-dev-user.mjs
+scripts/setup-codex-env.mjs
+scripts/worktree-dev-auth-config.mjs
+
+# Local git worktrees
+.worktrees/

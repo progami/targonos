@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { parseArgusMarket } from '@/lib/argus-market'
 import { getMonitoringChanges } from '@/lib/monitoring/reader'
 import type {
   MonitoringCategory,
@@ -12,7 +13,9 @@ export const dynamic = 'force-dynamic'
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
+    const market = parseArgusMarket(searchParams.get('market'))
     const changes = await getMonitoringChanges({
+      market,
       window: readWindow(searchParams.get('window')),
       owner: readOwner(searchParams.get('owner')),
       category: readCategory(searchParams.get('category')),

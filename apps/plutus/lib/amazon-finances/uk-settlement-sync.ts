@@ -548,7 +548,6 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
       skuToBrandName,
     });
 
-    if (draft.originalTotalCents > 0 && draft.fundTransferStatus === 'Succeeded') needBankAccount = true;
     if (draft.originalTotalCents < 0) needPaymentAccount = true;
 
     for (const segment of draft.segments) {

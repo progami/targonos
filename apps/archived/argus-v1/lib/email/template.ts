@@ -221,7 +221,7 @@ export function buildAlertEmailHtml(
 <tr>
 <td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:16px 24px; text-align:center;">
   <div style="font-family:${FONT}; font-size:11px; color:${TEXT_TERTIARY}; line-height:1.6;">
-    Automated alert from Argus &middot; Targon Global
+    Automated alert from Argus &middot; Targon
   </div>
 </td>
 </tr>

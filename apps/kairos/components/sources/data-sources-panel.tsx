@@ -30,6 +30,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { fetchJson } from '@/lib/api/client';
+import { getTimeSeriesCsvPath } from '@/lib/source-api';
 import type { TimeSeriesListItem } from '@/types/kairos';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -456,7 +457,7 @@ function CSVUploadForm({
       formData.append('file', selectedFile);
       formData.append('preview', 'true');
 
-      const response = await fetch('/api/v1/time-series/csv', {
+      const response = await fetch(getTimeSeriesCsvPath(), {
         method: 'POST',
         body: formData,
       });
@@ -853,7 +854,7 @@ export function DataSourcesPanel() {
   // CSV Upload Mutation
   const csvMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch('/api/v1/time-series/csv', {
+      const response = await fetch(getTimeSeriesCsvPath(), {
         method: 'POST',
         body: formData,
       });

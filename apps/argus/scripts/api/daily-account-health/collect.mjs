@@ -6,9 +6,11 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import {
   REPO_ROOT,
+  ARGUS_MARKET,
   MONITORING_BASE,
   ensureDir,
   loadMonitoringEnv,
+  marketEnvSuffix,
   requireEnv,
   writeCsv,
 } from '../weekly-sources/lib/common.mjs'
@@ -22,6 +24,8 @@ const OUTPUT_DIR = path.join(MONITORING_BASE, 'Daily', 'Account Health Dashboard
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'account-health.csv')
 const REPORT_TIMEOUT_MS = 2 * 60 * 60 * 1000
 const POLL_INTERVAL_MS = 15_000
+const ACTIVE_REPORT_STATUSES = new Set(['IN_PROGRESS', 'IN_QUEUE'])
+const ACTIVE_REPORT_REUSE_MAX_AGE_MS = 30 * 60 * 1000
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/
 
 const HEADERS = [
@@ -109,10 +113,11 @@ function createClient() {
 
   const requireFromTalos = createRequire(TALOS_PACKAGE_JSON)
   const SellingPartnerAPI = requireFromTalos('amazon-sp-api')
+  const envSuffix = marketEnvSuffix(ARGUS_MARKET)
 
   return new SellingPartnerAPI({
-    region: requireEnv('AMAZON_SP_API_REGION_US'),
-    refresh_token: requireEnv('AMAZON_REFRESH_TOKEN_US'),
+    region: requireEnv(`AMAZON_SP_API_REGION_${envSuffix}`),
+    refresh_token: requireEnv(`AMAZON_REFRESH_TOKEN_${envSuffix}`),
     credentials: {
       SELLING_PARTNER_APP_CLIENT_ID: requireEnv('AMAZON_SP_APP_CLIENT_ID'),
       SELLING_PARTNER_APP_CLIENT_SECRET: requireEnv('AMAZON_SP_APP_CLIENT_SECRET'),
@@ -126,6 +131,7 @@ function createClient() {
 }
 
 async function findReusableReport(client, marketplaceId) {
+  const nowMs = Date.now()
   const response = await client.callAPI({
     operation: 'getReports',
     endpoint: 'reports',
@@ -140,7 +146,12 @@ async function findReusableReport(client, marketplaceId) {
     .filter((report) => report?.marketplaceIds?.includes(marketplaceId))
     .filter((report) => {
       const status = report?.processingStatus
-      return status === 'IN_PROGRESS' || status === 'IN_QUEUE'
+      return ACTIVE_REPORT_STATUSES.has(status)
+    })
+    .filter((report) => {
+      const createdMs = Date.parse(report?.createdTime)
+      if (!Number.isFinite(createdMs)) return false
+      return nowMs - createdMs <= ACTIVE_REPORT_REUSE_MAX_AGE_MS
     })
     .sort((left, right) => String(right?.createdTime ?? '').localeCompare(String(left?.createdTime ?? '')))
 
@@ -363,7 +374,7 @@ function upsertRow(file, row) {
 
 async function main() {
   const client = createClient()
-  const marketplaceId = requireEnv('AMAZON_MARKETPLACE_ID_US')
+  const marketplaceId = requireEnv(`AMAZON_MARKETPLACE_ID_${marketEnvSuffix(ARGUS_MARKET)}`)
 
   const reusableReportId = await findReusableReport(client, marketplaceId)
   const reportId = reusableReportId ?? await createReport(client, marketplaceId)

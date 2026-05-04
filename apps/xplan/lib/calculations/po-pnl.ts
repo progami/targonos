@@ -4,7 +4,7 @@ import type { AllocationLedgerLine } from './allocation-ledger';
 
 export type PoPnlStatus = Extract<
   PurchaseOrderStatus,
-  'DRAFT' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED'
+  'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'CANCELLED'
 >;
 
 export interface PoPnlOrderMeta {
@@ -76,12 +76,11 @@ const UNATTRIBUTED_KEY = '__UNATTRIBUTED__';
 
 function normalizeStatus(status: PurchaseOrderStatus | null | undefined): PoPnlStatus {
   switch (status) {
-    case 'DRAFT':
     case 'ISSUED':
     case 'MANUFACTURING':
     case 'OCEAN':
     case 'WAREHOUSE':
-    case 'SHIPPED':
+    case 'CANCELLED':
       return status;
     default:
       return 'ISSUED';

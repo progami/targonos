@@ -255,9 +255,11 @@ export default function PermissionsPanel() {
   return (
     <div className="flex min-h-[640px] flex-col gap-4">
       <div className="flex flex-col gap-3 border-b border-slate-200/80 pb-4 dark:border-slate-700/70 sm:flex-row sm:items-end sm:justify-between">
-        <h2 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-          Permissions
-        </h2>
+        <div className="max-w-2xl">
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Manage baseline access and direct overrides without leaving the user roster.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
           <span>{summary.userCount} users</span>
           <span>{summary.overrideCount} overrides</span>

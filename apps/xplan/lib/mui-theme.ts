@@ -5,7 +5,7 @@ const shared = {
     fontFamily: 'var(--font-sans), Inter, system-ui, sans-serif',
   },
   shape: {
-    borderRadius: 8,
+    borderRadius: 12,
   },
   components: {
     MuiButton: {
@@ -15,8 +15,8 @@ const shared = {
       styleOverrides: {
         root: {
           textTransform: 'none' as const,
-          fontWeight: 500,
-          borderRadius: 8,
+          fontWeight: 600,
+          borderRadius: 12,
           whiteSpace: 'nowrap' as const,
           '&.Mui-disabled': { opacity: 0.4, pointerEvents: 'none' },
         },
@@ -40,7 +40,7 @@ const shared = {
     MuiIconButton: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
+          borderRadius: 12,
         },
       },
     },
@@ -58,10 +58,10 @@ const shared = {
     MuiChip: {
       styleOverrides: {
         root: {
-          fontWeight: 500,
-          height: 22,
+          fontWeight: 700,
+          height: 24,
           fontSize: '0.6875rem',
-          borderRadius: '6px',
+          borderRadius: '9999px',
         },
       },
     },
@@ -90,9 +90,9 @@ const shared = {
       styleOverrides: {
         root: {
           textTransform: 'none' as const,
-          fontWeight: 600,
-          minHeight: 36,
-          padding: '6px 12px',
+          fontWeight: 700,
+          minHeight: 40,
+          padding: '8px 14px',
           fontSize: '0.875rem',
         },
       },
@@ -100,7 +100,7 @@ const shared = {
     MuiTabs: {
       styleOverrides: {
         root: {
-          minHeight: 36,
+          minHeight: 40,
         },
         indicator: {
           height: 3,
@@ -120,10 +120,10 @@ const shared = {
       styleOverrides: {
         root: {
           textTransform: 'none' as const,
-          fontWeight: 500,
+          fontWeight: 700,
           fontSize: '0.75rem',
-          padding: '4px 10px',
-          borderRadius: 6,
+          padding: '5px 12px',
+          borderRadius: 10,
         },
       },
     },
@@ -148,10 +148,10 @@ export const lightTheme = createTheme({
       main: '#00C2B9',
     },
     background: {
-      default: '#f8fafc',
+      default: '#f4f7fb',
       paper: '#FFFFFF',
     },
-    divider: 'rgba(0, 0, 0, 0.08)',
+    divider: 'rgba(15, 23, 42, 0.08)',
   },
 });
 
@@ -160,15 +160,15 @@ export const darkTheme = createTheme({
   palette: {
     mode: 'dark',
     primary: {
-      main: '#00C2B9',
+      main: '#dbeafe',
     },
     secondary: {
-      main: '#002C51',
+      main: '#00C2B9',
     },
     background: {
-      default: '#041324',
-      paper: '#06182b',
+      default: '#071524',
+      paper: '#0b1d2d',
     },
-    divider: 'rgba(255, 255, 255, 0.08)',
+    divider: 'rgba(148, 163, 184, 0.16)',
   },
 });

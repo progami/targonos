@@ -3,15 +3,22 @@ import { redirect } from 'next/navigation'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageHeader } from '@/components/ui/page-header'
 import { Construction, Bell, AlertTriangle } from '@/lib/lucide-icons'
-import { portalOrigin } from '@/lib/portal'
+import { buildAppCallbackUrl, portalOrigin } from '@/lib/portal'
 
 export default async function ReorderAlertsPage() {
  const session = await auth()
 
  if (!session) {
  const portalAuth = portalOrigin()
- const appUrl = process.env.NEXT_PUBLIC_APP_URL || ''
- redirect(`${portalAuth}/login?callbackUrl=${encodeURIComponent(appUrl + '/market/reorder')}`)
+ const appUrl = process.env.NEXT_PUBLIC_APP_URL
+ if (!appUrl) {
+ throw new Error('NEXT_PUBLIC_APP_URL must be defined for Talos login redirects.')
+ }
+ redirect(
+   `${portalAuth}/login?callbackUrl=${encodeURIComponent(
+     buildAppCallbackUrl('/market/reorder', new URL(appUrl).origin),
+   )}`,
+ )
  }
 
  return (

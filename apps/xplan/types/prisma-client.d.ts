@@ -6,12 +6,11 @@ declare module '@targon/prisma-xplan' {
   export type StrategyRegion = 'US' | 'UK';
 
   export type PurchaseOrderStatus =
-    | 'DRAFT'
     | 'ISSUED'
     | 'MANUFACTURING'
     | 'OCEAN'
     | 'WAREHOUSE'
-    | 'SHIPPED';
+    | 'CANCELLED';
 
   export interface Strategy {
     id: string;
@@ -75,20 +74,6 @@ declare module '@targon/prisma-xplan' {
     overrideReferralRate?: number | null;
     overrideStoragePerMonth?: number | null;
     strategy?: Strategy;
-  }
-
-  export interface LeadStageTemplate {
-    id: string;
-    label: string;
-    defaultWeeks?: number | null;
-    sequence: number;
-  }
-
-  export interface LeadTimeOverride {
-    id?: string;
-    productId: string;
-    stageTemplateId: string;
-    durationWeeks?: number | null;
   }
 
   export interface BusinessParameter {
@@ -340,7 +325,7 @@ declare module '@targon/prisma-xplan' {
   export class PrismaClient<
     T extends PrismaClientOptions = PrismaClientOptions,
     U = never,
-    V = DefaultArgs
+    V = DefaultArgs,
   > {
     constructor(options?: T);
     $connect(): Promise<void>;
@@ -353,8 +338,6 @@ declare module '@targon/prisma-xplan' {
     strategy: ModelDelegate<Strategy>;
     product: ModelDelegate<Product>;
     businessParameter: ModelDelegate<BusinessParameter>;
-    leadStageTemplate: ModelDelegate<LeadStageTemplate>;
-    leadTimeOverride: ModelDelegate<LeadTimeOverride>;
     purchaseOrder: ModelDelegate<PurchaseOrder>;
     batchTableRow: ModelDelegate<BatchTableRow>;
     purchaseOrderPayment: ModelDelegate<PurchaseOrderPayment>;

@@ -117,11 +117,11 @@ export function SalesPlanningVisual({
 
     const stockStartKey = columnKeys.find(
       (key) =>
-        columnMeta[key]?.productId === selectedProductId && columnMeta[key]?.field === 'stockStart',
+        columnMeta[key]?.productId === selectedProductId && columnMeta[key]?.field === 'fba',
     );
     const stockEndKey = columnKeys.find(
       (key) =>
-        columnMeta[key]?.productId === selectedProductId && columnMeta[key]?.field === 'stockEnd',
+        columnMeta[key]?.productId === selectedProductId && columnMeta[key]?.field === 'fba',
     );
     const finalSalesKey = columnKeys.find(
       (key) =>
@@ -330,7 +330,7 @@ export function SalesPlanningVisual({
       {/* Chart Card */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Stock Level Over Time</CardTitle>
+          <CardTitle className="text-base">FBA Stock Over Time</CardTitle>
           <CardDescription>Tracking inventory levels with shipment arrival markers</CardDescription>
         </CardHeader>
         <CardContent>
@@ -488,7 +488,7 @@ export function SalesPlanningVisual({
                     : 'text-slate-400 dark:text-slate-500'
                 }`}
               >
-                Stock Level
+                FBA Stock
               </span>
             </button>
             <button

@@ -1,10 +1,12 @@
 import { promises as fs } from 'node:fs';
+import { loadSharedPlutusEnv } from './shared-env';
+import { parseSettlementSyncCliPostFlag } from '@/lib/amazon-finances/settlement-sync-post-mode';
 
 type CliOptions = {
   startDate: string;
   endDate: string | undefined;
   settlementIds: string[] | undefined;
-  amazonEnvPath: string;
+  amazonEnvPath: string | null;
   plutusEnvPath: string;
   postToQbo: boolean;
   process: boolean;
@@ -60,20 +62,21 @@ async function loadPlutusEnvFile(filePath: string): Promise<void> {
 }
 
 function parseArgs(argv: string[]): CliOptions {
+  const postFlag = parseSettlementSyncCliPostFlag(argv, 'UK SP-API settlement sync');
   let startDate = '2025-12-01';
   let endDate: string | undefined;
   let settlementIds: string[] | undefined;
-  let amazonEnvPath = '../talos/.env.local';
+  let amazonEnvPath: string | null = null;
   let plutusEnvPath = '.env.local';
-  let postToQbo = true;
+  const postToQbo = postFlag.postToQbo;
   let process = false;
 
   let i = 0;
-  while (i < argv.length) {
-    const arg = argv[i]!;
+  while (i < postFlag.argv.length) {
+    const arg = postFlag.argv[i]!;
 
     if (arg === '--start-date') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --start-date');
       startDate = next;
       i += 2;
@@ -81,7 +84,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--end-date') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --end-date');
       endDate = next;
       i += 2;
@@ -89,7 +92,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--settlement-ids') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --settlement-ids');
       settlementIds = next
         .split(',')
@@ -100,7 +103,7 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--amazon-env') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --amazon-env');
       amazonEnvPath = next;
       i += 2;
@@ -108,16 +111,10 @@ function parseArgs(argv: string[]): CliOptions {
     }
 
     if (arg === '--plutus-env') {
-      const next = argv[i + 1];
+      const next = postFlag.argv[i + 1];
       if (!next) throw new Error('Missing value for --plutus-env');
       plutusEnvPath = next;
       i += 2;
-      continue;
-    }
-
-    if (arg === '--no-post') {
-      postToQbo = false;
-      i += 1;
       continue;
     }
 
@@ -136,7 +133,11 @@ function parseArgs(argv: string[]): CliOptions {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
 
-  await loadAmazonEnvFile(options.amazonEnvPath);
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  } else {
+    await loadAmazonEnvFile(options.amazonEnvPath);
+  }
   await loadPlutusEnvFile(options.plutusEnvPath);
 
   const { syncUkSettlementsFromSpApiFinances } = await import('@/lib/amazon-finances/uk-settlement-sync');
@@ -156,4 +157,3 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
-

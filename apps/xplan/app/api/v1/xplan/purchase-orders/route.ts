@@ -16,6 +16,8 @@ const allowedFields = [
   'orderCode',
   'poDate',
   'poWeekNumber',
+  'poClass',
+  'inboundWeekOverride',
   'quantity',
   'productionWeeks',
   'sourceWeeks',
@@ -91,6 +93,7 @@ const weekNumberFields: Record<string, true> = {
 
 const dateFields: Record<string, true> = {
   poDate: true,
+  inboundWeekOverride: true,
   pay1Date: true,
   pay2Date: true,
   pay3Date: true,
@@ -449,6 +452,7 @@ export const PUT = withXPlanAuth(async (request: Request, session) => {
           data[field] = incoming;
         } else if (
           field === 'orderCode' ||
+          field === 'poClass' ||
           field === 'transportReference' ||
           field === 'shipName' ||
           field === 'containerNumber'
@@ -619,6 +623,7 @@ export const POST = withXPlanAuth(async (request: Request, session) => {
     quantity: safeQuantity,
     poDate: normalizedPoDate,
     poWeekNumber,
+    poClass: 'Planned',
     productionWeeks: new Prisma.Decimal(
       resolveStageDefaultWeeks(stageDefaults, OPS_STAGE_DEFAULT_LABELS.production),
     ),

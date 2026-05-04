@@ -78,9 +78,6 @@ Scripts resolve DB URL in this order:
 3. `DATABASE_URL_UK`
 4. `DATABASE_URL`
 
-If not set, scripts attempt to load Talos env files in order:
-
-1. `apps/talos/.env.local`
-2. `apps/talos/.env.dev`
-3. `apps/talos/.env.production`
-4. `apps/talos/.env`
+If not set, scripts load the exact shared/app env pair selected by `TALOS_ENV_MODE`.
+Unset `TALOS_ENV_MODE` means `local`, so the selected files are `env/shared.local.env`
+and `apps/talos/.env.local`.

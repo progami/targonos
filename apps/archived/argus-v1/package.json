@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js argus -- next dev -p 3216",
+    "dev": "node ../../../scripts/run-dev-with-logs.js argus -- node ../../../scripts/run-next-port.js dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint app",

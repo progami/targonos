@@ -1,12 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 export const REPO_ROOT = path.resolve(__dirname, '../../../../../../')
-export const MONITORING_BASE = '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales/Monitoring'
+const require = createRequire(import.meta.url)
+const { loadEnvForApp } = require(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
 
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000
 const BASE_WEEK_START_UTC = Date.UTC(2025, 11, 28)
@@ -41,12 +43,25 @@ export function loadEnvFile(file) {
 }
 
 export function loadMonitoringEnv() {
-  // Argus carries the concrete monitoring secrets; Talos now carries Bitwarden refs.
-  // Load Argus first so the shared loader does not lock in unresolved bw:// placeholders.
-  loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/talos/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, 'apps/xplan/.env.local'))
-  loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+  let mode = 'local'
+  if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
+    mode = process.env.ARGUS_ENV_MODE
+  } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
+    mode = process.env.TARGONOS_ENV_MODE
+  }
+
+  if (mode === 'local') {
+    loadEnvFile(path.join(REPO_ROOT, '.env.local'))
+    loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
+    return
+  }
+
+  loadEnvForApp({
+    repoRoot: REPO_ROOT,
+    appName: 'argus',
+    mode,
+    targetEnv: process.env,
+  })
 }
 
 export function requireEnv(name) {
@@ -56,6 +71,75 @@ export function requireEnv(name) {
   }
   return value.trim()
 }
+
+function readMarketArg(argv) {
+  const index = argv.indexOf('--market')
+  if (index < 0) return undefined
+  return argv[index + 1]
+}
+
+export function resolveArgusMarket(raw = readMarketArg(process.argv.slice(2)) ?? process.env.ARGUS_MARKET) {
+  if (raw === undefined) return 'us'
+  if (raw === null) return 'us'
+
+  const value = String(raw).trim().toLowerCase()
+  if (value === '') return 'us'
+  if (value === 'us') return 'us'
+  if (value === 'uk') return 'uk'
+  throw new Error(`Unsupported Argus market: ${raw}`)
+}
+
+export function marketEnvSuffix(market = resolveArgusMarket()) {
+  return market.toUpperCase()
+}
+
+export function requireMarketEnv(baseName, market = resolveArgusMarket()) {
+  return requireEnv(`${baseName}_${marketEnvSuffix(market)}`)
+}
+
+export function parseAsinList(value, envName) {
+  const asins = String(value ?? '')
+    .split(/[\s,|]+/)
+    .map((asin) => asin.trim().toUpperCase())
+    .filter(Boolean)
+
+  if (!asins.length) {
+    throw new Error(`Missing required ASIN list env var: ${envName}`)
+  }
+
+  return asins
+}
+
+export function requireMarketAsinList(baseName, market = resolveArgusMarket()) {
+  const envName = `${baseName}_${marketEnvSuffix(market)}`
+  return parseAsinList(requireEnv(envName), envName)
+}
+
+export function wprSourceConfigForMarket(market = resolveArgusMarket()) {
+  return {
+    market,
+    heroAsin: requireMarketEnv('WPR_HERO_ASIN', market).toUpperCase(),
+    competitorAsin: requireMarketEnv('WPR_COMPETITOR_ASIN', market).toUpperCase(),
+    competitorBrand: requireMarketEnv('WPR_COMPETITOR_BRAND', market),
+    datadiveNicheId: requireMarketEnv('DATADIVE_NICHE_ID', market),
+    listingOurAsins: requireMarketAsinList('ARGUS_OUR_ASINS', market),
+    listingCompetitorSeedAsins: requireMarketAsinList('ARGUS_COMPETITOR_MAIN_ASINS', market),
+    listingHeroBsrAsins: requireMarketAsinList('ARGUS_HERO_BSR_ASINS', market),
+  }
+}
+
+export function salesRootForMarket(market = resolveArgusMarket()) {
+  return requireEnv(`ARGUS_SALES_ROOT_${marketEnvSuffix(market)}`)
+}
+
+export function monitoringBaseForMarket(market = resolveArgusMarket()) {
+  return path.join(salesRootForMarket(market), 'Monitoring')
+}
+
+loadMonitoringEnv()
+
+export const ARGUS_MARKET = resolveArgusMarket()
+export const MONITORING_BASE = monitoringBaseForMarket(ARGUS_MARKET)
 
 export function formatDate(date) {
   const year = date.getFullYear()

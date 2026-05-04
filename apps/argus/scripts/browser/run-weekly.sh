@@ -10,7 +10,40 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
-LOG="/tmp/weekly-browser-sources.log"
+MARKET="us"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/weekly-browser-sources.log"
+else
+  LOG="/tmp/weekly-browser-sources-$MARKET.log"
+fi
 RUN_LOG_WRITER="$REPO_ROOT/apps/argus/scripts/lib/write-monitoring-run-log.mjs"
 WPR_SYNC_SCRIPT="$REPO_ROOT/apps/argus/scripts/lib/sync-wpr-workspace.sh"
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
@@ -43,7 +76,7 @@ append_detail_log_tail() {
   done < <(tail -10 "$detail_log")
 }
 
-log "=== Weekly Master Run Starting ==="
+log "=== Weekly Master Run Starting (market=$MARKET) ==="
 
 ensure_chrome_browser
 sleep 2
@@ -55,8 +88,9 @@ run_script() {
   local name="$1"
   local script="$2"
   local detail_log="$3"
+  local detail_log_env="$4"
   log "Running: $name"
-  if bash "$script"; then
+  if env ARGUS_MARKET="$MARKET" "$detail_log_env=$detail_log" bash "$script"; then
     log "OK: $name"
   else
     local exit_code=$?
@@ -68,15 +102,15 @@ run_script() {
   sleep 5
 }
 
-run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh" "/tmp/weekly-category-insights.log"
-run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "/tmp/weekly-poe.log"
-run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "/tmp/weekly-scaleinsights.log"
+run_script "Category Insights" "$SCRIPT_DIR/weekly-category-insights/collect.sh" "$(argus_tmp_log_path weekly-category-insights)" "ARGUS_CATEGORY_INSIGHTS_LOG"
+run_script "Product Opportunity Explorer" "$SCRIPT_DIR/weekly-poe/collect.sh" "$(argus_tmp_log_path weekly-poe)" "ARGUS_POE_LOG"
+run_script "ScaleInsights" "$SCRIPT_DIR/weekly-scaleinsights/collect.sh" "$(argus_tmp_log_path weekly-scaleinsights)" "ARGUS_SCALEINSIGHTS_LOG"
 log "Brand Metrics note: $BRAND_METRICS_SOURCE_LIMIT_NOTE"
-run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "/tmp/weekly-brand-metrics.log"
+run_script "Brand Metrics" "$SCRIPT_DIR/weekly-brand-metrics/collect.sh" "$(argus_tmp_log_path weekly-brand-metrics)" "ARGUS_BRAND_METRICS_LOG"
 
 if [ "$FAILED" -eq 0 ]; then
   log "Running: WPR workspace sync"
-  if bash "$WPR_SYNC_SCRIPT" --trigger weekly-browser-sources >> "$LOG" 2>&1; then
+  if bash "$WPR_SYNC_SCRIPT" --market "$MARKET" --trigger weekly-browser-sources >> "$LOG" 2>&1; then
     log "OK: WPR workspace sync"
   else
     local_exit_code=$?
@@ -106,6 +140,7 @@ fi
 
 RUN_LOG_ARGS=(
   --job-id "weekly-browser-sources"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"

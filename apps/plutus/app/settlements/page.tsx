@@ -479,7 +479,7 @@ export default function SettlementsPage() {
   const [syncRegion, setSyncRegion] = useState<Region>('US');
   const [syncEndDate, setSyncEndDate] = useState<string>('');
   const [syncSettlementIds, setSyncSettlementIds] = useState<string>('');
-  const [syncPostToQbo, setSyncPostToQbo] = useState(true);
+  const [syncPostToQbo, setSyncPostToQbo] = useState(false);
   const [syncProcess, setSyncProcess] = useState(false);
   const [syncResult, setSyncResult] = useState<SpApiSettlementSyncResult | null>(null);
 
@@ -531,7 +531,7 @@ export default function SettlementsPage() {
       setSyncEndDate('');
     }
 
-    setSyncPostToQbo(true);
+    setSyncPostToQbo(false);
     setSyncProcess(false);
     setSyncOpen(true);
   };
@@ -859,7 +859,6 @@ export default function SettlementsPage() {
                               onClick={() => router.push(settlementHref)}
                               dropdownItems={[
                                 { label: 'Open settlement', onClick: () => router.push(settlementHref) },
-                                { label: 'History', onClick: () => router.push(`${settlementHref}?tab=history`) },
                                 {
                                   label: 'Sync from Amazon',
                                   onClick: () =>

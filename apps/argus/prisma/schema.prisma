@@ -440,6 +440,9 @@ model MediaAsset {
   id           String   @id @default(cuid())
   sha256       String   @unique
   filePath     String
+  storageBackend MediaStorageBackend @default(LOCAL)
+  s3Bucket    String?
+  s3Key       String?
   mimeType     String
   bytes        Int?
   width        Int?
@@ -452,6 +455,13 @@ model MediaAsset {
   ebcImages    EbcImage[]
   videoMediaRevisions  VideoRevision[] @relation("VideoMedia")
   videoPosterRevisions VideoRevision[] @relation("VideoPoster")
+
+  @@index([filePath])
+}
+
+enum MediaStorageBackend {
+  LOCAL
+  S3
 }
 
 model EbcRevision {

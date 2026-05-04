@@ -57,26 +57,59 @@ export function TimeZoneClocks({ reportTimeZone }: { reportTimeZone: string }) {
       placement="bottom"
     >
       <Box
-        className="hidden sm:flex"
         sx={{
-          display: 'flex',
+          display: { xs: 'none', md: 'flex' },
           alignItems: 'center',
-          gap: 1,
-          borderRadius: '8px',
+          gap: 0.7,
+          flexShrink: 0,
+          borderRadius: '9999px',
           border: 1,
           borderColor: 'divider',
-          bgcolor: 'background.paper',
-          px: 1,
-          py: 0.5,
+          bgcolor: 'rgba(255,255,255,0.72)',
+          px: 0.8,
+          py: 0.45,
           fontSize: '10px',
-          fontWeight: 500,
+          fontWeight: 600,
           color: 'text.secondary',
-          boxShadow: '0 1px 2px 0 rgba(0,0,0,0.05)',
+          boxShadow: '0 14px 24px -22px rgba(15, 23, 42, 0.42)',
+          '.dark &': {
+            bgcolor: 'rgba(10, 26, 42, 0.84)',
+          },
         }}
       >
-        <span className="tabular-nums">{reportNow.split(' ').pop()}</span>
-        <Box component="span" sx={{ color: 'divider' }}>/</Box>
-        <span className="tabular-nums">{userNow.split(' ').pop()}</span>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.35 }}>
+          <Box
+            component="span"
+            sx={{
+              fontSize: '0.625rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'text.disabled',
+            }}
+          >
+            {reportLabel.slice(0, 3)}
+          </Box>
+          <span className="tabular-nums">{reportNow.split(' ').pop()}</span>
+        </Box>
+        <Box component="span" sx={{ color: 'divider' }}>
+          /
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.35 }}>
+          <Box
+            component="span"
+            sx={{
+              fontSize: '0.625rem',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              color: 'text.disabled',
+            }}
+          >
+            {userLabel.slice(0, 3)}
+          </Box>
+          <span className="tabular-nums">{userNow.split(' ').pop()}</span>
+        </Box>
       </Box>
     </MuiTooltip>
   );

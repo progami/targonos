@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
-import type { NextAuthConfig } from 'next-auth';
+import type { NextAuthConfig, Session } from 'next-auth';
 import type { NextRequest } from 'next/server';
-import { withSharedAuth } from '@targon/auth';
+import { getWorktreeDevSession, withSharedAuth } from '@targon/auth';
 
 type NextAuthResult = ReturnType<typeof NextAuth>;
 
@@ -20,7 +20,14 @@ function resolveAuthOptions(): NextAuthConfig {
   requireEnv('PORTAL_AUTH_URL');
   requireEnv('NEXT_PUBLIC_PORTAL_AUTH_URL');
 
-  const sharedSecret = process.env.PORTAL_AUTH_SECRET || process.env.NEXTAUTH_SECRET;
+  const portalAuthSecret = process.env.PORTAL_AUTH_SECRET;
+  const nextAuthSecret = process.env.NEXTAUTH_SECRET;
+  const sharedSecret =
+    typeof portalAuthSecret === 'string' && portalAuthSecret.trim() !== ''
+      ? portalAuthSecret
+      : typeof nextAuthSecret === 'string' && nextAuthSecret.trim() !== ''
+        ? nextAuthSecret
+        : undefined;
   if (!sharedSecret) {
     throw new Error(
       'PORTAL_AUTH_SECRET or NEXTAUTH_SECRET must be defined for X-Plan auth configuration.',
@@ -41,12 +48,27 @@ function resolveAuthOptions(): NextAuthConfig {
         return token;
       },
       async session({ session, token }) {
-        (session as { authz?: unknown }).authz = (token as { authz?: unknown }).authz;
-        (session as { roles?: unknown }).roles = (token as { roles?: unknown }).roles;
-        (session as { globalRoles?: unknown }).globalRoles = (token as { globalRoles?: unknown }).globalRoles;
+        const tokenClaims = token as {
+          authz?: {
+            apps?: unknown;
+            globalRoles?: unknown;
+            version?: unknown;
+          };
+          roles?: unknown;
+          globalRoles?: unknown;
+          authzVersion?: unknown;
+          sub?: unknown;
+        };
+
+        (session as { authz?: unknown }).authz = tokenClaims.authz;
+        (session as { roles?: unknown }).roles = tokenClaims.roles ?? tokenClaims.authz?.apps;
+        (session as { globalRoles?: unknown }).globalRoles =
+          tokenClaims.globalRoles ?? tokenClaims.authz?.globalRoles;
         (session as { authzVersion?: unknown }).authzVersion =
-          (token as { authzVersion?: unknown }).authzVersion;
-        session.user.id = (token.sub as string) || session.user.id;
+          tokenClaims.authzVersion ?? tokenClaims.authz?.version;
+        if (typeof tokenClaims.sub === 'string' && tokenClaims.sub.trim() !== '') {
+          session.user.id = tokenClaims.sub;
+        }
         return session;
       },
     },
@@ -72,6 +94,10 @@ export const handlers = {
   POST: (request: NextRequest) => getNextAuth().handlers.POST(request),
 } satisfies NextAuthResult['handlers'];
 
-export async function auth() {
-  return getNextAuth().auth();
+export async function auth(): Promise<Session | null> {
+  const worktreeSession = await getWorktreeDevSession('xplan');
+  if (worktreeSession) {
+    return worktreeSession as unknown as Session;
+  }
+  return getNextAuth().auth() as Promise<Session | null>;
 }

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { CheckSquare, Loader2, RefreshCw, Search } from 'lucide-react';
 import {
   CustomOpsPlanningGrid,
+  normalizePurchaseOrderStatus,
   type OpsInputRow,
 } from '@/components/sheets/custom-ops-planning-grid';
 import { PurchaseTimeline } from '@/components/sheets/purchase-timeline';
@@ -31,7 +32,6 @@ import {
   type BatchTableRowInput,
   type PurchaseOrderPaymentInput,
   type PurchaseOrderStatus,
-  type LeadTimeProfile,
 } from '@/lib/calculations';
 import { weekLabelForIsoDate, type PlanningWeekConfig } from '@/lib/calculations/planning-week';
 import {
@@ -86,6 +86,8 @@ export type PurchaseOrderSerialized = {
   quantity: number;
   poDate?: string | null;
   poWeekNumber?: number | null;
+  poClass?: string | null;
+  inboundWeekOverride?: string | null;
   productionWeeks?: number | null;
   sourceWeeks?: number | null;
   oceanWeeks?: number | null;
@@ -154,6 +156,11 @@ export type PurchaseOrderSerialized = {
     overrideFbaFee?: number | null;
     overrideReferralRate?: number | null;
     overrideStoragePerMonth?: number | null;
+    cartonSide1Cm?: number | null;
+    cartonSide2Cm?: number | null;
+    cartonSide3Cm?: number | null;
+    cartonWeightKg?: number | null;
+    unitsPerCarton?: number | null;
   }>;
 };
 
@@ -168,38 +175,9 @@ const FALLBACK_STAGE_DEFAULTS: StageDefaults = {
   finalWeeks: 1,
 };
 
-function sanitizeStageDefault(value: number | null | undefined, fallback: number): number {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) return fallback;
-  return numeric;
-}
-
-function resolveStageDefaults(parameters?: BusinessParameterMap): StageDefaults {
-  if (!parameters) return FALLBACK_STAGE_DEFAULTS;
-  return {
-    productionWeeks: sanitizeStageDefault(
-      parameters.defaultProductionWeeks,
-      FALLBACK_STAGE_DEFAULTS.productionWeeks,
-    ),
-    sourceWeeks: sanitizeStageDefault(
-      parameters.defaultSourceWeeks,
-      FALLBACK_STAGE_DEFAULTS.sourceWeeks,
-    ),
-    oceanWeeks: sanitizeStageDefault(
-      parameters.defaultOceanWeeks,
-      FALLBACK_STAGE_DEFAULTS.oceanWeeks,
-    ),
-    finalWeeks: sanitizeStageDefault(
-      parameters.defaultFinalWeeks,
-      FALLBACK_STAGE_DEFAULTS.finalWeeks,
-    ),
-  };
-}
-
 export type OpsPlanningCalculatorPayload = {
   parameters: BusinessParameterMap;
   products: ProductInput[];
-  leadProfiles: Array<LeadTimeProfile & { productId: string }>;
   purchaseOrders: PurchaseOrderSerialized[];
 };
 
@@ -215,6 +193,7 @@ interface OpsPlanningWorkspaceProps {
   calculator: OpsPlanningCalculatorPayload;
   timelineMonths: { start: string; end: string; label: string }[];
   mode?: 'tabular' | 'visual';
+  showPoFinanceTable?: boolean;
 }
 
 type ConfirmAction =
@@ -235,7 +214,7 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
 });
 
-const DEFAULT_PROFILE: LeadTimeProfile = {
+const DEFAULT_PROFILE = {
   productionWeeks: 0,
   sourceWeeks: 0,
   oceanWeeks: 0,
@@ -345,6 +324,15 @@ function parseInteger(value: string | number | null | undefined, fallback: numbe
   return numeric == null ? fallback : Math.round(numeric);
 }
 
+function resolvePurchaseOrderStatus(
+  value: string | null | undefined,
+  fallback: PurchaseOrderStatus,
+): PurchaseOrderStatus {
+  const normalized = normalizePurchaseOrderStatus(value ?? '');
+  if (normalized) return normalized;
+  return fallback;
+}
+
 function parsePercent(value: string | number | null | undefined): number | null {
   const numeric = toNumber(value);
   if (numeric == null) return null;
@@ -374,6 +362,8 @@ function deserializeOrders(
     quantity: order.quantity,
     poDate: parseDateValue(order.poDate),
     poWeekNumber: order.poWeekNumber ?? null,
+    poClass: order.poClass ?? null,
+    inboundWeekOverride: parseDateValue(order.inboundWeekOverride),
     productionWeeks: normalizeStageWeeks(
       'productionWeeks',
       order.productionWeeks ?? null,
@@ -448,6 +438,11 @@ function deserializeOrders(
         overrideFbaFee: batch.overrideFbaFee ?? null,
         overrideReferralRate: batch.overrideReferralRate ?? null,
         overrideStoragePerMonth: batch.overrideStoragePerMonth ?? null,
+        cartonSide1Cm: batch.cartonSide1Cm ?? null,
+        cartonSide2Cm: batch.cartonSide2Cm ?? null,
+        cartonSide3Cm: batch.cartonSide3Cm ?? null,
+        cartonWeightKg: batch.cartonWeightKg ?? null,
+        unitsPerCarton: batch.unitsPerCarton ?? null,
       })) ?? [],
   }));
 }
@@ -467,6 +462,8 @@ function mergeOrders(
         productId: row.productId,
         quantity: parseInteger(row.quantity, 0),
         poDate: parseDateValue(row.poDate),
+        poClass: row.poClass ? row.poClass : null,
+        inboundWeekOverride: parseDateValue(row.inboundWeekOverride),
         productionWeeks: normalizeStageWeeks(
           'productionWeeks',
           parseNumber(row.productionWeeks),
@@ -499,7 +496,7 @@ function mergeOrders(
         inboundEta: parseDateValue(row.portEta),
         availableDate: parseDateValue(row.availableDate),
         totalLeadDays: null,
-        status: (row.status as PurchaseOrderStatus) ?? 'ISSUED',
+        status: resolvePurchaseOrderStatus(row.status, 'ISSUED'),
         payments: [],
         overrideSellingPrice: parseNumber(row.sellingPrice),
         overrideManufacturingCost: parseNumber(row.manufacturingCost),
@@ -517,6 +514,9 @@ function mergeOrders(
       orderCode: row.orderCode,
       productId: row.productId,
       quantity: parseInteger(row.quantity, base.quantity ?? 0),
+      poClass: row.poClass ? row.poClass : null,
+      inboundWeekOverride:
+        parseDateValue(row.inboundWeekOverride) ?? base.inboundWeekOverride ?? null,
       pay1Date: parseDateValue(row.pay1Date),
       productionWeeks: normalizeStageWeeks(
         'productionWeeks',
@@ -541,7 +541,7 @@ function mergeOrders(
       portEta: parseDateValue(row.portEta) ?? base.portEta ?? null,
       inboundEta: parseDateValue(row.portEta) ?? base.inboundEta ?? base.portEta ?? null,
       availableDate: parseDateValue(row.availableDate) ?? base.availableDate ?? null,
-      status: (row.status as PurchaseOrderStatus) ?? base.status,
+      status: resolvePurchaseOrderStatus(row.status, base.status),
       overrideSellingPrice: parseNumber(row.sellingPrice),
       overrideManufacturingCost: parseNumber(row.manufacturingCost),
       overrideFreightCost: parseNumber(row.freightCost),
@@ -596,7 +596,6 @@ function buildTimelineRowsFromData(params: {
   rows: OpsInputRow[];
   payments: PurchasePaymentRow[];
   productIndex: Map<string, ProductCostSummary>;
-  leadProfiles: Map<string, LeadTimeProfile>;
   parameters: BusinessParameterMap;
   planningWeekConfig?: PlanningWeekConfig | null;
 }): {
@@ -604,8 +603,7 @@ function buildTimelineRowsFromData(params: {
   timelineOrders: PurchaseTimelineOrder[];
   derivedMap: Map<string, ReturnType<typeof computePurchaseOrderDerived>>;
 } {
-  const { orders, rows, payments, productIndex, leadProfiles, parameters, planningWeekConfig } =
-    params;
+  const { orders, rows, payments, productIndex, parameters, planningWeekConfig } = params;
   const ordersById = new Map(orders.map((order) => [order.id, order]));
   const paymentsByOrder = buildPaymentsByOrder(payments);
   const derivedMap = new Map<string, ReturnType<typeof computePurchaseOrderDerived>>();
@@ -652,12 +650,11 @@ function buildTimelineRowsFromData(params: {
       };
     }
 
-    const profile = leadProfiles.get(order.productId) ?? DEFAULT_PROFILE;
     const paymentsOverride = paymentsByOrder.get(order.id) ?? order.payments ?? [];
     const derived = computePurchaseOrderDerived(
       { ...order, payments: paymentsOverride },
       productIndex,
-      profile,
+      DEFAULT_PROFILE,
       parameters,
       { planningWeekConfig },
     );
@@ -752,6 +749,7 @@ export function OpsPlanningWorkspace({
   calculator,
   timelineMonths,
   mode = 'tabular',
+  showPoFinanceTable = true,
 }: OpsPlanningWorkspaceProps) {
   const isVisualMode = mode === 'visual';
   const router = useRouter();
@@ -776,23 +774,7 @@ export function OpsPlanningWorkspace({
     () => calculator.products.map((product) => ({ id: product.id, name: productLabel(product) })),
     [calculator.products, productLabel],
   );
-  const leadProfileMap = useMemo(() => {
-    const map = new Map<string, LeadTimeProfile>();
-    for (const profile of calculator.leadProfiles) {
-      map.set(profile.productId, {
-        productionWeeks: Number(profile.productionWeeks ?? 0),
-        sourceWeeks: Number(profile.sourceWeeks ?? 0),
-        oceanWeeks: Number(profile.oceanWeeks ?? 0),
-        finalWeeks: Number(profile.finalWeeks ?? 0),
-      });
-    }
-    return map;
-  }, [calculator.leadProfiles]);
-
-  const stageDefaults = useMemo(
-    () => resolveStageDefaults(calculator.parameters),
-    [calculator.parameters],
-  );
+  const stageDefaults = FALLBACK_STAGE_DEFAULTS;
 
   const initialOrders = useMemo(
     () => deserializeOrders(calculator.purchaseOrders, stageDefaults),
@@ -807,6 +789,8 @@ export function OpsPlanningWorkspace({
       batchCode: batch.batchCode ?? undefined,
       productId: batch.productId,
       productName: productNameIndex.get(batch.productId) ?? '',
+      carton: '',
+      region: '',
       quantity:
         batch.quantity == null
           ? ''
@@ -876,17 +860,9 @@ export function OpsPlanningWorkspace({
         rows: poTableRows,
         payments: initialPayments,
         productIndex,
-        leadProfiles: leadProfileMap,
         parameters: calculator.parameters,
       }),
-    [
-      initialOrders,
-      poTableRows,
-      initialPayments,
-      productIndex,
-      leadProfileMap,
-      calculator.parameters,
-    ],
+    [initialOrders, poTableRows, initialPayments, productIndex, calculator.parameters],
   );
 
   const [inputRows, setInputRows] = useState<OpsInputRow[]>(poTableRows);
@@ -1169,7 +1145,6 @@ export function OpsPlanningWorkspace({
         rows: nextInputRows,
         payments: nextPayments,
         productIndex,
-        leadProfiles: leadProfileMap,
         parameters: calculator.parameters,
         planningWeekConfig: planningWeekConfigRef.current,
       });
@@ -1178,7 +1153,7 @@ export function OpsPlanningWorkspace({
       setTimelineOrdersState(newTimelineOrders);
       syncPaymentExpectations(Array.from(derivedMap.keys()));
     },
-    [productIndex, leadProfileMap, calculator.parameters, syncPaymentExpectations],
+    [productIndex, calculator.parameters, syncPaymentExpectations],
   );
 
   useEffect(() => {
@@ -1312,40 +1287,58 @@ export function OpsPlanningWorkspace({
         list.push(row);
         rowsByOrder.set(row.purchaseOrderId, list);
       }
+      const quantityByOrder = new Map(
+        Array.from(rowsByOrder.entries()).map(([orderId, rows]) => [
+          orderId,
+          rows.reduce((sum, row) => sum + parseInteger(row.quantity, 0), 0),
+        ]),
+      );
 
-      setOrders((previous) => {
-        const next = previous.map((order) => {
-          const updates = rowsByOrder.get(order.id);
-          if (!updates || updates.length === 0) return order;
-          const batches = [...(order.batchTableRows ?? [])];
-          for (const update of updates) {
-            const batchIndex = batches.findIndex((batch) => batch.id === update.id);
-            if (batchIndex === -1) continue;
-            const tariffCost = parseNumber(update.tariffCost);
-            const tariffRate = parsePercent(update.tariffRate);
-            batches[batchIndex] = {
-              ...batches[batchIndex],
-              productId: update.productId,
-              quantity: parseInteger(update.quantity, batches[batchIndex].quantity ?? 0),
-              overrideSellingPrice: parseNumber(update.sellingPrice),
-              overrideManufacturingCost: parseNumber(update.manufacturingCost),
-              overrideFreightCost: parseNumber(update.freightCost),
-              overrideTariffCost: tariffCost,
-              overrideTariffRate: tariffCost != null ? null : tariffRate,
-              overrideTacosPercent: parsePercent(update.tacosPercent),
-              overrideFbaFee: parseNumber(update.fbaFee),
-              overrideReferralRate: parsePercent(update.referralRate),
-              overrideStoragePerMonth: parseNumber(update.storagePerMonth),
-            } as BatchTableRowInput;
-          }
-          const totalQuantity = batches.reduce((sum, batch) => sum + (batch.quantity ?? 0), 0);
-          return { ...order, batchTableRows: batches, quantity: totalQuantity };
-        });
-        ordersRef.current = next;
-        return next;
+      const nextOrders = ordersRef.current.map((order) => {
+        const updates = rowsByOrder.get(order.id);
+        if (!updates || updates.length === 0) return order;
+        const batches = [...(order.batchTableRows ?? [])];
+        for (const update of updates) {
+          const batchIndex = batches.findIndex((batch) => batch.id === update.id);
+          if (batchIndex === -1) continue;
+          const tariffCost = parseNumber(update.tariffCost);
+          const tariffRate = parsePercent(update.tariffRate);
+          batches[batchIndex] = {
+            ...batches[batchIndex],
+            productId: update.productId,
+            quantity: parseInteger(update.quantity, batches[batchIndex].quantity ?? 0),
+            overrideSellingPrice: parseNumber(update.sellingPrice),
+            overrideManufacturingCost: parseNumber(update.manufacturingCost),
+            overrideFreightCost: parseNumber(update.freightCost),
+            overrideTariffCost: tariffCost,
+            overrideTariffRate: tariffCost != null ? null : tariffRate,
+            overrideTacosPercent: parsePercent(update.tacosPercent),
+            overrideFbaFee: parseNumber(update.fbaFee),
+            overrideReferralRate: parsePercent(update.referralRate),
+            overrideStoragePerMonth: parseNumber(update.storagePerMonth),
+          } as BatchTableRowInput;
+        }
+        const totalQuantity = batches.reduce((sum, batch) => sum + (batch.quantity ?? 0), 0);
+        return { ...order, batchTableRows: batches, quantity: totalQuantity };
       });
+      ordersRef.current = nextOrders;
+      setOrders(nextOrders);
 
-      applyTimelineUpdate(ordersRef.current, inputRowsRef.current, paymentRowsRef.current);
+      let nextInputRows = inputRowsRef.current;
+      const recalculatedInputRows = inputRowsRef.current.map((row) => {
+        const totalQuantity = quantityByOrder.get(row.id);
+        if (totalQuantity == null) return row;
+        const formattedQuantity = formatNumericInput(totalQuantity, 0);
+        if (row.quantity === formattedQuantity) return row;
+        return { ...row, quantity: formattedQuantity };
+      });
+      if (recalculatedInputRows.some((row, index) => row !== inputRowsRef.current[index])) {
+        nextInputRows = recalculatedInputRows;
+        inputRowsRef.current = recalculatedInputRows;
+        setInputRows(recalculatedInputRows);
+      }
+
+      applyTimelineUpdate(nextOrders, nextInputRows, paymentRowsRef.current);
     },
     [applyTimelineUpdate],
   );
@@ -1409,6 +1402,8 @@ export function OpsPlanningWorkspace({
           batchCode: created.batchCode ?? undefined,
           productId: created.productId,
           productName: productNameIndex.get(created.productId) ?? '',
+          carton: '',
+          region: '',
           quantity: formatNumericInput(created.quantity ?? 0, 0),
           sellingPrice: '',
           manufacturingCost: '',
@@ -2052,8 +2047,8 @@ export function OpsPlanningWorkspace({
                         Import purchase order from Talos
                       </AlertDialogTitle>
                       <AlertDialogDescription className="mt-1">
-                        Select one or more Talos POs to create new rows and copy line items into the
-                        Batch table.
+                        Select one or more Talos POs to import or refresh rows and copy line items
+                        into the Batch table.
                       </AlertDialogDescription>
                     </div>
 
@@ -2130,6 +2125,10 @@ export function OpsPlanningWorkspace({
                       <div className="flex items-center gap-3 p-6 text-sm text-slate-600 dark:text-slate-300">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         Loading purchase orders…
+                      </div>
+                    ) : talosImportError ? (
+                      <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
+                        Talos purchase orders unavailable.
                       </div>
                     ) : talosOrders.length === 0 ? (
                       <div className="p-6 text-sm text-slate-600 dark:text-slate-300">
@@ -2240,8 +2239,9 @@ export function OpsPlanningWorkspace({
                   </label>
                   <div className="flex items-end justify-between rounded-lg border border-slate-200 bg-slate-50/60 px-4 py-3 text-xs text-slate-600 dark:border-[#1a3a54] dark:bg-white/5 dark:text-slate-300">
                     <span>
-                      Showing latest {TALOS_PO_RESULTS_LIMIT.toLocaleString()}. Select all shown to
-                      bulk import this list.
+                      {talosImportError
+                        ? 'Resolve the Talos connection and refresh.'
+                        : `Showing latest ${TALOS_PO_RESULTS_LIMIT.toLocaleString()}. Select all shown to bulk import this list.`}
                     </span>
                   </div>
                 </div>
@@ -2321,6 +2321,7 @@ export function OpsPlanningWorkspace({
           ) : null}
 
           <CustomOpsCostGrid
+            tableKind="batch"
             rows={visibleBatches}
             activeOrderId={activeOrderId}
             activeBatchId={activeBatchId}
@@ -2335,6 +2336,19 @@ export function OpsPlanningWorkspace({
             products={productOptions}
             onSync={handleCostSync}
           />
+          {showPoFinanceTable ? (
+            <CustomOpsCostGrid
+              rows={visibleBatches}
+              activeOrderId={activeOrderId}
+              activeBatchId={activeBatchId}
+              scrollKey={`ops-planning:finance:${strategyId}`}
+              onSelectOrder={(orderId) => setActiveOrderId(orderId)}
+              onSelectBatch={handleSelectBatch}
+              onRowsChange={handleBatchRowsChange}
+              products={productOptions}
+              onSync={handleCostSync}
+            />
+          ) : null}
           <CustomPurchasePaymentsGrid
             payments={visiblePayments}
             activeOrderId={activeOrderId}

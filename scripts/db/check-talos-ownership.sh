@@ -18,7 +18,7 @@ if ! command -v psql >/dev/null 2>&1; then
 fi
 
 if ! load_talos_env_if_needed; then
-  echo "Unable to resolve Talos DB environment variables (.env.local/.env.dev/.env.production/.env)." >&2
+  echo "Unable to resolve Talos DB environment variables for TALOS_ENV_MODE (default local)." >&2
   exit 1
 fi
 

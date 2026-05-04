@@ -1,0 +1,53 @@
+# 2026-04-11 Atlas Navigation Spec
+## Goal
+Document the Atlas navigation behavior and the navigation-specific defects currently evidenced in code for `/hub`, `/tasks`, `/employees`, `/leave`, `/policies`, and `/no-access`, with emphasis on entry redirects, canonical paths, sidebar/header links, back/history behavior, and no-access recovery.
+
+## Files Reviewed
+- Root/runtime context: `app-manifest.json`, `dev.local.apps.json`, `plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md`, `plans/2026-04-11-atlas-test-plan.md`.
+- Atlas config/auth/base-path: `apps/atlas/next.config.js`, `apps/atlas/app/layout.tsx`, `apps/atlas/middleware.ts`, `apps/atlas/lib/portal.ts`, `apps/atlas/lib/request-origin.ts`, `apps/atlas/lib/api-client.ts`, `apps/atlas/lib/current-user.ts`, `apps/atlas/lib/store/me.ts`, `apps/atlas/lib/navigation-history.tsx`.
+- Atlas shell/navigation UI: `apps/atlas/app/(atlas)/layout.tsx`, `apps/atlas/components/ui/PageHeader.tsx`, `apps/atlas/components/ui/BackButton.tsx`, `apps/atlas/components/search/CommandPalette.tsx`, `apps/atlas/app/api/search/route.ts`.
+- Hub/task surfaces: `apps/atlas/app/(atlas)/page.tsx`, `apps/atlas/app/(atlas)/work/page.tsx`, `apps/atlas/app/(atlas)/hub/page.tsx`, `apps/atlas/components/hub/HubDashboard.tsx`, `apps/atlas/app/(atlas)/tasks/page.tsx`, `apps/atlas/app/(atlas)/tasks/add/page.tsx`, `apps/atlas/app/(atlas)/tasks/[id]/page.tsx`.
+- Employee surfaces: `apps/atlas/app/(atlas)/employees/page.tsx`, `apps/atlas/app/(atlas)/employees/EmployeesClientPage.tsx`, `apps/atlas/app/(atlas)/employees/[id]/page.tsx`, `apps/atlas/app/(atlas)/employees/[id]/edit/page.tsx`, `apps/atlas/components/employee/EmployeeProfileClient.tsx`, `apps/atlas/components/employee/profile/tabs/LeaveTab.tsx`, `apps/atlas/components/employee/OnboardingOffboardingModal.tsx`.
+- Leave surfaces: `apps/atlas/app/(atlas)/leave/page.tsx`, `apps/atlas/app/(atlas)/leave/request/page.tsx`, `apps/atlas/app/(atlas)/leave/[id]/page.tsx`, `apps/atlas/app/(atlas)/leaves/[id]/page.tsx`, `apps/atlas/components/layouts/WorkflowRecordLayout.tsx`.
+- Policy surfaces: `apps/atlas/app/(atlas)/policies/page.tsx`, `apps/atlas/app/(atlas)/policies/add/page.tsx`, `apps/atlas/app/(atlas)/policies/[id]/page.tsx`, `apps/atlas/app/(atlas)/policies/[id]/edit/page.tsx`.
+- Relevant tests: `apps/atlas/tests/playwright.config.ts`, `apps/atlas/tests/e2e/smoke.spec.ts`, `apps/atlas/tests/fixtures/auth.ts`, `apps/atlas/tests/unit/middleware-origin.test.ts`.
+
+## Repro Routes
+- `/atlas` -> redirects to `/atlas/hub`; for a user without an employee profile, `/atlas/hub` immediately redirects to `/atlas/no-access` (`apps/atlas/app/(atlas)/page.tsx:3-4`, `apps/atlas/app/(atlas)/hub/page.tsx:5-8`).
+- `/atlas/no-access` -> click `Go back`; it links to `/`, which re-enters the `/hub` redirect chain and lands back on `/no-access` for the same user (`apps/atlas/app/no-access/page.tsx:86-92`, `apps/atlas/app/(atlas)/page.tsx:3-4`, `apps/atlas/app/(atlas)/hub/page.tsx:5-8`).
+- `/atlas/employees/:id?tab=leave` -> click `Request Leave`; the employee-profile leave tab sends users to `/leave?request=true` instead of `/leave/request` (`apps/atlas/components/employee/profile/tabs/LeaveTab.tsx:173-176`, `apps/atlas/app/(atlas)/leave/page.tsx:463-500`).
+- `/atlas/hub` -> Team -> `Leave to Approve`; hub cards link to `/leave/:id`, which only exists as a redirect shim to `/leaves/:id` (`apps/atlas/components/hub/HubDashboard.tsx:611-626`, `apps/atlas/app/(atlas)/leave/[id]/page.tsx:5-7`).
+- `/atlas/leave/request` as a user with no `dashboard.currentEmployee`; the page renders a dead-end error card instead of routing to `/no-access` or offering recovery (`apps/atlas/app/(atlas)/leave/request/page.tsx:68-84`).
+- `/atlas/policies/:id/edit`; the route immediately redirects to `/atlas/policies/:id` even though the test plan still treats it as a distinct route (`apps/atlas/app/(atlas)/policies/[id]/edit/page.tsx:7-9`, `plans/2026-04-11-atlas-test-plan.md:53-59`).
+
+## Confirmed Issues
+- `No Access` recovery is broken for blocked users. `apps/atlas/app/no-access/page.tsx:86-92` uses `href="/"` for `Go back`, but Atlas root redirects to `/hub` (`apps/atlas/app/(atlas)/page.tsx:3-4`) and `/hub` redirects users without employee profiles back to `/no-access` (`apps/atlas/app/(atlas)/hub/page.tsx:5-8`), so the primary recovery link loops.
+- `No Access` also hardcodes a production portal escape hatch. `apps/atlas/app/no-access/page.tsx:90-92` links to `https://os.targonglobal.com` instead of using the shared portal helper, so local and CI recovery leaves the configured dev origin.
+- The employee-profile leave CTA is wired to a dead query variant. `apps/atlas/components/employee/profile/tabs/LeaveTab.tsx:173-176` links to `/leave?request=true`, while the leave screen’s actual request entrypoint is `/leave/request` (`apps/atlas/app/(atlas)/leave/page.tsx:463-500`); no code in the leave page consumes `request=true`.
+- Leave detail routing is not canonical across Atlas surfaces. The leave list and employee leave history both navigate to `/leaves/:id` (`apps/atlas/app/(atlas)/leave/page.tsx:176-180`, `apps/atlas/components/employee/profile/tabs/LeaveTab.tsx:259-263`), but hub approval cards still navigate to `/leave/:id` (`apps/atlas/components/hub/HubDashboard.tsx:611-626`), which only redirects to `/leaves/:id` (`apps/atlas/app/(atlas)/leave/[id]/page.tsx:5-7`).
+- `/leave/request` does not reuse Atlas’s no-access recovery path. `/leave` sends missing-profile users to `/no-access` support (`apps/atlas/app/(atlas)/leave/page.tsx:440-454`), but `/leave/request` just shows `Unable to load employee data` with no support or redirect action (`apps/atlas/app/(atlas)/leave/request/page.tsx:68-84`).
+- Route/tests/docs are out of sync with the current navigation contract. The test plan still lists `/leave/[id]` and `/policies/[id]/edit` as primary routes (`plans/2026-04-11-atlas-test-plan.md:45-59`), but code makes leave detail canonical at `/leaves/[id]` and policy edit a redirect (`apps/atlas/app/(atlas)/leave/[id]/page.tsx:5-7`, `apps/atlas/app/(atlas)/policies/[id]/edit/page.tsx:7-9`). The existing task smoke assertion is also stale: it expects `Tasks`, while the actual page title is `Task List` (`apps/atlas/tests/e2e/smoke.spec.ts:31-36`, `apps/atlas/app/(atlas)/tasks/page.tsx:128-136`).
+
+## Likely Root Causes
+- Base-path handling is fragmented across `apps/atlas/next.config.js:3-16`, `apps/atlas/middleware.ts:11-27`, `apps/atlas/app/(atlas)/layout.tsx:46-54`, `apps/atlas/lib/navigation-history.tsx:13-21`, and `apps/atlas/lib/api-client.ts:95-101`. The middleware’s explicit `/atlas/atlas` cleanup (`apps/atlas/middleware.ts:19-24`) is evidence that Atlas is already compensating for path drift in multiple layers.
+- Leave navigation was partially renamed from singular to plural, but callers were not normalized together. The canonical page lives under `/leaves/[id]` (`apps/atlas/app/(atlas)/leaves/[id]/page.tsx`), while callers still mix `/leave/:id`, `/leaves/:id`, and `/leave?request=true`.
+- Recovery/navigation links are hand-authored instead of derived from shared helpers. `apps/atlas/app/no-access/page.tsx:86-92` hardcodes both `/` and the production portal, while signed-out middleware redirects are environment-driven through `portalUrl()` and `resolveAppOrigin()` (`apps/atlas/middleware.ts:85-97`, `apps/atlas/lib/request-origin.ts:11-28`).
+- Browser coverage is too weak to catch route drift. Atlas’s only browser smoke tests still skip auth when Google SSO is present (`apps/atlas/tests/fixtures/auth.ts:19-30`), and the cross-app smoke spec already calls out that this pattern is too soft for CI (`plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md:41-46`).
+
+## Verification Plan
+- Add browser assertions for `/atlas/no-access` that verify both recovery paths: `Go back` must not loop back into `/no-access`, and `Back to portal` must stay on the configured portal origin instead of hardcoding production.
+- Normalize all leave CTAs/details to one canonical route family, then smoke `/atlas/hub` -> leave approval card, `/atlas/employees/:id?tab=leave` -> request CTA, `/atlas/leave` row click, and direct `/atlas/leaves/:id`.
+- Add a missing-profile scenario for `/atlas/leave/request` and assert the same recovery outcome used by `/atlas/leave`.
+- Update the Atlas smoke/test-plan route inventory to match the real routes before adding CI coverage: `/leaves/[id]` for leave detail, `/policies/[id]` for inline edit, and `Task List` as the tasks heading (`plans/2026-04-11-atlas-test-plan.md:45-59`, `apps/atlas/tests/e2e/smoke.spec.ts:31-36`).
+- Align verification with the cross-app smoke standard: no skipped auth paths, no broken redirect loops, and no navigation that escapes the configured local origin (`plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md:163-197`).
+
+## Cross-App Notes
+- Atlas is marked active in `app-manifest.json:2-14`, and the local app map says Atlas should live at `http://localhost:3206` (`dev.local.apps.json:2-11`), but the cross-app smoke discovery observed Atlas on `3006` and notes that Atlas local env currently points auth/public URLs at production origins (`plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md:48-59`).
+- The cross-app smoke spec explicitly requires base paths to resolve correctly and shared-auth launch paths to stay on the intended host (`plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md:33-39`, `163-181`); Atlas’s hardcoded no-access portal link conflicts with that requirement.
+- Current cross-app discovery only proved `/atlas` -> `/atlas/hub` and `/atlas/calendar` render cleanly (`plans/2026-04-11-cross-app-ci-smoke-spec (COMPLETED).md:89-93`); it did not exercise the leave, no-access, or policy redirect edge cases above.
+
+## Open Questions
+- Is `/leaves/[id]` the intended long-term canonical detail route, or should Atlas collapse back to `/leave/[id]` to match the existing test plan? The code and plan currently disagree.
+- Was `/leave?request=true` meant to open a modal or preselected request flow? No direct evidence yet; the only implemented request destination I found is `/leave/request`.
+- Should `/tasks` be a first-class persistent nav item? `apps/atlas/app/(atlas)/layout.tsx:73-107` exposes `/hub`, `/employees`, `/leave`, and `/policies`, but not `/tasks`; outside direct URLs, the only explicit task-route discovery I found is command-palette search in `apps/atlas/app/api/search/route.ts:145-159`. No direct evidence yet.
+- Is inline policy editing on `/policies/[id]` the settled UX, or should `/policies/[id]/edit` remain a distinct route for smoke coverage and deep links?

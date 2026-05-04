@@ -48,3 +48,35 @@ export const panelBadgeSx = {
   fontSize: '0.625rem',
   color: textMuted,
 };
+
+export const chartControlRailSx = {
+  display: 'flex' as const,
+  justifyContent: 'space-between' as const,
+  alignItems: 'center' as const,
+  gap: 2,
+  flexWrap: 'wrap' as const,
+  px: 1.25,
+  py: 1,
+  border: subtleBorder,
+  borderRadius: '10px',
+  bgcolor: 'rgba(255,255,255,0.03)',
+  minHeight: 56,
+};
+
+export function chartToggleButtonSx(active: boolean, accent: string) {
+  return {
+    minWidth: 0,
+    px: 1.4,
+    textTransform: 'none' as const,
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    borderWidth: 1,
+    borderColor: active ? `${accent}88` : 'rgba(255,255,255,0.18)',
+    bgcolor: active ? `${accent}24` : 'rgba(255,255,255,0.045)',
+    color: 'rgba(255,255,255,0.9)',
+    '&:hover': {
+      borderColor: active ? `${accent}aa` : 'rgba(255,255,255,0.28)',
+      bgcolor: active ? `${accent}34` : 'rgba(255,255,255,0.07)',
+    },
+  };
+}

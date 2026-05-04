@@ -9,19 +9,14 @@ const isTruthy = (value) =>
 // Load environment variables unless explicitly disabled.
 // Dotenv does not override existing env vars unless `override: true` is set.
 if (!isTruthy(process.env.SKIP_DOTENV)) {
-  const dotenv = require('dotenv');
-  const baseOptions = { override: false, quiet: true };
-
-  // Load .env.local first (highest precedence for local/prod deployments)
-  dotenv.config({
-    ...baseOptions,
-    path: path.join(__dirname, `.env.local`),
-  });
-
-  // Then load environment-specific file
-  dotenv.config({
-    ...baseOptions,
-    path: path.join(__dirname, `.env.${process.env.NODE_ENV || 'development'}`),
+  const { loadEnvForApp } = require('../../scripts/lib/shared-env.cjs');
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const mode = nodeEnv === 'production' ? 'production' : 'local';
+  loadEnvForApp({
+    repoRoot: path.resolve(__dirname, '../..'),
+    appName: 'talos',
+    mode,
+    targetEnv: process.env,
   });
 }
 

@@ -20,6 +20,7 @@ import ArrowOutwardIcon from '@mui/icons-material/ArrowOutward'
 import RefreshIcon from '@mui/icons-material/Refresh'
 import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import type {
+  MonitoringBootstrap,
   MonitoringCategory,
   MonitoringChangeEvent,
   MonitoringHealthReport,
@@ -27,12 +28,17 @@ import type {
   MonitoringSeverity,
 } from '@/lib/monitoring/types'
 import { formatMonitoringLabel } from '@/lib/monitoring/labels'
+import { readAppJsonOrThrow } from '@/lib/fetch-json'
 import { formatDateTime } from '@/components/monitoring/ui'
 import FeedRail from '@/components/monitoring/FeedRail'
 import ChangeDetail from '@/components/monitoring/ChangeDetail'
 import SourceHealthGrid from '@/components/monitoring/SourceHealthGrid'
-
-const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
+import {
+  ARGUS_MARKETS,
+  appendMarketParam,
+  parseArgusMarket,
+  type ArgusMarket,
+} from '@/lib/argus-market'
 
 type OwnerFilter = 'ALL' | 'OURS' | 'COMPETITOR'
 
@@ -49,6 +55,7 @@ function TrackingDashboardContent() {
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
+  const market = parseArgusMarket(searchParams.get('market'))
   const [activeTab, setActiveTab] = useState<'changes' | 'sources'>('changes')
   const [overview, setOverview] = useState<MonitoringOverview | null>(null)
   const [changes, setChanges] = useState<MonitoringChangeEvent[]>([])
@@ -72,10 +79,23 @@ function TrackingDashboardContent() {
     readSnapshotParam(searchParams.get('snapshot')),
   )
   const deferredQuery = useDeferredValue(query)
+  const changeRequestQuery = useMemo(
+    () =>
+      buildUrlSearchParams({
+        market,
+        windowValue,
+        owner,
+        category,
+        severity,
+        query: deferredQuery,
+        snapshotTimestamp,
+      }).toString(),
+    [category, deferredQuery, market, owner, severity, snapshotTimestamp, windowValue],
+  )
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null)
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try {
-      const stored = localStorage.getItem('argus:read-events')
+      const stored = localStorage.getItem(readEventsStorageKey(market))
       return stored ? new Set(JSON.parse(stored) as string[]) : new Set()
     } catch {
       return new Set()
@@ -100,6 +120,7 @@ function TrackingDashboardContent() {
 
   useEffect(() => {
     const nextSearchParams = buildUrlSearchParams({
+      market,
       windowValue,
       owner,
       category,
@@ -117,6 +138,7 @@ function TrackingDashboardContent() {
     })
   }, [
     category,
+    market,
     owner,
     pathname,
     query,
@@ -130,68 +152,33 @@ function TrackingDashboardContent() {
   useEffect(() => {
     let cancelled = false
 
-    async function loadOverview() {
-      try {
-        setError(null)
-        const response = await fetch(`${basePath}/api/monitoring/overview`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring overview.')
-        }
-        if (!cancelled) {
-          setOverview(payload)
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring overview.')
-        }
-      }
-    }
-
-    void loadOverview()
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-
-    async function loadChanges() {
+    async function loadBootstrap() {
       try {
         setLoading(true)
         setError(null)
-        const searchParams = new URLSearchParams()
-        searchParams.set('window', windowValue)
-        searchParams.set('owner', owner)
-        searchParams.set('category', category)
-        searchParams.set('severity', severity)
-        if (deferredQuery.trim() !== '') searchParams.set('query', deferredQuery.trim())
-        if (snapshotTimestamp) searchParams.set('snapshot', snapshotTimestamp)
-
-        const response = await fetch(`${basePath}/api/monitoring/changes?${searchParams.toString()}`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring changes.')
-        }
-
+        const requestPath =
+          changeRequestQuery === ''
+            ? '/api/monitoring/bootstrap'
+            : `/api/monitoring/bootstrap?${changeRequestQuery}`
+        const bootstrap = await readAppJsonOrThrow<MonitoringBootstrap>(requestPath)
         if (!cancelled) {
-          setChanges(payload)
+          setOverview(bootstrap.overview)
+          setChanges(bootstrap.changes)
           setLoading(false)
         }
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring changes.')
+          setError(loadError instanceof Error ? loadError.message : 'Failed to load monitoring bootstrap.')
           setLoading(false)
         }
       }
     }
 
-    void loadChanges()
+    void loadBootstrap()
     return () => {
       cancelled = true
     }
-  }, [windowValue, owner, category, severity, deferredQuery, snapshotTimestamp])
+  }, [changeRequestQuery])
 
   useEffect(() => {
     if (activeTab !== 'sources') return
@@ -200,11 +187,9 @@ function TrackingDashboardContent() {
     async function loadHealth() {
       try {
         setHealthError(null)
-        const response = await fetch(`${basePath}/api/monitoring/health`)
-        const payload = await response.json()
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Failed to load monitoring health.')
-        }
+        const payload = await readAppJsonOrThrow<MonitoringHealthReport>(
+          appendMarketParam('/api/monitoring/health', market),
+        )
         if (!cancelled) {
           setHealth(payload)
         }
@@ -219,7 +204,16 @@ function TrackingDashboardContent() {
     return () => {
       cancelled = true
     }
-  }, [activeTab])
+  }, [activeTab, market])
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(readEventsStorageKey(market))
+      setReadIds(stored ? new Set(JSON.parse(stored) as string[]) : new Set())
+    } catch {
+      setReadIds(new Set())
+    }
+  }, [market])
 
   useEffect(() => {
     if (changes.length === 0) {
@@ -251,7 +245,7 @@ function TrackingDashboardContent() {
     setReadIds((prev) => {
       const next = new Set(prev)
       next.add(id)
-      try { localStorage.setItem('argus:read-events', JSON.stringify([...next])) } catch {}
+      try { localStorage.setItem(readEventsStorageKey(market), JSON.stringify([...next])) } catch {}
       return next
     })
   }
@@ -266,39 +260,18 @@ function TrackingDashboardContent() {
     setError(null)
     setHealthError(null)
     try {
-      const [overviewResponse, changesResponse] = await Promise.all([
-        fetch(`${basePath}/api/monitoring/overview`),
-        fetch(
-          `${basePath}/api/monitoring/changes?${buildUrlSearchParams({
-            windowValue,
-            owner,
-            category,
-            severity,
-            query: deferredQuery,
-            snapshotTimestamp,
-          }).toString()}`,
-        ),
-      ])
-
-      const overviewPayload = await overviewResponse.json()
-      const changesPayload = await changesResponse.json()
-
-      if (!overviewResponse.ok) {
-        throw new Error(overviewPayload.error ?? 'Failed to refresh overview.')
-      }
-      if (!changesResponse.ok) {
-        throw new Error(changesPayload.error ?? 'Failed to refresh change feed.')
-      }
-
-      setOverview(overviewPayload)
-      setChanges(changesPayload)
+      const bootstrapPath =
+        changeRequestQuery === ''
+          ? '/api/monitoring/bootstrap'
+          : `/api/monitoring/bootstrap?${changeRequestQuery}`
+      const bootstrap = await readAppJsonOrThrow<MonitoringBootstrap>(bootstrapPath)
+      setOverview(bootstrap.overview)
+      setChanges(bootstrap.changes)
 
       if (activeTab === 'sources') {
-        const healthResponse = await fetch(`${basePath}/api/monitoring/health`)
-        const healthPayload = await healthResponse.json()
-        if (!healthResponse.ok) {
-          throw new Error(healthPayload.error ?? 'Failed to refresh source health.')
-        }
+        const healthPayload = await readAppJsonOrThrow<MonitoringHealthReport>(
+          appendMarketParam('/api/monitoring/health', market),
+        )
         setHealth(healthPayload)
       }
     } catch (refreshError) {
@@ -306,6 +279,23 @@ function TrackingDashboardContent() {
     } finally {
       setRefreshing(false)
     }
+  }
+
+  function handleSelectMarket(nextMarket: ArgusMarket) {
+    const nextSearchParams = buildUrlSearchParams({
+      market: nextMarket,
+      windowValue,
+      owner,
+      category,
+      severity,
+      query,
+      snapshotTimestamp,
+    })
+    const nextQueryString = nextSearchParams.toString()
+    const nextUrl = nextQueryString === '' ? pathname : `${pathname}?${nextQueryString}`
+    startTransition(() => {
+      router.replace(nextUrl, { scroll: false })
+    })
   }
 
   return (
@@ -375,6 +365,19 @@ function TrackingDashboardContent() {
             </Tabs>
 
             <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                {ARGUS_MARKETS.map((option) => (
+                  <Button
+                    key={option.slug}
+                    size="small"
+                    variant={market === option.slug ? 'contained' : 'outlined'}
+                    onClick={() => handleSelectMarket(option.slug)}
+                    sx={{ minWidth: 38, px: 1.1, py: 0.35, fontWeight: 800 }}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </Stack>
               <Button
                 variant="outlined"
                 size="small"
@@ -387,7 +390,7 @@ function TrackingDashboardContent() {
               {selectedEvent ? (
                 <Button
                   component={Link}
-                  href={`/monitoring/${selectedEvent.asin}`}
+                  href={appendMarketParam(`/monitoring/${selectedEvent.asin}`, market)}
                   variant="outlined"
                   size="small"
                   startIcon={<ArrowOutwardIcon sx={{ fontSize: 14 }} />}
@@ -513,6 +516,7 @@ function readSnapshotParam(value: string | null): string | null {
 }
 
 function buildUrlSearchParams(input: {
+  market: ArgusMarket
   windowValue: '24h' | '7d' | '30d' | 'all'
   owner: OwnerFilter
   category: MonitoringCategory | 'ALL'
@@ -521,6 +525,7 @@ function buildUrlSearchParams(input: {
   snapshotTimestamp: string | null
 }): URLSearchParams {
   const searchParams = new URLSearchParams()
+  if (input.market !== 'us') searchParams.set('market', input.market)
   if (input.windowValue !== '7d') searchParams.set('window', input.windowValue)
   if (input.owner !== 'ALL') searchParams.set('owner', input.owner)
   if (input.category !== 'ALL') searchParams.set('category', input.category)
@@ -528,4 +533,8 @@ function buildUrlSearchParams(input: {
   if (input.query.trim() !== '') searchParams.set('query', input.query.trim())
   if (input.snapshotTimestamp) searchParams.set('snapshot', input.snapshotTimestamp)
   return searchParams
+}
+
+function readEventsStorageKey(market: ArgusMarket): string {
+  return `argus:${market}:read-events`
 }

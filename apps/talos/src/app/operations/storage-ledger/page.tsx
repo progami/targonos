@@ -20,7 +20,7 @@ import {
 import { useStorageLedger } from '@/hooks/useStorageLedger'
 import { usePageState } from '@/lib/store/page-state'
 import { format } from 'date-fns'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 
 const PAGE_KEY = '/operations/storage-ledger'
@@ -32,7 +32,7 @@ export default function StorageLedgerPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal('/login', `${window.location.origin}${withBasePath('/operations/storage-ledger')}`)
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/storage-ledger'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {

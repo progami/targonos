@@ -247,7 +247,6 @@ export const DELETE = withXPlanAuth(async (request: Request, session) => {
 
   await prisma.$transaction(async (tx: TransactionClient) => {
     await tx.purchaseOrder.deleteMany({ where: { productId: { in: ids } } });
-    await tx.leadTimeOverride.deleteMany({ where: { productId: { in: ids } } });
     await tx.product.deleteMany({ where: { id: { in: ids } } });
   });
 

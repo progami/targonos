@@ -5,31 +5,21 @@ import { useSession } from '@/hooks/usePortalSession'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import {
-  Search,
-  Building,
-  Package,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  Filter,
-  BookOpen,
-} from '@/lib/lucide-icons'
+import { ArrowUpDown, ArrowUp, ArrowDown, Filter, BookOpen } from '@/lib/lucide-icons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { Badge } from '@/components/ui/badge'
 import { LoadingSpinner, PageLoading } from '@/components/ui/loading-spinner'
 import { toast } from 'react-hot-toast'
 import { format } from 'date-fns'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import {
   useInventoryFilters,
   type InventoryBalance,
   type SortKey,
 } from '@/hooks/useInventoryFilters'
-import { getMovementTypeFromTransaction, getMovementMultiplier } from '@/lib/utils/movement-types'
+import { getMovementTypeFromTransaction } from '@/lib/utils/movement-types'
 
 const LEDGER_TIME_FORMAT = 'MMM d, yyyy h:mm a'
 
@@ -56,9 +46,8 @@ interface InventoryResponse {
   pagination?: {
     totalCount: number
   }
-  summary?: InventorySummary
+  summary: InventorySummary
 }
-
 const PAGE_KEY = '/operations/inventory'
 
 function InventoryPage() {
@@ -67,6 +56,7 @@ function InventoryPage() {
   const [loading, setLoading] = useState(true)
   const [balances, setBalances] = useState<InventoryBalance[]>([])
   const [summary, setSummary] = useState<InventorySummary | null>(null)
+  const [loadError, setLoadError] = useState<Error | null>(null)
 
   // Use the inventory filters hook for filtering, sorting, and persistence
   const {
@@ -90,10 +80,7 @@ function InventoryPage() {
   useEffect(() => {
     if (status === 'loading') return
     if (!session) {
-      redirectToPortal(
-        '/login',
-        `${window.location.origin}${withBasePath('/operations/inventory')}`
-      )
+      redirectToPortal('/login', buildAppCallbackUrl('/operations/inventory'))
       return
     }
     if (!['staff', 'admin'].includes(session.user.role)) {
@@ -105,28 +92,37 @@ function InventoryPage() {
   const fetchBalances = useCallback(async () => {
     try {
       setLoading(true)
+      setLoadError(null)
 
       const response = await fetch(withBasePath('/api/inventory/balances'), {
         credentials: 'include',
       })
+
+      const payload = (await response.json()) as InventoryResponse | { error: string }
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-        toast.error(`Failed to load inventory balances: ${errorData.error || response.statusText}`)
-        return
+        if (!('error' in payload) || typeof payload.error !== 'string') {
+          throw new Error('Inventory balances request failed')
+        }
+
+        throw new Error(payload.error)
       }
 
-      const payload: InventoryResponse | InventoryBalance[] = await response.json()
-
-      if (Array.isArray(payload)) {
-        setBalances(payload)
-        setSummary(null)
-      } else {
-        setBalances(payload.data || [])
-        setSummary(payload.summary ?? null)
+      if (!('data' in payload) || !Array.isArray(payload.data)) {
+        throw new Error('Inventory balances payload missing data')
       }
-    } catch (_error) {
-      toast.error('Failed to load inventory balances')
-      setSummary(null)
+
+      if (!('summary' in payload) || payload.summary === null || payload.summary === undefined) {
+        throw new Error('Inventory balances payload missing summary')
+      }
+
+      setBalances(payload.data)
+      setSummary(payload.summary)
+    } catch (error) {
+      const resolvedError =
+        error instanceof Error ? error : new Error('Failed to load inventory balances')
+      setLoadError(resolvedError)
+      toast.error(resolvedError.message)
     } finally {
       setLoading(false)
     }
@@ -141,14 +137,9 @@ function InventoryPage() {
   const tableTotals = useMemo(() => {
     return processedBalances.reduce(
       (acc, balance) => {
-        const multiplier = getMovementMultiplier(balance.lastTransactionType)
-        const baseCartons = Math.abs(balance.currentCartons)
-        const basePallets = Math.abs(balance.currentPallets)
-        const baseUnits = Math.abs(balance.currentUnits)
-
-        acc.cartons += multiplier === 0 ? balance.currentCartons : multiplier * baseCartons
-        acc.pallets += multiplier === 0 ? balance.currentPallets : multiplier * basePallets
-        acc.units += multiplier === 0 ? balance.currentUnits : multiplier * baseUnits
+        acc.cartons += balance.currentCartons
+        acc.pallets += balance.currentPallets
+        acc.units += balance.currentUnits
         return acc
       },
       { cartons: 0, pallets: 0, units: 0 }
@@ -170,28 +161,6 @@ function InventoryPage() {
     [sortConfig]
   )
 
-  const metrics = useMemo(() => {
-    const totalCartons = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentCartons), 0)
-    const totalPallets = balances.reduce((sum, balance) => sum + Math.max(0, balance.currentPallets), 0)
-    const uniqueWarehouses = new Set(balances.map(balance => balance.warehouse.code)).size
-    const uniqueSkusFallback = new Set(balances.map(balance => balance.sku.skuCode)).size
-    const lotsWithInventoryFallback = balances.filter(balance => balance.currentCartons > 0).length
-    const totalLotCountFallback = balances.length
-    const lotsOutOfStockFallback = Math.max(totalLotCountFallback - lotsWithInventoryFallback, 0)
-
-    return {
-      totalCartons,
-      totalPallets,
-      uniqueWarehouses,
-      summary: {
-        totalSkuCount: summary?.totalSkuCount ?? uniqueSkusFallback,
-        totalLotCount: summary?.totalLotCount ?? totalLotCountFallback,
-        lotsWithInventory: summary?.lotsWithInventory ?? lotsWithInventoryFallback,
-        lotsOutOfStock: summary?.lotsOutOfStock ?? lotsOutOfStockFallback,
-      },
-    }
-  }, [balances, summary])
-
   const baseFilterInputClass =
     'w-full rounded-md border border-slate-200 dark:border-slate-700 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
 
@@ -203,14 +172,28 @@ function InventoryPage() {
     )
   }
 
+  if (loadError !== null) {
+    throw loadError
+  }
+
+  if (loading) {
+    return (
+      <PageContainer>
+        <PageLoading />
+      </PageContainer>
+    )
+  }
+
+  if (!loading && summary === null) {
+    throw new Error('Inventory summary is required')
+  }
+
   return (
     <PageContainer>
-      <PageHeaderSection title="Inventory Ledger" description="Operations" icon={BookOpen} />
+      <PageHeaderSection title="Inventory" description="Operations" icon={BookOpen} />
       <PageContent className="flex-1 overflow-hidden px-4 py-6 sm:px-6 lg:px-8 flex flex-col">
         <div className="flex flex-col gap-6 flex-1 min-h-0">
-
           <div className="flex min-h-0 flex-col rounded-xl border bg-white dark:bg-slate-800 shadow-soft overflow-hidden flex-1">
-            {/* Scrollable table area */}
             <div className="relative min-h-0 overflow-auto scrollbar-gutter-stable flex-1">
               <table className="w-full min-w-[1100px] table-auto text-sm">
                 <thead>
@@ -518,10 +501,10 @@ function InventoryPage() {
                               </button>
                             </div>
                             <div className="space-y-2">
-                              {([
+                              {[
                                 { value: 'positive' as const, label: 'Inbound' },
                                 { value: 'negative' as const, label: 'Outbound' },
-                              ]).map(option => (
+                              ].map(option => (
                                 <label
                                   key={option.value}
                                   className="flex items-center gap-2 text-sm text-foreground"
@@ -626,19 +609,6 @@ function InventoryPage() {
                       balance.lastTransactionDate
                     )
                     const movementType = getMovementTypeFromTransaction(balance.lastTransactionType)
-                    const movementMultiplier = getMovementMultiplier(balance.lastTransactionType)
-                    const signedCartons =
-                      movementMultiplier === 0
-                        ? balance.currentCartons
-                        : movementMultiplier * Math.abs(balance.currentCartons)
-                    const signedPallets =
-                      movementMultiplier === 0
-                        ? balance.currentPallets
-                        : movementMultiplier * Math.abs(balance.currentPallets)
-                    const signedUnits =
-                      movementMultiplier === 0
-                        ? balance.currentUnits
-                        : movementMultiplier * Math.abs(balance.currentUnits)
                     const movementLabel =
                       movementType === 'positive'
                         ? 'Inbound'
@@ -653,16 +623,29 @@ function InventoryPage() {
                           : ('neutral' as const)
 
                     const sourceNumber =
-                      balance.fulfillmentOrderNumber ?? balance.purchaseOrderNumber ?? null
-                    const sourceHref = balance.fulfillmentOrderId
-                      ? `/operations/fulfillment-orders/${balance.fulfillmentOrderId}`
-                      : balance.purchaseOrderId
-                        ? `/operations/purchase-orders/${balance.purchaseOrderId}`
-                        : null
+                      movementType === 'negative'
+                        ? balance.lastTransactionReference ?? null
+                        : balance.inboundOrderNumber ?? null
+                    const sourceHref =
+                      movementType === 'negative'
+                        ? balance.lastTransactionId
+                          ? `/operations/transactions/${balance.lastTransactionId}`
+                          : null
+                        : balance.inboundOrderId
+                          ? `/operations/inbound/${balance.inboundOrderId}`
+                          : null
                     const sourceDisplay = sourceNumber ?? (sourceHref ? 'View' : '—')
                     const firstReceiveMeta = balance.receiveTransaction
                       ? `First receive: ${formatLedgerTimestamp(balance.receiveTransaction.transactionDate) ?? '—'} by ${balance.receiveTransaction.createdBy?.fullName ?? 'Unknown'}`
                       : null
+                    const sourceTitle = [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n')
+                    let warehouseDisplay = balance.warehouse.code
+                    if (warehouseDisplay.length === 0) {
+                      warehouseDisplay = balance.warehouse.name
+                    }
+                    if (warehouseDisplay.length === 0) {
+                      warehouseDisplay = '—'
+                    }
 
                     return (
                       <tr
@@ -671,9 +654,7 @@ function InventoryPage() {
                       >
                         <td
                           className="px-2 py-2 text-sm font-semibold text-foreground truncate"
-                          title={
-                            [sourceNumber, firstReceiveMeta].filter(Boolean).join('\n') || undefined
-                          }
+                          title={sourceTitle.length > 0 ? sourceTitle : undefined}
                         >
                           {sourceHref ? (
                             <Link
@@ -688,7 +669,7 @@ function InventoryPage() {
                           )}
                         </td>
                         <td className="px-2 py-2 text-sm font-medium text-foreground truncate">
-                          {balance.warehouse.code || balance.warehouse.name || '—'}
+                          {warehouseDisplay}
                         </td>
                         <td className="px-2 py-2 text-sm font-semibold text-foreground truncate">
                           {balance.sku.skuCode}
@@ -726,13 +707,13 @@ function InventoryPage() {
                           )}
                         </td>
                         <td className="px-2 py-2 text-right text-sm font-semibold text-primary whitespace-nowrap">
-                          {signedCartons.toLocaleString()}
+                          {balance.currentCartons.toLocaleString()}
                         </td>
                         <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
-                          {signedPallets.toLocaleString()}
+                          {balance.currentPallets.toLocaleString()}
                         </td>
                         <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
-                          {signedUnits.toLocaleString()}
+                          {balance.currentUnits.toLocaleString()}
                         </td>
                         <td className="px-2 py-2 text-sm whitespace-nowrap">
                           <Badge variant={movementBadgeVariant} className="uppercase text-[10px]">
@@ -752,7 +733,7 @@ function InventoryPage() {
                       Totals
                     </td>
                     <td className="px-2 py-2 font-medium whitespace-nowrap">
-                      {metrics.summary.totalSkuCount} SKUs
+                      {summary.totalSkuCount} SKUs
                     </td>
                     <td colSpan={3} />
                     <td className="px-2 py-2 text-right font-medium text-primary whitespace-nowrap">

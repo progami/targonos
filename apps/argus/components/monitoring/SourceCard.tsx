@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import type { MonitoringHealthDataset, MonitoringSchedulerJob } from '@/lib/monitoring/types'
+import { appendMarketParam, type ArgusMarket } from '@/lib/argus-market'
 
 export type UnifiedSourceStatus = 'healthy' | 'stale' | 'failed'
 
@@ -42,11 +43,12 @@ const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '')
 
 interface SourceCardProps {
   source: UnifiedSource
+  market: ArgusMarket
   expanded: boolean
   onToggle: () => void
 }
 
-export default function SourceCard({ source, expanded, onToggle }: SourceCardProps) {
+export default function SourceCard({ source, market, expanded, onToggle }: SourceCardProps) {
   const { job, primaryDataset, status } = source
   const [runs, setRuns] = useState<RunLogEntry[]>([])
   const [loadingRuns, setLoadingRuns] = useState(false)
@@ -56,7 +58,7 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
     let cancelled = false
     setLoadingRuns(true)
 
-    fetch(`${basePath}/api/monitoring/health/${job.id}/runs`)
+    fetch(`${basePath}${appendMarketParam(`/api/monitoring/health/${job.id}/runs`, market)}`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data: RunLogEntry[]) => {
         if (!cancelled) setRuns(data)
@@ -66,7 +68,7 @@ export default function SourceCard({ source, expanded, onToggle }: SourceCardPro
       })
 
     return () => { cancelled = true }
-  }, [expanded, job.id])
+  }, [expanded, job.id, market])
 
   const age = primaryDataset?.ageMinutes != null ? formatAge(primaryDataset.ageMinutes) : '—'
   const typeStyle = SOURCE_TYPE_STYLES[job.sourceType]

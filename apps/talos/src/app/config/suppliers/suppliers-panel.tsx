@@ -302,7 +302,7 @@ export default function SuppliersPanel({
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 {searchTerm
                   ? 'Clear your search or create a new supplier.'
-                  : 'Create suppliers for consistent SKU defaults and purchase orders.'}
+                  : 'Create suppliers for consistent SKU defaults and inbound.'}
               </p>
             </div>
             {!searchTerm && (
@@ -313,41 +313,41 @@ export default function SuppliersPanel({
             )}
           </div>
         ) : (
-          <div className="overflow-hidden">
-            <table className="w-full table-fixed text-sm">
+          <div className="overflow-x-auto">
+            <table className="min-w-[980px] w-full table-auto text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
-                  <th className="w-[10%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Contact</th>
-                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Email</th>
-                  <th className="w-[14%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
-                  <th className="w-[24%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Default Terms</th>
-                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
+                  <th className="min-w-[120px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Contact</th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Email</th>
+                  <th className="min-w-[140px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Default Terms</th>
+                  <th className="w-[72px] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredSuppliers.map(supplier => (
-                  <tr key={supplier.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                  <tr key={supplier.id} className="border-t border-slate-200 align-top dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
                     <td className="px-3 py-2 font-medium text-foreground">
                       <button
                         type="button"
                         onClick={() => openEdit(supplier)}
-                        className="block w-full text-left truncate hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
+                        className="block w-full text-left whitespace-normal break-words leading-5 hover:text-cyan-600 dark:hover:text-cyan-400 hover:underline transition-colors"
                         title={supplier.name}
                       >
                         {supplier.name}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground truncate" title={supplier.contactName ?? undefined}>
+                    <td className="px-3 py-2 text-muted-foreground whitespace-normal break-words leading-5" title={supplier.contactName ?? undefined}>
                       {supplier.contactName ?? '—'}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">
+                    <td className="px-3 py-2 text-muted-foreground break-all leading-5">
                       {supplier.email ?? '—'}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                       {supplier.phone ?? '—'}
                     </td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground truncate" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
+                    <td className="px-3 py-2 text-sm text-muted-foreground whitespace-normal break-words leading-5" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
                       {supplier.defaultPaymentTerms || supplier.defaultIncoterms ? (
                         [supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ')
                       ) : (
@@ -489,7 +489,7 @@ export default function SuppliersPanel({
                     placeholder="e.g., Net 30, 50% deposit"
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
                 </div>
 
                 <div className="space-y-1">
@@ -502,14 +502,14 @@ export default function SuppliersPanel({
                     }
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   >
-                    <option value="">None (select on PO)</option>
+                    <option value="">None (select on Inbound)</option>
                     {INCOTERMS_OPTIONS.map(option => (
                       <option key={option} value={option}>
                         {option}
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new POs</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
                 </div>
               </div>
             </div>

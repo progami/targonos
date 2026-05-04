@@ -91,6 +91,11 @@ export interface MonitoringOverview {
   topChanges: MonitoringChangeEvent[]
 }
 
+export interface MonitoringBootstrap {
+  overview: MonitoringOverview
+  changes: MonitoringChangeEvent[]
+}
+
 export interface MonitoringHealthDataset {
   id: string
   label: string

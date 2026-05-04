@@ -21,7 +21,6 @@ export function normalizeBasePath(value: string): string {
 
 export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? '')
 export const CLOUDFLARE_MAX_UPLOAD_BYTES = 100_000_000
-export const SNAPSHOT_ZIP_MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
 export function formatBytes(bytes: number): string {
   const mb = bytes / 1_000_000
@@ -239,6 +238,10 @@ export interface EbcModuleDraft {
 export type ArgusReplicaDocument = Document & {
   __argusMainMediaIndex?: number
   __argusVideoBaseline?: string
+  __argusEbcBaseline?: {
+    brand: string
+    description: string
+  }
 }
 
 export interface ListingDetailCallbacks {

@@ -32,7 +32,7 @@ interface DashboardStatsResponse {
     inTransit: number
     atWarehouse: number
   }
-  pendingFulfillmentOrders: number
+  pendingOutboundOrders: number
   // New: Top warehouses by inventory
   topWarehouses: Array<{
     code: string
@@ -97,7 +97,7 @@ export const GET = withAuth(async (request, session) => {
     recentCostEntries,
     // New queries for dashboard redesign
     costsByCategory,
-    purchaseOrdersByStage,
+    inboundOrdersByStage,
     pendingFOs,
     skusWithFbaData,
   ] = await Promise.all([
@@ -190,8 +190,8 @@ export const GET = withAuth(async (request, session) => {
         totalCost: true,
       },
     }),
-    // Purchase orders count by status
-    prisma.purchaseOrder.findMany({
+    // Inbounds count by status
+    prisma.inboundOrder.findMany({
       where: {
         status: {
           in: ['RFQ', 'ISSUED', 'MANUFACTURING', 'OCEAN', 'WAREHOUSE'],
@@ -201,8 +201,8 @@ export const GET = withAuth(async (request, session) => {
         status: true,
       },
     }),
-    // Pending fulfillment orders (draft status)
-    prisma.fulfillmentOrder.count({
+    // Pending outbound orders (draft status)
+    prisma.outboundOrder.count({
       where: {
         status: 'DRAFT',
       },
@@ -438,8 +438,8 @@ export const GET = withAuth(async (request, session) => {
     inTransit: 0,
     atWarehouse: 0,
   }
-  for (const po of purchaseOrdersByStage) {
-    switch (po.status) {
+  for (const inbound of inboundOrdersByStage) {
+    switch (inbound.status) {
       case 'RFQ':
         orderPipeline.issued++
         break
@@ -495,7 +495,7 @@ export const GET = withAuth(async (request, session) => {
     costBreakdown,
     fbaDiscrepancies,
     orderPipeline,
-    pendingFulfillmentOrders: pendingFOs,
+    pendingOutboundOrders: pendingFOs,
     topWarehouses,
     chartData: {
       inventoryTrend,

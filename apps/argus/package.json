@@ -3,11 +3,15 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "dev": "node ../../scripts/run-dev-with-logs.js argus -- next dev -p 3216",
+    "dev": "node ../../scripts/run-dev-with-logs.js argus -- node ../../scripts/run-next-port.js dev",
     "build": "next build",
-    "start": "next start -p 3216",
+    "start": "node ../../scripts/run-next-port.js start",
+    "media:import-us-gallery-versions": "tsx scripts/import-us-gallery-versions.ts",
+    "media:import-us-listing-assets": "tsx scripts/import-us-listing-assets.ts",
+    "media:remove-bad-source-gallery-revisions": "tsx scripts/remove-bad-source-gallery-revisions.ts",
+    "media:upload-local-to-s3": "tsx scripts/upload-local-media-to-s3.ts",
     "lint": "eslint app components lib middleware.ts",
-    "type-check": "prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
+    "type-check": "node -e \"require('fs').rmSync('.next/types', { recursive: true, force: true })\" && prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",

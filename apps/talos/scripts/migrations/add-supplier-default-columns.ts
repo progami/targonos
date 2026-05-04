@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { getTenantPrismaClient } from '../../src/lib/tenant/prisma-factory'
 import type { TenantCode } from '../../src/lib/tenant/constants'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   dryRun: boolean
@@ -14,15 +16,7 @@ type ScriptOptions = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {
@@ -65,7 +59,7 @@ function showHelp() {
   console.log(`
 Add Supplier Default Columns
 
-Adds supplier-level defaults used by PO creation autofill:
+Adds supplier-level defaults used by Inbound creation autofill:
   - suppliers.default_payment_terms
   - suppliers.default_incoterms
 

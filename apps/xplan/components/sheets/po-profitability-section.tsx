@@ -28,8 +28,9 @@ import {
 } from '@/components/sheet-toolbar';
 import { usePersistentState } from '@/hooks/usePersistentState';
 import { currencyForRegion, localeForRegion, type StrategyRegion } from '@/lib/strategy-region';
+import { comparePurchaseOrderCodes } from '@/lib/purchase-order-ordering';
 
-export type POStatus = 'DRAFT' | 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'SHIPPED';
+export type POStatus = 'ISSUED' | 'MANUFACTURING' | 'OCEAN' | 'WAREHOUSE' | 'CANCELLED';
 
 export type PoPnlMode = 'PROJECTED' | 'REAL';
 
@@ -120,12 +121,11 @@ const metricConfig: Record<MetricKey, { label: string; color: string; gradientId
 };
 
 const statusLabels: Record<POStatus, string> = {
-  DRAFT: 'Draft',
   ISSUED: 'Issued',
   MANUFACTURING: 'Manufacturing',
   OCEAN: 'Ocean',
   WAREHOUSE: 'Warehouse',
-  SHIPPED: 'Shipped',
+  CANCELLED: 'Cancelled',
 };
 
 const modeLabels: Record<PoPnlMode, string> = {
@@ -137,12 +137,11 @@ const modeOptions: PoPnlMode[] = ['PROJECTED', 'REAL'];
 
 const statusFilters: StatusFilter[] = [
   'ALL',
-  'DRAFT',
   'ISSUED',
   'MANUFACTURING',
   'OCEAN',
   'WAREHOUSE',
-  'SHIPPED',
+  'CANCELLED',
 ];
 
 type POProfitabilityFiltersContextValue = {
@@ -242,7 +241,15 @@ export function POProfitabilityHeaderControls({
 
   if (!context) return null;
 
-  const { mode, setMode, statusFilter, setStatusFilter, setFocusSkuId, showGpAfterPpc, setShowGpAfterPpc } = context;
+  const {
+    mode,
+    setMode,
+    statusFilter,
+    setStatusFilter,
+    setFocusSkuId,
+    showGpAfterPpc,
+    setShowGpAfterPpc,
+  } = context;
 
   return (
     <>
@@ -341,7 +348,8 @@ export function POProfitabilitySection({
       return [...result].sort((a, b) => {
         const dateA = a.availableDate ? new Date(a.availableDate).getTime() : 0;
         const dateB = b.availableDate ? new Date(b.availableDate).getTime() : 0;
-        return dateA - dateB;
+        if (dateA !== dateB) return dateA - dateB;
+        return comparePurchaseOrderCodes(a.orderCode, b.orderCode);
       });
     }
 
@@ -388,7 +396,8 @@ export function POProfitabilitySection({
     return Array.from(poMap.values()).sort((a, b) => {
       const dateA = a.availableDate ? new Date(a.availableDate).getTime() : 0;
       const dateB = b.availableDate ? new Date(b.availableDate).getTime() : 0;
-      return dateA - dateB;
+      if (dateA !== dateB) return dateA - dateB;
+      return comparePurchaseOrderCodes(a.orderCode, b.orderCode);
     });
   }, [data, statusFilter, skuFilter]);
 
@@ -422,19 +431,26 @@ export function POProfitabilitySection({
   const locale = localeForRegion(strategyRegion);
   const currency = currencyForRegion(strategyRegion);
 
+  const normalizeDisplayNumber = (value: number) => {
+    const roundedZero = Math.abs(value) < 0.0000001 ? 0 : value;
+    return Object.is(roundedZero, -0) ? 0 : roundedZero;
+  };
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       maximumFractionDigits: valueDisplay === 'PER_UNIT' ? 2 : 0,
-    }).format(value);
+    }).format(normalizeDisplayNumber(value));
   };
 
-  const formatPercent = (value: number) => `${value.toFixed(1)}%`;
+  const formatPercent = (value: number) => `${normalizeDisplayNumber(value).toFixed(1)}%`;
+  const formatUnits = (value: number) => normalizeDisplayNumber(Math.round(value)).toLocaleString();
   const formatMoney = (value: number, units: number) => {
+    const normalizedUnits = normalizeDisplayNumber(units);
     if (valueDisplay === 'PER_UNIT') {
-      if (!units) return formatCurrency(0);
-      return formatCurrency(value / units);
+      if (normalizedUnits === 0) return formatCurrency(0);
+      return formatCurrency(value / normalizedUnits);
     }
     return formatCurrency(value);
   };
@@ -443,6 +459,7 @@ export function POProfitabilitySection({
     Math.abs(dataset.unattributed.cogs) > 0.01 ||
     Math.abs(dataset.unattributed.netProfit) > 0.01 ||
     Math.abs(dataset.unattributed.fixedCosts) > 0.01;
+  const includeUnattributedInTotals = skuFilter === 'ALL' && statusFilter === 'ALL';
 
   // Summary stats
   const summary = useMemo(() => {
@@ -450,8 +467,10 @@ export function POProfitabilitySection({
       return {
         totalUnits: 0,
         totalRevenue: 0,
+        totalAmazonFees: 0,
         totalGrossProfit: 0,
         totalPpc: 0,
+        totalFixedCosts: 0,
         totalProfit: 0,
         totalCogs: 0,
         netMargin: 0,
@@ -459,14 +478,38 @@ export function POProfitabilitySection({
       };
     const totalUnits = filteredData.reduce((sum, row) => sum + row.units, 0);
     const totalRevenue = filteredData.reduce((sum, row) => sum + row.revenue, 0);
+    const totalAmazonFees = filteredData.reduce((sum, row) => sum + row.amazonFees, 0);
     const totalGrossProfit = filteredData.reduce((sum, row) => sum + row.grossProfit, 0);
     const totalPpc = filteredData.reduce((sum, row) => sum + row.ppcSpend, 0);
+    const totalFixedCosts = filteredData.reduce((sum, row) => sum + row.fixedCosts, 0);
     const totalProfit = filteredData.reduce((sum, row) => sum + row.netProfit, 0);
     const totalCogs = filteredData.reduce((sum, row) => sum + row.cogs, 0);
-    const netMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-    const roi = totalCogs > 0 ? (totalProfit / totalCogs) * 100 : 0;
-    return { totalUnits, totalRevenue, totalGrossProfit, totalPpc, totalProfit, totalCogs, netMargin, roi };
-  }, [filteredData]);
+    const totals = includeUnattributedInTotals
+      ? {
+          totalUnits: totalUnits + dataset.unattributed.units,
+          totalRevenue: totalRevenue + dataset.unattributed.revenue,
+          totalAmazonFees: totalAmazonFees + dataset.unattributed.amazonFees,
+          totalGrossProfit: totalGrossProfit + dataset.unattributed.grossProfit,
+          totalPpc: totalPpc + dataset.unattributed.ppcSpend,
+          totalFixedCosts: totalFixedCosts + dataset.unattributed.fixedCosts,
+          totalProfit: totalProfit + dataset.unattributed.netProfit,
+          totalCogs: totalCogs + dataset.unattributed.cogs,
+        }
+      : {
+          totalUnits,
+          totalRevenue,
+          totalAmazonFees,
+          totalGrossProfit,
+          totalPpc,
+          totalFixedCosts,
+          totalProfit,
+          totalCogs,
+        };
+    const netMargin =
+      totals.totalRevenue > 0 ? (totals.totalProfit / totals.totalRevenue) * 100 : 0;
+    const roi = totals.totalCogs > 0 ? (totals.totalProfit / totals.totalCogs) * 100 : 0;
+    return { ...totals, netMargin, roi };
+  }, [dataset.unattributed, filteredData, includeUnattributedInTotals]);
 
   if (data.length === 0) {
     return (
@@ -477,7 +520,7 @@ export function POProfitabilitySection({
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No purchase orders available for analysis.
+            No {mode === 'REAL' ? 'real' : 'projected'} PO profitability rows available.
           </p>
         </CardContent>
       </Card>
@@ -767,7 +810,10 @@ export function POProfitabilitySection({
                       Status
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm text-slate-600 dark:text-slate-300"
+                      >
                         {statusLabels[row.status]}
                       </TableCell>
                     ))}
@@ -782,12 +828,15 @@ export function POProfitabilitySection({
                       Units
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-slate-200">
-                        {row.units.toLocaleString()}
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-slate-200"
+                      >
+                        {formatUnits(row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/30">
-                      {summary.totalUnits.toLocaleString()}
+                      {formatUnits(summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -797,7 +846,10 @@ export function POProfitabilitySection({
                       {valueDisplay === 'PER_UNIT' ? 'Sell Price' : 'Revenue'}
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-slate-200">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-700 dark:text-slate-200"
+                      >
                         {formatMoney(row.revenue, row.units)}
                       </TableCell>
                     ))}
@@ -822,12 +874,18 @@ export function POProfitabilitySection({
                       Manufacturing
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.manufacturingCost, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.manufacturingCost, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.manufacturingCost, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -837,12 +895,18 @@ export function POProfitabilitySection({
                       Freight
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.freightCost, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.freightCost, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.freightCost, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -852,12 +916,18 @@ export function POProfitabilitySection({
                       Tariff
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.tariffCost, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.tariffCost, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.tariffCost, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -867,12 +937,18 @@ export function POProfitabilitySection({
                       Adjustment
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.cogsAdjustment, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.cogsAdjustment, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.cogsAdjustment, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -882,7 +958,10 @@ export function POProfitabilitySection({
                       Total COGS
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-600">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-600"
+                      >
                         {formatMoney(row.cogs, row.units)}
                       </TableCell>
                     ))}
@@ -907,12 +986,18 @@ export function POProfitabilitySection({
                       Referral
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.referralFees, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.referralFees, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.referralFees, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -922,12 +1007,18 @@ export function POProfitabilitySection({
                       FBA
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.fbaFees, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.fbaFees, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.fbaFees, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -937,12 +1028,18 @@ export function POProfitabilitySection({
                       Storage
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.storageFees, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.storageFees, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.storageFees, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -952,12 +1049,18 @@ export function POProfitabilitySection({
                       Adjustment
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums text-slate-600 dark:text-slate-300"
+                      >
                         {formatMoney(row.amazonFeesAdjustment, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.amazonFeesAdjustment, 0), summary.totalUnits)}
+                      {formatMoney(
+                        filteredData.reduce((sum, row) => sum + row.amazonFeesAdjustment, 0),
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -967,12 +1070,15 @@ export function POProfitabilitySection({
                       Total AMZ Fees
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-600">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200 border-t border-slate-200 dark:border-slate-600"
+                      >
                         {formatMoney(row.amazonFees, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-100/50 dark:bg-slate-800/30 border-t border-slate-200 dark:border-slate-600">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.amazonFees, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalAmazonFees, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -982,12 +1088,15 @@ export function POProfitabilitySection({
                       PPC Spend
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums font-semibold text-slate-700 dark:text-slate-200"
+                      >
                         {formatMoney(row.ppcSpend, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-100/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.ppcSpend, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalPpc, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -1013,7 +1122,9 @@ export function POProfitabilitySection({
                       </button>
                     </TableCell>
                     {tableSortedData.map((row) => {
-                      const gpValue = showGpAfterPpc ? row.grossProfit - row.ppcSpend : row.grossProfit;
+                      const gpValue = showGpAfterPpc
+                        ? row.grossProfit - row.ppcSpend
+                        : row.grossProfit;
                       return (
                         <TableCell
                           key={row.id}
@@ -1023,8 +1134,15 @@ export function POProfitabilitySection({
                         </TableCell>
                       );
                     })}
-                    <TableCell className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${(showGpAfterPpc ? summary.totalGrossProfit - summary.totalPpc : summary.totalGrossProfit) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
-                      {formatMoney(showGpAfterPpc ? summary.totalGrossProfit - summary.totalPpc : summary.totalGrossProfit, summary.totalUnits)}
+                    <TableCell
+                      className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${(showGpAfterPpc ? summary.totalGrossProfit - summary.totalPpc : summary.totalGrossProfit) >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}
+                    >
+                      {formatMoney(
+                        showGpAfterPpc
+                          ? summary.totalGrossProfit - summary.totalPpc
+                          : summary.totalGrossProfit,
+                        summary.totalUnits,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -1034,7 +1152,9 @@ export function POProfitabilitySection({
                       Gross Margin %
                     </TableCell>
                     {tableSortedData.map((row) => {
-                      const gpValue = showGpAfterPpc ? row.grossProfit - row.ppcSpend : row.grossProfit;
+                      const gpValue = showGpAfterPpc
+                        ? row.grossProfit - row.ppcSpend
+                        : row.grossProfit;
                       const gmPercent = row.revenue > 0 ? (gpValue / row.revenue) * 100 : 0;
                       return (
                         <TableCell
@@ -1046,7 +1166,15 @@ export function POProfitabilitySection({
                       );
                     })}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatPercent(summary.totalRevenue > 0 ? ((showGpAfterPpc ? summary.totalGrossProfit - summary.totalPpc : summary.totalGrossProfit) / summary.totalRevenue) * 100 : 0)}
+                      {formatPercent(
+                        summary.totalRevenue > 0
+                          ? ((showGpAfterPpc
+                              ? summary.totalGrossProfit - summary.totalPpc
+                              : summary.totalGrossProfit) /
+                              summary.totalRevenue) *
+                              100
+                          : 0,
+                      )}
                     </TableCell>
                   </TableRow>
 
@@ -1056,12 +1184,15 @@ export function POProfitabilitySection({
                       OPEX (est.)
                     </TableCell>
                     {tableSortedData.map((row) => (
-                      <TableCell key={row.id} className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200">
+                      <TableCell
+                        key={row.id}
+                        className="px-3 py-2 text-right text-sm tabular-nums font-medium text-slate-700 dark:text-slate-200"
+                      >
                         {formatMoney(row.fixedCosts, row.units)}
                       </TableCell>
                     ))}
                     <TableCell className="px-3 py-2 text-right text-sm tabular-nums font-bold text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/30">
-                      {formatMoney(filteredData.reduce((sum, row) => sum + row.fixedCosts, 0), summary.totalUnits)}
+                      {formatMoney(summary.totalFixedCosts, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
 
@@ -1078,7 +1209,9 @@ export function POProfitabilitySection({
                         {formatMoney(row.netProfit, row.units)}
                       </TableCell>
                     ))}
-                    <TableCell className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${summary.totalProfit >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
+                    <TableCell
+                      className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${summary.totalProfit >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}
+                    >
                       {formatMoney(summary.totalProfit, summary.totalUnits)}
                     </TableCell>
                   </TableRow>
@@ -1096,7 +1229,9 @@ export function POProfitabilitySection({
                         {formatPercent(row.netMarginPercent)}
                       </TableCell>
                     ))}
-                    <TableCell className={`px-3 py-2 text-right text-sm tabular-nums font-medium bg-slate-50/50 dark:bg-slate-800/30 ${summary.netMargin >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-600 dark:text-red-300'}`}>
+                    <TableCell
+                      className={`px-3 py-2 text-right text-sm tabular-nums font-medium bg-slate-50/50 dark:bg-slate-800/30 ${summary.netMargin >= 0 ? 'text-slate-700 dark:text-slate-200' : 'text-red-600 dark:text-red-300'}`}
+                    >
                       {formatPercent(summary.netMargin)}
                     </TableCell>
                   </TableRow>
@@ -1114,7 +1249,9 @@ export function POProfitabilitySection({
                         {formatPercent(row.roi)}
                       </TableCell>
                     ))}
-                    <TableCell className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${summary.roi >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}>
+                    <TableCell
+                      className={`px-3 py-2 text-right text-sm tabular-nums font-bold bg-slate-50/50 dark:bg-slate-800/30 ${summary.roi >= 0 ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'}`}
+                    >
                       {formatPercent(summary.roi)}
                     </TableCell>
                   </TableRow>

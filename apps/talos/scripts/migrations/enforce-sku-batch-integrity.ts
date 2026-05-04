@@ -9,6 +9,8 @@ import type { TenantCode } from '../../src/lib/tenant/constants'
 
 type SchemaTier = 'main' | 'dev'
 
+import { loadTalosScriptEnv } from '../load-env'
+
 type ScriptOptions = {
   tenants: TenantCode[]
   schemaTiers: SchemaTier[]
@@ -17,15 +19,7 @@ type ScriptOptions = {
 }
 
 function loadEnv() {
-  const candidates = ['.env.local', '.env.production', '.env.dev', '.env']
-  const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  for (const candidate of candidates) {
-    const fullPath = path.join(appDir, candidate)
-    if (!fs.existsSync(fullPath)) continue
-    dotenv.config({ path: fullPath })
-    return
-  }
-  dotenv.config({ path: path.join(appDir, '.env') })
+  loadTalosScriptEnv()
 }
 
 function parseArgs(): ScriptOptions {
@@ -297,7 +291,7 @@ async function applyForSchema(
           CREATE CONSTRAINT TRIGGER trg_sku_batches_require_batch
             AFTER INSERT OR UPDATE OR DELETE ON sku_batches
             DEFERRABLE INITIALLY DEFERRED
-            FOR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
+            OutboundR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
         END IF;
       END $$;
     `
@@ -315,7 +309,7 @@ async function applyForSchema(
           CREATE CONSTRAINT TRIGGER trg_skus_require_batch
             AFTER INSERT OR UPDATE ON skus
             DEFERRABLE INITIALLY DEFERRED
-            FOR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
+            OutboundR EACH ROW EXECUTE FUNCTION enforce_sku_batch_presence();
         END IF;
       END $$;
     `

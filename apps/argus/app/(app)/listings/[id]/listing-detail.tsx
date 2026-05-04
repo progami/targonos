@@ -6,15 +6,14 @@ import { useRouter } from 'next/navigation'
 import {
   formatAmazonPdpReplicaContractError,
   getReplicaSlotElement,
+  sanitizeAmazonPdpReplicaDocument,
   validateAmazonPdpReplicaContract,
   type AmazonPdpReplicaContractError,
 } from './amazon-pdp-replica'
-import { ListingDetailDialogs, ListingDetailHeader } from './listing-detail-dialogs'
+import { ListingDetailDialogs } from './listing-detail-dialogs'
 import {
   CLOUDFLARE_MAX_UPLOAD_BYTES,
-  SNAPSHOT_ZIP_MAX_UPLOAD_BYTES,
   basePath,
-  formatBytes,
   formatUsdFromCents,
   getUploadSizeError,
   isInitialIframeDocument,
@@ -109,14 +108,6 @@ export function ListingDetail({
   const [ebcModuleDraft, setEbcModuleDraft] = useState<EbcModuleDraft>({ headline: '', bodyText: '' })
   const [ebcModuleFiles, setEbcModuleFiles] = useState<File[]>([])
 
-  const [snapshotIngestOpen, setSnapshotIngestOpen] = useState(false)
-  const [snapshotIngestFile, setSnapshotIngestFile] = useState<File | null>(null)
-  const [snapshotIngestBusy, setSnapshotIngestBusy] = useState(false)
-  const [snapshotIngestError, setSnapshotIngestError] = useState<string | null>(null)
-  const [resetDialogOpen, setResetDialogOpen] = useState(false)
-  const [resetBusy, setResetBusy] = useState(false)
-  const [resetError, setResetError] = useState<string | null>(null)
-
   const callbacksRef = useRef<ListingDetailCallbacks>({
     titlePrev: () => {},
     titleNext: () => {},
@@ -197,7 +188,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = titleRevisions.length > titleIndex ? titleRevisions[titleIndex] : null
       if (!selected) return
-      const versionNumber = titleRevisions.length - titleIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Title v${versionNumber}?`)) return
 
       void (async () => {
@@ -248,7 +239,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = bulletsRevisions.length > bulletsIndex ? bulletsRevisions[bulletsIndex] : null
       if (!selected) return
-      const versionNumber = bulletsRevisions.length - bulletsIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Bullets v${versionNumber}?`)) return
 
       void (async () => {
@@ -325,7 +316,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      const versionNumber = galleryRevisions.length - galleryIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Images v${versionNumber}?`)) return
 
       void (async () => {
@@ -370,7 +361,7 @@ export function ListingDetail({
       if (!listing) return
       const selected = videoRevisions.length > videoIndex ? videoRevisions[videoIndex] : null
       if (!selected) return
-      const versionNumber = videoRevisions.length - videoIndex
+      const versionNumber = selected.seq
       if (!window.confirm(`Delete Video v${versionNumber}?`)) return
 
       void (async () => {
@@ -676,6 +667,8 @@ export function ListingDetail({
       iframeDocRef.current = doc
       setIframeEpoch((current) => current + 1)
 
+      sanitizeAmazonPdpReplicaDocument(doc)
+
       const height = doc.documentElement.scrollHeight
       if (height > 0) {
         setIframeHeight(height)
@@ -709,6 +702,7 @@ export function ListingDetail({
 
       setReplicaContractError(null)
 
+      captureEbcBaseline(doc)
       injectArgusVersionControls(doc, callbacksRef)
     }
 
@@ -739,13 +733,14 @@ export function ListingDetail({
     applyGallery(doc, selectedGallery)
     applyVideo(doc, selectedVideo)
     applyEbc(doc, appliedEbc)
+    ensureCurrentEbcModuleControls(doc, callbacksRef, appliedEbc)
     applyVariationSelection(doc, listing ? listing.asin : null)
 
-    const titleVersionNumber = selectedTitleRev ? titleRevisions.length - titleIndex : undefined
-    const bulletsVersionNumber = selectedBullets ? bulletsRevisions.length - bulletsIndex : undefined
-    const galleryVersionNumber = selectedGallery ? galleryRevisions.length - galleryIndex : undefined
-    const videoVersionNumber = selectedVideo ? videoRevisions.length - videoIndex : undefined
-    const ebcVersionNumber = selectedEbc ? ebcRevisions.length - ebcIndex : undefined
+    const titleVersionNumber = selectedTitleRev ? selectedTitleRev.seq : undefined
+    const bulletsVersionNumber = selectedBullets ? selectedBullets.seq : undefined
+    const galleryVersionNumber = selectedGallery ? selectedGallery.seq : undefined
+    const videoVersionNumber = selectedVideo ? selectedVideo.seq : undefined
+    const ebcVersionNumber = selectedEbc ? selectedEbc.seq : undefined
 
     updateTrackControls(doc, 'title', titleVersionNumber, titleIndex, titleRevisions.length)
     updateTrackControls(doc, 'bullets', bulletsVersionNumber, bulletsIndex, bulletsRevisions.length)
@@ -781,7 +776,7 @@ export function ListingDetail({
     callbacksRef.current.galleryDownload = () => {
       const selected = galleryRevisions.length > galleryIndex ? galleryRevisions[galleryIndex] : null
       if (!selected) return
-      const versionNumber = galleryRevisions.length - galleryIndex
+      const versionNumber = selected.seq
       void downloadGalleryRevisionZip(selected, versionNumber).catch((err) => console.error(err))
     }
 
@@ -791,63 +786,6 @@ export function ListingDetail({
       void downloadEbcZip('ebc_current.zip', 'ebc_current', composed).catch((err) => console.error(err))
     }
   }, [galleryRevisions, galleryIndex, ebcRevisions, ebcIndex, ebcModulePointers, activePointers])
-
-  async function handleSnapshotIngestSubmit() {
-    if (!listing || !snapshotIngestFile) return
-
-    if (snapshotIngestFile.size > SNAPSHOT_ZIP_MAX_UPLOAD_BYTES) {
-      setSnapshotIngestError(
-        `“${snapshotIngestFile.name}” is ${formatBytes(snapshotIngestFile.size)}. Max zip size is ${formatBytes(SNAPSHOT_ZIP_MAX_UPLOAD_BYTES)}.`,
-      )
-      return
-    }
-
-    setSnapshotIngestBusy(true)
-    setSnapshotIngestError(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('snapshot', snapshotIngestFile)
-
-      const response = await fetch(`${basePath}/api/listings/${listing.id}/ingest`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      const text = await response.text()
-      if (!response.ok) {
-        try {
-          const parsed = JSON.parse(text) as { error?: unknown }
-          if (typeof parsed.error === 'string' && parsed.error.trim().length > 0) {
-            setSnapshotIngestError(parsed.error)
-            return
-          }
-        } catch {
-          // keep raw text when JSON parsing fails
-        }
-
-        setSnapshotIngestError(text.trim().length > 0 ? text : 'Snapshot ingest failed.')
-        return
-      }
-
-      try {
-        const parsed = JSON.parse(text) as { changes?: unknown }
-        if (Array.isArray(parsed.changes) && parsed.changes.length > 0) {
-          window.alert(`Ingested snapshot:\n${parsed.changes.join('\n')}`)
-        } else {
-          window.alert('Ingested snapshot (no content changes detected).')
-        }
-      } catch {
-        window.alert('Ingested snapshot.')
-      }
-
-      setSnapshotIngestOpen(false)
-      setSnapshotIngestFile(null)
-      refreshListingData()
-    } finally {
-      setSnapshotIngestBusy(false)
-    }
-  }
 
   async function handleTitleSubmit() {
     if (!listing) return
@@ -1025,38 +963,6 @@ export function ListingDetail({
     refreshListingData()
   }
 
-  async function handleResetSubmit() {
-    if (!listing) return
-
-    setResetBusy(true)
-    setResetError(null)
-
-    try {
-      const response = await fetch(`${basePath}/api/listings/${listing.id}/reset`, {
-        method: 'POST',
-      })
-      const text = await response.text()
-      if (!response.ok) {
-        setResetError(text.trim().length > 0 ? text : 'Reset failed.')
-        return
-      }
-
-      setResetDialogOpen(false)
-      setSnapshotIngestOpen(false)
-      setSnapshotIngestFile(null)
-      setSnapshotIngestError(null)
-      setTitleEditorOpen(false)
-      setBulletsEditorOpen(false)
-      setPriceEditorOpen(false)
-      setGalleryUploaderOpen(false)
-      setVideoUploaderOpen(false)
-      setEbcModuleEditorOpen(false)
-      refreshListingData()
-    } finally {
-      setResetBusy(false)
-    }
-  }
-
   return (
     <div className="flex flex-col h-screen bg-white">
       {replicaContractError && (
@@ -1064,38 +970,15 @@ export function ListingDetail({
           Replica template mismatch: {formatAmazonPdpReplicaContractError(replicaContractError)}
         </div>
       )}
-      <ListingDetailHeader
-        listing={listing}
-        onOpenSnapshotIngest={() => {
-          setSnapshotIngestError(null)
-          setSnapshotIngestFile(null)
-          setSnapshotIngestOpen(true)
-        }}
-        onOpenReset={() => {
-          setResetError(null)
-          setResetDialogOpen(true)
-        }}
-      />
       <iframe
         ref={iframeRef}
         src={`${basePath}/api/fixture/replica.html`}
-        className="w-full border-0"
-        style={{ height: iframeHeight }}
+        style={{ height: iframeHeight, width: '100%', display: 'block', border: 0 }}
         title={listing ? listing.label : listingId}
         sandbox="allow-same-origin allow-scripts"
       />
       <ListingDetailDialogs
         listing={listing}
-        snapshotIngestOpen={snapshotIngestOpen}
-        snapshotIngestBusy={snapshotIngestBusy}
-        snapshotIngestError={snapshotIngestError}
-        snapshotIngestFile={snapshotIngestFile}
-        onSnapshotIngestClose={() => setSnapshotIngestOpen(false)}
-        onSnapshotIngestFileChange={(file) => {
-          setSnapshotIngestError(null)
-          setSnapshotIngestFile(file)
-        }}
-        onSnapshotIngestSubmit={handleSnapshotIngestSubmit}
         titleEditorOpen={titleEditorOpen}
         titleDraft={titleDraft}
         onTitleEditorClose={() => setTitleEditorOpen(false)}
@@ -1137,11 +1020,6 @@ export function ListingDetail({
         }}
         onEbcModuleFilesChange={setEbcModuleFiles}
         onEbcModuleSubmit={handleEbcModuleSubmit}
-        resetDialogOpen={resetDialogOpen}
-        resetBusy={resetBusy}
-        resetError={resetError}
-        onResetDialogClose={() => setResetDialogOpen(false)}
-        onResetSubmit={handleResetSubmit}
       />
     </div>
   )
@@ -1273,6 +1151,15 @@ function injectArgusVersionControls(
         pointer-events: none;
         z-index: 2;
       }
+      .argus-generated-ebc-module {
+        position: relative;
+        margin-top: 12px;
+      }
+      .argus-generated-ebc-module img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
       a { cursor: default !important; }
     `
     doc.head.append(style)
@@ -1299,11 +1186,6 @@ function injectArgusVersionControls(
     ensurePriceControls(doc, price, callbacksRef)
   }
 
-  const video = getReplicaSlotElement<HTMLElement>(doc, 'gallery-video-thumb')
-  if (video) {
-    ensureTrackControls(doc, video, 'video', 'Video', callbacksRef)
-  }
-
   let ebc: HTMLElement | null = null
   const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
   const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
@@ -1315,20 +1197,6 @@ function injectArgusVersionControls(
 
   if (ebc) {
     ensureTrackControls(doc, ebc, 'ebc', 'A+ Content', callbacksRef)
-  }
-
-  if (brandContainer) {
-    const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-    for (let i = 0; i < modules.length; i++) {
-      ensureEbcModuleControls(doc, modules[i], 'BRAND_STORY', i, callbacksRef)
-    }
-  }
-
-  if (descriptionContainer) {
-    const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-    for (let i = 0; i < modules.length; i++) {
-      ensureEbcModuleControls(doc, modules[i], 'PRODUCT_DESCRIPTION', i, callbacksRef)
-    }
   }
 
   const swatches = getVariationSwatches(doc)
@@ -1453,7 +1321,7 @@ function ensureTrackControls(
 
   const controls = doc.createElement('div')
   controls.id = controlsId
-  controls.className = 'argus-vc-controls'
+  controls.className = `argus-vc-controls argus-vc-controls-${track}`
 
   const prev = doc.createElement('button')
   prev.id = `argus-vc-prev-${track}`
@@ -1616,13 +1484,7 @@ function ensureEbcModuleControls(
   target: HTMLElement,
   sectionType: string,
   modulePosition: number,
-  callbacksRef: RefObject<{
-    ebcModulePrev: (sectionType: string, modulePosition: number) => void
-    ebcModuleNext: (sectionType: string, modulePosition: number) => void
-    ebcModuleLive: (sectionType: string, modulePosition: number) => void
-    ebcModuleEdit: (sectionType: string, modulePosition: number) => void
-    ebcModuleDelete: (sectionType: string, modulePosition: number) => void
-  }>,
+  callbacksRef: RefObject<ListingDetailCallbacks>,
 ) {
   function stopClick(e: MouseEvent) {
     e.preventDefault()
@@ -1705,6 +1567,33 @@ function ensureEbcModuleControls(
 
   controls.append(prev, label, next, sep, live, edit, del)
   target.append(controls)
+}
+
+function ensureCurrentEbcModuleControls(
+  doc: Document,
+  callbacksRef: RefObject<ListingDetailCallbacks>,
+  rev: EbcRevision | null,
+) {
+  if (!rev) return
+
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
+
+  for (const section of rev.sections) {
+    const container = section.sectionType === 'BRAND_STORY' ? brandContainer : descriptionContainer
+    if (!container) {
+      throw new Error(`Replica EBC container missing for ${section.sectionType}.`)
+    }
+
+    const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+    for (let i = 0; i < section.modules.length; i++) {
+      const target = modules[i]
+      if (!target) {
+        throw new Error(`Replica EBC module missing for ${section.sectionType}:${i}.`)
+      }
+      ensureEbcModuleControls(doc, target, section.sectionType, i, callbacksRef)
+    }
+  }
 }
 
 function updateTrackControls(
@@ -2112,7 +2001,7 @@ function ensureGalleryThumbnailSwap(
   if (altList.dataset.argusGallerySwapBound === 'true') return
   altList.dataset.argusGallerySwapBound = 'true'
 
-  altList.addEventListener('click', (e) => {
+  const handleThumbnailSwap = (e: Event, allowPlaceholderUpload: boolean) => {
     const target = e.target
     if (!(target instanceof doc.defaultView!.Element)) return
     if (target.closest('.argus-vc-controls')) return
@@ -2122,6 +2011,7 @@ function ensureGalleryThumbnailSwap(
     const storedDoc = doc as ArgusReplicaDocument
 
     if (li.classList.contains('videoThumbnail')) {
+      if (!allowPlaceholderUpload) return
       const videoIndex = itemNoFromElement(li)
       if (typeof videoIndex !== 'number') return
 
@@ -2149,6 +2039,7 @@ function ensureGalleryThumbnailSwap(
     e.stopPropagation()
 
     if (src === ARGUS_GALLERY_PLACEHOLDER_MAIN) {
+      if (!allowPlaceholderUpload) return
       callbacksRef.current.galleryUpload()
       return
     }
@@ -2162,7 +2053,10 @@ function ensureGalleryThumbnailSwap(
     ensureGalleryLandingSizing(landing)
 
     setAltImagesSelection(altList, li)
-  }, true)
+  }
+
+  altList.addEventListener('click', (e) => handleThumbnailSwap(e, true), true)
+  altList.addEventListener('mouseover', (e) => handleThumbnailSwap(e, false), true)
 }
 
 function getVariationSwatches(doc: Document): HTMLElement[] {
@@ -2306,19 +2200,15 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
   const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
   const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
 
-  if (!rev || rev.sections.length === 0) {
-    if (brandContainer) {
-      brandContainer.style.display = ''
-      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete brandContainer.dataset.argusEbcApplied
-    }
-    if (descriptionContainer) {
-      descriptionContainer.style.display = ''
-      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete descriptionContainer.dataset.argusEbcApplied
-    }
+  if (!rev) {
+    if (brandContainer) restoreEbcContainerBaseline(doc, 'brand', brandContainer)
+    if (descriptionContainer) restoreEbcContainerBaseline(doc, 'description', descriptionContainer)
+    return
+  }
+
+  if (rev.sections.length === 0) {
+    if (brandContainer) markEbcContainerEmpty(brandContainer)
+    if (descriptionContainer) markEbcContainerEmpty(descriptionContainer)
     return
   }
 
@@ -2327,10 +2217,7 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
 
   if (brandContainer) {
     if (!brandSection) {
-      brandContainer.style.display = ''
-      const modules = Array.from(brandContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete brandContainer.dataset.argusEbcApplied
+      restoreEbcContainerBaseline(doc, 'brand', brandContainer)
     } else {
       brandContainer.style.display = ''
       applyEbcSection(brandContainer, brandSection)
@@ -2340,16 +2227,65 @@ function applyEbc(doc: Document, rev: EbcRevision | null) {
 
   if (descriptionContainer) {
     if (!descriptionSection) {
-      descriptionContainer.style.display = ''
-      const modules = Array.from(descriptionContainer.querySelectorAll<HTMLElement>('.aplus-module'))
-      for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
-      delete descriptionContainer.dataset.argusEbcApplied
+      restoreEbcContainerBaseline(doc, 'description', descriptionContainer)
     } else {
       descriptionContainer.style.display = ''
       applyEbcSection(descriptionContainer, descriptionSection)
       descriptionContainer.dataset.argusEbcApplied = rev.id
     }
   }
+}
+
+function captureEbcBaseline(doc: Document) {
+  const storedDoc = doc as ArgusReplicaDocument
+  if (storedDoc.__argusEbcBaseline !== undefined) return
+
+  const brandContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-brand-root')
+  if (!brandContainer) {
+    throw new Error('Replica EBC brand container missing while capturing baseline.')
+  }
+
+  const descriptionContainer = getReplicaSlotElement<HTMLElement>(doc, 'ebc-description-root')
+  if (!descriptionContainer) {
+    throw new Error('Replica EBC description container missing while capturing baseline.')
+  }
+
+  storedDoc.__argusEbcBaseline = {
+    brand: brandContainer.innerHTML,
+    description: descriptionContainer.innerHTML,
+  }
+}
+
+function restoreEbcContainerBaseline(doc: Document, key: 'brand' | 'description', container: HTMLElement) {
+  const baseline = (doc as ArgusReplicaDocument).__argusEbcBaseline
+  if (baseline === undefined) {
+    throw new Error('Replica EBC baseline missing.')
+  }
+
+  container.style.display = ''
+  container.innerHTML = key === 'brand' ? baseline.brand : baseline.description
+  delete container.dataset.argusEbcApplied
+}
+
+function resetEbcContainer(container: HTMLElement) {
+  const previousGeneratedModules = Array.from(container.querySelectorAll<HTMLElement>('.argus-generated-ebc-module'))
+  for (const mod of previousGeneratedModules) mod.remove()
+
+  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (const mod of modules) {
+    mod.style.display = ''
+    setEbcModulePlaceholder(mod, null)
+  }
+
+  delete container.dataset.argusEbcApplied
+}
+
+function markEbcContainerEmpty(container: HTMLElement) {
+  container.style.display = ''
+  resetEbcContainer(container)
+
+  const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (const mod of modules) setEbcModulePlaceholder(mod, 'Upload A+ module')
 }
 
 function setEbcModulePlaceholder(target: HTMLElement, label: string | null) {
@@ -2364,7 +2300,15 @@ function setEbcModulePlaceholder(target: HTMLElement, label: string | null) {
 }
 
 function applyEbcSection(container: HTMLElement, section: EbcSection) {
+  const previousGeneratedModules = Array.from(container.querySelectorAll<HTMLElement>('.argus-generated-ebc-module'))
+  for (const mod of previousGeneratedModules) mod.remove()
+
   const modules = Array.from(container.querySelectorAll<HTMLElement>('.aplus-module'))
+  for (let mi = modules.length; mi < section.modules.length; mi += 1) {
+    const ebcModule = createGeneratedEbcModule(container.ownerDocument)
+    container.append(ebcModule)
+    modules.push(ebcModule)
+  }
 
   for (let mi = 0; mi < modules.length; mi++) {
     const target = modules[mi]
@@ -2427,4 +2371,15 @@ function applyEbcSection(container: HTMLElement, section: EbcSection) {
       if (srcImg.alt) img.alt = srcImg.alt
     }
   }
+}
+
+function createGeneratedEbcModule(doc: Document): HTMLElement {
+  const ebcModule = doc.createElement('div')
+  ebcModule.className = 'aplus-module aplus-premium argus-generated-ebc-module'
+
+  const img = doc.createElement('img')
+  img.alt = 'A+ module image'
+  ebcModule.append(img)
+
+  return ebcModule
 }

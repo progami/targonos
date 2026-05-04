@@ -3,6 +3,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 
+const require = createRequire(import.meta.url)
+
 function parseArgs(argv) {
   const args = {}
 
@@ -91,7 +93,9 @@ function printUsage() {
   console.log(`  ${script} --tenant UK --start 2025-12-01 --end 2026-01-01`)
   console.log('')
   console.log('Options:')
-  console.log('  --env-file <path>    Defaults to $TARGONOS_MAIN_DIR/apps/talos/.env.local (or ./apps/talos/.env.local)')
+  console.log('  --env-mode <mode>    Defaults to local (local, dev, production, ci)')
+  console.log('  --env-app <app>      Defaults to talos')
+  console.log('  --env-file <path>    Explicit legacy single env file override')
   console.log('  --tenant <US|UK>     Required (US or UK)')
   console.log('  --start <YYYY-MM-DD> Optional (defaults to last 60 days)')
   console.log('  --end <YYYY-MM-DD>   Optional (defaults to now-5min)')
@@ -109,14 +113,22 @@ const __dirname = path.dirname(__filename)
 const repoRoot = path.resolve(__dirname, '..')
 
 const mainRepoDir = process.env.TARGONOS_MAIN_DIR ?? process.env.TARGON_MAIN_DIR ?? repoRoot
-const defaultEnvFile = path.join(mainRepoDir, 'apps/talos/.env.local')
-const envFilePath = String(args['env-file'] ?? defaultEnvFile)
+const envFilePath = args['env-file'] === undefined ? undefined : String(args['env-file'])
 
-if (!fs.existsSync(envFilePath)) {
-  throw new Error(`Env file not found: ${envFilePath}`)
+if (envFilePath === undefined) {
+  const { loadEnvForApp } = require('./lib/shared-env.cjs')
+  loadEnvForApp({
+    repoRoot: mainRepoDir,
+    appName: String(args['env-app'] ?? 'talos'),
+    mode: String(args['env-mode'] ?? 'local'),
+    targetEnv: process.env,
+  })
+} else {
+  if (!fs.existsSync(envFilePath)) {
+    throw new Error(`Env file not found: ${envFilePath}`)
+  }
+  loadEnvFile(envFilePath)
 }
-
-loadEnvFile(envFilePath)
 
 const tenant = String(args.tenant ?? '').trim().toUpperCase()
 if (tenant !== 'US' && tenant !== 'UK') {
@@ -125,14 +137,14 @@ if (tenant !== 'US' && tenant !== 'UK') {
 
 const appClientId = getEnvVar('AMAZON_SP_APP_CLIENT_ID')
 const appClientSecret = getEnvVar('AMAZON_SP_APP_CLIENT_SECRET')
-const refreshToken = getEnvVar(`AMAZON_REFRESH_TOKEN_${tenant}`) ?? getEnvVar('AMAZON_REFRESH_TOKEN')
-const region = getEnvVar(`AMAZON_SP_API_REGION_${tenant}`) ?? getEnvVar('AMAZON_SP_API_REGION')
+const refreshToken = getEnvVar(`AMAZON_REFRESH_TOKEN_${tenant}`)
+const region = getEnvVar(`AMAZON_SP_API_REGION_${tenant}`)
 
 const missing = []
 if (!appClientId) missing.push('AMAZON_SP_APP_CLIENT_ID')
 if (!appClientSecret) missing.push('AMAZON_SP_APP_CLIENT_SECRET')
-if (!refreshToken) missing.push(`AMAZON_REFRESH_TOKEN_${tenant}` + ' (or AMAZON_REFRESH_TOKEN)')
-if (!region) missing.push(`AMAZON_SP_API_REGION_${tenant}` + ' (or AMAZON_SP_API_REGION)')
+if (!refreshToken) missing.push(`AMAZON_REFRESH_TOKEN_${tenant}`)
+if (!region) missing.push(`AMAZON_SP_API_REGION_${tenant}`)
 if (missing.length > 0) {
   throw new Error(`Missing required env vars: ${missing.join(', ')}`)
 }

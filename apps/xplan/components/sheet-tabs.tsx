@@ -43,7 +43,22 @@ export function SheetTabs({
   if (isStack) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%', gap: 1.5 }}>
-        <List disablePadding sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        <List
+          disablePadding
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.75,
+            borderRadius: '20px',
+            border: 1,
+            borderColor: 'divider',
+            bgcolor: 'rgba(255,255,255,0.72)',
+            p: 1,
+            '.dark &': {
+              bgcolor: 'rgba(10, 26, 42, 0.84)',
+            },
+          }}
+        >
           {sheets.map((sheet) => {
             const Icon = sheet.icon;
             const href = sheet.href ?? `/${sheet.slug}`;
@@ -57,30 +72,46 @@ export function SheetTabs({
                 onClick={onSheetSelect ? (event: React.MouseEvent) => handleClick(sheet.slug, event) : undefined}
                 selected={isActive}
                 sx={{
-                  borderRadius: '16px',
+                  borderRadius: '14px',
                   border: 1,
-                  borderColor: isActive ? 'secondary.main' : 'divider',
-                  py: 1.5,
-                  px: 2,
+                  borderColor: isActive ? 'rgba(0, 194, 185, 0.3)' : 'transparent',
+                  py: 1.25,
+                  px: 1.75,
                   minWidth: 160,
+                  color: 'text.secondary',
+                  '&:hover': {
+                    bgcolor: 'rgba(15, 23, 42, 0.04)',
+                  },
                   ...(isActive && {
-                    bgcolor: 'rgba(0, 194, 185, 0.15)',
-                    boxShadow: 2,
+                    bgcolor: 'rgba(239, 251, 250, 0.96)',
+                    color: 'text.primary',
+                    boxShadow: '0 16px 30px -24px rgba(15, 23, 42, 0.38)',
+                    '.dark &': {
+                      bgcolor: 'rgba(9, 35, 51, 0.92)',
+                    },
                     '&.Mui-selected': {
-                      bgcolor: 'rgba(0, 194, 185, 0.15)',
-                      '&:hover': { bgcolor: 'rgba(0, 194, 185, 0.2)' },
+                      bgcolor: 'rgba(239, 251, 250, 0.96)',
+                      '.dark &': {
+                        bgcolor: 'rgba(9, 35, 51, 0.92)',
+                      },
+                      '&:hover': { bgcolor: 'rgba(232, 248, 246, 1)' },
                     },
                   }),
                 }}
               >
                 {Icon && (
-                  <ListItemIcon sx={{ minWidth: 32 }}>
+                  <ListItemIcon
+                    sx={{
+                      minWidth: 32,
+                      color: isActive ? 'secondary.main' : 'text.secondary',
+                    }}
+                  >
                     <Icon size={16} />
                   </ListItemIcon>
                 )}
                 <ListItemText
                   primary={sheet.label}
-                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500 }}
+                  primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 600 }}
                 />
               </ListItemButton>
             );
@@ -92,31 +123,56 @@ export function SheetTabs({
   }
 
   return (
-    <Box sx={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: 1, py: 0.5 }}>
+    <Box
+      sx={{
+        display: 'flex',
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 1,
+        borderRadius: '18px',
+        border: 1,
+        borderColor: 'divider',
+        bgcolor: 'rgba(255,255,255,0.64)',
+        px: 0.75,
+        py: 0.75,
+        '.dark &': {
+          bgcolor: 'rgba(10, 26, 42, 0.8)',
+        },
+      }}
+    >
       <Tabs
         value={activeIndex >= 0 ? activeIndex : false}
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
         sx={{
-          minHeight: 36,
+          minHeight: 40,
+          '& .MuiTabs-flexContainer': {
+            gap: 0.75,
+          },
           '& .MuiTabs-indicator': {
-            bgcolor: 'secondary.main',
+            display: 'none',
           },
           '& .MuiTab-root': {
-            minHeight: 36,
-            px: 1.25,
-            py: 0.5,
+            minHeight: 40,
+            minWidth: 0,
+            px: 1.5,
+            py: 0.75,
             fontSize: '0.875rem',
             fontWeight: 600,
             color: 'text.secondary',
-            borderRadius: '6px',
-            transition: 'background-color 0.15s',
+            borderRadius: '12px',
+            transition: 'background-color 0.15s, color 0.15s, box-shadow 0.15s',
+            '&:hover': {
+              bgcolor: 'rgba(15, 23, 42, 0.04)',
+            },
             '&.Mui-selected': {
-              color: 'secondary.main',
-              bgcolor: 'rgba(0,194,185,0.12)',
+              color: 'text.primary',
+              bgcolor: 'rgba(239, 251, 250, 0.96)',
+              boxShadow: '0 14px 24px -22px rgba(15, 23, 42, 0.45)',
               '.dark &': {
-                bgcolor: 'rgba(0,194,185,0.18)',
+                bgcolor: 'rgba(9, 35, 51, 0.94)',
               },
             },
           },

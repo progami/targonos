@@ -62,6 +62,8 @@ export interface PurchaseOrderDerived {
   batches: PurchaseOrderBatchDerived[];
   status: PurchaseOrderStatus;
   statusIcon?: string | null;
+  poClass?: string | null;
+  inboundWeekOverride?: Date | null;
   notes?: string | null;
   shipName?: string | null;
   containerNumber?: string | null;
@@ -108,12 +110,11 @@ export interface PurchaseOrderDerived {
 }
 
 const STATUS_ICON_MAP: Record<PurchaseOrderStatus, string> = {
-  DRAFT: '📝',
   ISSUED: '📤',
   MANUFACTURING: '🛠',
   OCEAN: '🚢',
   WAREHOUSE: '📦',
-  SHIPPED: '🚚',
+  CANCELLED: '✕',
 };
 
 const PAY_PERCENT_FIELDS = ['pay1Percent', 'pay2Percent', 'pay3Percent'] as const;
@@ -297,6 +298,7 @@ function buildStageSchedule(
   const finalBaseWeekNumber = portEtaWeekNumber ?? inboundEtaWeekNumber ?? oceanBaseWeekNumber;
   const availableWeekNumber =
     normalizeWeekNumber(order.availableWeekNumber) ??
+    resolveWeekNumber(order.inboundWeekOverride ?? null, mapping) ??
     resolveWeekNumber(order.availableDate ?? null, mapping) ??
     (finalBaseWeekNumber != null ? finalBaseWeekNumber + stageOffsetWeeks(finalWeeks) : null);
 
@@ -329,6 +331,7 @@ function buildStageSchedule(
 
     const finalBaseFallback = portEtaFallback ?? inboundEtaFallback ?? oceanBaseFallback;
     const availableFallback =
+      order.inboundWeekOverride ??
       order.availableDate ??
       (finalBaseFallback ? addStageDurationDate(finalBaseFallback, finalWeeks) : null);
 
@@ -345,7 +348,8 @@ function buildStageSchedule(
   const productionCompleteForDiff = order.productionComplete ?? productionComplete ?? null;
   const sourceDepartureForDiff = order.sourceDeparture ?? sourceDeparture ?? null;
   const portEtaForDiff = order.portEta ?? portEta ?? null;
-  const availableForDiff = order.availableDate ?? availableDate ?? null;
+  const availableForDiff =
+    order.inboundWeekOverride ?? order.availableDate ?? availableDate ?? null;
 
   const computedProductionWeeks = weeksBetweenDates(
     productionStartForDiff,
@@ -759,6 +763,8 @@ export function computePurchaseOrderDerived(
     batches: derivedBatches,
     status: order.status,
     statusIcon: order.statusIcon ?? STATUS_ICON_MAP[order.status],
+    poClass: order.poClass ?? null,
+    inboundWeekOverride: order.inboundWeekOverride ?? null,
     notes: order.notes ?? null,
     shipName: order.shipName ?? null,
     containerNumber: order.containerNumber ?? order.transportReference ?? null,

@@ -1,5 +1,10 @@
 export type ArgusMediaBackend = 'local' | 's3'
 
+export type ArgusS3MediaConfig = {
+  prefix: string
+  bucket: string
+}
+
 function normalizePrefix(value: string): string {
   const trimmed = value.trim()
   if (trimmed.length === 0) {
@@ -23,16 +28,34 @@ export function getArgusMediaBackend(): ArgusMediaBackend {
 
 export function getArgusMediaS3Prefix(): string {
   const configured = process.env.ARGUS_MEDIA_S3_PREFIX
-  if (configured !== undefined && configured.trim().length > 0) {
-    return normalizePrefix(configured)
+  if (configured === undefined) {
+    throw new Error('ARGUS_MEDIA_S3_PREFIX is required when using the S3 media backend.')
   }
 
-  const env = process.env.ARGUS_ENV
-  if (env === undefined || env.trim().length === 0) {
-    throw new Error('ARGUS_ENV must be set when using the S3 media backend without ARGUS_MEDIA_S3_PREFIX.')
+  return normalizePrefix(configured)
+}
+
+export function requireArgusS3MediaConfig(): ArgusS3MediaConfig {
+  const backend = getArgusMediaBackend()
+  if (backend !== 's3') {
+    throw new Error(`ARGUS_MEDIA_BACKEND must be s3 for S3 media operations. Current backend: ${backend}`)
   }
 
-  return normalizePrefix(`argus/${env.trim()}`)
+  const prefix = getArgusMediaS3Prefix()
+  const bucket = process.env.S3_BUCKET_NAME
+  if (bucket === undefined) {
+    throw new Error('S3_BUCKET_NAME is required when using the S3 media backend.')
+  }
+
+  const trimmedBucket = bucket.trim()
+  if (trimmedBucket.length === 0) {
+    throw new Error('S3_BUCKET_NAME is required when using the S3 media backend.')
+  }
+
+  return {
+    prefix,
+    bucket: trimmedBucket,
+  }
 }
 
 export function getArgusMediaS3Key(filePath: string): string {
@@ -43,4 +66,3 @@ export function getArgusMediaS3Key(filePath: string): string {
 
   return `${getArgusMediaS3Prefix()}/${normalized}`
 }
-

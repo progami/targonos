@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  getCaseApprovalStateTone,
   getCaseQueueActionColor,
   getCaseQueueBorderColor,
   getCaseQueueCategoryTone,
@@ -33,4 +34,18 @@ test('queue action and chrome colors stay mode-aware', () => {
   assert.equal(getCaseQueueMutedTextColor('dark'), 'rgba(255, 255, 255, 0.64)')
   assert.equal(getCaseQueueSelectedRowBackground('light'), 'rgba(0, 44, 81, 0.03)')
   assert.equal(getCaseQueueSelectedRowBackground('dark'), 'rgba(255, 255, 255, 0.03)')
+})
+
+test('getCaseApprovalStateTone returns a compact warning accent for approval-required states', () => {
+  assert.deepEqual(getCaseApprovalStateTone('approval_required', 'light'), {
+    color: '#8f5d00',
+    background: 'rgba(191, 125, 0, 0.1)',
+    border: 'rgba(191, 125, 0, 0.22)',
+  })
+
+  assert.deepEqual(getCaseApprovalStateTone('approval_required', 'dark'), {
+    color: '#f3cc74',
+    background: 'rgba(243, 204, 116, 0.14)',
+    border: 'rgba(243, 204, 116, 0.22)',
+  })
 })

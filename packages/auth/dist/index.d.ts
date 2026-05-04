@@ -50,6 +50,20 @@ export interface PortalJwtPayload extends Record<string, unknown> {
     activeTenant?: string;
     exp?: number;
 }
+export type WorktreeDevSession = {
+    expires: string;
+    user: {
+        id: string;
+        email: string;
+        name: string;
+    };
+    authz: PortalAuthz;
+    roles: RolesClaim;
+    globalRoles: string[];
+    authzVersion: number;
+    activeTenant: string | null;
+    apps: string[];
+};
 export interface DecodePortalSessionOptions {
     cookieHeader?: string | null;
     cookieNames?: string[];
@@ -58,6 +72,8 @@ export interface DecodePortalSessionOptions {
     debug?: boolean;
     request?: PortalUrlRequestLike;
 }
+export declare function isWorktreeDevAuthEnabled(): boolean;
+export declare function getWorktreeDevSession(appId?: string): Promise<WorktreeDevSession | null>;
 export declare function decodePortalSession(options?: DecodePortalSessionOptions): Promise<PortalJwtPayload | null>;
 export type PortalUrlRequestLike = {
     headers: Headers;
@@ -93,6 +109,11 @@ export type PortalAuthz = {
     globalRoles: string[];
     apps: Record<string, AuthzAppGrant>;
 };
+export type PortalConsumerSession = {
+    payload: PortalJwtPayload;
+    authz: PortalAuthz;
+    activeTenant: string | null;
+};
 export type AppEntitlement = {
     departments?: string[];
     depts?: string[];
@@ -108,6 +129,15 @@ export type AuthDecision = {
     authz: PortalAuthz | null;
 };
 export declare function normalizePortalAuthz(value: unknown): PortalAuthz | null;
+export declare function readPortalConsumerSession(options: {
+    request: Request | {
+        headers: Headers;
+    };
+    appId: string;
+    cookieNames?: string[];
+    secret?: string;
+    debug?: boolean;
+}): Promise<PortalConsumerSession | null>;
 export declare function getCurrentAuthz(request: Request, options?: {
     appId?: string;
     cookieNames?: string[];

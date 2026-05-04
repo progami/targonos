@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
+import { parseArgusMarket, type ArgusMarket } from '@/lib/argus-market'
 import { getCompetitivePricing, getCatalogItemWithRanks } from '@/lib/sp-api'
 
 function extractBearerToken(header: string | null): string | null {
@@ -22,11 +23,19 @@ function requireCronAuth(request: NextRequest): NextResponse | null {
   return null
 }
 
+function marketplaceForMarket(market: ArgusMarket): 'US' | 'UK' {
+  if (market === 'us') return 'US'
+  if (market === 'uk') return 'UK'
+  throw new Error(`Unsupported Argus market: ${market}`)
+}
+
 export async function POST(request: NextRequest) {
   const authError = requireCronAuth(request)
   if (authError) return authError
 
   const body = await request.json().catch(() => ({}))
+  const market = parseArgusMarket(request.nextUrl.searchParams.get('market'))
+  const marketplace = marketplaceForMarket(market)
   const triggeredBy = (body as { triggeredBy?: string }).triggeredBy ?? 'manual'
 
   // Create a fetch run record
@@ -35,7 +44,7 @@ export async function POST(request: NextRequest) {
   })
 
   const enabledAsins = await prisma.trackedAsin.findMany({
-    where: { enabled: true },
+    where: { enabled: true, marketplace },
   })
 
   if (enabledAsins.length === 0) {
@@ -47,7 +56,7 @@ export async function POST(request: NextRequest) {
         asinCount: 0,
       },
     })
-    return NextResponse.json({ runId: run.id, asinCount: 0, errorCount: 0 })
+    return NextResponse.json({ runId: run.id, market, marketplace, asinCount: 0, errorCount: 0 })
   }
 
   const asinStrings = enabledAsins.map((a) => a.asin)
@@ -56,7 +65,7 @@ export async function POST(request: NextRequest) {
   // Step 1: Get competitive pricing for all ASINs (batched)
   let pricingResults: Awaited<ReturnType<typeof getCompetitivePricing>> = []
   try {
-    pricingResults = await getCompetitivePricing(asinStrings)
+    pricingResults = await getCompetitivePricing(asinStrings, market)
   } catch (err) {
     errors.push({ asin: '*', error: `Pricing batch failed: ${err instanceof Error ? err.message : String(err)}` })
   }
@@ -68,7 +77,7 @@ export async function POST(request: NextRequest) {
   const catalogByAsin = new Map<string, Awaited<ReturnType<typeof getCatalogItemWithRanks>>>()
   for (const asin of asinStrings) {
     try {
-      const catalog = await getCatalogItemWithRanks(asin)
+      const catalog = await getCatalogItemWithRanks(asin, market)
       catalogByAsin.set(asin, catalog)
     } catch (err) {
       errors.push({ asin, error: `Catalog failed: ${err instanceof Error ? err.message : String(err)}` })
@@ -134,6 +143,8 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     runId: run.id,
+    market,
+    marketplace,
     asinCount: enabledAsins.length,
     errorCount: errors.length,
     errors,

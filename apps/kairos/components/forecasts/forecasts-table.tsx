@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -259,11 +260,13 @@ export function ForecastsTable() {
   const seriesQuery = useQuery({
     queryKey: SERIES_QUERY_KEY,
     queryFn: async () => fetchJson<TimeSeriesResponse>('/api/v1/time-series'),
+    retry: false,
   });
 
   const forecastsQuery = useQuery({
     queryKey: FORECASTS_QUERY_KEY,
     queryFn: async () => fetchJson<ForecastsResponse>('/api/v1/forecasts'),
+    retry: false,
     refetchInterval: (query) => {
       const hasRunning = query.state.data?.forecasts?.some((f) => f.status === 'RUNNING');
       return hasRunning ? 5000 : false;
@@ -766,6 +769,12 @@ export function ForecastsTable() {
             <TableBody>
               {forecastsQuery.isLoading ? (
                 <SkeletonTable rows={5} columns={columns.length} />
+              ) : forecastsQuery.isError ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center text-sm text-rose-600 dark:text-rose-400">
+                    Failed to load forecasts: {forecastsQuery.error.message}
+                  </TableCell>
+                </TableRow>
               ) : table.getRowModel().rows.length ? (
                 table.getRowModel().rows.map((row) => (
                   <TableRow key={row.id}>

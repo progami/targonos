@@ -13,7 +13,6 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG="/tmp/weekly-api-sources.log"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
 WPR_SYNC_SCRIPT="$SCRIPT_DIR/../../lib/sync-wpr-workspace.sh"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -21,11 +20,20 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 DRY_FLAG=""
 START_DATE=""
 END_DATE=""
+MARKET="us"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run)
       DRY_FLAG="--dry-run"
+      ;;
+    --market)
+      if [ "$#" -lt 2 ]; then
+        echo "--market requires us or uk." >&2
+        exit 1
+      fi
+      MARKET="$2"
+      shift
       ;;
     --start-date)
       START_DATE="${2:-}"
@@ -43,24 +51,69 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-if [ -n "$START_DATE" ] && [ -z "$END_DATE" ] || [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
+case "$MARKET" in
+  us|uk)
+    export ARGUS_MARKET="$MARKET"
+    ;;
+  *)
+    echo "Unsupported market: $MARKET" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$MARKET" = "us" ]; then
+  LOG="/tmp/weekly-api-sources.log"
+else
+  LOG="/tmp/weekly-api-sources-$MARKET.log"
+fi
+
+if [ -n "$START_DATE" ] && [ -z "$END_DATE" ]; then
   echo "Both --start-date and --end-date are required together." >&2
   exit 1
 fi
 
-DATE_FLAGS=""
-if [ -n "$START_DATE" ]; then
-  DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
+if [ -z "$START_DATE" ] && [ -n "$END_DATE" ]; then
+  echo "Both --start-date and --end-date are required together." >&2
+  exit 1
 fi
+
+MARKET_FLAG="--market $MARKET"
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
 
-log "=== Weekly API Sources run starting ${DRY_FLAG:-live} ==="
+log "=== Weekly API Sources run starting market=$MARKET mode=${DRY_FLAG:-live} ==="
 
 if ! NODE_BIN="$(command -v node)"; then
   log "FAILED: Node.js not found in PATH=$PATH"
   exit 1
 fi
+
+if [ -z "$START_DATE" ]; then
+  IFS='|' read -r START_DATE END_DATE <<<"$("$NODE_BIN" - <<'NODE'
+const formatDate = (date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+const today = new Date()
+const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+const day = todayLocal.getDay()
+let daysBackToCompletedSaturday = day === 6 ? 7 : (day + 1) % 7
+if (day === 0) {
+  daysBackToCompletedSaturday += 7
+}
+const weekEndDate = new Date(todayLocal)
+weekEndDate.setDate(weekEndDate.getDate() - daysBackToCompletedSaturday)
+const weekStartDate = new Date(weekEndDate)
+weekStartDate.setDate(weekStartDate.getDate() - 6)
+process.stdout.write(`${formatDate(weekStartDate)}|${formatDate(weekEndDate)}`)
+NODE
+)"
+fi
+
+DATE_FLAGS="--start-date $START_DATE --end-date $END_DATE"
+log "Weekly API source window: $START_DATE..$END_DATE"
 
 RUN_STARTED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
 RUN_STARTED_AT_ISO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
@@ -105,15 +158,15 @@ run_optional_step() {
   fi
 }
 
-run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $DRY_FLAG $DATE_FLAGS"
-run_optional_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $DRY_FLAG $DATE_FLAGS"
-run_optional_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $DRY_FLAG"
-run_optional_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $DRY_FLAG"
-run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $DRY_FLAG $DATE_FLAGS"
-run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $DRY_FLAG"
+run_step "SP-API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-spapi.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_step "SP Ads API" "python3 \"$SCRIPT_DIR/collect-sp-ads.py\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_step "Datadive API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-datadive.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_step "Datadive format repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-datadive-formats.mjs\" $MARKET_FLAG $DRY_FLAG"
+run_step "Sellerboard API" "\"$NODE_BIN\" \"$SCRIPT_DIR/collect-sellerboard.mjs\" $MARKET_FLAG $DRY_FLAG $DATE_FLAGS"
+run_step "Weekly label repair" "\"$NODE_BIN\" \"$SCRIPT_DIR/repair-week-labels.mjs\" $MARKET_FLAG $DRY_FLAG"
 
 if [ -z "$DRY_FLAG" ] && [ "$FAILED" -eq 0 ]; then
-  run_step "WPR workspace sync" "bash \"$WPR_SYNC_SCRIPT\" --trigger weekly-api-sources"
+  run_step "WPR workspace sync" "bash \"$WPR_SYNC_SCRIPT\" --market \"$MARKET\" --trigger weekly-api-sources"
 fi
 
 log "=== Weekly API Sources run done (failures=$FAILED) ==="
@@ -142,6 +195,7 @@ fi
 
 RUN_LOG_ARGS=(
   --job-id "weekly-api-sources"
+  --market "$MARKET"
   --status "$RUN_STATUS"
   --summary "$RUN_SUMMARY"
   --duration-ms "$DURATION_MS"

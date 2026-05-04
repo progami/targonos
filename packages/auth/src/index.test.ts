@@ -8,6 +8,7 @@ import {
   hasCapability,
   hasPortalSession,
   normalizePortalAuthz,
+  readPortalConsumerSession,
   resolveAppAuthOrigin,
   resolvePortalAuthOrigin,
 } from './index'
@@ -310,6 +311,74 @@ test('decodePortalSession ignores a signed active tenant cookie after membership
   assert.equal(payload?.activeTenant, undefined)
 })
 
+test('readPortalConsumerSession returns claims and normalized authz', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const sessionCookieName = '__Secure-next-auth.session-token'
+  const sessionToken = await encode({
+    token: {
+      sub: 'u_1',
+      email: 'ops@targonglobal.com',
+      name: 'Ops User',
+      authz: {
+        version: 4,
+        globalRoles: ['platform_admin'],
+        apps: {
+          talos: {
+            departments: ['Ops'],
+            tenantMemberships: ['US', 'UK'],
+          },
+        },
+      },
+      activeTenant: 'UK',
+    },
+    secret: process.env.PORTAL_AUTH_SECRET,
+    salt: sessionCookieName,
+  })
+
+  const session = await readPortalConsumerSession({
+    request: new Request('https://dev-os.targonglobal.com/talos/dashboard', {
+      headers: {
+        cookie: `${sessionCookieName}=${sessionToken}`,
+      },
+    }),
+    appId: 'talos',
+  })
+
+  assert.equal(session?.payload.sub, 'u_1')
+  assert.equal(session?.payload.email, 'ops@targonglobal.com')
+  assert.equal(session?.payload.name, 'Ops User')
+  assert.equal(session?.payload.activeTenant, 'UK')
+  assert.deepEqual(session?.authz, {
+    version: 4,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+    },
+  })
+  assert.equal(session?.activeTenant, 'UK')
+})
+
+test('readPortalConsumerSession returns null on decrypt failure', async () => {
+  process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
+  process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
+
+  const session = await readPortalConsumerSession({
+    request: new Request('https://dev-os.targonglobal.com/talos/dashboard', {
+      headers: {
+        cookie: '__Secure-next-auth.session-token=invalid-token',
+      },
+    }),
+    appId: 'talos',
+  })
+
+  assert.equal(session, null)
+})
+
 test('decodePortalSession strips an embedded active tenant that is no longer allowed for the app', async () => {
   process.env.PORTAL_AUTH_SECRET = 'test-portal-auth-secret-000000000000'
   process.env.NEXTAUTH_SECRET = process.env.PORTAL_AUTH_SECRET
@@ -394,4 +463,127 @@ test('hasCapability returns false without authz even when dev bypass env is set'
     }),
     false,
   )
+})
+
+test('decodePortalSession returns the dedicated worktree dev session without cookies', async () => {
+  process.env.NODE_ENV = 'development'
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 7,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+      xplan: {
+        departments: ['Admin'],
+        tenantMemberships: [],
+      },
+    },
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: null,
+    appId: 'talos',
+  })
+
+  assert.deepEqual(payload, {
+    sub: '11111111-1111-4111-8111-111111111111',
+    email: 'worktree.dev@targonglobal.com',
+    name: 'Worktree Dev',
+    authz: {
+      version: 7,
+      globalRoles: ['platform_admin'],
+      apps: {
+        talos: {
+          departments: ['Ops'],
+          tenantMemberships: ['US', 'UK'],
+        },
+        xplan: {
+          departments: ['Admin'],
+          tenantMemberships: [],
+        },
+      },
+    },
+    globalRoles: ['platform_admin'],
+    authzVersion: 7,
+    roles: {
+      talos: {
+        departments: ['Ops'],
+        depts: ['Ops'],
+        tenantMemberships: ['US', 'UK'],
+      },
+      xplan: {
+        departments: ['Admin'],
+        depts: ['Admin'],
+        tenantMemberships: [],
+      },
+    },
+    apps: ['talos', 'xplan'],
+  })
+})
+
+test('getCurrentAuthz resolves authz from the dedicated worktree dev session', async () => {
+  process.env.NODE_ENV = 'development'
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      argus: {
+        departments: ['Account / Listing'],
+        tenantMemberships: [],
+      },
+    },
+  })
+
+  const authz = await getCurrentAuthz(
+    new Request('http://localhost:41216/argus'),
+    {
+      appId: 'argus',
+    },
+  )
+
+  assert.deepEqual(authz, {
+    version: 3,
+    globalRoles: ['platform_admin'],
+    apps: {
+      argus: {
+        departments: ['Account / Listing'],
+        tenantMemberships: [],
+      },
+    },
+  })
+})
+
+test('decodePortalSession ignores worktree dev auth in production', async () => {
+  process.env.NODE_ENV = 'production'
+  process.env.TARGON_WORKTREE_DEV_AUTH = 'true'
+  process.env.TARGON_WORKTREE_DEV_USER_ID = '11111111-1111-4111-8111-111111111111'
+  process.env.TARGON_WORKTREE_DEV_USER_EMAIL = 'worktree.dev@targonglobal.com'
+  process.env.TARGON_WORKTREE_DEV_USER_NAME = 'Worktree Dev'
+  process.env.TARGON_WORKTREE_DEV_AUTHZ_JSON = JSON.stringify({
+    version: 1,
+    globalRoles: ['platform_admin'],
+    apps: {
+      talos: {
+        departments: ['Ops'],
+        tenantMemberships: ['US'],
+      },
+    },
+  })
+
+  const payload = await decodePortalSession({
+    cookieHeader: null,
+    appId: 'talos',
+  })
+
+  assert.equal(payload, null)
 })

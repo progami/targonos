@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertCircle } from '@/lib/lucide-icons'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 
 const errorMessages: Record<string, string> = {
  Configuration: 'There is a problem with the server configuration.',
@@ -32,7 +32,7 @@ function AuthErrorContent() {
  : errorMessages.Default
 
  const handleRetry = () => {
- redirectToPortal('/login', `${window.location.origin}/auth/error`)
+ redirectToPortal('/login', buildAppCallbackUrl('/auth/error'))
  }
 
  return (

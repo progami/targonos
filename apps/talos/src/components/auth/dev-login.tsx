@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 
 export function DevLogin() {
  const [loading, setLoading] = useState(false)
@@ -10,7 +10,7 @@ export function DevLogin() {
  const handleDevLogin = async () => {
  setLoading(true)
  try {
- redirectToPortal('/login', `${window.location.origin}/operations/inventory`)
+ redirectToPortal('/login', buildAppCallbackUrl('/operations/inventory'))
  } catch (_error) {
  toast.error('Login error')
  } finally {

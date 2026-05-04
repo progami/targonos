@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Play } from 'lucide-react'
 
@@ -31,10 +32,13 @@ export function ImageGallery({ images, diff }: ImageGalleryProps) {
       {/* Main image */}
       <div className="relative flex items-center justify-center bg-white border rounded-lg p-2 min-h-[400px]">
         {activeImage && (
-          <img
+          <Image
             src={resolveImageSrc(activeImage.hiRes ?? activeImage.src)}
             alt={`Product image ${activeIndex + 1}`}
-            className="max-w-full max-h-[480px] object-contain"
+            width={1200}
+            height={1200}
+            unoptimized
+            className="max-w-full max-h-[480px] h-auto w-auto object-contain"
           />
         )}
         {activeImage?.isVideo && (
@@ -62,9 +66,12 @@ export function ImageGallery({ images, diff }: ImageGalleryProps) {
                 isChanged && 'ring-2 ring-yellow-400',
               )}
             >
-              <img
+              <Image
                 src={resolveImageSrc(img.src)}
                 alt={`Thumbnail ${i + 1}`}
+                width={72}
+                height={72}
+                unoptimized
                 className="w-full h-full object-contain"
               />
               {img.isVideo && (

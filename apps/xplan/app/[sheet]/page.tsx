@@ -13,7 +13,6 @@ import {
   ProfitAndLossFiltersProvider,
   ProfitAndLossHeaderControls,
 } from '@/components/sheets/fin-planning-pl-grid';
-import { SellerboardSyncControl } from '@/components/sheets/sellerboard-sync-control';
 import { CashFlowGrid } from '@/components/sheets/fin-planning-cash-grid';
 import { SheetViewToggle, type SheetViewMode } from '@/components/sheet-view-toggle';
 import { SHEET_TOOLBAR_GROUP, SHEET_TOOLBAR_LABEL } from '@/components/sheet-toolbar';
@@ -28,7 +27,7 @@ import {
   type POProfitabilityData,
 } from '@/components/sheets/po-profitability-section';
 import type { OpsInputRow } from '@/components/sheets/custom-ops-planning-grid';
-import type { OpsBatchRow } from '@/components/sheets/custom-ops-cost-grid';
+import { CustomOpsCostGrid, type OpsBatchRow } from '@/components/sheets/custom-ops-cost-grid';
 import type { OpsTimelineRow } from '@/components/sheets/ops-planning-timeline';
 import type { PurchasePaymentRow } from '@/components/sheets/custom-purchase-payments-grid';
 import type {
@@ -49,8 +48,6 @@ import {
   type BatchTableRow,
   type BusinessParameter,
   type CashFlowWeek,
-  type LeadStageTemplate,
-  type LeadTimeOverride,
   type Product,
   type ProfitAndLossWeek,
   type PurchaseOrder,
@@ -64,8 +61,6 @@ import { ActiveStrategyIndicator } from '@/components/active-strategy-indicator'
 import { getUtcDateForTimeZone } from '@/lib/utils/dates';
 import {
   mapProducts,
-  mapLeadStageTemplates,
-  mapLeadOverrides,
   mapBusinessParameters,
   mapPurchaseOrders,
   mapSalesWeeks,
@@ -74,8 +69,6 @@ import {
 } from '@/lib/calculations/adapters';
 import {
   buildProductCostIndex,
-  buildLeadTimeProfiles,
-  getLeadTimeProfile,
   normalizeBusinessParameters,
   computePurchaseOrderDerived,
   computeSalesPlan,
@@ -107,6 +100,14 @@ import type { PlanningCalendar } from '@/lib/planning';
 import { weekLabelForWeekNumber, type PlanningWeekConfig } from '@/lib/calculations/planning-week';
 import { formatDateDisplay, toIsoDate } from '@/lib/utils/dates';
 import {
+  computeForecastWorkbookRow,
+  computePoFinanceWorkbookRow,
+  computePoTableWorkbookRow,
+  EXCEL_FORECAST_METRICS,
+  type ForecastWorkbookRow,
+  type PoTableWorkbookInput,
+} from '@/lib/calculations/workbook-parity';
+import {
   sellerboardReportTimeZoneForRegion,
   currencyForRegion,
   localeForRegion,
@@ -114,16 +115,18 @@ import {
   weekStartsOnForRegion,
   type StrategyRegion,
 } from '@/lib/strategy-region';
+import { purchaseOrderSourceType } from '@/lib/purchase-order-source';
+import { comparePurchaseOrderRows } from '@/lib/purchase-order-ordering';
 
 const SALES_METRICS = [
-  'stockStart',
+  'inbound',
+  'threePl',
+  'fba',
   'actualSales',
   'forecastSales',
-  'systemForecastSales',
   'finalSales',
-  'finalSalesError',
-  'stockWeeks',
-  'stockEnd',
+  'fbaCoverWeeks',
+  'totalCoverWeeks',
 ] as const;
 type SalesMetric = (typeof SALES_METRICS)[number];
 
@@ -155,12 +158,30 @@ function productLabel(product: { sku?: string | null; name: string }): string {
   return sku.length ? sku : product.name;
 }
 
+const TALOS_TRANSPORT_PLACEHOLDERS = new Set(['NUMBER', 'STATED']);
+
+function formatTransportReference(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return '';
+  return TALOS_TRANSPORT_PLACEHOLDERS.has(trimmed.toUpperCase()) ? '' : trimmed;
+}
+
 function toNumberSafe(value: number | bigint | null | undefined): number {
   if (value == null) return 0;
   if (typeof value === 'number') return value;
   if (typeof value === 'bigint') return Number(value);
   const numeric = Number(value);
   return Number.isNaN(numeric) ? 0 : numeric;
+}
+
+function toOptionalNumber(
+  value: number | bigint | Prisma.Decimal | null | undefined,
+): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'bigint') return Number(value);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function formatNumeric(value: number | null | undefined, fractionDigits = 2): string {
@@ -221,6 +242,8 @@ function serializePurchaseOrder(order: PurchaseOrderInput): PurchaseOrderSeriali
     quantity: Number(order.quantity ?? 0),
     poDate: serializeDate(order.poDate),
     poWeekNumber: order.poWeekNumber ?? null,
+    poClass: order.poClass ?? null,
+    inboundWeekOverride: serializeDate(order.inboundWeekOverride),
     productionWeeks: order.productionWeeks ?? null,
     sourceWeeks: order.sourceWeeks ?? null,
     oceanWeeks: order.oceanWeeks ?? null,
@@ -289,6 +312,11 @@ function serializePurchaseOrder(order: PurchaseOrderInput): PurchaseOrderSeriali
         overrideFbaFee: batch.overrideFbaFee ?? null,
         overrideReferralRate: batch.overrideReferralRate ?? null,
         overrideStoragePerMonth: batch.overrideStoragePerMonth ?? null,
+        cartonSide1Cm: batch.cartonSide1Cm ?? null,
+        cartonSide2Cm: batch.cartonSide2Cm ?? null,
+        cartonSide3Cm: batch.cartonSide3Cm ?? null,
+        cartonWeightKg: batch.cartonWeightKg ?? null,
+        unitsPerCarton: batch.unitsPerCarton ?? null,
       })) ?? [],
   };
 }
@@ -488,56 +516,9 @@ async function safeFindMany<T>(
   }
 }
 
-type BusinessParameterView = {
-  id: string;
-  label: string;
-  value: string;
-  type: 'numeric' | 'text';
-};
-
 type NestedHeaderCell =
   | string
   | { label: string; colspan?: number; rowspan?: number; title?: string };
-
-const FINANCE_PARAMETER_LABELS = new Set(
-  ['amazon payout delay (weeks)', 'starting cash', 'weekly fixed costs', 'fixed costs'].map(
-    (label) => label.toLowerCase(),
-  ),
-);
-const SALES_PARAMETER_LABELS = new Set(
-  ['weeks of stock warning threshold', 'stockout warning (weeks)'].map((label) =>
-    label.toLowerCase(),
-  ),
-);
-const HIDDEN_PARAMETER_LABELS = new Set(
-  [
-    'forecast smoothing factor',
-    'low stock threshold (%)',
-    'inventory carrying cost (%/year)',
-    'target gross margin (%)',
-    'default moq (units)',
-    'production buffer (%)',
-  ].map((label) => label.toLowerCase()),
-);
-const OPERATIONS_PARAMETER_EXCLUDES = new Set([
-  'product ordering',
-  'supplier payment split 1 (%)',
-  'supplier payment split 2 (%)',
-  'supplier payment split 3 (%)',
-  'supplier payment terms (weeks)',
-]);
-
-function isFinanceParameterLabel(label: string) {
-  return FINANCE_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
-
-function isSalesParameterLabel(label: string) {
-  return SALES_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
-
-function isHiddenParameterLabel(label: string) {
-  return HIDDEN_PARAMETER_LABELS.has(label.trim().toLowerCase());
-}
 
 async function resolveStrategyId(
   searchParamStrategy: string | string[] | undefined,
@@ -625,82 +606,63 @@ function columnKey(productIndex: number, metric: SalesMetric) {
 
 function metricHeader(metric: SalesMetric): NestedHeaderCell {
   switch (metric) {
-    case 'stockStart':
-      return 'Stock Start';
+    case 'inbound':
+      return EXCEL_FORECAST_METRICS[0];
+    case 'threePl':
+      return EXCEL_FORECAST_METRICS[1];
+    case 'fba':
+      return EXCEL_FORECAST_METRICS[2];
     case 'actualSales':
-      return 'Actual';
+      return EXCEL_FORECAST_METRICS[3];
     case 'forecastSales':
-      return 'Planner';
-    case 'systemForecastSales':
-      return 'System';
+      return EXCEL_FORECAST_METRICS[4];
     case 'finalSales':
-      return {
-        label: 'Demand',
-        title: 'Demand precedence: Override (if set) → Actual → Planner → System.',
-      };
-    case 'finalSalesError':
-      return {
-        label: '% Error',
-        title: 'Percent error between actual and forecast sales when both values are present.',
-      };
-    case 'stockWeeks':
-      return {
-        label: 'Cover (w)',
-        title:
-          'Cover (weeks) = projected Stock Start ÷ projected Demand (higher is safer). ∞ means Demand is 0 for that week.',
-      };
-    case 'stockEnd':
-      return 'Stock Qty';
+      return EXCEL_FORECAST_METRICS[5];
+    case 'fbaCoverWeeks':
+      return EXCEL_FORECAST_METRICS[6];
+    case 'totalCoverWeeks':
+      return EXCEL_FORECAST_METRICS[7];
     default:
       return metric;
   }
 }
 
-async function getProductSetupView(strategyId: string) {
+async function getProductSetupView(
+  strategyId: string,
+  activeYear: number,
+  strategyRegion: StrategyRegion,
+) {
   const prismaAny = prisma as unknown as Record<string, unknown>;
   const productDelegate = prismaAny.product as
     | { findMany: (args?: unknown) => Promise<Product[]> }
     | undefined;
-  const businessParameterDelegate = prismaAny.businessParameter as
+  const productSetupYearDelegate = prismaAny.productSetupYear as
     | {
-        findMany: (args?: unknown) => Promise<BusinessParameter[]>;
-      }
-    | undefined;
-  const leadStageDelegate = prismaAny.leadStageTemplate as
-    | {
-        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
-      }
-    | undefined;
-  const leadOverrideDelegate = prismaAny.leadTimeOverride as
-    | {
-        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
+        findMany: (args?: unknown) => Promise<
+          Array<{
+            productId: string;
+            openingStock: number | Prisma.Decimal | null;
+            nextYearOpeningOverride: number | Prisma.Decimal | null;
+            notes: string | null;
+            totalCoverThresholdWeeks: number | Prisma.Decimal | null;
+            fbaCoverThresholdWeeks: number | Prisma.Decimal | null;
+          }>
+        >;
       }
     | undefined;
 
-  const [products, businessParameters, leadStages, leadOverrides] = await Promise.all([
+  const [products, setupYears] = await Promise.all([
     safeFindMany<Product[]>(
       productDelegate,
       { where: { strategyId }, orderBy: { name: 'asc' } },
       [],
       'product',
     ),
-    safeFindMany<BusinessParameter[]>(
-      businessParameterDelegate,
-      { where: { strategyId }, orderBy: { label: 'asc' } },
+    safeFindMany(
+      productSetupYearDelegate,
+      { where: { strategyId, year: activeYear } },
       [],
-      'businessParameter',
-    ),
-    safeFindMany<LeadStageTemplate[]>(
-      leadStageDelegate,
-      { orderBy: { sequence: 'asc' } },
-      [],
-      'leadStageTemplate',
-    ),
-    safeFindMany<LeadTimeOverride[]>(
-      leadOverrideDelegate,
-      { where: { product: { strategyId } } },
-      [],
-      'leadTimeOverride',
+      'productSetupYear',
     ),
   ]);
 
@@ -709,93 +671,51 @@ async function getProductSetupView(strategyId: string) {
     return product.isActive && sku && sku.length > 0;
   });
 
-  const parameterInputs = mapBusinessParameters(businessParameters);
-  const visibleParameterInputs = parameterInputs.filter(
-    (parameter) => !isHiddenParameterLabel(parameter.label),
-  );
-
-  const operationsParameters = visibleParameterInputs
-    .filter((parameter) => {
-      const normalized = parameter.label.trim().toLowerCase();
-      return (
-        !isFinanceParameterLabel(parameter.label) &&
-        !isSalesParameterLabel(parameter.label) &&
-        !OPERATIONS_PARAMETER_EXCLUDES.has(normalized)
-      );
-    })
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
-
-  const salesParameters = visibleParameterInputs
-    .filter((parameter) => isSalesParameterLabel(parameter.label))
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
-
-  const financeParameters = visibleParameterInputs
-    .filter((parameter) => isFinanceParameterLabel(parameter.label))
-    .map<BusinessParameterView>((parameter) => ({
-      id: parameter.id,
-      label: parameter.label,
-      value:
-        parameter.valueNumeric != null
-          ? formatNumeric(parameter.valueNumeric)
-          : (parameter.valueText ?? ''),
-      type: parameter.valueNumeric != null ? 'numeric' : 'text',
-    }));
-
   const productRows = activeProducts
     .sort((a, b) => a.name.localeCompare(b.name))
     .map((product) => ({
       id: product.id,
       sku: product.sku ?? '',
       name: product.name,
+      price: formatNumeric(toOptionalNumber(product.sellingPrice), 2),
+      isActive: product.isActive,
     }));
 
-  const leadStageTemplateViews = mapLeadStageTemplates(leadStages).map((stage) => ({
-    id: stage.id,
-    label: stage.label,
-    defaultWeeks: stage.defaultWeeks,
-    sequence: stage.sequence,
-  }));
-
-  const leadProfiles = buildLeadTimeProfiles(
-    mapLeadStageTemplates(leadStages),
-    mapLeadOverrides(leadOverrides),
-    productRows.map((p) => p.id),
-  );
-
-  const leadTimeProfiles: Record<string, { productionWeeks: number; sourceWeeks: number; oceanWeeks: number; finalWeeks: number }> = {};
-  for (const [productId, profile] of leadProfiles) {
-    leadTimeProfiles[productId] = profile;
-  }
-
-  const leadTimeOverrideIds = leadOverrides.map((o) => ({
-    productId: o.productId,
-    stageTemplateId: o.stageTemplateId,
-  }));
+  const setupByProductId = new Map(setupYears.map((row) => [row.productId, row]));
+  const workbookSetupRows = productRows.map((product) => {
+    const setupRow = setupByProductId.get(product.id);
+    return {
+      productId: product.id,
+      region: strategyRegion,
+      workbookSku: product.sku,
+      displaySku: product.sku,
+      friendlyName: product.name,
+      price: product.price,
+      demandProxySku: '',
+      proxyRatio: '',
+      manualGrowthMultiplier: '',
+      active: product.isActive ? 'TRUE' : 'FALSE',
+      stockWeekStart: '',
+      openingFbaUnits: '',
+      openingThreeplUnits: '',
+      openingTotalUnits: '',
+      totalThresholdW: formatNumeric(
+        toOptionalNumber(setupRow?.totalCoverThresholdWeeks ?? null),
+        2,
+      ),
+      fbaThresholdW: formatNumeric(
+        toOptionalNumber(setupRow?.fbaCoverThresholdWeeks ?? null),
+        2,
+      ),
+      pack: '',
+      micron: '',
+      notes: setupRow?.notes ?? '',
+    };
+  });
 
   return {
     products: productRows,
-    operationsParameters,
-    salesParameters,
-    financeParameters,
-    leadStageTemplates: leadStageTemplateViews,
-    leadTimeProfiles,
-    leadTimeOverrideIds,
+    workbookSetupRows,
   };
 }
 
@@ -828,9 +748,7 @@ async function getKeyParametersForAllStrategies(
     result[sid].push({
       label: param.label,
       value:
-        param.valueNumeric != null
-          ? formatNumeric(param.valueNumeric)
-          : (param.valueText ?? ''),
+        param.valueNumeric != null ? formatNumeric(param.valueNumeric) : (param.valueText ?? ''),
     });
   }
   return result;
@@ -840,16 +758,6 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
   const prismaAny = prisma as unknown as Record<string, unknown>;
   const productDelegate = prismaAny.product as
     | { findMany: (args?: unknown) => Promise<Product[]> }
-    | undefined;
-  const leadStageDelegate = prismaAny.leadStageTemplate as
-    | {
-        findMany: (args?: unknown) => Promise<LeadStageTemplate[]>;
-      }
-    | undefined;
-  const leadOverrideDelegate = prismaAny.leadTimeOverride as
-    | {
-        findMany: (args?: unknown) => Promise<LeadTimeOverride[]>;
-      }
     | undefined;
   const businessParameterDelegate = prismaAny.businessParameter as
     | {
@@ -870,63 +778,45 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     | typeof prisma.purchaseOrderPayment
     | undefined;
 
-  const [products, leadStages, overrides, businessParameters, purchaseOrders, batchTableRows] =
-    await Promise.all([
-      safeFindMany<Product[]>(
-        productDelegate,
-        { where: { strategyId }, orderBy: { name: 'asc' } },
-        [],
-        'product',
-      ),
-      safeFindMany<LeadStageTemplate[]>(
-        leadStageDelegate,
-        { orderBy: { sequence: 'asc' } },
-        [],
-        'leadStageTemplate',
-      ),
-      safeFindMany<LeadTimeOverride[]>(
-        leadOverrideDelegate,
-        { where: { product: { strategyId } } },
-        [],
-        'leadTimeOverride',
-      ),
-      safeFindMany<BusinessParameter[]>(
-        businessParameterDelegate,
-        { where: { strategyId }, orderBy: { label: 'asc' } },
-        [],
-        'businessParameter',
-      ),
-      safeFindMany<Array<PurchaseOrder & { payments: PurchaseOrderPayment[] }>>(
-        purchaseOrderDelegate,
-        {
-          where: { strategyId },
-          orderBy: [{ productionStart: 'asc' }, { orderCode: 'asc' }],
-          include: {
-            payments: { orderBy: { paymentIndex: 'asc' } },
-          },
+  const [products, businessParameters, purchaseOrders, batchTableRows] = await Promise.all([
+    safeFindMany<Product[]>(
+      productDelegate,
+      { where: { strategyId }, orderBy: { name: 'asc' } },
+      [],
+      'product',
+    ),
+    safeFindMany<BusinessParameter[]>(
+      businessParameterDelegate,
+      { where: { strategyId }, orderBy: { label: 'asc' } },
+      [],
+      'businessParameter',
+    ),
+    safeFindMany<Array<PurchaseOrder & { payments: PurchaseOrderPayment[] }>>(
+      purchaseOrderDelegate,
+      {
+        where: { strategyId },
+        orderBy: [{ productionStart: 'asc' }, { orderCode: 'asc' }],
+        include: {
+          payments: { orderBy: { paymentIndex: 'asc' } },
         },
-        [],
-        'purchaseOrder',
-      ),
-      safeFindMany<BatchTableRow[]>(
-        batchTableRowDelegate,
-        {
-          where: { purchaseOrder: { strategyId } },
-          orderBy: [{ purchaseOrderId: 'asc' }, { createdAt: 'asc' }],
-        },
-        [],
-        'batchTableRow',
-      ),
-    ]);
+      },
+      [],
+      'purchaseOrder',
+    ),
+    safeFindMany<BatchTableRow[]>(
+      batchTableRowDelegate,
+      {
+        where: { purchaseOrder: { strategyId } },
+        orderBy: [{ purchaseOrderId: 'asc' }, { createdAt: 'asc' }],
+      },
+      [],
+      'batchTableRow',
+    ),
+  ]);
 
   const productInputs = mapProducts(products);
   const productIndex = buildProductCostIndex(productInputs);
   const productNameById = new Map(products.map((product) => [product.id, productLabel(product)]));
-  const leadProfiles = buildLeadTimeProfiles(
-    mapLeadStageTemplates(leadStages),
-    mapLeadOverrides(overrides),
-    productInputs.map((product) => product.id),
-  );
   const parameters = normalizeBusinessParameters(mapBusinessParameters(businessParameters));
   const batchesByOrder = new Map<string, typeof batchTableRows>();
   for (const batch of batchTableRows) {
@@ -935,7 +825,9 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     batchesByOrder.set(batch.purchaseOrderId, list);
   }
 
-  const purchaseOrdersWithBatches = purchaseOrders.map((order) => ({
+  const orderedPurchaseOrders = [...purchaseOrders].sort(comparePurchaseOrderRows);
+
+  const purchaseOrdersWithBatches = orderedPurchaseOrders.map((order) => ({
     ...order,
     batchTableRows: (batchesByOrder.get(order.id) ?? []) as BatchTableRow[],
   })) as Array<
@@ -951,7 +843,6 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     purchaseOrders: purchaseOrdersWithBatches,
     purchaseOrderInputs: purchaseOrderInputsInitial,
     productIndex,
-    leadProfiles,
     parameters,
     paymentsDelegate,
     calendar,
@@ -965,18 +856,23 @@ async function loadOperationsContext(strategyId: string, calendar?: PlanningCale
     productInputs,
     productIndex,
     productNameById,
-    leadProfiles,
     parameters,
     purchaseOrderInputs,
     rawPurchaseOrders: purchaseOrdersWithBatches,
   };
 }
 
+const PO_LEVEL_STAGE_PROFILE: LeadTimeProfile = {
+  productionWeeks: 0,
+  sourceWeeks: 0,
+  oceanWeeks: 0,
+  finalWeeks: 0,
+};
+
 async function ensureDefaultSupplierInvoices({
   purchaseOrders,
   purchaseOrderInputs,
   productIndex,
-  leadProfiles,
   parameters,
   paymentsDelegate,
   calendar,
@@ -986,7 +882,6 @@ async function ensureDefaultSupplierInvoices({
   >;
   purchaseOrderInputs: PurchaseOrderInput[];
   productIndex: Map<string, ProductCostSummary>;
-  leadProfiles: Map<string, LeadTimeProfile>;
   parameters: BusinessParameterMap;
   paymentsDelegate?: typeof prisma.purchaseOrderPayment;
   calendar?: PlanningCalendar['calendar'];
@@ -1001,11 +896,15 @@ async function ensureDefaultSupplierInvoices({
     const record = purchaseOrders[index];
     const input = purchaseOrderInputs[index];
     if (!input) continue;
-    const profile = getLeadTimeProfile(input.productId, leadProfiles);
-    if (!profile) continue;
-    const derived = computePurchaseOrderDerived(input, productIndex, profile, parameters, {
-      calendar,
-    });
+    const derived = computePurchaseOrderDerived(
+      input,
+      productIndex,
+      PO_LEVEL_STAGE_PROFILE,
+      parameters,
+      {
+        calendar,
+      },
+    );
     if (!derived.plannedPayments.length) continue;
 
     const existingByIndex = new Map<number, PurchaseOrderPayment>();
@@ -1048,22 +947,42 @@ async function ensureDefaultSupplierInvoices({
       }
 
       if (existing) {
-        const updatePayload: UpdatePaymentInput = {
-          paymentIndex: planned.paymentIndex,
-          category: planned.category,
-          label: planned.label,
-          dueDateDefault,
-          dueWeekNumberDefault,
-        };
+        const updatePayload: UpdatePaymentInput = {};
 
-        if (existingDueDateSource === 'SYSTEM') {
-          updatePayload.dueDate = dueDate;
-          updatePayload.dueWeekNumber = dueWeekNumber;
-          updatePayload.dueDateSource = 'SYSTEM';
+        if (existing.paymentIndex !== planned.paymentIndex) {
+          updatePayload.paymentIndex = planned.paymentIndex;
+        }
+        if (!nullableStringsMatch(existing.category, planned.category)) {
+          updatePayload.category = planned.category;
+        }
+        if (!nullableStringsMatch(existing.label, planned.label)) {
+          updatePayload.label = planned.label;
+        }
+        if (!datesMatch(existing.dueDateDefault, dueDateDefault)) {
+          updatePayload.dueDateDefault = dueDateDefault;
+        }
+        if (!nullableNumbersMatch(existing.dueWeekNumberDefault, dueWeekNumberDefault)) {
+          updatePayload.dueWeekNumberDefault = dueWeekNumberDefault;
         }
 
-        updatePayload.amountExpected = amountExpectedDecimal;
-        updatePayload.percentage = percentageDecimal;
+        if (existingDueDateSource === 'SYSTEM') {
+          if (!datesMatch(existing.dueDate, dueDate)) {
+            updatePayload.dueDate = dueDate;
+          }
+          if (!nullableNumbersMatch(existing.dueWeekNumber, dueWeekNumber)) {
+            updatePayload.dueWeekNumber = dueWeekNumber;
+          }
+          if (existing.dueDateSource !== 'SYSTEM') {
+            updatePayload.dueDateSource = 'SYSTEM';
+          }
+        }
+
+        if (!nullableDecimalsMatch(existing.amountExpected, amountExpectedDecimal)) {
+          updatePayload.amountExpected = amountExpectedDecimal;
+        }
+        if (!nullableDecimalsMatch(existing.percentage, percentageDecimal)) {
+          updatePayload.percentage = percentageDecimal;
+        }
 
         if (Object.keys(updatePayload).length > 0) {
           updates.push(updatePurchaseOrderPayment(existing.id, updatePayload, paymentsDelegate));
@@ -1112,6 +1031,37 @@ async function ensureDefaultSupplierInvoices({
 }
 
 type PaymentDueDateSource = 'SYSTEM' | 'USER';
+
+function datesMatch(a: Date | null | undefined, b: Date | null | undefined): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return a.getTime() === b.getTime();
+}
+
+function nullableNumbersMatch(
+  a: number | null | undefined,
+  b: number | null | undefined,
+): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+function nullableStringsMatch(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+function nullableDecimalsMatch(
+  a: Prisma.Decimal | number | string | null | undefined,
+  b: Prisma.Decimal | null,
+): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  const aNumber = Number(a);
+  const bNumber = Number(b);
+  return Number.isFinite(aNumber) && Number.isFinite(bNumber) && aNumber === bNumber;
+}
 
 const PAYMENT_METADATA_MISSING_REGEX =
   /Unknown argument `(?:category|label|amountExpected|amountPaid|dueWeekNumber|dueWeekNumberDefault)`/;
@@ -1240,20 +1190,11 @@ async function updatePurchaseOrderPayment(
 function deriveOrders(
   context: Awaited<ReturnType<typeof loadOperationsContext>>,
   calendar?: PlanningCalendar['calendar'],
-  options: { includeDraft?: boolean } = {},
+  _options: { includeDraft?: boolean } = {},
 ) {
-  const includeDraft = options.includeDraft === true;
   return context.purchaseOrderInputs
     .map((order) => {
-      if (
-        !includeDraft &&
-        typeof order.status === 'string' &&
-        order.status.trim().toUpperCase() === 'DRAFT'
-      ) {
-        return null;
-      }
       if (!context.productIndex.has(order.productId)) return null;
-      const profile = getLeadTimeProfile(order.productId, context.leadProfiles);
       const productNames =
         Array.isArray(order.batchTableRows) && order.batchTableRows.length > 1
           ? order.batchTableRows
@@ -1266,7 +1207,7 @@ function deriveOrders(
         derived: computePurchaseOrderDerived(
           order,
           context.productIndex,
-          profile,
+          PO_LEVEL_STAGE_PROFILE,
           context.parameters,
           { calendar },
         ),
@@ -1326,7 +1267,6 @@ async function loadFinancialData(planning: PlanningCalendar, strategyId: string,
         findMany: (args?: unknown) => Promise<SalesWeekFinancialsRow[]>;
       }
     | undefined;
-
   const [operations, salesRows, profitOverrideRows, cashOverrideRows] = await Promise.all([
     loadOperationsContext(strategyId, planning.calendar),
     safeFindMany<SalesWeek[]>(
@@ -1446,35 +1386,46 @@ async function getOpsPlanningView(
   const visibleOrders = derivedOrders;
   const visibleOrderIds = new Set(visibleOrders.map((item) => item.derived.id));
 
-  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }) => ({
-    id: input.id,
-    productId: input.productId,
-    orderCode: input.orderCode,
-    poDate: formatDate(input.poDate ?? null),
-    productionStart: toIsoDate(input.productionStart ?? null) ?? '',
-    productionComplete: toIsoDate(input.productionComplete ?? null) ?? '',
-    sourceDeparture: toIsoDate(input.sourceDeparture ?? null) ?? '',
-    portEta: toIsoDate(input.portEta ?? null) ?? '',
-    availableDate: toIsoDate(input.availableDate ?? null) ?? '',
-    productName,
-    shipName: input.shipName ?? '',
-    containerNumber: input.containerNumber ?? input.transportReference ?? '',
-    quantity: formatNumeric(input.quantity ?? null, 0),
-    pay1Date: formatDate(input.pay1Date ?? null),
-    productionWeeks: formatNumeric(derived.stageProfile.productionWeeks),
-    sourceWeeks: formatNumeric(derived.stageProfile.sourceWeeks),
-    oceanWeeks: formatNumeric(derived.stageProfile.oceanWeeks),
-    finalWeeks: formatNumeric(derived.stageProfile.finalWeeks),
-    sellingPrice: formatNumeric(input.overrideSellingPrice ?? null),
-    manufacturingCost: formatNumeric(input.overrideManufacturingCost ?? null),
-    freightCost: formatNumeric(input.overrideFreightCost ?? null),
-    tariffRate: formatPercentDecimal(input.overrideTariffRate ?? null),
-    tacosPercent: formatPercentDecimal(input.overrideTacosPercent ?? null),
-    fbaFee: formatNumeric(input.overrideFbaFee ?? null),
-    referralRate: formatPercentDecimal(input.overrideReferralRate ?? null),
-    storagePerMonth: formatNumeric(input.overrideStoragePerMonth ?? null),
-    status: input.status,
-  }));
+  const inputRows: OpsInputRow[] = visibleOrders.map(({ input, derived, productName }) => {
+    return {
+      id: input.id,
+      productId: input.productId,
+      orderCode: input.orderCode,
+      poDate: formatDate(input.poDate ?? null),
+      poClass: input.poClass ?? '',
+      productionStart: toIsoDate(input.productionStart ?? null) ?? '',
+      productionComplete: toIsoDate(input.productionComplete ?? null) ?? '',
+      sourceDeparture: toIsoDate(input.sourceDeparture ?? null) ?? '',
+      portEta: toIsoDate(input.portEta ?? null) ?? '',
+      availableDate: toIsoDate(input.availableDate ?? null) ?? '',
+      inboundWeekOverride: toIsoDate(input.inboundWeekOverride ?? null) ?? '',
+      inboundWeek: toIsoDate(derived.availableDate ?? null) ?? '',
+      productName,
+      shipName: input.shipName ?? '',
+      containerNumber: formatTransportReference(input.containerNumber ?? input.transportReference),
+      quantity: formatNumeric(input.quantity ?? null, 0),
+      notes: input.notes ?? '',
+      region: strategyRegion,
+      sourceType: purchaseOrderSourceType({
+        sourceSystem: input.sourceSystem ?? null,
+        notes: input.notes,
+      }),
+      pay1Date: formatDate(input.pay1Date ?? null),
+      productionWeeks: formatNumeric(derived.stageProfile.productionWeeks),
+      sourceWeeks: formatNumeric(derived.stageProfile.sourceWeeks),
+      oceanWeeks: formatNumeric(derived.stageProfile.oceanWeeks),
+      finalWeeks: formatNumeric(derived.stageProfile.finalWeeks),
+      sellingPrice: formatNumeric(input.overrideSellingPrice ?? null),
+      manufacturingCost: formatNumeric(input.overrideManufacturingCost ?? null),
+      freightCost: formatNumeric(input.overrideFreightCost ?? null),
+      tariffRate: formatPercentDecimal(input.overrideTariffRate ?? null),
+      tacosPercent: formatPercentDecimal(input.overrideTacosPercent ?? null),
+      fbaFee: formatNumeric(input.overrideFbaFee ?? null),
+      referralRate: formatPercentDecimal(input.overrideReferralRate ?? null),
+      storagePerMonth: formatNumeric(input.overrideStoragePerMonth ?? null),
+      status: input.status,
+    };
+  });
 
   const timelineRows: OpsTimelineRow[] = visibleOrders.map(({ derived, productName }) => ({
     id: derived.id,
@@ -1572,15 +1523,53 @@ async function getOpsPlanningView(
       });
     });
 
-  const leadProfilesPayload = Array.from(context.leadProfiles.entries()).map(
-    ([productId, profile]) => ({
-      productId,
-      productionWeeks: Number(profile.productionWeeks ?? 0),
-      sourceWeeks: Number(profile.sourceWeeks ?? 0),
-      oceanWeeks: Number(profile.oceanWeeks ?? 0),
-      finalWeeks: Number(profile.finalWeeks ?? 0),
-    }),
-  );
+  const poFinanceLookupRows = rawPurchaseOrders
+    .filter((order) => visibleOrderIds.has(order.id))
+    .flatMap((order) => {
+      const derived = derivedByOrderId.get(order.id);
+      const batches = Array.isArray(order.batchTableRows) ? order.batchTableRows : [];
+      return batches.map((batch) => {
+        const totalStageWeeks = derived
+          ? derived.stageProfile.productionWeeks +
+            derived.stageProfile.sourceWeeks +
+            derived.stageProfile.oceanWeeks +
+            derived.stageProfile.finalWeeks
+          : null;
+        return {
+          orderCode: order.orderCode,
+          product: context.productNameById.get(batch.productId) ?? '',
+          quantity: toOptionalNumber(batch.quantity),
+          unitsPerCarton: toOptionalNumber(
+            (batch as BatchTableRow & { unitsPerCarton?: number | null }).unitsPerCarton ?? null,
+          ),
+          cartonLengthCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide1Cm?: Prisma.Decimal | number | null })
+              .cartonSide1Cm ?? null,
+          ),
+          cartonWidthCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide2Cm?: Prisma.Decimal | number | null })
+              .cartonSide2Cm ?? null,
+          ),
+          cartonHeightCm: toOptionalNumber(
+            (batch as BatchTableRow & { cartonSide3Cm?: Prisma.Decimal | number | null })
+              .cartonSide3Cm ?? null,
+          ),
+          mfgStart: derived?.productionStart ?? order.productionStart ?? null,
+          arrivalWeeks: derived?.stageProfile.oceanWeeks ?? null,
+          warehouseWeeks: totalStageWeeks,
+          inboundWeekOverride:
+            (order as PurchaseOrder & { inboundWeekOverride?: Date | null }).inboundWeekOverride ??
+            null,
+          region: strategyRegion,
+        } satisfies PoTableWorkbookInput;
+      });
+    });
+  const poFinanceLookupDerived = poFinanceLookupRows.map((row, index) => ({
+    orderCode: row.orderCode,
+    product: row.product,
+    region: row.region,
+    carton: computePoTableWorkbookRow(row, poFinanceLookupRows, index).carton,
+  }));
 
   const batchRows = rawPurchaseOrders
     .filter((order) => visibleOrderIds.has(order.id))
@@ -1593,6 +1582,24 @@ async function getOpsPlanningView(
         batchCode: batch.batchCode ?? undefined,
         productId: batch.productId,
         productName: context.productNameById.get(batch.productId) ?? '',
+        carton: formatNumeric(
+          computePoFinanceWorkbookRow({
+            orderCode: order.orderCode,
+            product: context.productNameById.get(batch.productId) ?? '',
+            region: strategyRegion,
+            poTableRows: poFinanceLookupDerived,
+            sellPrice: null,
+            manufacturingCost: null,
+            freightCost: null,
+            tariffCost: null,
+            tacosPercent: null,
+            fbaFee: null,
+            referralPercent: null,
+            storageCost: null,
+          }).carton,
+          0,
+        ),
+        region: strategyRegion,
         quantity: formatNumeric(toNumberSafe(batch.quantity), 0),
         sellingPrice: formatNumeric(
           batch.overrideSellingPrice ?? order.overrideSellingPrice ?? null,
@@ -1627,7 +1634,6 @@ async function getOpsPlanningView(
   const calculator: OpsPlanningCalculatorPayload = {
     parameters: context.parameters,
     products: context.productInputs,
-    leadProfiles: leadProfilesPayload,
     purchaseOrders: context.purchaseOrderInputs
       .filter((order) => visibleOrderIds.has(order.id))
       .map(serializePurchaseOrder),
@@ -1654,31 +1660,30 @@ function getSalesPlanningView(
   const productList = [...context.productInputs].sort((a, b) =>
     productLabel(a).localeCompare(productLabel(b)),
   );
+  const orderLeadTimeByProduct = new Map<string, LeadTimeProfile & { totalWeeks: number }>();
+  for (const order of context.purchaseOrderInputs) {
+    const profile = {
+      productionWeeks: Number(order.productionWeeks ?? 0),
+      sourceWeeks: Number(order.sourceWeeks ?? 0),
+      oceanWeeks: Number(order.oceanWeeks ?? 0),
+      finalWeeks: Number(order.finalWeeks ?? 0),
+    };
+    const totalWeeks =
+      profile.productionWeeks + profile.sourceWeeks + profile.oceanWeeks + profile.finalWeeks;
+    if (totalWeeks <= 0) continue;
+    const existing = orderLeadTimeByProduct.get(order.productId);
+    if (existing && existing.totalWeeks >= totalWeeks) continue;
+    orderLeadTimeByProduct.set(order.productId, { ...profile, totalWeeks });
+  }
   const leadTimeByProduct = Object.fromEntries(
     productList.map((product) => {
-      const profile = getLeadTimeProfile(product.id, context.leadProfiles);
-      const profileTotal =
-        Number(profile.productionWeeks ?? 0) +
-        Number(profile.sourceWeeks ?? 0) +
-        Number(profile.oceanWeeks ?? 0) +
-        Number(profile.finalWeeks ?? 0);
-
-      const fallback = context.parameters;
-      const fallbackProfile = {
-        productionWeeks: fallback.defaultProductionWeeks,
-        sourceWeeks: fallback.defaultSourceWeeks,
-        oceanWeeks: fallback.defaultOceanWeeks,
-        finalWeeks: fallback.defaultFinalWeeks,
+      const resolved = orderLeadTimeByProduct.get(product.id) ?? {
+        productionWeeks: 0,
+        sourceWeeks: 0,
+        oceanWeeks: 0,
+        finalWeeks: 0,
+        totalWeeks: 0,
       };
-      const fallbackTotal =
-        Number(fallbackProfile.productionWeeks) +
-        Number(fallbackProfile.sourceWeeks) +
-        Number(fallbackProfile.oceanWeeks) +
-        Number(fallbackProfile.finalWeeks);
-
-      const resolved = profileTotal > 0 ? profile : fallbackProfile;
-      const totalWeeks = profileTotal > 0 ? profileTotal : fallbackTotal;
-
       return [
         product.id,
         {
@@ -1686,7 +1691,7 @@ function getSalesPlanningView(
           sourceWeeks: Number(resolved.sourceWeeks ?? 0),
           oceanWeeks: Number(resolved.oceanWeeks ?? 0),
           finalWeeks: Number(resolved.finalWeeks ?? 0),
-          totalWeeks: Number(totalWeeks ?? 0),
+          totalWeeks: Number(resolved.totalWeeks ?? 0),
         },
       ];
     }),
@@ -1818,9 +1823,9 @@ function getSalesPlanningView(
   const nestedHeaders: NestedHeaderCell[][] = hasProducts
     ? [
         ['', '', ''],
-        ['Week', 'Date', 'Inbound PO'],
+        ['WEEK', 'DATE', 'Notes'],
       ]
-    : [['Week', 'Date', 'Inbound PO']];
+    : [['WEEK', 'DATE', 'Notes']];
 
   productList.forEach((product, productIdx) => {
     nestedHeaders[0].push({ label: productLabel(product), colspan: SALES_METRICS.length });
@@ -1849,6 +1854,7 @@ function getSalesPlanningView(
   }
 
   const currentWeekNumber = weekNumberForDate(asOfDate, planning.calendar);
+  const previousForecastByProductId = new Map<string, ForecastWorkbookRow>();
 
   const segmentForWeek = (weekNumber: number): YearSegment | null => {
     if (!planning.yearSegments.length) return null;
@@ -1900,45 +1906,56 @@ function getSalesPlanningView(
         row[`p${productIdx}_hasInbound`] = 'true';
       }
       row[`p${productIdx}_arrivals`] = formatNumeric(derived?.arrivals ?? null, 0);
+      const forecastRow = computeForecastWorkbookRow({
+        openingStock: null,
+        inbound: derived?.arrivals ?? null,
+        actual: derived?.actualSales ?? null,
+        planner: derived?.forecastSales ?? null,
+        final: derived?.finalSales ?? null,
+        previous: previousForecastByProductId.get(product.id) ?? null,
+      });
+      previousForecastByProductId.set(product.id, forecastRow);
 
       SALES_METRICS.forEach((metric) => {
         const key = columnKey(productIdx, metric);
         switch (metric) {
-          case 'stockStart':
-            row[key] = formatNumeric(derived?.stockStart ?? null, 0);
+          case 'inbound':
+            row[key] = formatNumeric(forecastRow.inbound, 0);
+            break;
+          case 'threePl':
+            row[key] = formatNumeric(forecastRow.threePl, 0);
+            break;
+          case 'fba':
+            row[key] = formatNumeric(forecastRow.fba, 0);
+            break;
+          case 'fbaCoverWeeks':
+            if (!Number.isFinite(forecastRow.fbaCoverWeeks)) {
+              row[key] = '∞';
+            } else {
+              row[key] = formatNumeric(forecastRow.fbaCoverWeeks, 2);
+            }
+            break;
+          case 'totalCoverWeeks':
+            if (!Number.isFinite(forecastRow.totalCoverWeeks)) {
+              row[key] = '∞';
+            } else {
+              row[key] = formatNumeric(forecastRow.totalCoverWeeks, 2);
+            }
             break;
           case 'actualSales':
-            row[key] = formatNumeric(derived?.actualSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.actual, 0);
             break;
           case 'forecastSales':
-            row[key] = formatNumeric(derived?.forecastSales ?? null, 0);
-            break;
-          case 'systemForecastSales':
-            row[key] = formatNumeric(derived?.systemForecastSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.planner, 0);
             break;
           case 'finalSales':
-            row[key] = formatNumeric(derived?.finalSales ?? null, 0);
+            row[key] = formatNumeric(forecastRow.final, 0);
             if (derived?.finalSalesSource) {
               row[`p${productIdx}_finalSalesSource`] = derived.finalSalesSource;
             }
             if (derived?.systemForecastVersion) {
               row[`p${productIdx}_systemForecastVersion`] = derived.systemForecastVersion;
             }
-            break;
-          case 'finalSalesError':
-            row[key] = formatPercent(derived?.finalPercentError ?? null, 1);
-            break;
-          case 'stockWeeks':
-            if (derived?.stockWeeks == null) {
-              row[key] = '';
-            } else if (!Number.isFinite(derived.stockWeeks)) {
-              row[key] = '∞';
-            } else {
-              row[key] = formatNumeric(derived.stockWeeks, 2);
-            }
-            break;
-          case 'stockEnd':
-            row[key] = formatNumeric(derived?.stockEnd ?? null, 0);
             break;
           default:
             break;
@@ -2301,11 +2318,7 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         },
       })
     : null;
-  const activeStrategyName: string | null = activeStrategyRow
-    ? activeStrategyRow.strategyGroup?.name
-      ? `${activeStrategyRow.strategyGroup.name} · ${activeStrategyRow.name}`
-      : activeStrategyRow.name
-    : null;
+  const activeStrategyName: string | null = activeStrategyRow ? activeStrategyRow.name : null;
   const strategyRegion: StrategyRegion =
     strategyId && activeStrategyRow
       ? (() => {
@@ -2318,7 +2331,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       : 'US';
   const weekStartsOn = weekStartsOnForRegion(strategyRegion);
   const reportTimeZone = strategyId ? sellerboardReportTimeZoneForRegion(strategyRegion) : null;
-  const reportAsOfDate = reportTimeZone ? getUtcDateForTimeZone(new Date(), reportTimeZone) : new Date();
+  const reportAsOfDate = reportTimeZone
+    ? getUtcDateForTimeZone(new Date(), reportTimeZone)
+    : new Date();
 
   const [workbookStatus, planningCalendar] = await Promise.all([
     getWorkbookStatus(),
@@ -2355,7 +2370,8 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
     return strategyId;
   };
 
-  const getFinancialData = () => loadFinancialData(planningCalendar, requireStrategyId(), reportAsOfDate);
+  const getFinancialData = () =>
+    loadFinancialData(planningCalendar, requireStrategyId(), reportAsOfDate);
   const weeklyLabelControl = (label: string) => (
     <div key="weekly-label" className={SHEET_TOOLBAR_GROUP}>
       <span className={SHEET_TOOLBAR_LABEL}>{label}</span>
@@ -2546,8 +2562,15 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       const allStrategyIds = strategies.map((s) => s.id);
       const [productSetupView, keyParametersByStrategyId] = await Promise.all([
         strategyId
-          ? getProductSetupView(strategyId)
-          : Promise.resolve({ products: [], operationsParameters: [], salesParameters: [], financeParameters: [], leadStageTemplates: [], leadTimeProfiles: {}, leadTimeOverrideIds: [] }),
+          ? getProductSetupView(
+              strategyId,
+              activeYear ?? new Date().getUTCFullYear(),
+              strategyRegion,
+            )
+          : Promise.resolve({
+              products: [],
+              workbookSetupRows: [],
+            }),
         getKeyParametersForAllStrategies(allStrategyIds),
       ]);
 
@@ -2556,13 +2579,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
           strategies={strategies}
           activeStrategyId={resolvedStrategyId}
           viewer={viewer}
+          activeYear={activeYear ?? new Date().getUTCFullYear()}
           products={productSetupView.products}
-          operationsParameters={productSetupView.operationsParameters}
-          salesParameters={productSetupView.salesParameters}
-          financeParameters={productSetupView.financeParameters}
-          leadStageTemplates={productSetupView.leadStageTemplates}
-          leadTimeProfiles={productSetupView.leadTimeProfiles}
-          leadTimeOverrideIds={productSetupView.leadTimeOverrideIds}
+          workbookSetupRows={productSetupView.workbookSetupRows}
           keyParametersByStrategyId={keyParametersByStrategyId}
         />
       );
@@ -2626,13 +2645,6 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       controls.push(
         <SalesPlanningFocusControl key="sales-focus" productOptions={view.productOptions} />,
       );
-      controls.push(
-        <SellerboardSyncControl
-          key="sellerboard-sync"
-          strategyId={activeStrategyId}
-          strategyRegion={strategyRegion}
-        />,
-      );
       wrapLayout = (node) => (
         <SalesPlanningFocusProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
@@ -2677,15 +2689,14 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getProfitAndLossView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
-      controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
-      controls.push(
-        <SellerboardSyncControl
-          key="sellerboard-sync"
-          strategyId={activeStrategyId}
-          strategyRegion={strategyRegion}
-        />,
+      const view = getProfitAndLossView(
+        data,
+        planningCalendar,
+        activeSegment,
+        activeYear,
+        reportAsOfDate,
       );
+      controls.push(<ProfitAndLossHeaderControls key="pnl-controls" />);
       wrapLayout = (node) => (
         <ProfitAndLossFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
           {node}
@@ -2752,47 +2763,84 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
       );
       break;
     }
-    case '6-po-profitability': {
+    case '6-po-finances': {
+      const activeStrategyId = requireStrategyId();
+      const view = await getOpsPlanningView(
+        activeStrategyId,
+        strategyRegion,
+        planningCalendar,
+        activeSegment,
+      );
+      const productOptions = view.calculator.products
+        .map((product) => ({ id: product.id, name: productLabel(product) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+      tabularContent = (
+        <CustomOpsCostGrid
+          rows={view.batchTableRows}
+          scrollKey={`po-finances:${activeStrategyId}`}
+          products={productOptions}
+        />
+      );
+      break;
+    }
+    case '8-po-profitability': {
       const activeStrategyId = requireStrategyId();
       const data = await getFinancialData();
       const view = getPOProfitabilityView(data, planningCalendar, reportAsOfDate);
       const productOptions = data.operations.productInputs
         .map((product) => ({ id: product.id, name: productLabel(product) }))
         .sort((a, b) => a.name.localeCompare(b.name));
+      const hasPoProfitabilityData = [view.projected.data, view.real.data].some(
+        (rows) => rows.length > 0,
+      );
 
-      controls.push(
-        <POProfitabilityHeaderControls
-          key="po-profitability-controls"
-          productOptions={productOptions}
-        />,
-      );
-      wrapLayout = (node) => (
-        <POProfitabilityFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
-          {node}
-        </POProfitabilityFiltersProvider>
-      );
-      visualContent = (
-        <POProfitabilitySection
-          strategyRegion={strategyRegion}
-          datasets={view}
-          productOptions={productOptions}
-          title="Margin trends"
-          description="Performance across purchase orders by arrival date"
-          showChart
-          showTable={false}
-        />
-      );
-      tabularContent = (
-        <POProfitabilitySection
-          strategyRegion={strategyRegion}
-          datasets={view}
-          productOptions={productOptions}
-          title="P&L breakdown"
-          description="FIFO-based PO-level P&L (Projected vs Real)"
-          showChart={false}
-          showTable
-        />
-      );
+      if (hasPoProfitabilityData) {
+        controls.push(
+          <POProfitabilityHeaderControls
+            key="po-profitability-controls"
+            productOptions={productOptions}
+          />,
+        );
+        wrapLayout = (node) => (
+          <POProfitabilityFiltersProvider key={activeStrategyId} strategyId={activeStrategyId}>
+            {node}
+          </POProfitabilityFiltersProvider>
+        );
+        visualContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="Margin trends"
+            description="Performance across purchase orders by arrival date"
+            showChart
+            showTable={false}
+          />
+        );
+        tabularContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="P&L breakdown"
+            description="FIFO-based PO-level P&L (Projected vs Real)"
+            showChart={false}
+            showTable
+          />
+        );
+      } else {
+        tabularContent = (
+          <POProfitabilitySection
+            strategyRegion={strategyRegion}
+            datasets={view}
+            productOptions={productOptions}
+            title="P&L breakdown"
+            description="FIFO-based PO-level P&L (Projected vs Real)"
+            showChart={false}
+            showTable
+          />
+        );
+      }
       break;
     }
     case '7-fin-planning-cash-flow': {
@@ -2808,7 +2856,13 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
         break;
       }
       const data = await getFinancialData();
-      const view = getCashFlowView(data, planningCalendar, activeSegment, activeYear, reportAsOfDate);
+      const view = getCashFlowView(
+        data,
+        planningCalendar,
+        activeSegment,
+        activeYear,
+        reportAsOfDate,
+      );
       tabularContent = (
         <CashFlowGrid
           strategyId={activeStrategyId}
@@ -2918,7 +2972,9 @@ export default async function SheetPage({ params, searchParams }: SheetPageProps
   // Use unshift to place view toggle first (leftmost) for consistent positioning
   const hasVisualMode = Boolean(visualContent);
   if (hasVisualMode) {
-    controls.unshift(<SheetViewToggle key="sheet-view-toggle" value={viewMode} slug={config.slug} />);
+    controls.unshift(
+      <SheetViewToggle key="sheet-view-toggle" value={viewMode} slug={config.slug} />,
+    );
   }
   const headerControls = controls.length ? controls : undefined;
 

@@ -12,12 +12,80 @@ if ! NODE_BIN="$(command -v node)"; then
   exit 1
 fi
 
+if [ -z "${BW_BIN:-}" ]; then
+  if ! BW_BIN="$(command -v bw)"; then
+    echo "Bitwarden CLI not found in PATH=$PATH" >&2
+    exit 1
+  fi
+fi
+
 run_chrome_helper() {
   "$NODE_BIN" "$CHROME_HELPER" "$@"
 }
 
 ensure_chrome_browser() {
   run_chrome_helper ensure-browser >/dev/null
+}
+
+bitwarden_secret_dir() {
+  if [ -n "${ARGUS_BITWARDEN_SECRET_DIR:-}" ]; then
+    printf '%s' "$ARGUS_BITWARDEN_SECRET_DIR"
+    return 0
+  fi
+  printf '%s' "$HOME/.config/codex/secrets"
+}
+
+bitwarden_secret_path() {
+  local secret_name="$1"
+  printf '%s/%s' "$(bitwarden_secret_dir)" "$secret_name"
+}
+
+read_bitwarden_secret() {
+  local secret_name="$1"
+  local secret_path
+
+  secret_path="$(bitwarden_secret_path "$secret_name")"
+  if [ ! -f "$secret_path" ]; then
+    return 1
+  fi
+
+  cat "$secret_path"
+}
+
+write_bitwarden_secret() {
+  local secret_name="$1"
+  local secret_value="$2"
+  local secret_dir
+  local secret_path
+
+  secret_dir="$(bitwarden_secret_dir)"
+  secret_path="$(bitwarden_secret_path "$secret_name")"
+  mkdir -p "$secret_dir"
+  umask 077
+  printf '%s' "$secret_value" > "$secret_path"
+  chmod 600 "$secret_path"
+}
+
+bitwarden_email() {
+  if [ -n "${ARGUS_BITWARDEN_EMAIL:-}" ]; then
+    printf '%s' "$ARGUS_BITWARDEN_EMAIL"
+    return 0
+  fi
+  printf '%s' 'jarrar@targonglobal.com'
+}
+
+bitwarden_status_field() {
+  local field_name="$1"
+  local payload="$2"
+
+  FIELD_NAME="$field_name" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["PAYLOAD"])
+value = payload.get(os.environ["FIELD_NAME"], "")
+print("" if value is None else value)
+PY
 }
 
 bitwarden_session() {
@@ -28,16 +96,25 @@ bitwarden_session() {
 
   local password
   local session
+  local status_json
+  local status_value
 
-  password="$(security find-generic-password -a "$USER" -s bitwarden-master-password -w)"
-  session="$(BW_PASSWORD="$password" bw unlock --passwordenv BW_PASSWORD --raw)"
+  status_json="$("$BW_BIN" status)"
+  status_value="$(bitwarden_status_field status "$status_json")"
+
+  password="$(read_bitwarden_secret bitwarden-master-password)"
+  if [ "$status_value" = "unauthenticated" ]; then
+    BW_PASSWORD="$password" "$BW_BIN" login "$(bitwarden_email)" --passwordenv BW_PASSWORD >/dev/null
+  fi
+
+  session="$(BW_PASSWORD="$password" "$BW_BIN" unlock --passwordenv BW_PASSWORD --raw)"
   export BW_SESSION="$session"
-  security add-generic-password -U -a "$USER" -s bitwarden-cli-session -w "$session" >/dev/null
+  write_bitwarden_secret bitwarden-cli-session "$session"
   printf '%s' "$session"
 }
 
 bitwarden_login_field() {
-  local item_name="$1"
+  local item_query="$1"
   local login_username="$2"
   local field_name="$3"
   local payload
@@ -45,24 +122,40 @@ bitwarden_login_field() {
 
   session="$(bitwarden_session)"
   export BW_SESSION="$session"
-  payload="$(BW_SESSION="$session" bw list items --search "$item_name")"
+  payload="$(BW_SESSION="$session" "$BW_BIN" list items --search "$item_query")"
 
-  ITEM_NAME="$item_name" LOGIN_USERNAME="$login_username" FIELD_NAME="$field_name" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
+  ITEM_QUERY="$item_query" LOGIN_USERNAME="$login_username" FIELD_NAME="$field_name" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
 import json
 import os
-import sys
+from urllib.parse import urlparse
 
 items = json.loads(os.environ["PAYLOAD"])
-item_name = os.environ["ITEM_NAME"]
+item_query = os.environ["ITEM_QUERY"].strip().lower()
 login_username = os.environ["LOGIN_USERNAME"]
 field_name = os.environ["FIELD_NAME"]
 
-for item in items:
-    if item.get("name") != item_name:
-        continue
+def matches_item(item, query):
+    item_name = (item.get("name") or "").strip().lower()
+    if item_name == query:
+        return True
 
     login = item.get("login") or {}
+    for uri_entry in login.get("uris") or []:
+        uri = (uri_entry or {}).get("uri") or ""
+        if uri.strip().lower() == query:
+            return True
+        try:
+            if (urlparse(uri).hostname or "").strip().lower() == query:
+                return True
+        except ValueError:
+            continue
+    return False
+
+for item in items:
+    login = item.get("login") or {}
     if login.get("username") != login_username:
+        continue
+    if not matches_item(item, item_query):
         continue
 
     if field_name == "username":
@@ -83,30 +176,46 @@ PY
 }
 
 bitwarden_login_item_id() {
-  local item_name="$1"
+  local item_query="$1"
   local login_username="$2"
   local payload
   local session
 
   session="$(bitwarden_session)"
   export BW_SESSION="$session"
-  payload="$(BW_SESSION="$session" bw list items --search "$item_name")"
+  payload="$(BW_SESSION="$session" "$BW_BIN" list items --search "$item_query")"
 
-  ITEM_NAME="$item_name" LOGIN_USERNAME="$login_username" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
+  ITEM_QUERY="$item_query" LOGIN_USERNAME="$login_username" PAYLOAD="$payload" "$PYTHON_BIN" - <<'PY'
 import json
 import os
-import sys
+from urllib.parse import urlparse
 
 items = json.loads(os.environ["PAYLOAD"])
-item_name = os.environ["ITEM_NAME"]
+item_query = os.environ["ITEM_QUERY"].strip().lower()
 login_username = os.environ["LOGIN_USERNAME"]
 
-for item in items:
-    if item.get("name") != item_name:
-        continue
+def matches_item(item, query):
+    item_name = (item.get("name") or "").strip().lower()
+    if item_name == query:
+        return True
 
     login = item.get("login") or {}
+    for uri_entry in login.get("uris") or []:
+        uri = (uri_entry or {}).get("uri") or ""
+        if uri.strip().lower() == query:
+            return True
+        try:
+            if (urlparse(uri).hostname or "").strip().lower() == query:
+                return True
+        except ValueError:
+            continue
+    return False
+
+for item in items:
+    login = item.get("login") or {}
     if login.get("username") != login_username:
+        continue
+    if not matches_item(item, item_query):
         continue
 
     item_id = item.get("id")
@@ -139,7 +248,7 @@ bitwarden_login_totp() {
   session="$(bitwarden_session)"
   export BW_SESSION="$session"
   item_id="$(bitwarden_login_item_id "$item_name" "$login_username")"
-  item_json="$(BW_SESSION="$session" bw get item "$item_id")"
+  item_json="$(BW_SESSION="$session" "$BW_BIN" get item "$item_id")"
   totp_value="$(printf '%s' "$item_json" | jq -r '.login.totp // ""')"
 
   if [ -z "$totp_value" ]; then
@@ -243,6 +352,88 @@ require_env() {
   printf '%s' "$value"
 }
 
+argus_market() {
+  local value="${ARGUS_MARKET:-us}"
+  case "$value" in
+    us|uk)
+      printf '%s' "$value"
+      ;;
+    *)
+      echo "Unsupported market: $value" >&2
+      exit 1
+      ;;
+  esac
+}
+
+argus_market_env_suffix() {
+  local market
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      printf '%s' 'US'
+      ;;
+    uk)
+      printf '%s' 'UK'
+      ;;
+  esac
+}
+
+argus_market_env_name() {
+  local base_name="$1"
+  printf '%s_%s' "$base_name" "$(argus_market_env_suffix)"
+}
+
+require_market_env() {
+  local base_name="$1"
+  require_env "$(argus_market_env_name "$base_name")"
+}
+
+argus_tmp_log_path() {
+  local log_name="$1"
+  local market
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      printf '/tmp/%s.log' "$log_name"
+      ;;
+    uk)
+      printf '/tmp/%s-%s.log' "$log_name" "$market"
+      ;;
+  esac
+}
+
+seller_central_host_globs() {
+  local host
+  host="$(require_market_env ARGUS_SELLER_CENTRAL_HOST)"
+  case "$(argus_market)" in
+    us)
+      printf '%s' "$host,amazon.com"
+      ;;
+    uk)
+      printf '%s' "$host,amazon.co.uk,amazon.com"
+      ;;
+  esac
+}
+
+argus_sales_root() {
+  local market
+  local env_name
+  market="$(argus_market)"
+  case "$market" in
+    us)
+      env_name="ARGUS_SALES_ROOT_US"
+      ;;
+    uk)
+      env_name="ARGUS_SALES_ROOT_UK"
+      ;;
+  esac
+  require_env "$env_name"
+}
+
+argus_monitoring_root() {
+  printf '%s/Monitoring' "$(argus_sales_root)"
+}
+
 js_string_literal() {
   "$PYTHON_BIN" - "$1" <<'PY'
 import json
@@ -254,7 +445,14 @@ PY
 
 is_amazon_login_url() {
   local url="${1:-}"
-  [[ "$url" == *"amazon.com/ap/"* || "$url" == *"signin"* ]]
+  case "$url" in
+    *"amazon.com/ap/"*|*"amazon.co.uk/ap/"*|*"signin"*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 copy_file_with_node() {
@@ -353,6 +551,8 @@ else:
     glob_pattern = pattern
 
 deadline = time.time() + timeout_seconds
+stable_signature = None
+stable_seen_at = 0.0
 while time.time() <= deadline:
     matches = sorted(
         (
@@ -374,8 +574,16 @@ while time.time() <= deadline:
             or latest_ctime > baseline_ctime
             or latest_size != baseline_size
         ):
-            print(str(latest))
-            raise SystemExit(0)
+            signature = (str(latest), latest_mtime, latest_ctime, latest_size)
+            if signature == stable_signature and time.time() - stable_seen_at >= 2:
+                print(str(latest))
+                raise SystemExit(0)
+            stable_signature = signature
+            stable_seen_at = time.time()
+            time.sleep(2)
+            continue
+    stable_signature = None
+    stable_seen_at = 0.0
     time.sleep(2)
 
 raise SystemExit(1)

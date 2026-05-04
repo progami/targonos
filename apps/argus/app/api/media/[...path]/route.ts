@@ -3,7 +3,8 @@ import { createReadStream } from 'fs'
 import { stat } from 'fs/promises'
 import { join, extname } from 'path'
 import { Readable } from 'stream'
-import { getArgusMediaBackend, getArgusMediaS3Key } from '@/lib/media-backend'
+import prisma from '@/lib/db'
+import { getArgusMediaBackend, requireArgusS3MediaConfig } from '@/lib/media-backend'
 
 export const runtime = 'nodejs'
 
@@ -46,9 +47,13 @@ function sanitizeRangeHeader(rangeHeader: string): string | null {
 }
 
 function awsHttpStatusCode(error: unknown): number | null {
-  if (!error || typeof error !== 'object') return null
+  if (error === null) return null
+  if (error === undefined) return null
+  if (typeof error !== 'object') return null
   const metadata = (error as { $metadata?: unknown }).$metadata
-  if (!metadata || typeof metadata !== 'object') return null
+  if (metadata === null) return null
+  if (metadata === undefined) return null
+  if (typeof metadata !== 'object') return null
   const status = (metadata as { httpStatusCode?: unknown }).httpStatusCode
   return typeof status === 'number' ? status : null
 }
@@ -61,12 +66,16 @@ export async function GET(
   const backend = getArgusMediaBackend()
 
   if (backend === 's3') {
+    const config = requireArgusS3MediaConfig()
     const safeSegments = segments.filter((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
     if (safeSegments.length !== segments.length) {
       return new NextResponse('Forbidden', { status: 403 })
     }
     const rel = safeSegments.join('/')
-    if (rel.length === 0 || rel.includes('..')) {
+    if (rel.length === 0) {
+      return new NextResponse('Forbidden', { status: 403 })
+    }
+    if (rel.includes('..')) {
       return new NextResponse('Forbidden', { status: 403 })
     }
 
@@ -75,12 +84,35 @@ export async function GET(
 
     const rawRangeHeader = request.headers.get('range')
     const rangeHeader = rawRangeHeader ? sanitizeRangeHeader(rawRangeHeader) : null
+    const filePath = `media/${rel}`
+    const mediaAsset = await prisma.mediaAsset.findFirst({
+      where: {
+        filePath,
+      },
+      select: {
+        storageBackend: true,
+        s3Bucket: true,
+        s3Key: true,
+      },
+    })
+
+    if (mediaAsset === null) {
+      return new NextResponse('Not Found', { status: 404 })
+    }
+    if (mediaAsset.storageBackend !== 'S3') {
+      throw new Error(`Media asset ${filePath} is not stored in S3.`)
+    }
+    if (mediaAsset.s3Bucket !== config.bucket) {
+      throw new Error(`Media asset ${filePath} belongs to ${mediaAsset.s3Bucket}, not ${config.bucket}.`)
+    }
+    if (mediaAsset.s3Key === null) {
+      throw new Error(`Media asset ${filePath} is missing s3Key.`)
+    }
 
     try {
       const { getS3Service } = await import('@targon/aws-s3')
       const s3 = getS3Service()
-      const key = getArgusMediaS3Key(`media/${rel}`)
-      const result = await s3.getObjectStream(key, rangeHeader ? { range: rangeHeader } : {})
+      const result = await s3.getObjectStream(mediaAsset.s3Key, rangeHeader ? { range: rangeHeader } : {})
 
       const headers: Record<string, string> = {
         'Content-Type': result.contentType ?? fallbackContentType,

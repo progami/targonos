@@ -1,5 +1,10 @@
 import type { TenantCode } from '@/lib/tenant/constants'
+import { isWorktreeDevAuthEnabled } from '@targon/auth'
 import { portalUrl } from '@/lib/portal'
+
+export function shouldPersistPortalActiveTenant(): boolean {
+  return !isWorktreeDevAuthEnabled()
+}
 
 export function buildPortalActiveTenantRequest(
   request: Request,

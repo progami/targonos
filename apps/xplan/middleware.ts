@@ -33,7 +33,6 @@ export async function middleware(request: NextRequest) {
     isTokenAuthedCronRoute ||
     normalizedPath === '/no-access' ||
     normalizedPath === '/api/health' ||
-    normalizedPath.startsWith('/api/auth/') ||
     normalizedPath.startsWith('/_next') ||
     normalizedPath === '/favicon.ico' ||
     normalizedPath === '/favicon.svg'

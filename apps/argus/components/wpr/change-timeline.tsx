@@ -1,4 +1,28 @@
-import { Box, Typography } from '@mui/material';
+'use client';
+
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  Alert,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
+import { getPublicBasePath } from '@/lib/base-path';
+import { appendMarketParam, type ArgusMarket } from '@/lib/argus-market';
+import { formatAsinReference } from '@/lib/product-labels';
+import {
+  formatWprChangeCategory,
+  getWprChangeCategoryColor,
+  WPR_CHANGE_CATEGORY_OPTIONS,
+} from '@/lib/wpr/change-log-categories';
 import type { WprChangeLogEntry, WeekLabel } from '@/lib/wpr/types';
 import {
   panelSx,
@@ -6,45 +30,50 @@ import {
   panelTitleSx,
   panelBadgeSx,
   panelBgDarker,
-  textMuted,
-  textSecondary,
+  subtleBorder,
   teal,
+  textMuted,
+  textPrimary,
+  textSecondary,
 } from '@/lib/wpr/panel-tokens';
+import WprWeekSelect from '@/components/wpr/wpr-week-select';
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'LISTING ATTRIBUTES': 'rgba(0, 194, 185, 0.7)',
-  IMAGES: 'rgba(168, 130, 255, 0.7)',
-  PRICING: 'rgba(255, 183, 77, 0.7)',
-  INVENTORY: 'rgba(100, 181, 246, 0.7)',
-  RANKING: 'rgba(129, 199, 132, 0.7)',
-  ADVERTISING: 'rgba(255, 138, 128, 0.7)',
+const basePath = getPublicBasePath();
+
+const dialogSlotProps = {
+  paper: {
+    sx: {
+      borderRadius: 3,
+      border: '1px solid rgba(255,255,255,0.08)',
+      bgcolor: panelBgDarker,
+      color: textPrimary,
+      boxShadow: '0 24px 80px rgba(0, 0, 0, 0.45)',
+    },
+  },
+  backdrop: {
+    sx: {
+      backdropFilter: 'blur(3px)',
+      backgroundColor: 'rgba(0, 8, 16, 0.55)',
+    },
+  },
+} as const;
+
+type ChangeDraft = {
+  entryDate: string;
+  category: string;
+  title: string;
+  summary: string;
+  asins: string;
+  fieldLabels: string;
+  highlights: string;
+  statusLines: string;
 };
-
-function getCategoryColor(category: string): string {
-  return CATEGORY_COLORS[category.toUpperCase()] ?? 'rgba(255,255,255,0.6)';
-}
-
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function formatDate(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return raw;
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
-function formatDay(raw: string): string {
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return '';
-  return DAYS[d.getUTCDay()];
-}
 
 const cellSx = {
   px: 1.5,
   py: 1,
   fontSize: '0.8125rem',
   lineHeight: 1.4,
-  whiteSpace: 'nowrap' as const,
   borderBottom: '1px solid rgba(255,255,255,0.04)',
   verticalAlign: 'top' as const,
 };
@@ -69,7 +98,7 @@ const tagSx = {
   px: '7px',
   py: '3px',
   borderRadius: '4px',
-  fontSize: '0.75rem',
+  fontSize: '0.72rem',
   fontWeight: 600,
   letterSpacing: '0.04em',
   textTransform: 'uppercase' as const,
@@ -90,218 +119,506 @@ const chipSx = {
   whiteSpace: 'nowrap' as const,
 };
 
+function compactAsinList(values: string[]): string {
+  if (values.length === 0) {
+    return '—';
+  }
+
+  return values.map((value) => formatAsinReference(value)).join(', ');
+}
+
+function summaryText(entry: WprChangeLogEntry): string {
+  if (entry.summary.trim() !== '') {
+    return entry.summary;
+  }
+
+  if (entry.highlights !== undefined && entry.highlights.length > 0) {
+    return entry.highlights.join(' | ');
+  }
+
+  return '—';
+}
+
+function fieldLabels(entry: WprChangeLogEntry): string[] {
+  if (entry.field_labels === undefined) {
+    return [];
+  }
+
+  return entry.field_labels;
+}
+
+function todayIsoDate(): string {
+  const now = new Date();
+  const year = String(now.getFullYear());
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function buildInitialDraft(): ChangeDraft {
+  return {
+    entryDate: todayIsoDate(),
+    category: 'CONTENT',
+    title: '',
+    summary: '',
+    asins: '',
+    fieldLabels: '',
+    highlights: '',
+    statusLines: '',
+  };
+}
+
+function splitCommaOrLineValues(value: string): string[] {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
+}
+
+function splitLineValues(value: string): string[] {
+  return value
+    .split('\n')
+    .map((item) => item.trim())
+    .filter((item) => item !== '');
+}
+
 export default function ChangeTimeline({
-  entriesByWeek,
+  entries,
+  selectedWeek,
+  weeks,
+  weekStartDates,
+  onSelectWeek,
+  market,
 }: {
-  entriesByWeek: Record<WeekLabel, WprChangeLogEntry[]>;
+  entries: WprChangeLogEntry[];
+  selectedWeek: WeekLabel;
+  weeks: WeekLabel[];
+  weekStartDates: Record<WeekLabel, string>;
+  onSelectWeek: (week: WeekLabel) => void;
+  market: ArgusMarket;
 }) {
-  const weeks = Object.keys(entriesByWeek).sort().reverse();
-  const totalChanges = weeks.reduce((sum, w) => sum + entriesByWeek[w].length, 0);
-  const latestWeek = weeks[0];
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<ChangeDraft>(() => buildInitialDraft());
+
+  const resetDraft = () => {
+    setDraft(buildInitialDraft());
+    setError(null);
+  };
+
+  const handleOpenDialog = () => {
+    resetDraft();
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    if (busy) {
+      return;
+    }
+
+    setDialogOpen(false);
+    setError(null);
+  };
+
+  const handleSubmit = async () => {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`${basePath}${appendMarketParam('/api/wpr/changelog', market)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          weekLabel: selectedWeek,
+          entryDate: draft.entryDate,
+          category: draft.category,
+          title: draft.title,
+          summary: draft.summary,
+          asins: splitCommaOrLineValues(draft.asins),
+          fieldLabels: splitCommaOrLineValues(draft.fieldLabels),
+          highlights: splitLineValues(draft.highlights),
+          statusLines: splitLineValues(draft.statusLines),
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Failed to create the WPR changelog entry.');
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ['wpr', market] });
+      setDialogOpen(false);
+      resetDraft();
+    } catch (submissionError) {
+      const message = submissionError instanceof Error ? submissionError.message : 'Failed to create the WPR changelog entry.';
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveDisabled =
+    busy ||
+    draft.entryDate.trim() === '' ||
+    draft.title.trim() === '' ||
+    draft.summary.trim() === '' ||
+    splitCommaOrLineValues(draft.asins).length === 0 ||
+    splitLineValues(draft.highlights).length === 0;
 
   return (
     <Box sx={panelSx}>
-      {/* Panel header */}
       <Box sx={panelHeadSx}>
-        <Typography sx={panelTitleSx}>Change Log</Typography>
-        <Typography sx={panelBadgeSx}>
-          {totalChanges} tracked change{totalChanges !== 1 ? 's' : ''} &middot; through{' '}
-          {latestWeek}
-        </Typography>
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexWrap: 'wrap' }}>
+          <Typography sx={panelTitleSx}>Change Log</Typography>
+          <Typography sx={panelBadgeSx}>
+            {entries.length} tracked change{entries.length !== 1 ? 's' : ''}
+          </Typography>
+          <Typography sx={panelBadgeSx}>Through {selectedWeek}</Typography>
+        </Stack>
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <WprWeekSelect
+            label="Week"
+            selectedWeek={selectedWeek}
+            weeks={weeks}
+            weekStartDates={weekStartDates}
+            onSelectWeek={onSelectWeek}
+            minWidth={220}
+          />
+          <Button
+            type="button"
+            size="small"
+            variant="outlined"
+            onClick={handleOpenDialog}
+            sx={{
+              borderColor: 'rgba(0,194,185,0.42)',
+              color: teal,
+              fontWeight: 700,
+              letterSpacing: '0.04em',
+              textTransform: 'none',
+              '&:hover': {
+                borderColor: 'rgba(0,194,185,0.56)',
+                bgcolor: 'rgba(0,194,185,0.12)',
+              },
+            }}
+          >
+            New change
+          </Button>
+        </Stack>
       </Box>
 
-      {/* Table */}
-      <Box sx={{ overflow: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '5%' }}>
-                Week
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '11%' }}>
-                Date
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '9%' }}>
-                Day
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '10%' }}>
-                Category
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '8%' }}>
-                Source
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '28%' }}>
-                Change
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '15%' }}>
-                ASINs
-              </Box>
-              <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '14%' }}>
-                Fields
-              </Box>
-            </tr>
-          </thead>
-          <tbody>
-            {weeks.map((week, weekIdx) => {
-              const entries = entriesByWeek[week];
-              const showWeekSeparator = weekIdx > 0;
-
-              return entries.map((entry, entryIdx) => (
-                <Box
-                  component="tr"
-                  key={entry.id}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
-                    transition: 'background-color 0.1s',
-                    ...(showWeekSeparator &&
-                      entryIdx === 0 && {
-                        '& > td, & > th': {
-                          borderTop: '1px solid rgba(255,255,255,0.08)',
-                        },
-                      }),
-                  }}
-                >
-                  {/* Week */}
-                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
-                    <Box
-                      component="span"
-                      sx={{
-                        px: '6px',
-                        py: '2px',
-                        bgcolor: 'rgba(0, 194, 185, 0.15)',
-                        border: '1px solid rgba(0, 194, 185, 0.25)',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        letterSpacing: '0.08em',
-                        color: teal,
-                      }}
-                    >
-                      {entry.week_label}
-                    </Box>
-                  </Box>
-
-                  {/* Date */}
+      {entries.length === 0 ? (
+        <Box
+          sx={{
+            minHeight: 240,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: 'rgba(255,255,255,0.54)',
+            fontSize: '0.78rem',
+            letterSpacing: '0.03em',
+          }}
+        >
+          No tracked changes in the available history.
+        </Box>
+      ) : (
+        <Box sx={{ overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '72px' }}>
+                  Week
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '156px' }}>
+                  Date
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '92px' }}>
+                  Source
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '92px' }}>
+                  Category
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '280px' }}>
+                  Title
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left' }}>
+                  Summary
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '180px' }}>
+                  ASINs
+                </Box>
+                <Box component="th" sx={{ ...headerCellSx, textAlign: 'left', width: '180px' }}>
+                  Fields
+                </Box>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => {
+                const summary = summaryText(entry);
+                const categoryColor = getWprChangeCategoryColor(entry.category);
+                const fields = fieldLabels(entry);
+                return (
                   <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}
+                    component="tr"
+                    key={entry.id}
+                    sx={{
+                      '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' },
+                      transition: 'background-color 0.1s',
+                    }}
                   >
-                    {formatDate(entry.timestamp ?? entry.date_label)}
-                  </Box>
-
-                  {/* Day */}
-                  <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', color: textMuted }}
-                  >
-                    {formatDay(entry.timestamp ?? entry.date_label)}
-                  </Box>
-
-                  {/* Category */}
-                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
-                    <Box
-                      component="span"
-                      sx={{
-                        ...tagSx,
-                        bgcolor: `${getCategoryColor(entry.category)}15`,
-                        border: `1px solid ${getCategoryColor(entry.category)}40`,
-                        color: getCategoryColor(entry.category),
-                      }}
-                    >
-                      {entry.category}
-                    </Box>
-                  </Box>
-
-                  {/* Source */}
-                  <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
-                    <Box
-                      component="span"
-                      sx={{
-                        ...tagSx,
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: textMuted,
-                        fontWeight: 500,
-                      }}
-                    >
-                      {entry.source}
-                    </Box>
-                  </Box>
-
-                  {/* Change (title + summary) */}
-                  <Box
-                    component="td"
-                    sx={{ ...cellSx, textAlign: 'left', whiteSpace: 'normal' }}
-                  >
-                    <Typography
-                      sx={{
-                        fontSize: '0.8125rem',
-                        fontWeight: 700,
-                        color: 'rgba(255,255,255,0.85)',
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      {entry.title}
-                    </Typography>
-                    {entry.summary && (
-                      <Typography
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                      <Box
+                        component="span"
                         sx={{
+                          px: '6px',
+                          py: '2px',
+                          bgcolor: 'rgba(0, 194, 185, 0.15)',
+                          border: '1px solid rgba(0, 194, 185, 0.25)',
+                          borderRadius: '4px',
                           fontSize: '0.75rem',
-                          color: textMuted,
-                          lineHeight: 1.5,
-                          mt: '2px',
+                          fontWeight: 700,
+                          letterSpacing: '0.08em',
+                          color: teal,
                         }}
                       >
-                        {entry.summary}
+                        {entry.week_label}
+                      </Box>
+                    </Box>
+
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}>
+                      {entry.date_label}
+                    </Box>
+
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                      <Box
+                        component="span"
+                        sx={{
+                          ...tagSx,
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          color: textMuted,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {entry.source}
+                      </Box>
+                    </Box>
+
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                      <Box
+                        component="span"
+                        sx={{
+                          ...tagSx,
+                          bgcolor: `${categoryColor}15`,
+                          border: `1px solid ${categoryColor}40`,
+                          color: categoryColor,
+                        }}
+                      >
+                        {formatWprChangeCategory(entry.category)}
+                      </Box>
+                    </Box>
+
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: 'rgba(255,255,255,0.85)' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.8125rem',
+                          fontWeight: 700,
+                          color: 'inherit',
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {entry.title}
                       </Typography>
-                    )}
-                  </Box>
+                    </Box>
 
-                  {/* ASINs */}
-                  <Box
-                    component="td"
-                    sx={{
-                      ...cellSx,
-                      textAlign: 'left',
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    {(entry.asins?.length ?? 0) > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {(entry.asins ?? []).map((asin) => (
-                          <Box key={asin} component="span" sx={chipSx}>
-                            {asin}
-                          </Box>
-                        ))}
-                      </Box>
-                    )}
-                  </Box>
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left', color: textSecondary }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.78rem',
+                          color: 'inherit',
+                          lineHeight: 1.45,
+                          whiteSpace: 'normal',
+                        }}
+                      >
+                        {summary}
+                      </Typography>
+                    </Box>
 
-                  {/* Fields */}
-                  <Box
-                    component="td"
-                    sx={{
-                      ...cellSx,
-                      textAlign: 'left',
-                      whiteSpace: 'normal',
-                    }}
-                  >
-                    {(entry.field_labels?.length ?? 0) > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {(entry.field_labels ?? []).map((field) => (
-                          <Box key={field} component="span" sx={chipSx}>
-                            {field}
-                          </Box>
-                        ))}
-                      </Box>
-                    )}
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left' }}>
+                      <Typography
+                        sx={{
+                          fontSize: '0.76rem',
+                          color: textSecondary,
+                          lineHeight: 1.45,
+                          whiteSpace: 'normal',
+                        }}
+                      >
+                        {compactAsinList(entry.asins)}
+                      </Typography>
+                    </Box>
+
+                    <Box component="td" sx={{ ...cellSx, textAlign: 'left', whiteSpace: 'normal' }}>
+                      {fields.length === 0 ? (
+                        <Typography sx={{ fontSize: '0.76rem', color: textMuted }}>—</Typography>
+                      ) : (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {fields.map((field) => (
+                            <Box component="span" key={`${entry.id}-${field}`} sx={chipSx}>
+                              {field}
+                            </Box>
+                          ))}
+                        </Box>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-              ));
-            })}
-          </tbody>
-        </table>
-      </Box>
+                );
+              })}
+            </tbody>
+          </table>
+        </Box>
+      )}
+
+      <Dialog open={dialogOpen} onClose={handleCloseDialog} fullWidth maxWidth="md" slotProps={dialogSlotProps}>
+        <DialogTitle sx={{ pb: 1.25, borderBottom: subtleBorder }}>
+          <Stack spacing={0.5}>
+            <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: textPrimary }}>
+              Log a new standardized change
+            </Typography>
+            <Typography sx={{ fontSize: '0.82rem', color: textSecondary }}>
+              This writes a canonical Plan Log markdown file for {selectedWeek} and rebuilds the WPR payload.
+            </Typography>
+          </Stack>
+        </DialogTitle>
+
+        <DialogContent dividers sx={{ py: 2.5, borderColor: 'rgba(255,255,255,0.08)' }}>
+          <Stack spacing={2}>
+            {error ? <Alert severity="error">{error}</Alert> : null}
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <TextField
+                label="Week"
+                value={selectedWeek}
+                fullWidth
+                InputProps={{ readOnly: true }}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    bgcolor: 'rgba(255,255,255,0.03)',
+                  },
+                }}
+              />
+              <TextField
+                label="Entry date"
+                type="date"
+                value={draft.entryDate}
+                onChange={(event) => setDraft((current) => ({ ...current, entryDate: event.target.value }))}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                select
+                label="Category"
+                value={draft.category}
+                onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                fullWidth
+              >
+                {WPR_CHANGE_CATEGORY_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Stack>
+
+            <TextField
+              label="Title"
+              value={draft.title}
+              onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+              fullWidth
+              placeholder="Content update across 2 ASINs"
+            />
+
+            <TextField
+              label="Summary"
+              value={draft.summary}
+              onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
+              fullWidth
+              multiline
+              minRows={2}
+              placeholder="Backend terms and bullets refreshed."
+            />
+
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+              <TextField
+                label="ASINs"
+                value={draft.asins}
+                onChange={(event) => setDraft((current) => ({ ...current, asins: event.target.value }))}
+                fullWidth
+                multiline
+                minRows={4}
+                placeholder={'B09HXC3NL8\nB0CR1GSBQ9'}
+                helperText="One per line or comma separated."
+              />
+              <TextField
+                label="Fields"
+                value={draft.fieldLabels}
+                onChange={(event) => setDraft((current) => ({ ...current, fieldLabels: event.target.value }))}
+                fullWidth
+                multiline
+                minRows={4}
+                placeholder={'Backend terms\nBullet points'}
+                helperText="Optional. One per line or comma separated."
+              />
+            </Stack>
+
+            <TextField
+              label="What changed (one per line)"
+              value={draft.highlights}
+              onChange={(event) => setDraft((current) => ({ ...current, highlights: event.target.value }))}
+              fullWidth
+              multiline
+              minRows={5}
+              placeholder={'Rewrote backend terms for root coverage.\nTightened bullet hierarchy for mobile.'}
+            />
+
+            <TextField
+              label="Status"
+              value={draft.statusLines}
+              onChange={(event) => setDraft((current) => ({ ...current, statusLines: event.target.value }))}
+              fullWidth
+              multiline
+              minRows={3}
+              placeholder={'Submitted in Seller Central.\nWaiting for propagation.'}
+              helperText="Optional. One status line per row."
+            />
+          </Stack>
+        </DialogContent>
+
+        <DialogActions sx={{ px: 3, py: 2, gap: 1.25, borderTop: subtleBorder }}>
+          <Button type="button" variant="text" color="inherit" disabled={busy} onClick={handleCloseDialog}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="contained"
+            disabled={saveDisabled}
+            onClick={() => {
+              void handleSubmit();
+            }}
+            sx={{
+              bgcolor: teal,
+              color: 'rgba(0, 20, 35, 0.95)',
+              fontWeight: 800,
+              '&:hover': {
+                bgcolor: '#24d7cf',
+              },
+            }}
+          >
+            {busy ? 'Saving...' : 'Save change'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

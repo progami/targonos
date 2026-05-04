@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface EbcImageTextProps {
   headline: string | null
   bodyText: string | null
@@ -11,10 +13,13 @@ export function EbcImageText({ headline, bodyText, images }: EbcImageTextProps) 
     <div className="flex gap-6 items-start">
       {images[0] && (
         <div className="shrink-0 w-1/2">
-          <img
+          <Image
             src={images[0].src}
             alt={images[0].alt ?? 'Product image'}
-            className="w-full rounded-lg"
+            width={1200}
+            height={1200}
+            unoptimized
+            className="h-auto w-full rounded-lg"
           />
         </div>
       )}

@@ -11,7 +11,7 @@ import {
  Zap,
  Users
 } from '@/lib/lucide-icons'
-import { portalUrl, redirectToPortal } from '@/lib/portal'
+import { buildAppCallbackUrl, portalUrl, redirectToPortal } from '@/lib/portal'
 
 export default function LandingPage() {
  const version = process.env.NEXT_PUBLIC_VERSION ?? '0.0.0'
@@ -78,7 +78,7 @@ export default function LandingPage() {
  href={portalUrl('/login').toString()}
  onClick={(e) => {
  e.preventDefault()
- redirectToPortal('/login', `${window.location.origin}/dashboard`)
+ redirectToPortal('/login', buildAppCallbackUrl('/dashboard'))
  }}
  className="group inline-flex items-center justify-center gap-2 px-8 py-4 text-lg font-medium text-white bg-gradient-to-r from-cyan-600 to-brand-teal-600 rounded-lg hover:from-cyan-700 hover:to-brand-teal-700 transition-all transform hover:scale-105"
  >
@@ -141,7 +141,7 @@ export default function LandingPage() {
  href={portalUrl('/login').toString()}
  onClick={(e) => {
  e.preventDefault()
- redirectToPortal('/login', `${window.location.origin}/dashboard`)
+ redirectToPortal('/login', buildAppCallbackUrl('/dashboard'))
  }}
  className="inline-flex items-center gap-2 px-8 py-4 text-lg font-medium text-cyan-600 bg-white dark:bg-slate-800 rounded-lg hover:bg-slate-100 transition-colors"
  >

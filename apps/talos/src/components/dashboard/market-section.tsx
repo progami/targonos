@@ -8,6 +8,41 @@ import {
  Area
 } from '@/components/charts/RechartsComponents'
 
+function formatAxisDate(value: string) {
+ if (!value) return ''
+ const date = new Date(value)
+ if (isNaN(date.getTime())) return ''
+ return date.toLocaleDateString('en-US', {
+ month: 'short',
+ day: 'numeric',
+ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+ })
+}
+
+function formatTooltipDate(value: string) {
+ if (!value) return ''
+ const date = new Date(value)
+ if (isNaN(date.getTime())) return ''
+ return date.toLocaleDateString('en-US', {
+ weekday: 'long',
+ year: 'numeric',
+ month: 'long',
+ day: 'numeric',
+ timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+ })
+}
+
+function getVisibleTickValues(data: Array<{ date: string; inventory: number }>) {
+ if (data.length <= 7) return data.map(point => point.date)
+
+ const step = Math.ceil(data.length / 6)
+ const ticks = data
+ .filter((_, index) => index % step === 0 || index === data.length - 1)
+ .map(point => point.date)
+
+ return Array.from(new Set(ticks))
+}
+
 interface MarketSectionProps {
  data?: {
  amazonMetrics?: {
@@ -31,35 +66,31 @@ export function MarketSection({ data, loading }: MarketSectionProps) {
  )
  }
 
+ const inventoryTrend = data?.inventoryTrend ?? []
+ const visibleTicks = getVisibleTickValues(inventoryTrend)
+
  return (
  <div>
  {/* Inventory Trend Chart */}
- {data?.inventoryTrend && data.inventoryTrend.length > 0 ? (
+ {inventoryTrend.length > 0 ? (
  <div className="h-64 sm:h-72 md:h-80">
  <ResponsiveContainer width="100%" height="100%">
- <AreaChart data={data.inventoryTrend} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+ <AreaChart data={inventoryTrend} margin={{ top: 10, right: 16, left: 8, bottom: 12 }}>
  <defs>
  <linearGradient id="colorInventory" x1="0" y1="0" x2="0" y2="1">
  <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
  <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
  </linearGradient>
  </defs>
- <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+ <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#e5e7eb" />
  <XAxis 
  dataKey="date" 
- tick={{ fontSize: 11 }}
- tickFormatter={(value) => {
- if (!value) return ''
- const date = new Date(value)
- if (isNaN(date.getTime())) return ''
- // Use local timezone formatting
- return date.toLocaleDateString('en-US', { 
- month: 'numeric', 
- day: 'numeric',
- timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
- })
- }}
- interval="preserveStartEnd"
+ ticks={visibleTicks}
+ tick={{ fontSize: 10 }}
+ tickMargin={10}
+ minTickGap={24}
+ tickFormatter={formatAxisDate}
+ interval={0}
  />
  <YAxis 
  tick={{ fontSize: 12 }}
@@ -72,18 +103,7 @@ export function MarketSection({ data, loading }: MarketSectionProps) {
  borderRadius: '6px'
  }}
  formatter={(value: number) => [value.toLocaleString(), 'Inventory']}
- labelFormatter={(label) => {
- if (!label) return ''
- const date = new Date(label)
- if (isNaN(date.getTime())) return ''
- return date.toLocaleDateString('en-US', { 
- weekday: 'long', 
- year: 'numeric', 
- month: 'long', 
- day: 'numeric',
- timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
- })
- }}
+ labelFormatter={formatTooltipDate}
  />
  <Area 
  type="monotone" 

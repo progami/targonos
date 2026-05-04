@@ -6,31 +6,47 @@ import csv
 import html
 import json
 import math
-import os
 import re
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from common import resolve_wpr_paths
+from market_config import wpr_market_config
 
 WPR_PATHS = resolve_wpr_paths()
 DATA_ROOT = WPR_PATHS.wpr_root
 WEEK_DIR_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
 ASIN_RE = re.compile(r"b0[a-z0-9]{8}$", re.IGNORECASE)
-DEFAULT_COMPETITOR_ASIN = "B0DQDWV1SV"
-DEFAULT_COMPETITOR_BRAND = "Axgatoxe"
-COMPETITOR_ASIN = (os.environ.get("WPR_COMPETITOR_ASIN") or DEFAULT_COMPETITOR_ASIN).strip()
-COMPETITOR_BRAND = (os.environ.get("WPR_COMPETITOR_BRAND") or DEFAULT_COMPETITOR_BRAND).strip()
-COMPETITOR_CONFIG_SOURCE = (
-    "env_override"
-    if (
-        (os.environ.get("WPR_COMPETITOR_ASIN") or "").strip()
-        or (os.environ.get("WPR_COMPETITOR_BRAND") or "").strip()
-    )
-    else "default"
-)
+MARKET_CONFIG = wpr_market_config()
+ARGUS_MARKET = MARKET_CONFIG.market
+COMPETITOR_ASIN = MARKET_CONFIG.competitor_asin
+COMPETITOR_BRAND = MARKET_CONFIG.competitor_brand
+COMPETITOR_CONFIG_SOURCE = "market_config"
+APP_ROOT = Path(__file__).resolve().parents[2]
+ASIN_LABELS_PATH = APP_ROOT / "lib" / "asin-labels.json"
+KNOWN_ASIN_LABELS = json.loads(ASIN_LABELS_PATH.read_text(encoding="utf-8"))
+
+
+def normalize_asin(value: object) -> str:
+    return str(value).strip().upper()
+
+
+def format_asin_display_name(asin_value: object) -> str:
+    asin = normalize_asin(asin_value)
+    label = KNOWN_ASIN_LABELS.get(asin)
+    if label is not None:
+        return label
+    return asin
+
+
+def format_asin_reference(asin_value: object) -> str:
+    asin = normalize_asin(asin_value)
+    label = KNOWN_ASIN_LABELS.get(asin)
+    if label is not None:
+        return f"{label} ({asin})"
+    return asin
 
 
 def parse_float(value: object) -> float:
@@ -164,6 +180,11 @@ def assign_cluster(term: str) -> tuple[str, str]:
     text = normalize_text(term)
     tokens = token_set(term)
 
+    if ARGUS_MARKET == "uk":
+        uk_cluster = assign_uk_cluster(term)
+        if uk_cluster is not None:
+            return uk_cluster
+
     if has_all(tokens, "dust", "barrier", "plastic"):
         return "Plastic", "Dust Barrier Plastic Sheeting"
     if has_all(tokens, "construction", "plastic", "dust"):
@@ -262,6 +283,20 @@ def should_skip_ppc_term(term: str) -> bool:
     if ASIN_RE.fullmatch(compact):
         return True
     return not re.search(r"[a-z]", compact)
+
+
+def assign_uk_cluster(term: str) -> tuple[str, str] | None:
+    tokens = token_set(term)
+
+    if has_all(tokens, "dust", "sheet"):
+        if has_any(tokens, "decorating", "decorator", "paint", "painting", "painter"):
+            return "Dust Sheet", "Dust Sheet for Decorating"
+        return "Dust Sheet", "Dust Sheet"
+
+    if has_all(tokens, "dust", "cover"):
+        return "Dust Sheet", "Dust Cover"
+
+    return None
 
 
 WEEK_FOLDER_GLOBS = ("Week * (Sun)", "Week * (Sun) (Partial)")
@@ -575,8 +610,6 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
                 matrix.append(entry)
             entry["weeks"][week_label] = {
                 "present": len(files) > 0,
-                "file_count": len(files),
-                "files": [f.name for f in files[:3]],
             }
             if files:
                 has_any = True
@@ -708,6 +741,28 @@ def build_listing_change_title(category: str, fields: list[str], asin_count: int
     return title
 
 
+def normalize_manual_change_category(category: str | None) -> str:
+    if category is None:
+        return "Content"
+
+    normalized = category.strip().upper()
+    if normalized == "MANUAL":
+        return "Content"
+    if normalized == "CONTENT":
+        return "Content"
+    if normalized == "PRICING":
+        return "Pricing"
+    if normalized == "IMAGES":
+        return "Images"
+    if normalized == "OFFER":
+        return "Offer"
+    if normalized == "CATALOG":
+        return "Catalog"
+    if normalized == "MIXED":
+        return "Mixed"
+    raise ValueError(f"Unsupported WPR manual change category: {category}")
+
+
 def summarize_field_labels(fields: list[str], limit: int = 5) -> str:
     labels = [CHANGE_FIELD_LABELS.get(field, field.replace("_", " ").title()) for field in fields]
     visible = labels[:limit]
@@ -792,6 +847,30 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
     week_number, week_label, start_date_text = detect_week_folder(path)
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
+
+    def match_metadata(label: str) -> str | None:
+        pattern = rf"^{re.escape(label)}:\s*(.+)$"
+        for line in lines:
+            stripped = line.strip()
+            match = re.match(pattern, stripped, flags=re.IGNORECASE)
+            if match is not None:
+                return match.group(1).strip()
+        return None
+
+    def extract_section(name: str) -> list[str]:
+        inside = False
+        section_lines: list[str] = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped == f"## {name}":
+                inside = True
+                continue
+            if inside and stripped.startswith("## "):
+                break
+            if inside:
+                section_lines.append(line.rstrip())
+        return section_lines
+
     title = path.stem.replace("_", " ")
     for line in lines:
         stripped = line.strip()
@@ -800,36 +879,35 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
             break
 
     date_label = start_date_text
-    match = re.search(r"Entry date:\s*(\d{4}-\d{2}-\d{2})", text)
-    if match is not None:
-        date_label = match.group(1)
+    entry_date = match_metadata("Entry date")
+    if entry_date is not None and re.match(r"^\d{4}-\d{2}-\d{2}$", entry_date):
+        date_label = entry_date
     else:
-        match = re.search(r"Week ending:\s*(\d{4}-\d{2}-\d{2})", text)
-        if match is not None:
-            date_label = match.group(1)
+        week_ending = match_metadata("Week ending")
+        if week_ending is not None and re.match(r"^\d{4}-\d{2}-\d{2}$", week_ending):
+            date_label = week_ending
 
     summary = ""
-    if "## Change Summary" in text:
-        after = text.split("## Change Summary", 1)[1].strip().splitlines()
-        for line in after:
-            stripped = line.strip()
-            if stripped == "":
-                if summary != "":
-                    break
-                continue
-            if stripped.startswith("#"):
+    change_summary_lines = extract_section("Change Summary")
+    for line in change_summary_lines:
+        stripped = line.strip()
+        if stripped == "":
+            if summary != "":
                 break
-            summary += (" " if summary != "" else "") + stripped
-    if summary == "" and "## What Changed (Observed)" in text:
-        after = text.split("## What Changed (Observed)", 1)[1].strip().splitlines()
-        bullet_lines = []
-        for line in after:
-            stripped = line.strip()
-            if stripped.startswith("## "):
-                break
-            if stripped.startswith("- "):
-                bullet_lines.append(stripped[2:].strip())
-        summary = " | ".join(bullet_lines[:2])
+            continue
+        summary += (" " if summary != "" else "") + stripped
+
+    observed_lines = extract_section("What Changed (Observed)")
+    observed_bullets = []
+    for line in observed_lines:
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            observed_bullets.append(stripped[2:].strip())
+        elif re.match(r"^\d+\.\s+", stripped):
+            observed_bullets.append(re.sub(r"^\d+\.\s+", "", stripped))
+
+    if summary == "" and observed_bullets:
+        summary = " | ".join(observed_bullets[:2])
     if summary == "":
         for line in lines:
             stripped = line.strip()
@@ -841,31 +919,48 @@ def parse_markdown_change_log(path: Path, week_meta: dict[str, dict[str, object]
                 summary = stripped[2:].strip()
                 break
 
-    highlights = []
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("- ["):
-            continue
-        if stripped.startswith("- "):
-            highlights.append(stripped[2:].strip())
-        elif re.match(r"^\d+\.\s+", stripped):
-            highlights.append(re.sub(r"^\d+\.\s+", "", stripped))
-        if len(highlights) >= 4:
-            break
+    highlights = observed_bullets[:4]
+    if not highlights:
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("- ["):
+                continue
+            if stripped.startswith("- "):
+                highlights.append(stripped[2:].strip())
+            elif re.match(r"^\d+\.\s+", stripped):
+                highlights.append(re.sub(r"^\d+\.\s+", "", stripped))
+            if len(highlights) >= 4:
+                break
 
-    asins = sorted(set(re.findall(r"B0[A-Z0-9]{8}", text, flags=re.IGNORECASE)))
+    asin_metadata = match_metadata("ASINs")
+    if asin_metadata is not None:
+        asins = [asin.strip().upper() for asin in asin_metadata.split(",") if asin.strip()]
+    else:
+        asins = sorted(set(re.findall(r"B0[A-Z0-9]{8}", text, flags=re.IGNORECASE)))
+
+    field_labels = []
+    field_metadata = match_metadata("Fields")
+    if field_metadata is not None and field_metadata != "—":
+        field_labels = [field.strip() for field in field_metadata.split(",") if field.strip()]
+
+    source = match_metadata("Source")
+    if source is None:
+        source = "Plan Log"
+
+    category = normalize_manual_change_category(match_metadata("Type"))
     return {
         "id": slugify(f"manual-{week_label}-{title}"),
         "kind": "manual",
-        "source": "Plan Log",
+        "source": source,
         "week_label": week_label,
         "week_number": week_number,
         "timestamp": date_label,
         "date_label": format_change_log_date_label(date_label),
         "title": title,
         "summary": summary,
-        "category": "Manual",
+        "category": category,
         "asins": asins,
+        "field_labels": field_labels,
         "highlights": highlights,
     }
 
@@ -2276,6 +2371,55 @@ def baseline_window_for_anchor(week_order: list[str], anchor_week: str) -> list[
     return week_order[: anchor_index + 1]
 
 
+def week_start_date(week_meta: dict[str, dict[str, object]], week_label: str) -> date:
+    value = week_meta[week_label]["start_date"]
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return date.fromisoformat(value)
+    raise TypeError(f"Invalid start_date for {week_label}: {value!r}")
+
+
+def select_default_week_label(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> str:
+    chart_weeks = chart_week_order(week_order, week_meta, today)
+    return chart_weeks[-1]
+
+
+def completed_week_order(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> list[str]:
+    if today is None:
+        today = date.today()
+
+    completed_weeks: list[str] = []
+    for week_label in week_order:
+        start_date = week_start_date(week_meta, week_label)
+        if start_date + timedelta(days=7) <= today:
+            completed_weeks.append(week_label)
+
+    if not completed_weeks:
+        raise ValueError("No completed WPR weeks are available.")
+
+    return completed_weeks
+
+
+def chart_week_order(
+    week_order: list[str],
+    week_meta: dict[str, dict[str, object]],
+    today: date | None = None,
+) -> list[str]:
+    completed_weeks = completed_week_order(week_order, week_meta, today)
+    if len(completed_weeks) <= 1:
+        raise ValueError("No stable WPR chart weeks are available.")
+    return completed_weeks[:-1]
+
+
 def build_brand_metrics_window(
     brand_metrics: dict[str, dict[str, float]],
     baseline_weeks: list[str],
@@ -3530,6 +3674,7 @@ def build_window_bundle(
 
 def build_html(data: dict[str, object]) -> str:
     data_json = json.dumps(data, separators=(",", ":"))
+    asin_labels_json = json.dumps(KNOWN_ASIN_LABELS, separators=(",", ":"))
     template = """<!doctype html>
 <html lang="en">
 <head>
@@ -5052,6 +5197,7 @@ def build_html(data: dict[str, object]) -> str:
 
 <script>
   var reportData = __DATA__;
+  var asinDisplayNames = __ASIN_LABELS__;
 
   var selectedWeekLabel = reportData.defaultWeek;
   var activeData = reportData.windowsByWeek[reportData.defaultWeek];
@@ -5519,7 +5665,7 @@ def build_html(data: dict[str, object]) -> str:
 
   function scpSortValueForRow(row, key) {
     var current = selectedWeekScpMetrics(row.weekly);
-    if (key === "asin") return row.asin;
+    if (key === "asin") return formatAsinDisplayName(row);
     if (key === "impressions") return current.impressions;
     if (key === "clicks") return current.clicks;
     if (key === "ctr") return current.ctr;
@@ -5538,7 +5684,7 @@ def build_html(data: dict[str, object]) -> str:
 
   function brSortValueForRow(row, key) {
     var current = selectedWeekBusinessMetrics(row.weekly);
-    if (key === "asin") return row.asin;
+    if (key === "asin") return formatAsinDisplayName(row);
     if (key === "weeks_present_selected_week") return row.weeks_present_selected_week;
     if (key === "sessions") return current.sessions;
     if (key === "page_views") return current.page_views;
@@ -5602,6 +5748,24 @@ def build_html(data: dict[str, object]) -> str:
     var div = document.createElement("div");
     div.textContent = value;
     return div.innerHTML;
+  }
+
+  function normalizeAsin(value) {
+    return String(value).trim().toUpperCase();
+  }
+
+  function formatAsinDisplayName(row) {
+    var asin = normalizeAsin(row.asin);
+    var label = asinDisplayNames[asin];
+    if (label !== undefined) return label;
+    return asin;
+  }
+
+  function formatAsinReference(value) {
+    var asin = normalizeAsin(value);
+    var label = asinDisplayNames[asin];
+    if (label !== undefined) return label + " (" + asin + ")";
+    return asin;
   }
 
   function clusterColor(cluster) {
@@ -8041,7 +8205,7 @@ def build_html(data: dict[str, object]) -> str:
       }
       html += '<tr class="' + rowClass.trim() + '" data-scp-asin-row="' + escapeHtml(row.id) + '">';
       html += '<td class="check-col"><input type="checkbox" data-scp-asin-checkbox="' + escapeHtml(row.id) + '"' + (selection.selectedIds.indexOf(row.id) !== -1 ? ' checked' : '') + '></td>';
-      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(row.asin) + '</div><div class="group-name-meta">' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
+      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(formatAsinDisplayName(row)) + '</div><div class="group-name-meta">' + escapeHtml(row.asin) + ' · ' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
       html += '<td>' + row.weeks_present_selected_week + '</td>';
       html += '<td>' + fmtNumber(current.impressions) + '</td>';
       html += '<td>' + fmtPct(safeDiv(current.impressions, total.impressions)) + '</td>';
@@ -8101,7 +8265,7 @@ def build_html(data: dict[str, object]) -> str:
       }
       html += '<tr class="' + rowClass.trim() + '" data-br-asin-row="' + escapeHtml(row.id) + '">';
       html += '<td class="check-col"><input type="checkbox" data-br-asin-checkbox="' + escapeHtml(row.id) + '"' + (selection.selectedIds.indexOf(row.id) !== -1 ? ' checked' : '') + '></td>';
-      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(row.asin) + '</div><div class="group-name-meta">' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
+      html += '<td><div class="group-name-stack"><div class="group-name-main">' + escapeHtml(formatAsinDisplayName(row)) + '</div><div class="group-name-meta">' + escapeHtml(row.asin) + ' · ' + (row.is_target ? 'Target ASIN' : 'Catalog ASIN') + ' · ' + row.weeks_present_selected_week + ' / 1 weeks</div></div></td>';
       html += '<td>' + row.weeks_present_selected_week + '</td>';
       html += '<td>' + (hasWeek ? fmtNumber(current.sessions) : '—') + '</td>';
       html += '<td>' + (hasWeek ? fmtNumber(current.page_views) : '—') + '</td>';
@@ -9258,7 +9422,7 @@ def build_html(data: dict[str, object]) -> str:
       if (!summary && entry.highlights && entry.highlights.length > 0) {
         summary = entry.highlights.join(" | ");
       }
-      var asins = entry.asins && entry.asins.length > 0 ? entry.asins.join(", ") : "—";
+      var asins = entry.asins && entry.asins.length > 0 ? entry.asins.map(formatAsinReference).join(", ") : "—";
       var fields = entry.field_labels && entry.field_labels.length > 0 ? entry.field_labels.join(", ") : "—";
       html += '<tr>';
       html += '<td><span class="change-log-week">W' + escapeHtml(entry.week_label.replace(/^W/, "")) + '</span></td>';
@@ -10032,9 +10196,8 @@ def build_html(data: dict[str, object]) -> str:
         }
         if (recentWindowSet.has(w)) cls += " source-window";
         if (w === anchorWeek) cls += " source-anchor";
-        var count = cell ? cell.file_count : 0;
-        var title = present ? count + " file" + (count !== 1 ? "s" : "") + ": " + (cell.files ? cell.files.join(", ") : "") : "Missing";
-        html += '<div class="source-cell ' + cls + '" title="' + escapeHtml(title) + '"></div>';
+        var title = present ? "Present" : "Missing";
+        html += '<div class="source-cell ' + cls + '" title="' + title + '"></div>';
       });
       html += '</div>';
     });
@@ -10068,7 +10231,7 @@ def build_html(data: dict[str, object]) -> str:
 </body>
 </html>
 """
-    return template.replace("__DATA__", data_json)
+    return template.replace("__DATA__", data_json).replace("__ASIN_LABELS__", asin_labels_json)
 
 
 
@@ -10137,9 +10300,6 @@ def main() -> None:
             key=lambda item: int(item[1]),
         )
     ]
-    latest_week_label = week_order[-1]
-    latest_week_number = int(week_meta[latest_week_label]["week_number"])
-    latest_week_start = str(week_meta[latest_week_label]["start_date"])
     output_dir = WPR_PATHS.data_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -10188,12 +10348,18 @@ def main() -> None:
         windows_by_week[anchor_week] = window_bundle
         audits_by_week[anchor_week] = window_audit
 
-    default_bundle = windows_by_week[latest_week_label]
-    audit_output = audits_by_week[latest_week_label]
+    chart_weeks = chart_week_order(week_order, week_meta)
+    default_week_label = chart_weeks[-1]
+    default_bundle = windows_by_week[default_week_label]
+    audit_output = audits_by_week[default_week_label]
+    chart_week_start_dates = {
+        week_label: week_start_dates[week_label]
+        for week_label in chart_weeks
+    }
     payload = build_payload(
         default_bundle,
-        week_order,
-        week_start_dates,
+        chart_weeks,
+        chart_week_start_dates,
         source_overview,
         windows_by_week,
         change_log_by_week,
@@ -10215,7 +10381,7 @@ def main() -> None:
     write_summary_csv(
         csv_path,
         default_bundle["clusters"],
-        latest_week_label,
+        default_week_label,
         default_bundle["meta"]["recentWindow"],
         default_bundle["meta"]["baselineWindow"],
     )

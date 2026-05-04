@@ -13,7 +13,7 @@ function resolveAppOrigin(request: NextRequest): string {
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  const basePath = getBasePath()
+  const basePath = getBasePath(pathname)
   if (basePath) {
     const doubleBasePrefix = `${basePath}${basePath}`
     const url = new URL(request.url)
@@ -24,7 +24,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const normalizedPath = withoutBasePath(pathname)
+  const normalizedPath = withoutBasePath(pathname, pathname)
 
   // Redirect /operations to /operations/inventory (base-path aware)
   if (normalizedPath === '/operations') {
@@ -45,7 +45,6 @@ export async function middleware(request: NextRequest) {
   ]
 
   const publicPrefixes = [
-    '/api/auth/',
     '/api/tenant/',
   ]
 
@@ -56,6 +55,7 @@ export async function middleware(request: NextRequest) {
   if (
     isPublicRoute ||
     normalizedPath.startsWith('/_next') ||
+    normalizedPath.startsWith('/_dev-assets') ||
     normalizedPath === '/favicon.ico' ||
     normalizedPath === '/favicon.svg'
   ) {
@@ -151,5 +151,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|_dev-assets|favicon.ico).*)'],
 }

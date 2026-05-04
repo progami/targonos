@@ -81,7 +81,7 @@ export function validateOrigin(req: NextRequest): boolean {
 
 export function csrfProtection(req: NextRequest): Response | null {
  // Skip CSRF for API routes that are meant to be public
- const publicPaths = ['/api/health', '/api/auth/providers'];
+ const publicPaths = ['/api/health'];
  if (publicPaths.some(path => req.nextUrl.pathname.startsWith(path))) {
  return null;
  }

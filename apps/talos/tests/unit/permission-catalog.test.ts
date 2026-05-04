@@ -10,17 +10,17 @@ test('permission catalog covers every live Talos authorization code', () => {
   assert.deepEqual(
     TALOS_PERMISSION_CATALOG.map((permission) => permission.code),
     [
-      'fo.create',
-      'fo.edit',
-      'fo.stage',
+      'outbound.create',
+      'outbound.edit',
+      'outbound.stage',
       'permission.manage',
-      'po.approve.draft_to_manufacturing',
-      'po.approve.manufacturing_to_ocean',
-      'po.approve.ocean_to_warehouse',
-      'po.cancel',
-      'po.create',
-      'po.edit',
-      'po.view',
+      'inbound.approve.draft_to_manufacturing',
+      'inbound.approve.manufacturing_to_ocean',
+      'inbound.approve.ocean_to_warehouse',
+      'inbound.cancel',
+      'inbound.create',
+      'inbound.edit',
+      'inbound.view',
       'user.manage',
     ]
   )

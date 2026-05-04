@@ -6,17 +6,35 @@ type Status = 'loading' | 'authenticated' | 'unauthenticated'
 
 const SESSION_QUERY_KEY = ['portal-session'] as const
 
-async function fetchSession(): Promise<Session | null> {
-  const response = await fetch(withBasePath('/api/portal/session'), {
-    credentials: 'include',
-  })
+export async function parsePortalSessionResponse(response: Response): Promise<Session | null> {
   if (!response.ok) {
     if (response.status === 401) {
       return null
     }
+
     throw new Error('Failed to fetch session')
   }
+
+  const contentType = response.headers.get('content-type')
+  if (typeof contentType !== 'string') {
+    return null
+  }
+
+  if (!contentType.includes('application/json')) {
+    return null
+  }
+
   return response.json()
+}
+
+async function fetchSession(): Promise<Session | null> {
+  const response = await fetch(withBasePath('/api/portal/session'), {
+    credentials: 'include',
+    headers: {
+      accept: 'application/json',
+    },
+  })
+  return parsePortalSessionResponse(response)
 }
 
 export function usePortalSession() {

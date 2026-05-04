@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
+import { parseArgusMarket } from '@/lib/argus-market'
 import { getMonitoringHealth } from '@/lib/monitoring/reader'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const health = await getMonitoringHealth()
+    const { searchParams } = new URL(request.url)
+    const market = parseArgusMarket(searchParams.get('market'))
+    const health = await getMonitoringHealth(market)
     return NextResponse.json(health)
   } catch (error) {
     return NextResponse.json(

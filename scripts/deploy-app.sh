@@ -145,7 +145,12 @@ build_talos_changed_migrate_cmd() {
     return 0
   fi
 
-  local commands=()
+  if any_changed_under "apps/talos/prisma/migrations/"; then
+    printf '%s' "$talos_full_migrate_cmd"
+    return 0
+  fi
+
+  local commands=("$talos_prisma_migrate_cmd")
 
   any_changed "apps/talos/scripts/migrations/ensure-talos-tenant-schema.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:tenant-schema")
@@ -169,26 +174,22 @@ build_talos_changed_migrate_cmd() {
     commands+=("pnpm --filter $workspace db:migrate:warehouse-billing-config")
   any_changed "apps/talos/scripts/migrations/add-warehouse-sku-storage-configs.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs")
-  any_changed "apps/talos/scripts/migrations/add-purchase-order-document-table.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:purchase-order-documents")
-  any_changed "apps/talos/scripts/migrations/add-fulfillment-orders-foundation.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:fulfillment-orders-foundation")
-  any_changed "apps/talos/scripts/migrations/add-fulfillment-orders-amazon-fields.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields")
+  any_changed "apps/talos/scripts/migrations/add-inbound-document-table.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-documents")
+  any_changed "apps/talos/scripts/migrations/add-outbound-orders-foundation.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:outbound-orders-foundation")
+  any_changed "apps/talos/scripts/migrations/add-outbound-orders-amazon-fields.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:outbound-orders-amazon-fields")
   any_changed "apps/talos/scripts/migrations/replace-batch-with-lot-ref.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref")
-  any_changed "apps/talos/scripts/migrations/add-po-product-assignments.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:po-product-assignments")
+  any_changed "apps/talos/scripts/migrations/add-inbound-product-assignments.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-product-assignments")
   any_changed "apps/talos/scripts/migrations/supply-chain-reference-convention.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:supply-chain-reference-convention")
   any_changed "apps/talos/scripts/migrations/ensure-erd-v10-views.ts" &&
     commands+=("pnpm --filter $workspace db:migrate:erd-v10-views")
-  any_changed "apps/talos/scripts/migrations/normalize-po-base-currency.ts" &&
-    commands+=("pnpm --filter $workspace db:migrate:po-base-currency")
-
-  if [[ ${#commands[@]} -eq 0 ]]; then
-    return 1
-  fi
+  any_changed "apps/talos/scripts/migrations/normalize-inbound-base-currency.ts" &&
+    commands+=("pnpm --filter $workspace db:migrate:inbound-base-currency")
 
   join_commands "${commands[@]}"
 }
@@ -201,6 +202,7 @@ deploy_git_sha="${DEPLOY_GIT_SHA:-}"
 deploy_base_sha="${DEPLOY_BASE_SHA:-}"
 deploy_head_sha="${DEPLOY_HEAD_SHA:-}"
 migrate_cmd=""
+talos_prisma_migrate_cmd=""
 talos_full_migrate_cmd=""
 install_mode=""
 changed_files_available="false"
@@ -247,10 +249,12 @@ if [[ "$environment" == "dev" ]]; then
   REPO_DIR="$TARGONOS_DEV_DIR"
   PM2_PREFIX="dev"
   BRANCH="dev"
+  shared_env_mode="dev"
 elif [[ "$environment" == "main" ]]; then
   REPO_DIR="$TARGONOS_MAIN_DIR"
   PM2_PREFIX="main"
   BRANCH="main"
+  shared_env_mode="production"
 else
   echo "Unknown environment: $environment" >&2
   exit 1
@@ -271,7 +275,8 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/talos"
     pm2_name="${PM2_PREFIX}-talos"
     prisma_cmd="pnpm --filter $workspace db:generate"
-    talos_full_migrate_cmd="pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-billing-config && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:purchase-order-documents && pnpm --filter $workspace db:migrate:fulfillment-orders-foundation && pnpm --filter $workspace db:migrate:fulfillment-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:po-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:po-base-currency"
+    talos_prisma_migrate_cmd="DATABASE_URL=\"\$DATABASE_URL_US\" pnpm --filter $workspace db:migrate:deploy && DATABASE_URL=\"\$DATABASE_URL_UK\" pnpm --filter $workspace db:migrate:deploy"
+    talos_full_migrate_cmd="$talos_prisma_migrate_cmd && pnpm --filter $workspace db:migrate:tenant-schema && pnpm --filter $workspace db:migrate:sku-dimensions && pnpm --filter $workspace db:migrate:sku-reference-fee-columns && pnpm --filter $workspace db:migrate:sku-subcategory && pnpm --filter $workspace db:migrate:sku-amazon-reference-weight && pnpm --filter $workspace db:migrate:sku-amazon-listing-price && pnpm --filter $workspace db:migrate:sku-amazon-categories && pnpm --filter $workspace db:migrate:sku-amazon-item-dimensions && pnpm --filter $workspace db:migrate:supplier-defaults && pnpm --filter $workspace db:migrate:warehouse-billing-config && pnpm --filter $workspace db:migrate:warehouse-sku-storage-configs && pnpm --filter $workspace db:migrate:inbound-documents && pnpm --filter $workspace db:migrate:outbound-orders-foundation && pnpm --filter $workspace db:migrate:outbound-orders-amazon-fields && pnpm --filter $workspace db:migrate:replace-batch-with-lot-ref && pnpm --filter $workspace db:migrate:inbound-product-assignments && pnpm --filter $workspace db:migrate:supply-chain-reference-convention && pnpm --filter $workspace db:migrate:erd-v10-views && pnpm --filter $workspace db:migrate:inbound-base-currency"
     migrate_cmd="$talos_full_migrate_cmd"
     build_cmd="pnpm --filter $workspace build"
     ;;
@@ -360,6 +365,25 @@ fi
 log() { printf '\033[36m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 warn() { printf '\033[33m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*"; }
 error() { printf '\033[31m[deploy-%s-%s]\033[0m %s\n' "$app_key" "$environment" "$*" >&2; }
+
+selected_app_env_loaded="false"
+
+load_selected_app_env() {
+  local exports
+  if ! exports="$(node "$REPO_DIR/scripts/load-app-env.js" --app "$app_key" --mode "$shared_env_mode")"; then
+    error "Failed to load shared/app env for $shared_env_mode"
+    exit 1
+  fi
+  eval "$exports"
+  selected_app_env_loaded="true"
+  log "Loaded shared/app env for $shared_env_mode"
+}
+
+get_selected_env_value() {
+  local env_app="$1"
+  local key="$2"
+  node "$REPO_DIR/scripts/load-app-env.js" --app "$env_app" --mode "$shared_env_mode" --get "$key"
+}
 
 resolve_origin_repository_slug() {
   local remote_url
@@ -616,6 +640,7 @@ run_pm2_sanitized() {
   DATABASE_URL= \
   DATABASE_URL_US= \
   DATABASE_URL_UK= \
+  TALOS_PRESERVE_DATABASE_ENV= \
   PORTAL_DB_URL= \
   PGDATABASE= \
   PGHOST= \
@@ -739,59 +764,6 @@ sync_next_standalone_assets() {
   log "Standalone assets synced for $app_key"
 }
 
-load_env_file() {
-  local file="$1"
-  if [[ ! -f "$file" ]]; then
-    return 1
-  fi
-
-  # Parse dotenv-style env files safely (values may contain '&', '?', etc.).
-  # Avoid `source`, which treats those characters as shell operators.
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-
-    if [[ -z "$line" || "${line:0:1}" == "#" ]]; then
-      continue
-    fi
-
-    if [[ "$line" == export\ * ]]; then
-      line="${line#export }"
-      line="${line#"${line%%[![:space:]]*}"}"
-    fi
-
-    if [[ "$line" != *"="* ]]; then
-      continue
-    fi
-
-    local key="${line%%=*}"
-    local value="${line#*=}"
-
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-
-    if [[ -z "$key" || ! "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-      continue
-    fi
-
-    if [[ "$key" == "TARGONOS_DEV_DIR" || "$key" == "TARGONOS_MAIN_DIR" || "$key" == "TARGON_DEV_DIR" || "$key" == "TARGON_MAIN_DIR" ]]; then
-      continue
-    fi
-
-    if [[ "$value" == \"*\" && "$value" == *\" ]]; then
-      value="${value#\"}"
-      value="${value%\"}"
-    elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
-      value="${value#\'}"
-      value="${value%\'}"
-    fi
-
-    export "${key}=${value}"
-  done < "$file"
-
-  return 0
-}
-
 set_env_var_in_file() {
   local file="$1"
   local key="$2"
@@ -822,24 +794,6 @@ ensure_database_url() {
     return 0
   fi
 
-  local candidates=()
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
-  else
-    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
-  fi
-
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file" && [[ -n "${DATABASE_URL:-}" || -n "${DATABASE_URL_US:-}" || -n "${DATABASE_URL_UK:-}" ]]; then
-      if [[ -n "${DATABASE_URL:-}" ]]; then
-        log "Loaded DATABASE_URL from $(basename "$file")"
-      else
-        log "Loaded tenant database URLs from $(basename "$file")"
-      fi
-      return 0
-    fi
-  done
-
   return 1
 }
 
@@ -848,21 +802,13 @@ ensure_portal_db_url() {
     return 0
   fi
 
-  local sso_dir="$REPO_DIR/apps/sso"
-  local candidates=()
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
-  else
-    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
-  fi
-  local file
-
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file" && [[ -n "${PORTAL_DB_URL:-}" ]]; then
-      log "Loaded PORTAL_DB_URL from $(basename "$file")"
+  local portal_db_url
+  if portal_db_url="$(get_selected_env_value sso PORTAL_DB_URL)"; then
+    if [[ -n "${portal_db_url//[[:space:]]/}" ]]; then
+      export PORTAL_DB_URL="$portal_db_url"
       return 0
     fi
-  done
+  fi
 
   return 1
 }
@@ -931,35 +877,7 @@ hosted_app_url() {
 }
 
 resolve_portal_shared_secret() {
-  local sso_dir="$REPO_DIR/apps/sso"
-  local candidates=()
-
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$sso_dir/.env.local" "$sso_dir/.env.dev" "$sso_dir/.env.dev.ci" "$sso_dir/.env")
-  else
-    candidates=("$sso_dir/.env.production" "$sso_dir/.env.local" "$sso_dir/.env")
-  fi
-
-  local file
-  for file in "${candidates[@]}"; do
-    if [[ ! -f "$file" ]]; then
-      continue
-    fi
-
-    local secret
-    secret="$(
-      unset PORTAL_AUTH_SECRET NEXTAUTH_SECRET
-      load_env_file "$file" >/dev/null
-      printf '%s' "${PORTAL_AUTH_SECRET:-${NEXTAUTH_SECRET:-}}"
-    )"
-
-    if [[ -n "${secret//[[:space:]]/}" ]]; then
-      printf '%s' "$secret"
-      return 0
-    fi
-  done
-
-  return 1
+  get_selected_env_value sso PORTAL_AUTH_SECRET
 }
 
 apply_hosted_env_overrides() {
@@ -1122,6 +1040,7 @@ prepare_talos_owner_migration_env() {
   fi
 
   export DATABASE_URL="$DATABASE_URL_US"
+  export TALOS_PRESERVE_DATABASE_ENV="1"
 }
 
 prepare_owner_migration_env() {
@@ -1138,23 +1057,7 @@ prepare_owner_migration_env() {
   esac
 }
 ensure_app_env_loaded() {
-  local candidates=()
-
-  if [[ "$environment" == "dev" ]]; then
-    candidates=("$app_dir/.env.local" "$app_dir/.env.dev" "$app_dir/.env.dev.ci" "$app_dir/.env")
-  else
-    candidates=("$app_dir/.env.production" "$app_dir/.env.local" "$app_dir/.env")
-  fi
-
-  local file
-  for file in "${candidates[@]}"; do
-    if load_env_file "$file"; then
-      log "Loaded app env from $(basename "$file")"
-      return 0
-    fi
-  done
-
-  return 1
+  [[ "$selected_app_env_loaded" == "true" ]]
 }
 
 validate_plutus_qbo_env() {
@@ -1192,6 +1095,13 @@ validate_plutus_qbo_env() {
   fi
 }
 
+validate_hermes_env() {
+  if [[ "${HERMES_AUTO_MIGRATE:-}" == "1" ]]; then
+    error "HERMES_AUTO_MIGRATE must be 0 for hosted hermes deployments"
+    exit 1
+  fi
+}
+
 require_non_empty_env_var() {
   local key="$1"
   local value="${!key:-}"
@@ -1206,8 +1116,8 @@ normalize_argus_media_backend() {
   local raw="${ARGUS_MEDIA_BACKEND:-}"
 
   if [[ -z "${raw//[[:space:]]/}" ]]; then
-    printf 'local'
-    return 0
+    error "ARGUS_MEDIA_BACKEND is required for argus deployments"
+    exit 1
   fi
 
   local normalized
@@ -1271,11 +1181,21 @@ fi
 deploy_runtime_sha="$(git -C "$REPO_DIR" rev-parse HEAD)"
 log "Target runtime SHA: $deploy_runtime_sha"
 
+load_selected_app_env
+
 # Step 1.5: Detect what changed in this deploy range (if available)
 if compute_changed_files; then
   log "Detected ${#changed_files[@]} changed files for deploy range ${deploy_base_sha:-unknown}..${deploy_head_sha:-unknown}"
 else
   warn "Could not determine changed files for this deployment; using safe defaults"
+fi
+
+if [[ "$app_key" == "talos" && "$changed_files_available" == "true" ]]; then
+  if talos_changed_migrate_cmd="$(build_talos_changed_migrate_cmd)"; then
+    migrate_cmd="$talos_changed_migrate_cmd"
+  else
+    migrate_cmd=""
+  fi
 fi
 
 # Step 2: Install dependencies
@@ -1461,6 +1381,10 @@ apply_hosted_env_overrides
 
 if [[ "$app_key" == "plutus" ]]; then
   validate_plutus_qbo_env
+fi
+
+if [[ "$app_key" == "hermes" ]]; then
+  validate_hermes_env
 fi
 
 if [[ "$app_key" == "argus" ]]; then

@@ -7,6 +7,7 @@ type HermesConnectionMapping = {
   endpointOverride?: string;
   awsRegionOverride?: string;
   lwaRefreshToken?: string;
+  lwaRefreshTokenEnv?: string;
   awsRoleArn?: string;
   userAgent?: string;
 };
@@ -17,11 +18,50 @@ function hasNonEmptyEnv(name: string): boolean {
   return value.trim().length > 0;
 }
 
-function hasMappedRefreshToken(mappings: HermesConnectionMapping[]): boolean {
-  return mappings.some((mapping) => {
-    if (typeof mapping?.lwaRefreshToken !== "string") return false;
-    return mapping.lwaRefreshToken.trim().length > 0;
-  });
+function getNonEmptyMappingValue(
+  mapping: HermesConnectionMapping | null,
+  key: "lwaRefreshToken" | "lwaRefreshTokenEnv"
+): string | null {
+  const value = mapping?.[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed;
+}
+
+function validateRefreshTokenMapping(mapping: HermesConnectionMapping | null): void {
+  const inlineRefreshToken = getNonEmptyMappingValue(mapping, "lwaRefreshToken");
+  const refreshTokenEnv = getNonEmptyMappingValue(mapping, "lwaRefreshTokenEnv");
+  if (inlineRefreshToken && refreshTokenEnv) {
+    throw new Error("Hermes connection mapping cannot set both lwaRefreshToken and lwaRefreshTokenEnv");
+  }
+}
+
+function getMappedRefreshTokenEnv(mapping: HermesConnectionMapping | null): string | null {
+  validateRefreshTokenMapping(mapping);
+  return getNonEmptyMappingValue(mapping, "lwaRefreshTokenEnv");
+}
+
+function hasInlineMappedRefreshToken(mapping: HermesConnectionMapping | null): boolean {
+  validateRefreshTokenMapping(mapping);
+  return getNonEmptyMappingValue(mapping, "lwaRefreshToken") !== null;
+}
+
+function mappingUsesGlobalRefreshToken(mapping: HermesConnectionMapping | null): boolean {
+  validateRefreshTokenMapping(mapping);
+  if (hasInlineMappedRefreshToken(mapping)) return false;
+  return getMappedRefreshTokenEnv(mapping) === null;
+}
+
+function getRefreshTokenForMapping(mapping: HermesConnectionMapping | null): string {
+  validateRefreshTokenMapping(mapping);
+  const inlineRefreshToken = getNonEmptyMappingValue(mapping, "lwaRefreshToken");
+  if (inlineRefreshToken) return inlineRefreshToken;
+
+  const refreshTokenEnv = getMappedRefreshTokenEnv(mapping);
+  if (refreshTokenEnv) return getEnvOrThrow(refreshTokenEnv);
+
+  return getEnvOrThrow("SPAPI_LWA_REFRESH_TOKEN");
 }
 
 function getEnvOrThrow(name: string): string {
@@ -65,9 +105,18 @@ export function assertSpApiEnvConfiguredForHermes(): void {
   const missing = required.filter((name) => !hasNonEmptyEnv(name));
 
   const mappings = parseConnectionMappings();
-  const usesMappedRefreshToken = mappings !== null && hasMappedRefreshToken(mappings);
-  if (!usesMappedRefreshToken && !hasNonEmptyEnv("SPAPI_LWA_REFRESH_TOKEN")) {
+  const requiresGlobalRefreshToken =
+    mappings === null || mappings.some((mapping) => mappingUsesGlobalRefreshToken(mapping));
+  if (requiresGlobalRefreshToken && !hasNonEmptyEnv("SPAPI_LWA_REFRESH_TOKEN")) {
     missing.push("SPAPI_LWA_REFRESH_TOKEN");
+  }
+  if (mappings !== null) {
+    for (const mapping of mappings) {
+      const refreshTokenEnv = getMappedRefreshTokenEnv(mapping);
+      if (refreshTokenEnv && !hasNonEmptyEnv(refreshTokenEnv)) {
+        missing.push(refreshTokenEnv);
+      }
+    }
   }
 
   if (missing.length > 0) {
@@ -136,7 +185,7 @@ export function loadSpApiConfigForConnection(connectionId: string): SpApiConfig 
       mapping?.awsRegionOverride ?? process.env.SPAPI_AWS_REGION_OVERRIDE,
     lwaClientId: getEnvOrThrow("SPAPI_LWA_CLIENT_ID"),
     lwaClientSecret: getEnvOrThrow("SPAPI_LWA_CLIENT_SECRET"),
-    lwaRefreshToken: mapping?.lwaRefreshToken ?? getEnvOrThrow("SPAPI_LWA_REFRESH_TOKEN"),
+    lwaRefreshToken: getRefreshTokenForMapping(mapping),
     awsAccessKeyId: getEnvOrThrow("SPAPI_AWS_ACCESS_KEY_ID"),
     awsSecretAccessKey: getEnvOrThrow("SPAPI_AWS_SECRET_ACCESS_KEY"),
     awsRoleArn: mapping?.awsRoleArn ?? process.env.SPAPI_AWS_ROLE_ARN,

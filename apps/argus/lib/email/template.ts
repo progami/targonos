@@ -6,6 +6,7 @@ import type {
   MonitoringSnapshotRecord,
   MonitoringStateRecord,
 } from '@/lib/monitoring/types'
+import { formatAsinDisplayName } from '@/lib/product-labels'
 import { formatEmailDateTime, formatEmailCurrency, formatEmailNumber } from './format'
 
 // ─── Brand ──────────────────────────────────────────────────
@@ -77,11 +78,13 @@ export function buildAlertEmailHtml(
   const detectedAt = formatEmailDateTime(event.timestamp)
   const comparedTo = event.baselineTimestamp ? formatEmailDateTime(event.baselineTimestamp) : null
 
-  // Product display name: prefer label, fallback to snapshot title, then ASIN
-  const productName = event.label
-    ?? event.currentSnapshot?.title
-    ?? event.baselineSnapshot?.title
-    ?? event.asin
+  const productName = formatAsinDisplayName({
+    asin: event.asin,
+    label: event.label,
+    brand: event.currentSnapshot?.brand ?? event.baselineSnapshot?.brand,
+    size: event.currentSnapshot?.size ?? event.baselineSnapshot?.size,
+    title: event.currentSnapshot?.title ?? event.baselineSnapshot?.title,
+  })
   const safeProductName = esc(productName.length > 70 ? productName.slice(0, 67) + '...' : productName)
   const safeAsin = esc(event.asin)
   const safeHeadline = esc(event.headline)
@@ -221,7 +224,7 @@ export function buildAlertEmailHtml(
 <tr>
 <td style="background:#f8fafc; border:1px solid ${BORDER}; border-top:none; padding:16px 24px; text-align:center;">
   <div style="font-family:${FONT}; font-size:11px; color:${TEXT_TERTIARY}; line-height:1.6;">
-    Automated alert from Argus &middot; Targon Global
+    Automated alert from Argus &middot; Targon
   </div>
 </td>
 </tr>
