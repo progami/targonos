@@ -6,6 +6,7 @@ export type UnitSystem = 'metric' | 'imperial'
 
 export const CM_PER_INCH = 2.54
 export const LB_PER_KG = 2.2046226218
+export const CARTON_DIMENSION_UNIT_SYSTEM: UnitSystem = 'metric'
 
 export function getDefaultUnitSystem(tenantCode: TenantCode): UnitSystem {
   if (tenantCode === 'UK') return 'metric'
