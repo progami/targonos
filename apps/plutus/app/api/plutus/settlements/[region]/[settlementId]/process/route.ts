@@ -10,6 +10,7 @@ import {
   resolveAuditInvoicesForSettlementChildren,
 } from '@/lib/plutus/audit-invoice-resolution';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { HumanApprovalError, requireHumanApprovalHeader } from '@/lib/plutus/human-approval';
 import { fetchSettlementParentDetail } from '@/lib/plutus/settlement-parents-server';
 import { computeSettlementPreview, processSettlement } from '@/lib/plutus/settlement-processing';
 import { rollbackProcessedSettlementByJournalEntryId } from '@/lib/plutus/settlement-rollback';
@@ -25,8 +26,9 @@ function requireRegion(value: string): 'US' | 'UK' {
   throw new Error(`Unsupported settlement region: ${value}`);
 }
 
-export async function POST(_req: NextRequest, context: RouteContext) {
+export async function POST(req: NextRequest, context: RouteContext) {
   try {
+    requireHumanApprovalHeader(req, 'Parent settlement processing');
     const connection = await getQboConnection();
     if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
@@ -203,6 +205,10 @@ export async function POST(_req: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    if (error instanceof HumanApprovalError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     if (error instanceof QboAuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }

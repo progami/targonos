@@ -8,6 +8,7 @@ import { computeSettlementTotalFromJournalEntry, parseSettlementDocNumber } from
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
+import { HumanApprovalError, requireHumanApprovalHeader } from '@/lib/plutus/human-approval';
 import { resolveParentRouteForSettlementJournalEntry } from '@/lib/plutus/settlement-parents-server';
 import { rollbackProcessedSettlementByJournalEntryId } from '@/lib/plutus/settlement-rollback';
 
@@ -149,6 +150,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
+    requireHumanApprovalHeader(req, 'Settlement rollback');
     const connection = await getQboConnection();
     if (!connection) {
       return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
@@ -186,6 +188,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
+    if (error instanceof HumanApprovalError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     if (error instanceof QboAuthError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }

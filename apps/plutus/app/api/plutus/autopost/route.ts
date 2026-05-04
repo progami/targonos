@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createLogger } from '@targon/logger';
 import { db } from '@/lib/db';
+import { HumanApprovalError, requireHumanApprovalHeader } from '@/lib/plutus/human-approval';
 
 const logger = createLogger({ name: 'plutus-autopost-settings' });
 
@@ -23,6 +24,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    requireHumanApprovalHeader(req, 'Autopost settings update');
     const body = await req.json();
     const autopostEnabled = body.autopostEnabled === true;
     const autopostStartDate = typeof body.autopostStartDate === 'string' && body.autopostStartDate.trim() !== ''
@@ -41,6 +43,10 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, autopostEnabled, autopostStartDate });
   } catch (error) {
+    if (error instanceof HumanApprovalError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+
     logger.error('Failed to update autopost settings', { error });
     return NextResponse.json(
       { error: 'Failed to update autopost settings', details: error instanceof Error ? error.message : String(error) },
