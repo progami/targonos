@@ -1,9 +1,16 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createWprWeekSummary, getWprWeekSummary } from './reader'
+
+test('WPR reader streams the latest payload from disk', () => {
+  const source = readFileSync(new URL('./reader.ts', import.meta.url), 'utf8')
+
+  assert.match(source, /createReadStream/)
+  assert.doesNotMatch(source, /import\s+\{\s*stat,\s*readFile\s*\}\s+from\s+'node:fs\/promises'/)
+})
 
 function buildScpMetrics() {
   return {
@@ -109,9 +116,9 @@ function buildWeekBundle(anchorWeek: string) {
 const weekStartDateByLabel: Record<string, string> = {
   W07: '2026-02-08',
   W08: '2026-02-15',
-  W16: '2026-04-12',
-  W17: '2026-04-19',
-  W18: '2026-04-26',
+  W16: '2026-04-19',
+  W17: '2026-04-26',
+  W18: '2026-05-03',
 }
 
 function writePayload(dataDir: string, stableWeek: string, latestCompletedWeek: string) {
