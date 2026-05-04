@@ -2,12 +2,9 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSnackbar } from 'notistack';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import CloudDownloadIcon from '@mui/icons-material/CloudDownload';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import SearchIcon from '@mui/icons-material/Search';
 import Checkbox from '@mui/material/Checkbox';
@@ -16,10 +13,6 @@ import MuiButton from '@mui/material/Button';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import ClickAwayListener from '@mui/material/ClickAwayListener';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Popper from '@mui/material/Popper';
 import Skeleton from '@mui/material/Skeleton';
@@ -33,7 +26,6 @@ import Typography from '@mui/material/Typography';
 
 import { EmptyState } from '@/components/ui/empty-state';
 import { PageHeader } from '@/components/page-header';
-import { SplitButton } from '@/components/ui/split-button';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { normalizeSettlementMarketplaceQuery } from '@/lib/plutus/settlement-marketplace-query';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
@@ -87,7 +79,6 @@ type SettlementsResponse = {
 };
 
 type ConnectionStatus = { connected: boolean; canConnect: boolean; error?: string };
-type Region = SettlementRow['marketplace']['region'];
 
 /* ── shared chip styles ── */
 const chipBase = { height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px' } as const;
@@ -127,88 +118,6 @@ function formatMoney(amount: number, currency: string): string {
 
   if (amount < 0) return `(${formatted})`;
   return formatted;
-}
-
-function isoDaySubtractDays(isoDay: string, days: number): string {
-  const date = new Date(`${isoDay}T00:00:00.000Z`);
-  if (!Number.isFinite(date.getTime())) {
-    throw new Error(`Invalid iso day: ${isoDay}`);
-  }
-  date.setUTCDate(date.getUTCDate() - days);
-  return date.toISOString().slice(0, 10);
-}
-
-type SpApiSettlementSyncSegmentResult = {
-  settlementId: string;
-  eventGroupId: string;
-  docNumber: string;
-  txnDate: string;
-  qboJournalEntryId: string | null;
-  qboAction: 'existing' | 'posted' | 'skipped' | 'error';
-  processed: boolean;
-  reason?: string;
-  error?: string;
-};
-
-type SpApiSettlementSyncResult = {
-  totals: {
-    settlements: number;
-    segments: number;
-    posted: number;
-    existing: number;
-    processed: number;
-    skipped: number;
-    errors: number;
-  };
-  segments: SpApiSettlementSyncSegmentResult[];
-};
-
-function readStringField(payload: unknown, key: string): string | null {
-  if (typeof payload !== 'object' || payload === null) return null;
-  const value = (payload as Record<string, unknown>)[key];
-  if (typeof value !== 'string') return null;
-  const trimmed = value.trim();
-  return trimmed === '' ? null : trimmed;
-}
-
-async function syncSettlementsFromAmazon(input: {
-  region: Region;
-  startDate: string;
-  endDate: string | null;
-  settlementIds: string[];
-  postToQbo: boolean;
-  process: boolean;
-}): Promise<SpApiSettlementSyncResult> {
-  const endpoint = input.region === 'US' ? 'us' : 'uk';
-
-  const payload: Record<string, unknown> = {
-    startDate: input.startDate,
-    postToQbo: input.postToQbo,
-    process: input.process,
-  };
-  if (input.endDate !== null) payload.endDate = input.endDate;
-  if (input.settlementIds.length > 0) payload.settlementIds = input.settlementIds;
-
-  const res = await fetch(`${basePath}/api/plutus/settlements/spapi/${endpoint}/sync`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  const data = (await res.json()) as unknown;
-  if (!res.ok) {
-    const details = readStringField(data, 'details');
-    if (details) {
-      throw new Error(details);
-    }
-
-    const error = readStringField(data, 'error');
-    if (error) {
-      throw new Error(error);
-    }
-
-    throw new Error('Sync failed');
-  }
-  return data as SpApiSettlementSyncResult;
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
@@ -296,21 +205,6 @@ function SettlementsEmptyIcon() {
       <path d="M16 16h16M16 22h12M16 28h8" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
-}
-
-type AutopostCheckResult = {
-  processed: Array<{ settlementId: string; docNumber: string; invoiceId: string }>;
-  skipped: Array<{ settlementId: string; docNumber: string; reason: string }>;
-  errors: Array<{ settlementId: string; docNumber: string; error: string }>;
-};
-
-async function runAutopostCheck(): Promise<AutopostCheckResult> {
-  const res = await fetch(`${basePath}/api/plutus/autopost/check`, { method: 'POST' });
-  if (!res.ok) {
-    const data = await res.json();
-    throw new Error(data.error);
-  }
-  return res.json();
 }
 
 /* ── shared table-cell styles ── */
@@ -408,7 +302,6 @@ function SettlementMarketplaceQuerySync({
 export default function SettlementsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { enqueueSnackbar } = useSnackbar();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
   const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
   const searchInput = useSettlementsListStore((s) => s.searchInput);
@@ -469,89 +362,6 @@ export default function SettlementsPage() {
     return data.settlements;
   }, [data]);
 
-  // Compute KPI stats from loaded data
-  const [syncOpen, setSyncOpen] = useState(false);
-  const [syncStartDate, setSyncStartDate] = useState(() => {
-    const date = new Date();
-    date.setUTCDate(date.getUTCDate() - 30);
-    return date.toISOString().slice(0, 10);
-  });
-  const [syncRegion, setSyncRegion] = useState<Region>('US');
-  const [syncEndDate, setSyncEndDate] = useState<string>('');
-  const [syncSettlementIds, setSyncSettlementIds] = useState<string>('');
-  const [syncPostToQbo, setSyncPostToQbo] = useState(false);
-  const [syncProcess, setSyncProcess] = useState(false);
-  const [syncResult, setSyncResult] = useState<SpApiSettlementSyncResult | null>(null);
-
-  const syncMutation = useMutation({
-    mutationFn: syncSettlementsFromAmazon,
-    onSuccess: (result) => {
-      setSyncResult(result);
-      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      enqueueSnackbar(`Synced ${result.totals.segments} segment${result.totals.segments === 1 ? '' : 's'}`, { variant: 'success' });
-    },
-    onError: (err) => {
-      enqueueSnackbar(err instanceof Error ? err.message : 'Sync failed', { variant: 'error' });
-    },
-  });
-
-  const autoprocessMutation = useMutation({
-    mutationFn: runAutopostCheck,
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      const processedCount = result.processed.length;
-      const skippedCount = result.skipped.length;
-      const errorCount = result.errors.length;
-
-      if (processedCount > 0) {
-        enqueueSnackbar(`Auto-processed ${processedCount} settlement${processedCount === 1 ? '' : 's'}`, { variant: 'success' });
-      } else if (errorCount > 0) {
-        enqueueSnackbar(`${errorCount} error${errorCount === 1 ? '' : 's'} during auto-processing`, { variant: 'error' });
-      } else {
-        enqueueSnackbar(`No settlements to auto-process (${skippedCount} skipped)`, { variant: 'info' });
-      }
-    },
-    onError: (err) => {
-      enqueueSnackbar(err instanceof Error ? err.message : 'Auto-process failed', { variant: 'error' });
-    },
-  });
-
-  const openSyncDialog = (options: { region: Region; settlementId?: string; postedDate?: string }) => {
-    setSyncResult(null);
-    setSyncRegion(options.region);
-
-    const settlementId = options?.settlementId ? options.settlementId.trim() : '';
-    setSyncSettlementIds(settlementId);
-
-    const postedDate = options?.postedDate ? options.postedDate.trim() : '';
-    if (postedDate !== '' && /^\d{4}-\d{2}-\d{2}$/.test(postedDate)) {
-      setSyncStartDate(isoDaySubtractDays(postedDate, 45));
-      setSyncEndDate(postedDate);
-    } else {
-      setSyncEndDate('');
-    }
-
-    setSyncPostToQbo(false);
-    setSyncProcess(false);
-    setSyncOpen(true);
-  };
-
-  const runSync = () => {
-    const settlementIds = syncSettlementIds
-      .split(/[\s,]+/)
-      .map((id) => id.trim())
-      .filter((id) => id !== '');
-
-    syncMutation.mutate({
-      region: syncRegion,
-      startDate: syncStartDate.trim(),
-      endDate: syncEndDate.trim() === '' ? null : syncEndDate.trim(),
-      settlementIds,
-      postToQbo: syncPostToQbo,
-      process: syncProcess,
-    });
-  };
-
   if (!isCheckingConnection && connection?.connected === false) {
     return <NotConnectedScreen title="Settlements" canConnect={connection.canConnect} error={connection.error} />;
   }
@@ -565,31 +375,9 @@ export default function SettlementsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Review and post settlement data from Amazon to QuickBooks."
+            description="Review Amazon settlement postings in QuickBooks."
             variant="accent"
           />
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <MuiButton
-              variant="outlined"
-              disableElevation
-              onClick={() => openSyncDialog({ region: marketplace === 'all' ? 'US' : marketplace })}
-              disabled={syncMutation.isPending}
-              startIcon={<CloudDownloadIcon sx={{ fontSize: 14 }} />}
-              sx={{ ...outlineSx, ...defaultSize }}
-            >
-              {syncMutation.isPending ? 'Syncing…' : 'Sync from Amazon'}
-            </MuiButton>
-            <MuiButton
-              variant="outlined"
-              disableElevation
-              onClick={() => autoprocessMutation.mutate()}
-              disabled={autoprocessMutation.isPending}
-              startIcon={<PlayArrowIcon sx={{ fontSize: 14 }} />}
-              sx={{ ...outlineSx, ...defaultSize }}
-            >
-              {autoprocessMutation.isPending ? 'Processing…' : 'Auto-process'}
-            </MuiButton>
-          </Box>
         </Box>
 
         <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-end' }}>
@@ -855,23 +643,14 @@ export default function SettlementsPage() {
                         <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
                             <PlutusPill status={rowView.statusText} />
-                            <SplitButton
+                            <MuiButton
+                              variant="contained"
+                              disableElevation
                               onClick={() => router.push(settlementHref)}
-                              dropdownItems={[
-                                { label: 'Open settlement', onClick: () => router.push(settlementHref) },
-                                {
-                                  label: 'Sync from Amazon',
-                                  onClick: () =>
-                                    openSyncDialog({
-                                      region: s.marketplace.region,
-                                      settlementId: s.sourceSettlementId,
-                                      postedDate: s.postedDate,
-                                    }),
-                                },
-                              ]}
+                              sx={{ ...defaultBtnSx, ...defaultSize }}
                             >
-                              Action
-                            </SplitButton>
+                              Open
+                            </MuiButton>
                           </Box>
                         </MuiTableCell>
                       </MuiTableRow>
@@ -935,135 +714,6 @@ export default function SettlementsPage() {
           )}
         </Box>
 
-        <Dialog
-            open={syncOpen}
-            onClose={() => setSyncOpen(false)}
-            maxWidth="md"
-            fullWidth
-            slotProps={{ backdrop: { sx: { bgcolor: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)' } } }}
-          >
-            <DialogTitle>Sync from Amazon ({syncRegion})</DialogTitle>
-            <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                Pulls settlements from Amazon SP-API Finances, generates settlement JEs, and optionally processes them in Plutus.
-              </Typography>
-
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
-                <TextField
-                  label="Start date"
-                  type="date"
-                  value={syncStartDate}
-                  onChange={(e) => setSyncStartDate(e.target.value)}
-                  sx={textFieldSx}
-                  InputLabelProps={{ shrink: true }}
-                />
-                <TextField
-                  label="End date (optional)"
-                  type="date"
-                  value={syncEndDate}
-                  onChange={(e) => setSyncEndDate(e.target.value)}
-                  sx={textFieldSx}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Box>
-
-              <TextField
-                label="Settlement IDs (optional)"
-                placeholder="25223291971 25223291972"
-                value={syncSettlementIds}
-                onChange={(e) => setSyncSettlementIds(e.target.value)}
-                helperText="Comma or space-separated. Leave empty to sync everything in the date range."
-                multiline
-                minRows={2}
-                sx={textFieldSx}
-              />
-
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                <FormControlLabel
-                  control={<Checkbox checked={syncPostToQbo} onChange={(e) => setSyncPostToQbo(e.target.checked)} />}
-                  label="Post missing JEs to QBO"
-                />
-                <FormControlLabel
-                  control={<Checkbox checked={syncProcess} onChange={(e) => setSyncProcess(e.target.checked)} />}
-                  label="Process in Plutus"
-                />
-              </Box>
-
-              {syncMutation.isPending && (
-                <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>Syncing…</Typography>
-              )}
-
-              {syncMutation.error && (
-                <Typography sx={{ fontSize: '0.875rem', color: 'error.main' }}>
-                  {syncMutation.error instanceof Error ? syncMutation.error.message : 'Sync failed'}
-                </Typography>
-              )}
-
-              {syncResult && (
-                <Box sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden' }}>
-                  <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                      Results
-                    </Typography>
-                    <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
-                      {syncResult.totals.settlements} settlement{syncResult.totals.settlements === 1 ? '' : 's'} &middot;{' '}
-                      {syncResult.totals.segments} segment{syncResult.totals.segments === 1 ? '' : 's'} &middot;{' '}
-                      posted {syncResult.totals.posted}, existing {syncResult.totals.existing}, processed {syncResult.totals.processed}, skipped {syncResult.totals.skipped}, errors {syncResult.totals.errors}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ overflow: 'auto' }}>
-                    <MuiTable size="small" sx={{ width: '100%', fontSize: '0.875rem' }}>
-                      <MuiTableHead>
-                        <MuiTableRow sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Doc #</MuiTableCell>
-                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>QBO</MuiTableCell>
-                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Plutus</MuiTableCell>
-                          <MuiTableCell sx={{ ...thSx, fontWeight: 600 }}>Note</MuiTableCell>
-                        </MuiTableRow>
-                      </MuiTableHead>
-                      <MuiTableBody>
-                        {syncResult.segments.map((seg, idx) => (
-                          <MuiTableRow key={`${seg.docNumber}-${idx}`} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                            <MuiTableCell sx={{ ...tdSx, fontFamily: 'JetBrains Mono, monospace' }}>{seg.docNumber}</MuiTableCell>
-                            <MuiTableCell sx={tdSx}>
-                              {seg.qboAction === 'posted' && <Chip label="Posted" size="small" color="success" sx={chipBase} />}
-                              {seg.qboAction === 'existing' && <Chip label="Existing" size="small" color="default" sx={chipBase} />}
-                              {seg.qboAction === 'skipped' && <Chip label="Skipped" size="small" color="default" sx={chipBase} />}
-                              {seg.qboAction === 'error' && <Chip label="Error" size="small" color="error" sx={chipBase} />}
-                            </MuiTableCell>
-                            <MuiTableCell sx={tdSx}>
-                              {seg.processed ? (
-                                <Chip label="Processed" size="small" color="success" sx={chipBase} />
-                              ) : (
-                                <Chip label="Not processed" size="small" color="default" sx={chipBase} />
-                              )}
-                            </MuiTableCell>
-                            <MuiTableCell sx={{ ...tdSx, color: seg.qboAction === 'error' ? 'error.main' : 'text.secondary' }}>
-                              {seg.reason ? seg.reason : seg.error ? seg.error : null}
-                            </MuiTableCell>
-                          </MuiTableRow>
-                        ))}
-                      </MuiTableBody>
-                    </MuiTable>
-                  </Box>
-                </Box>
-              )}
-            </DialogContent>
-            <DialogActions sx={{ px: 3, pb: 2 }}>
-              <MuiButton variant="outlined" disableElevation onClick={() => setSyncOpen(false)} sx={{ ...outlineSx, ...defaultSize }}>
-                Close
-              </MuiButton>
-              <MuiButton
-                variant="contained"
-                disableElevation
-                onClick={() => runSync()}
-                disabled={syncMutation.isPending || syncStartDate.trim() === ''}
-                sx={{ ...defaultBtnSx, ...defaultSize }}
-              >
-                Run sync
-              </MuiButton>
-            </DialogActions>
-          </Dialog>
         </Box>
       </Box>
   );

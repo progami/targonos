@@ -371,6 +371,10 @@ async function findMissingUkSettlementIds(input: {
 }
 
 async function maybeRunAutopost() {
+  if (process.env.PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED !== '1') {
+    return null;
+  }
+
   const deps = await getWorkerDeps();
   const config = await deps.db.setupConfig.findFirst({
     select: {

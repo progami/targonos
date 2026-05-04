@@ -1,16 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSnackbar } from 'notistack';
+import { useParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 
@@ -200,31 +195,8 @@ async function previewParentSettlement(region: string, settlementId: string): Pr
   return data as ParentPreviewResponse;
 }
 
-async function processParentSettlement(region: string, settlementId: string) {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}/process`, {
-    method: 'POST',
-  });
-  const data = await res.json();
-  return { ok: res.ok, data };
-}
-
-async function rollbackParentSettlement(region: string, settlementId: string) {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'rollback' }),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.details ?? data.error ?? 'Failed to rollback settlement');
-  }
-}
-
 export default function ParentSettlementDetailPage() {
-  const { enqueueSnackbar } = useSnackbar();
   const params = useParams();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const region = typeof params.region === 'string' ? params.region : '';
   const settlementId = typeof params.settlementId === 'string' ? decodeURIComponent(params.settlementId) : '';
 
@@ -234,10 +206,6 @@ export default function ParentSettlementDetailPage() {
 
   const [preview, setPreview] = useState<ParentPreviewResponse | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isRollingBack, setIsRollingBack] = useState(false);
-  const [rollbackOpen, setRollbackOpen] = useState(false);
-  const [repairOpen, setRepairOpen] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
@@ -330,77 +298,6 @@ export default function ParentSettlementDetailPage() {
     }
   }
 
-  async function handleProcess() {
-    if (unresolvedChildren.length > 0) {
-      setActionError('Plutus could not resolve an audit invoice for one or more month-end postings.');
-      return;
-    }
-
-    setActionError(null);
-    setIsProcessing(true);
-    try {
-      const result = await processParentSettlement(region, settlementId);
-      if (!result.ok) {
-        if (result.data.children) {
-          setPreview(result.data as ParentPreviewResponse);
-          setActionError('Processing is blocked. Review the posting previews below.');
-        } else {
-          setActionError(result.data.details ?? result.data.error ?? 'Failed to process settlement');
-        }
-        return;
-      }
-
-      enqueueSnackbar('Settlement processed in Plutus', { variant: 'success' });
-      await queryClient.invalidateQueries({ queryKey: ['parent-settlement', region, settlementId] });
-      await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      setPreview(null);
-    } catch (nextError) {
-      setActionError(nextError instanceof Error ? nextError.message : String(nextError));
-      enqueueSnackbar('Failed to process settlement', { variant: 'error' });
-    } finally {
-      setIsProcessing(false);
-    }
-  }
-
-  async function executeRollback() {
-    setRollbackOpen(false);
-    setIsRollingBack(true);
-    setActionError(null);
-    try {
-      await rollbackParentSettlement(region, settlementId);
-      enqueueSnackbar('Settlement rolled back in Plutus', { variant: 'success' });
-      await queryClient.invalidateQueries({ queryKey: ['parent-settlement', region, settlementId] });
-      await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      setPreview(null);
-    } catch (nextError) {
-      setActionError(nextError instanceof Error ? nextError.message : String(nextError));
-    } finally {
-      setIsRollingBack(false);
-    }
-  }
-
-  async function executeRepair() {
-    setRepairOpen(false);
-    try {
-      await rollbackParentSettlement(region, settlementId);
-      const result = await processParentSettlement(region, settlementId);
-      if (!result.ok) {
-        if (result.data.children) {
-          setPreview(result.data as ParentPreviewResponse);
-        }
-        throw new Error(result.data.details ?? result.data.error ?? 'Repair failed');
-      }
-
-      enqueueSnackbar('Settlement repaired in Plutus', { variant: 'success' });
-      await queryClient.invalidateQueries({ queryKey: ['parent-settlement', region, settlementId] });
-      await queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-      setPreview(null);
-    } catch (nextError) {
-      setActionError(nextError instanceof Error ? nextError.message : String(nextError));
-      enqueueSnackbar('Failed to repair settlement', { variant: 'error' });
-    }
-  }
-
   return (
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '78rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
@@ -428,28 +325,9 @@ export default function ParentSettlementDetailPage() {
           {data && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {data.settlement.plutusStatus !== 'Processed' && (
-                <>
-                  <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
-                    {isPreviewLoading ? 'Previewing…' : 'Preview'}
-                  </Button>
-                  <Button variant="contained" onClick={() => void handleProcess()} disabled={isProcessing || unresolvedChildren.length > 0}>
-                    {isProcessing
-                      ? 'Processing…'
-                      : data.settlement.plutusStatus === 'RolledBack'
-                        ? 'Reprocess settlement'
-                        : 'Process settlement'}
-                  </Button>
-                </>
-              )}
-              {data.settlement.plutusStatus === 'Processed' && (
-                <>
-                  <Button variant="outlined" onClick={() => setRepairOpen(true)} disabled={isRollingBack || isProcessing}>
-                    Repair
-                  </Button>
-                  <Button variant="outlined" color="error" onClick={() => setRollbackOpen(true)} disabled={isRollingBack}>
-                    Rollback
-                  </Button>
-                </>
+                <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
+                  {isPreviewLoading ? 'Previewing…' : 'Preview'}
+                </Button>
               )}
             </Box>
           )}
@@ -484,7 +362,7 @@ export default function ParentSettlementDetailPage() {
 
             {unresolvedChildren.length > 0 ? (
               <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
-                Preview and processing stay blocked until every posting resolves to one audit invoice.
+                Preview stays blocked until every posting resolves to one audit invoice.
               </Typography>
             ) : null}
 
@@ -520,34 +398,6 @@ export default function ParentSettlementDetailPage() {
             </Box>
           </Box>
         )}
-
-        <Dialog open={rollbackOpen} onClose={() => setRollbackOpen(false)}>
-          <DialogTitle>Rollback settlement?</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-              This will roll back all month-end postings for the settlement, not just one child posting.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setRollbackOpen(false)}>Cancel</Button>
-            <Button color="error" onClick={() => void executeRollback()} disabled={isRollingBack}>
-              Confirm rollback
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <Dialog open={repairOpen} onClose={() => setRepairOpen(false)}>
-          <DialogTitle>Repair settlement?</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-              This will roll back all child postings and then reprocess the full settlement using the selected invoices above.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setRepairOpen(false)}>Cancel</Button>
-            <Button onClick={() => void executeRepair()}>Confirm repair</Button>
-          </DialogActions>
-        </Dialog>
       </Box>
     </Box>
   );
