@@ -27,11 +27,14 @@ test('inbound carton size controls use metric carton units instead of tenant pac
   )
 
   assert.equal(source.includes('const cartonUnitSystem = CARTON_DIMENSION_UNIT_SYSTEM'), true)
-  assert.equal(source.includes('const cartonLengthUnit = getLengthUnitLabel(cartonUnitSystem)'), true)
+  assert.equal(
+    source.includes('const cartonLengthUnit = getLengthUnitLabel(cartonUnitSystem)'),
+    true
+  )
   assert.equal(source.includes('Carton Size ({cartonLengthUnit})'), true)
   assert.equal(source.includes('Carton Size ({lengthUnit})'), false)
   assert.equal(source.includes('cartonSide1Cm: convertLengthToCm(side1, unitSystem)'), false)
   assert.equal(source.includes('formatLengthFromCm(line.cartonSide1Cm, unitSystem)'), false)
   assert.equal(source.includes('cartonSide1Cm: convertLengthToCm(side1, cartonUnitSystem)'), true)
-  assert.equal(source.includes('formatLengthFromCm(line.cartonSide1Cm, cartonUnitSystem)'), true)
+  assert.match(source, /formatLengthFromCm\(\s*line\.cartonSide1Cm,\s*cartonUnitSystem\s*\)/)
 })

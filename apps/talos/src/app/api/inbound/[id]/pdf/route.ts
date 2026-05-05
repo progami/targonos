@@ -49,9 +49,40 @@ function formatUnitCostCurrency(value: number | null): string {
 
 // Convert number to words (for amounts)
 function numberToWords(num: number): string {
-  const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-    'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen']
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety']
+  const ones = [
+    '',
+    'One',
+    'Two',
+    'Three',
+    'Four',
+    'Five',
+    'Six',
+    'Seven',
+    'Eight',
+    'Nine',
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
+  ]
+  const tens = [
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
+    'Ninety',
+  ]
 
   if (num === 0) return 'Zero'
 
@@ -59,7 +90,11 @@ function numberToWords(num: number): string {
     if (n === 0) return ''
     if (n < 20) return ones[n]
     if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '')
-    return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + convertLessThanThousand(n % 100) : '')
+    return (
+      ones[Math.floor(n / 100)] +
+      ' Hundred' +
+      (n % 100 ? ' ' + convertLessThanThousand(n % 100) : '')
+    )
   }
 
   const dollars = Math.floor(num)
@@ -133,7 +168,8 @@ function renderOrderDocumentHtml(params: {
   // Calculate totals
   let grandTotal = 0
   for (const line of params.lines) {
-    const lineTotal = line.totalCost ?? (line.unitCost !== null ? line.unitCost * line.unitsOrdered : 0)
+    const lineTotal =
+      line.totalCost ?? (line.unitCost !== null ? line.unitCost * line.unitsOrdered : 0)
     grandTotal += lineTotal ?? 0
   }
 
@@ -190,9 +226,10 @@ function renderOrderDocumentHtml(params: {
     return normalizedLines
   }
 
-  const destinationName = params.destinationName && params.destinationName.trim().length > 0
-    ? params.destinationName
-    : params.buyerName
+  const destinationName =
+    params.destinationName && params.destinationName.trim().length > 0
+      ? params.destinationName
+      : params.buyerName
 
   const destinationAddressHtml = (() => {
     const lines: string[] = []
@@ -222,7 +259,8 @@ function renderOrderDocumentHtml(params: {
     return params.lines
       .map(line => {
         const unitCost = line.unitCost
-        const lineTotal = line.totalCost ?? (unitCost !== null ? unitCost * line.unitsOrdered : null)
+        const lineTotal =
+          line.totalCost ?? (unitCost !== null ? unitCost * line.unitsOrdered : null)
 
         return `
           <tr>
@@ -671,12 +709,16 @@ function renderOrderDocumentHtml(params: {
               <span class="inbound-meta-label">Generated:</span>
               <span class="inbound-meta-value">${formatDateTime(params.generatedAt)}${params.generatedByName ? ` by ${escapeHtml(params.generatedByName)}` : ''}</span>
             </div>
-            ${params.vendorPiNumbers.length > 0 ? `
+            ${
+              params.vendorPiNumbers.length > 0
+                ? `
             <div class="inbound-meta-row">
               <span class="inbound-meta-label">Vendor PI${params.vendorPiNumbers.length === 1 ? '' : 's'}:</span>
               <span class="inbound-meta-value">${escapeHtml(params.vendorPiNumbers.join(', '))}</span>
             </div>
-            ` : ''}
+            `
+                : ''
+            }
             <div class="inbound-meta-row">
               <span class="inbound-meta-label">Shipment:</span>
               <span class="inbound-meta-value">By Sea</span>
@@ -692,10 +734,14 @@ function renderOrderDocumentHtml(params: {
           <div class="party-address">
             ${supplierAddressHtml}
             ${params.supplierPhone ? `<br>Tel: ${escapeHtml(params.supplierPhone)}` : ''}
-            ${supplierBankingHtml ? `
+            ${
+              supplierBankingHtml
+                ? `
               <span class="banking-label">Banking</span>
               <span class="banking-details">${supplierBankingHtml}</span>
-            ` : ''}
+            `
+                : ''
+            }
           </div>
         </div>
         <div class="party">
@@ -746,24 +792,36 @@ function renderOrderDocumentHtml(params: {
       <div class="terms-notes">
         <div class="info-box">
           <div class="info-box-title">Terms & Conditions</div>
-          ${params.expectedDate ? `
+          ${
+            params.expectedDate
+              ? `
           <div class="info-row">
             <span class="info-label">Delivery:</span>
             <span class="info-value highlight">${formatDate(params.expectedDate)}</span>
           </div>
-          ` : ''}
-          ${params.paymentTerms ? `
+          `
+              : ''
+          }
+          ${
+            params.paymentTerms
+              ? `
           <div class="info-row">
             <span class="info-label">Payment Terms:</span><br>
             <span class="info-value">${escapeHtml(params.paymentTerms)}</span>
           </div>
-          ` : ''}
-          ${params.incoterms ? `
+          `
+              : ''
+          }
+          ${
+            params.incoterms
+              ? `
           <div class="info-row">
             <span class="info-label">Incoterms:</span>
             <span class="info-value">${escapeHtml(params.incoterms)}</span>
           </div>
-          ` : ''}
+          `
+              : ''
+          }
         </div>
         <div class="info-box">
           <div class="info-box-title">Notes</div>
@@ -801,7 +859,12 @@ function renderOrderDocumentHtml(params: {
 }
 
 export const GET = withAuthAndParams(async (_request, params, _session) => {
-  const id = typeof params?.id === 'string' ? params.id : Array.isArray(params?.id) ? params?.id?.[0] : undefined
+  const id =
+    typeof params?.id === 'string'
+      ? params.id
+      : Array.isArray(params?.id)
+        ? params?.id?.[0]
+        : undefined
 
   if (!id) {
     return ApiResponses.badRequest('Inbound ID is required')
@@ -858,9 +921,7 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
 
   const documentNumber = toPublicOrderNumber(order.inboundNumber ?? order.orderNumber)
 
-  if (
-    (!supplierBankingDetails || supplierBankingDetails.trim().length === 0)
-  ) {
+  if (!supplierBankingDetails || supplierBankingDetails.trim().length === 0) {
     return ApiResponses.badRequest(
       'Supplier banking information is required to generate a Inbound. Update the supplier record and try again.'
     )
@@ -869,9 +930,10 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const vendorPiNumbers = (() => {
     const values = new Set<string>()
     for (const line of order.lines) {
-      const piNumber = typeof (line as { piNumber?: string | null }).piNumber === 'string'
-        ? (line as { piNumber?: string | null }).piNumber!.trim()
-        : ''
+      const piNumber =
+        typeof (line as { piNumber?: string | null }).piNumber === 'string'
+          ? (line as { piNumber?: string | null }).piNumber!.trim()
+          : ''
       if (piNumber.length > 0) {
         values.add(piNumber)
       }
@@ -891,14 +953,20 @@ export const GET = withAuthAndParams(async (_request, params, _session) => {
   const generatedAt = new Date()
   const generatedByName = _session.user.name ?? _session.user.email ?? null
 
-  await prisma.inboundOrder.update({
-    where: { id: order.id },
+  const metadataUpdate = await prisma.inboundOrder.updateMany({
+    where: { id: order.id, updatedAt: order.updatedAt },
     data: {
       inboundPdfGeneratedAt: generatedAt,
       inboundPdfGeneratedById: _session.user.id,
       inboundPdfGeneratedByName: generatedByName,
+      updatedAt: order.updatedAt,
     },
   })
+  if (metadataUpdate.count !== 1) {
+    return ApiResponses.conflict(
+      'Inbound changed while generating the PDF. Review the latest details and regenerate.'
+    )
+  }
 
   const lines = order.lines.map(line => ({
     skuCode: line.skuCode,
