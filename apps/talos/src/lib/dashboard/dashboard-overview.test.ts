@@ -283,6 +283,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
     movements: [
       {
         id: 'old-receive',
+        poId: 'PO-OLD',
         transactionType: 'RECEIVE',
         transactionDate: new Date('2026-04-10T12:00:00.000Z'),
         createdAt: new Date('2026-04-10T12:01:00.000Z'),
@@ -299,6 +300,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
       },
       {
         id: 'recent-receive',
+        poId: 'PO-IN',
         transactionType: 'RECEIVE',
         transactionDate: new Date('2026-04-13T12:00:00.000Z'),
         createdAt: new Date('2026-04-13T12:01:00.000Z'),
@@ -315,6 +317,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
       },
       {
         id: 'recent-ship',
+        poId: 'PO-OUT',
         transactionType: 'SHIP',
         transactionDate: new Date('2026-04-14T12:00:00.000Z'),
         createdAt: new Date('2026-04-14T12:01:00.000Z'),
@@ -342,6 +345,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
   )
   assert.deepEqual(snapshot.recentIn[0], {
     id: 'recent-receive',
+    poId: 'PO-IN',
     transactionType: 'RECEIVE',
     transactionDate: '2026-04-13T12:00:00.000Z',
     warehouseCode: 'TCL-CHINO',
@@ -361,6 +365,7 @@ test('buildDashboardOverviewSnapshot returns recent inbound and outbound movemen
 test('buildDashboardOverviewSnapshot uses createdAt to rank same-day recent movements', () => {
   const movements = Array.from({ length: 6 }, (_, index) => ({
     id: `same-day-${index + 1}`,
+    poId: `PO-${index + 1}`,
     transactionType: 'RECEIVE',
     transactionDate: new Date('2026-04-15T00:00:00.000Z'),
     createdAt: new Date(`2026-04-15T00:0${index}:00.000Z`),

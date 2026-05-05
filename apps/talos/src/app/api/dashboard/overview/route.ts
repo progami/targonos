@@ -6,6 +6,7 @@ import {
   buildDashboardOverviewSnapshot,
   mapInboundOrderToDashboardOverviewInput,
 } from '@/lib/dashboard/dashboard-overview'
+import { toPublicOrderNumber } from '@/lib/services/inbound-utils'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
   AMAZON_WAREHOUSE_CODES,
@@ -20,6 +21,10 @@ type DashboardOverviewSession = {
     role?: string
     warehouseId?: string | null
   }
+}
+
+function getMovementOriginKey(input: { warehouseCode: string; skuCode: string; lotRef: string }) {
+  return [input.warehouseCode.trim(), input.skuCode.trim(), input.lotRef.trim()].join('\u001f')
 }
 
 export async function resolveDashboardOverviewWarehouseCodeFilter(
@@ -112,6 +117,24 @@ export const GET = withAuth(async (_request, session) => {
       outboundOrderNumber: outboundOrder?.outboundNumber ?? null,
     }))
   )
+  const poIdByMovementOrigin = new Map<string, string>()
+
+  for (const transaction of transactions) {
+    const orderNumber = transaction.inboundOrder?.orderNumber
+    if (typeof orderNumber !== 'string') {
+      continue
+    }
+
+    const poId = toPublicOrderNumber(orderNumber).trim()
+    if (poId.length === 0) {
+      continue
+    }
+
+    const originKey = getMovementOriginKey(transaction)
+    if (!poIdByMovementOrigin.has(originKey)) {
+      poIdByMovementOrigin.set(originKey, poId)
+    }
+  }
 
   return NextResponse.json(
     buildDashboardOverviewSnapshot({
@@ -129,22 +152,27 @@ export const GET = withAuth(async (_request, session) => {
           inboundOrder: _inboundOrder,
           outboundOrder: _outboundOrder,
           ...transaction
-        }) => ({
-          id: transaction.id,
-          transactionType: transaction.transactionType,
-          transactionDate: transaction.transactionDate,
-          createdAt: transaction.createdAt,
-          warehouseCode: transaction.warehouseCode,
-          warehouseName: transaction.warehouseName,
-          skuCode: transaction.skuCode,
-          skuDescription: transaction.skuDescription,
-          lotRef: transaction.lotRef,
-          cartonsIn: transaction.cartonsIn,
-          cartonsOut: transaction.cartonsOut,
-          storagePalletsIn: transaction.storagePalletsIn,
-          shippingPalletsOut: transaction.shippingPalletsOut,
-          unitsPerCarton: transaction.unitsPerCarton,
-        })
+        }) => {
+          const poId = poIdByMovementOrigin.get(getMovementOriginKey(transaction))
+
+          return {
+            id: transaction.id,
+            poId: poId === undefined ? null : poId,
+            transactionType: transaction.transactionType,
+            transactionDate: transaction.transactionDate,
+            createdAt: transaction.createdAt,
+            warehouseCode: transaction.warehouseCode,
+            warehouseName: transaction.warehouseName,
+            skuCode: transaction.skuCode,
+            skuDescription: transaction.skuDescription,
+            lotRef: transaction.lotRef,
+            cartonsIn: transaction.cartonsIn,
+            cartonsOut: transaction.cartonsOut,
+            storagePalletsIn: transaction.storagePalletsIn,
+            shippingPalletsOut: transaction.shippingPalletsOut,
+            unitsPerCarton: transaction.unitsPerCarton,
+          }
+        }
       ),
     })
   )

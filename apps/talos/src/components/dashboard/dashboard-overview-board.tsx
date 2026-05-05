@@ -1,12 +1,29 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import Link from 'next/link'
+import { useMemo, useState, type ReactNode } from 'react'
+import NextLink from 'next/link'
+import {
+  Box,
+  LinearProgress,
+  Link as MuiLink,
+  Paper,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
+import type { SxProps, Theme } from '@mui/material/styles'
 import type {
   DashboardOverviewMovement,
   DashboardOverviewSnapshot,
 } from '@/lib/dashboard/dashboard-overview'
-import { ArrowDown, ArrowUp } from '@/lib/lucide-icons'
+import { Box as BoxIcon } from '@/lib/lucide-icons'
 
 type InventoryMetric = 'cartons' | 'pallets' | 'units'
 
@@ -18,9 +35,10 @@ type InventoryMetricRow = {
 }
 
 const numberFormatter = new Intl.NumberFormat('en-US')
-const dateFormatter = new Intl.DateTimeFormat('en-US', {
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
   month: 'short',
   day: '2-digit',
+  year: '2-digit',
   timeZone: 'UTC',
 })
 
@@ -34,6 +52,78 @@ const metricLabels: Record<InventoryMetric, string> = {
   cartons: 'Cartons',
   pallets: 'Pallets',
   units: 'Units',
+}
+
+const panelSx: SxProps<Theme> = {
+  border: '1px solid',
+  borderColor: 'light-dark(rgb(226 232 240), rgb(30 41 59))',
+  borderRadius: '6px',
+  backgroundColor: 'light-dark(rgba(255,255,255,0.82), rgba(15,23,42,0.42))',
+  backgroundImage: 'none',
+  boxShadow: '0 1px 2px light-dark(rgba(15,23,42,0.06), rgba(0,0,0,0.16))',
+  overflow: 'hidden',
+}
+
+const panelHeaderSx: SxProps<Theme> = {
+  alignItems: 'center',
+  borderBottom: '1px solid',
+  borderColor: 'light-dark(rgb(226 232 240), rgb(30 41 59))',
+  display: 'flex',
+  justifyContent: 'space-between',
+  minHeight: 48,
+  px: 2,
+}
+
+const panelTitleSx: SxProps<Theme> = {
+  color: 'light-dark(rgb(51 65 85), rgb(226 232 240))',
+  fontSize: 15,
+  fontWeight: 700,
+  letterSpacing: '0.14em',
+  lineHeight: 1,
+  textTransform: 'uppercase',
+}
+
+const headCellSx: SxProps<Theme> = {
+  borderColor: 'light-dark(rgb(226 232 240), rgb(30 41 59))',
+  color: 'light-dark(rgb(100 116 139), rgb(100 116 139))',
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.14em',
+  lineHeight: 1.2,
+  px: 2,
+  py: 1.5,
+  textTransform: 'uppercase',
+  whiteSpace: 'nowrap',
+}
+
+const bodyCellSx: SxProps<Theme> = {
+  borderColor: 'light-dark(rgb(226 232 240), rgba(30,41,59,0.8))',
+  color: 'light-dark(rgb(71 85 105), rgb(203 213 225))',
+  fontSize: 14,
+  lineHeight: 1.25,
+  px: 2,
+  py: 1.5,
+}
+
+const strongCellSx: SxProps<Theme> = {
+  ...bodyCellSx,
+  color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+  fontWeight: 700,
+}
+
+const recentHeadCellSx: SxProps<Theme> = {
+  ...headCellSx,
+  fontSize: 10,
+  letterSpacing: '0.08em',
+  px: 1,
+  py: 1.15,
+}
+
+const recentBodyCellSx: SxProps<Theme> = {
+  ...bodyCellSx,
+  fontSize: 12,
+  px: 1,
+  py: 1.1,
 }
 
 function formatNumber(value: number) {
@@ -64,6 +154,18 @@ function formatMetricValue(row: InventoryMetricRow, metric: InventoryMetric) {
   return formatNumber(getMetricValue(row, metric))
 }
 
+function Panel({ children, sx }: { children: ReactNode; sx?: SxProps<Theme> }) {
+  return (
+    <Paper elevation={0} square={false} sx={[panelSx, { minWidth: 0 }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}>
+      {children}
+    </Paper>
+  )
+}
+
+function PanelTitle({ children }: { children: ReactNode }) {
+  return <Typography component="h2" sx={panelTitleSx}>{children}</Typography>
+}
+
 function MetricToggle({
   selectedMetric,
   setSelectedMetric,
@@ -72,31 +174,94 @@ function MetricToggle({
   setSelectedMetric: (metric: InventoryMetric) => void
 }) {
   return (
-    <div
+    <ToggleButtonGroup
+      exclusive
+      size="small"
+      value={selectedMetric}
+      onChange={(_event, value: InventoryMetric | null) => {
+        if (value !== null) {
+          setSelectedMetric(value)
+        }
+      }}
       aria-label="Distribution metric"
-      className="inline-flex shrink-0 overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-800 dark:bg-slate-950"
-      role="group"
+      sx={{
+        border: '1px solid',
+        borderColor: 'light-dark(rgb(203 213 225), rgb(51 65 85))',
+        borderRadius: '6px',
+        overflow: 'hidden',
+        '& .MuiToggleButton-root': {
+          border: 0,
+          borderRadius: 0,
+          color: 'light-dark(rgb(71 85 105), rgb(148 163 184))',
+          fontSize: 12,
+          fontWeight: 700,
+          lineHeight: 1,
+          px: 2,
+          py: 1,
+          textTransform: 'none',
+        },
+        '& .MuiToggleButton-root.Mui-selected': {
+          backgroundColor: 'light-dark(rgb(15 118 110), rgba(20,184,166,0.8))',
+          color: 'light-dark(white, rgb(15 23 42))',
+        },
+        '& .MuiToggleButton-root.Mui-selected:hover': {
+          backgroundColor: 'light-dark(rgb(17 94 89), rgb(45 212 191))',
+        },
+      }}
     >
-      {metricOptions.map(option => {
-        const selected = selectedMetric === option.value
+      {metricOptions.map(option => (
+        <ToggleButton key={option.value} value={option.value} aria-label={option.label}>
+          {option.label}
+        </ToggleButton>
+      ))}
+    </ToggleButtonGroup>
+  )
+}
 
-        return (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => setSelectedMetric(option.value)}
-            className={
-              selected
-                ? 'rounded-[5px] bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-50 shadow-sm dark:bg-slate-100 dark:text-slate-950'
-                : 'rounded-[5px] px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-slate-100'
-            }
-          >
-            {option.label}
-          </button>
-        )
-      })}
-    </div>
+function MetricBar({ value, total }: { value: number; total: number }) {
+  const share = getShare(value, total)
+
+  return (
+    <Stack direction="row" spacing={1.5} alignItems="center" minWidth={0}>
+      <Typography
+        sx={{
+          color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+          fontSize: 16,
+          fontWeight: 700,
+          minWidth: 80,
+          textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {formatNumber(value)}
+      </Typography>
+      <LinearProgress
+        variant="determinate"
+        value={share}
+        sx={{
+          backgroundColor: 'light-dark(rgb(226 232 240), rgb(30 41 59))',
+          borderRadius: '2px',
+          flex: 1,
+          height: 8,
+          minWidth: 120,
+          '& .MuiLinearProgress-bar': {
+            backgroundColor: 'light-dark(rgb(15 118 110), rgba(20,184,166,0.8))',
+            borderRadius: '2px',
+          },
+        }}
+      />
+      <Typography
+        sx={{
+          color: 'light-dark(rgb(100 116 139), rgb(100 116 139))',
+          fontSize: 13,
+          minWidth: 42,
+          textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {share}%
+      </Typography>
+    </Stack>
   )
 }
 
@@ -127,54 +292,48 @@ function StageTable({ snapshot }: { snapshot: DashboardOverviewSnapshot }) {
   const totalCartons = rows.reduce((sum, row) => sum + row.cartons, 0)
 
   return (
-    <section className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
-      <table className="min-w-[720px] table-fixed text-sm">
-        <thead>
-          <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
-            <th className="w-[28%] py-3 pr-4">Stage</th>
-            <th className="w-[30%] px-4">Cartons</th>
-            <th className="px-4 text-right">Pallets</th>
-            <th className="px-4 text-right">Units</th>
-            <th className="pl-4 text-right">Count</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(row => {
-            const share = getShare(row.cartons, totalCartons)
-
-            return (
-              <tr key={row.label} className="border-t border-slate-200 dark:border-slate-800/80">
-                <td className="py-4 pr-4 text-base font-semibold text-slate-900 dark:text-slate-100">
+    <Panel>
+      <TableContainer>
+        <Table size="small" sx={{ minWidth: 760, tableLayout: 'fixed' }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ ...headCellSx, width: '24%' }}>Stage</TableCell>
+              <TableCell sx={{ ...headCellSx, width: '32%' }}>Cartons</TableCell>
+              <TableCell align="right" sx={headCellSx}>Pallets</TableCell>
+              <TableCell align="right" sx={headCellSx}>Units</TableCell>
+              <TableCell align="right" sx={headCellSx}>Count</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map(row => (
+              <TableRow key={row.label} hover={false}>
+                <TableCell
+                  sx={{
+                    ...strongCellSx,
+                    fontSize: 16,
+                    textTransform: 'uppercase',
+                  }}
+                >
                   {row.label}
-                </td>
-                <td className="px-4 py-4">
-                  <div className="flex items-center gap-3">
-                    <span className="w-16 text-right text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                      {formatNumber(row.cartons)}
-                    </span>
-                    <div className="h-2 min-w-24 flex-1 bg-slate-200 dark:bg-slate-900">
-                      <div className="h-full bg-teal-700/80" style={{ width: `${share}%` }} />
-                    </div>
-                    <span className="w-10 text-right text-xs tabular-nums text-slate-500 dark:text-slate-500">
-                      {share}%
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                </TableCell>
+                <TableCell sx={bodyCellSx}>
+                  <MetricBar value={row.cartons} total={totalCartons} />
+                </TableCell>
+                <TableCell align="right" sx={bodyCellSx}>
                   {formatNumber(row.pallets)}
-                </td>
-                <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                </TableCell>
+                <TableCell align="right" sx={bodyCellSx}>
                   {formatNumber(row.units)}
-                </td>
-                <td className="py-4 pl-4 text-right text-slate-500 dark:text-slate-400">
+                </TableCell>
+                <TableCell align="right" sx={{ ...bodyCellSx, color: 'light-dark(rgb(100 116 139), rgb(148 163 184))' }}>
                   {row.count}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </section>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Panel>
   )
 }
 
@@ -191,81 +350,86 @@ function WarehouseTable({
   )
 
   return (
-    <section className="min-w-0">
-      <div className="mb-3 flex items-end justify-between gap-4">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-          Warehouses
-        </h2>
-      </div>
-
-      <div className="overflow-x-auto border-y border-slate-200 dark:border-slate-800">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
-              <th className="py-3 pr-4">Warehouse</th>
-              <th className="px-4 py-3 text-right">Cartons</th>
-              <th className="px-4 py-3 text-right">Pallets</th>
-              <th className="px-4 py-3 text-right">Units</th>
-              <th className="px-4 py-3 text-right">SKUs</th>
-              <th className="py-3 pl-4 text-right">Share</th>
-            </tr>
-          </thead>
-          <tbody>
+    <Panel sx={{ height: '100%' }}>
+      <Box sx={panelHeaderSx}>
+        <PanelTitle>Warehouses</PanelTitle>
+      </Box>
+      <TableContainer>
+        <Table size="small" sx={{ tableLayout: 'fixed' }}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ ...headCellSx, width: '38%' }}>Warehouse</TableCell>
+              <TableCell align="right" sx={headCellSx}>Cartons</TableCell>
+              <TableCell align="right" sx={headCellSx}>Pallets</TableCell>
+              <TableCell align="right" sx={headCellSx}>Units</TableCell>
+              <TableCell align="right" sx={headCellSx}>SKUs</TableCell>
+              <TableCell align="right" sx={headCellSx}>Share</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
             {warehouses.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="py-10 text-center text-sm text-slate-500 dark:text-slate-500"
-                >
+              <TableRow>
+                <TableCell colSpan={6} align="center" sx={{ ...bodyCellSx, py: 5 }}>
                   No warehouse stock.
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ) : null}
             {warehouses.map(row => {
               const selectedValue = getMetricValue(row, selectedMetric)
               const share = getShare(selectedValue, totalSelected)
 
               return (
-                <tr
-                  key={row.warehouseCode}
-                  className="border-t border-slate-200 dark:border-slate-800/80"
-                >
-                  <td className="py-4 pr-4">
-                    <div className="font-medium text-slate-900 dark:text-slate-100">
+                <TableRow key={row.warehouseCode} hover={false}>
+                  <TableCell sx={bodyCellSx}>
+                    <Typography
+                      noWrap
+                      sx={{
+                        color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+                        fontSize: 14,
+                        fontWeight: 600,
+                      }}
+                    >
                       {row.warehouseName}
-                    </div>
-                    <div className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-500">
+                    </Typography>
+                    <Typography
+                      noWrap
+                      sx={{
+                        color: 'light-dark(rgb(100 116 139), rgb(100 116 139))',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        letterSpacing: '0.12em',
+                        mt: 0.5,
+                        textTransform: 'uppercase',
+                      }}
+                    >
                       {row.warehouseCode}
-                    </div>
-                  </td>
+                    </Typography>
+                  </TableCell>
                   {metricOptions.map(option => {
                     const selected = selectedMetric === option.value
                     return (
-                      <td
+                      <TableCell
                         key={option.value}
-                        className={
-                          selected
-                            ? 'px-4 py-4 text-right text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100'
-                            : 'px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300'
-                        }
+                        align="right"
+                        sx={selected ? strongCellSx : bodyCellSx}
                       >
                         {formatMetricValue(row, option.value)}
-                      </td>
+                      </TableCell>
                     )
                   })}
-                  <td className="px-4 py-4 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                  <TableCell align="right" sx={bodyCellSx}>
                     {formatNumber(row.skuCount)}
-                  </td>
-                  <td className="py-4 pl-4 text-right tabular-nums text-slate-500 dark:text-slate-400">
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...bodyCellSx, color: 'light-dark(rgb(100 116 139), rgb(148 163 184))' }}>
                     {share}%
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )
             })}
-          </tbody>
-        </table>
-      </div>
-    </section>
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Panel>
   )
 }
 
@@ -288,69 +452,82 @@ function WarehouseChart({
   const metricLabel = metricLabels[selectedMetric].toLowerCase()
 
   return (
-    <section className="min-w-0">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-          Distribution
-        </h2>
+    <Panel sx={{ height: '100%' }}>
+      <Box sx={panelHeaderSx}>
+        <PanelTitle>Distribution</PanelTitle>
         <MetricToggle selectedMetric={selectedMetric} setSelectedMetric={setSelectedMetric} />
-      </div>
+      </Box>
 
-      <div className="border-y border-slate-200 py-4 dark:border-slate-800">
+      <Stack spacing={2.5} sx={{ px: 2, py: 3 }}>
         {chartData.length === 0 ? (
-          <div className="flex h-56 items-center justify-center text-sm text-slate-500 dark:text-slate-500">
-            No chart data.
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {chartData.map(row => {
-              const width = Math.round((Math.max(row.value, 0) / scaleMax) * 100)
-              const displayValue =
-                selectedMetric === 'pallets' && row.carriesPallets === false
-                  ? '—'
-                  : formatNumber(row.value)
-              const title =
-                selectedMetric === 'pallets' && row.carriesPallets === false
-                  ? `${row.name}: FBA does not carry pallets`
-                  : `${row.name}: ${formatNumber(row.value)} ${metricLabel}`
+          <Box sx={{ alignItems: 'center', display: 'flex', height: 224, justifyContent: 'center' }}>
+            <Typography sx={{ color: 'light-dark(rgb(100 116 139), rgb(100 116 139))', fontSize: 14 }}>
+              No chart data.
+            </Typography>
+          </Box>
+        ) : null}
+        {chartData.map(row => {
+          const width = Math.round((Math.max(row.value, 0) / scaleMax) * 100)
+          const displayValue =
+            selectedMetric === 'pallets' && row.carriesPallets === false
+              ? '—'
+              : formatNumber(row.value)
+          const title =
+            selectedMetric === 'pallets' && row.carriesPallets === false
+              ? `${row.name}: FBA does not carry pallets`
+              : `${row.name}: ${formatNumber(row.value)} ${metricLabel}`
 
-              return (
-                <div
-                  key={row.name}
-                  className="grid grid-cols-[5.5rem_minmax(0,1fr)_4.5rem] items-center gap-3"
-                >
-                  <div className="truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
-                    {row.name}
-                  </div>
-                  <div className="h-9 bg-slate-100 dark:bg-slate-900">
-                    <div
-                      className="h-full bg-teal-700/80"
-                      style={{ width: `${width}%` }}
-                      title={title}
-                    />
-                  </div>
-                  <div className="text-right text-sm font-semibold tabular-nums text-slate-900 dark:text-slate-100">
-                    {displayValue}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
-
-function MovementQuantity({ movement }: { movement: DashboardOverviewMovement }) {
-  return (
-    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-      <span>{formatNumber(movement.cartons)} cartons</span>
-      <span>{formatNumber(movement.units)} units</span>
-      <span>
-        {movement.carriesPallets ? `${formatNumber(movement.pallets)} pallets` : 'No pallets'}
-      </span>
-    </div>
+          return (
+            <Box
+              key={row.name}
+              sx={{
+                alignItems: 'center',
+                display: 'grid',
+                gap: 1.5,
+                gridTemplateColumns: '5.75rem minmax(0, 1fr) 5rem',
+              }}
+            >
+              <Typography
+                noWrap
+                sx={{
+                  color: 'light-dark(rgb(71 85 105), rgb(203 213 225))',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {row.name}
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={width}
+                title={title}
+                sx={{
+                  backgroundColor: 'light-dark(rgb(226 232 240), rgba(30,41,59,0.78))',
+                  borderRadius: '2px',
+                  height: 40,
+                  '& .MuiLinearProgress-bar': {
+                    backgroundColor: 'light-dark(rgb(15 118 110), rgba(20,184,166,0.82))',
+                    borderRadius: '2px',
+                  },
+                }}
+              />
+              <Typography
+                align="right"
+                sx={{
+                  color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {displayValue}
+              </Typography>
+            </Box>
+          )
+        })}
+      </Stack>
+    </Panel>
   )
 }
 
@@ -363,64 +540,131 @@ function RecentMovementSection({
   movements: DashboardOverviewMovement[]
   direction: 'in' | 'out'
 }) {
-  const Icon = direction === 'in' ? ArrowDown : ArrowUp
-  const iconClass =
+  const dateColumnLabel = direction === 'in' ? 'Received' : 'Shipped'
+  const iconColor =
     direction === 'in'
-      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
-      : 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300'
+      ? 'light-dark(rgb(15 118 110), rgb(45 212 191))'
+      : 'light-dark(rgb(8 145 178), rgb(103 232 249))'
 
   return (
-    <section className="min-w-0">
-      <div className="mb-3 flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
-          {title}
-        </h2>
-        <Link
+    <Panel sx={{ height: '100%', minHeight: 270 }}>
+      <Box sx={panelHeaderSx}>
+        <PanelTitle>{title}</PanelTitle>
+        <MuiLink
+          component={NextLink}
           href="/operations/transactions"
-          className="text-xs font-semibold text-teal-700 hover:text-teal-900 dark:text-teal-300 dark:hover:text-teal-100"
+          underline="none"
+          sx={{
+            color: 'light-dark(rgb(15 118 110), rgb(45 212 191))',
+            fontSize: 12,
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+          }}
         >
-          Ledger
-        </Link>
-      </div>
+          View all
+        </MuiLink>
+      </Box>
 
-      <div className="border-y border-slate-200 dark:border-slate-800">
-        {movements.length === 0 ? (
-          <div className="flex h-32 items-center justify-center text-sm text-slate-500 dark:text-slate-500">
-            No recent movements.
-          </div>
-        ) : (
-          <div className="divide-y divide-slate-200 dark:divide-slate-800">
-            {movements.map(movement => (
-              <div
-                key={movement.id}
-                className="grid grid-cols-[2rem_minmax(0,1fr)_4rem] gap-3 py-3"
-              >
-                <div className={`flex h-8 w-8 items-center justify-center rounded-md ${iconClass}`}>
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {movement.skuCode}
-                    </span>
-                    <span className="text-xs font-medium text-slate-500 dark:text-slate-500">
-                      {movement.lotRef}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
-                    {movement.warehouseName} · {movement.transactionType}
-                  </div>
-                  <MovementQuantity movement={movement} />
-                </div>
-                <div className="pt-0.5 text-right text-xs font-semibold tabular-nums text-slate-500 dark:text-slate-500">
-                  {formatDate(movement.transactionDate)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+      {movements.length === 0 ? (
+        <Stack alignItems="center" justifyContent="center" spacing={2} sx={{ minHeight: 224, px: 2, py: 3 }}>
+          <BoxIcon size={42} color="currentColor" />
+          <Typography
+            sx={{
+              color: 'light-dark(rgb(100 116 139), rgb(100 116 139))',
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+            }}
+          >
+            No recent movements
+          </Typography>
+        </Stack>
+      ) : (
+        <TableContainer sx={{ overflowX: 'hidden' }}>
+          <Table size="small" sx={{ tableLayout: 'fixed', width: '100%' }}>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={recentHeadCellSx}>PO / SKU</TableCell>
+                <TableCell sx={{ ...recentHeadCellSx, width: 82 }}>{dateColumnLabel}</TableCell>
+                <TableCell sx={{ ...recentHeadCellSx, width: 56 }}>WH</TableCell>
+                <TableCell align="right" sx={{ ...recentHeadCellSx, width: 66 }}>Units</TableCell>
+                <TableCell align="right" sx={{ ...recentHeadCellSx, width: 72 }}>Cartons</TableCell>
+                <TableCell align="right" sx={{ ...recentHeadCellSx, width: 66 }}>Pallets</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {movements.map(movement => (
+                <TableRow
+                  key={movement.id}
+                  hover={false}
+                  sx={{
+                    borderLeft: '3px solid',
+                    borderLeftColor: iconColor,
+                  }}
+                >
+                  <TableCell sx={{ ...recentBodyCellSx, color: 'light-dark(rgb(15 23 42), rgb(241 245 249))', fontWeight: 700 }}>
+                    <Stack spacing={0.15} minWidth={0}>
+                      <Typography
+                        noWrap
+                        sx={{
+                          color: 'light-dark(rgb(8 145 178), rgb(34 211 238))',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {movement.poId === null ? '-' : movement.poId}
+                      </Typography>
+                      <Typography
+                        noWrap
+                        sx={{
+                          color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          lineHeight: 1.15,
+                        }}
+                      >
+                        {movement.skuCode}
+                      </Typography>
+                    </Stack>
+                  </TableCell>
+                  <TableCell sx={{ ...recentBodyCellSx, fontWeight: 700 }}>
+                    <Typography noWrap sx={{ fontSize: 11, fontWeight: 700, lineHeight: 1.15 }}>
+                      {formatDate(movement.transactionDate)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={recentBodyCellSx}>
+                    <Typography
+                      noWrap
+                      title={movement.warehouseName}
+                      sx={{
+                        color: 'light-dark(rgb(71 85 105), rgb(203 213 225))',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        lineHeight: 1.15,
+                      }}
+                    >
+                      {movement.warehouseCode}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...recentBodyCellSx, fontVariantNumeric: 'tabular-nums' }}>
+                    {formatNumber(movement.units)}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...recentBodyCellSx, color: 'light-dark(rgb(15 23 42), rgb(241 245 249))', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
+                    {formatNumber(movement.cartons)}
+                  </TableCell>
+                  <TableCell align="right" sx={{ ...recentBodyCellSx, fontVariantNumeric: 'tabular-nums' }}>
+                    {movement.carriesPallets ? formatNumber(movement.pallets) : '-'}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Panel>
   )
 }
 
@@ -436,22 +680,61 @@ export function DashboardOverviewBoard({ snapshot }: { snapshot: DashboardOvervi
   )
 
   return (
-    <div className="space-y-7 text-slate-700 dark:text-slate-200">
+    <Stack
+      spacing={2.5}
+      sx={{
+        color: 'light-dark(rgb(51 65 85), rgb(226 232 240))',
+        flex: 1,
+        height: '100%',
+        minHeight: 0,
+        minWidth: 0,
+        width: '100%',
+      }}
+    >
       <StageTable snapshot={snapshot} />
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.35fr)_minmax(24rem,0.65fr)]">
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2.5,
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            lg: 'minmax(0, 1.3fr) minmax(22rem, 0.7fr)',
+          },
+          minWidth: 0,
+        }}
+      >
         <WarehouseTable warehouses={warehouses} selectedMetric={selectedMetric} />
         <WarehouseChart
           warehouses={warehouses}
           selectedMetric={selectedMetric}
           setSelectedMetric={setSelectedMetric}
         />
-      </div>
+      </Box>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <Box
+        sx={{
+          display: 'grid',
+          flex: {
+            lg: 1,
+          },
+          gap: 2.5,
+          gridTemplateColumns: {
+            xs: 'minmax(0, 1fr)',
+            lg: 'repeat(2, minmax(0, 1fr))',
+          },
+          height: {
+            lg: '100%',
+          },
+          minHeight: {
+            lg: 270,
+          },
+          minWidth: 0,
+        }}
+      >
         <RecentMovementSection title="Recent In" movements={snapshot.recentIn} direction="in" />
         <RecentMovementSection title="Recent Out" movements={snapshot.recentOut} direction="out" />
-      </div>
-    </div>
+      </Box>
+    </Stack>
   )
 }

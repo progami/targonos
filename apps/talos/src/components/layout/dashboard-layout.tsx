@@ -24,16 +24,19 @@ const appName = 'Talos'
 	 const commitUrl = commitSha ? `https://github.com/progami/targonos/commit/${commitSha}` : undefined
 	 const inferredReleaseUrl = `https://github.com/progami/targonos/releases/tag/v${version}`
 	 const href = explicitReleaseUrl ?? commitUrl ?? inferredReleaseUrl
+ const showBreadcrumbSlot = hideBreadcrumb ? customBreadcrumb !== undefined : true
  
  return (
  <DashboardLayoutNestingContext.Provider value={true}>
  <MainNav />
  <div className="md:pl-16 lg:pl-64 transition-all duration-300 h-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
  <main className="flex-1 flex flex-col min-h-0">
+ {showBreadcrumbSlot && (
  <div className="px-4 sm:px-6 md:px-8 py-4">
- {hideBreadcrumb ? customBreadcrumb ?? null : customBreadcrumb ?? <Breadcrumb />}
+ {hideBreadcrumb ? customBreadcrumb : customBreadcrumb ?? <Breadcrumb />}
  </div>
- <div className="flex-1 flex flex-col px-4 sm:px-6 md:px-8 pb-4 min-h-0 overflow-y-auto scrollbar-gutter-stable">
+ )}
+ <div className={`flex-1 flex flex-col min-h-0 overflow-y-auto scrollbar-gutter-stable ${showBreadcrumbSlot ? 'px-4 sm:px-6 md:px-8 pb-4' : 'px-3 sm:px-4 md:px-5 lg:px-6 pb-3 pt-3'}`}>
  {children}
  </div>
  </main>

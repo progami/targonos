@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { cn } from '@/lib/utils'
+import { Box, ButtonBase, CircularProgress, Stack, Typography } from '@mui/material'
 import { TenantConfig, TenantCode, TENANTS } from '@/lib/tenant/constants'
-import { Globe, MapPin, LogOut } from '@/lib/lucide-icons'
+import { ChevronRight, MapPin } from '@/lib/lucide-icons'
 import { withBasePath } from '@/lib/utils/base-path'
 
 interface TenantIndicatorProps {
   className?: string
   collapsed?: boolean
-  showLogout?: boolean
+  showSwitchAction?: boolean
 }
 
 // Format timezone to readable city name
@@ -25,7 +25,7 @@ export function FlatFlag({ code, size = 24 }: { code: TenantCode; size?: number 
   const h = Math.round(size * 2 / 3)
   if (code === 'US') {
     return (
-      <svg width={size} height={h} viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
+      <svg width={size} height={h} viewBox="0 0 24 16" style={{ borderRadius: 2, flexShrink: 0 }}>
         <rect width="24" height="16" fill="#B22234" />
         <rect y="1.23" width="24" height="1.23" fill="#FFF" />
         <rect y="3.69" width="24" height="1.23" fill="#FFF" />
@@ -38,7 +38,7 @@ export function FlatFlag({ code, size = 24 }: { code: TenantCode; size?: number 
     )
   }
   return (
-    <svg width={size} height={h} viewBox="0 0 24 16" className="rounded-sm flex-shrink-0">
+    <svg width={size} height={h} viewBox="0 0 24 16" style={{ borderRadius: 2, flexShrink: 0 }}>
       <rect width="24" height="16" fill="#012169" />
       <path d="M0,0 L24,16 M24,0 L0,16" stroke="#FFF" strokeWidth="2.5" />
       <path d="M0,0 L24,16 M24,0 L0,16" stroke="#C8102E" strokeWidth="1.5" />
@@ -52,11 +52,11 @@ export function FlatFlag({ code, size = 24 }: { code: TenantCode; size?: number 
  * Display-only indicator showing current region.
  * Region switching is only allowed from the WorldMap (landing page).
  */
-export function TenantIndicator({ className, collapsed, showLogout = true }: TenantIndicatorProps) {
+export function TenantIndicator({ className, collapsed, showSwitchAction = true }: TenantIndicatorProps) {
   const [current, setCurrent] = useState<TenantConfig | null>(null)
   const router = useRouter()
 
-  const handleLogout = () => {
+  const handleSwitchRegion = () => {
     router.push('/')
   }
 
@@ -74,41 +74,143 @@ export function TenantIndicator({ className, collapsed, showLogout = true }: Ten
 
   if (!current) {
     return (
-      <div className={cn('flex items-center gap-3 px-3 py-2.5 text-slate-400', className)}>
-        <Globe className="h-5 w-5 animate-pulse motion-reduce:animate-none" />
-        {!collapsed && <span className="text-sm">Loading...</span>}
-      </div>
+      <Stack
+        className={className}
+        direction="row"
+        spacing={1.5}
+        alignItems="center"
+        sx={{
+          borderRadius: '8px',
+          color: 'light-dark(rgb(100 116 139), rgb(148 163 184))',
+          minHeight: 44,
+          px: 1.5,
+          py: 1,
+        }}
+      >
+        <CircularProgress size={16} color="inherit" />
+        {!collapsed && (
+          <Typography sx={{ fontSize: 14, fontWeight: 600 }}>Loading region</Typography>
+        )}
+      </Stack>
+    )
+  }
+
+  const content = (
+    <>
+      <Box
+        sx={{
+          alignItems: 'center',
+          backgroundColor: 'light-dark(rgba(255,255,255,0.82), rgba(2,6,23,0.4))',
+          border: '1px solid',
+          borderColor: 'light-dark(rgb(226 232 240), rgb(51 65 85))',
+          borderRadius: '6px',
+          display: 'flex',
+          flexShrink: 0,
+          height: 28,
+          justifyContent: 'center',
+          width: 28,
+        }}
+      >
+        <FlatFlag code={current.code} size={20} />
+      </Box>
+      {!collapsed && (
+        <>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center" minWidth={0}>
+              <Typography
+                noWrap
+                sx={{
+                  color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+                  fontSize: 14,
+                  fontWeight: 700,
+                  lineHeight: 1.25,
+                }}
+              >
+                {current.displayName}
+              </Typography>
+              <Box
+                aria-hidden="true"
+                sx={{
+                  backgroundColor: 'light-dark(rgba(6,182,212,0.7), rgba(103,232,249,0.7))',
+                  borderRadius: '999px',
+                  height: 4,
+                  width: 4,
+                }}
+              />
+              <Typography
+                noWrap
+                sx={{
+                  color: 'light-dark(rgb(100 116 139), rgb(148 163 184))',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.16em',
+                  lineHeight: 1.25,
+                  textTransform: 'uppercase',
+                }}
+              >
+                {current.currency}
+              </Typography>
+            </Stack>
+            <Stack
+              direction="row"
+              spacing={0.75}
+              alignItems="center"
+              sx={{ color: 'light-dark(rgb(100 116 139), rgb(148 163 184))', mt: 0.25 }}
+            >
+              <MapPin size={12} />
+              <Typography noWrap sx={{ fontSize: 12, lineHeight: 1.25 }}>
+                {formatTimezone(current.timezone)}
+              </Typography>
+            </Stack>
+          </Box>
+          {showSwitchAction && (
+            <ChevronRight
+              size={16}
+              aria-hidden="true"
+            />
+          )}
+        </>
+      )}
+    </>
+  )
+
+  const rowSx = {
+    alignItems: 'center',
+    backgroundColor: 'light-dark(rgba(241,245,249,0.72), rgba(30,41,59,0.45))',
+    borderRadius: '8px',
+    color: 'light-dark(rgb(51 65 85), rgb(203 213 225))',
+    display: 'flex',
+    gap: 1.5,
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    minHeight: 44,
+    px: collapsed ? 1 : 1.5,
+    py: 1,
+    textAlign: 'left',
+    transition: 'background-color 160ms ease, color 160ms ease',
+    width: '100%',
+    '&:hover': {
+      backgroundColor: 'light-dark(rgba(226,232,240,0.78), rgba(30,41,59,0.95))',
+      color: 'light-dark(rgb(8 145 178), rgb(103 232 249))',
+    },
+  }
+
+  if (!showSwitchAction) {
+    return (
+      <Box className={className} sx={rowSx}>
+        {content}
+      </Box>
     )
   }
 
   return (
-    <div className={cn('flex items-center gap-2', className)}>
-      <div
-        className={cn(
-          'flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-2.5 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-700/50',
-          !showLogout && 'flex-1'
-        )}
-      >
-        <FlatFlag code={current.code} />
-        {!collapsed && (
-          <div className="flex flex-col items-start min-w-0">
-            <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{current.displayName}</span>
-            <span className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-              <MapPin className="h-3 w-3 flex-shrink-0" />
-              <span className="truncate">{formatTimezone(current.timezone)}</span>
-            </span>
-          </div>
-        )}
-      </div>
-      {showLogout && (
-        <button
-          onClick={handleLogout}
-          className="flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 p-2.5 text-slate-500 dark:text-slate-400 transition-colors hover:bg-slate-100/50 dark:hover:bg-slate-700/50 hover:text-slate-700 dark:hover:text-slate-200"
-          title="Switch Region"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
-      )}
-    </div>
+    <ButtonBase
+      onClick={handleSwitchRegion}
+      className={className}
+      sx={rowSx}
+      title="Switch region"
+      aria-label={`Switch region. Current region: ${current.displayName}, ${formatTimezone(current.timezone)}`}
+    >
+      {content}
+    </ButtonBase>
   )
 }
