@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { appendRunLog } from './artifacts.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -53,19 +54,6 @@ function parseMarket(raw) {
   if (value === 'us') return 'us'
   if (value === 'uk') return 'uk'
   throw new Error(`Unsupported market: ${raw}`)
-}
-
-function requireEnv(name) {
-  const value = process.env[name]
-  if (!value || !value.trim()) {
-    throw new Error(`Missing required env var: ${name}`)
-  }
-  return value.trim()
-}
-
-function monitoringRootForMarket(market) {
-  const salesRoot = requireEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`)
-  return path.join(salesRoot, 'Monitoring')
 }
 
 function parseDurationMs(raw) {
@@ -134,9 +122,7 @@ async function main() {
     ...(warnSteps.length > 0 ? { warnSteps } : {}),
   }
 
-  const targetPath = path.join(monitoringRootForMarket(market), 'Logs', jobId, 'run-log.jsonl')
-  await fs.promises.mkdir(path.dirname(targetPath), { recursive: true })
-  await fs.promises.appendFile(targetPath, `${JSON.stringify(entry)}\n`, 'utf8')
+  appendRunLog({ market, jobId, entry })
 }
 
 main().catch((error) => {

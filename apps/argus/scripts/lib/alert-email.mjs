@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -19,46 +18,12 @@ const DEFAULT_IMPERSONATED_USER = 'jarrar@targonglobal.com'
 
 const execFileAsync = promisify(execFile)
 
-export function loadEnvFile(file) {
-  if (!fs.existsSync(file)) return
-
-  const rawLines = fs.readFileSync(file, 'utf8').split(/\r?\n/)
-  for (const rawLine of rawLines) {
-    for (const line of rawLine.split(/\\\\n|\\n/)) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-
-      const cleaned = trimmed.replace(/^\d+→/, '')
-      const separator = cleaned.indexOf('=')
-      if (separator < 0) continue
-
-      const key = cleaned.slice(0, separator).trim()
-      let value = cleaned.slice(separator + 1).trim()
-      if (
-        (value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))
-      ) {
-        value = value.slice(1, -1)
-      }
-      if (value.endsWith('$')) value = value.slice(0, -1)
-
-      if (!process.env[key]) process.env[key] = value
-    }
-  }
-}
-
 export function loadMonitoringEnv() {
   let mode = 'local'
   if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
     mode = process.env.ARGUS_ENV_MODE
   } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
     mode = process.env.TARGONOS_ENV_MODE
-  }
-
-  if (mode === 'local') {
-    loadEnvFile(path.join(REPO_ROOT, '.env.local'))
-    loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-    return
   }
 
   loadEnvForApp({

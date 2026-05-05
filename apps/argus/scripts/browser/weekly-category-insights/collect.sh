@@ -27,10 +27,20 @@ mkdir -p "$DEST"
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+cleanup_tab() {
+  local status=$?
+  if [ -n "$TAB_ID" ]; then
+    if ! run_chrome_helper close-tab-id "$TAB_ID" >/dev/null 2>&1; then
+      log "WARN: failed to close Chrome tab $TAB_ID"
+    fi
+  fi
+  exit "$status"
+}
 open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+trap cleanup_tab EXIT
 
 wait_for_target_page() {
   local expected_url="$1"
@@ -392,6 +402,7 @@ if [ -z "${CSV_OUTPUT// }" ]; then
 fi
 
 printf '%s' "$CSV_OUTPUT" | write_stdin_to_file_with_node "$OUTFILE"
+enqueue_drive_sync "$OUTFILE"
 
 log "Saved: ${PREFIX}_CategoryInsights.csv"
 log "Resolved path: $TARGET_CATEGORY_ID > $TARGET_PRODUCT_TYPE_LABEL > $TARGET_SEARCH_TERM"

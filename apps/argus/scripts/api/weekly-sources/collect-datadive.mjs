@@ -11,6 +11,7 @@ import {
   requireEnv,
   wprSourceConfigForMarket,
   writeCsv,
+  writeTextFile,
 } from './lib/common.mjs'
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
@@ -270,7 +271,7 @@ async function main() {
   writeRankRadarCsv(rankRadarFile, week, sourceConfig, selectedRankRadar.id, rankRows)
 
   const manifestPath = path.join(DATADIVE_BASE, `${weekPrefix}_DD-Manifest.json`)
-  fs.writeFileSync(
+  writeTextFile(
     manifestPath,
     JSON.stringify(
       {

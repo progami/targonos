@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { MONITORING_BASE, weekContextForEndDate } from './lib/common.mjs'
+import { MONITORING_BASE, enqueueOutputFile, weekContextForEndDate } from './lib/common.mjs'
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
 const WEEK_FILE_PATTERN = /^(W\d{2})_(\d{4}-\d{2}-\d{2})_(.+)$/
@@ -147,6 +147,7 @@ function main() {
 
     repairFileContents(mismatch.file, mismatch.actualCode, mismatch.expectedCode, mismatch.oldPrefix, mismatch.newPrefix)
     fs.renameSync(mismatch.file, mismatch.nextPath)
+    enqueueOutputFile(mismatch.nextPath)
   }
 
   console.log(`[repair-week-labels] ${dryRun ? 'Planned' : 'Applied'} ${mismatches.length} rename(s).`)

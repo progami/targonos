@@ -63,8 +63,13 @@ case "$MARKET" in
 esac
 
 WPR_DATA_DIR="$(require_env "$WPR_DATA_ENV_NAME")"
+if [[ "$WPR_DATA_DIR" == *"/Library/CloudStorage/"* ]]; then
+  echo "$WPR_DATA_ENV_NAME must be local, not a Google Drive mount: $WPR_DATA_DIR" >&2
+  exit 1
+fi
 export WPR_DATA_DIR
 export ARGUS_MARKET="$MARKET"
+mkdir -p "$WPR_DATA_DIR"
 WPR_WORKSPACE="$(cd "$(dirname "$WPR_DATA_DIR")" && pwd)"
 REBUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/rebuild_wpr.py"
 BUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/build_intent_cluster_dashboard.py"

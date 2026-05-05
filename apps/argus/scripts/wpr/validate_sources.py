@@ -84,6 +84,10 @@ def monitoring_weekly_root() -> Path:
     return resolve_wpr_paths().monitoring_root / "Weekly"
 
 
+def monitoring_root_for_market(market: str) -> Path:
+    return Path(required_env(f"ARGUS_MONITORING_ROOT_{market.upper()}")).expanduser().resolve()
+
+
 def sales_root_for_market(market: str) -> Path:
     return Path(required_env(f"ARGUS_SALES_ROOT_{market.upper()}")).expanduser().resolve()
 
@@ -132,10 +136,10 @@ def latest_source_file(rule: SourceRule) -> Path | None:
 
 
 def matching_sibling_file(path: Path, market: str) -> Path:
-    current_sales_root = sales_root_for_market(market)
-    other_sales_root = sales_root_for_market(sibling_market(market))
-    relative = path.resolve().relative_to(current_sales_root)
-    return other_sales_root / relative
+    current_monitoring_root = monitoring_root_for_market(market)
+    other_monitoring_root = monitoring_root_for_market(sibling_market(market))
+    relative = path.resolve().relative_to(current_monitoring_root)
+    return other_monitoring_root / relative
 
 
 def validate_duplicate_market_files(market: str, rules: list[SourceRule] = SOURCE_RULES) -> list[str]:

@@ -32,7 +32,9 @@ test('createManifestState starts with the weekly defaults', () => {
 
 test('persistManifestReportId merges report ids into the same manifest file', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'spapi-manifest-'))
-  const manifestPath = path.join(tempDir, 'manifest.json')
+  const previousMonitoringRoot = process.env.ARGUS_MONITORING_ROOT_US
+  process.env.ARGUS_MONITORING_ROOT_US = tempDir
+  const manifestPath = path.join(tempDir, 'Logs', 'weekly-api-sources', 'metadata', 'manifest.json')
   const manifestState = createManifestState(null, {
     weekCode: 'W14',
     weekStart: '2026-03-29',
@@ -45,8 +47,16 @@ test('persistManifestReportId merges report ids into the same manifest file', ()
     competitorBrand: 'Axgatoxe',
   })
 
-  persistManifestReportId(manifestPath, manifestState, 'scpReportId', 'scp-123')
-  persistManifestReportId(manifestPath, manifestState, 'salesReportId', 'sales-456')
+  try {
+    persistManifestReportId(manifestPath, manifestState, 'scpReportId', 'scp-123')
+    persistManifestReportId(manifestPath, manifestState, 'salesReportId', 'sales-456')
+  } finally {
+    if (previousMonitoringRoot === undefined) {
+      delete process.env.ARGUS_MONITORING_ROOT_US
+    } else {
+      process.env.ARGUS_MONITORING_ROOT_US = previousMonitoringRoot
+    }
+  }
 
   const writtenManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
   assert.deepEqual(writtenManifest.reports, {

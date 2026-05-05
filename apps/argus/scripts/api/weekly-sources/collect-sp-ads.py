@@ -18,6 +18,8 @@ ENV_PATH = ARGUS_APP_ROOT / '.env.local'
 
 DEST_ROOT = None
 MANIFEST_ROOT = None
+MONITORING_ROOT = None
+CURRENT_MARKET = None
 
 POLL_INTERVAL_SEC = 15
 MAX_WAIT_SECONDS = 40 * 60
@@ -68,11 +70,39 @@ def parse_market(raw):
 
 
 def monitoring_base_for_market(env, market):
-    key = f'ARGUS_SALES_ROOT_{market.upper()}'
+    key = f'ARGUS_MONITORING_ROOT_{market.upper()}'
     value = env.get(key)
     if not value:
         raise RuntimeError(f'Missing env var: {key}')
-    return Path(value) / 'Monitoring'
+    if '/Library/CloudStorage/' in value:
+        raise RuntimeError(f'{key} must be local, not a Google Drive mount.')
+    return Path(value).resolve()
+
+
+def enqueue_drive_sync(path: Path):
+    if CURRENT_MARKET is None:
+        raise RuntimeError('Argus market must be resolved before queueing Drive sync output.')
+    if MONITORING_ROOT is None:
+        raise RuntimeError('Argus monitoring root must be resolved before queueing Drive sync output.')
+
+    resolved = path.resolve()
+    relative_path = resolved.relative_to(MONITORING_ROOT)
+    if str(relative_path) == '.drive-sync/queue.jsonl':
+        return
+
+    stat = resolved.stat()
+    queue_path = MONITORING_ROOT / '.drive-sync' / 'queue.jsonl'
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        'enqueuedAt': datetime.utcnow().isoformat() + 'Z',
+        'market': CURRENT_MARKET,
+        'localPath': str(resolved),
+        'relativePath': relative_path.as_posix(),
+        'size': stat.st_size,
+        'mtimeMs': stat.st_mtime * 1000,
+    }
+    with queue_path.open('a', encoding='utf-8') as queue_file:
+        queue_file.write(json.dumps(entry) + '\n')
 
 
 def latest_complete_week():
@@ -295,6 +325,7 @@ def write_csv(path: Path, headers, rows):
             else:
                 writer.writerow(['' for _ in headers])
     os.replace(temp, path)
+    enqueue_drive_sync(path)
 
 
 def has_row_value(value):
@@ -614,11 +645,12 @@ def run_week(base_url, headers, week, ads_metadata):
 
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(manifest, indent=2))
+    enqueue_drive_sync(manifest_path)
     print(f'[{week["code"]}] manifest {manifest_path}', flush=True)
 
 
 def main():
-    global DEST_ROOT, MANIFEST_ROOT
+    global DEST_ROOT, MANIFEST_ROOT, MONITORING_ROOT, CURRENT_MARKET
     parser = argparse.ArgumentParser()
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--start-date')
@@ -630,8 +662,11 @@ def main():
         raise RuntimeError('Both --start-date and --end-date are required together.')
 
     env = load_env(ENV_PATH)
+    env.update(os.environ)
     market = parse_market(args.market)
-    DEST_ROOT = monitoring_base_for_market(env, market) / 'Weekly' / 'Ad Console' / 'SP - Sponsored Products (API)'
+    CURRENT_MARKET = market
+    MONITORING_ROOT = monitoring_base_for_market(env, market)
+    DEST_ROOT = MONITORING_ROOT / 'Weekly' / 'Ad Console' / 'SP - Sponsored Products (API)'
     MANIFEST_ROOT = DEST_ROOT
     week = week_context_for_range(args.start_date, args.end_date) if args.start_date else latest_complete_week()
     dry_run = args.dry_run
