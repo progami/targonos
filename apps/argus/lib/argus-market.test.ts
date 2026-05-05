@@ -25,15 +25,19 @@ test('parseArgusMarket rejects unsupported slugs', () => {
   )
 })
 
-test('getArgusMarketConfig resolves market-specific sales and WPR paths from env', () => {
+test('getArgusMarketConfig resolves market-specific local monitoring and WPR paths from env', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'argus-market-config-'))
   const usSalesRoot = path.join(root, 'Dust Sheets - US', 'Sales')
   const ukSalesRoot = path.join(root, 'Dust Sheets - UK', 'Sales')
+  const usMonitoringRoot = path.join(root, 'argus-monitoring', 'us')
+  const ukMonitoringRoot = path.join(root, 'argus-monitoring', 'uk')
   const usWprDataDir = path.join(usSalesRoot, 'WPR', 'wpr-workspace', 'output')
   const ukWprDataDir = path.join(ukSalesRoot, 'WPR', 'wpr-workspace', 'output')
 
   process.env.ARGUS_SALES_ROOT_US = usSalesRoot
   process.env.ARGUS_SALES_ROOT_UK = ukSalesRoot
+  process.env.ARGUS_MONITORING_ROOT_US = usMonitoringRoot
+  process.env.ARGUS_MONITORING_ROOT_UK = ukMonitoringRoot
   process.env.WPR_DATA_DIR_US = usWprDataDir
   process.env.WPR_DATA_DIR_UK = ukWprDataDir
 
@@ -41,7 +45,7 @@ test('getArgusMarketConfig resolves market-specific sales and WPR paths from env
     slug: 'uk',
     label: 'UK',
     salesRoot: ukSalesRoot,
-    monitoringRoot: path.join(ukSalesRoot, 'Monitoring'),
+    monitoringRoot: ukMonitoringRoot,
     wprRoot: path.join(ukSalesRoot, 'WPR'),
     wprDataDir: ukWprDataDir,
   })

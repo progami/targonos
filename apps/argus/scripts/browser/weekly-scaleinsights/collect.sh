@@ -23,14 +23,25 @@ else
 fi
 
 mkdir -p "$DEST"
+set_chrome_download_dir "$DL"
 
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+cleanup_tab() {
+  local status=$?
+  if [ -n "$TAB_ID" ]; then
+    if ! run_chrome_helper close-tab-id "$TAB_ID" >/dev/null 2>&1; then
+      log "WARN: failed to close Chrome tab $TAB_ID"
+    fi
+  fi
+  exit "$status"
+}
 open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+trap cleanup_tab EXIT
 
 log "Starting weekly ScaleInsights: $PREFIX"
 
@@ -50,6 +61,7 @@ fi
 
 open_window "$TARGET_URL"
 wait_tab
+set_chrome_download_dir "$DL"
 
 login_state_js='(() => {
   const href = location.href || "";
@@ -107,22 +119,13 @@ download_url="${TARGET_URL}?countrycode=${COUNTRY_CODE}&from=${START_DATE}&to=${
 compact_start="${START_DATE//-/}"
 compact_end="${END_DATE//-/}"
 download_pattern="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_end}*.xlsx"
-baseline_info="$(latest_matching_file "$download_pattern")"
-baseline_path=""
-baseline_mtime="0"
-baseline_ctime="0"
-baseline_size="0"
-
-if [ -n "$baseline_info" ]; then
-  IFS='|' read -r baseline_path baseline_mtime baseline_ctime baseline_size <<<"$baseline_info"
-fi
 
 log "Watching ScaleInsights download pattern: $download_pattern"
 
-open_window "$download_url"
-sleep 2
+delete_matching_files "$download_pattern"
+run_chrome_helper navigate-tab-id "$TAB_ID" "$download_url" >/dev/null
 
-if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" 120)"; then
+if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "" 0 0 0 120)"; then
   latest_after_timeout="$(latest_matching_file "$download_pattern")"
   if [ -n "$latest_after_timeout" ]; then
     log "Latest ScaleInsights match after timeout: $latest_after_timeout"
@@ -134,6 +137,7 @@ if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "$baselin
 fi
 
 copy_file_with_node "$downloaded_file" "$target_file"
+enqueue_drive_sync "$target_file"
 
 log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx"
 log "Done"

@@ -108,6 +108,10 @@ export interface MonitoringHealthDataset {
   consumers: string[]
   updatedAt: string | null
   ageMinutes: number | null
+  localStatus: 'healthy' | 'stale' | 'missing'
+  driveUpdatedAt: string | null
+  driveAgeMinutes: number | null
+  driveStatus: 'healthy' | 'stale' | 'missing' | null
   status: 'healthy' | 'stale' | 'missing'
 }
 

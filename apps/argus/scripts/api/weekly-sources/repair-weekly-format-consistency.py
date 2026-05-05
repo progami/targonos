@@ -5,11 +5,13 @@ import csv
 import json
 import os
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ARGUS_APP_ROOT = Path(__file__).resolve().parents[3]
 ENV_PATH = ARGUS_APP_ROOT / '.env.local'
+MONITORING_ROOT = None
+CURRENT_MARKET = None
 
 SP_ADS_SCHEMAS = {
     'SP - Search Term Report (API)': [
@@ -398,11 +400,40 @@ def parse_market(raw):
 
 def monitoring_base_for_market(market):
     env = load_env(ENV_PATH)
-    key = f'ARGUS_SALES_ROOT_{market.upper()}'
+    env.update(os.environ)
+    key = f'ARGUS_MONITORING_ROOT_{market.upper()}'
     value = env.get(key)
     if not value:
         raise RuntimeError(f'Missing env var: {key}')
-    return Path(value) / 'Monitoring'
+    if '/Library/CloudStorage/' in value:
+        raise RuntimeError(f'{key} must be local, not a Google Drive mount.')
+    return Path(value).resolve()
+
+
+def enqueue_drive_sync(path: Path):
+    if CURRENT_MARKET is None:
+        raise RuntimeError('Argus market must be resolved before queueing Drive sync output.')
+    if MONITORING_ROOT is None:
+        raise RuntimeError('Argus monitoring root must be resolved before queueing Drive sync output.')
+
+    resolved = path.resolve()
+    relative_path = resolved.relative_to(MONITORING_ROOT)
+    if str(relative_path) == '.drive-sync/queue.jsonl':
+        return
+
+    stat = resolved.stat()
+    queue_path = MONITORING_ROOT / '.drive-sync' / 'queue.jsonl'
+    queue_path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        'enqueuedAt': datetime.utcnow().isoformat() + 'Z',
+        'market': CURRENT_MARKET,
+        'localPath': str(resolved),
+        'relativePath': relative_path.as_posix(),
+        'size': stat.st_size,
+        'mtimeMs': stat.st_mtime * 1000,
+    }
+    with queue_path.open('a', encoding='utf-8') as queue_file:
+        queue_file.write(json.dumps(entry) + '\n')
 
 
 def week_bounds_from_name(path: Path):
@@ -429,6 +460,7 @@ def write_csv_rows(path: Path, headers, rows, dry_run):
         writer.writerow(headers)
         for row in rows:
             writer.writerow([row.get(header, '') for header in headers])
+    enqueue_drive_sync(path)
 
 
 def dict_rows_from_csv(rows, header_index, rename=None):
@@ -477,6 +509,7 @@ def rewrite_sp_ads_manifest(path: Path, dry_run):
         print(f'[dry-run] rewrite {path}')
         return
     path.write_text(updated)
+    enqueue_drive_sync(path)
 
 
 def rewrite_sales_traffic(path: Path, headers, rename_prefixes, dry_run):
@@ -572,8 +605,11 @@ def rewrite_sqp(path: Path, dry_run):
 
 
 def main():
+    global MONITORING_ROOT, CURRENT_MARKET
     args = parse_args()
-    weekly_base = monitoring_base_for_market(parse_market(args.market)) / 'Weekly'
+    CURRENT_MARKET = parse_market(args.market)
+    MONITORING_ROOT = monitoring_base_for_market(CURRENT_MARKET)
+    weekly_base = MONITORING_ROOT / 'Weekly'
     sp_ads_base = weekly_base / 'Ad Console' / 'SP - Sponsored Products (API)'
     brand_analytics_base = weekly_base / 'Brand Analytics (API)'
     business_reports_base = weekly_base / 'Business Reports (API)' / 'Sales & Traffic (API)'

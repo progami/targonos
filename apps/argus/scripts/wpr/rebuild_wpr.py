@@ -32,6 +32,7 @@ MDY_DATE_RE = re.compile(r"(?<!\d)(\d{1,2})[ _-](\d{1,2})[ _-](\d{4})(?!\d)")
 IGNORED_NAMES = {".DS_Store"}
 LEGACY_INPUT_NAMES = {"Daily", "Hourly", "Weekly"}
 EXCLUDED_INPUT_SOURCES = {"Visuals (Browser)"}
+BASE_WEEK_1_START = date(2025, 12, 28)
 
 
 @dataclass(frozen=True)
@@ -122,23 +123,7 @@ def merge_move(src: Path, dest: Path) -> None:
 
 
 def discover_anchor_week() -> WeekMeta:
-    weekly_root = MONITORING_ROOT / "Weekly"
-    anchors: dict[int, date] = {}
-    for path in weekly_root.rglob("*"):
-        if not path.is_file() or path.name in IGNORED_NAMES:
-            continue
-        match = WEEK_FILE_RE.search(path.name)
-        if not match:
-            continue
-        week = int(match.group(1))
-        end_date = parse_iso_date(match.group(2))
-        anchors.setdefault(week, end_date)
-        if anchors[week] != end_date:
-            raise ValueError(f"Inconsistent week end date for W{week:02d}: {path}")
-    if 1 not in anchors:
-        raise ValueError("Could not determine Week 1 from Monitoring/Weekly")
-    end_date = anchors[1]
-    return WeekMeta(week=1, start_date=end_date - timedelta(days=6), end_date=end_date)
+    return WeekMeta(week=1, start_date=BASE_WEEK_1_START, end_date=BASE_WEEK_1_START + timedelta(days=6))
 
 
 def discover_existing_wpr_weeks() -> dict[int, date]:
@@ -412,9 +397,15 @@ def split_csv_by_week(
     date_field: str,
     parser,
     stats: dict[int, int],
+    required: bool = True,
 ) -> dict[int, int]:
     row_counts: dict[int, int] = defaultdict(int)
     file_handles: dict[int, tuple[object, csv.DictWriter]] = {}
+
+    if not src.exists():
+        if required:
+            raise FileNotFoundError(src)
+        return row_counts
 
     with src.open("r", newline="", encoding="utf-8-sig") as infile:
         reader = csv.DictReader(infile)
@@ -462,6 +453,7 @@ def populate_daily_inputs(weeks: dict[int, WeekMeta], stats: dict[int, int]) -> 
         date_field="date",
         parser=parse_iso_date,
         stats=stats,
+        required=False,
     )
 
 

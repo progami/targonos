@@ -19,7 +19,9 @@ import {
   requireEnv,
   wprSourceConfigForMarket,
   weekContextForRange,
+  enqueueOutputFile,
   writeCsv,
+  writeTextFile,
 } from './lib/common.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -278,7 +280,7 @@ export function createManifestState(existingManifest, { weekCode, weekStart, wee
 
 export function writeManifest(file, manifestState) {
   manifestState.generatedAt = new Date().toISOString()
-  fs.writeFileSync(file, JSON.stringify(manifestState, null, 2))
+  writeTextFile(file, JSON.stringify(manifestState, null, 2))
 }
 
 export function persistManifestReportId(file, manifestState, reportKey, reportId) {
@@ -716,6 +718,7 @@ async function main() {
 
     await downloadUrlToFile(tstDoc.url, rawTstPath)
     runTstFilter(rawTstPath, filteredTstPath, tstTargetAsins)
+    enqueueOutputFile(filteredTstPath)
     fs.rmSync(rawTstPath, { force: true })
   }
 

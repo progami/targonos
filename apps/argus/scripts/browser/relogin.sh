@@ -48,6 +48,7 @@ tab_url_for_id() {
 
 ensure_seller_tab() {
   SELLER_TAB_ID="$(run_chrome_helper ensure-tab-id "$TARGET_URL" "$SELLER_CENTRAL_HOSTS")"
+  log "Tab: $SELLER_TAB_ID"
 }
 
 run_js() {
@@ -65,23 +66,30 @@ navigate_tab() {
 inspect_seller_state() {
   local js='(() => {
     const clean = (value) => (value || "").replace(/[|\n\r\t]+/g, " ").replace(/\s+/g, " ").trim();
-    const href = clean(location.href || "");
+    const rawHref = location.href || "";
+    const href = clean(rawHref);
+    let comparableHref = href;
+    try {
+      const parsed = new URL(rawHref);
+      comparableHref = parsed.origin + parsed.pathname;
+    } catch {}
     const title = clean(document.title || "");
     const body = document.body ? clean(document.body.innerText || "") : "";
     const hasInput = Array.from(document.querySelectorAll("input")).length > 0;
 
-    if (href.includes("/account-switcher")) return ["ACCOUNT_SWITCHER", href, title].join("|");
+    if (href === "" || href === "about:blank") return ["BLANK", comparableHref, title].join("|");
+    if (href.includes("/account-switcher")) return ["ACCOUNT_SWITCHER", comparableHref, title].join("|");
     if (/enroll a 2-step verification authenticator/i.test(body)) return ["AUTH_APP_ENROLLMENT", href, title].join("|");
     if (/choose where to receive the code|enter otp from authenticator app/i.test(body)) return ["AUTH_APP_METHOD", href, title].join("|");
     if (/sent the code to your email/i.test(body) && hasInput) return ["EMAIL_OTP_UNSUPPORTED", href, title].join("|");
     if (/for added security, please enter the one time password|enter code:|enter verification code/i.test(body) && hasInput) return ["AUTH_APP_OTP", href, title].join("|");
     if (!href.includes("signin") && !href.includes("/ap/") && !/sign in|enter the characters you see below|solve this puzzle/i.test(body)) {
-      return ["AUTHENTICATED", href, title].join("|");
+      return ["AUTHENTICATED", comparableHref, title].join("|");
     }
-    if (document.getElementById("ap_password")) return ["PASSWORD", href, title].join("|");
-    if (document.getElementById("ap_email")) return ["EMAIL", href, title].join("|");
-    if (/enter the characters you see below|solve this puzzle/i.test(body)) return ["CAPTCHA", href, title].join("|");
-    return ["UNKNOWN", href, title].join("|");
+    if (document.getElementById("ap_password")) return ["PASSWORD", comparableHref, title].join("|");
+    if (document.getElementById("ap_email")) return ["EMAIL", comparableHref, title].join("|");
+    if (/enter the characters you see below|solve this puzzle/i.test(body)) return ["CAPTCHA", comparableHref, title].join("|");
+    return ["UNKNOWN", comparableHref, title].join("|");
   })();'
   run_js "$js"
 }
@@ -213,6 +221,7 @@ for _ in $(seq 1 60); do
 
   state=$(inspect_seller_state)
   IFS='|' read -r state_name state_url state_title <<<"$state"
+  log "State: $state_name $state_url"
 
   case "$state_name" in
     AUTHENTICATED)
@@ -265,6 +274,10 @@ for _ in $(seq 1 60); do
     CAPTCHA)
       log "FAILED: CAPTCHA encountered"
       exit 1
+      ;;
+    BLANK|UNKNOWN)
+      log "Navigating blank or unknown Seller Central tab to target"
+      navigate_tab "$TARGET_URL"
       ;;
     *)
       :

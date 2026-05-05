@@ -5,6 +5,10 @@ import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
+import {
+  enqueueDriveSync,
+  monitoringRootForMarket as artifactMonitoringRootForMarket,
+} from '../../lib/artifacts.mjs'
 
 const TODAY = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
@@ -62,17 +66,9 @@ function loadEnvFile(file) {
   }
 }
 
-function requireEnv(name) {
-  const value = process.env[name]
-  if (!value || !value.trim()) {
-    throw new Error(`Missing required env var: ${name}`)
-  }
-  return value.trim()
-}
-
 function monitoringRootForMarket(market) {
   loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  return path.join(requireEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`), 'Monitoring')
+  return artifactMonitoringRootForMarket(market)
 }
 
 function timestamp() {
@@ -146,6 +142,12 @@ function clearTodayParts(destBaseDir) {
   }
 }
 
+function enqueueCapturedParts(destBaseDir) {
+  for (let index = 1; index <= 4; index += 1) {
+    enqueueDriveSync({ market: MARKET, localPath: path.join(destBaseDir, `part${index}`, `${TODAY}.png`) })
+  }
+}
+
 function captureListing(asin, brand) {
   const destBaseDir = path.join(DEST, brand, asin)
   for (let attempt = 1; attempt <= MAX_CAPTURE_ATTEMPTS; attempt += 1) {
@@ -160,6 +162,7 @@ function captureListing(asin, brand) {
           killSignal: 'SIGKILL',
         },
       )
+      enqueueCapturedParts(destBaseDir)
       log(`Saved: ${brand}/${asin}/part{1..4}/${TODAY}.png`)
       return true
     } catch (error) {

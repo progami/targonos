@@ -3,6 +3,7 @@
 COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$COMMON_DIR/../../../.." && pwd)"
 CHROME_HELPER="$COMMON_DIR/chrome-devtools-helper.mjs"
+DRIVE_SYNC_ENQUEUE="$COMMON_DIR/../lib/enqueue-drive-sync.mjs"
 TOTP_HELPER="$COMMON_DIR/totp-helper.mjs"
 PYTHON_BIN="${PYTHON_BIN:-/usr/bin/python3}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -415,23 +416,35 @@ seller_central_host_globs() {
   esac
 }
 
-argus_sales_root() {
+argus_monitoring_root() {
   local market
   local env_name
   market="$(argus_market)"
   case "$market" in
     us)
-      env_name="ARGUS_SALES_ROOT_US"
+      env_name="ARGUS_MONITORING_ROOT_US"
       ;;
     uk)
-      env_name="ARGUS_SALES_ROOT_UK"
+      env_name="ARGUS_MONITORING_ROOT_UK"
       ;;
   esac
   require_env "$env_name"
 }
 
-argus_monitoring_root() {
-  printf '%s/Monitoring' "$(argus_sales_root)"
+argus_browser_download_root() {
+  local market
+  market="$(argus_market)"
+  if [ -n "${ARGUS_BROWSER_DOWNLOAD_ROOT:-}" ]; then
+    printf '%s/%s' "$ARGUS_BROWSER_DOWNLOAD_ROOT" "$market"
+    return 0
+  fi
+  printf '%s/.local/share/targon/argus-downloads/%s' "$HOME" "$market"
+}
+
+set_chrome_download_dir() {
+  local download_dir="$1"
+  mkdir -p "$download_dir"
+  run_chrome_helper set-download-dir "$download_dir" >/dev/null
 }
 
 js_string_literal() {
@@ -441,6 +454,11 @@ import sys
 
 print(json.dumps(sys.argv[1]))
 PY
+}
+
+enqueue_drive_sync() {
+  local target="$1"
+  "$NODE_BIN" "$DRIVE_SYNC_ENQUEUE" --market "$(argus_market)" --path "$target"
 }
 
 is_amazon_login_url() {
@@ -613,4 +631,71 @@ for path in base.glob(glob_pattern):
     if path.is_file():
         path.unlink()
 PY
+}
+
+download_numbered_candidate() {
+  local base_path="$1"
+  local index="$2"
+
+  if [ "$index" -eq 0 ]; then
+    printf '%s' "$base_path"
+    return
+  fi
+
+  local extension="${base_path##*.}"
+  local stem="${base_path%.*}"
+  if [ "$extension" = "$base_path" ]; then
+    printf '%s (%s)' "$base_path" "$index"
+    return
+  fi
+
+  printf '%s (%s).%s' "$stem" "$index" "$extension"
+}
+
+delete_numbered_download_candidates() {
+  local base_path="$1"
+  local index=""
+  local candidate=""
+
+  for index in $(seq 0 30); do
+    candidate="$(download_numbered_candidate "$base_path" "$index")"
+    if [ -f "$candidate" ]; then
+      rm -f "$candidate"
+    fi
+  done
+}
+
+wait_for_numbered_download_candidate() {
+  local base_path="$1"
+  local timeout_seconds="${2:-120}"
+  local deadline=$(( $(date +%s) + timeout_seconds ))
+  local stable_path=""
+  local stable_size=""
+  local stable_seen_at="0"
+  local index=""
+  local candidate=""
+  local candidate_size=""
+  local now=""
+
+  while [ "$(date +%s)" -le "$deadline" ]; do
+    now="$(date +%s)"
+    for index in $(seq 0 30); do
+      candidate="$(download_numbered_candidate "$base_path" "$index")"
+      if [ -f "$candidate" ]; then
+        candidate_size="$(stat -f '%z' "$candidate")"
+        if [ "$candidate_size" -gt 0 ]; then
+          if [ "$stable_path" = "$candidate" ] && [ "$stable_size" = "$candidate_size" ] && [ $((now - stable_seen_at)) -ge 2 ]; then
+            printf '%s' "$candidate"
+            return 0
+          fi
+          stable_path="$candidate"
+          stable_size="$candidate_size"
+          stable_seen_at="$now"
+        fi
+      fi
+    done
+    sleep 2
+  done
+
+  return 1
 }

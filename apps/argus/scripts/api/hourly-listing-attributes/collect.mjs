@@ -5,6 +5,8 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { sendArgusAlertEmail } from '../../lib/alert-email.mjs'
+import { enqueueDriveSync, monitoringRootForMarket } from '../../lib/artifacts.mjs'
+import { BSR_CHANGE_FIELDS, selectEmailEvents } from './alert-selection.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -14,18 +16,13 @@ const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const { loadEnvForApp } = createRequire(import.meta.url)(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
 
 let MONITORING_HOURLY_LISTINGS_DIR = ''
+let CURRENT_MARKET = null
 const SNAPSHOT_HISTORY_FILE_NAME = 'Listings-Snapshot-History.csv'
 const CHANGES_HISTORY_FILE_NAME = 'Listings-Changes-History.csv'
 
 let CURRENT_OUR_ASINS = []
 let CURRENT_COMPETITOR_SEED_ASINS = []
 let CURRENT_OUR_ASIN_PRIORITY = new Map()
-const BSR_CHANGE_FIELDS = new Set([
-  'root_bsr_rank',
-  'root_bsr_category_id',
-  'sub_bsr_rank',
-  'sub_bsr_category_id',
-])
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true })
 }
@@ -82,8 +79,14 @@ function resolveArgusMarket() {
 }
 
 function monitoringHourlyListingsDir(market) {
-  const salesRoot = requiredEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`)
-  return path.join(salesRoot, 'Monitoring', 'Hourly', 'Listing Attributes (API)')
+  return path.join(monitoringRootForMarket(market), 'Hourly', 'Listing Attributes (API)')
+}
+
+function enqueueOutputFile(file) {
+  if (CURRENT_MARKET === null) {
+    throw new Error('Argus market must be resolved before queueing Drive sync output.')
+  }
+  enqueueDriveSync({ market: CURRENT_MARKET, localPath: file })
 }
 
 function parseAsinList(value) {
@@ -202,7 +205,9 @@ function csvEscape(value) {
 
 function writeCsv(file, rows, headersInput = null) {
   if (!rows.length) {
+    ensureDir(path.dirname(file))
     fs.writeFileSync(file, '')
+    enqueueOutputFile(file)
     return
   }
 
@@ -214,6 +219,7 @@ function writeCsv(file, rows, headersInput = null) {
     lines.push(headers.map((header) => csvEscape(row[header])).join(','))
   }
   fs.writeFileSync(file, `${lines.join('\n')}\n`)
+  enqueueOutputFile(file)
 }
 
 function appendCsv(file, rows) {
@@ -250,6 +256,7 @@ function appendCsv(file, rows) {
   const lines = rows.map((row) => newHeaders.map((header) => csvEscape(row[header])).join(','))
   const prefix = existingText.endsWith('\n') ? '' : '\n'
   fs.appendFileSync(file, `${prefix}${lines.join('\n')}\n`)
+  enqueueOutputFile(file)
 }
 
 function parseCsv(file) {
@@ -1141,11 +1148,6 @@ function buildCanonicalEvent(
   }
 }
 
-function eventHasBsrChange(event) {
-  const changedFields = Array.isArray(event?.changed_fields) ? event.changed_fields : []
-  return changedFields.some((field) => BSR_CHANGE_FIELDS.has(field))
-}
-
 function filterVisibleBsrChanges(asin, changedFields, fieldChanges, heroBsrAsins) {
   const normalizedAsin = String(asin ?? '').trim().toUpperCase()
   if (heroBsrAsins.has(normalizedAsin)) {
@@ -1159,14 +1161,6 @@ function filterVisibleBsrChanges(asin, changedFields, fieldChanges, heroBsrAsins
     changedFields: changedFields.filter((field) => !BSR_CHANGE_FIELDS.has(field)),
     fieldChanges: fieldChanges.filter((change) => !BSR_CHANGE_FIELDS.has(change.field)),
   }
-}
-
-function shouldEmailEvent(event) {
-  return eventHasBsrChange(event)
-}
-
-function selectEmailEvents(events) {
-  return events.filter((event) => shouldEmailEvent(event))
 }
 
 function severityRank(severity) {
@@ -1836,6 +1830,7 @@ async function main() {
     targetEnv: process.env,
   })
   const market = resolveArgusMarket()
+  CURRENT_MARKET = market
   const envSuffix = market.toUpperCase()
   MONITORING_HOURLY_LISTINGS_DIR = monitoringHourlyListingsDir(market)
   ensureDir(MONITORING_HOURLY_LISTINGS_DIR)
@@ -1899,6 +1894,7 @@ async function main() {
   appendCsv(snapshotHistoryFile, rows)
   appendCsv(changesHistoryFile, diffs)
   fs.writeFileSync(statePath, JSON.stringify(nextState, null, 2))
+  enqueueOutputFile(statePath)
 
   const emailEvents = selectEmailEvents(events)
 

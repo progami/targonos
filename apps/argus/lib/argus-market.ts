@@ -57,14 +57,16 @@ export function getArgusMarketConfig(market: ArgusMarket): ArgusMarketConfig {
   const option = getArgusMarketOption(market)
   const envSuffix = market.toUpperCase()
   const salesRoot = requireEnv(`ARGUS_SALES_ROOT_${envSuffix}`)
+  const monitoringRoot = requireEnv(`ARGUS_MONITORING_ROOT_${envSuffix}`)
   const wprDataDir = requireEnv(`WPR_DATA_DIR_${envSuffix}`)
   const normalizedSalesRoot = stripTrailingSlash(salesRoot)
+  const normalizedMonitoringRoot = stripTrailingSlash(monitoringRoot)
 
   return {
     slug: option.slug,
     label: option.label,
     salesRoot: normalizedSalesRoot,
-    monitoringRoot: joinPath(normalizedSalesRoot, 'Monitoring'),
+    monitoringRoot: normalizedMonitoringRoot,
     wprRoot: joinPath(normalizedSalesRoot, 'WPR'),
     wprDataDir: stripTrailingSlash(wprDataDir),
   }

@@ -54,6 +54,29 @@ function formatAge(minutes: number | null): string {
   return `${(hours / 24).toFixed(1)}d ago`
 }
 
+function statusTone(status: 'healthy' | 'stale' | 'missing' | null): UnifiedStatus {
+  if (status === 'healthy') return 'healthy'
+  if (status === 'stale') return 'stale'
+  return 'failed'
+}
+
+function StatusChip({ status }: { status: 'healthy' | 'stale' | 'missing' | null }) {
+  const tone = statusTone(status)
+  return (
+    <Chip
+      label={(status ?? 'N/A').toUpperCase()}
+      size="small"
+      sx={{
+        height: 18,
+        fontSize: '0.6rem',
+        fontWeight: 700,
+        bgcolor: alpha(STATUS_DOT[tone], 0.12),
+        color: STATUS_DOT[tone],
+      }}
+    />
+  )
+}
+
 /* ── Component ──────────────────────────────────────────── */
 
 interface SourceHealthGridProps {
@@ -200,8 +223,10 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                         <thead>
                           <tr>
                             <th>Output</th>
-                            <th>Status</th>
+                            <th>Local</th>
+                            <th>Drive publish</th>
                             <th>Last updated</th>
+                            <th>Drive updated</th>
                             <th>Age</th>
                             <th>Purpose</th>
                             <th></th>
@@ -211,21 +236,13 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                           {datasets.map((ds) => (
                             <tr key={ds.id}>
                               <td style={{ fontWeight: 600 }}>{ds.label}</td>
-                              <td>
-                                <Chip
-                                  label={ds.status.toUpperCase()}
-                                  size="small"
-                                  sx={{
-                                    height: 18,
-                                    fontSize: '0.6rem',
-                                    fontWeight: 700,
-                                    bgcolor: alpha(STATUS_DOT[ds.status === 'healthy' ? 'healthy' : ds.status === 'stale' ? 'stale' : 'failed'], 0.12),
-                                    color: STATUS_DOT[ds.status === 'healthy' ? 'healthy' : ds.status === 'stale' ? 'stale' : 'failed'],
-                                  }}
-                                />
-                              </td>
+                              <td><StatusChip status={ds.localStatus} /></td>
+                              <td><StatusChip status={ds.driveStatus} /></td>
                               <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
                                 {formatDateTime(ds.updatedAt)}
+                              </td>
+                              <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem' }}>
+                                {formatDateTime(ds.driveUpdatedAt)}
                               </td>
                               <td style={{ fontFamily: 'var(--font-mono)' }}>{formatAge(ds.ageMinutes)}</td>
                               <td style={{ color: 'rgba(255,255,255,0.5)' }}>{ds.purpose}</td>

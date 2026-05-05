@@ -9,6 +9,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ARGUS_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$ARGUS_DIR/../.." && pwd)"
 LAUNCH_AGENTS_DIR="$HOME/Library/LaunchAgents"
 LAUNCHD_DOMAIN="gui/$(id -u)"
 mkdir -p "$LAUNCH_AGENTS_DIR"
@@ -46,6 +48,60 @@ case "$MARKET" in
     ;;
 esac
 
+load_env_file() {
+  local file="$1"
+  if [ ! -f "$file" ]; then
+    return 0
+  fi
+
+  local export_lines
+  export_lines="$(/usr/bin/python3 - "$file" <<'PY'
+from pathlib import Path
+import shlex
+import sys
+
+path = Path(sys.argv[1])
+for raw_line in path.read_text().splitlines():
+    for line in raw_line.split('\\n'):
+        trimmed = line.strip()
+        if not trimmed or trimmed.startswith('#') or '=' not in trimmed:
+            continue
+        key, value = trimmed.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        if value.endswith('$'):
+            value = value[:-1]
+        print(f'export {key}={shlex.quote(value)}')
+PY
+)"
+  if [ -n "$export_lines" ]; then
+    eval "$export_lines"
+  fi
+}
+
+require_env_value() {
+  local name="$1"
+  local value="${!name:-}"
+  if [ -z "${value// }" ]; then
+    echo "Missing required env var: $name" >&2
+    exit 1
+  fi
+  printf '%s' "$value"
+}
+
+xml_escape() {
+  /usr/bin/python3 - "$1" <<'PY'
+import html
+import sys
+
+print(html.escape(sys.argv[1], quote=False))
+PY
+}
+
+MARKET_SUFFIX="$(printf '%s' "$MARKET" | tr '[:lower:]' '[:upper:]')"
+
 label_for_market() {
   local base_label="$1"
   if [ "$MARKET" = "us" ]; then
@@ -71,13 +127,6 @@ WEEKLY_PLIST="$LAUNCH_AGENTS_DIR/$WEEKLY_LABEL.plist"
 DAILY_VISUALS_PLIST="$LAUNCH_AGENTS_DIR/$DAILY_VISUALS_LABEL.plist"
 LEGACY_DAILY_AH_PLIST="$LAUNCH_AGENTS_DIR/com.targon.daily-account-health.plist"
 BROWSER_DAILY_AH_SCRIPT="$SCRIPT_DIR/daily-account-health/collect.sh"
-if [ "$MARKET" = "us" ]; then
-  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
-  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
-else
-  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
-  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
-fi
 
 bootout_if_loaded() {
   local label="$1"
@@ -110,6 +159,7 @@ chmod +x "$SCRIPT_DIR/weekly-poe/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-scaleinsights/collect.sh"
 chmod +x "$SCRIPT_DIR/weekly-brand-metrics/collect.sh"
 chmod +x "$SCRIPT_DIR/daily-visuals/collect.sh"
+chmod +x "$ARGUS_DIR/scripts/lib/enqueue-drive-sync.mjs"
 
 if [ "$UNINSTALL" = "true" ]; then
   echo "Uninstalling browser launchd agents for market=$MARKET..."
@@ -122,6 +172,82 @@ if [ "$UNINSTALL" = "true" ]; then
   exit 0
 fi
 
+load_env_file "$REPO_ROOT/env/shared.local.env"
+load_env_file "$ARGUS_DIR/.env.local"
+
+if [ "$MARKET" = "us" ]; then
+  ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_US"
+  ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/us"
+else
+  ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_UK"
+  ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/uk"
+fi
+TARGONOS_ENV_MODE="local"
+
+ARGUS_CATEGORY_INSIGHTS_URL_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_URL_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_${MARKET_SUFFIX}"
+ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_ENV_KEY="ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_${MARKET_SUFFIX}"
+ARGUS_SELLER_CENTRAL_HOME_URL_ENV_KEY="ARGUS_SELLER_CENTRAL_HOME_URL_${MARKET_SUFFIX}"
+ARGUS_SELLER_CENTRAL_HOST_ENV_KEY="ARGUS_SELLER_CENTRAL_HOST_${MARKET_SUFFIX}"
+ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_ENV_KEY="ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_${MARKET_SUFFIX}"
+ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_ENV_KEY="ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_${MARKET_SUFFIX}"
+ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_ENV_KEY="ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_${MARKET_SUFFIX}"
+ARGUS_POE_TARGET_URL_BASE_ENV_KEY="ARGUS_POE_TARGET_URL_BASE_${MARKET_SUFFIX}"
+AMAZON_MARKETPLACE_ID_ENV_KEY="AMAZON_MARKETPLACE_ID_${MARKET_SUFFIX}"
+ARGUS_SCALEINSIGHTS_COUNTRY_CODE_ENV_KEY="ARGUS_SCALEINSIGHTS_COUNTRY_CODE_${MARKET_SUFFIX}"
+ARGUS_BRAND_METRICS_URL_BASE_ENV_KEY="ARGUS_BRAND_METRICS_URL_BASE_${MARKET_SUFFIX}"
+ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_ENV_KEY="ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_${MARKET_SUFFIX}"
+ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_ENV_KEY="ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_${MARKET_SUFFIX}"
+
+ARGUS_CATEGORY_INSIGHTS_URL="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_URL_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_ENV_KEY")"
+ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID="$(require_env_value "$ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_ENV_KEY")"
+ARGUS_SELLER_CENTRAL_HOME_URL="$(require_env_value "$ARGUS_SELLER_CENTRAL_HOME_URL_ENV_KEY")"
+ARGUS_SELLER_CENTRAL_HOST="$(require_env_value "$ARGUS_SELLER_CENTRAL_HOST_ENV_KEY")"
+ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY="$(require_env_value "$ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_ENV_KEY")"
+ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL="$(require_env_value "$ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_ENV_KEY")"
+ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL="$(require_env_value "$ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_ENV_KEY")"
+ARGUS_POE_TARGET_URL_BASE="$(require_env_value "$ARGUS_POE_TARGET_URL_BASE_ENV_KEY")"
+AMAZON_MARKETPLACE_ID="$(require_env_value "$AMAZON_MARKETPLACE_ID_ENV_KEY")"
+ARGUS_SCALEINSIGHTS_COUNTRY_CODE="$(require_env_value "$ARGUS_SCALEINSIGHTS_COUNTRY_CODE_ENV_KEY")"
+ARGUS_BRAND_METRICS_URL_BASE="$(require_env_value "$ARGUS_BRAND_METRICS_URL_BASE_ENV_KEY")"
+ARGUS_BRAND_METRICS_DOWNLOAD_GLOB="$(require_env_value "$ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_ENV_KEY")"
+ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME="$(require_env_value "$ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_ENV_KEY")"
+
+HOME_XML="$(xml_escape "$HOME")"
+ARGUS_MONITORING_ROOT_XML="$(xml_escape "$ARGUS_MONITORING_ROOT")"
+ARGUS_CATEGORY_INSIGHTS_URL_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_URL")"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID")"
+ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL")"
+ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM")"
+ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID")"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID")"
+ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL")"
+ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_XML="$(xml_escape "$ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID")"
+ARGUS_SELLER_CENTRAL_HOME_URL_XML="$(xml_escape "$ARGUS_SELLER_CENTRAL_HOME_URL")"
+ARGUS_SELLER_CENTRAL_HOST_XML="$(xml_escape "$ARGUS_SELLER_CENTRAL_HOST")"
+ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_XML="$(xml_escape "$ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY")"
+ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_XML="$(xml_escape "$ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL")"
+ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_XML="$(xml_escape "$ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL")"
+ARGUS_POE_TARGET_URL_BASE_XML="$(xml_escape "$ARGUS_POE_TARGET_URL_BASE")"
+AMAZON_MARKETPLACE_ID_XML="$(xml_escape "$AMAZON_MARKETPLACE_ID")"
+ARGUS_SCALEINSIGHTS_COUNTRY_CODE_XML="$(xml_escape "$ARGUS_SCALEINSIGHTS_COUNTRY_CODE")"
+ARGUS_BRAND_METRICS_URL_BASE_XML="$(xml_escape "$ARGUS_BRAND_METRICS_URL_BASE")"
+ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_XML="$(xml_escape "$ARGUS_BRAND_METRICS_DOWNLOAD_GLOB")"
+ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_XML="$(xml_escape "$ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME")"
+
+mkdir -p "$ARGUS_MONITORING_ROOT"
+
 echo "Installing browser launchd agents for market=$MARKET..."
 
 # 1. Weekly browser sources — Monday 3:00 AM CT
@@ -132,10 +258,52 @@ cat > "$WEEKLY_PLIST" <<PLIST
 <dict>
   <key>EnvironmentVariables</key>
   <dict>
+    <key>HOME</key>
+    <string>${HOME_XML}</string>
+    <key>TARGONOS_ENV_MODE</key>
+    <string>${TARGONOS_ENV_MODE}</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
+    <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_MONITORING_ROOT_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_URL_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_URL_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_ID_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_MARKETPLACE_LABEL_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_SEARCH_TERM_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_CATEGORY_ID_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_ID_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_PRODUCT_TYPE_LABEL_XML}</string>
+    <key>${ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_ENV_KEY}</key>
+    <string>${ARGUS_CATEGORY_INSIGHTS_BROWSE_NODE_ID_XML}</string>
+    <key>${ARGUS_SELLER_CENTRAL_HOME_URL_ENV_KEY}</key>
+    <string>${ARGUS_SELLER_CENTRAL_HOME_URL_XML}</string>
+    <key>${ARGUS_SELLER_CENTRAL_HOST_ENV_KEY}</key>
+    <string>${ARGUS_SELLER_CENTRAL_HOST_XML}</string>
+    <key>${ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_ENV_KEY}</key>
+    <string>${ARGUS_SELLER_CENTRAL_BITWARDEN_QUERY_XML}</string>
+    <key>${ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_ENV_KEY}</key>
+    <string>${ARGUS_SELLER_CENTRAL_ACCOUNT_LABEL_XML}</string>
+    <key>${ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_ENV_KEY}</key>
+    <string>${ARGUS_SELLER_CENTRAL_MARKETPLACE_LABEL_XML}</string>
+    <key>${ARGUS_POE_TARGET_URL_BASE_ENV_KEY}</key>
+    <string>${ARGUS_POE_TARGET_URL_BASE_XML}</string>
+    <key>${AMAZON_MARKETPLACE_ID_ENV_KEY}</key>
+    <string>${AMAZON_MARKETPLACE_ID_XML}</string>
+    <key>${ARGUS_SCALEINSIGHTS_COUNTRY_CODE_ENV_KEY}</key>
+    <string>${ARGUS_SCALEINSIGHTS_COUNTRY_CODE_XML}</string>
+    <key>${ARGUS_BRAND_METRICS_URL_BASE_ENV_KEY}</key>
+    <string>${ARGUS_BRAND_METRICS_URL_BASE_XML}</string>
+    <key>${ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_ENV_KEY}</key>
+    <string>${ARGUS_BRAND_METRICS_DOWNLOAD_GLOB_XML}</string>
+    <key>${ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_ENV_KEY}</key>
+    <string>${ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME_XML}</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>
@@ -175,10 +343,14 @@ cat > "$DAILY_VISUALS_PLIST" <<PLIST
 <dict>
   <key>EnvironmentVariables</key>
   <dict>
+    <key>HOME</key>
+    <string>${HOME_XML}</string>
+    <key>TARGONOS_ENV_MODE</key>
+    <string>${TARGONOS_ENV_MODE}</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
+    <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
+    <string>${ARGUS_MONITORING_ROOT_XML}</string>
     <key>PATH</key>
     <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import path from 'node:path'
-import fs from 'node:fs'
 import {
   ARGUS_MARKET,
   MONITORING_BASE,
@@ -12,6 +11,7 @@ import {
   orderHeaders,
   requireEnv,
   weekContextForRange,
+  writeTextFile,
 } from './lib/common.mjs'
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
@@ -269,8 +269,7 @@ async function downloadCsv(url) {
 }
 
 function writeFile(file, content) {
-  ensureDir(path.dirname(file))
-  fs.writeFileSync(file, content.endsWith('\n') ? content : `${content}\n`)
+  writeTextFile(file, content.endsWith('\n') ? content : `${content}\n`)
 }
 
 async function main() {
@@ -320,7 +319,7 @@ async function main() {
   writeFile(ordersFile, ordersCsv)
 
   const manifestPath = path.join(SELLERBOARD_BASE, `${weekPrefix}_SB-Manifest.json`)
-  fs.writeFileSync(
+  writeTextFile(
     manifestPath,
     JSON.stringify(
       {
