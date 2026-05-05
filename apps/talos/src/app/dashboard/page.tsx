@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { Box, Typography } from '@mui/material'
 import { toast } from 'react-hot-toast'
 import { PageContainer, PageContent } from '@/components/layout/page-container'
 import { DashboardOverviewBoard } from '@/components/dashboard/dashboard-overview-board'
@@ -116,12 +117,47 @@ export default function DashboardPage() {
   }
 
   return (
-    <PageContainer>
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-950 sm:px-6 lg:px-8">
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Dashboard</h1>
-      </header>
-      <PageContent>
-        <DashboardOverviewBoard snapshot={snapshot} />
+    <PageContainer className="min-h-full bg-transparent dark:bg-transparent">
+      <PageContent className="flex min-h-0 flex-1 flex-col overflow-visible px-0 py-0">
+        <Box
+          sx={{
+            display: 'flex',
+            flex: 1,
+            flexDirection: 'column',
+            height: '100%',
+            minHeight: 0,
+            minWidth: 0,
+            pb: 0.25,
+            width: '100%',
+          }}
+        >
+          <Box
+            component="header"
+            sx={{
+              borderBottom: '1px solid',
+              borderColor: 'light-dark(rgb(226 232 240), rgb(30 41 59))',
+              flexShrink: 0,
+              mb: 2.5,
+              pb: 2,
+              pt: 0.25,
+            }}
+          >
+            <Typography
+              component="h1"
+              sx={{
+                color: 'light-dark(rgb(15 23 42), rgb(241 245 249))',
+                fontSize: 20,
+                fontWeight: 700,
+                letterSpacing: '0.02em',
+                lineHeight: 1.2,
+                textTransform: 'uppercase',
+              }}
+            >
+              Dashboard
+            </Typography>
+          </Box>
+          <DashboardOverviewBoard snapshot={snapshot} />
+        </Box>
       </PageContent>
     </PageContainer>
   )

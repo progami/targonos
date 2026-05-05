@@ -35,6 +35,7 @@ export interface DashboardOverviewBalanceInput {
 
 export interface DashboardOverviewMovementInput {
   id: string
+  poId: string | null
   transactionType: string
   transactionDate: Date
   createdAt: Date
@@ -52,6 +53,7 @@ export interface DashboardOverviewMovementInput {
 
 export type DashboardOverviewMovement = {
   id: string
+  poId: string | null
   transactionType: string
   transactionDate: string
   warehouseCode: string
@@ -138,9 +140,11 @@ function mapDashboardMovement(
   const carriesPallets = warehouseCarriesPallets(warehouseCode)
   const cartons = direction === 'in' ? movement.cartonsIn : movement.cartonsOut
   const pallets = direction === 'in' ? movement.storagePalletsIn : movement.shippingPalletsOut
+  const trimmedPoId = movement.poId === null ? null : movement.poId.trim()
 
   return {
     id: movement.id,
+    poId: trimmedPoId !== null && trimmedPoId.length > 0 ? trimmedPoId : null,
     transactionType: movement.transactionType,
     transactionDate: movement.transactionDate.toISOString(),
     warehouseCode,

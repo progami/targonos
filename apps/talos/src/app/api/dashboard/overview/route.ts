@@ -6,6 +6,7 @@ import {
   buildDashboardOverviewSnapshot,
   mapInboundOrderToDashboardOverviewInput,
 } from '@/lib/dashboard/dashboard-overview'
+import { toPublicOrderNumber } from '@/lib/services/inbound-utils'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
   AMAZON_WAREHOUSE_CODES,
@@ -20,6 +21,66 @@ type DashboardOverviewSession = {
     role?: string
     warehouseId?: string | null
   }
+}
+
+type DashboardOverviewMovementTransaction = {
+  id: string
+  transactionType: string
+  transactionDate: Date
+  createdAt: Date
+  warehouseCode: string
+  warehouseName: string
+  skuCode: string
+  skuDescription: string
+  lotRef: string
+  cartonsIn: number
+  cartonsOut: number
+  storagePalletsIn: number
+  shippingPalletsOut: number
+  unitsPerCarton: number
+  inboundOrder: { orderNumber: string } | null
+}
+
+function getMovementOriginKey(input: { warehouseCode: string; skuCode: string; lotRef: string }) {
+  return [input.warehouseCode.trim(), input.skuCode.trim(), input.lotRef.trim()].join('\u001f')
+}
+
+export function mapTransactionsToDashboardOverviewMovements(
+  transactions: DashboardOverviewMovementTransaction[]
+) {
+  const poIdByMovementOrigin = new Map<string, string>()
+
+  return transactions.map(({ inboundOrder, ...transaction }) => {
+    const originKey = getMovementOriginKey(transaction)
+    let poId = poIdByMovementOrigin.get(originKey) ?? null
+    const orderNumber = inboundOrder?.orderNumber
+
+    if (typeof orderNumber === 'string') {
+      const receivedPoId = toPublicOrderNumber(orderNumber).trim()
+      if (receivedPoId.length > 0) {
+        poIdByMovementOrigin.set(originKey, receivedPoId)
+        poId = receivedPoId
+      }
+    }
+
+    return {
+      id: transaction.id,
+      poId,
+      transactionType: transaction.transactionType,
+      transactionDate: transaction.transactionDate,
+      createdAt: transaction.createdAt,
+      warehouseCode: transaction.warehouseCode,
+      warehouseName: transaction.warehouseName,
+      skuCode: transaction.skuCode,
+      skuDescription: transaction.skuDescription,
+      lotRef: transaction.lotRef,
+      cartonsIn: transaction.cartonsIn,
+      cartonsOut: transaction.cartonsOut,
+      storagePalletsIn: transaction.storagePalletsIn,
+      shippingPalletsOut: transaction.shippingPalletsOut,
+      unitsPerCarton: transaction.unitsPerCarton,
+    }
+  })
 }
 
 export async function resolveDashboardOverviewWarehouseCodeFilter(
@@ -122,30 +183,9 @@ export const GET = withAuth(async (_request, session) => {
         skuCode: balance.skuCode,
         currentCartons: balance.currentCartons,
         currentPallets: balance.currentPallets,
-        currentUnits: balance.currentUnits,
-      })),
-      movements: transactions.map(
-        ({
-          inboundOrder: _inboundOrder,
-          outboundOrder: _outboundOrder,
-          ...transaction
-        }) => ({
-          id: transaction.id,
-          transactionType: transaction.transactionType,
-          transactionDate: transaction.transactionDate,
-          createdAt: transaction.createdAt,
-          warehouseCode: transaction.warehouseCode,
-          warehouseName: transaction.warehouseName,
-          skuCode: transaction.skuCode,
-          skuDescription: transaction.skuDescription,
-          lotRef: transaction.lotRef,
-          cartonsIn: transaction.cartonsIn,
-          cartonsOut: transaction.cartonsOut,
-          storagePalletsIn: transaction.storagePalletsIn,
-          shippingPalletsOut: transaction.shippingPalletsOut,
-          unitsPerCarton: transaction.unitsPerCarton,
-        })
-      ),
+          currentUnits: balance.currentUnits,
+        })),
+      movements: mapTransactionsToDashboardOverviewMovements(transactions),
     })
   )
 })
