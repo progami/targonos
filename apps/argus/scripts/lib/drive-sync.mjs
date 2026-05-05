@@ -293,10 +293,46 @@ function readQueueEntries(market) {
   return { queuePath, entries }
 }
 
+function readEntriesFile(filePath) {
+  return fs.readFileSync(filePath, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line))
+}
+
+function recoverProcessingQueues(queuePath) {
+  const queueDir = path.dirname(queuePath)
+  const queueBaseName = path.basename(queuePath)
+  if (!fs.existsSync(queueDir)) {
+    return
+  }
+
+  const processingFiles = fs.readdirSync(queueDir)
+    .filter((name) => name.startsWith(`${queueBaseName}.`) && name.endsWith('.processing'))
+    .sort()
+
+  if (processingFiles.length === 0) {
+    return
+  }
+
+  const recoveredEntries = []
+  for (const name of processingFiles) {
+    const processingPath = path.join(queueDir, name)
+    recoveredEntries.push(...readEntriesFile(processingPath))
+    fs.rmSync(processingPath, { force: true })
+  }
+
+  if (recoveredEntries.length > 0) {
+    fs.appendFileSync(queuePath, recoveredEntries.map((entry) => JSON.stringify(entry)).join('\n') + '\n', 'utf8')
+  }
+}
+
 function claimQueueEntries(market) {
   const queuePath = driveSyncQueuePath(market)
   const processingPath = `${queuePath}.${process.pid}.${Date.now()}.processing`
   fs.mkdirSync(path.dirname(queuePath), { recursive: true })
+  recoverProcessingQueues(queuePath)
 
   try {
     fs.renameSync(queuePath, processingPath)
@@ -307,11 +343,7 @@ function claimQueueEntries(market) {
     throw error
   }
 
-  const entries = fs.readFileSync(processingPath, 'utf8')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
-    .map((line) => JSON.parse(line))
+  const entries = readEntriesFile(processingPath)
 
   return { queuePath, processingPath, entries }
 }

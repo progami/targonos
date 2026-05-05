@@ -315,8 +315,10 @@ download_export() {
   local expected_start="${1:-}"
   local expected_end="${2:-}"
   local expected_file=""
+  local download_pattern=""
   local downloaded_file=""
   local export_status=""
+  local latest_after_timeout=""
   local payload=""
   local start_iso=""
   local end_iso=""
@@ -334,16 +336,27 @@ download_export() {
   fi
 
   expected_file="$(brand_metrics_download_file "$expected_start" "$expected_end")"
+  download_pattern="${expected_file%.csv}*.csv"
 
   for attempt in $(seq 1 3); do
+    delete_matching_files "$download_pattern"
+
     export_status="$(click_export)"
     if [ "$export_status" != "EXPORT_CLICKED" ]; then
       log "FAILED: Brand Metrics export click failed ($export_status)"
       return 1
     fi
 
-    sleep 5
-    downloaded_file="$expected_file"
+    if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "" 0 0 0 120)"; then
+      latest_after_timeout="$(latest_matching_file "$download_pattern")"
+      if [ -n "$latest_after_timeout" ]; then
+        log "Latest Brand Metrics match after timeout: $latest_after_timeout"
+      else
+        log "Latest Brand Metrics match after timeout: none"
+      fi
+      log "FAILED: Brand Metrics export did not create a CSV download"
+      return 1
+    fi
 
     payload="$(csv_context "$downloaded_file")"
     start_iso="$(json_field "$payload" startIso)"

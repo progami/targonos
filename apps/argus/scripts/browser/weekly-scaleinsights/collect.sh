@@ -118,13 +118,23 @@ fi
 download_url="${TARGET_URL}?countrycode=${COUNTRY_CODE}&from=${START_DATE}&to=${END_DATE}&handler=Excel"
 compact_start="${START_DATE//-/}"
 compact_end="${END_DATE//-/}"
-download_file="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_end}.xlsx"
+download_pattern="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_end}*.xlsx"
 
-log "Watching ScaleInsights download file: $download_file"
+log "Watching ScaleInsights download pattern: $download_pattern"
 
+delete_matching_files "$download_pattern"
 run_chrome_helper navigate-tab-id "$TAB_ID" "$download_url" >/dev/null
-sleep 5
-downloaded_file="$download_file"
+
+if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "" 0 0 0 120)"; then
+  latest_after_timeout="$(latest_matching_file "$download_pattern")"
+  if [ -n "$latest_after_timeout" ]; then
+    log "Latest ScaleInsights match after timeout: $latest_after_timeout"
+  else
+    log "Latest ScaleInsights match after timeout: none"
+  fi
+  log "FAILED: ScaleInsights download did not create an XLSX for $download_url"
+  exit 1
+fi
 
 copy_file_with_node "$downloaded_file" "$target_file"
 enqueue_drive_sync "$target_file"
