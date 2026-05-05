@@ -730,6 +730,65 @@ test('ecosystem config runs settlement sync workers in explicit read-only QBO mo
   );
 });
 
+test('plutus primary nav exposes only settlement accounting scope', () => {
+  const source = readFileSync('components/app-header.tsx', 'utf8');
+
+  for (const expected of [
+    "label: 'Settlements'",
+    "label: 'COGS Inputs'",
+    "label: 'Exceptions'",
+    "label: 'Mappings'",
+    "label: 'Sources'",
+    "label: 'Settings'",
+  ]) {
+    assert.equal(source.includes(expected), true, expected);
+  }
+
+  for (const removed of [
+    "label: 'Transactions'",
+    "label: 'Cashflow'",
+    "label: 'Accounts & Taxes'",
+    "label: 'Setup Wizard'",
+    "label: 'Account Taxes'",
+    "label: 'Chart of Accounts'",
+    "href: '/transactions'",
+    "href: '/cashflow'",
+    "href: '/chart-of-accounts'",
+  ]) {
+    assert.equal(source.includes(removed), false, removed);
+  }
+});
+
+test('removed QBO clone pages redirect out of primary workflows', () => {
+  assert.equal(readFileSync('app/transactions/page.tsx', 'utf8').includes("redirect('/cogs-inputs')"), true);
+  assert.equal(readFileSync('app/bills/page.tsx', 'utf8').includes("redirect('/cogs-inputs')"), true);
+  assert.equal(readFileSync('app/cashflow/page.tsx', 'utf8').includes("redirect('/settlements')"), true);
+  assert.equal(readFileSync('app/chart-of-accounts/page.tsx', 'utf8').includes("redirect('/settlements')"), true);
+});
+
+test('cogs inputs page is read-only QBO source intake', () => {
+  const routeSource = readFileSync('app/cogs-inputs/page.tsx', 'utf8');
+  const pageSource = readFileSync('components/cogs-inputs/cogs-inputs-page.tsx', 'utf8');
+
+  assert.equal(routeSource.includes('CogsInputsPage'), true);
+  assert.equal(pageSource.includes('PageHeader title="COGS Inputs"'), true);
+  assert.equal(pageSource.includes("const tab = 'bill' as 'journalEntry' | 'bill' | 'purchase';"), true);
+  assert.equal(pageSource.includes('setCreateBillOpen(true)'), false);
+  assert.equal(pageSource.includes('setCreatePurchaseOpen(true)'), false);
+  assert.equal(pageSource.includes('<CreateBillModal'), false);
+  assert.equal(pageSource.includes('<CreatePurchaseModal'), false);
+  assert.equal(pageSource.includes('<Tabs'), false);
+});
+
+test('exceptions page links to settlement and COGS blocker queues', () => {
+  const source = readFileSync('app/exceptions/page.tsx', 'utf8');
+
+  assert.equal(source.includes('PageHeader title="Exceptions"'), true);
+  assert.equal(source.includes("href: '/settlements'"), true);
+  assert.equal(source.includes("href: '/cogs-inputs'"), true);
+  assert.equal(source.includes("redirect('/settlements')"), false);
+});
+
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
   assert.equal(normalizeSettlementMarketplaceQuery('UK'), 'UK');
   assert.equal(normalizeSettlementMarketplaceQuery('us'), 'US');
