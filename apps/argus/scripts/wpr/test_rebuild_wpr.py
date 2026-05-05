@@ -12,8 +12,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SCRIPT_PATH = SCRIPT_DIR / "rebuild_wpr.py"
 
 
-def load_module(data_dir: Path):
+def load_module(data_dir: Path, monitoring_root: Path):
     os.environ["WPR_DATA_DIR"] = str(data_dir)
+    os.environ["ARGUS_MARKET"] = "us"
+    os.environ["ARGUS_MONITORING_ROOT_US"] = str(monitoring_root)
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
     spec = spec_from_file_location(f"rebuild_wpr_{id(data_dir)}", SCRIPT_PATH)
@@ -64,7 +66,7 @@ class RebuildWprTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            module = load_module(wpr_data_dir)
+            module = load_module(wpr_data_dir, monitoring_root)
             module.main()
 
             week_one_input_dir = sales_root / "WPR" / "Week 1 - 2025-12-28 (Sun)" / "input" / "Listing Attributes (API)"

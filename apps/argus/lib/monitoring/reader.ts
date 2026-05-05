@@ -198,6 +198,7 @@ interface DatasetHealthSpec {
   cadence: MonitoringHealthDataset['cadence']
   sourceType: MonitoringSourceType
   path: string
+  monitoringBase: string
   driveId: string | null
   purpose: string
   producedBy: string | null
@@ -206,7 +207,7 @@ interface DatasetHealthSpec {
 }
 
 function buildDatasetSpecs(paths: MonitoringPaths): DatasetHealthSpec[] {
-  return [
+  const specs: Array<Omit<DatasetHealthSpec, 'monitoringBase'>> = [
   {
     id: 'hourly-state',
     label: 'Hourly latest state',
@@ -388,6 +389,7 @@ function buildDatasetSpecs(paths: MonitoringPaths): DatasetHealthSpec[] {
     getUpdatedAt: async () => findLatestModifiedAt(paths.weeklyBrandMetricsPath, 3),
   },
   ]
+  return specs.map((spec) => ({ ...spec, monitoringBase: paths.monitoringBase }))
 }
 
 interface LaunchAgentPlist {
@@ -401,6 +403,14 @@ interface LaunchAgentPlist {
 interface MonitoringRunLogEntry {
   timestamp: string
   status: 'ok' | 'failed'
+}
+
+interface DrivePublishedState {
+  items?: Record<string, {
+    relativePath?: string
+    driveModifiedTime?: string | null
+    publishedAt?: string | null
+  }>
 }
 
 const CATEGORY_FIELDS: Record<MonitoringCategory, Set<string>> = {
@@ -1487,9 +1497,69 @@ function readImageUrls(raw: Record<string, unknown>): string[] {
     .filter((value) => value !== '')
 }
 
+function thresholdMinutesForCadence(cadence: MonitoringHealthDataset['cadence']): number {
+  if (cadence === 'hourly') return 3 * HOUR_IN_MINUTES
+  if (cadence === 'daily') return 36 * HOUR_IN_MINUTES
+  return 10 * DAY_IN_MINUTES
+}
+
+function ageMinutesForTimestamp(timestamp: string | null): number | null {
+  if (!timestamp) return null
+  return Math.max(0, Math.round((Date.now() - new Date(timestamp).getTime()) / 60000))
+}
+
+function statusForFreshness(updatedAt: string | null, threshold: number): 'healthy' | 'stale' | 'missing' {
+  const ageMinutes = ageMinutesForTimestamp(updatedAt)
+  if (ageMinutes === null) return 'missing'
+  return ageMinutes > threshold ? 'stale' : 'healthy'
+}
+
+async function getDrivePublishUpdatedAt(spec: DatasetHealthSpec): Promise<string | null> {
+  if (spec.sourceType === 'MANUAL') return null
+
+  const statePath = path.join(spec.monitoringBase, '.drive-sync', 'published.json')
+  let state: DrivePublishedState
+  try {
+    state = JSON.parse(await fs.readFile(statePath, 'utf8')) as DrivePublishedState
+  } catch (error) {
+    if (isMissing(error)) return null
+    throw error
+  }
+
+  const items = Object.values(state.items ?? {})
+  const relativePath = path.relative(spec.monitoringBase, spec.path).split(path.sep).join('/')
+  const prefix = `${relativePath}/`
+  const timestamps = items
+    .filter((item) => {
+      const itemPath = item.relativePath ?? ''
+      if (itemPath === relativePath) return true
+      return itemPath.startsWith(prefix)
+    })
+    .map((item) => item.driveModifiedTime ?? item.publishedAt ?? null)
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+
+  return timestamps.sort((left, right) => right.localeCompare(left))[0] ?? null
+}
+
+function combineDatasetStatus(
+  localStatus: 'healthy' | 'stale' | 'missing',
+  driveStatus: 'healthy' | 'stale' | 'missing' | null,
+): 'healthy' | 'stale' | 'missing' {
+  if (localStatus === 'missing') return 'missing'
+  if (driveStatus === 'missing') return 'missing'
+  if (localStatus === 'stale') return 'stale'
+  if (driveStatus === 'stale') return 'stale'
+  return 'healthy'
+}
+
 async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHealthDataset> {
   const driveUrl = spec.driveId ? `https://drive.google.com/drive/folders/${spec.driveId}` : null
   const updatedAt = await spec.getUpdatedAt()
+  const threshold = thresholdMinutesForCadence(spec.cadence)
+  const localStatus = statusForFreshness(updatedAt, threshold)
+  const driveUpdatedAt = await getDrivePublishUpdatedAt(spec)
+  const driveAgeMinutes = ageMinutesForTimestamp(driveUpdatedAt)
+  const driveStatus = spec.sourceType === 'MANUAL' ? null : statusForFreshness(driveUpdatedAt, threshold)
   if (!updatedAt) {
     return {
       id: spec.id,
@@ -1503,17 +1573,15 @@ async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHeal
       consumers: spec.consumers,
       updatedAt: null,
       ageMinutes: null,
+      localStatus,
+      driveUpdatedAt,
+      driveAgeMinutes,
+      driveStatus,
       status: 'missing',
     }
   }
 
-  const ageMinutes = Math.max(0, Math.round((Date.now() - new Date(updatedAt).getTime()) / 60000))
-  const threshold =
-    spec.cadence === 'hourly'
-      ? 3 * HOUR_IN_MINUTES
-      : spec.cadence === 'daily'
-        ? 36 * HOUR_IN_MINUTES
-        : 10 * DAY_IN_MINUTES
+  const ageMinutes = ageMinutesForTimestamp(updatedAt)
 
   return {
     id: spec.id,
@@ -1527,7 +1595,11 @@ async function getDatasetHealth(spec: DatasetHealthSpec): Promise<MonitoringHeal
     consumers: spec.consumers,
     updatedAt,
     ageMinutes,
-    status: ageMinutes > threshold ? 'stale' : 'healthy',
+    localStatus,
+    driveUpdatedAt,
+    driveAgeMinutes,
+    driveStatus,
+    status: combineDatasetStatus(localStatus, driveStatus),
   }
 }
 

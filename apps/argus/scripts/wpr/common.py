@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from market_config import required_env, resolve_argus_market
+
 
 @dataclass(frozen=True)
 class WprPaths:
@@ -27,7 +29,8 @@ def resolve_wpr_paths() -> WprPaths:
     workspace_root = data_dir.parent
     wpr_root = workspace_root.parent
     sales_root = wpr_root.parent
-    monitoring_root = sales_root / "Monitoring"
+    market = resolve_argus_market()
+    monitoring_root = Path(required_env(f"ARGUS_MONITORING_ROOT_{market.upper()}")).expanduser().resolve()
     return WprPaths(
         data_dir=data_dir,
         workspace_root=workspace_root,

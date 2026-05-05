@@ -11,8 +11,9 @@ DEST="${ARGUS_BRAND_METRICS_DEST:-$(argus_monitoring_root)/Weekly/Ad Console/Bra
 DL="${ARGUS_BRAND_METRICS_DOWNLOAD_DIR:-$HOME/Downloads}"
 LOG="${ARGUS_BRAND_METRICS_LOG:-$(argus_tmp_log_path weekly-brand-metrics)}"
 TARGET_URL_BASE="$(require_market_env ARGUS_BRAND_METRICS_URL_BASE)"
-DOWNLOAD_PATTERN="$DL/$(require_market_env ARGUS_BRAND_METRICS_DOWNLOAD_GLOB)"
+DOWNLOAD_BASENAME="$(require_market_env ARGUS_BRAND_METRICS_DOWNLOAD_BASENAME)"
 REFERENCE_DATE="$(date '+%Y-%m-%d')"
+download_result=""
 
 if [ "$#" -eq 2 ]; then
   REQUEST_MODE="explicit-week"
@@ -27,14 +28,25 @@ else
 fi
 
 mkdir -p "$DEST"
+set_chrome_download_dir "$DL"
 
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+cleanup_tab() {
+  local status=$?
+  if [ -n "$TAB_ID" ]; then
+    if ! run_chrome_helper close-tab-id "$TAB_ID" >/dev/null 2>&1; then
+      log "WARN: failed to close Chrome tab $TAB_ID"
+    fi
+  fi
+  exit "$status"
+}
 open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+trap cleanup_tab EXIT
 brand_metrics_source_limit_note() { "$NODE_BIN" "$SCRIPT_DIR/../brand-metrics-availability.mjs" source-limit-note; }
 brand_metrics_availability_lag_detail() { "$NODE_BIN" "$SCRIPT_DIR/../brand-metrics-availability.mjs" lag-detail "$1" "$2"; }
 
@@ -233,10 +245,11 @@ if (lines.length < 2) {
 
 const header = parseCsvLine(lines[0]);
 const firstRow = parseCsvLine(lines[1]);
-const startIndex = header.indexOf("Start Date");
-const endIndex = header.indexOf("End Date");
-const brandIndex = header.indexOf("Brand");
-const categoryIndex = header.indexOf("Category");
+const normalizedHeader = header.map((value) => String(value || "").trim().toLowerCase());
+const startIndex = normalizedHeader.indexOf("start date");
+const endIndex = normalizedHeader.indexOf("end date");
+const brandIndex = normalizedHeader.indexOf("brand");
+const categoryIndex = normalizedHeader.indexOf("category");
 if (startIndex === -1 || endIndex === -1) {
   throw new Error("Brand Metrics CSV is missing Start Date or End Date");
 }
@@ -280,34 +293,53 @@ print(f"{start}|{end}")
 PY
 }
 
+brand_metrics_download_file() {
+  "$PYTHON_BIN" - "$DL" "$DOWNLOAD_BASENAME" "$1" "$2" <<'PY'
+from datetime import date
+from pathlib import Path
+import sys
+
+download_dir = Path(sys.argv[1])
+basename = sys.argv[2]
+start = date.fromisoformat(sys.argv[3])
+end = date.fromisoformat(sys.argv[4])
+
+def compact(value):
+    return f"{value.strftime('%b')}_{value.day}_{value.strftime('%y')}"
+
+print(download_dir / f"{basename}_{compact(start)}_to_{compact(end)}.csv")
+PY
+}
+
 download_export() {
   local expected_start="${1:-}"
   local expected_end="${2:-}"
-  local baseline_info=""
-  local baseline_path=""
-  local baseline_mtime="0"
-  local baseline_ctime="0"
-  local baseline_size="0"
+  local expected_file=""
+  local download_pattern=""
   local downloaded_file=""
   local export_status=""
+  local latest_after_timeout=""
   local payload=""
   local start_iso=""
   local end_iso=""
   local is_full_week=""
   local row_count=""
 
-  delete_matching_files "$DOWNLOAD_PATTERN"
+  if [ -z "$expected_start" ]; then
+    log "FAILED: Brand Metrics export expected start date is missing"
+    return 1
+  fi
+
+  if [ -z "$expected_end" ]; then
+    log "FAILED: Brand Metrics export expected end date is missing"
+    return 1
+  fi
+
+  expected_file="$(brand_metrics_download_file "$expected_start" "$expected_end")"
+  download_pattern="${expected_file%.csv}*.csv"
 
   for attempt in $(seq 1 3); do
-    baseline_info="$(latest_matching_file "$DOWNLOAD_PATTERN")"
-    if [ -n "$baseline_info" ]; then
-      IFS='|' read -r baseline_path baseline_mtime baseline_ctime baseline_size <<<"$baseline_info"
-    else
-      baseline_path=""
-      baseline_mtime="0"
-      baseline_ctime="0"
-      baseline_size="0"
-    fi
+    delete_matching_files "$download_pattern"
 
     export_status="$(click_export)"
     if [ "$export_status" != "EXPORT_CLICKED" ]; then
@@ -315,8 +347,8 @@ download_export() {
       return 1
     fi
 
-    if ! downloaded_file="$(wait_for_new_matching_file "$DOWNLOAD_PATTERN" "$baseline_path" "$baseline_mtime" "$baseline_ctime" "$baseline_size" 120)"; then
-      latest_after_timeout="$(latest_matching_file "$DOWNLOAD_PATTERN")"
+    if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "" 0 0 0 120)"; then
+      latest_after_timeout="$(latest_matching_file "$download_pattern")"
       if [ -n "$latest_after_timeout" ]; then
         log "Latest Brand Metrics match after timeout: $latest_after_timeout"
       else
@@ -360,6 +392,7 @@ fi
 open_window "$TARGET_URL"
 sleep 8
 wait_tab
+set_chrome_download_dir "$DL"
 
 current_url="$(tab_url)"
 if is_amazon_login_url "$current_url"; then
@@ -415,7 +448,14 @@ if [ "$REQUEST_MODE" = "last-available-week" ]; then
   fi
 fi
 
-if ! download_result="$(download_export "$REQUESTED_START_DATE" "$REQUESTED_END_DATE")"; then
+EXPECTED_DOWNLOAD_START="$REQUESTED_START_DATE"
+EXPECTED_DOWNLOAD_END="$REQUESTED_END_DATE"
+if [ "$REQUEST_MODE" = "last-available-week" ]; then
+  EXPECTED_DOWNLOAD_START="$published_start_date"
+  EXPECTED_DOWNLOAD_END="$published_end_date"
+fi
+
+if ! download_result="$(download_export "$EXPECTED_DOWNLOAD_START" "$EXPECTED_DOWNLOAD_END")"; then
   log "FAILED: Brand Metrics export validation failed"
   exit 1
 fi
@@ -429,6 +469,7 @@ ACTUAL_CATEGORY="$(json_field "$csv_payload" category)"
 IFS='|' read -r WEEK_NUM START_DATE END_DATE PREFIX <<<"$(week_context_for_end_date "$ACTUAL_END_DATE")"
 TARGET_FILE="$DEST/${PREFIX}_BrandMetrics.csv"
 copy_file_with_node "$downloaded_file" "$TARGET_FILE"
+enqueue_drive_sync "$TARGET_FILE"
 
 log "Saved: ${PREFIX}_BrandMetrics.csv"
 log "CSV details: brand=${ACTUAL_BRAND:-unknown} category=${ACTUAL_CATEGORY:-unknown} range=${ACTUAL_START_DATE}..${ACTUAL_END_DATE}"

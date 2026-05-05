@@ -14,6 +14,8 @@ SCRIPT_PATH = SCRIPT_DIR / "build_intent_cluster_dashboard.py"
 def load_module(data_dir: Path, market: str = "us"):
     os.environ["WPR_DATA_DIR"] = str(data_dir)
     os.environ["ARGUS_MARKET"] = market
+    sales_root = data_dir.parents[2]
+    os.environ[f"ARGUS_MONITORING_ROOT_{market.upper()}"] = str(sales_root / "Monitoring")
     os.environ["WPR_HERO_ASIN_US"] = "B09HXC3NL8"
     os.environ["WPR_HERO_ASIN_UK"] = "B09HXC3NL8"
     os.environ["WPR_COMPETITOR_ASIN_US"] = "B0DQDWV1SV"
@@ -117,6 +119,21 @@ class DefaultWeekSelectionTest(unittest.TestCase):
             self.assertEqual(
                 module.chart_week_order(["W16", "W17", "W18"], week_meta, module.date(2026, 4, 28)),
                 ["W16"],
+            )
+
+    def test_chart_week_order_uses_single_completed_local_week(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            data_dir = Path(tmp_dir) / "Sales" / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+            week_meta = {
+                "W18": {"week_number": 18, "week_label": "W18", "start_date": "2026-04-26"},
+                "W19 Partial": {"week_number": 19, "week_label": "W19 Partial", "start_date": "2026-05-03"},
+            }
+
+            self.assertEqual(
+                module.chart_week_order(["W18", "W19 Partial"], week_meta, module.date(2026, 5, 5)),
+                ["W18"],
             )
 
 

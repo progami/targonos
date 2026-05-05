@@ -46,13 +46,17 @@ class ValidateSourcesTest(unittest.TestCase):
             root = Path(tmp_dir)
             us_sales_root = root / "Dust Sheets - US" / "Sales"
             uk_sales_root = root / "Dust Sheets - UK" / "Sales"
+            us_monitoring_root = root / "argus-monitoring" / "us"
+            uk_monitoring_root = root / "argus-monitoring" / "uk"
             os.environ["ARGUS_SALES_ROOT_US"] = str(us_sales_root)
             os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
+            os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
+            os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
-            rel = Path("Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Search Term Report (API)/W17_2026-04-25_SP-SearchTerm.csv")
-            for sales_root in (us_sales_root, uk_sales_root):
+            rel = Path("Weekly/Ad Console/SP - Sponsored Products (API)/SP - Search Term Report (API)/W17_2026-04-25_SP-SearchTerm.csv")
+            for monitoring_root in (us_monitoring_root, uk_monitoring_root):
                 write_csv(
-                    sales_root / rel,
+                    monitoring_root / rel,
                     ["date", "searchTerm", "clicks"],
                     [{"date": "2026-04-20", "searchTerm": "plastic drop cloth", "clicks": "4"}],
                 )
@@ -69,27 +73,31 @@ class ValidateSourcesTest(unittest.TestCase):
             root = Path(tmp_dir)
             us_sales_root = root / "Dust Sheets - US" / "Sales"
             uk_sales_root = root / "Dust Sheets - UK" / "Sales"
+            us_monitoring_root = root / "argus-monitoring" / "us"
+            uk_monitoring_root = root / "argus-monitoring" / "uk"
             os.environ["ARGUS_SALES_ROOT_US"] = str(us_sales_root)
             os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
+            os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
+            os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
             relative_dir = Path("Ad Console/SP - Sponsored Products (API)/SP - Search Term Report (API)")
             rule = None
 
-            old_rel = Path("Monitoring/Weekly") / relative_dir / "W16_2026-04-18_SP-SearchTerm.csv"
-            latest_rel = Path("Monitoring/Weekly") / relative_dir / "W17_2026-04-25_SP-SearchTerm.csv"
-            for sales_root in (us_sales_root, uk_sales_root):
+            old_rel = Path("Weekly") / relative_dir / "W16_2026-04-18_SP-SearchTerm.csv"
+            latest_rel = Path("Weekly") / relative_dir / "W17_2026-04-25_SP-SearchTerm.csv"
+            for monitoring_root in (us_monitoring_root, uk_monitoring_root):
                 write_csv(
-                    sales_root / old_rel,
+                    monitoring_root / old_rel,
                     ["date", "searchTerm", "clicks"],
                     [{"date": "2026-04-13", "searchTerm": "plastic drop cloth", "clicks": "4"}],
                 )
             write_csv(
-                us_sales_root / latest_rel,
+                us_monitoring_root / latest_rel,
                 ["date", "searchTerm", "clicks"],
                 [{"date": "2026-04-20", "searchTerm": "plastic drop cloth", "clicks": "4"}],
             )
             write_csv(
-                uk_sales_root / latest_rel,
+                uk_monitoring_root / latest_rel,
                 ["date", "searchTerm", "clicks"],
                 [{"date": "2026-04-20", "searchTerm": "dust sheet", "clicks": "4"}],
             )
@@ -104,9 +112,13 @@ class ValidateSourcesTest(unittest.TestCase):
     def test_uk_validation_rejects_wrong_datadive_niche(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             uk_sales_root = Path(tmp_dir) / "Dust Sheets - UK" / "Sales"
+            uk_monitoring_root = Path(tmp_dir) / "argus-monitoring" / "uk"
+            us_monitoring_root = Path(tmp_dir) / "argus-monitoring" / "us"
             os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
+            os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
+            os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
-            manifest = uk_sales_root / "Monitoring/Weekly/Datadive (API)/W17_2026-04-25_DD-Manifest.json"
+            manifest = uk_monitoring_root / "Weekly/Datadive (API)/W17_2026-04-25_DD-Manifest.json"
             manifest.parent.mkdir(parents=True, exist_ok=True)
             manifest.write_text('{"nicheId":"79IvywKLfF","heroAsin":"B09HXC3NL8"}', encoding="utf-8")
 

@@ -8,6 +8,7 @@ import { defaultChromeBrowserUrl, defaultChromeStartScriptPath } from './browser
 const BROWSER_URL = defaultChromeBrowserUrl(process.env)
 const START_SCRIPT = defaultChromeStartScriptPath(process.env)
 const WAIT_TIMEOUT_MS = 60_000
+const COMMAND_TIMEOUT_MS = 15_000
 
 export function parseHosts(hostListText) {
   return String(hostListText ?? '')
@@ -26,6 +27,19 @@ export function urlMatchesHost(sourceUrl, hostText) {
     return parsed.hostname === hostText
   } catch {
     return false
+  }
+}
+
+export function normalizedUrlForMatch(sourceUrl) {
+  if (!sourceUrl) {
+    return ''
+  }
+
+  try {
+    const parsed = new URL(sourceUrl)
+    return `${parsed.origin}${parsed.pathname}`
+  } catch {
+    return String(sourceUrl)
   }
 }
 
@@ -105,8 +119,27 @@ class CdpConnection {
     this.#nextId += 1
 
     return new Promise((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject })
-      this.socket.send(JSON.stringify({ id, method, params }))
+      const timeout = setTimeout(() => {
+        this.#pending.delete(id)
+        reject(new Error(`Chrome DevTools command timed out: ${method}`))
+      }, COMMAND_TIMEOUT_MS)
+      const finish = (callback, value) => {
+        clearTimeout(timeout)
+        callback(value)
+      }
+
+      this.#pending.set(id, {
+        resolve: (result) => finish(resolve, result),
+        reject: (error) => finish(reject, error),
+      })
+
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }))
+      } catch (error) {
+        this.#pending.delete(id)
+        clearTimeout(timeout)
+        reject(error)
+      }
     })
   }
 
@@ -182,6 +215,15 @@ async function activateTarget(targetId) {
   }
 }
 
+async function closeTarget(targetId) {
+  const browser = await connectBrowser()
+  try {
+    await browser.send('Target.closeTarget', { targetId })
+  } finally {
+    await browser.close()
+  }
+}
+
 async function createTarget(url) {
   const browser = await connectBrowser()
   try {
@@ -189,6 +231,33 @@ async function createTarget(url) {
     return targetId
   } finally {
     await browser.close()
+  }
+}
+
+async function setDownloadDir(downloadPath) {
+  const browser = await connectBrowser()
+  try {
+    await browser.send('Browser.setDownloadBehavior', {
+      behavior: 'allow',
+      downloadPath,
+      eventsEnabled: true,
+    })
+  } finally {
+    await browser.close()
+  }
+
+  const targets = await listPageTargets()
+  for (const page of targets) {
+    const target = await connectTarget(page.id)
+    try {
+      await target.send('Page.enable')
+      await target.send('Page.setDownloadBehavior', {
+        behavior: 'allow',
+        downloadPath,
+      })
+    } finally {
+      await target.close()
+    }
   }
 }
 
@@ -277,6 +346,33 @@ async function getTargetUrl(targetId) {
 async function ensureTabId(targetUrl, hostListText) {
   const hosts = parseHosts(hostListText)
   const targets = await listPageTargets()
+  const normalizedTargetUrl = normalizedUrlForMatch(targetUrl)
+  const exactMatch = targets.find((target) => {
+    if (target?.type !== 'page') {
+      return false
+    }
+    return normalizedUrlForMatch(target?.url) === normalizedTargetUrl
+  })
+  if (exactMatch) {
+    await activateTarget(exactMatch.id)
+    return exactMatch.id
+  }
+
+  const hostMatches = targets.filter((target) => {
+    if (target?.type !== 'page') {
+      return false
+    }
+    return hosts.some((host) => urlMatchesHost(target?.url, host))
+  })
+  const authStepMatch = hostMatches.find((target) => {
+    const url = target?.url ?? ''
+    return url.includes('/ap/mfa') || url.includes('/account-switcher')
+  })
+  if (authStepMatch) {
+    await activateTarget(authStepMatch.id)
+    return authStepMatch.id
+  }
+
   const match = findMatchingPageTarget(targets, hosts)
   if (match) {
     await activateTarget(match.id)
@@ -319,6 +415,13 @@ async function main() {
       await navigateTarget(rest[0], rest[1])
       return
     }
+    case 'close-tab-id': {
+      if (rest.length < 1) {
+        throw new Error('close-tab-id requires target id.')
+      }
+      await closeTarget(rest[0])
+      return
+    }
     case 'wait-tab-id': {
       if (rest.length < 1) {
         throw new Error('wait-tab-id requires target id.')
@@ -339,6 +442,13 @@ async function main() {
         throw new Error('get-url-tab-id requires target id.')
       }
       process.stdout.write(await getTargetUrl(rest[0]))
+      return
+    }
+    case 'set-download-dir': {
+      if (rest.length < 1) {
+        throw new Error('set-download-dir requires a download path.')
+      }
+      await setDownloadDir(rest[0])
       return
     }
     default:

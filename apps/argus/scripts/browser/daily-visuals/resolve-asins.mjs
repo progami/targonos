@@ -2,6 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { monitoringRootForMarket as artifactMonitoringRootForMarket } from '../../lib/artifacts.mjs'
 
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname)
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '../../../../..')
@@ -48,17 +49,9 @@ function loadEnvFile(file) {
   }
 }
 
-function requireEnv(name) {
-  const value = process.env[name]
-  if (!value || !value.trim()) {
-    throw new Error(`Missing required env var: ${name}`)
-  }
-  return value.trim()
-}
-
 function monitoringRootForMarket(market) {
   loadEnvFile(path.join(REPO_ROOT, 'apps/argus/.env.local'))
-  return path.join(requireEnv(`ARGUS_SALES_ROOT_${market.toUpperCase()}`), 'Monitoring')
+  return artifactMonitoringRootForMarket(market)
 }
 
 function normalizeBrand(brandRaw) {

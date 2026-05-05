@@ -2416,7 +2416,7 @@ def chart_week_order(
 ) -> list[str]:
     completed_weeks = completed_week_order(week_order, week_meta, today)
     if len(completed_weeks) <= 1:
-        raise ValueError("No stable WPR chart weeks are available.")
+        return completed_weeks
     return completed_weeks[:-1]
 
 

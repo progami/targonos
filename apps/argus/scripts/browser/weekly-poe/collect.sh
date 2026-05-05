@@ -21,10 +21,20 @@ mkdir -p "$DEST"
 TAB_ID=""
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') — $1" >> "$LOG"; }
+cleanup_tab() {
+  local status=$?
+  if [ -n "$TAB_ID" ]; then
+    if ! run_chrome_helper close-tab-id "$TAB_ID" >/dev/null 2>&1; then
+      log "WARN: failed to close Chrome tab $TAB_ID"
+    fi
+  fi
+  exit "$status"
+}
 open_window() { TAB_ID="$(run_chrome_helper open-window-tab "$1")"; }
 run_js() { run_chrome_helper run-js-tab-id "$TAB_ID" "$1"; }
 wait_tab() { run_chrome_helper wait-tab-id "$TAB_ID" >/dev/null; }
 tab_url() { run_chrome_helper get-url-tab-id "$TAB_ID"; }
+trap cleanup_tab EXIT
 navigate_tab() { run_chrome_helper navigate-tab-id "$TAB_ID" "$1" >/dev/null; }
 
 wait_for_expected_path() {
@@ -154,6 +164,8 @@ write_csvs() {
     "$payload_file" \
     "$DEST/${PREFIX}_POE.csv" \
     "$DEST/${PREFIX}_POE-SearchTerms.csv"
+  enqueue_drive_sync "$DEST/${PREFIX}_POE.csv"
+  enqueue_drive_sync "$DEST/${PREFIX}_POE-SearchTerms.csv"
   rm -f "$payload_file"
 }
 

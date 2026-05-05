@@ -38,7 +38,7 @@ function envValue(plist, key) {
   return match ? match[1] : null
 }
 
-test('API launchd installer writes market env blocks for generated UK collectors', () => {
+test('API launchd installer writes shared env runtime blocks for generated UK collectors', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-api-install-'))
   const fakeBin = path.join(tempRoot, 'bin')
   const fakeHome = path.join(tempRoot, 'home')
@@ -56,17 +56,34 @@ test('API launchd installer writes market env blocks for generated UK collectors
   })
 
   const hourlyPlist = readGeneratedPlist(fakeHome, 'com.targon.hourly-listing-attributes-api.uk')
+  const dailyPlist = readGeneratedPlist(fakeHome, 'com.targon.daily-account-health.uk')
   const weeklyPlist = readGeneratedPlist(fakeHome, 'com.targon.weekly-api-sources.uk')
+  const trackingPlist = readGeneratedPlist(fakeHome, 'com.targon.argus.tracking-fetch.uk')
+  const driveSyncPlist = readGeneratedPlist(fakeHome, 'com.targon.argus.drive-sync.uk')
 
-  for (const plist of [hourlyPlist, weeklyPlist]) {
+  for (const plist of [trackingPlist, hourlyPlist, dailyPlist, weeklyPlist, driveSyncPlist]) {
+    assert.equal(envValue(plist, 'HOME'), fakeHome)
+    assert.equal(envValue(plist, 'TARGONOS_ENV_MODE'), 'local')
     assert.equal(envValue(plist, 'ARGUS_MARKET'), 'uk')
-    assert.equal(
-      envValue(plist, 'ARGUS_SALES_ROOT_UK'),
-      '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales',
-    )
+    assert.equal(envValue(plist, 'ARGUS_MONITORING_ROOT_UK'), path.join(fakeHome, '.local/share/targon/argus-monitoring/uk'))
+    assert.equal(envValue(plist, 'ARGUS_DRIVE_MONITORING_FOLDER_ID_UK'), '14aFd4dnqAgFl2p_6J0eJGnqOV0Ew7dbh')
+    assert.equal(envValue(plist, 'ARGUS_DRIVE_PROFILE'), 'targon')
+    assert.equal(envValue(plist, 'GWORKSPACE_API_BIN'), path.join(fakeHome, '.local/bin/gworkspace-api'))
+    assert.equal(envValue(plist, 'GWORKSPACE_API_PYTHON'), '/opt/homebrew/bin/python3')
     assert.equal(
       envValue(plist, 'PATH'),
       '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin',
     )
+    assert.equal(envValue(plist, 'AMAZON_SP_API_REGION_UK'), null)
+    assert.equal(envValue(plist, 'AMAZON_REFRESH_TOKEN_UK'), null)
+    assert.equal(envValue(plist, 'AMAZON_SP_APP_CLIENT_ID'), null)
+    assert.equal(envValue(plist, 'AMAZON_SP_APP_CLIENT_SECRET'), null)
   }
+
+  assert.equal(
+    envValue(trackingPlist, 'ARGUS_SALES_ROOT_UK'),
+    '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales',
+  )
+  assert.match(driveSyncPlist, /scripts\/lib\/drive-sync\.mjs/)
+  assert.match(driveSyncPlist, /<string>--market<\/string>\s*<string>uk<\/string>/)
 })
