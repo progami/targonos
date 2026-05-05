@@ -15,17 +15,20 @@ process.env.NEXT_PUBLIC_PORTAL_AUTH_URL ??= 'http://localhost:3000'
 process.env.COOKIE_DOMAIN ??= 'localhost'
 process.env.PORTAL_AUTH_SECRET ??= 'test-secret'
 
-let resolveDashboardOverviewWarehouseCodeFilter:
-  | (typeof import('../../app/api/dashboard/overview/route'))['resolveDashboardOverviewWarehouseCodeFilter']
-  | undefined
+let dashboardOverviewRoute: typeof import('../../app/api/dashboard/overview/route') | undefined
 
-const loadResolveDashboardOverviewWarehouseCodeFilter = async () => {
-  if (resolveDashboardOverviewWarehouseCodeFilter === undefined) {
-    const mod = await import('../../app/api/dashboard/overview/route')
-    resolveDashboardOverviewWarehouseCodeFilter = mod.resolveDashboardOverviewWarehouseCodeFilter
+const loadDashboardOverviewRoute = async () => {
+  if (dashboardOverviewRoute === undefined) {
+    dashboardOverviewRoute = await import('../../app/api/dashboard/overview/route')
   }
 
-  return resolveDashboardOverviewWarehouseCodeFilter
+  return dashboardOverviewRoute
+}
+
+const loadResolveDashboardOverviewWarehouseCodeFilter = async () => {
+  const route = await loadDashboardOverviewRoute()
+
+  return route.resolveDashboardOverviewWarehouseCodeFilter
 }
 
 test('buildDashboardOverviewSnapshot snapshot for factory, transit, and warehouse totals', () => {
@@ -390,6 +393,72 @@ test('buildDashboardOverviewSnapshot uses createdAt to rank same-day recent move
   assert.deepEqual(
     snapshot.recentIn.map(row => row.id),
     ['same-day-6', 'same-day-5', 'same-day-4', 'same-day-3', 'same-day-2']
+  )
+})
+
+test('mapTransactionsToDashboardOverviewMovements carries the latest prior PO for a reused origin', async () => {
+  const route = await loadDashboardOverviewRoute()
+  const movementBase = {
+    transactionType: 'RECEIVE',
+    transactionDate: new Date('2026-04-01T00:00:00.000Z'),
+    createdAt: new Date('2026-04-01T00:00:00.000Z'),
+    warehouseCode: 'FMC',
+    warehouseName: 'FMC Logistics (UK) Ltd',
+    skuCode: 'CS-1SD-32M',
+    skuDescription: 'Caelum Star 1SD 32M',
+    lotRef: 'LOT-REUSED',
+    cartonsIn: 0,
+    cartonsOut: 0,
+    storagePalletsIn: 0,
+    shippingPalletsOut: 0,
+    unitsPerCarton: 60,
+  }
+
+  const movements = route.mapTransactionsToDashboardOverviewMovements([
+    {
+      ...movementBase,
+      id: 'receive-old',
+      cartonsIn: 10,
+      transactionDate: new Date('2026-04-01T00:00:00.000Z'),
+      createdAt: new Date('2026-04-01T00:01:00.000Z'),
+      inboundOrder: { orderNumber: 'PO-16-PDS::internal' },
+    },
+    {
+      ...movementBase,
+      id: 'ship-old-origin',
+      transactionType: 'SHIP',
+      cartonsOut: 4,
+      transactionDate: new Date('2026-04-02T00:00:00.000Z'),
+      createdAt: new Date('2026-04-02T00:01:00.000Z'),
+      inboundOrder: null,
+    },
+    {
+      ...movementBase,
+      id: 'receive-new',
+      cartonsIn: 8,
+      transactionDate: new Date('2026-04-03T00:00:00.000Z'),
+      createdAt: new Date('2026-04-03T00:01:00.000Z'),
+      inboundOrder: { orderNumber: 'PO-17-PDS::internal' },
+    },
+    {
+      ...movementBase,
+      id: 'ship-new-origin',
+      transactionType: 'SHIP',
+      cartonsOut: 3,
+      transactionDate: new Date('2026-04-04T00:00:00.000Z'),
+      createdAt: new Date('2026-04-04T00:01:00.000Z'),
+      inboundOrder: null,
+    },
+  ])
+
+  assert.deepEqual(
+    movements.map(movement => ({ id: movement.id, poId: movement.poId })),
+    [
+      { id: 'receive-old', poId: 'PO-16-PDS' },
+      { id: 'ship-old-origin', poId: 'PO-16-PDS' },
+      { id: 'receive-new', poId: 'PO-17-PDS' },
+      { id: 'ship-new-origin', poId: 'PO-17-PDS' },
+    ]
   )
 })
 
