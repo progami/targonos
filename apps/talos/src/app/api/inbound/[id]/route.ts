@@ -4,10 +4,24 @@ import { serializeInboundOrder as serializeWithStageData } from '@/lib/services/
 import { enforceCrossTenantManufacturingOnlyForInboundOrder } from '@/lib/services/inbound-cross-tenant-access'
 import { getTenantPrisma } from '@/lib/tenant/server'
 import { deriveSupplierCountry } from '@/lib/suppliers/derive-country'
-import {
-  getInboundOrderById,
-  updateInboundOrderDetails,
-} from '@/lib/services/inbound-service'
+import { getInboundOrderById, updateInboundOrderDetails } from '@/lib/services/inbound-service'
+
+const OUTPUT_SOURCE_AUDIT_ACTIONS = [
+  'CREATE',
+  'UPDATE_DETAILS',
+  'STATUS_TRANSITION',
+  'STAGE_UPDATE',
+  'SPLIT',
+  'INVENTORY_RECEIVE',
+  'LINE_ADD',
+  'LINE_UPDATE',
+  'LINE_DELETE',
+  'DOCUMENT_UPLOAD',
+  'DOCUMENT_REPLACE',
+  'CONTAINER_ADD',
+  'CONTAINER_UPDATE',
+  'CONTAINER_DELETE',
+]
 
 export const GET = withAuthAndParams(async (_request, params) => {
   const id =
@@ -43,7 +57,18 @@ export const GET = withAuthAndParams(async (_request, params) => {
         })
       : null
 
-  const serialized = serializeWithStageData(order)
+  const latestSourceAudit = await prisma.auditLog.findFirst({
+    where: {
+      entityId: id,
+      action: { in: OUTPUT_SOURCE_AUDIT_ACTIONS },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { createdAt: true },
+  })
+
+  const serialized = serializeWithStageData(order, {
+    sourceChangedAt: latestSourceAudit ? latestSourceAudit.createdAt : null,
+  })
   return ApiResponses.success({
     ...serialized,
     supplier: supplier
@@ -107,14 +132,16 @@ export const PATCH = withAuthAndParams(async (request, params, session) => {
   }
 
   const normalized = {
-    expectedDate: parsed.data.expectedDate === '' ? null : parsed.data.expectedDate ?? undefined,
-    incoterms: parsed.data.incoterms === '' ? null : parsed.data.incoterms ?? undefined,
-    paymentTerms: parsed.data.paymentTerms === '' ? null : parsed.data.paymentTerms ?? undefined,
+    expectedDate: parsed.data.expectedDate === '' ? null : (parsed.data.expectedDate ?? undefined),
+    incoterms: parsed.data.incoterms === '' ? null : (parsed.data.incoterms ?? undefined),
+    paymentTerms: parsed.data.paymentTerms === '' ? null : (parsed.data.paymentTerms ?? undefined),
     counterpartyName:
-      parsed.data.counterpartyName === '' ? null : parsed.data.counterpartyName ?? undefined,
-    notes: parsed.data.notes === '' ? null : parsed.data.notes ?? undefined,
+      parsed.data.counterpartyName === '' ? null : (parsed.data.counterpartyName ?? undefined),
+    notes: parsed.data.notes === '' ? null : (parsed.data.notes ?? undefined),
     manufacturingStartDate:
-      parsed.data.manufacturingStartDate === '' ? null : parsed.data.manufacturingStartDate ?? undefined,
+      parsed.data.manufacturingStartDate === ''
+        ? null
+        : (parsed.data.manufacturingStartDate ?? undefined),
   }
 
   try {
