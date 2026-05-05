@@ -7,18 +7,16 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
+import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import InventoryIcon from '@mui/icons-material/Inventory';
-import ChecklistIcon from '@mui/icons-material/Checklist';
+import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import SettingsIcon from '@mui/icons-material/Settings';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
@@ -103,97 +101,16 @@ function MarketplaceSelector() {
   );
 }
 
-type NavItem =
-  | { href: string; label: string; icon: SvgIconComponent }
-  | { label: string; icon: SvgIconComponent; items: Array<{ href: string; label: string }> };
+type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
-  { href: '/transactions', label: 'Transactions', icon: SwapHorizIcon },
-  { href: '/cashflow', label: 'Cashflow', icon: TrendingUpIcon },
-  {
-    label: 'Accounts & Taxes',
-    icon: ChecklistIcon,
-    items: [
-      { href: '/setup', label: 'Setup Wizard' },
-      { href: '/settlement-mapping', label: 'Account Taxes' },
-      { href: '/chart-of-accounts', label: 'Chart of Accounts' },
-    ],
-  },
-  { href: '/data-sources', label: 'Data Sources', icon: InventoryIcon },
+  { href: '/cogs-inputs', label: 'COGS Inputs', icon: AssignmentTurnedInIcon },
+  { href: '/exceptions', label: 'Exceptions', icon: ErrorOutlineIcon },
+  { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
+  { href: '/data-sources', label: 'Sources', icon: InventoryIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
-
-function NavDropdown({ item, pathname }: { item: Extract<NavItem, { items: any[] }>; pathname: string }) {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
-  const menuOpen = Boolean(anchorEl);
-
-  const anyActive = item.items.some(
-    (submenu) => pathname === submenu.href || pathname.startsWith(`${submenu.href}/`),
-  );
-
-  return (
-    <>
-      <Box
-        component="button"
-        onClick={(e: React.MouseEvent<HTMLButtonElement>) => setAnchorEl(e.currentTarget)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          whiteSpace: 'nowrap',
-          borderRadius: 2,
-          px: 1.25,
-          py: 1,
-          fontSize: '13px',
-          fontWeight: 500,
-          border: 'none',
-          bgcolor: 'transparent',
-          cursor: 'pointer',
-          transition: 'all 0.15s',
-          position: 'relative',
-          color: anyActive ? '#008f87' : 'text.secondary',
-          '&:hover': { color: 'text.primary' },
-        }}
-      >
-        <span>{item.label}</span>
-        <ExpandMoreIcon
-          sx={{
-            fontSize: 14,
-            color: 'text.disabled',
-            transition: 'transform 0.2s',
-            transform: menuOpen ? 'rotate(180deg)' : 'rotate(0)',
-          }}
-        />
-        {anyActive && (
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: -13,
-              left: 10,
-              right: 10,
-              height: 2,
-              borderRadius: 1,
-              bgcolor: '#00C2B9',
-            }}
-          />
-        )}
-      </Box>
-      <Menu
-        anchorEl={anchorEl}
-        open={menuOpen}
-        onClose={() => setAnchorEl(null)}
-        slotProps={{ paper: { sx: { minWidth: 220, mt: 0.75, p: 0.5 } } }}
-      >
-        {item.items.map((submenu) => (
-          <MenuItem key={submenu.href} component={Link} href={submenu.href} onClick={() => setAnchorEl(null)}>
-            {submenu.label}
-          </MenuItem>
-        ))}
-      </Menu>
-    </>
-  );
-}
 
 export function AppHeader() {
   const pathname = usePathname();
@@ -253,48 +170,44 @@ export function AppHeader() {
           {/* Desktop nav */}
           <Box component="nav" sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', gap: 0.25 }}>
             {NAV_ITEMS.map((item) => {
-              if ('href' in item) {
-                const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    style={{ textDecoration: 'none' }}
+              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      whiteSpace: 'nowrap',
+                      borderRadius: 2,
+                      px: 1.25,
+                      py: 1,
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      transition: 'all 0.15s',
+                      color: isActive ? '#008f87' : 'text.secondary',
+                      '&:hover': { color: 'text.primary' },
+                    }}
                   >
-                    <Box
-                      sx={{
-                        position: 'relative',
-                        whiteSpace: 'nowrap',
-                        borderRadius: 2,
-                        px: 1.25,
-                        py: 1,
-                        fontSize: '13px',
-                        fontWeight: 500,
-                        transition: 'all 0.15s',
-                        color: isActive ? '#008f87' : 'text.secondary',
-                        '&:hover': { color: 'text.primary' },
-                      }}
-                    >
-                      {item.label}
-                      {isActive && (
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            bottom: -13,
-                            left: 10,
-                            right: 10,
-                            height: 2,
-                            borderRadius: 1,
-                            bgcolor: '#00C2B9',
-                          }}
-                        />
-                      )}
-                    </Box>
-                  </Link>
-                );
-              }
-
-              return <NavDropdown key={item.label} item={item} pathname={pathname} />;
+                    {item.label}
+                    {isActive && (
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          bottom: -13,
+                          left: 10,
+                          right: 10,
+                          height: 2,
+                          borderRadius: 1,
+                          bgcolor: '#00C2B9',
+                        }}
+                      />
+                    )}
+                  </Box>
+                </Link>
+              );
             })}
           </Box>
         </Box>
@@ -352,89 +265,35 @@ export function AppHeader() {
             <MarketplaceSelector />
           </Box>
           {NAV_ITEMS.map((item) => {
-            if ('href' in item) {
-              const Icon = item.icon;
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  style={{ textDecoration: 'none' }}
-                >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 1.5,
-                      borderRadius: 2,
-                      px: 1.5,
-                      py: 1.25,
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      transition: 'background-color 0.15s',
-                      color: isActive ? '#008f87' : 'text.secondary',
-                      bgcolor: isActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
-                      '&:hover': { bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <Icon sx={{ fontSize: 16, color: isActive ? '#00C2B9' : 'text.disabled' }} />
-                    {item.label}
-                  </Box>
-                </Link>
-              );
-            }
-
+            const Icon = item.icon;
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
-              <Box key={item.label}>
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileOpen(false)}
+                style={{ textDecoration: 'none' }}
+              >
                 <Box
                   sx={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 1.5,
+                    borderRadius: 2,
                     px: 1.5,
-                    py: 1,
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    color: 'text.disabled',
+                    py: 1.25,
+                    fontSize: '0.875rem',
+                    fontWeight: 500,
+                    transition: 'background-color 0.15s',
+                    color: isActive ? '#008f87' : 'text.secondary',
+                    bgcolor: isActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
+                    '&:hover': { bgcolor: 'action.hover' },
                   }}
                 >
+                  <Icon sx={{ fontSize: 16, color: isActive ? '#00C2B9' : 'text.disabled' }} />
                   {item.label}
                 </Box>
-                {item.items.map((submenu) => {
-                  const isActive = pathname === submenu.href || pathname.startsWith(`${submenu.href}/`);
-                  return (
-                    <Link
-                      key={submenu.href}
-                      href={submenu.href}
-                      onClick={() => setMobileOpen(false)}
-                      style={{ textDecoration: 'none' }}
-                    >
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1.5,
-                          borderRadius: 2,
-                          px: 1.5,
-                          py: 1.25,
-                          pl: 3.5,
-                          fontSize: '0.875rem',
-                          fontWeight: 500,
-                          transition: 'background-color 0.15s',
-                          color: isActive ? '#008f87' : 'text.secondary',
-                          bgcolor: isActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
-                          '&:hover': { bgcolor: 'action.hover' },
-                        }}
-                      >
-                        {submenu.label}
-                      </Box>
-                    </Link>
-                  );
-                })}
-              </Box>
+              </Link>
             );
           })}
         </Box>
