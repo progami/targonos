@@ -23,12 +23,14 @@ import {
   buildBillMappingPullSyncUpdates,
   type BillMappingPullSyncCandidate,
 } from '@/lib/plutus/bills/pull-sync';
+import { filterCogsInputRows } from '@/lib/plutus/cogs-inputs/scope';
 
 const logger = createLogger({ name: 'plutus-transactions' });
 
 class RequestValidationError extends Error {}
 
 type TransactionTypeParam = 'journalEntry' | 'bill' | 'purchase';
+type TransactionScopeParam = 'all' | 'cogsInput';
 
 type TransactionLine = {
   id: string;
@@ -82,6 +84,12 @@ function requireTransactionType(raw: string | null): TransactionTypeParam {
   throw new RequestValidationError('Invalid transaction type');
 }
 
+function requireTransactionScope(raw: string | null): TransactionScopeParam {
+  if (raw === null) return 'all';
+  if (raw === 'cogsInput') return raw;
+  throw new RequestValidationError('Invalid transaction scope');
+}
+
 function requirePositiveInt(raw: string | null, fallback: number, label: string): number {
   const value = raw === null ? fallback : Number.parseInt(raw, 10);
   if (!Number.isFinite(value) || value < 1) {
@@ -96,6 +104,50 @@ function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
     map.set(account.Id, account);
   }
   return map;
+}
+
+async function fetchAllBillsForCogsInput(
+  connection: QboConnection,
+  input: {
+    startDate: string | undefined;
+    endDate: string | undefined;
+    search: string | undefined;
+  },
+): Promise<{ bills: QboBill[]; updatedConnection?: QboConnection }> {
+  const maxResults = 500;
+  let startPosition = 1;
+  let activeConnection = connection;
+  let updatedConnection: QboConnection | undefined;
+  let totalCount = 0;
+  let bills: QboBill[] = [];
+
+  while (true) {
+    const result = await fetchBills(activeConnection, {
+      startDate: input.startDate,
+      endDate: input.endDate,
+      docNumberContains: input.search,
+      maxResults,
+      startPosition,
+      includeTotalCount: startPosition === 1,
+    });
+
+    if (result.updatedConnection) {
+      activeConnection = result.updatedConnection;
+      updatedConnection = result.updatedConnection;
+    }
+    if (startPosition === 1) {
+      totalCount = result.totalCount;
+    }
+
+    bills = bills.concat(result.bills);
+
+    if (result.bills.length < maxResults) break;
+    if (totalCount > 0 && bills.length >= totalCount) break;
+
+    startPosition += result.bills.length;
+  }
+
+  return { bills, updatedConnection };
 }
 
 type MappingRecord = {
@@ -260,6 +312,10 @@ export async function GET(req: NextRequest) {
 
     const searchParams = req.nextUrl.searchParams;
     const type = requireTransactionType(searchParams.get('type'));
+    const scope = requireTransactionScope(searchParams.get('scope'));
+    if (scope === 'cogsInput' && type !== 'bill') {
+      throw new RequestValidationError('COGS input scope only supports bills');
+    }
 
     const rawStartDate = searchParams.get('startDate');
     const rawEndDate = searchParams.get('endDate');
@@ -288,7 +344,7 @@ export async function GET(req: NextRequest) {
     const accountsById = buildAccountLookup(accountsResult.accounts);
 
     let transactions: TransactionRow[];
-    let totalCount: number;
+    let totalCount = 0;
     let updatedConnection: QboConnection | undefined;
     let brands: Array<{ id: string; name: string }> | undefined;
     let skus: Array<{ id: string; sku: string; productName: string | null; brandId: string }> | undefined;
@@ -306,15 +362,27 @@ export async function GET(req: NextRequest) {
       totalCount = result.totalCount;
       transactions = result.journalEntries.map((je) => mapJournalEntry(je, accountsById));
     } else if (type === 'bill') {
-      const result = await fetchBills(activeConnection, {
-        startDate,
-        endDate,
-        docNumberContains: search,
-        maxResults: pageSize,
-        startPosition,
-      });
-      updatedConnection = result.updatedConnection;
-      totalCount = result.totalCount;
+      let bills: QboBill[];
+      if (scope === 'cogsInput') {
+        const result = await fetchAllBillsForCogsInput(activeConnection, {
+          startDate,
+          endDate,
+          search,
+        });
+        bills = result.bills;
+        updatedConnection = result.updatedConnection;
+      } else {
+        const result = await fetchBills(activeConnection, {
+          startDate,
+          endDate,
+          docNumberContains: search,
+          maxResults: pageSize,
+          startPosition,
+        });
+        bills = result.bills;
+        updatedConnection = result.updatedConnection;
+        totalCount = result.totalCount;
+      }
 
       const config = await db.setupConfig.findFirst();
       const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
@@ -324,14 +392,14 @@ export async function GET(req: NextRequest) {
         productExpenses: config?.productExpenses,
       });
 
-      const qboBillIds = result.bills.map((bill) => bill.Id);
+      const qboBillIds = bills.map((bill) => bill.Id);
       const mappings = await db.billMapping.findMany({
         where: { qboBillId: { in: qboBillIds } },
         include: { lines: true },
       });
       const mappingByBillId = new Map(mappings.map((mapping) => [mapping.qboBillId, mapping]));
 
-      const billsById = new Map(result.bills.map((bill) => [bill.Id, bill]));
+      const billsById = new Map(bills.map((bill) => [bill.Id, bill]));
       const pullSyncUpdates = buildBillMappingPullSyncUpdates(
         mappings as BillMappingPullSyncCandidate[],
         billsById,
@@ -365,11 +433,19 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      transactions = result.bills.map((bill) => {
+      const mappedBills = bills.map((bill) => {
         const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
         const mapping = mappingByBillId.get(bill.Id);
         return mapBill(bill, accountsById, trackedLines, mapping ? mapping : null);
       });
+
+      if (scope === 'cogsInput') {
+        const cogsInputRows = filterCogsInputRows(mappedBills);
+        totalCount = cogsInputRows.length;
+        transactions = cogsInputRows.slice(startPosition - 1, startPosition - 1 + pageSize);
+      } else {
+        transactions = mappedBills;
+      }
 
       brands = await db.brand.findMany({
         select: { id: true, name: true },

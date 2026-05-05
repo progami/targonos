@@ -594,6 +594,7 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
 
 async function fetchTransactions(input: {
   type: 'journalEntry' | 'bill' | 'purchase';
+  scope: 'cogsInput' | null;
   page: number;
   pageSize: number;
   search: string;
@@ -603,6 +604,7 @@ async function fetchTransactions(input: {
 }): Promise<TransactionsResponse> {
   const params = new URLSearchParams();
   params.set('type', input.type);
+  if (input.scope !== null) params.set('scope', input.scope);
   params.set('page', String(input.page));
   params.set('pageSize', String(input.pageSize));
   if (input.search.trim() !== '') params.set('search', input.search.trim());
@@ -2591,6 +2593,7 @@ export function CogsInputsPage() {
     queryFn: () =>
       fetchTransactions({
         type: apiType,
+        scope: 'cogsInput',
         page,
         pageSize,
         search,

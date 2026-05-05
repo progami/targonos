@@ -25,6 +25,7 @@ import {
   buildBillMappingPullSyncUpdates,
   extractPoNumberFromBill,
 } from '../lib/plutus/bills/pull-sync';
+import { filterCogsInputRows } from '../lib/plutus/cogs-inputs/scope';
 import {
   allocateManufacturingSplitAmounts,
   normalizeManufacturingSplits,
@@ -769,15 +770,28 @@ test('removed QBO clone pages redirect out of primary workflows', () => {
 test('cogs inputs page is read-only QBO source intake', () => {
   const routeSource = readFileSync('app/cogs-inputs/page.tsx', 'utf8');
   const pageSource = readFileSync('components/cogs-inputs/cogs-inputs-page.tsx', 'utf8');
+  const apiSource = readFileSync('app/api/plutus/transactions/route.ts', 'utf8');
 
   assert.equal(routeSource.includes('CogsInputsPage'), true);
   assert.equal(pageSource.includes('PageHeader title="COGS Inputs"'), true);
   assert.equal(pageSource.includes("const tab = 'bill' as 'journalEntry' | 'bill' | 'purchase';"), true);
+  assert.equal(pageSource.includes("scope: 'cogsInput'"), true);
+  assert.equal(apiSource.includes('filterCogsInputRows(mappedBills)'), true);
   assert.equal(pageSource.includes('setCreateBillOpen(true)'), false);
   assert.equal(pageSource.includes('setCreatePurchaseOpen(true)'), false);
   assert.equal(pageSource.includes('<CreateBillModal'), false);
   assert.equal(pageSource.includes('<CreatePurchaseModal'), false);
   assert.equal(pageSource.includes('<Tabs'), false);
+});
+
+test('cogs input scoping keeps tracked or mapped bills only', () => {
+  const rows = [
+    { id: 'tracked', isTrackedBill: true, mapping: null },
+    { id: 'mapped', isTrackedBill: false, mapping: { id: 'mapping-1' } },
+    { id: 'general', isTrackedBill: false, mapping: null },
+  ];
+
+  assert.deepEqual(filterCogsInputRows(rows).map((row) => row.id), ['tracked', 'mapped']);
 });
 
 test('exceptions page links to settlement and COGS blocker queues', () => {
