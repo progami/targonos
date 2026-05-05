@@ -88,8 +88,8 @@ async function postSyncEndpoint(baseUrl: string, token: string, endpoint: string
 async function loadStrategies(): Promise<StrategyRow[]> {
   return prisma.strategy.findMany({
     where: {
-      status: 'ACTIVE',
       isPrimary: true,
+      status: { in: ['DRAFT', 'ACTIVE'] },
     },
     select: {
       id: true,
@@ -109,7 +109,7 @@ async function syncStrategy(baseUrl: string, token: string, strategy: StrategyRo
 
 async function runOnce(baseUrl: string, token: string): Promise<void> {
   const strategies = await loadStrategies();
-  console.log(`[xplan-sellerboard-sync] activePrimaryStrategies=${strategies.length}`);
+  console.log(`[xplan-sellerboard-sync] syncablePrimaryStrategies=${strategies.length}`);
 
   for (const strategy of strategies) {
     console.log(
