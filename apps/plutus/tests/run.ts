@@ -777,6 +777,7 @@ test('cogs inputs page is read-only QBO source intake', () => {
   assert.equal(pageSource.includes("const tab = 'bill' as 'journalEntry' | 'bill' | 'purchase';"), true);
   assert.equal(pageSource.includes("scope: 'cogsInput'"), true);
   assert.equal(apiSource.includes('filterCogsInputRows(mappedBills)'), true);
+  assert.equal(apiSource.includes('bills.length >= totalCount'), false);
   assert.equal(pageSource.includes('setCreateBillOpen(true)'), false);
   assert.equal(pageSource.includes('setCreatePurchaseOpen(true)'), false);
   assert.equal(pageSource.includes('<CreateBillModal'), false);

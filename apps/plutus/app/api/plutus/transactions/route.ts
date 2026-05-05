@@ -118,7 +118,6 @@ async function fetchAllBillsForCogsInput(
   let startPosition = 1;
   let activeConnection = connection;
   let updatedConnection: QboConnection | undefined;
-  let totalCount = 0;
   let bills: QboBill[] = [];
 
   while (true) {
@@ -135,14 +134,10 @@ async function fetchAllBillsForCogsInput(
       activeConnection = result.updatedConnection;
       updatedConnection = result.updatedConnection;
     }
-    if (startPosition === 1) {
-      totalCount = result.totalCount;
-    }
 
     bills = bills.concat(result.bills);
 
     if (result.bills.length < maxResults) break;
-    if (totalCount > 0 && bills.length >= totalCount) break;
 
     startPosition += result.bills.length;
   }
