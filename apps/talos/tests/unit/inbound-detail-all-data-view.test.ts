@@ -74,6 +74,11 @@ test('generated inbound outputs do not stale themselves', () => {
 
   assert.equal(serviceSource.includes('isOrderUpdatedByGeneratedOutput('), true)
   assert.equal(serviceSource.includes('sourceChangedAt?: Date | string | null'), true)
+  assert.equal(serviceSource.includes('const hasSourceChangedAtOption ='), true)
+  assert.match(
+    serviceSource,
+    /hasSourceChangedAtOption\s*&&\s*isOrderUpdatedByGeneratedOutput\(order\.updatedAt,\s*generatedOutputDates\)/
+  )
   assert.equal(detailRouteSource.includes('OUTPUT_SOURCE_AUDIT_ACTIONS'), true)
   assert.equal(detailRouteSource.includes('sourceChangedAt: latestSourceAudit'), true)
   assert.equal(pdfRouteSource.includes('updatedAt: order.updatedAt'), true)

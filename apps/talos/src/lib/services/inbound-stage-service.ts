@@ -3985,15 +3985,18 @@ export function serializeInboundOrder(
   const inboundPdfGeneratedAt = order.inboundPdfGeneratedAt ?? null
   const shippingMarksGeneratedAt = order.shippingMarksGeneratedAt ?? null
   const generatedOutputDates = [rfqPdfGeneratedAt, inboundPdfGeneratedAt, shippingMarksGeneratedAt]
-  const orderUpdatedAt = isOrderUpdatedByGeneratedOutput(order.updatedAt, generatedOutputDates)
-    ? null
-    : order.updatedAt
+  const hasSourceChangedAtOption =
+    typeof _options === 'object' && _options !== null && 'sourceChangedAt' in _options
+  const orderUpdatedAt =
+    hasSourceChangedAtOption &&
+    isOrderUpdatedByGeneratedOutput(order.updatedAt, generatedOutputDates)
+      ? null
+      : order.updatedAt
+  const sourceChangedAt = hasSourceChangedAtOption
+    ? normalizeOptionalDate(_options.sourceChangedAt)
+    : null
   const lastChangedAt =
-    maxDateOrNull([
-      orderUpdatedAt,
-      lastLineUpdatedAt,
-      normalizeOptionalDate(_options?.sourceChangedAt),
-    ]) ?? order.createdAt
+    maxDateOrNull([orderUpdatedAt, lastLineUpdatedAt, sourceChangedAt]) ?? order.createdAt
 
   return {
     id: order.id,
