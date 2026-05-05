@@ -3577,14 +3577,20 @@ export async function generateInboundOrderShippingMarks(params: {
   }
 
   const generatedAt = new Date()
-  await prisma.inboundOrder.update({
-    where: { id: order.id },
+  const metadataUpdate = await prisma.inboundOrder.updateMany({
+    where: { id: order.id, updatedAt: order.updatedAt },
     data: {
       shippingMarksGeneratedAt: generatedAt,
       shippingMarksGeneratedById: params.user.id,
       shippingMarksGeneratedByName: params.user.name,
+      updatedAt: order.updatedAt,
     },
   })
+  if (metadataUpdate.count !== 1) {
+    throw new ConflictError(
+      'Inbound changed while generating shipping marks. Review the latest details and regenerate.'
+    )
+  }
 
   const inboundNumber = order.inboundNumber ? escapeHtml(order.inboundNumber) : ''
   const destinationDetails = resolveInboundOrderDestination(
@@ -3923,12 +3929,46 @@ function getLatestGrnNumber(order: InboundOrderWithOptionalLines): string | null
   return latestReference
 }
 
+function maxDateOrNull(dates: Array<Date | null>): Date | null {
+  let max: Date | null = null
+  for (const date of dates) {
+    if (!date) continue
+    if (max === null) {
+      max = date
+      continue
+    }
+    if (date > max) {
+      max = date
+    }
+  }
+  return max
+}
+
+function normalizeOptionalDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null
+  if (value instanceof Date) return value
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed
+}
+
+function isOrderUpdatedByGeneratedOutput(
+  orderUpdatedAt: Date,
+  generatedOutputDates: Array<Date | null>
+): boolean {
+  const latestGeneratedOutputAt = maxDateOrNull(generatedOutputDates)
+  if (!latestGeneratedOutputAt) return false
+
+  const deltaMs = orderUpdatedAt.getTime() - latestGeneratedOutputAt.getTime()
+  return deltaMs >= 0 && deltaMs <= 10_000
+}
+
 /**
  * Serialize a InboundOrder for API responses
  */
 export function serializeInboundOrder(
   order: InboundOrderWithOptionalLines,
-  _options?: { defaultCurrency?: string }
+  _options?: { defaultCurrency?: string; sourceChangedAt?: Date | string | null }
 ): Record<string, unknown> {
   const lastLineUpdatedAt = (() => {
     if (!order.lines || order.lines.length === 0) return null
@@ -3941,12 +3981,22 @@ export function serializeInboundOrder(
     return max
   })()
 
-  const lastChangedAt =
-    lastLineUpdatedAt && lastLineUpdatedAt > order.updatedAt ? lastLineUpdatedAt : order.updatedAt
-
   const rfqPdfGeneratedAt = order.rfqPdfGeneratedAt ?? null
   const inboundPdfGeneratedAt = order.inboundPdfGeneratedAt ?? null
   const shippingMarksGeneratedAt = order.shippingMarksGeneratedAt ?? null
+  const generatedOutputDates = [rfqPdfGeneratedAt, inboundPdfGeneratedAt, shippingMarksGeneratedAt]
+  const hasSourceChangedAtOption =
+    typeof _options === 'object' && _options !== null && 'sourceChangedAt' in _options
+  const orderUpdatedAt =
+    hasSourceChangedAtOption &&
+    isOrderUpdatedByGeneratedOutput(order.updatedAt, generatedOutputDates)
+      ? null
+      : order.updatedAt
+  const sourceChangedAt = hasSourceChangedAtOption
+    ? normalizeOptionalDate(_options.sourceChangedAt)
+    : null
+  const lastChangedAt =
+    maxDateOrNull([orderUpdatedAt, lastLineUpdatedAt, sourceChangedAt]) ?? order.createdAt
 
   return {
     id: order.id,
