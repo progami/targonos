@@ -187,9 +187,12 @@ test('Drive sync recovers claimed processing queues after early abort', async (t
     )
 
     assert.equal(fs.existsSync(queuePath), false)
-    assert.equal(
-      fs.readdirSync(path.dirname(queuePath)).filter((name) => name.endsWith('.processing')).length,
-      1,
+    const queueDir = path.dirname(queuePath)
+    const [processingName] = fs.readdirSync(queueDir).filter((name) => name.endsWith('.processing'))
+    assert.notEqual(processingName, undefined)
+    fs.renameSync(
+      path.join(queueDir, processingName),
+      path.join(queueDir, processingName.replace(`.${process.pid}.`, '.999999.')),
     )
 
     process.env.GWORKSPACE_API_PYTHON = '/bin/echo'
@@ -221,6 +224,57 @@ test('Drive sync recovers claimed processing queues after early abort', async (t
       fs.readdirSync(path.dirname(queuePath)).filter((name) => name.endsWith('.processing')),
       [],
     )
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  }
+})
+
+test('Drive sync leaves active processing queues owned by a running process', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-drive-sync-active-'))
+  const previousEnv = {
+    ARGUS_MONITORING_ROOT_US: process.env.ARGUS_MONITORING_ROOT_US,
+    ARGUS_DRIVE_MONITORING_FOLDER_ID_US: process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US,
+    ARGUS_DRIVE_PROFILE: process.env.ARGUS_DRIVE_PROFILE,
+    GWORKSPACE_API_BIN: process.env.GWORKSPACE_API_BIN,
+    GWORKSPACE_API_PYTHON: process.env.GWORKSPACE_API_PYTHON,
+  }
+
+  process.env.ARGUS_MONITORING_ROOT_US = tempRoot
+  process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US = 'monitoring-root-us'
+  process.env.ARGUS_DRIVE_PROFILE = 'targon'
+  process.env.GWORKSPACE_API_BIN = 'gworkspace-api'
+  process.env.GWORKSPACE_API_PYTHON = '/bin/echo'
+
+  const queuePath = path.join(tempRoot, '.drive-sync', 'queue.jsonl')
+  const processingPath = `${queuePath}.${process.pid}.1778104187891.processing`
+  const relativePath = 'Logs/hourly-listing-attributes-api/run-log.jsonl'
+  const localPath = path.join(tempRoot, relativePath)
+  fs.mkdirSync(path.dirname(localPath), { recursive: true })
+  fs.mkdirSync(path.dirname(queuePath), { recursive: true })
+  fs.writeFileSync(localPath, 'hourly\n', 'utf8')
+
+  const stat = fs.statSync(localPath)
+  fs.writeFileSync(processingPath, `${JSON.stringify({
+    enqueuedAt: '2026-05-05T17:00:00.000Z',
+    market: 'us',
+    localPath,
+    relativePath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+  })}\n`, 'utf8')
+
+  try {
+    const { drainDriveSyncQueue } = await import(moduleUrl.href)
+    await drainDriveSyncQueue({ market: 'us', dryRun: false })
+
+    assert.equal(fs.existsSync(processingPath), true)
+    assert.equal(fs.existsSync(queuePath), false)
   } finally {
     for (const [key, value] of Object.entries(previousEnv)) {
       if (value === undefined) {
