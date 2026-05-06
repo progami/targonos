@@ -2,6 +2,7 @@ import { filterAppsForUser, resolveAppUrl, ALL_APPS, type AppDef } from '@/lib/a
 import { getSafeServerSession } from '@/lib/safe-session'
 import PortalClient, { type PortalAppCard } from './PortalClient'
 import LoginPage from './login/page'
+import { hasSignedInUser } from '@/lib/session-state'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
 
@@ -21,7 +22,7 @@ function withLaunchUrl(app: AppDef): PortalAppCard {
 
 export default async function PortalHome({ searchParams }: { searchParams: SearchParams }) {
   const session = await getSafeServerSession()
-  if (!session) {
+  if (!hasSignedInUser(session)) {
     return <LoginPage />
   }
 
