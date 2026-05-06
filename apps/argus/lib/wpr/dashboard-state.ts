@@ -226,7 +226,7 @@ function resetInitializedEmptySqpSelection<T extends Record<string, unknown>>(st
 }
 
 export function migrateWprDashboardState(persistedState: unknown, persistedVersion: number): unknown {
-  if (persistedVersion >= 2) {
+  if (persistedVersion >= 3) {
     return persistedState
   }
 

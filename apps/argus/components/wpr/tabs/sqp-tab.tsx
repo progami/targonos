@@ -6,7 +6,9 @@ import {
   allSelectableSqpRootIds,
   allSelectableSqpTermIds,
   createSqpSelectionViewModel,
+  defaultSqpRootIds,
   rootTermIds,
+  selectableSqpTermIdsForRoots,
 } from '@/lib/wpr/sqp-view-model'
 import type { WprChangeLogEntry, WprWeekBundle } from '@/lib/wpr/types'
 import { buildBundleWeekStartDateLookup } from '@/lib/wpr/week-display'
@@ -82,10 +84,11 @@ export default function SqpTab({
     const filteredExpandedIds = filterIds(expandedSqpRootIds, rootIdSet)
 
     if (!hasInitializedSqpSelection) {
+      const defaultRootIds = defaultSqpRootIds(bundle)
       replaceState({
-        selectedClusterId: null,
-        selectedSqpRootIds: new Set<string>(),
-        selectedSqpTermIds: new Set<string>(),
+        selectedClusterId: firstSetMember(new Set(defaultRootIds)),
+        selectedSqpRootIds: new Set(defaultRootIds),
+        selectedSqpTermIds: new Set(selectableSqpTermIdsForRoots(bundle, defaultRootIds)),
         expandedSqpRootIds: new Set<string>(),
         hasInitializedSqpSelection: true,
       })
