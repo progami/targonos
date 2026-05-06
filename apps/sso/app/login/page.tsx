@@ -1,8 +1,4 @@
 import './login.css'
-import { redirect } from 'next/navigation'
-import { auth } from '@/lib/auth'
-import { resolvePortalCallbackTarget } from '@/lib/callback-target'
-import { requireAuthEnv } from '@/lib/required-auth-env'
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>
 
@@ -35,20 +31,6 @@ export default async function LoginPage({ searchParams }: { searchParams?: Searc
   const error = typeof errorParam === 'string' ? errorParam : ''
   const errorMessage = error === '' ? '' : getErrorMessage(error)
   const loginSubtitle = 'Authenticate once to reach the TargonOS launcher and every workspace your role can open.'
-  const session = await auth()
-
-  if (session) {
-    const target = resolvePortalCallbackTarget({
-      targetUrl: callbackUrl,
-      portalBaseUrl: requireAuthEnv('NEXTAUTH_URL'),
-    })
-
-    if (target) {
-      redirect(target)
-    }
-
-    redirect('/')
-  }
 
   return (
     <div className="login-shell">

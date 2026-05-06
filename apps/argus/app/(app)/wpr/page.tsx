@@ -1,3 +1,5 @@
+'use client';
+
 import { Suspense } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import WprDashboardShell from '@/components/wpr/wpr-dashboard-shell';
