@@ -44,7 +44,9 @@ while [ "$#" -gt 0 ]; do
 done
 
 PYTHON_BIN="$(command -v python3)"
+NODE_BIN="$(command -v node)"
 export PYTHON_BIN
+export NODE_BIN
 
 source "$(cd "$(dirname "$0")/../browser" && pwd)/common.sh"
 load_monitoring_env
@@ -74,6 +76,7 @@ WPR_WORKSPACE="$(cd "$(dirname "$WPR_DATA_DIR")" && pwd)"
 REBUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/rebuild_wpr.py"
 BUILD_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/build_intent_cluster_dashboard.py"
 VALIDATE_SCRIPT="$REPO_ROOT/apps/argus/scripts/wpr/validate_sources.py"
+ENQUEUE_WPR_DRIVE_SYNC_SCRIPT="$REPO_ROOT/apps/argus/scripts/lib/enqueue-wpr-drive-sync.mjs"
 
 if [ ! -f "$REBUILD_SCRIPT" ]; then
   echo "Missing rebuild script: $REBUILD_SCRIPT" >&2
@@ -90,11 +93,17 @@ if [ ! -f "$BUILD_SCRIPT" ]; then
   exit 1
 fi
 
+if [ ! -f "$ENQUEUE_WPR_DRIVE_SYNC_SCRIPT" ]; then
+  echo "Missing WPR Drive sync enqueue script: $ENQUEUE_WPR_DRIVE_SYNC_SCRIPT" >&2
+  exit 1
+fi
+
 echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace sync starting (market=$MARKET, trigger=$TRIGGER)"
 echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace: $WPR_WORKSPACE"
 
 "$PYTHON_BIN" "$VALIDATE_SCRIPT"
 "$PYTHON_BIN" "$REBUILD_SCRIPT"
 "$PYTHON_BIN" "$BUILD_SCRIPT"
+"$NODE_BIN" "$ENQUEUE_WPR_DRIVE_SYNC_SCRIPT" --market "$MARKET"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace sync completed"

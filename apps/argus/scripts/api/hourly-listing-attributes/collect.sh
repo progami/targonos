@@ -9,6 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RUN_LOG_WRITER="$SCRIPT_DIR/../../lib/write-monitoring-run-log.mjs"
+WPR_SYNC_SCRIPT="$SCRIPT_DIR/../../lib/sync-wpr-workspace.sh"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 MARKET="us"
 
@@ -67,6 +68,17 @@ else
   RUN_STATUS="failed"
   RUN_SUMMARY="Hourly listing attributes collection failed."
   RUN_ERROR_MESSAGE="Hourly listing attributes collection failed."
+fi
+
+if [ "$RUN_STATUS" = "ok" ]; then
+  if bash "$WPR_SYNC_SCRIPT" --market "$MARKET" --trigger hourly-listing-attributes >> "$LOG" 2>&1; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace sync OK" >> "$LOG"
+  else
+    echo "$(date '+%Y-%m-%d %H:%M:%S') — WPR workspace sync FAILED" >> "$LOG"
+    RUN_STATUS="failed"
+    RUN_SUMMARY="Hourly listing attributes completed, but WPR workspace sync failed."
+    RUN_ERROR_MESSAGE="WPR workspace sync failed."
+  fi
 fi
 
 RUN_FINISHED_AT_MS="$("$NODE_BIN" -e 'process.stdout.write(String(Date.now()))')"
