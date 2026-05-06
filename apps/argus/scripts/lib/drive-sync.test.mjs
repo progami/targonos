@@ -8,7 +8,9 @@ const moduleUrl = new URL(`./drive-sync.mjs?test=${Date.now()}`, import.meta.url
 
 test('Drive sync planner targets Shared Drive folders with supportsAllDrives', async () => {
   const previousRoot = process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US
+  const previousWprRoot = process.env.ARGUS_DRIVE_WPR_FOLDER_ID_US
   process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US = 'monitoring-root-us'
+  process.env.ARGUS_DRIVE_WPR_FOLDER_ID_US = 'wpr-root-us'
 
   try {
     const { buildDriveSyncPlan, driveChildSearchUrl } = await import(moduleUrl.href)
@@ -23,6 +25,15 @@ test('Drive sync planner targets Shared Drive folders with supportsAllDrives', a
     assert.equal(plan.fileName, '2026-05-05.png')
     assert.equal(plan.uploadType, 'resumable')
 
+    const wprPlan = buildDriveSyncPlan({
+      market: 'us',
+      relativePath: 'Week 1 - 2025-12-28 (Sun)/input/source.csv',
+      size: 10,
+      scope: 'wpr',
+    })
+    assert.equal(wprPlan.rootFolderId, 'wpr-root-us')
+    assert.equal(wprPlan.scope, 'wpr')
+
     const searchUrl = driveChildSearchUrl({
       parentId: 'parent-folder',
       name: 'Visuals (Browser)',
@@ -36,6 +47,11 @@ test('Drive sync planner targets Shared Drive folders with supportsAllDrives', a
       delete process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US
     } else {
       process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US = previousRoot
+    }
+    if (previousWprRoot === undefined) {
+      delete process.env.ARGUS_DRIVE_WPR_FOLDER_ID_US
+    } else {
+      process.env.ARGUS_DRIVE_WPR_FOLDER_ID_US = previousWprRoot
     }
   }
 })
