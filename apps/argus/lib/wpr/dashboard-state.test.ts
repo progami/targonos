@@ -159,6 +159,20 @@ test('WPR persisted state migration reopens initialized empty SQP selections', (
   assert.equal(migrated.weekStateByWeek.W16?.hasInitializedSqpSelection, false)
 })
 
+test('WPR persisted state migration reopens version 2 initialized empty SQP selections', () => {
+  const state = createInitialDashboardState('W16')
+  state.hasInitializedSqpSelection = true
+  state.weekStateByWeek.W16 = {
+    ...captureWeekScopedState(state),
+    hasInitializedSqpSelection: true,
+  }
+
+  const migrated = migrateWprDashboardState(state, 2) as typeof state
+
+  assert.equal(migrated.hasInitializedSqpSelection, false)
+  assert.equal(migrated.weekStateByWeek.W16?.hasInitializedSqpSelection, false)
+})
+
 test('WPR persisted state migration preserves non-empty SQP selections', () => {
   const state = createInitialDashboardState('W16')
   state.selectedSqpRootIds = new Set(['cluster-a'])
