@@ -26,11 +26,17 @@ def resolve_wpr_paths() -> WprPaths:
         raise RuntimeError("WPR_DATA_DIR is required.")
 
     data_dir = Path(trimmed).expanduser().resolve()
+    if "/Library/CloudStorage/" in str(data_dir):
+        raise RuntimeError(f"WPR_DATA_DIR must be local, not a Google Drive mount: {data_dir}")
     workspace_root = data_dir.parent
     wpr_root = workspace_root.parent
     sales_root = wpr_root.parent
     market = resolve_argus_market()
     monitoring_root = Path(required_env(f"ARGUS_MONITORING_ROOT_{market.upper()}")).expanduser().resolve()
+    if "/Library/CloudStorage/" in str(monitoring_root):
+        raise RuntimeError(
+            f"ARGUS_MONITORING_ROOT_{market.upper()} must be local, not a Google Drive mount: {monitoring_root}"
+        )
     return WprPaths(
         data_dir=data_dir,
         workspace_root=workspace_root,

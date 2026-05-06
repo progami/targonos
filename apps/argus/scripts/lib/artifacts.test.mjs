@@ -10,12 +10,14 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-artifacts-'))
   const previousRoot = process.env.ARGUS_MONITORING_ROOT_US
   const previousSalesRoot = process.env.ARGUS_SALES_ROOT_US
+  const previousWprDataDir = process.env.WPR_DATA_DIR_US
 
   process.env.ARGUS_MONITORING_ROOT_US = path.join(tempRoot, 'monitoring-us')
+  process.env.WPR_DATA_DIR_US = path.join(tempRoot, 'wpr-us', 'WPR', 'wpr-workspace', 'output')
   delete process.env.ARGUS_SALES_ROOT_US
 
   try {
-    const { appendRunLog, monitoringRootForMarket, writeTextArtifact } = await import(moduleUrl.href)
+    const { appendRunLog, enqueueWprDriveSync, monitoringRootForMarket, wprRootForMarket, writeTextArtifact } = await import(moduleUrl.href)
 
     const root = monitoringRootForMarket('us')
     assert.equal(root, path.join(tempRoot, 'monitoring-us'))
@@ -50,6 +52,16 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
       ],
     )
     assert.ok(queued.every((entry) => entry.market === 'us'))
+
+    const wprRoot = wprRootForMarket('us')
+    assert.equal(wprRoot, path.join(tempRoot, 'wpr-us', 'WPR'))
+    const wprArtifactPath = path.join(wprRoot, 'Week 1 - 2025-12-28 (Sun)', 'input', 'source.csv')
+    fs.mkdirSync(path.dirname(wprArtifactPath), { recursive: true })
+    fs.writeFileSync(wprArtifactPath, 'wpr\n', 'utf8')
+    enqueueWprDriveSync({ market: 'us', localPath: wprArtifactPath })
+    const wprQueuePath = path.join(root, '.drive-sync', 'wpr-queue.jsonl')
+    const wprQueued = fs.readFileSync(wprQueuePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+    assert.equal(wprQueued[0].relativePath, 'Week 1 - 2025-12-28 (Sun)/input/source.csv')
   } finally {
     if (previousRoot === undefined) {
       delete process.env.ARGUS_MONITORING_ROOT_US
@@ -60,6 +72,11 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
       delete process.env.ARGUS_SALES_ROOT_US
     } else {
       process.env.ARGUS_SALES_ROOT_US = previousSalesRoot
+    }
+    if (previousWprDataDir === undefined) {
+      delete process.env.WPR_DATA_DIR_US
+    } else {
+      process.env.WPR_DATA_DIR_US = previousWprDataDir
     }
   }
 })

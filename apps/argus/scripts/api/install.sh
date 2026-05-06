@@ -86,15 +86,23 @@ if [ "$MARKET" = "us" ]; then
   ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
   ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_US"
   ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/us"
+  WPR_DATA_DIR_ENV_KEY="WPR_DATA_DIR_US"
+  WPR_DATA_DIR="$HOME/.local/share/targon/argus-wpr/us/WPR/wpr-workspace/output"
   ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY="ARGUS_DRIVE_MONITORING_FOLDER_ID_US"
-  ARGUS_DRIVE_MONITORING_FOLDER_ID="1_0tNhEbgVo2DfbD3w6qbatxA98u15b3W"
+  ARGUS_DRIVE_MONITORING_FOLDER_ID="14aFd4dnqAgFl2p_6J0eJGnqOV0Ew7dbh"
+  ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY="ARGUS_DRIVE_WPR_FOLDER_ID_US"
+  ARGUS_DRIVE_WPR_FOLDER_ID="1hjKflwTsqRLZU8IWSIvYI_q5tJX3GHNt"
 else
   ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
   ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
   ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_UK"
   ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/uk"
+  WPR_DATA_DIR_ENV_KEY="WPR_DATA_DIR_UK"
+  WPR_DATA_DIR="$HOME/.local/share/targon/argus-wpr/uk/WPR/wpr-workspace/output"
   ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY="ARGUS_DRIVE_MONITORING_FOLDER_ID_UK"
-  ARGUS_DRIVE_MONITORING_FOLDER_ID="14aFd4dnqAgFl2p_6J0eJGnqOV0Ew7dbh"
+  ARGUS_DRIVE_MONITORING_FOLDER_ID="1_0tNhEbgVo2DfbD3w6qbatxA98u15b3W"
+  ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY="ARGUS_DRIVE_WPR_FOLDER_ID_UK"
+  ARGUS_DRIVE_WPR_FOLDER_ID="1zJgmdxN09aX4ij-y67wyC8qoRcVRrOC9"
 fi
 ARGUS_DRIVE_PROFILE="targon"
 GWORKSPACE_API_BIN="$HOME/.local/bin/gworkspace-api"
@@ -152,6 +160,7 @@ fi
 echo "Installing API launchd agents for market=$MARKET..."
 delete_existing_plists
 mkdir -p "$ARGUS_MONITORING_ROOT"
+mkdir -p "$WPR_DATA_DIR"
 
 # 1. Tracking fetch — every hour
 cat > "$TRACKING_FETCH_PLIST" <<PLIST
@@ -173,8 +182,12 @@ cat > "$TRACKING_FETCH_PLIST" <<PLIST
     <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
+    <key>${WPR_DATA_DIR_ENV_KEY}</key>
+    <string>${WPR_DATA_DIR}</string>
     <key>${ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY}</key>
     <string>${ARGUS_DRIVE_MONITORING_FOLDER_ID}</string>
+    <key>${ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY}</key>
+    <string>${ARGUS_DRIVE_WPR_FOLDER_ID}</string>
     <key>ARGUS_DRIVE_PROFILE</key>
     <string>${ARGUS_DRIVE_PROFILE}</string>
     <key>GWORKSPACE_API_BIN</key>
@@ -224,8 +237,12 @@ cat <<PLIST
     <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
+    <key>${WPR_DATA_DIR_ENV_KEY}</key>
+    <string>${WPR_DATA_DIR}</string>
     <key>${ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY}</key>
     <string>${ARGUS_DRIVE_MONITORING_FOLDER_ID}</string>
+    <key>${ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY}</key>
+    <string>${ARGUS_DRIVE_WPR_FOLDER_ID}</string>
     <key>ARGUS_DRIVE_PROFILE</key>
     <string>${ARGUS_DRIVE_PROFILE}</string>
     <key>GWORKSPACE_API_BIN</key>
@@ -276,8 +293,12 @@ cat > "$DAILY_ACCOUNT_HEALTH_PLIST" <<PLIST
     <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
+    <key>${WPR_DATA_DIR_ENV_KEY}</key>
+    <string>${WPR_DATA_DIR}</string>
     <key>${ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY}</key>
     <string>${ARGUS_DRIVE_MONITORING_FOLDER_ID}</string>
+    <key>${ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY}</key>
+    <string>${ARGUS_DRIVE_WPR_FOLDER_ID}</string>
     <key>ARGUS_DRIVE_PROFILE</key>
     <string>${ARGUS_DRIVE_PROFILE}</string>
     <key>GWORKSPACE_API_BIN</key>
@@ -331,8 +352,12 @@ cat > "$WEEKLY_API_PLIST" <<PLIST
     <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
+    <key>${WPR_DATA_DIR_ENV_KEY}</key>
+    <string>${WPR_DATA_DIR}</string>
     <key>${ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY}</key>
     <string>${ARGUS_DRIVE_MONITORING_FOLDER_ID}</string>
+    <key>${ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY}</key>
+    <string>${ARGUS_DRIVE_WPR_FOLDER_ID}</string>
     <key>ARGUS_DRIVE_PROFILE</key>
     <string>${ARGUS_DRIVE_PROFILE}</string>
     <key>GWORKSPACE_API_BIN</key>
@@ -386,8 +411,12 @@ cat > "$DRIVE_SYNC_PLIST" <<PLIST
     <string>${MARKET}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
+    <key>${WPR_DATA_DIR_ENV_KEY}</key>
+    <string>${WPR_DATA_DIR}</string>
     <key>${ARGUS_DRIVE_MONITORING_FOLDER_ID_ENV_KEY}</key>
     <string>${ARGUS_DRIVE_MONITORING_FOLDER_ID}</string>
+    <key>${ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY}</key>
+    <string>${ARGUS_DRIVE_WPR_FOLDER_ID}</string>
     <key>ARGUS_DRIVE_PROFILE</key>
     <string>${ARGUS_DRIVE_PROFILE}</string>
     <key>GWORKSPACE_API_BIN</key>

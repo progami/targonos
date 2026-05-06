@@ -122,6 +122,24 @@ def merge_move(src: Path, dest: Path) -> None:
     shutil.move(str(src), str(dest))
 
 
+def merge_copy(src: Path, dest: Path) -> None:
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if src.is_dir():
+        dest.mkdir(parents=True, exist_ok=True)
+        for child in src.iterdir():
+            merge_copy(child, dest / child.name)
+        return
+
+    if dest.exists():
+        if dest.is_dir():
+            raise ValueError(f"Cannot copy file into directory: {src} -> {dest}")
+        if filecmp.cmp(src, dest, shallow=False):
+            return
+        dest = unique_path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dest)
+
+
 def discover_anchor_week() -> WeekMeta:
     return WeekMeta(week=1, start_date=BASE_WEEK_1_START, end_date=BASE_WEEK_1_START + timedelta(days=6))
 
@@ -203,6 +221,13 @@ def discover_max_dated_monitoring_week(anchor_start: date) -> int:
             parse_timestamp,
         )
     )
+    consider(
+        scan_csv_max_date(
+            MONITORING_ROOT / "Hourly" / "Listing Attributes (API)" / "Listings-Snapshot-History.csv",
+            "snapshot_timestamp_utc",
+            parse_timestamp,
+        )
+    )
 
     if latest_date is None:
         return 0
@@ -259,8 +284,6 @@ def create_input_scaffold(weeks: dict[int, WeekMeta]) -> None:
         input_dir = week_dir / "input"
         output_dir = week_dir / "output"
         output_dir.mkdir(parents=True, exist_ok=True)
-        if input_dir.exists():
-            shutil.rmtree(input_dir)
         input_dir.mkdir(parents=True, exist_ok=True)
         for source in sorted(sources):
             (input_dir / source).mkdir(parents=True, exist_ok=True)
@@ -272,16 +295,13 @@ def canonicalize_existing_week_dirs(weeks: dict[int, WeekMeta]) -> None:
         if meta is None:
             continue
         canonical = WPR_ROOT / meta.folder_name
+        canonical.mkdir(parents=True, exist_ok=True)
         if path == canonical:
             continue
-        canonical.mkdir(parents=True, exist_ok=True)
-        for child in list(path.iterdir()):
+        for child in path.iterdir():
             if child.name in IGNORED_NAMES:
-                child.unlink(missing_ok=True)
                 continue
-            merge_move(child, canonical / child.name)
-        if path.exists() and not any(path.iterdir()):
-            path.rmdir()
+            merge_copy(child, canonical / child.name)
 
 
 def migrate_existing_week_payload(meta: WeekMeta) -> None:
@@ -297,17 +317,12 @@ def migrate_existing_week_payload(meta: WeekMeta) -> None:
             item.unlink(missing_ok=True)
             continue
         if not payload_exists(item):
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink(missing_ok=True)
             continue
 
         if item.is_dir() and item.name == "Plans":
             merge_move(item, output_dir / "Plans")
             continue
         if item.is_dir() and item.name in LEGACY_INPUT_NAMES:
-            shutil.rmtree(item)
             continue
         if item.is_file():
             merge_move(item, output_dir / "Reports" / item.name)
@@ -382,7 +397,7 @@ def populate_weekly_inputs(weeks: dict[int, WeekMeta], stats: dict[int, int]) ->
             continue
         week = resolve_week_for_weekly_file(src, weeks)
         if week is None:
-            skipped.append(str(src.relative_to(SALES_ROOT)))
+            skipped.append(str(src.relative_to(MONITORING_ROOT)))
             continue
         rel = src.relative_to(weekly_root)
         dest = WPR_ROOT / weeks[week].folder_name / "input" / rel
@@ -459,6 +474,14 @@ def populate_daily_inputs(weeks: dict[int, WeekMeta], stats: dict[int, int]) -> 
 
 def populate_hourly_inputs(weeks: dict[int, WeekMeta], stats: dict[int, int]) -> None:
     hourly_root = MONITORING_ROOT / "Hourly" / "Listing Attributes (API)"
+    split_csv_by_week(
+        src=hourly_root / "Listings-Snapshot-History.csv",
+        weeks=weeks,
+        rel_dest=Path("Listing Attributes (API)") / "Listings-Snapshot-History.csv",
+        date_field="snapshot_timestamp_utc",
+        parser=parse_timestamp,
+        stats=stats,
+    )
     split_csv_by_week(
         src=hourly_root / "Listings-Changes-History.csv",
         weeks=weeks,

@@ -10,12 +10,15 @@ import {
   normalizeArtifactRelativePath,
   parseArgusMarket,
   requireEnv,
+  wprDriveSyncQueuePath,
 } from './artifacts.mjs'
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 1024 * 1024
 const DRIVE_SYNC_PUBLISHED_RELATIVE_PATH = '.drive-sync/published.json'
+const WPR_DRIVE_SYNC_PUBLISHED_RELATIVE_PATH = '.drive-sync/wpr-published.json'
+const DRIVE_SYNC_SCOPES = new Set(['monitoring', 'wpr'])
 
 function driveApiUrl(pathname, params = {}) {
   const url = new URL(pathname, 'https://www.googleapis.com')
@@ -48,12 +51,21 @@ export function driveChildSearchUrl({ parentId, name, mimeType }) {
   })
 }
 
-export function driveRootFolderIdForMarket(market) {
-  return requireEnv(`ARGUS_DRIVE_MONITORING_FOLDER_ID_${marketEnvSuffix(market)}`)
+export function parseDriveSyncScope(raw) {
+  const value = String(raw).trim().toLowerCase()
+  if (DRIVE_SYNC_SCOPES.has(value)) return value
+  throw new Error(`Unsupported Drive sync scope: ${raw}`)
 }
 
-export function buildDriveSyncPlan({ market, relativePath, size }) {
+export function driveRootFolderIdForMarket(market, scope = 'monitoring') {
+  const parsedScope = parseDriveSyncScope(scope)
+  const prefix = parsedScope === 'wpr' ? 'ARGUS_DRIVE_WPR_FOLDER_ID' : 'ARGUS_DRIVE_MONITORING_FOLDER_ID'
+  return requireEnv(`${prefix}_${marketEnvSuffix(market)}`)
+}
+
+export function buildDriveSyncPlan({ market, relativePath, size, scope = 'monitoring' }) {
   const parsedMarket = parseArgusMarket(market)
+  const parsedScope = parseDriveSyncScope(scope)
   const normalizedRelativePath = normalizeArtifactRelativePath(relativePath)
   const segments = normalizedRelativePath.split('/')
   if (segments.length < 1) {
@@ -68,7 +80,8 @@ export function buildDriveSyncPlan({ market, relativePath, size }) {
   const uploadType = Number(size) >= RESUMABLE_UPLOAD_THRESHOLD_BYTES ? 'resumable' : 'media'
   return {
     market: parsedMarket,
-    rootFolderId: driveRootFolderIdForMarket(parsedMarket),
+    scope: parsedScope,
+    rootFolderId: driveRootFolderIdForMarket(parsedMarket, parsedScope),
     relativePath: normalizedRelativePath,
     folderSegments: segments.slice(0, -1),
     fileName,
@@ -257,9 +270,9 @@ async function uploadResumable({ token, fileId, filePath, contentType }) {
   return JSON.parse(text)
 }
 
-export async function syncDriveFile({ token, market, localPath, relativePath }) {
+export async function syncDriveFile({ token, market, localPath, relativePath, scope = 'monitoring' }) {
   const stat = fs.statSync(localPath)
-  const plan = buildDriveSyncPlan({ market, relativePath, size: stat.size })
+  const plan = buildDriveSyncPlan({ market, relativePath, size: stat.size, scope })
   const parentId = await ensureFolderPath({
     token,
     rootFolderId: plan.rootFolderId,
@@ -278,8 +291,16 @@ export async function syncDriveFile({ token, market, localPath, relativePath }) 
   return uploadMedia({ token, fileId: file.id, filePath: localPath, contentType })
 }
 
-function readQueueEntries(market) {
-  const queuePath = driveSyncQueuePath(market)
+function queuePathForScope(market, scope) {
+  const parsedScope = parseDriveSyncScope(scope)
+  if (parsedScope === 'wpr') {
+    return wprDriveSyncQueuePath(market)
+  }
+  return driveSyncQueuePath(market)
+}
+
+function readQueueEntries(market, scope) {
+  const queuePath = queuePathForScope(market, scope)
   if (!fs.existsSync(queuePath)) {
     return { queuePath, entries: [] }
   }
@@ -328,8 +349,8 @@ function recoverProcessingQueues(queuePath) {
   }
 }
 
-function claimQueueEntries(market) {
-  const queuePath = driveSyncQueuePath(market)
+function claimQueueEntries(market, scope) {
+  const queuePath = queuePathForScope(market, scope)
   const processingPath = `${queuePath}.${process.pid}.${Date.now()}.processing`
   fs.mkdirSync(path.dirname(queuePath), { recursive: true })
   recoverProcessingQueues(queuePath)
@@ -348,12 +369,15 @@ function claimQueueEntries(market) {
   return { queuePath, processingPath, entries }
 }
 
-function publishedStatePath(market) {
-  return path.join(monitoringRootForMarket(market), DRIVE_SYNC_PUBLISHED_RELATIVE_PATH)
+function publishedStatePath(market, scope) {
+  const relativePath = parseDriveSyncScope(scope) === 'wpr'
+    ? WPR_DRIVE_SYNC_PUBLISHED_RELATIVE_PATH
+    : DRIVE_SYNC_PUBLISHED_RELATIVE_PATH
+  return path.join(monitoringRootForMarket(market), relativePath)
 }
 
-function readPublishedState(market) {
-  const statePath = publishedStatePath(market)
+function readPublishedState(market, scope) {
+  const statePath = publishedStatePath(market, scope)
   if (!fs.existsSync(statePath)) {
     return { version: 1, items: {} }
   }
@@ -361,14 +385,14 @@ function readPublishedState(market) {
   return JSON.parse(fs.readFileSync(statePath, 'utf8'))
 }
 
-function writePublishedState(market, state) {
-  const statePath = publishedStatePath(market)
+function writePublishedState(market, scope, state) {
+  const statePath = publishedStatePath(market, scope)
   fs.mkdirSync(path.dirname(statePath), { recursive: true })
   fs.writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
 }
 
-function recordPublishedArtifact({ market, entry, result }) {
-  const state = readPublishedState(market)
+function recordPublishedArtifact({ market, scope, entry, result }) {
+  const state = readPublishedState(market, scope)
   const items = state.items ?? {}
   items[entry.relativePath] = {
     relativePath: entry.relativePath,
@@ -379,7 +403,7 @@ function recordPublishedArtifact({ market, entry, result }) {
     size: entry.size,
     mtimeMs: entry.mtimeMs,
   }
-  writePublishedState(market, { version: 1, items })
+  writePublishedState(market, scope, { version: 1, items })
 }
 
 function compactEntries(entries) {
@@ -391,7 +415,7 @@ function compactEntries(entries) {
 }
 
 function parseCliArgs(argv) {
-  const args = { dryRun: false, market: null }
+  const args = { dryRun: false, market: null, scope: 'all' }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--dry-run') {
@@ -400,6 +424,16 @@ function parseCliArgs(argv) {
     }
     if (arg === '--market') {
       args.market = argv[index + 1]
+      index += 1
+      continue
+    }
+    if (arg === '--scope') {
+      const scope = argv[index + 1]
+      if (scope === 'all') {
+        args.scope = 'all'
+      } else {
+        args.scope = parseDriveSyncScope(scope)
+      }
       index += 1
       continue
     }
@@ -413,13 +447,18 @@ function parseCliArgs(argv) {
 }
 
 export async function drainDriveSyncQueue({ market, dryRun }) {
-  const queue = dryRun ? readQueueEntries(market) : claimQueueEntries(market)
+  return drainScopedDriveSyncQueue({ market, dryRun, scope: 'monitoring' })
+}
+
+export async function drainScopedDriveSyncQueue({ market, dryRun, scope }) {
+  const parsedScope = parseDriveSyncScope(scope)
+  const queue = dryRun ? readQueueEntries(market, parsedScope) : claimQueueEntries(market, parsedScope)
   const { queuePath, processingPath, entries } = queue
   const compacted = compactEntries(entries)
   if (dryRun) {
     return compacted.map((entry) => {
       const stat = fs.statSync(entry.localPath)
-      return buildDriveSyncPlan({ market, relativePath: entry.relativePath, size: stat.size })
+      return buildDriveSyncPlan({ market, relativePath: entry.relativePath, size: stat.size, scope: parsedScope })
     })
   }
 
@@ -432,8 +471,9 @@ export async function drainDriveSyncQueue({ market, dryRun }) {
         market,
         localPath: entry.localPath,
         relativePath: entry.relativePath,
+        scope: parsedScope,
       })
-      recordPublishedArtifact({ market, entry, result })
+      recordPublishedArtifact({ market, scope: parsedScope, entry, result })
     } catch (error) {
       failed.push({ entry, error })
     }
@@ -457,10 +497,23 @@ export async function drainDriveSyncQueue({ market, dryRun }) {
   throw new Error(`Drive sync failed for ${failed.length} artifact(s): ${messages.join('; ')}`)
 }
 
+export async function drainAllDriveSyncQueues({ market, dryRun }) {
+  const results = []
+  for (const scope of DRIVE_SYNC_SCOPES) {
+    const scopeResults = await drainScopedDriveSyncQueue({ market, dryRun, scope })
+    if (dryRun) {
+      results.push(...scopeResults)
+    }
+  }
+  return results
+}
+
 async function main() {
   const args = parseCliArgs(process.argv.slice(2))
   monitoringRootForMarket(args.market)
-  const result = await drainDriveSyncQueue(args)
+  const result = args.scope === 'all'
+    ? await drainAllDriveSyncQueues(args)
+    : await drainScopedDriveSyncQueue(args)
   if (args.dryRun) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
   }

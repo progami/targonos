@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 export const DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/queue.jsonl'
+export const WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/wpr-queue.jsonl'
 
 export function parseArgusMarket(raw) {
   const value = String(raw).trim().toLowerCase()
@@ -34,6 +35,14 @@ export function monitoringRootForMarket(market) {
     throw new Error(`ARGUS_MONITORING_ROOT_${marketEnvSuffix(market)} must be local, not a Google Drive mount.`)
   }
   return path.resolve(root)
+}
+
+export function wprRootForMarket(market) {
+  const root = requireEnv(`WPR_DATA_DIR_${marketEnvSuffix(market)}`)
+  if (root.includes('/Library/CloudStorage/')) {
+    throw new Error(`WPR_DATA_DIR_${marketEnvSuffix(market)} must be local, not a Google Drive mount.`)
+  }
+  return path.resolve(root, '..', '..')
 }
 
 export function normalizeArtifactRelativePath(relativePath) {
@@ -74,6 +83,10 @@ export function driveSyncQueuePath(market) {
   return localPathForArtifact({ market, relativePath: DRIVE_SYNC_QUEUE_RELATIVE_PATH })
 }
 
+export function wprDriveSyncQueuePath(market) {
+  return localPathForArtifact({ market, relativePath: WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH })
+}
+
 export function enqueueDriveSync({ market, localPath }) {
   const parsedMarket = parseArgusMarket(market)
   const relativePath = relativePathForLocalArtifact({ market: parsedMarket, localPath })
@@ -95,6 +108,33 @@ export function enqueueDriveSync({ market, localPath }) {
     mtimeMs: stat.mtimeMs,
   }
   const queuePath = driveSyncQueuePath(parsedMarket)
+  ensureParentDir(queuePath)
+  fs.appendFileSync(queuePath, `${JSON.stringify(entry)}\n`, 'utf8')
+  return entry
+}
+
+export function enqueueWprDriveSync({ market, localPath }) {
+  const parsedMarket = parseArgusMarket(market)
+  const root = wprRootForMarket(parsedMarket)
+  const relativePath = normalizeArtifactRelativePath(path.relative(root, path.resolve(localPath)))
+  if (relativePath === WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH) {
+    return null
+  }
+
+  const stat = fs.statSync(localPath)
+  if (!stat.isFile()) {
+    throw new Error(`WPR Drive sync target is not a file: ${localPath}`)
+  }
+
+  const entry = {
+    enqueuedAt: new Date().toISOString(),
+    market: parsedMarket,
+    localPath: path.resolve(localPath),
+    relativePath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+  }
+  const queuePath = wprDriveSyncQueuePath(parsedMarket)
   ensureParentDir(queuePath)
   fs.appendFileSync(queuePath, `${JSON.stringify(entry)}\n`, 'utf8')
   return entry
