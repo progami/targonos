@@ -189,17 +189,13 @@ test('changelog owns its week selector once the top bar stops rendering one', ()
   assert.match(changelogTabSource, /onSelectWeek=\{onSelectWeek\}/)
 })
 
-test('SQP and TST do not auto-select the default cluster on first load', () => {
+test('SQP initializes default roots on first load while TST stays unselected', () => {
   const sqpSource = readFileSync(new URL('./tabs/sqp-tab.tsx', import.meta.url), 'utf8')
   const tstSource = readFileSync(new URL('./tabs/tst-tab.tsx', import.meta.url), 'utf8')
 
   assert.match(
     sqpSource,
-    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: null,[\s\S]*selectedSqpRootIds: new Set<string>\(\),[\s\S]*selectedSqpTermIds: new Set<string>\(\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
-  )
-  assert.doesNotMatch(
-    sqpSource,
-    /if \(!hasInitializedSqpSelection\) \{[\s\S]*selectedClusterId: defaultRootId,[\s\S]*selectedSqpRootIds: new Set\(\[defaultRootId\]\),[\s\S]*selectedSqpTermIds: new Set\(rootTermIds\(bundle, defaultRootId\)\)/,
+    /if \(!hasInitializedSqpSelection\) \{[\s\S]*const defaultRootIds = defaultSqpRootIds\(bundle\)[\s\S]*selectedClusterId: firstSetMember\(new Set\(defaultRootIds\)\),[\s\S]*selectedSqpRootIds: new Set\(defaultRootIds\),[\s\S]*selectedSqpTermIds: new Set\(selectableSqpTermIdsForRoots\(bundle, defaultRootIds\)\),[\s\S]*expandedSqpRootIds: new Set<string>\(\),[\s\S]*hasInitializedSqpSelection: true,[\s\S]*return/,
   )
 
   assert.match(

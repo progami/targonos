@@ -190,7 +190,7 @@ export const useWprStore = create<WprStore>()(
     },
     {
       name: 'argus-wpr-dashboard',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => localStorage, {
         replacer: wprStateReplacer,
         reviver: wprStateReviver,
