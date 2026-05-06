@@ -322,6 +322,43 @@ function readEntriesFile(filePath) {
     .map((line) => JSON.parse(line))
 }
 
+function processingQueueOwnerPid(queueBaseName, processingFileName) {
+  const prefix = `${queueBaseName}.`
+  const suffix = '.processing'
+  if (!processingFileName.startsWith(prefix)) {
+    return null
+  }
+  if (!processingFileName.endsWith(suffix)) {
+    return null
+  }
+
+  const remainder = processingFileName.slice(prefix.length, -suffix.length)
+  const [pidText] = remainder.split('.')
+  const pid = Number.parseInt(pidText, 10)
+  if (!Number.isInteger(pid)) {
+    return null
+  }
+  if (pid <= 0) {
+    return null
+  }
+  return pid
+}
+
+function processIsActive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    if (error?.code === 'ESRCH') {
+      return false
+    }
+    if (error?.code === 'EPERM') {
+      return true
+    }
+    throw error
+  }
+}
+
 function recoverProcessingQueues(queuePath) {
   const queueDir = path.dirname(queuePath)
   const queueBaseName = path.basename(queuePath)
@@ -339,6 +376,10 @@ function recoverProcessingQueues(queuePath) {
 
   const recoveredEntries = []
   for (const name of processingFiles) {
+    const ownerPid = processingQueueOwnerPid(queueBaseName, name)
+    if (ownerPid !== null && processIsActive(ownerPid)) {
+      continue
+    }
     const processingPath = path.join(queueDir, name)
     recoveredEntries.push(...readEntriesFile(processingPath))
     fs.rmSync(processingPath, { force: true })
