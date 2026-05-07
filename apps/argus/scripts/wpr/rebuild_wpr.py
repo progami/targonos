@@ -22,7 +22,8 @@ WPR_ROOT = WPR_PATHS.wpr_root
 SALES_ROOT = WPR_PATHS.sales_root
 MONITORING_ROOT = WPR_PATHS.monitoring_root
 
-EXISTING_WEEK_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
+CANONICAL_WEEK_RE = re.compile(r"^W(\d{1,2})(?: Partial)?$")
+LEGACY_WEEK_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
 PPC_WEEK_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2})$")
 WEEK_FILE_RE = re.compile(r"W(\d{2})_(\d{4}-\d{2}-\d{2})")
 WEEK_RANGE_RE = re.compile(r"W(\d{2})_W(\d{2})")
@@ -67,8 +68,7 @@ class WeekMeta:
 
     @property
     def folder_name(self) -> str:
-        suffix = " (Partial)" if self.partial else ""
-        return f"Week {self.week} - {self.start_date.isoformat()} (Sun){suffix}"
+        return f"W{self.week:02d}"
 
 
 def parse_iso_date(value: str) -> date:
@@ -184,15 +184,33 @@ def discover_anchor_week() -> WeekMeta:
     return WeekMeta(week=1, start_date=BASE_WEEK_1_START, end_date=BASE_WEEK_1_START + timedelta(days=6))
 
 
+def week_start_for_number(week: int) -> date:
+    return BASE_WEEK_1_START + timedelta(days=(week - 1) * 7)
+
+
+def parse_existing_week_dir_name(name: str) -> tuple[int, date] | None:
+    canonical_match = CANONICAL_WEEK_RE.match(name)
+    if canonical_match:
+        week = int(canonical_match.group(1))
+        return week, week_start_for_number(week)
+
+    legacy_match = LEGACY_WEEK_RE.match(name)
+    if legacy_match:
+        return int(legacy_match.group(1)), parse_iso_date(legacy_match.group(2))
+
+    return None
+
+
 def discover_existing_wpr_weeks() -> dict[int, date]:
     weeks: dict[int, date] = {}
     for path in WPR_ROOT.iterdir():
         if not path.is_dir():
             continue
-        match = EXISTING_WEEK_RE.match(path.name)
-        if not match:
+        parsed = parse_existing_week_dir_name(path.name)
+        if parsed is None:
             continue
-        weeks[int(match.group(1))] = parse_iso_date(match.group(2))
+        week, start = parsed
+        weeks[week] = start
     return weeks
 
 
@@ -201,10 +219,11 @@ def discover_existing_week_dirs() -> list[tuple[int, date, Path]]:
     for path in WPR_ROOT.iterdir():
         if not path.is_dir():
             continue
-        match = EXISTING_WEEK_RE.match(path.name)
-        if not match:
+        parsed = parse_existing_week_dir_name(path.name)
+        if parsed is None:
             continue
-        week_dirs.append((int(match.group(1)), parse_iso_date(match.group(2)), path))
+        week, start = parsed
+        week_dirs.append((week, start, path))
     return week_dirs
 
 
@@ -338,10 +357,13 @@ def canonicalize_existing_week_dirs(weeks: dict[int, WeekMeta]) -> None:
         canonical.mkdir(parents=True, exist_ok=True)
         if path == canonical:
             continue
-        for child in path.iterdir():
+        for child in list(path.iterdir()):
             if child.name in IGNORED_NAMES:
+                child.unlink(missing_ok=True)
                 continue
-            merge_copy(child, canonical / child.name)
+            merge_move(child, canonical / child.name)
+        if path.exists() and not any(path.iterdir()):
+            path.rmdir()
 
 
 def migrate_existing_week_payload(meta: WeekMeta) -> None:
@@ -583,7 +605,7 @@ def main() -> None:
         meta = weeks[week]
         if meta in removed_empty_weeks:
             continue
-        label = f"Week {week:02d}{' (Partial)' if meta.partial else ''}"
+        label = f"W{week:02d}{' (partial)' if meta.partial else ''}"
         print(
             f"  {label}: {meta.start_date.isoformat()} to {meta.end_date.isoformat()} "
             f"-> {input_file_counts.get(week, 0)} input files"
