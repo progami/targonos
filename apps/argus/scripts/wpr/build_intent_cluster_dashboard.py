@@ -581,6 +581,7 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
     week_folders = list(discover_week_folders_by_label().values())
     week_labels: list[str] = []
     weeks_with_data: list[str] = []
+    complete_weeks_with_data: list[str] = []
 
     for folder in week_folders:
         match = WEEK_DIR_RE.match(folder.name)
@@ -588,6 +589,7 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
             continue
         week_number = int(match.group(1))
         week_label = f"W{week_number:02d}"
+        is_partial = "(Partial)" in folder.name
         week_labels.append(week_label)
         input_dir = folder / "input"
         has_any = False
@@ -616,8 +618,10 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
 
         if has_any:
             weeks_with_data.append(week_label)
+            if not is_partial:
+                complete_weeks_with_data.append(week_label)
 
-    latest_week = weeks_with_data[-1] if weeks_with_data else ""
+    latest_week = complete_weeks_with_data[-1] if complete_weeks_with_data else (weeks_with_data[-1] if weeks_with_data else "")
     latest_present = 0
     latest_total = len(SOURCE_TYPES)
     critical_gaps: list[str] = []

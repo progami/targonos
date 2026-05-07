@@ -27,12 +27,35 @@ PPC_WEEK_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2})$")
 WEEK_FILE_RE = re.compile(r"W(\d{2})_(\d{4}-\d{2}-\d{2})")
 WEEK_RANGE_RE = re.compile(r"W(\d{2})_W(\d{2})")
 ISO_DATE_RE = re.compile(r"(?<!\d)(\d{4}-\d{2}-\d{2})(?!\d)")
+YMD_UNDERSCORE_DATE_RE = re.compile(r"(?<!\d)(\d{4})_(\d{2})_(\d{2})(?!\d)")
 MDY_DATE_RE = re.compile(r"(?<!\d)(\d{1,2})[ _-](\d{1,2})[ _-](\d{4})(?!\d)")
+MONTH_NAME_DATE_RE = re.compile(
+    r"(?<![A-Za-z])"
+    r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)"
+    r"[ _-](\d{1,2})[ _-](\d{4})(?!\d)",
+    re.IGNORECASE,
+)
+LEGACY_WEEK_NUMBER_RE = re.compile(r"(?:^|[^A-Za-z0-9])Week[ _-](\d{1,2})(?!\d)", re.IGNORECASE)
 
 IGNORED_NAMES = {".DS_Store"}
 LEGACY_INPUT_NAMES = {"Daily", "Hourly", "Weekly"}
 EXCLUDED_INPUT_SOURCES = {"Visuals (Browser)"}
 BASE_WEEK_1_START = date(2025, 12, 28)
+MONTH_NAME_TO_NUMBER = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "sept": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
 
 
 @dataclass(frozen=True)
@@ -57,6 +80,23 @@ def parse_timestamp(value: str) -> date:
     if cleaned.endswith("Z"):
         cleaned = cleaned[:-1] + "+00:00"
     return datetime.fromisoformat(cleaned).date()
+
+
+def parse_legacy_file_date(first: int, second: int, year: int, weeks: dict[int, WeekMeta]) -> int | None:
+    candidates: list[date] = []
+    for month, day in ((first, second), (second, first)):
+        try:
+            candidate = date(year, month, day)
+        except ValueError:
+            continue
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    for candidate in candidates:
+        week = week_for_date(candidate, weeks)
+        if week is not None:
+            return week
+    return None
 
 
 def payload_exists(path: Path) -> bool:
@@ -362,6 +402,19 @@ def remove_legacy_output_snapshots(weeks: dict[int, WeekMeta]) -> None:
             shutil.rmtree(legacy_dir)
 
 
+def remove_empty_week_scaffolds(weeks: dict[int, WeekMeta]) -> list[WeekMeta]:
+    removed: list[WeekMeta] = []
+    for meta in weeks.values():
+        week_dir = WPR_ROOT / meta.folder_name
+        if not week_dir.exists():
+            continue
+        if payload_exists(week_dir):
+            continue
+        remove_empty_tree(week_dir)
+        removed.append(meta)
+    return removed
+
+
 def resolve_week_for_weekly_file(path: Path, weeks: dict[int, WeekMeta]) -> int | None:
     match = WEEK_FILE_RE.search(path.name)
     if match:
@@ -375,10 +428,25 @@ def resolve_week_for_weekly_file(path: Path, weeks: dict[int, WeekMeta]) -> int 
     if iso_match:
         return week_for_date(parse_iso_date(iso_match.group(1)), weeks)
 
+    ymd_match = YMD_UNDERSCORE_DATE_RE.search(path.stem)
+    if ymd_match:
+        year, month, day = map(int, ymd_match.groups())
+        return week_for_date(date(year, month, day), weeks)
+
+    month_name_match = MONTH_NAME_DATE_RE.search(path.stem)
+    if month_name_match:
+        month_name, day, year = month_name_match.groups()
+        month = MONTH_NAME_TO_NUMBER[month_name.lower()]
+        return week_for_date(date(int(year), month, int(day)), weeks)
+
+    legacy_week_match = LEGACY_WEEK_NUMBER_RE.search(path.stem)
+    if legacy_week_match:
+        return int(legacy_week_match.group(1))
+
     mdy_match = MDY_DATE_RE.search(path.stem)
     if mdy_match:
-        month, day, year = map(int, mdy_match.groups())
-        return week_for_date(date(year, month, day), weeks)
+        first, second, year = map(int, mdy_match.groups())
+        return parse_legacy_file_date(first, second, year, weeks)
 
     return None
 
@@ -508,15 +576,23 @@ def main() -> None:
     skipped_weekly_files = populate_weekly_inputs(weeks, input_file_counts)
     populate_daily_inputs(weeks, input_file_counts)
     populate_hourly_inputs(weeks, input_file_counts)
+    removed_empty_weeks = remove_empty_week_scaffolds(weeks)
 
     print("Rebuilt WPR week folders:")
     for week in sorted(weeks):
         meta = weeks[week]
+        if meta in removed_empty_weeks:
+            continue
         label = f"Week {week:02d}{' (Partial)' if meta.partial else ''}"
         print(
             f"  {label}: {meta.start_date.isoformat()} to {meta.end_date.isoformat()} "
             f"-> {input_file_counts.get(week, 0)} input files"
         )
+
+    if removed_empty_weeks:
+        print("\nRemoved generated week folders without source payload:")
+        for meta in removed_empty_weeks:
+            print(f"  {meta.folder_name}")
 
     if skipped_weekly_files:
         print("\nSkipped monitoring files without a resolvable week:")
