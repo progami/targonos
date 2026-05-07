@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 
@@ -86,6 +87,33 @@ class CollectSpAdsTest(unittest.TestCase):
 
         self.assertEqual(module.get_report_status("https://ads.example", {}, "report-id"), {"status": "PENDING"})
         self.assertEqual(len(calls), 2)
+
+    def test_parse_reports_rejects_unsupported_values(self) -> None:
+        module = load_module()
+        with self.assertRaisesRegex(RuntimeError, "Unsupported SP Ads report"):
+            module.parse_reports("campaign,nope")
+
+    def test_parse_reports_accepts_dash_alias(self) -> None:
+        module = load_module()
+        self.assertEqual(module.parse_reports("search-term,campaign"), {"search_term", "campaign"})
+
+    def test_active_pending_manifest_entry_expires(self) -> None:
+        module = load_module()
+        old = datetime.now(timezone.utc) - timedelta(seconds=module.ACTIVE_REPORT_REUSE_MAX_SECONDS + 60)
+        manifest = {
+            "generatedAt": old.isoformat().replace("+00:00", "Z"),
+            "reports": {
+                "campaign": [
+                    {
+                        "suffix": "main",
+                        "reportId": "abc-123",
+                        "status": "PENDING",
+                    }
+                ]
+            },
+        }
+
+        self.assertIsNone(module.reusable_manifest_entry(manifest, "campaign", "main"))
 
 
 if __name__ == "__main__":

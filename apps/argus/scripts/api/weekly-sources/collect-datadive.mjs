@@ -9,6 +9,7 @@ import {
   latestCompleteWeek,
   loadMonitoringEnv,
   requireEnv,
+  weekContextForRange,
   wprSourceConfigForMarket,
   writeCsv,
   writeTextFile,
@@ -68,8 +69,41 @@ const COMPETITOR_HEADERS = [
 ]
 
 function parseArgs() {
+  const argv = process.argv.slice(2)
+  let dryRun = false
+  let startDate = null
+  let endDate = null
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    if (arg === '--dry-run') {
+      dryRun = true
+      continue
+    }
+    if (arg === '--market') {
+      index += 1
+      continue
+    }
+    if (arg === '--start-date') {
+      startDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    if (arg === '--end-date') {
+      endDate = argv[index + 1] ?? null
+      index += 1
+      continue
+    }
+    throw new Error(`Unknown argument: ${arg}`)
+  }
+
+  if ((startDate && !endDate) || (!startDate && endDate)) {
+    throw new Error('Both --start-date and --end-date are required together.')
+  }
+
   return {
-    dryRun: process.argv.includes('--dry-run'),
+    dryRun,
+    week: startDate && endDate ? weekContextForRange(startDate, endDate) : latestCompleteWeek(),
   }
 }
 
@@ -222,8 +256,7 @@ function writeRankRadarCsv(file, week, sourceConfig, rankRadarId, rows) {
 }
 
 async function main() {
-  const { dryRun } = parseArgs()
-  const week = latestCompleteWeek()
+  const { dryRun, week } = parseArgs()
   const sourceConfig = wprSourceConfigForMarket()
   const weekPrefix = `${week.weekCode}_${week.weekEnd}`
   const scopeLabel = `${week.weekCode} ${week.weekStart}..${week.weekEnd}`

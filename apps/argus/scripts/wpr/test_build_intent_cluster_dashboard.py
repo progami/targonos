@@ -137,6 +137,42 @@ class DefaultWeekSelectionTest(unittest.TestCase):
             )
 
 
+class SourceOverviewTest(unittest.TestCase):
+    def test_latest_source_week_ignores_partial_week(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            complete_source = (
+                sales_root
+                / "WPR"
+                / "Week 18 - 2026-04-26 (Sun)"
+                / "input"
+                / "Brand Analytics (API)"
+                / "SQP - Search Query Performance (API)"
+                / "W18_2026-05-02_SQP.csv"
+            )
+            complete_source.parent.mkdir(parents=True, exist_ok=True)
+            complete_source.write_text("header\nvalue\n", encoding="utf-8")
+
+            partial_source = (
+                sales_root
+                / "WPR"
+                / "Week 19 - 2026-05-03 (Sun) (Partial)"
+                / "input"
+                / "Account Health Dashboard (API)"
+                / "account-health.csv"
+            )
+            partial_source.parent.mkdir(parents=True, exist_ok=True)
+            partial_source.write_text("header\nvalue\n", encoding="utf-8")
+
+            module = load_module(data_dir)
+            overview = module.scan_sources({})
+
+            self.assertEqual(overview["latest_week"], "W18")
+
+
 class ListingChangeAggregationTest(unittest.TestCase):
     def test_groups_changes_by_timestamp_and_fields(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
