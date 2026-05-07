@@ -17,7 +17,9 @@ from market_config import wpr_market_config
 
 WPR_PATHS = resolve_wpr_paths()
 DATA_ROOT = WPR_PATHS.wpr_root
-WEEK_DIR_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
+CANONICAL_WEEK_DIR_RE = re.compile(r"^W(\d{1,2})$")
+LEGACY_WEEK_DIR_RE = re.compile(r"^Week (\d+) - (\d{4}-\d{2}-\d{2}) \(Sun\)(?: \(Partial\))?$")
+BASE_WEEK_1_START = date(2025, 12, 28)
 ASIN_RE = re.compile(r"b0[a-z0-9]{8}$", re.IGNORECASE)
 MARKET_CONFIG = wpr_market_config()
 ARGUS_MARKET = MARKET_CONFIG.market
@@ -101,11 +103,18 @@ def mean_or_none(values: list[float]) -> float | None:
 
 def detect_week_folder(path: Path) -> tuple[int, str, str]:
     relative = path.relative_to(DATA_ROOT)
-    match = WEEK_DIR_RE.match(relative.parts[0])
-    if not match:
-        raise ValueError(f"Unrecognized week folder: {relative.parts[0]}")
-    week_number = int(match.group(1))
-    start_date = match.group(2)
+    folder_name = relative.parts[0]
+    canonical_match = CANONICAL_WEEK_DIR_RE.match(folder_name)
+    if canonical_match:
+        week_number = int(canonical_match.group(1))
+        start_date = (BASE_WEEK_1_START + timedelta(days=(week_number - 1) * 7)).isoformat()
+        return week_number, f"W{week_number:02d}", start_date
+
+    legacy_match = LEGACY_WEEK_DIR_RE.match(folder_name)
+    if not legacy_match:
+        raise ValueError(f"Unrecognized week folder: {folder_name}")
+    week_number = int(legacy_match.group(1))
+    start_date = legacy_match.group(2)
     return week_number, f"W{week_number:02d}", start_date
 
 
@@ -299,7 +308,7 @@ def assign_uk_cluster(term: str) -> tuple[str, str] | None:
     return None
 
 
-WEEK_FOLDER_GLOBS = ("Week * (Sun)", "Week * (Sun) (Partial)")
+WEEK_FOLDER_GLOBS = ("W[0-9]", "W[0-9][0-9]", "Week * (Sun)", "Week * (Sun) (Partial)")
 WEEK_FOLDER_PREFIX = "Week * (Sun)/"
 
 
@@ -311,7 +320,8 @@ def discover_week_folders_by_label() -> dict[str, Path]:
         candidates,
         key=lambda path: (
             detect_week_folder(path)[0],
-            1 if "(Partial)" in path.name else 0,
+            0 if CANONICAL_WEEK_DIR_RE.match(path.name) else 1,
+            1 if "Partial" in path.name else 0,
         ),
     )
     folders: dict[str, Path] = {}
@@ -584,12 +594,11 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
     complete_weeks_with_data: list[str] = []
 
     for folder in week_folders:
-        match = WEEK_DIR_RE.match(folder.name)
-        if not match:
+        try:
+            week_number, week_label, start_date_text = detect_week_folder(folder)
+        except ValueError:
             continue
-        week_number = int(match.group(1))
-        week_label = f"W{week_number:02d}"
-        is_partial = "(Partial)" in folder.name
+        is_complete = date.fromisoformat(start_date_text) + timedelta(days=7) <= date.today()
         week_labels.append(week_label)
         input_dir = folder / "input"
         has_any = False
@@ -618,7 +627,7 @@ def scan_sources(week_meta: dict[str, dict[str, object]]) -> dict[str, object]:
 
         if has_any:
             weeks_with_data.append(week_label)
-            if not is_partial:
+            if is_complete:
                 complete_weeks_with_data.append(week_label)
 
     latest_week = complete_weeks_with_data[-1] if complete_weeks_with_data else (weeks_with_data[-1] if weeks_with_data else "")
