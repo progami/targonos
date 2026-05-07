@@ -89,7 +89,7 @@ async function loadPlutusEnv(): Promise<void> {
 function parseArgs(argv: string[]): CliOptions {
   let post = false;
   let startDate = '2025-12-01';
-  let targetSettlementIds: string[] | null = ['608', '609'];
+  let targetSettlementIds: string[] | null = null;
   let humanApproval: string | null = null;
   let i = 0;
 
@@ -154,7 +154,6 @@ async function fetchAuditInvoiceSummaries(
   const rows = await db.$queryRawUnsafe<AuditInvoiceRowSummary[]>(`
     SELECT "invoiceId",
            CASE
-             WHEN LOWER("market") = 'us' OR LOWER("market") LIKE '%amazon.com%' THEN 'amazon.com'
              WHEN LOWER("market") = 'uk' OR LOWER("market") LIKE '%amazon.co.uk%' THEN 'amazon.co.uk'
              ELSE NULL
            END AS "marketplaceId",
@@ -168,7 +167,7 @@ async function fetchAuditInvoiceSummaries(
   `);
 
   return rows.flatMap((r) => {
-    if (r.marketplaceId !== 'amazon.com' && r.marketplaceId !== 'amazon.co.uk') {
+    if (r.marketplaceId !== 'amazon.co.uk') {
       return [];
     }
 
@@ -208,7 +207,7 @@ async function main(): Promise<void> {
 
   while (true) {
     const page = await fetchJournalEntries(activeConnection, {
-      docNumberContains: 'US-',
+      docNumberContains: 'UK-',
       startDate: options.startDate,
       maxResults: pageSize,
       startPosition,
@@ -249,7 +248,7 @@ async function main(): Promise<void> {
       const trimmed = docNumber.trim();
       if (!isSettlementDocNumber(trimmed)) return false;
       const meta = parseSettlementDocNumber(trimmed);
-      return meta.marketplace.id === 'amazon.com';
+      return meta.marketplace.id === 'amazon.co.uk';
     })
     .filter((entry) => !processedSettlementIds.has(entry.Id))
     .sort((a, b) => a.TxnDate.localeCompare(b.TxnDate));
@@ -379,8 +378,7 @@ async function main(): Promise<void> {
     }
 
     const hasBlockingBlocks = previewResult.preview.blocks.some((block) => isBlockingProcessingBlock(block));
-    const hasEmptyJournals =
-      previewResult.preview.cogsJournalEntry.lines.length === 0 || previewResult.preview.pnlJournalEntry.lines.length === 0;
+    const hasEmptyJournals = previewResult.preview.pnlJournalEntry.lines.length === 0;
 
     if (hasBlockingBlocks || hasEmptyJournals) {
       statusRows.push({

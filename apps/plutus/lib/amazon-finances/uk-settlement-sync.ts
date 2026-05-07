@@ -16,23 +16,26 @@ import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
-import { buildPlutusSettlementDocNumber, isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { buildPlutusSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
   createJournalEntry,
   fetchAccounts,
   fetchExchangeRate,
-  fetchJournalEntries,
   fetchPreferences,
   findJournalEntryAttachmentIdByFileName,
   uploadJournalEntryAttachment,
   type QboConnection,
-  type QboJournalEntry,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import {
   buildSyntheticUkSettlementId,
   extractEventGroupIdFromSyntheticUkSettlementId,
 } from '@/lib/amazon-finances/uk-settlement-id';
+import {
+  findExistingSettlementJournalEntryByDocNumber,
+  findExistingSettlementJournalEntryBySource,
+  type ExistingSettlementJournalEntryLookup,
+} from '@/lib/amazon-finances/settlement-sync-existing';
 
 type SettlementDraftBundle = {
   settlementId: string;
@@ -52,6 +55,18 @@ function computeDraftSegmentHash(segment: SettlementDraftBundle['draft']['segmen
     net: fromCents(r.netCents),
   }));
   return computeProcessingHash(rows);
+}
+
+function minSegmentStartIsoDay(segments: SettlementDraftBundle['draft']['segments']): string {
+  if (segments.length === 0) {
+    throw new Error('Settlement draft has no segments');
+  }
+
+  let minStart = segments[0]!.startIsoDay;
+  for (const segment of segments.slice(1)) {
+    if (segment.startIsoDay < minStart) minStart = segment.startIsoDay;
+  }
+  return minStart;
 }
 
 export type UkSpApiSettlementSyncInput = {
@@ -146,66 +161,6 @@ async function buildSkuToBrandName(): Promise<Map<string, string>> {
     skuToBrandName.set(normalizeSku(row.sku), row.brand.name);
   }
   return skuToBrandName;
-}
-
-function isCanonicalSettlementDocNumber(docNumber: string): boolean {
-  const trimmedUpper = docNumber.trim().toUpperCase();
-  if (!isSettlementDocNumber(trimmedUpper)) return false;
-  return trimmedUpper === normalizeSettlementDocNumber(trimmedUpper);
-}
-
-function pickPreferredSettlementEntry(a: QboJournalEntry, b: QboJournalEntry): QboJournalEntry {
-  const aDocNumber = a.DocNumber ? a.DocNumber : '';
-  const bDocNumber = b.DocNumber ? b.DocNumber : '';
-
-  const aCanonical = isCanonicalSettlementDocNumber(aDocNumber);
-  const bCanonical = isCanonicalSettlementDocNumber(bDocNumber);
-
-  if (aCanonical && !bCanonical) return a;
-  if (bCanonical && !aCanonical) return b;
-
-  const aTxnDate = a.TxnDate ? a.TxnDate : '';
-  const bTxnDate = b.TxnDate ? b.TxnDate : '';
-
-  if (aTxnDate !== bTxnDate) {
-    return aTxnDate > bTxnDate ? a : b;
-  }
-
-  return a.Id > b.Id ? a : b;
-}
-
-async function findExistingJournalEntryIdByDocNumber(
-  connection: QboConnection,
-  docNumber: string,
-): Promise<{ journalEntryId: string | null; updatedConnection?: QboConnection }> {
-  let activeConnection = connection;
-  const existing = await fetchJournalEntries(activeConnection, {
-    docNumberContains: docNumber,
-    maxResults: 10,
-    startPosition: 1,
-  });
-  if (existing.updatedConnection) {
-    activeConnection = existing.updatedConnection;
-  }
-
-  const normalizedTarget = normalizeSettlementDocNumber(docNumber);
-  const matches = existing.journalEntries.filter((je) => {
-    const candidateDocNumber = je.DocNumber;
-    if (typeof candidateDocNumber !== 'string') return false;
-    if (!isSettlementDocNumber(candidateDocNumber)) return false;
-    return normalizeSettlementDocNumber(candidateDocNumber) === normalizedTarget;
-  });
-
-  if (matches.length === 0) {
-    return { journalEntryId: null, updatedConnection: activeConnection === connection ? undefined : activeConnection };
-  }
-
-  let selected = matches[0]!;
-  for (const candidate of matches.slice(1)) {
-    selected = pickPreferredSettlementEntry(selected, candidate);
-  }
-
-  return { journalEntryId: selected.Id, updatedConnection: activeConnection === connection ? undefined : activeConnection };
 }
 
 async function ensureJournalEntryHasSettlementEvidenceAttachments(
@@ -634,6 +589,22 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
 
   for (const bundle of bundles) {
     const uploadFilename = `spapi-finances-settlement-${bundle.settlementId}.json`;
+    let sourcePostingLookup: ExistingSettlementJournalEntryLookup | null = null;
+
+    async function loadSourcePostingLookup(): Promise<ExistingSettlementJournalEntryLookup> {
+      if (sourcePostingLookup !== null) return sourcePostingLookup;
+
+      sourcePostingLookup = await findExistingSettlementJournalEntryBySource(activeConnection, {
+        docNumberContains: 'UK-',
+        settlementId: bundle.settlementId,
+        eventGroupId: bundle.eventGroupId,
+        startDate: minSegmentStartIsoDay(bundle.draft.segments),
+      });
+      if (sourcePostingLookup.updatedConnection) {
+        activeConnection = sourcePostingLookup.updatedConnection;
+      }
+      return sourcePostingLookup;
+    }
 
     const segmentMeta = bundle.draft.segments.map((segment) => {
       const hash = computeDraftSegmentHash(segment);
@@ -722,7 +693,7 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
           continue;
         }
 
-        const existingLookup = await findExistingJournalEntryIdByDocNumber(activeConnection, jeDraft.docNumber);
+        const existingLookup = await findExistingSettlementJournalEntryByDocNumber(activeConnection, jeDraft.docNumber);
         if (existingLookup.updatedConnection) {
           activeConnection = existingLookup.updatedConnection;
         }
@@ -764,6 +735,22 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
         }
 
         if (qboJournalEntryId === null) {
+          const sourceLookup = await loadSourcePostingLookup();
+          if (sourceLookup.journalEntryId !== null) {
+            const matchedDocNumber = sourceLookup.docNumber === null ? sourceLookup.journalEntryId : sourceLookup.docNumber;
+            segments.push({
+              settlementId: bundle.settlementId,
+              eventGroupId: bundle.eventGroupId,
+              docNumber: jeDraft.docNumber,
+              txnDate: jeDraft.txnDate,
+              qboJournalEntryId: sourceLookup.journalEntryId,
+              qboAction: 'existing',
+              processed: false,
+              reason: `Already posted under source-matched QBO DocNumber ${matchedDocNumber}; not posting current split segment`,
+            });
+            continue;
+          }
+
           if (!postToQbo) {
             segments.push({
               settlementId: bundle.settlementId,

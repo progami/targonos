@@ -18,6 +18,7 @@ import {
   buildSettlementHistoryViewModel,
   buildSettlementListRowViewModel,
   buildSettlementPostingSectionViewModels,
+  formatPlutusSettlementStatus,
 } from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -167,7 +168,7 @@ function PlutusPill({ status }: { status: ParentSettlementDetailResponse['settle
   if (status === 'RolledBack') {
     return <Chip label="Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
   }
-  return <Chip label="Pending" size="small" variant="outlined" sx={{ borderColor: 'rgba(34, 197, 94, 0.45)', color: 'success.dark' }} />;
+  return <Chip label={formatPlutusSettlementStatus(status)} size="small" variant="outlined" sx={{ borderColor: 'rgba(34, 197, 94, 0.45)', color: 'success.dark' }} />;
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
