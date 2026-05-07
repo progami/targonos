@@ -94,14 +94,17 @@ class RebuildWprTest(unittest.TestCase):
             module = load_module(wpr_data_dir, monitoring_root)
             module.main()
 
-            week_one_input_dir = sales_root / "WPR" / "Week 1 - 2025-12-28 (Sun)" / "input" / "Listing Attributes (API)"
-            week_two_input_dir = sales_root / "WPR" / "Week 2 - 2026-01-04 (Sun) (Partial)" / "input" / "Listing Attributes (API)"
+            week_one_input_dir = sales_root / "WPR" / "W01" / "input" / "Listing Attributes (API)"
+            week_two_input_dir = sales_root / "WPR" / "W02" / "input" / "Listing Attributes (API)"
             self.assertTrue((week_one_input_dir / "Listings-Changes-History.csv").exists())
             self.assertTrue((week_two_input_dir / "Listings-Snapshot-History.csv").exists())
             self.assertFalse((week_one_input_dir / "latest_state.json").exists())
-            self.assertTrue(preserved_input.exists())
-            self.assertTrue(legacy_input.exists())
-            self.assertTrue(partial_input.exists())
+            self.assertTrue((sales_root / "WPR" / "W01" / "input" / "Manual Source" / "preserved.csv").exists())
+            self.assertTrue((sales_root / "WPR" / "W01" / "Daily" / "legacy.csv").exists())
+            self.assertTrue((sales_root / "WPR" / "W01" / "input" / "Manual Source" / "partial.csv").exists())
+            self.assertFalse(preserved_input.exists())
+            self.assertFalse(legacy_input.exists())
+            self.assertFalse(partial_input.exists())
 
     def test_copies_partial_week_payload_into_final_canonical_folder(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -144,13 +147,13 @@ class RebuildWprTest(unittest.TestCase):
             canonical_input = (
                 sales_root
                 / "WPR"
-                / "Week 2 - 2026-01-04 (Sun)"
+                / "W02"
                 / "input"
                 / "Manual Source"
                 / "manual.csv"
             )
             self.assertTrue(canonical_input.exists())
-            self.assertTrue(partial_input.exists())
+            self.assertFalse(partial_input.exists())
 
     def test_removes_generated_week_folders_without_source_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -179,9 +182,9 @@ class RebuildWprTest(unittest.TestCase):
             module = load_module(wpr_data_dir, monitoring_root)
             module.main()
 
-            self.assertFalse((sales_root / "WPR" / "Week 1 - 2025-12-28 (Sun)").exists())
-            self.assertFalse((sales_root / "WPR" / "Week 2 - 2026-01-04 (Sun)").exists())
-            self.assertTrue((sales_root / "WPR" / "Week 3 - 2026-01-11 (Sun)").exists())
+            self.assertFalse((sales_root / "WPR" / "W01").exists())
+            self.assertFalse((sales_root / "WPR" / "W02").exists())
+            self.assertTrue((sales_root / "WPR" / "W03").exists())
 
     def test_routes_legacy_day_month_year_weekly_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -223,7 +226,7 @@ class RebuildWprTest(unittest.TestCase):
             routed_file = (
                 sales_root
                 / "WPR"
-                / "Week 17 - 2026-04-19 (Sun) (Partial)"
+                / "W17"
                 / "input"
                 / "Business Reports (API)"
                 / "Sales & Traffic (API)"
@@ -234,7 +237,7 @@ class RebuildWprTest(unittest.TestCase):
                 (
                     sales_root
                     / "WPR"
-                    / "Week 16 - 2026-04-12 (Sun) (Partial)"
+                    / "W16"
                     / "input"
                     / "Business Reports (API)"
                     / "Sales & Traffic (API)"
@@ -245,7 +248,7 @@ class RebuildWprTest(unittest.TestCase):
                 (
                     sales_root
                     / "WPR"
-                    / "Week 17 - 2026-04-19 (Sun) (Partial)"
+                    / "W17"
                     / "input"
                     / "Business Reports (API)"
                     / "Sales & Traffic (API)"
@@ -256,7 +259,7 @@ class RebuildWprTest(unittest.TestCase):
                 (
                     sales_root
                     / "WPR"
-                    / "Week 9 - 2026-02-22 (Sun) (Partial)"
+                    / "W09"
                     / "input"
                     / "Business Reports (API)"
                     / "Sales & Traffic (API)"

@@ -128,11 +128,11 @@ class DefaultWeekSelectionTest(unittest.TestCase):
             module = load_module(data_dir)
             week_meta = {
                 "W18": {"week_number": 18, "week_label": "W18", "start_date": "2026-04-26"},
-                "W19 Partial": {"week_number": 19, "week_label": "W19 Partial", "start_date": "2026-05-03"},
+                "W19": {"week_number": 19, "week_label": "W19", "start_date": "2026-05-03"},
             }
 
             self.assertEqual(
-                module.chart_week_order(["W18", "W19 Partial"], week_meta, module.date(2026, 5, 5)),
+                module.chart_week_order(["W18", "W19"], week_meta, module.date(2026, 5, 5)),
                 ["W18"],
             )
 
@@ -147,7 +147,7 @@ class SourceOverviewTest(unittest.TestCase):
             complete_source = (
                 sales_root
                 / "WPR"
-                / "Week 18 - 2026-04-26 (Sun)"
+                / "W18"
                 / "input"
                 / "Brand Analytics (API)"
                 / "SQP - Search Query Performance (API)"
@@ -159,7 +159,7 @@ class SourceOverviewTest(unittest.TestCase):
             partial_source = (
                 sales_root
                 / "WPR"
-                / "Week 19 - 2026-05-03 (Sun) (Partial)"
+                / "W19"
                 / "input"
                 / "Account Health Dashboard (API)"
                 / "account-health.csv"
@@ -179,7 +179,7 @@ class ListingChangeAggregationTest(unittest.TestCase):
             sales_root = Path(tmp_dir) / "Sales"
             data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
-            week_input_dir = sales_root / "WPR" / "Week 1 - 2025-12-28 (Sun)" / "input" / "Listing Attributes (API)"
+            week_input_dir = sales_root / "WPR" / "W01" / "input" / "Listing Attributes (API)"
             week_input_dir.mkdir(parents=True, exist_ok=True)
             csv_path = week_input_dir / "Listings-Changes-History.csv"
             with csv_path.open("w", newline="", encoding="utf-8") as handle:
@@ -245,7 +245,7 @@ class ManualChangeLogParsingTest(unittest.TestCase):
             data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
 
-            week_dir = sales_root / "WPR" / "Week 16 - 2026-04-12 (Sun)" / "output" / "Plans"
+            week_dir = sales_root / "WPR" / "W16" / "output" / "Plans"
             week_dir.mkdir(parents=True, exist_ok=True)
             log_path = week_dir / "W16_Content_update_across_2_ASINs_Log_2026-04-20.md"
             log_path.write_text(
@@ -302,7 +302,7 @@ class ManualChangeLogParsingTest(unittest.TestCase):
             data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
 
-            week_dir = sales_root / "WPR" / "Week 12 - 2026-03-15 (Sun)" / "output" / "Plans"
+            week_dir = sales_root / "WPR" / "W12" / "output" / "Plans"
             week_dir.mkdir(parents=True, exist_ok=True)
             log_path = week_dir / "Week12_Legacy_EBC_Log_2026-03-21.md"
             log_path.write_text(
@@ -347,7 +347,7 @@ class SourceOverviewTest(unittest.TestCase):
             week_input_dir = (
                 sales_root
                 / "WPR"
-                / "Week 16 - 2026-04-12 (Sun)"
+                / "W16"
                 / "input"
                 / "Business Reports (API)"
                 / "Sales & Traffic (API)"
