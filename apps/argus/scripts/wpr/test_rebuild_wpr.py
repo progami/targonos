@@ -152,6 +152,118 @@ class RebuildWprTest(unittest.TestCase):
             self.assertTrue(canonical_input.exists())
             self.assertTrue(partial_input.exists())
 
+    def test_removes_generated_week_folders_without_source_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            monitoring_root = Path(tmp_dir) / "Monitoring"
+            wpr_data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            wpr_data_dir.mkdir(parents=True, exist_ok=True)
+
+            weekly_root = monitoring_root / "Weekly" / "Dummy Source"
+            weekly_root.mkdir(parents=True, exist_ok=True)
+            (weekly_root / "report_W03_2026-01-17.csv").write_text("header\nvalue\n", encoding="utf-8")
+
+            account_health_root = monitoring_root / "Daily" / "Account Health Dashboard (API)"
+            account_health_root.mkdir(parents=True, exist_ok=True)
+            with (account_health_root / "account-health.csv").open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["date"])
+                writer.writeheader()
+
+            hourly_root = monitoring_root / "Hourly" / "Listing Attributes (API)"
+            hourly_root.mkdir(parents=True, exist_ok=True)
+            for name in ("Listings-Changes-History.csv", "Listings-Snapshot-History.csv"):
+                with (hourly_root / name).open("w", newline="", encoding="utf-8") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=["snapshot_timestamp_utc"])
+                    writer.writeheader()
+
+            module = load_module(wpr_data_dir, monitoring_root)
+            module.main()
+
+            self.assertFalse((sales_root / "WPR" / "Week 1 - 2025-12-28 (Sun)").exists())
+            self.assertFalse((sales_root / "WPR" / "Week 2 - 2026-01-04 (Sun)").exists())
+            self.assertTrue((sales_root / "WPR" / "Week 3 - 2026-01-11 (Sun)").exists())
+
+    def test_routes_legacy_day_month_year_weekly_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            monitoring_root = Path(tmp_dir) / "Monitoring"
+            wpr_data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            wpr_data_dir.mkdir(parents=True, exist_ok=True)
+
+            weekly_root = monitoring_root / "Weekly" / "Business Reports (API)" / "Sales & Traffic (API)"
+            weekly_root.mkdir(parents=True, exist_ok=True)
+            (weekly_root / "BusinessReport-21-04-2026.csv").write_text("header\nvalue\n", encoding="utf-8")
+            (weekly_root / "GB_Search_catalogue_performance_Simple_Week_2026_04_18.csv").write_text(
+                "header\nvalue\n",
+                encoding="utf-8",
+            )
+            (weekly_root / "Products_Apr_21_2026.csv").write_text("header\nvalue\n", encoding="utf-8")
+            (weekly_root / "Sponsored_Products_Search_term_report_-_Week_9.xlsx").write_text(
+                "binary-ish\n",
+                encoding="utf-8",
+            )
+
+            account_health_root = monitoring_root / "Daily" / "Account Health Dashboard (API)"
+            account_health_root.mkdir(parents=True, exist_ok=True)
+            with (account_health_root / "account-health.csv").open("w", newline="", encoding="utf-8") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["date"])
+                writer.writeheader()
+                writer.writerow({"date": "2026-04-21"})
+
+            hourly_root = monitoring_root / "Hourly" / "Listing Attributes (API)"
+            hourly_root.mkdir(parents=True, exist_ok=True)
+            for name in ("Listings-Changes-History.csv", "Listings-Snapshot-History.csv"):
+                with (hourly_root / name).open("w", newline="", encoding="utf-8") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=["snapshot_timestamp_utc"])
+                    writer.writeheader()
+
+            module = load_module(wpr_data_dir, monitoring_root)
+            module.main()
+
+            routed_file = (
+                sales_root
+                / "WPR"
+                / "Week 17 - 2026-04-19 (Sun) (Partial)"
+                / "input"
+                / "Business Reports (API)"
+                / "Sales & Traffic (API)"
+                / "BusinessReport-21-04-2026.csv"
+            )
+            self.assertTrue(routed_file.exists())
+            self.assertTrue(
+                (
+                    sales_root
+                    / "WPR"
+                    / "Week 16 - 2026-04-12 (Sun) (Partial)"
+                    / "input"
+                    / "Business Reports (API)"
+                    / "Sales & Traffic (API)"
+                    / "GB_Search_catalogue_performance_Simple_Week_2026_04_18.csv"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    sales_root
+                    / "WPR"
+                    / "Week 17 - 2026-04-19 (Sun) (Partial)"
+                    / "input"
+                    / "Business Reports (API)"
+                    / "Sales & Traffic (API)"
+                    / "Products_Apr_21_2026.csv"
+                ).exists()
+            )
+            self.assertTrue(
+                (
+                    sales_root
+                    / "WPR"
+                    / "Week 9 - 2026-02-22 (Sun) (Partial)"
+                    / "input"
+                    / "Business Reports (API)"
+                    / "Sales & Traffic (API)"
+                    / "Sponsored_Products_Search_term_report_-_Week_9.xlsx"
+                ).exists()
+            )
+
     def test_rejects_google_drive_mount_paths(self) -> None:
         cloud_wpr_data_dir = (
             Path("/Users/test/Library/CloudStorage/GoogleDrive-test@example.com/Shared drives/Dust Sheets - US")

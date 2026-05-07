@@ -32,6 +32,7 @@ const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
 const DONE_REPORT_STATUSES = new Set(['DONE'])
 const REPORT_WAIT_TIMEOUT_MS = 120 * 60 * 1000
+const ACTIVE_REPORT_REUSE_MAX_AGE_MS = 30 * 60 * 1000
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
 const SPAPI_MANIFEST_DIR = path.join(MONITORING_BASE, 'Logs', 'weekly-api-sources', 'metadata')
@@ -226,6 +227,7 @@ function parseArgs() {
   let dryRun = false
   let startDate = null
   let endDate = null
+  let reports = ['scp', 'sqp', 'sales', 'tst']
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -247,6 +249,25 @@ function parseArgs() {
       index += 1
       continue
     }
+    if (arg === '--reports') {
+      const rawReports = argv[index + 1] ?? ''
+      const parsedReports = rawReports
+        .split(',')
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean)
+      const supportedReports = new Set(['scp', 'sqp', 'sales', 'tst'])
+      for (const report of parsedReports) {
+        if (!supportedReports.has(report)) {
+          throw new Error(`Unsupported SP-API report selector: ${report}`)
+        }
+      }
+      if (!parsedReports.length) {
+        throw new Error('--reports requires at least one report selector.')
+      }
+      reports = parsedReports
+      index += 1
+      continue
+    }
     throw new Error(`Unknown argument: ${arg}`)
   }
 
@@ -256,6 +277,7 @@ function parseArgs() {
 
   return {
     dryRun,
+    reports,
     week: startDate && endDate ? weekContextForRange(startDate, endDate) : latestCompleteWeek(),
   }
 }
@@ -363,6 +385,16 @@ function canBlindlyReuseReport(report, reportOptions) {
   return sameReportOptions(report.reportOptions, reportOptions)
 }
 
+function isStaleActiveReport(report) {
+  if (!ACTIVE_REPORT_STATUSES.has(report?.processingStatus)) return false
+  if (!report?.createdTime) return false
+
+  const createdAt = new Date(report.createdTime).getTime()
+  if (Number.isNaN(createdAt)) return false
+
+  return Date.now() - createdAt > ACTIVE_REPORT_REUSE_MAX_AGE_MS
+}
+
 async function findReusableReport(client, { reportType, marketplaceId, dataStartTime, dataEndTime, reportOptions = null, statuses }) {
   const response = await client.callAPI({
     operation: 'getReports',
@@ -381,6 +413,7 @@ async function findReusableReport(client, { reportType, marketplaceId, dataStart
       .filter((report) => sameInstant(report?.dataEndTime, dataEndTime))
       .filter((report) => canBlindlyReuseReport(report, reportOptions))
       .filter((report) => statuses.has(report?.processingStatus))
+      .filter((report) => !isStaleActiveReport(report))
       .sort((left, right) => String(right?.createdTime ?? '').localeCompare(String(left?.createdTime ?? '')))[0] ?? null
   )
 }
@@ -430,15 +463,19 @@ async function resolveReportId(client, { reportType, reportWindow, label, report
     return manifestReport.reportId
   }
 
-  if (ACTIVE_REPORT_STATUSES.has(manifestStatus)) {
-    console.log(`[SP-API] ${label} reusing manifest active reportId=${manifestReport.reportId}`)
-    return waitForReport(client, manifestReport.reportId, label)
-  }
-
   const completedReport = await findReusableReport(client, { ...criteria, statuses: DONE_REPORT_STATUSES })
   if (completedReport?.reportId) {
     console.log(`[SP-API] ${label} reusing DONE reportId=${completedReport.reportId}`)
     return completedReport.reportId
+  }
+
+  if (ACTIVE_REPORT_STATUSES.has(manifestStatus) && !isStaleActiveReport(manifestReport)) {
+    console.log(`[SP-API] ${label} reusing manifest active reportId=${manifestReport.reportId}`)
+    return waitForReport(client, manifestReport.reportId, label)
+  }
+
+  if (ACTIVE_REPORT_STATUSES.has(manifestStatus) && isStaleActiveReport(manifestReport)) {
+    console.log(`[SP-API] ${label} ignoring stale manifest active reportId=${manifestReport.reportId}`)
   }
 
   const activeReport = await findReusableReport(client, { ...criteria, statuses: ACTIVE_REPORT_STATUSES })
@@ -565,7 +602,8 @@ function runTstFilter(rawPath, outputPath, targetAsins) {
 }
 
 async function main() {
-  const { dryRun, week } = parseArgs()
+  const { dryRun, week, reports } = parseArgs()
+  const selectedReports = new Set(reports)
   const { weekCode, weekStart, weekEnd } = week
 
   const weekPrefix = `${weekCode}_${weekEnd}`
@@ -595,11 +633,13 @@ async function main() {
 
   if (dryRun) {
     console.log(`[SP-API][dry-run] scope=${scopeLabel}`)
-    console.log(`[SP-API][dry-run] ${scpPath}`)
-    console.log(`[SP-API][dry-run] ${sqpPath}`)
-    console.log(`[SP-API][dry-run] ${filteredTstPath}`)
-    console.log(`[SP-API][dry-run] ${salesByDatePath}`)
-    console.log(`[SP-API][dry-run] ${salesByAsinPath}`)
+    if (selectedReports.has('scp')) console.log(`[SP-API][dry-run] ${scpPath}`)
+    if (selectedReports.has('sqp')) console.log(`[SP-API][dry-run] ${sqpPath}`)
+    if (selectedReports.has('tst')) console.log(`[SP-API][dry-run] ${filteredTstPath}`)
+    if (selectedReports.has('sales')) {
+      console.log(`[SP-API][dry-run] ${salesByDatePath}`)
+      console.log(`[SP-API][dry-run] ${salesByAsinPath}`)
+    }
     return
   }
 
@@ -639,87 +679,95 @@ async function main() {
   manifestState.competitorBrand = sourceConfig.competitorBrand
   manifestState.targetAsins = tstTargetAsins
 
-  const scpReportId = await resolveReportId(client, {
-    reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
-    reportWindow,
-    label: `${scopeLabel} SCP`,
-    reportOptions: { reportPeriod: 'WEEK' },
-    manifestReportId: existingManifest?.reports?.scpReportId,
-    onReportCreated: rememberReportId('scpReportId'),
-  })
-  rememberReportId('scpReportId')(scpReportId)
-  const canReuseScpOutput = existingManifest?.reports?.scpReportId === scpReportId && fs.existsSync(scpPath)
-  if (canReuseScpOutput) {
-    console.log(`[SP-API] ${scopeLabel} SCP output already current for reportId=${scpReportId}`)
-  } else {
-    const scpData = await downloadJsonReport(client, scpReportId)
-    rowsToCsv(scpPath, scpData.parsed?.dataByAsin || [], SCP_HEADERS)
+  if (selectedReports.has('scp')) {
+    const scpReportId = await resolveReportId(client, {
+      reportType: 'GET_BRAND_ANALYTICS_SEARCH_CATALOG_PERFORMANCE_REPORT',
+      reportWindow,
+      label: `${scopeLabel} SCP`,
+      reportOptions: { reportPeriod: 'WEEK' },
+      manifestReportId: existingManifest?.reports?.scpReportId,
+      onReportCreated: rememberReportId('scpReportId'),
+    })
+    rememberReportId('scpReportId')(scpReportId)
+    const canReuseScpOutput = existingManifest?.reports?.scpReportId === scpReportId && fs.existsSync(scpPath)
+    if (canReuseScpOutput) {
+      console.log(`[SP-API] ${scopeLabel} SCP output already current for reportId=${scpReportId}`)
+    } else {
+      const scpData = await downloadJsonReport(client, scpReportId)
+      rowsToCsv(scpPath, scpData.parsed?.dataByAsin || [], SCP_HEADERS)
+    }
   }
 
-  const sqpReportId = await resolveReportId(client, {
-    reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
-    reportWindow,
-    label: `${scopeLabel} SQP`,
-    reportOptions: { reportPeriod: 'WEEK', asin: sourceConfig.heroAsin },
-    manifestReportId: existingManifest?.reports?.sqpReportId,
-    onReportCreated: rememberReportId('sqpReportId'),
-  })
-  rememberReportId('sqpReportId')(sqpReportId)
-  const canReuseSqpOutput = existingManifest?.reports?.sqpReportId === sqpReportId && fs.existsSync(sqpPath)
-  if (canReuseSqpOutput) {
-    console.log(`[SP-API] ${scopeLabel} SQP output already current for reportId=${sqpReportId}`)
-  } else {
-    const sqpData = await downloadJsonReport(client, sqpReportId)
-    rowsToCsv(sqpPath, sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
+  if (selectedReports.has('sqp')) {
+    const sqpReportId = await resolveReportId(client, {
+      reportType: 'GET_BRAND_ANALYTICS_SEARCH_QUERY_PERFORMANCE_REPORT',
+      reportWindow,
+      label: `${scopeLabel} SQP`,
+      reportOptions: { reportPeriod: 'WEEK', asin: sourceConfig.heroAsin },
+      manifestReportId: existingManifest?.reports?.sqpReportId,
+      onReportCreated: rememberReportId('sqpReportId'),
+    })
+    rememberReportId('sqpReportId')(sqpReportId)
+    const canReuseSqpOutput = existingManifest?.reports?.sqpReportId === sqpReportId && fs.existsSync(sqpPath)
+    if (canReuseSqpOutput) {
+      console.log(`[SP-API] ${scopeLabel} SQP output already current for reportId=${sqpReportId}`)
+    } else {
+      const sqpData = await downloadJsonReport(client, sqpReportId)
+      rowsToCsv(sqpPath, sqpData.parsed?.dataByAsin || [], SQP_HEADERS)
+    }
   }
 
-  const salesReportId = await resolveReportId(client, {
-    reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
-    reportWindow,
-    label: `${scopeLabel} SalesTraffic`,
-    reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
-    manifestReportId: existingManifest?.reports?.salesReportId,
-    onReportCreated: rememberReportId('salesReportId'),
-  })
-  rememberReportId('salesReportId')(salesReportId)
-  const canReuseSalesOutput =
-    existingManifest?.reports?.salesReportId === salesReportId &&
-    fs.existsSync(salesByDatePath) &&
-    fs.existsSync(salesByAsinPath)
-  if (canReuseSalesOutput) {
-    console.log(`[SP-API] ${scopeLabel} SalesTraffic output already current for reportId=${salesReportId}`)
-  } else {
-    const salesData = await downloadJsonReport(client, salesReportId)
-    rowsToCsv(salesByDatePath, salesData.parsed?.salesAndTrafficByDate || [], SALES_BY_DATE_HEADERS)
-    rowsToCsv(salesByAsinPath, salesData.parsed?.salesAndTrafficByAsin || [], SALES_BY_ASIN_HEADERS)
+  if (selectedReports.has('sales')) {
+    const salesReportId = await resolveReportId(client, {
+      reportType: 'GET_SALES_AND_TRAFFIC_REPORT',
+      reportWindow,
+      label: `${scopeLabel} SalesTraffic`,
+      reportOptions: { dateGranularity: 'DAY', asinGranularity: 'CHILD' },
+      manifestReportId: existingManifest?.reports?.salesReportId,
+      onReportCreated: rememberReportId('salesReportId'),
+    })
+    rememberReportId('salesReportId')(salesReportId)
+    const canReuseSalesOutput =
+      existingManifest?.reports?.salesReportId === salesReportId &&
+      fs.existsSync(salesByDatePath) &&
+      fs.existsSync(salesByAsinPath)
+    if (canReuseSalesOutput) {
+      console.log(`[SP-API] ${scopeLabel} SalesTraffic output already current for reportId=${salesReportId}`)
+    } else {
+      const salesData = await downloadJsonReport(client, salesReportId)
+      rowsToCsv(salesByDatePath, salesData.parsed?.salesAndTrafficByDate || [], SALES_BY_DATE_HEADERS)
+      rowsToCsv(salesByAsinPath, salesData.parsed?.salesAndTrafficByAsin || [], SALES_BY_ASIN_HEADERS)
+    }
   }
 
-  const tstReportId = await resolveReportId(client, {
-    reportType: TST_REPORT_TYPE,
-    reportWindow,
-    label: `${scopeLabel} TST`,
-    reportOptions: { reportPeriod: 'WEEK' },
-    manifestReportId: existingManifest?.reports?.tstReportId,
-    onReportCreated: rememberReportId('tstReportId'),
-  })
-  rememberReportId('tstReportId')(tstReportId)
+  if (selectedReports.has('tst')) {
+    const tstReportId = await resolveReportId(client, {
+      reportType: TST_REPORT_TYPE,
+      reportWindow,
+      label: `${scopeLabel} TST`,
+      reportOptions: { reportPeriod: 'WEEK' },
+      manifestReportId: existingManifest?.reports?.tstReportId,
+      onReportCreated: rememberReportId('tstReportId'),
+    })
+    rememberReportId('tstReportId')(tstReportId)
 
-  const canReuseFilteredTst =
-    existingManifest?.reports?.tstReportId === tstReportId &&
-    existingManifest?.filterMode === 'clickedAsinAny' &&
-    sameStringArray(existingManifest?.targetAsins, tstTargetAsins) &&
-    fs.existsSync(filteredTstPath)
+    const canReuseFilteredTst =
+      existingManifest?.reports?.tstReportId === tstReportId &&
+      existingManifest?.filterMode === 'clickedAsinAny' &&
+      sameStringArray(existingManifest?.targetAsins, tstTargetAsins) &&
+      fs.existsSync(filteredTstPath)
 
-  if (canReuseFilteredTst) {
-    console.log(`[SP-API] ${scopeLabel} TST output already current for reportId=${tstReportId}`)
-  } else {
-    const tstDoc = await reportDocumentInfo(client, tstReportId)
-    const rawTstPath = path.join('/tmp', `${weekPrefix}_TST.raw.json${String(tstDoc?.compressionAlgorithm || '').toUpperCase() === 'GZIP' ? '.gz' : ''}`)
+    if (canReuseFilteredTst) {
+      console.log(`[SP-API] ${scopeLabel} TST output already current for reportId=${tstReportId}`)
+    } else {
+      const tstDoc = await reportDocumentInfo(client, tstReportId)
+      const rawTstPath = path.join('/tmp', `${weekPrefix}_TST.raw.json${String(tstDoc?.compressionAlgorithm || '').toUpperCase() === 'GZIP' ? '.gz' : ''}`)
 
-    await downloadUrlToFile(tstDoc.url, rawTstPath)
-    runTstFilter(rawTstPath, filteredTstPath, tstTargetAsins)
-    enqueueOutputFile(filteredTstPath)
-    fs.rmSync(rawTstPath, { force: true })
+      await downloadUrlToFile(tstDoc.url, rawTstPath)
+      runTstFilter(rawTstPath, filteredTstPath, tstTargetAsins)
+      enqueueOutputFile(filteredTstPath)
+      fs.rmSync(rawTstPath, { force: true })
+    }
   }
 
   writeManifest(manifestPath, manifestState)

@@ -3,6 +3,7 @@
 import argparse
 import csv
 import gzip
+import http.client
 import json
 import os
 import re
@@ -10,7 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ARGUS_APP_ROOT = Path(__file__).resolve().parents[3]
@@ -23,6 +24,8 @@ CURRENT_MARKET = None
 
 POLL_INTERVAL_SEC = 15
 MAX_WAIT_SECONDS = 40 * 60
+ACTIVE_REPORT_REUSE_MAX_SECONDS = 30 * 60
+ACTIVE_REPORT_STATUSES = {'PENDING', 'PROCESSING', 'IN_QUEUE', 'IN_PROGRESS'}
 
 SUBDIR = {
     'search_term': 'SP - Search Term Report (API)',
@@ -41,6 +44,8 @@ CODE_SUFFIX = {
     'placement': 'SP-Placement',
     'purchased': 'SP-Purchased',
 }
+
+SUPPORTED_REPORTS = set(CODE_SUFFIX.keys())
 
 
 def load_env(path: Path):
@@ -67,6 +72,24 @@ def parse_market(raw):
     if value in ('us', 'uk'):
         return value
     raise RuntimeError(f'Unsupported Argus market: {raw}')
+
+
+def parse_reports(raw):
+    if raw is None:
+        return set(SUPPORTED_REPORTS)
+
+    selected = set()
+    for item in raw.split(','):
+        value = item.strip().lower().replace('-', '_')
+        if not value:
+            continue
+        if value not in SUPPORTED_REPORTS:
+            raise RuntimeError(f'Unsupported SP Ads report: {item}')
+        selected.add(value)
+
+    if not selected:
+        raise RuntimeError('--reports must include at least one supported report.')
+    return selected
 
 
 def monitoring_base_for_market(env, market):
@@ -282,7 +305,7 @@ def get_report_status(base_url, headers, report_id):
     for attempt in range(1, 4):
         try:
             status, resp = http_json(endpoint, method='GET', headers=headers)
-        except urllib.error.URLError:
+        except (urllib.error.URLError, http.client.RemoteDisconnected, TimeoutError):
             if attempt == 3:
                 raise
             time.sleep(attempt)
@@ -366,6 +389,63 @@ def manifest_entry_for(reports, key, suffix):
     return None
 
 
+def reusable_manifest_entry(existing_manifest, key, suffix):
+    if not existing_manifest:
+        return None
+    reports = existing_manifest.get('reports') or {}
+    entry = manifest_entry_for(reports, key, suffix)
+    if not entry:
+        return None
+    if not str(entry.get('reportId') or '').strip():
+        return None
+    status = str(entry.get('status') or '').upper()
+    if status in ('FAILED', 'FAILURE', 'CANCELLED'):
+        return None
+    if status in ACTIVE_REPORT_STATUSES and active_manifest_entry_is_stale(existing_manifest, entry):
+        return None
+    return entry
+
+
+def parse_api_datetime(value):
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith('Z'):
+        text = text[:-1] + '+00:00'
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def active_manifest_entry_is_stale(existing_manifest, entry):
+    candidate_values = [
+        entry.get('updatedAt'),
+        entry.get('createdAt'),
+    ]
+    if existing_manifest:
+        candidate_values.append(existing_manifest.get('generatedAt'))
+
+    newest = None
+    for value in candidate_values:
+        parsed = parse_api_datetime(value)
+        if parsed is None:
+            continue
+        if newest is None or parsed > newest:
+            newest = parsed
+
+    if newest is None:
+        return False
+
+    age_seconds = (datetime.now(timezone.utc) - newest).total_seconds()
+    return age_seconds > ACTIVE_REPORT_REUSE_MAX_SECONDS
+
+
 def can_reuse_key_output(existing_manifest, week, key, entries, ads_metadata):
     if not existing_manifest:
         return False
@@ -393,6 +473,53 @@ def can_reuse_key_output(existing_manifest, week, key, entries, ads_metadata):
             return False
 
     return True
+
+
+def manifest_payload(existing_manifest, week, ads_metadata, skipped_keys, task_entries, outputs):
+    grouped = {}
+    for entry in task_entries:
+        grouped.setdefault(entry['key'], []).append(entry)
+
+    return {
+        'generatedAt': datetime.utcnow().isoformat() + 'Z',
+        'market': ads_metadata['market'],
+        'profileId': ads_metadata['profileId'],
+        'adsApiBaseUrl': ads_metadata['adsApiBaseUrl'],
+        'week': week,
+        'pollIntervalSec': POLL_INTERVAL_SEC,
+        'maxWaitSec': MAX_WAIT_SECONDS,
+        'reports': {
+            **{
+                key: (existing_manifest.get('reports') or {}).get(key, [])
+                for key in skipped_keys
+                if existing_manifest and (existing_manifest.get('reports') or {}).get(key)
+            },
+            **{
+                key: [
+                    {
+                        'suffix': entry['suffix'],
+                        'reportId': entry['reportId'],
+                        'status': entry['statusObj'].get('status') if entry.get('statusObj') else entry.get('status') or 'PENDING',
+                        'createdAt': entry['statusObj'].get('createdAt') if entry.get('statusObj') else entry.get('createdAt'),
+                        'updatedAt': entry['statusObj'].get('updatedAt') if entry.get('statusObj') else entry.get('updatedAt'),
+                        'reused': entry['reused'],
+                        'attempts': entry['attempts'],
+                        'outputColumns': entry['outputColumns'],
+                        'finalColumns': entry['columns'],
+                    }
+                    for entry in entries
+                ]
+                for key, entries in grouped.items()
+            },
+        },
+        'outputs': outputs,
+    }
+
+
+def write_manifest(manifest_path, payload):
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(payload, indent=2))
+    enqueue_drive_sync(manifest_path)
 
 
 def report_configs():
@@ -517,7 +644,7 @@ def report_configs():
     }
 
 
-def run_week(base_url, headers, week, ads_metadata):
+def run_week(base_url, headers, week, ads_metadata, selected_reports):
     tasks = []
     configs = report_configs()
     manifest_path = MANIFEST_ROOT / f"{week['code']}_{week['endDate']}_SP-Manifest.json"
@@ -526,6 +653,8 @@ def run_week(base_url, headers, week, ads_metadata):
     skipped_keys = set()
 
     for key, entries in configs.items():
+        if key not in selected_reports:
+            continue
         if can_reuse_key_output(existing_manifest, week, key, entries, ads_metadata):
             outputs[key] = dict((existing_manifest.get('outputs') or {}).get(key) or {})
             print(f'[{week["code"]}] reuse existing {key} output file={output_path_for_week(week, key)}', flush=True)
@@ -533,12 +662,26 @@ def run_week(base_url, headers, week, ads_metadata):
             continue
 
         for suffix, cfg_base, request_columns, output_columns in entries:
-            created = create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base, request_columns)
-            print(
-                f'[{week["code"]}] create {key}/{suffix} reportId={created["reportId"]} '
-                f'reused={created["reused"]} attempts={created["attempts"]} finalCols={len(created["columns"])}',
-                flush=True,
-            )
+            existing_entry = reusable_manifest_entry(existing_manifest, key, suffix)
+            if existing_entry:
+                created = {
+                    'reportId': existing_entry['reportId'],
+                    'columns': existing_entry.get('finalColumns') or request_columns,
+                    'reused': True,
+                    'attempts': existing_entry.get('attempts') or 0,
+                    'status': existing_entry.get('status') or 'PENDING',
+                    'createdAt': existing_entry.get('createdAt'),
+                    'updatedAt': existing_entry.get('updatedAt'),
+                }
+                print(f'[{week["code"]}] resume {key}/{suffix} reportId={created["reportId"]}', flush=True)
+            else:
+                created = create_with_adaptive_columns(base_url, headers, week, key, suffix, cfg_base, request_columns)
+                created['createdAt'] = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+                print(
+                    f'[{week["code"]}] create {key}/{suffix} reportId={created["reportId"]} '
+                    f'reused={created["reused"]} attempts={created["attempts"]} finalCols={len(created["columns"])}',
+                    flush=True,
+                )
             tasks.append({
                 'key': key,
                 'suffix': suffix,
@@ -547,12 +690,17 @@ def run_week(base_url, headers, week, ads_metadata):
                 'reportId': created['reportId'],
                 'reused': created['reused'],
                 'attempts': created['attempts'],
+                'status': created.get('status') or 'PENDING',
+                'createdAt': created.get('createdAt'),
+                'updatedAt': created.get('updatedAt'),
                 'statusObj': None,
             })
 
     if not tasks:
         print(f'[{week["code"]}] manifest {manifest_path} already current', flush=True)
         return
+
+    write_manifest(manifest_path, manifest_payload(existing_manifest, week, ads_metadata, skipped_keys, tasks, outputs))
 
     deadline = time.time() + MAX_WAIT_SECONDS
     pending = len(tasks)
@@ -608,44 +756,8 @@ def run_week(base_url, headers, week, ads_metadata):
         }
         print(f'[{week["code"]}] saved {key} rows={len(rows)} file={output_path}', flush=True)
 
-    manifest = {
-        'generatedAt': datetime.utcnow().isoformat() + 'Z',
-        'market': ads_metadata['market'],
-        'profileId': ads_metadata['profileId'],
-        'adsApiBaseUrl': ads_metadata['adsApiBaseUrl'],
-        'week': week,
-        'pollIntervalSec': POLL_INTERVAL_SEC,
-        'maxWaitSec': MAX_WAIT_SECONDS,
-        'reports': {
-            **{
-                key: (existing_manifest.get('reports') or {}).get(key, [])
-                for key in skipped_keys
-                if existing_manifest and (existing_manifest.get('reports') or {}).get(key)
-            },
-            **{
-                key: [
-                {
-                    'suffix': entry['suffix'],
-                    'reportId': entry['reportId'],
-                    'status': entry['statusObj'].get('status'),
-                    'createdAt': entry['statusObj'].get('createdAt'),
-                    'updatedAt': entry['statusObj'].get('updatedAt'),
-                    'reused': entry['reused'],
-                    'attempts': entry['attempts'],
-                    'outputColumns': entry['outputColumns'],
-                    'finalColumns': entry['columns'],
-                }
-                for entry in entries
-            ]
-            for key, entries in completed.items()
-            },
-        },
-        'outputs': outputs,
-    }
-
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, indent=2))
-    enqueue_drive_sync(manifest_path)
+    manifest = manifest_payload(existing_manifest, week, ads_metadata, skipped_keys, tasks, outputs)
+    write_manifest(manifest_path, manifest)
     print(f'[{week["code"]}] manifest {manifest_path}', flush=True)
 
 
@@ -656,6 +768,7 @@ def main():
     parser.add_argument('--start-date')
     parser.add_argument('--end-date')
     parser.add_argument('--market', default=os.environ.get('ARGUS_MARKET', 'us'))
+    parser.add_argument('--reports')
     args = parser.parse_args()
 
     if bool(args.start_date) != bool(args.end_date):
@@ -664,6 +777,7 @@ def main():
     env = load_env(ENV_PATH)
     env.update(os.environ)
     market = parse_market(args.market)
+    selected_reports = parse_reports(args.reports)
     CURRENT_MARKET = market
     MONITORING_ROOT = monitoring_base_for_market(env, market)
     DEST_ROOT = MONITORING_ROOT / 'Weekly' / 'Ad Console' / 'SP - Sponsored Products (API)'
@@ -674,6 +788,8 @@ def main():
     if dry_run:
         print(f'[SP-Ads][dry-run] week={week["code"]} {week["startDate"]}..{week["endDate"]}')
         for key, subdir in SUBDIR.items():
+            if key not in selected_reports:
+                continue
             suffix = CODE_SUFFIX[key]
             file_name = f'{week["code"]}_{week["endDate"]}_{suffix}.csv'
             print(f'[SP-Ads][dry-run] {DEST_ROOT / subdir / file_name}')
@@ -696,7 +812,7 @@ def main():
     }
 
     print(f'=== {week["code"]} {week["startDate"]}..{week["endDate"]} ===', flush=True)
-    run_week(base_url, headers, week, ads_metadata)
+    run_week(base_url, headers, week, ads_metadata, selected_reports)
 
 
 if __name__ == '__main__':
