@@ -1489,7 +1489,7 @@ if [[ "$app_key" == "hermes" ]]; then
 fi
 
 if [[ "$app_key" == "plutus" ]]; then
-  plutus_workers=("${PM2_PREFIX}-plutus-cashflow-refresh" "${PM2_PREFIX}-plutus-settlement-sync")
+  plutus_workers=("${PM2_PREFIX}-plutus-settlement-sync")
   for worker in "${plutus_workers[@]}"; do
     log "Step 7: Starting $worker"
     start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"

@@ -62,6 +62,14 @@ test('plutus deploy applies Prisma migrations instead of db push', () => {
   )
 })
 
+test('plutus deploy starts only active Plutus worker processes', () => {
+  assert.match(
+    deployScript,
+    /plutus_workers=\("\$\{PM2_PREFIX\}-plutus-settlement-sync"\)/,
+  )
+  assert.doesNotMatch(deployScript, /plutus-cashflow-refresh/)
+})
+
 test('shared-db deploys map apps onto deterministic owner roles and local owner URLs', () => {
   assert.match(
     deployScript,
