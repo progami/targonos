@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 
 import { buildPlutusSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import type { QboConnection } from '@/lib/qbo/api';
-import { createJournalEntry, fetchExchangeRate, fetchJournalEntries, fetchPreferences } from '@/lib/qbo/api';
+import { createJournalEntry, fetchAccounts, fetchExchangeRate, fetchJournalEntries, fetchPreferences } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
 type CliOptions = {
@@ -254,22 +254,9 @@ async function main(): Promise<void> {
     originalTotalCents += cents;
   }
 
-  const needBankAccount = originalTotalCents > 0;
-  const needPaymentAccount = originalTotalCents < 0;
-
   const postingConfig = await db.settlementPostingConfig.findUnique({ where: { marketplace: options.marketplace } });
   if (!postingConfig) {
     throw new Error(`Missing settlement posting config for marketplace=${options.marketplace}`);
-  }
-
-  const bankAccountId = postingConfig.bankAccountId ? postingConfig.bankAccountId.trim() : '';
-  const paymentAccountId = postingConfig.paymentAccountId ? postingConfig.paymentAccountId.trim() : '';
-
-  if (needBankAccount && bankAccountId === '') {
-    throw new Error("Missing 'Transfer to Bank' account id (configure it in Settlement Mapping)");
-  }
-  if (needPaymentAccount && paymentAccountId === '') {
-    throw new Error("Missing 'Payment to Amazon' account id (configure it in Settlement Mapping)");
   }
 
   const memoMapping = requireMemoMapping(postingConfig.accountIdByMemo);
@@ -292,6 +279,21 @@ async function main(): Promise<void> {
   if (fx.updatedConnection) {
     activeConnection = fx.updatedConnection;
   }
+
+  const accountsResult = await fetchAccounts(activeConnection, { includeInactive: true });
+  if (accountsResult.updatedConnection) {
+    activeConnection = accountsResult.updatedConnection;
+  }
+
+  const settlementControlMatches = accountsResult.accounts.filter(
+    (account) => account.Name.trim().toLowerCase() === 'plutus settlement control',
+  );
+  if (settlementControlMatches.length !== 1) {
+    throw new Error(
+      `Missing or ambiguous QBO account for settlement control (expected exactly one named "Plutus Settlement Control", found ${settlementControlMatches.length})`,
+    );
+  }
+  const settlementControlAccountId = settlementControlMatches[0]!.Id;
 
   const lines: Array<{
     amount: number;
@@ -318,14 +320,14 @@ async function main(): Promise<void> {
     const absAmount = Math.abs(originalTotalCents) / 100;
     if (originalTotalCents > 0) {
       lines.push({
-        accountId: bankAccountId,
+        accountId: settlementControlAccountId,
         postingType: 'Debit',
         amount: absAmount,
         description: 'Transfer to Bank',
       });
     } else {
       lines.push({
-        accountId: paymentAccountId,
+        accountId: settlementControlAccountId,
         postingType: 'Credit',
         amount: absAmount,
         description: 'Payment to Amazon',

@@ -1,4 +1,5 @@
 import { buildQboJournalEntriesFromUkSettlementDraft, buildUkSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/uk-settlement-builder';
+import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '@/lib/amazon-finances/settlement-cash-account-guardrails';
 import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
@@ -347,6 +348,7 @@ async function validateUkSettlementCashAccountCurrencies(input: {
     if (!account) {
       throw new Error(`Settlement mapping account not found in QBO for ${role}: ${accountId}`);
     }
+    assertSettlementCashMappingDoesNotUseRealBankMovement(account, role);
 
     const currency = account.CurrencyRef?.value ? account.CurrencyRef.value.trim().toUpperCase() : '';
     if (currency === '') {
