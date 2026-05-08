@@ -20,6 +20,12 @@ import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
+import { useMarketplaceStore } from '@/lib/store/marketplace';
+import {
+  marketplaceFromSettlementMappingRegion,
+  settlementMappingRegionFromMarketplace,
+  type SettlementMappingRegion,
+} from '@/lib/plutus/settlement-mapping-region';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -33,7 +39,7 @@ type ConnectionStatus = {
   usingSalesTax?: boolean;
   partnerTaxEnabled?: boolean;
 };
-type Region = 'US' | 'UK';
+type Region = SettlementMappingRegion;
 
 type QboAccount = {
   id: string;
@@ -132,6 +138,8 @@ function normalizeTaxCodeMappings(input: {
 export default function SettlementMappingPage() {
   const queryClient = useQueryClient();
   const { enqueueSnackbar } = useSnackbar();
+  const marketplace = useMarketplaceStore((s) => s.marketplace);
+  const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
 
   const { data: connectionStatus, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -194,6 +202,14 @@ export default function SettlementMappingPage() {
     });
   }, [mappingData]);
 
+  useEffect(() => {
+    const nextRegion = settlementMappingRegionFromMarketplace(marketplace);
+    if (nextRegion === null) return;
+    if (nextRegion === region) return;
+    setRegion(nextRegion);
+    setSearch('');
+  }, [marketplace, region]);
+
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const taxCodes = useMemo(() => (taxCodesData ? taxCodesData.taxCodes : []), [taxCodesData]);
 
@@ -251,7 +267,7 @@ export default function SettlementMappingPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['setup-settlement-mapping'] });
-      enqueueSnackbar('Saved account taxes', { variant: 'success' });
+      enqueueSnackbar('Saved settlement mappings', { variant: 'success' });
     },
     onError: (error) => {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
@@ -299,7 +315,7 @@ export default function SettlementMappingPage() {
   });
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Account Taxes" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
+    return <NotConnectedScreen title="Settlement Mappings" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
   }
 
   const isLoading =
@@ -314,7 +330,7 @@ export default function SettlementMappingPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PageHeader
-              title="Account Taxes"
+              title="Settlement Mappings"
               variant="accent"
             />
             <Tooltip
@@ -338,7 +354,12 @@ export default function SettlementMappingPage() {
             <FormControl size="small" sx={{ width: 80, flexShrink: 0 }}>
               <Select
                 value={region}
-                onChange={(e) => setRegion(e.target.value as Region)}
+                onChange={(e) => {
+                  const nextRegion = e.target.value as Region;
+                  setRegion(nextRegion);
+                  setMarketplace(marketplaceFromSettlementMappingRegion(nextRegion));
+                  setSearch('');
+                }}
                 sx={{ borderRadius: 2, maxWidth: 80 }}
               >
                 <MenuItem value="US">US</MenuItem>

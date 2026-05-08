@@ -89,6 +89,10 @@ import {
 } from '../lib/plutus/settlement-review';
 import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
 import {
+  marketplaceFromSettlementMappingRegion,
+  settlementMappingRegionFromMarketplace,
+} from '../lib/plutus/settlement-mapping-region';
+import {
   buildLegacySettlementApiPath,
   buildLegacySettlementApiPreviewPath,
   buildLegacySettlementApiProcessPath,
@@ -165,6 +169,20 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, 'dark'), 'dark');
   assert.equal(resolveMuiThemeMode(true, 'light'), 'light');
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
+});
+
+test('settlement mapping region mirrors concrete app marketplace filters', () => {
+  assert.equal(settlementMappingRegionFromMarketplace('US'), 'US');
+  assert.equal(settlementMappingRegionFromMarketplace('UK'), 'UK');
+  assert.equal(settlementMappingRegionFromMarketplace('all'), null);
+  assert.equal(marketplaceFromSettlementMappingRegion('US'), 'US');
+  assert.equal(marketplaceFromSettlementMappingRegion('UK'), 'UK');
+});
+
+test('settlement mapping page is labeled as settlement mappings, not account taxes', () => {
+  const source = readFileSync(new URL('../app/settlement-mapping/page.tsx', import.meta.url), 'utf8');
+  assert.equal(source.includes('Settlement Mappings'), true);
+  assert.equal(source.includes('Account Taxes'), false);
 });
 
 test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
