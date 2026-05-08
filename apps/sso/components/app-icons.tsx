@@ -5,74 +5,49 @@ import type { ReactNode } from 'react'
  * Each icon is designed at 24x24 with stroke-based styling using currentColor.
  */
 
+const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+
 /** Talos: Hexagon with vertical slit - the watchful eye of the automaton */
 export const TalosIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* Hexagon with vertical slit cutout using evenodd fill-rule */}
     <path
-      d="M 12 3 L 19.8 7.5 L 19.8 16.5 L 12 21 L 4.2 16.5 L 4.2 7.5 Z M 10.9 6.4 L 13.1 6.4 L 13.1 17.6 L 10.9 17.6 Z"
-      fill="currentColor"
-      fillRule="evenodd"
+      d="M12 2.8 20.2 7.5v9L12 21.2 3.8 16.5v-9L12 2.8Z"
+      fill="var(--icon-gold)"
+    />
+    <path
+      d="M12 5.2 18 8.6v6.8l-6 3.4-6-3.4V8.6l6-3.4Z"
+      fill="var(--icon-navy)"
+    />
+    <rect
+      x="10.85"
+      y="7.3"
+      width="2.3"
+      height="9.4"
+      fill="var(--icon-teal)"
+      rx="1.15"
     />
   </svg>
 )
 
-/** Atlas: Circle resting in chevron - titan holding the heavens */
+/** Atlas: approved Greek-inspired generated mark */
 export const AtlasIcon = (
-  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* The sphere (organization/people being upheld) */}
-    <circle
-      cx="12"
-      cy="8"
-      r="5.5"
-      fill="currentColor"
-      opacity="0.2"
-    />
-    <circle
-      cx="12"
-      cy="8"
-      r="5.5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-    />
-    {/* The chevron/V support (HR infrastructure) */}
-    <path
-      d="M3 15L12 21L21 15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
+  <img src={`${assetBasePath}/app-logos/atlas.png`} alt="" aria-hidden="true" />
 )
 
-/** Kairos (Forecasting): Lightning bolt morphing to arrow - opportune moment + growth */
+/** Kairos (Forecasting): time window and moment mark */
 export const KairosIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* Combined lightning-arrow shape */}
+    <circle cx="12" cy="12" r="8.5" fill="none" stroke="var(--icon-navy)" strokeWidth="1.6" />
+    <path d="M8 5.5h8M8 18.5h8" stroke="var(--icon-gold)" strokeWidth="1.7" strokeLinecap="round" />
     <path
-      d="M13 2L4 13H11L10 22L20 10H13L13 2Z"
-      fill="currentColor"
-      opacity="0.15"
-    />
-    <path
-      d="M13 2L4 13H11L10 22L20 10H13L13 2Z"
+      d="M8.7 6.5c0 3.2 2.2 4.1 3.3 5.5-1.1 1.4-3.3 2.3-3.3 5.5M15.3 6.5c0 3.2-2.2 4.1-3.3 5.5 1.1 1.4 3.3 2.3 3.3 5.5"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
+      stroke="var(--icon-teal)"
+      strokeWidth="1.45"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-    {/* Upward arrow accent at top */}
-    <path
-      d="M13 2L16 5M13 2L10 5"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+    <circle cx="17.7" cy="6.3" r="1.45" fill="var(--icon-gold)" />
   </svg>
 )
 
@@ -81,16 +56,25 @@ export const XPlanIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
     <path
       d="M7 7L17 17"
-      stroke="currentColor"
+      stroke="var(--icon-navy)"
       strokeWidth="2.8"
       strokeLinecap="round"
     />
     <path
       d="M17 7L7 17"
-      stroke="currentColor"
+      stroke="var(--icon-navy)"
       strokeWidth="2.8"
       strokeLinecap="round"
     />
+    <path
+      d="M12 4.4v15.2M4.4 12h15.2"
+      stroke="var(--icon-teal)"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      opacity="0.8"
+    />
+    <circle cx="12" cy="12" r="2" fill="var(--icon-teal)" />
+    <circle cx="18.7" cy="5.3" r="1.35" fill="var(--icon-gold)" />
   </svg>
 )
 
@@ -186,6 +170,11 @@ export const HermesIcon = (
   </svg>
 )
 
+/** Argus: approved Greek shield monitoring mark */
+export const ArgusIcon = (
+  <img src={`${assetBasePath}/app-logos/argus.png`} alt="" aria-hidden="true" />
+)
+
 /** Website: Globe icon for marketing site */
 export const WebsiteIcon = (
   <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
@@ -212,6 +201,7 @@ export const WebsiteIcon = (
 export const APP_ICONS: Record<string, ReactNode> = {
   talos: TalosIcon,
   atlas: AtlasIcon,
+  argus: ArgusIcon,
   kairos: KairosIcon,
   xplan: XPlanIcon,
   plutus: PlutusIcon,

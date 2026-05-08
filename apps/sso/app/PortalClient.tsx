@@ -6,7 +6,7 @@ import type { CSSProperties } from 'react'
 
 import type { AppDef } from '@/lib/apps'
 import { getAppIcon } from '@/components/app-icons'
-import { getPublicVersion, getPublicVersionHref } from '@/lib/public-build-metadata'
+import { getPublicBuildTime, getPublicVersion, getPublicVersionHref } from '@/lib/public-build-metadata'
 
 import styles from './portal.module.css'
 
@@ -26,13 +26,6 @@ type AppState = {
   isEntitled: boolean
   isPublicEntry: boolean
   tone: AppStateTone
-}
-
-type CategorySection = {
-  apps: PortalAppCard[]
-  category: string
-  readyCount: number
-  totalCount: number
 }
 
 const CATEGORY_ORDER = [
@@ -98,10 +91,25 @@ function getWorkspaceActionClassName(state: AppState) {
   return classNames.join(' ')
 }
 
+function formatBuildTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    throw new Error('NEXT_PUBLIC_BUILD_TIME is invalid.')
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  }).format(date)
+}
+
 export default function PortalClient({
   session,
   apps,
-  accessApps,
   roles,
   isPlatformAdmin,
   accessError,
@@ -158,30 +166,10 @@ export default function PortalClient({
     }
   }
 
-  const accessSummaryApps = (accessApps ?? apps).filter((app) => (
-    app.lifecycle !== 'dev' || Boolean(roleMap[app.id]) || Boolean(isPlatformAdmin)
-  ))
-  const hasAccessSummaryApps = accessSummaryApps.length > 0
-
   const normalizeCategory = (value?: string | null) => {
     const trimmed = value?.trim()
     return trimmed && trimmed.length > 0 ? trimmed : OTHER_CATEGORY
   }
-
-  const appsByCategory = apps.reduce<Record<string, PortalAppCard[]>>((acc, app) => {
-    const primaryCategory = normalizeCategory(app.category)
-    acc[primaryCategory] = acc[primaryCategory]
-      ? [...acc[primaryCategory], app]
-      : [app]
-    return acc
-  }, {})
-
-  const orderedCategories = CATEGORY_ORDER.filter((value) => appsByCategory[value]?.length)
-    .concat(
-      Object.keys(appsByCategory).filter(
-        (value) => !CATEGORY_ORDER.includes(value) && appsByCategory[value]?.length
-      )
-    )
 
   const rankApp = (app: PortalAppCard) => {
     const state = resolveState(app)
@@ -194,36 +182,32 @@ export default function PortalClient({
     return 2
   }
 
-  const categorySections: CategorySection[] = orderedCategories.map((category) => {
-    const sortedApps = [...(appsByCategory[category] ?? [])].sort((left, right) => {
-      const rankDifference = rankApp(left) - rankApp(right)
-      if (rankDifference !== 0) {
-        return rankDifference
-      }
+  const rankCategory = (value?: string | null) => {
+    const normalized = normalizeCategory(value)
+    const index = CATEGORY_ORDER.indexOf(normalized)
+    return index === -1 ? CATEGORY_ORDER.length : index
+  }
 
-      return left.name.localeCompare(right.name)
-    })
-
-    const readyCount = sortedApps.filter((app) => {
-      const state = resolveState(app)
-      return state.isEntitled && !state.isDisabled
-    }).length
-
-    return {
-      apps: sortedApps,
-      category,
-      readyCount,
-      totalCount: sortedApps.length,
+  const launcherApps = [...apps].sort((left, right) => {
+    const rankDifference = rankApp(left) - rankApp(right)
+    if (rankDifference !== 0) {
+      return rankDifference
     }
+
+    const categoryDifference = rankCategory(left.category) - rankCategory(right.category)
+    if (categoryDifference !== 0) {
+      return categoryDifference
+    }
+
+    return left.name.localeCompare(right.name)
   })
 
-  const previewApps = accessSummaryApps.slice(0, 8)
-  const hiddenPreviewCount = accessSummaryApps.length - previewApps.length
   const signedInEmail = session.user?.email?.trim()
   const profileInitial = signedInEmail ? signedInEmail.slice(0, 1).toUpperCase() : 'T'
   const accessModeLabel = isPlatformAdmin ? 'Platform admin access' : 'Role-scoped access'
   const version = getPublicVersion()
   const versionHref = getPublicVersionHref()
+  const buildTimeLabel = formatBuildTime(getPublicBuildTime())
 
   return (
     <div className={styles.container}>
@@ -279,11 +263,12 @@ export default function PortalClient({
               href={versionHref}
               target="_blank"
               rel="noopener noreferrer"
-              className={styles.portalVersionBadge}
+              className={styles.buildMeta}
               data-portal-version-badge="true"
-              aria-label={`TargonOS version v${version}`}
+              aria-label={`TargonOS version v${version}, last updated ${buildTimeLabel}`}
             >
-              v{version}
+              <span>v{version}</span>
+              <span>Updated {buildTimeLabel}</span>
             </a>
             <button
               type="button"
@@ -311,140 +296,102 @@ export default function PortalClient({
           </div>
         ) : null}
 
-        <section className={styles.workspaceShell} aria-label="TargonOS workspaces">
-          <aside className={styles.accessRail} aria-label="Assigned workspaces">
-            <div className={styles.railHeader}>
-              <div>
-                <h2 className={styles.railTitle}>Your access map</h2>
-              </div>
-              {isPlatformAdmin ? <span className={styles.overviewFlag}>Platform admin</span> : null}
+        <section className={styles.launcherShell} aria-labelledby="portal-title">
+          <div className={styles.launcherTop}>
+            <div className={styles.launcherHeading}>
+              <span className={styles.sectionEyebrow}>{accessModeLabel}</span>
+              <h1 id="portal-title" className={styles.launcherTitle}>Workspaces</h1>
             </div>
+            <span className={styles.launcherMeta}>
+              {launcherApps.length} applications
+            </span>
+          </div>
 
-            {hasAccessSummaryApps ? (
-              <ul className={styles.accessList}>
-                {previewApps.map((app, index) => (
-                  <li
-                    key={app.id}
-                    className={styles.accessItem}
-                    style={{ animationDelay: `${index * 45}ms` }}
-                  >
-                    <span className={styles.accessItemIcon}>{getAppIcon(app.id)}</span>
-                    <span className={styles.accessItemName}>{app.name}</span>
-                  </li>
-                ))}
-                {hiddenPreviewCount > 0 ? (
-                  <li className={`${styles.accessItem} ${styles.accessItemMuted}`}>
-                    <span className={styles.accessItemName}>+{hiddenPreviewCount} more</span>
-                  </li>
-                ) : null}
-              </ul>
-            ) : (
-              <p className={styles.summaryEmpty}>
-                No workspace assignments were found for this account.
-              </p>
-            )}
-          </aside>
+          <div className={styles.workspaceList}>
+            {launcherApps.map((app, appIndex) => {
+              const state = resolveState(app)
+              const linkProps = state.isDisabled
+                ? {}
+                : {
+                    target: '_blank' as const,
+                    rel: 'noreferrer noopener',
+                  }
 
-          <section className={styles.lanesPanel} aria-label="Available applications">
-            <div className={styles.lanes}>
-              {categorySections.map((section, sectionIndex) => (
-                <section key={section.category} className={styles.lane}>
-                  <div className={styles.laneIntro}>
-                    <div className={styles.laneNameRow}>
-                      <h3 className={styles.laneName}>{section.category}</h3>
-                      <span className={styles.laneCount}>
-                        {section.readyCount}/{section.totalCount} ready
+              return (
+                <a
+                  key={app.id}
+                  href={state.isDisabled ? undefined : app.launchUrl}
+                  className={getWorkspaceRowClassName(state)}
+                  aria-disabled={state.isDisabled}
+                  tabIndex={state.isDisabled ? -1 : undefined}
+                  style={{ '--row-delay': `${appIndex * 35}ms` } as CSSProperties}
+                  title={app.description}
+                  {...linkProps}
+                >
+                  <span className={styles.workspaceIcon}>{getAppIcon(app.id)}</span>
+
+                  <span className={styles.workspaceMain}>
+                    <span className={styles.workspaceCategory}>
+                      {normalizeCategory(app.category)}
+                    </span>
+                    <span className={styles.workspaceName}>{app.name}</span>
+                    <span className={styles.workspaceDescription}>{app.description}</span>
+                    {state.isEntitled && app.launchError ? (
+                      <span className={styles.launchError}>{app.launchError}</span>
+                    ) : null}
+                  </span>
+
+                  <span className={styles.workspaceBadges}>
+                    {state.isPublicEntry ? (
+                      <span className={`${styles.stateBadge} ${styles.stateBadgePublic}`}>
+                        Public
                       </span>
-                    </div>
-                  </div>
+                    ) : null}
+                    {!state.isEntitled ? (
+                      <span className={`${styles.stateBadge} ${styles.stateBadgeLocked}`}>
+                        Restricted
+                      </span>
+                    ) : null}
+                    {state.isEntitled && !app.launchUrl ? (
+                      <span className={`${styles.stateBadge} ${styles.stateBadgeMuted}`}>
+                        Unavailable
+                      </span>
+                    ) : null}
+                    {state.isDevLifecycle ? (
+                      <span className={`${styles.stateBadge} ${styles.stateBadgeDev}`}>
+                        Dev
+                      </span>
+                    ) : null}
+                  </span>
 
-                  <div className={styles.workspaceList}>
-                    {section.apps.map((app, appIndex) => {
-                      const state = resolveState(app)
-                      const linkProps = state.isDisabled
-                        ? {}
-                        : {
-                            target: '_blank' as const,
-                            rel: 'noreferrer noopener',
-                          }
-                      const animationDelay = (sectionIndex * 70) + (appIndex * 35)
+                  <span className={getWorkspaceActionClassName(state)} aria-hidden="true">
+                    <svg
+                      className={styles.arrow}
+                      viewBox="0 0 20 20"
+                      width="18"
+                      height="18"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8 5h6.59L7.3 12.29A1 1 0 0 0 8.7 13.7L16 6.41V13a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H8a1 1 0 0 0 0 2Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </span>
+                </a>
+              )
+            })}
 
-                      return (
-                        <a
-                          key={app.id}
-                          href={state.isDisabled ? undefined : app.launchUrl}
-                          className={getWorkspaceRowClassName(state)}
-                          aria-disabled={state.isDisabled}
-                          tabIndex={state.isDisabled ? -1 : undefined}
-                          style={{ '--row-delay': `${animationDelay}ms` } as CSSProperties}
-                          {...linkProps}
-                        >
-                          <span className={styles.workspaceIcon}>{getAppIcon(app.id)}</span>
-
-                          <span className={styles.workspaceMain}>
-                            <span className={styles.workspaceName}>{app.name}</span>
-                            <span className={styles.workspaceDescription}>{app.description}</span>
-                            {state.isEntitled && app.launchError ? (
-                              <span className={styles.launchError}>{app.launchError}</span>
-                            ) : null}
-                          </span>
-
-                          <span className={styles.workspaceBadges}>
-                            {state.isPublicEntry ? (
-                              <span className={`${styles.stateBadge} ${styles.stateBadgePublic}`}>
-                                Public
-                              </span>
-                            ) : null}
-                            {!state.isEntitled ? (
-                              <span className={`${styles.stateBadge} ${styles.stateBadgeLocked}`}>
-                                Restricted
-                              </span>
-                            ) : null}
-                            {state.isEntitled && !app.launchUrl ? (
-                              <span className={`${styles.stateBadge} ${styles.stateBadgeMuted}`}>
-                                Unavailable
-                              </span>
-                            ) : null}
-                            {state.isDevLifecycle ? (
-                              <span className={`${styles.stateBadge} ${styles.stateBadgeDev}`}>
-                                Dev
-                              </span>
-                            ) : null}
-                          </span>
-
-                          <span className={getWorkspaceActionClassName(state)}>
-                            <span>{state.actionText}</span>
-                            <svg
-                              className={styles.arrow}
-                              viewBox="0 0 20 20"
-                              width="18"
-                              height="18"
-                              aria-hidden="true"
-                            >
-                              <path
-                                d="M8 5h6.59L7.3 12.29A1 1 0 0 0 8.7 13.7L16 6.41V13a1 1 0 1 0 2 0V4a1 1 0 0 0-1-1H8a1 1 0 0 0 0 2Z"
-                                fill="currentColor"
-                              />
-                            </svg>
-                          </span>
-                        </a>
-                      )
-                    })}
-                  </div>
-                </section>
-              ))}
-
-              {!hasApps ? (
-                <div className={styles.empty}>
-                  <h2 className={styles.emptyTitle}>No applications assigned</h2>
-                  <p>
-                    We could not find entitlements linked to your account. Reach out to an
-                    administrator.
-                  </p>
-                </div>
-              ) : null}
+            {!hasApps ? (
+              <div className={styles.empty}>
+                <h2 className={styles.emptyTitle}>No applications assigned</h2>
+                <p>
+                  We could not find entitlements linked to your account. Reach out to an
+                  administrator.
+                </p>
+              </div>
+            ) : null}
             </div>
-          </section>
         </section>
       </main>
     </div>

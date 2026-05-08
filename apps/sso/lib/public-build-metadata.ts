@@ -1,4 +1,5 @@
 const publicBuildEnv = {
+  NEXT_PUBLIC_BUILD_TIME: process.env.NEXT_PUBLIC_BUILD_TIME,
   NEXT_PUBLIC_COMMIT_SHA: process.env.NEXT_PUBLIC_COMMIT_SHA,
   NEXT_PUBLIC_RELEASE_URL: process.env.NEXT_PUBLIC_RELEASE_URL,
   NEXT_PUBLIC_VERSION: process.env.NEXT_PUBLIC_VERSION,
@@ -21,6 +22,15 @@ export function getPublicVersion(): string {
   }
 
   return version
+}
+
+export function getPublicBuildTime(): string {
+  const buildTime = readPublicEnv('NEXT_PUBLIC_BUILD_TIME')
+  if (buildTime === undefined) {
+    throw new Error('NEXT_PUBLIC_BUILD_TIME is required.')
+  }
+
+  return buildTime
 }
 
 export function getPublicVersionHref(): string {
