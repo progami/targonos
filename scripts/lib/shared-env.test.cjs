@@ -5,6 +5,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  createBitwardenResolver,
   getEnvFileSelection,
   loadEnvForApp,
   parseBwRef,
@@ -105,6 +106,54 @@ test('parseBwRef decodes Bitwarden item and field names', () => {
       fieldName: 'AMAZON_REFRESH_TOKEN_US',
     }
   )
+})
+
+test('createBitwardenResolver retries empty bw output', () => {
+  const home = tempRepo()
+  writeFile(path.join(home, '.config/codex/secrets/bitwarden-cli-session'), 'session-token\n')
+  const calls = []
+
+  const resolver = createBitwardenResolver(
+    { HOME: home },
+    {
+      retryDelayMs: 0,
+      spawnSyncImpl(command, args, options) {
+        calls.push({ command, args, options })
+        if (calls.length === 1) {
+          return { status: 0, stdout: '', stderr: '' }
+        }
+        return {
+          status: 0,
+          stdout: JSON.stringify({ fields: [{ name: 'FIELD', value: 'secret-value' }] }),
+          stderr: '',
+        }
+      },
+    },
+  )
+
+  assert.equal(resolver('bw://Item/FIELD'), 'secret-value')
+  assert.equal(calls.length, 2)
+  assert.deepEqual(calls[1].args, ['get', 'item', 'Item', '--session', 'session-token'])
+})
+
+test('createBitwardenResolver fails after repeated empty bw output', () => {
+  const home = tempRepo()
+  writeFile(path.join(home, '.config/codex/secrets/bitwarden-cli-session'), 'session-token\n')
+  let calls = 0
+
+  const resolver = createBitwardenResolver(
+    { HOME: home },
+    {
+      retryDelayMs: 0,
+      spawnSyncImpl() {
+        calls += 1
+        return { status: 0, stdout: '', stderr: '' }
+      },
+    },
+  )
+
+  assert.throws(() => resolver('bw://Item/FIELD'), /empty response from bw/)
+  assert.equal(calls, 3)
 })
 
 test('loadEnvForApp resolves bw refs before export', () => {
