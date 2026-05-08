@@ -37,6 +37,8 @@ MONTH_NAME_DATE_RE = re.compile(
     re.IGNORECASE,
 )
 LEGACY_WEEK_NUMBER_RE = re.compile(r"(?:^|[^A-Za-z0-9])Week[ _-](\d{1,2})(?!\d)", re.IGNORECASE)
+BROWSER_DUPLICATE_SUFFIX_RE = re.compile(r" \(\d+\)(?=\.|$)")
+NONCANONICAL_ARTIFACT_SUFFIX_RE = re.compile(r"__(?:backup|wpr_recovery|legacy|dup\d+)(?=\.|$)", re.IGNORECASE)
 
 IGNORED_NAMES = {".DS_Store"}
 LEGACY_INPUT_NAMES = {"Daily", "Hourly", "Weekly"}
@@ -124,20 +126,21 @@ def remove_empty_tree(path: Path) -> None:
     path.rmdir()
 
 
-def unique_path(path: Path) -> Path:
-    if not path.exists():
-        return path
-    stem = path.stem
-    suffix = path.suffix
-    counter = 2
-    while True:
-        candidate = path.with_name(f"{stem}__dup{counter}{suffix}")
-        if not candidate.exists():
-            return candidate
-        counter += 1
+def canonical_wpr_name(name: str) -> str:
+    cleaned = BROWSER_DUPLICATE_SUFFIX_RE.sub("", name)
+    if cleaned in {"", ".", ".."}:
+        raise ValueError(f"Invalid WPR artifact name: {name}")
+    if NONCANONICAL_ARTIFACT_SUFFIX_RE.search(cleaned):
+        raise ValueError(f"WPR artifact name contains a noncanonical suffix: {name}")
+    return cleaned
+
+
+def canonical_wpr_relative_path(path: Path) -> Path:
+    return Path(*(canonical_wpr_name(part) for part in path.parts))
 
 
 def merge_move(src: Path, dest: Path) -> None:
+    dest = dest.with_name(canonical_wpr_name(dest.name))
     dest.parent.mkdir(parents=True, exist_ok=True)
     if src.is_dir():
         if not dest.exists():
@@ -157,12 +160,12 @@ def merge_move(src: Path, dest: Path) -> None:
         if filecmp.cmp(src, dest, shallow=False):
             src.unlink()
             return
-        dest = unique_path(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        raise ValueError(f"WPR destination conflict after canonicalizing artifact name: {src} -> {dest}")
     shutil.move(str(src), str(dest))
 
 
 def merge_copy(src: Path, dest: Path) -> None:
+    dest = dest.with_name(canonical_wpr_name(dest.name))
     dest.parent.mkdir(parents=True, exist_ok=True)
     if src.is_dir():
         dest.mkdir(parents=True, exist_ok=True)
@@ -175,8 +178,7 @@ def merge_copy(src: Path, dest: Path) -> None:
             raise ValueError(f"Cannot copy file into directory: {src} -> {dest}")
         if filecmp.cmp(src, dest, shallow=False):
             return
-        dest = unique_path(dest)
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        raise ValueError(f"WPR destination conflict after canonicalizing artifact name: {src} -> {dest}")
     shutil.copy2(src, dest)
 
 
@@ -336,7 +338,7 @@ def create_input_scaffold(weeks: dict[int, WeekMeta]) -> None:
             continue
         for child in cadence_root.iterdir():
             if child.is_dir() and child.name not in IGNORED_NAMES and child.name not in EXCLUDED_INPUT_SOURCES:
-                sources.add(child.name)
+                sources.add(canonical_wpr_name(child.name))
 
     for meta in weeks.values():
         week_dir = WPR_ROOT / meta.folder_name
@@ -475,6 +477,12 @@ def resolve_week_for_weekly_file(path: Path, weeks: dict[int, WeekMeta]) -> int 
 
 def copy_file_into_week(src: Path, dest: Path, stats: dict[int, int], week: int) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        if dest.is_dir():
+            raise ValueError(f"Cannot copy file into directory: {src} -> {dest}")
+        if filecmp.cmp(src, dest, shallow=False):
+            return
+        raise ValueError(f"WPR destination conflict after canonicalizing artifact name: {src} -> {dest}")
     shutil.copy2(src, dest)
     stats[week] += 1
 
@@ -489,7 +497,7 @@ def populate_weekly_inputs(weeks: dict[int, WeekMeta], stats: dict[int, int]) ->
         if week is None:
             skipped.append(str(src.relative_to(MONITORING_ROOT)))
             continue
-        rel = src.relative_to(weekly_root)
+        rel = canonical_wpr_relative_path(src.relative_to(weekly_root))
         dest = WPR_ROOT / weeks[week].folder_name / "input" / rel
         copy_file_into_week(src, dest, stats, week)
     return skipped
