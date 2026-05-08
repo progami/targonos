@@ -336,7 +336,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/plutus"
     pm2_name="${PM2_PREFIX}-plutus"
     prisma_cmd=""
-    migrate_cmd="pnpm --filter $workspace db:push"
+    migrate_cmd="pnpm --filter $workspace db:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   hermes)
