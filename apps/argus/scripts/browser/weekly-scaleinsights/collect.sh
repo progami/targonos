@@ -13,6 +13,7 @@ DL="${ARGUS_SCALEINSIGHTS_DOWNLOAD_DIR:-$HOME/Downloads}"
 LOG="${ARGUS_SCALEINSIGHTS_LOG:-$(argus_tmp_log_path weekly-scaleinsights)}"
 TARGET_URL="https://portal.scaleinsights.com/KeywordRanking"
 COUNTRY_CODE="$(require_market_env ARGUS_SCALEINSIGHTS_COUNTRY_CODE)"
+ASIN="$(require_market_env WPR_HERO_ASIN)"
 
 if [ "$#" -eq 2 ]; then
   START_DATE="$1"
@@ -46,15 +47,47 @@ trap cleanup_tab EXIT
 log "Starting weekly ScaleInsights: $PREFIX"
 
 target_file="$DEST/${PREFIX}_SI-KeywordRanking.xlsx"
+target_meta_file="$target_file.meta.json"
+download_url="${TARGET_URL}?asin=${ASIN}&countrycode=${COUNTRY_CODE}&from=${START_DATE}&to=${END_DATE}&handler=Excel"
+
+target_matches_requested_export() {
+  "$NODE_BIN" - "$target_meta_file" "$COUNTRY_CODE" "$ASIN" "$START_DATE" "$END_DATE" "$download_url" <<'NODE'
+const fs = require("node:fs");
+const [metaFile, countryCode, asin, startDate, endDate, downloadUrl] = process.argv.slice(2);
+const payload = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+if (payload.countryCode !== countryCode) process.exit(1);
+if (payload.asin !== asin) process.exit(1);
+if (payload.startDate !== startDate) process.exit(1);
+if (payload.endDate !== endDate) process.exit(1);
+if (payload.downloadUrl !== downloadUrl) process.exit(1);
+NODE
+}
+
+write_target_metadata() {
+  "$NODE_BIN" - "$target_meta_file" "$COUNTRY_CODE" "$ASIN" "$START_DATE" "$END_DATE" "$download_url" <<'NODE'
+const fs = require("node:fs");
+const [metaFile, countryCode, asin, startDate, endDate, downloadUrl] = process.argv.slice(2);
+fs.writeFileSync(metaFile, `${JSON.stringify({
+  countryCode,
+  asin,
+  startDate,
+  endDate,
+  downloadUrl,
+  exportedAt: new Date().toISOString(),
+}, null, 2)}\n`);
+NODE
+}
+
 if [ -f "$target_file" ]; then
   target_size="$(stat -f '%z' "$target_file")"
   log "Existing ScaleInsights target: $target_file size=$target_size"
-  if [ "$target_size" -gt 0 ]; then
+  if [ "$target_size" -gt 0 ] && [ -f "$target_meta_file" ] && target_matches_requested_export; then
     log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx already current"
     log "Done"
     tail -100 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
     exit 0
   fi
+  log "Existing ScaleInsights target is stale for asin=$ASIN countrycode=$COUNTRY_CODE; refreshing"
 else
   log "Existing ScaleInsights target missing: $target_file"
 fi
@@ -115,7 +148,6 @@ if [ "$login_state" = "LOGIN_REQUIRED" ]; then
   wait_tab
 fi
 
-download_url="${TARGET_URL}?countrycode=${COUNTRY_CODE}&from=${START_DATE}&to=${END_DATE}&handler=Excel"
 compact_start="${START_DATE//-/}"
 compact_end="${END_DATE//-/}"
 download_pattern="$DL/KeywordRanking_${COUNTRY_CODE}_${compact_start}_${compact_end}*.xlsx"
@@ -137,7 +169,9 @@ if ! downloaded_file="$(wait_for_new_matching_file "$download_pattern" "" 0 0 0 
 fi
 
 copy_file_with_node "$downloaded_file" "$target_file"
+write_target_metadata
 enqueue_drive_sync "$target_file"
+enqueue_drive_sync "$target_meta_file"
 
 log "Saved: ${PREFIX}_SI-KeywordRanking.xlsx"
 log "Done"
