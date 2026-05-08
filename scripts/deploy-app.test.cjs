@@ -137,6 +137,14 @@ test('plutus deploy skips migrations when prisma files did not change', () => {
   )
 })
 
+test('plutus deploy restarts only configured plutus workers', () => {
+  assert.match(
+    deployScript,
+    /plutus_workers=\("\$\{PM2_PREFIX\}-plutus-settlement-sync"\)/,
+  )
+  assert.doesNotMatch(deployScript, /plutus-cashflow-refresh/)
+})
+
 test('hosted deploys load exact shared and app env files without .env.local fallback', () => {
   assert.match(
     deployScript,
