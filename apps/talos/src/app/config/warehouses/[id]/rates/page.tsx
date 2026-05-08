@@ -4,13 +4,23 @@ import { use, useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { DashboardLayout } from '@/components/layout/dashboard-layout'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
-import { DollarSign, Loader2, Upload, Download, Trash2, ChevronRight, Home } from '@/lib/lucide-icons'
+import {
+  DollarSign,
+  Loader2,
+  Upload,
+  Download,
+  Trash2,
+  ChevronRight,
+  Home,
+} from '@/lib/lucide-icons'
 import { Button } from '@/components/ui/button'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { toast } from 'react-hot-toast'
 import { WarehouseRatesPanel } from '../../warehouse-rates-panel'
 import { useRef, ChangeEvent } from 'react'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
+import { useSession } from '@/hooks/usePortalSession'
+import { getTenantConfig } from '@/lib/tenant/constants'
 
 interface Warehouse {
   id: string
@@ -25,11 +35,7 @@ interface Warehouse {
   } | null
 }
 
-export default function WarehouseRatesPage({
-  params
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default function WarehouseRatesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [warehouse, setWarehouse] = useState<Warehouse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -37,6 +43,7 @@ export default function WarehouseRatesPage({
   const [downloading, setDownloading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false)
+  const { data: session, status } = useSession()
 
   const loadWarehouse = useCallback(async () => {
     try {
@@ -132,15 +139,25 @@ export default function WarehouseRatesPage({
 
   const customBreadcrumb = warehouse ? (
     <nav className="flex items-center space-x-1 text-sm text-slate-600 dark:text-slate-400 mb-4">
-      <Link href="/dashboard" className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+      <Link
+        href="/dashboard"
+        aria-label="Go to dashboard"
+        className="flex items-center hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+      >
         <Home className="h-4 w-4" />
       </Link>
       <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
-      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+      <Link
+        href="/config/warehouses"
+        className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+      >
         Configuration
       </Link>
       <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
-      <Link href="/config/warehouses" className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors">
+      <Link
+        href="/config/warehouses"
+        className="hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+      >
         Warehouses
       </Link>
       <ChevronRight className="h-4 w-4 mx-1 text-slate-400 dark:text-slate-500" />
@@ -148,7 +165,7 @@ export default function WarehouseRatesPage({
     </nav>
   ) : null
 
-  if (loading) {
+  if (loading || status === 'loading') {
     return (
       <DashboardLayout hideBreadcrumb>
         <div className="flex h-64 items-center justify-center">
@@ -179,12 +196,18 @@ export default function WarehouseRatesPage({
     )
   }
 
+  if (!session) {
+    return null
+  }
+
+  const tenantCurrency = getTenantConfig(session.user.region).currency
+
   return (
     <DashboardLayout customBreadcrumb={customBreadcrumb}>
       <PageContainer>
         <PageHeaderSection
           title={warehouse.name}
-          description={`Template Rates • ${warehouse.code}`}
+          description={`Template Rates • ${warehouse.code} • ${tenantCurrency}`}
           icon={DollarSign}
           backHref="/config/warehouses"
           backLabel="Back"
@@ -204,6 +227,7 @@ export default function WarehouseRatesPage({
                       onClick={handleDownload}
                       disabled={downloading}
                       className="h-7 px-2"
+                      aria-label={`Download rate list for ${warehouse.code}`}
                     >
                       <Download className="h-3.5 w-3.5" />
                     </Button>
@@ -212,6 +236,7 @@ export default function WarehouseRatesPage({
                       size="sm"
                       onClick={handleRemoveAttachment}
                       className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      aria-label={`Remove rate list for ${warehouse.code}`}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -225,6 +250,7 @@ export default function WarehouseRatesPage({
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
                   className="h-7 px-2"
+                  aria-label={`Upload rate list for ${warehouse.code}`}
                 >
                   <Upload className="h-3.5 w-3.5" />
                 </Button>
@@ -246,6 +272,7 @@ export default function WarehouseRatesPage({
               warehouseId={warehouse.id}
               warehouseName={warehouse.name}
               warehouseCode={warehouse.code}
+              currency={tenantCurrency}
             />
           </div>
         </PageContent>

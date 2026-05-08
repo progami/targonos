@@ -2,11 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
-import {
-  Building2,
-  Edit,
-  Search,
-} from '@/lib/lucide-icons'
+import { Building2, Edit, Search } from '@/lib/lucide-icons'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
@@ -54,7 +50,7 @@ export default function WarehousesPanel() {
 
       const payload = await response.json()
       const data: Warehouse[] = Array.isArray(payload) ? payload : []
-      const normalized = data.map((warehouse) => ({
+      const normalized = data.map(warehouse => ({
         ...warehouse,
         name: warehouse.name || 'Unnamed warehouse',
         code: warehouse.code || '—',
@@ -83,7 +79,7 @@ export default function WarehousesPanel() {
 
   const filteredWarehouses = useMemo(() => {
     const term = searchTerm.trim().toLowerCase()
-    return warehouses.filter((warehouse) => {
+    return warehouses.filter(warehouse => {
       if (!term) return true
 
       const haystack = [
@@ -125,9 +121,13 @@ export default function WarehousesPanel() {
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Warehouse Network</h2>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                Warehouse Network
+              </h2>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400">Manage warehouses and configure cost rates</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Manage warehouses and configure cost rates
+            </p>
           </div>
           <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 font-medium">
             {warehouses.length} warehouses · {totals.costRates} rates
@@ -140,7 +140,7 @@ export default function WarehousesPanel() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
               <input
                 value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
+                onChange={event => setSearchTerm(event.target.value)}
                 placeholder="Search warehouses..."
                 className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
               />
@@ -156,7 +156,9 @@ export default function WarehousesPanel() {
           <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
             <Building2 className="h-10 w-10 text-slate-300 dark:text-slate-600" />
             <div>
-              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">No warehouses to show</p>
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                No warehouses to show
+              </p>
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 Contact an administrator to configure warehouses.
               </p>
@@ -167,18 +169,35 @@ export default function WarehousesPanel() {
             <table className="w-full table-fixed text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <th className="w-[12%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Code</th>
-                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
-                  <th className="w-[10%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Type</th>
-                  <th className="w-[26%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Address</th>
-                  <th className="w-[14%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
-                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Rates</th>
-                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
+                  <th className="w-[12%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Code
+                  </th>
+                  <th className="w-[22%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Name
+                  </th>
+                  <th className="w-[10%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Type
+                  </th>
+                  <th className="w-[26%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Address
+                  </th>
+                  <th className="w-[14%] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Phone
+                  </th>
+                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Rates
+                  </th>
+                  <th className="w-[8%] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredWarehouses.map(warehouse => (
-                  <tr key={warehouse.id} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                  <tr
+                    key={warehouse.id}
+                    className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                  >
                     <td className="px-3 py-2 font-medium text-foreground">
                       <Link
                         href={`/config/warehouses/${warehouse.id}/rates`}
@@ -193,7 +212,10 @@ export default function WarehousesPanel() {
                     <td className="px-3 py-2 text-muted-foreground">
                       {getKindLabel(warehouse.kind)}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground truncate" title={warehouse.address || undefined}>
+                    <td
+                      className="px-3 py-2 text-muted-foreground truncate"
+                      title={warehouse.address || undefined}
+                    >
                       {warehouse.address || '—'}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
@@ -203,12 +225,11 @@ export default function WarehousesPanel() {
                       {warehouse._count.costRates}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                      >
-                        <Link href={`/config/warehouses/${warehouse.id}/edit`}>
+                      <Button asChild variant="outline" size="sm">
+                        <Link
+                          href={`/config/warehouses/${warehouse.id}/edit`}
+                          aria-label={`Edit warehouse ${warehouse.code}`}
+                        >
                           <Edit className="h-4 w-4" />
                         </Link>
                       </Button>
