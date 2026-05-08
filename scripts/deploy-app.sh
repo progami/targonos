@@ -194,6 +194,18 @@ build_talos_changed_migrate_cmd() {
   join_commands "${commands[@]}"
 }
 
+plutus_prisma_changed() {
+  if any_changed "apps/plutus/prisma/schema.prisma"; then
+    return 0
+  fi
+
+  if any_changed_under "apps/plutus/prisma/migrations/"; then
+    return 0
+  fi
+
+  return 1
+}
+
 skip_git="${DEPLOY_SKIP_GIT:-false}"
 skip_install="${DEPLOY_SKIP_INSTALL:-false}"
 skip_pm2_save="${DEPLOY_SKIP_PM2_SAVE:-false}"
@@ -1194,6 +1206,15 @@ if [[ "$app_key" == "talos" && "$changed_files_available" == "true" ]]; then
   if talos_changed_migrate_cmd="$(build_talos_changed_migrate_cmd)"; then
     migrate_cmd="$talos_changed_migrate_cmd"
   else
+    migrate_cmd=""
+  fi
+fi
+
+if [[ "$app_key" == "plutus" && "$changed_files_available" == "true" ]]; then
+  if plutus_prisma_changed; then
+    log "Plutus Prisma files changed; running db push"
+  else
+    log "Skipping Plutus db push (no Prisma changes in deploy range)"
     migrate_cmd=""
   fi
 fi

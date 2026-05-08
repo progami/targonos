@@ -107,6 +107,17 @@ test('talos deploy always applies pending prisma migrations for both tenant sche
   )
 })
 
+test('plutus deploy skips db push when prisma files did not change', () => {
+  assert.match(
+    deployScript,
+    /plutus_prisma_changed\(\)[\s\S]*?any_changed "apps\/plutus\/prisma\/schema\.prisma"[\s\S]*?any_changed_under "apps\/plutus\/prisma\/migrations\/"/,
+  )
+  assert.match(
+    deployScript,
+    /if \[\[ "\$app_key" == "plutus" && "\$changed_files_available" == "true" \]\]; then[\s\S]*?if plutus_prisma_changed; then[\s\S]*?else[\s\S]*?migrate_cmd=""/,
+  )
+})
+
 test('hosted deploys load exact shared and app env files without .env.local fallback', () => {
   assert.match(
     deployScript,
