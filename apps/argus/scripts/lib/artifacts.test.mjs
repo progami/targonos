@@ -70,6 +70,13 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
       () => enqueueWprDriveSync({ market: 'us', localPath: workspaceArtifactPath }),
       /WPR Drive sync path must start with a canonical WNN week folder: wpr-workspace\/output\/wpr-data-latest\.json/,
     )
+
+    const duplicateNamedArtifactPath = path.join(wprRoot, 'W01', 'input', 'source (1).csv')
+    fs.writeFileSync(duplicateNamedArtifactPath, 'wpr\n', 'utf8')
+    assert.throws(
+      () => enqueueWprDriveSync({ market: 'us', localPath: duplicateNamedArtifactPath }),
+      /WPR Drive sync path contains a noncanonical artifact name: W01\/input\/source \(1\)\.csv/,
+    )
   } finally {
     if (previousRoot === undefined) {
       delete process.env.ARGUS_MONITORING_ROOT_US
