@@ -20,6 +20,7 @@ import {
   type SortKey,
 } from '@/hooks/useInventoryFilters'
 import { getMovementTypeFromTransaction } from '@/lib/utils/movement-types'
+import { isAmazonWarehouseCode } from '@/lib/warehouses/amazon-warehouse'
 
 const LEDGER_TIME_FORMAT = 'MMM d, yyyy h:mm a'
 
@@ -138,7 +139,7 @@ function InventoryPage() {
     return processedBalances.reduce(
       (acc, balance) => {
         acc.cartons += balance.currentCartons
-        acc.pallets += balance.currentPallets
+        acc.pallets += isAmazonWarehouseCode(balance.warehouse.code) ? 0 : balance.currentPallets
         acc.units += balance.currentUnits
         return acc
       },
@@ -624,8 +625,8 @@ function InventoryPage() {
 
                     const sourceNumber =
                       movementType === 'negative'
-                        ? balance.lastTransactionReference ?? null
-                        : balance.inboundOrderNumber ?? null
+                        ? (balance.lastTransactionReference ?? null)
+                        : (balance.inboundOrderNumber ?? null)
                     const sourceHref =
                       movementType === 'negative'
                         ? balance.lastTransactionId
@@ -646,6 +647,7 @@ function InventoryPage() {
                     if (warehouseDisplay.length === 0) {
                       warehouseDisplay = '—'
                     }
+                    const carriesPallets = !isAmazonWarehouseCode(balance.warehouse.code)
 
                     return (
                       <tr
@@ -668,14 +670,14 @@ function InventoryPage() {
                             sourceDisplay
                           )}
                         </td>
-                        <td className="px-2 py-2 text-sm font-medium text-foreground truncate">
+                        <td className="px-2 py-2 text-sm font-medium text-foreground whitespace-normal break-words leading-5">
                           {warehouseDisplay}
                         </td>
-                        <td className="px-2 py-2 text-sm font-semibold text-foreground truncate">
+                        <td className="px-2 py-2 text-sm font-semibold text-foreground whitespace-nowrap">
                           {balance.sku.skuCode}
                         </td>
                         <td
-                          className="px-2 py-2 text-sm text-muted-foreground truncate"
+                          className="px-2 py-2 text-sm text-muted-foreground whitespace-normal break-words leading-5"
                           title={balance.sku.description || undefined}
                         >
                           {balance.sku.description || '—'}
@@ -710,7 +712,7 @@ function InventoryPage() {
                           {balance.currentCartons.toLocaleString()}
                         </td>
                         <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
-                          {balance.currentPallets.toLocaleString()}
+                          {carriesPallets ? balance.currentPallets.toLocaleString() : '—'}
                         </td>
                         <td className="px-2 py-2 text-right text-sm whitespace-nowrap">
                           {balance.currentUnits.toLocaleString()}

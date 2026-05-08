@@ -4,28 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { useSession } from '@/hooks/usePortalSession'
 import { useRouter } from 'next/navigation'
-import {
-  DollarSign,
-  BarChart3,
-  Filter,
-  Download,
-  Truck,
-  Box,
-  Package,
-} from '@/lib/lucide-icons'
+import { DollarSign, BarChart3, Filter, Download, Truck, Box, Package } from '@/lib/lucide-icons'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { StatsCard, StatsCardGrid } from '@/components/ui/stats-card'
 import { Button } from '@/components/ui/button'
 import { PageLoading } from '@/components/ui/loading-spinner'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrencyForCode } from '@/lib/dashboard/currency'
 import { toast } from 'react-hot-toast'
 import type { CostLedgerBucketTotals, CostLedgerGroupResult } from '@targon/ledger'
 import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
 import { withBasePath } from '@/lib/utils/base-path'
 import { parseCostLedgerExportResponse } from './export'
 import { usePageState } from '@/lib/store'
+import { getTenantConfig } from '@/lib/tenant/constants'
 
 const baseFilterInputClass =
   'w-full rounded-md border border-muted px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary'
@@ -81,6 +74,11 @@ export default function CostLedgerPage() {
 
   // Initialize column filters from persisted state after hydration
   const [columnFilters, setColumnFilters] = useState(defaultColumnFilters)
+  const tenantCurrency = session ? getTenantConfig(session.user.region).currency : 'USD'
+  const formatAmount = useCallback(
+    (amount: number) => formatCurrencyForCode(amount, tenantCurrency),
+    [tenantCurrency]
+  )
 
   useEffect(() => {
     setHydrated(true)
@@ -126,12 +124,8 @@ export default function CostLedgerPage() {
         credentials: 'include',
       })
       if (!response.ok) {
-        const errorData = await response
-          .json()
-          .catch(() => ({ error: 'Unknown error' }))
-        toast.error(
-          `Failed to load cost ledger: ${errorData.error || response.statusText}`,
-        )
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        toast.error(`Failed to load cost ledger: ${errorData.error ?? response.statusText}`)
         return
       }
 
@@ -154,7 +148,7 @@ export default function CostLedgerPage() {
   const renderNumericFilter = (
     label: string,
     minKey: keyof typeof columnFilters,
-    maxKey: keyof typeof columnFilters,
+    maxKey: keyof typeof columnFilters
   ) => (
     <Popover>
       <PopoverTrigger asChild>
@@ -168,9 +162,7 @@ export default function CostLedgerPage() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-56 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-foreground">
-            {label} range
-          </span>
+          <span className="text-sm font-medium text-foreground">{label} range</span>
           <button
             type="button"
             className="text-xs font-medium text-primary hover:underline"
@@ -184,7 +176,7 @@ export default function CostLedgerPage() {
             type="number"
             inputMode="numeric"
             value={columnFilters[minKey] as string}
-            onChange={(event) =>
+            onChange={event =>
               setColumnFilters(prev => ({ ...prev, [minKey]: event.target.value }))
             }
             placeholder="Min"
@@ -194,7 +186,7 @@ export default function CostLedgerPage() {
             type="number"
             inputMode="numeric"
             value={columnFilters[maxKey] as string}
-            onChange={(event) =>
+            onChange={event =>
               setColumnFilters(prev => ({ ...prev, [maxKey]: event.target.value }))
             }
             placeholder="Max"
@@ -229,7 +221,7 @@ export default function CostLedgerPage() {
     const matchesRange = (
       value: number | null | undefined,
       min: number | null,
-      max: number | null,
+      max: number | null
     ) => {
       const actual = value ?? 0
       if (min !== null && actual < min) return false
@@ -301,34 +293,34 @@ export default function CostLedgerPage() {
     return [
       {
         title: 'Total',
-        value: formatCurrency(totals.total ?? 0),
+        value: formatAmount(totals.total ?? 0),
         subtitle: 'All cost buckets',
         icon: DollarSign,
         variant: 'default' as const,
       },
       {
         title: 'Inbound',
-        value: formatCurrency(totals.inbound ?? 0),
+        value: formatAmount(totals.inbound ?? 0),
         subtitle: 'Inbound handling',
         icon: Package,
         variant: 'default' as const,
       },
       {
         title: 'Outbound',
-        value: formatCurrency(totals.outbound ?? 0),
+        value: formatAmount(totals.outbound ?? 0),
         subtitle: 'Outbound handling',
         icon: Truck,
         variant: 'default' as const,
       },
       {
         title: 'Storage',
-        value: formatCurrency(totals.storage ?? 0),
+        value: formatAmount(totals.storage ?? 0),
         subtitle: 'Storage fees',
         icon: Box,
         variant: 'default' as const,
       },
     ]
-  }, [totals])
+  }, [formatAmount, totals])
 
   if (status === 'loading') {
     return (
@@ -389,7 +381,7 @@ export default function CostLedgerPage() {
                                 'inline-flex h-7 w-7 items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors',
                                 columnFilters.weekEnding
                                   ? 'border-primary/50 bg-primary/10 text-primary hover:bg-primary/20'
-                                  : 'hover:bg-muted/30 hover:text-primary',
+                                  : 'hover:bg-muted/30 hover:text-primary'
                               )}
                             >
                               <Filter className="h-3.5 w-3.5" />
@@ -441,11 +433,7 @@ export default function CostLedgerPage() {
                     <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
                       <div className="flex items-center justify-end gap-1">
                         <span>Forwarding</span>
-                        {renderNumericFilter(
-                          'Forwarding',
-                          'forwardingMin',
-                          'forwardingMax',
-                        )}
+                        {renderNumericFilter('Forwarding', 'forwardingMin', 'forwardingMax')}
                       </div>
                     </th>
                     <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right">
@@ -474,9 +462,7 @@ export default function CostLedgerPage() {
                       <td colSpan={7} className="px-6 py-10 text-center">
                         <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
                           <Package className="h-10 w-10 text-muted-foreground/60" />
-                          <h3 className="text-sm font-semibold text-foreground">
-                            No results
-                          </h3>
+                          <h3 className="text-sm font-semibold text-foreground">No results</h3>
                           <p className="text-xs text-muted-foreground">
                             Adjust your filters to see cost ledger activity.
                           </p>
@@ -490,22 +476,22 @@ export default function CostLedgerPage() {
                           {format(new Date(group.rangeEnd), 'PP')}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {formatCurrency(group.costs.inbound ?? 0)}
+                          {formatAmount(group.costs.inbound ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {formatCurrency(group.costs.outbound ?? 0)}
+                          {formatAmount(group.costs.outbound ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {formatCurrency(group.costs.forwarding ?? 0)}
+                          {formatAmount(group.costs.forwarding ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {formatCurrency(group.costs.storage ?? 0)}
+                          {formatAmount(group.costs.storage ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {formatCurrency(group.costs.other ?? 0)}
+                          {formatAmount(group.costs.other ?? 0)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium text-foreground">
-                          {formatCurrency(group.costs.total ?? 0)}
+                          {formatAmount(group.costs.total ?? 0)}
                         </td>
                       </tr>
                     ))

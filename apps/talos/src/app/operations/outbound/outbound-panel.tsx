@@ -191,7 +191,7 @@ export function OutboundPanel() {
             <h2 className="text-lg font-semibold text-foreground">Outbound</h2>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Shipments returned by Amazon inbound SP-API for the active tenant.
+            Shipments returned by Amazon FBA shipment data for the active tenant.
           </p>
         </div>
 

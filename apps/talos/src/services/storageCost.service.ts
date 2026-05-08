@@ -1,53 +1,53 @@
 import { getTenantPrisma } from '@/lib/tenant/server'
 import {
- FinancialLedgerCategory,
- FinancialLedgerSourceType,
- Prisma,
- TransactionType,
+  FinancialLedgerCategory,
+  FinancialLedgerSourceType,
+  Prisma,
+  TransactionType,
 } from '@targon/prisma-talos'
 import { addMonths, addWeeks, eachDayOfInterval, endOfWeek, format, startOfWeek } from 'date-fns'
 import { randomUUID } from 'crypto'
 import {
- calculateStorageCost,
- getStorageRate,
- type StorageRateResult,
- type StorageTier,
+  calculateStorageCost,
+  getStorageRate,
+  type StorageRateResult,
+  type StorageTier,
 } from './storageRate.service'
 
 interface RecordStorageCostParams {
- warehouseCode: string
- warehouseName: string
- skuCode: string
- skuDescription: string
- lotRef: string
- transactionDate: Date
+  warehouseCode: string
+  warehouseName: string
+  skuCode: string
+  skuDescription: string
+  lotRef: string
+  transactionDate: Date
 }
 
 type WeeklyTransactionMovement = {
- transactionType: TransactionType
- cartonsIn: number
- cartonsOut: number
- transactionDate: Date
+  transactionType: TransactionType
+  cartonsIn: number
+  cartonsOut: number
+  transactionDate: Date
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
- typeof value === 'object' && value !== null && !Array.isArray(value)
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const asNumber = (value: unknown): number | null => {
- if (typeof value === 'number' && Number.isFinite(value)) return value
- if (typeof value === 'string' && value.trim() !== '') {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
- }
- return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
 }
 
 const asIsoDateString = (value: unknown): string | null => {
- if (typeof value !== 'string') return null
- const trimmed = value.trim()
- if (!trimmed) return null
- const parsed = new Date(trimmed)
- return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const parsed = new Date(trimmed)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
 }
 
 /**
@@ -56,551 +56,590 @@ const asIsoDateString = (value: unknown): string | null => {
  * storage costs are captured when inventory first appears in a week
  */
 interface WarehouseBillingConfig {
- storageBillingModel?: 'DAILY' | 'WEEKLY_ARRIVAL_CUTOFF' | 'WEEKLY_PALLET'
- cutoffHour?: number
- halfWeekRate?: number
- fullWeekRate?: number
- weeklyPalletRate?: number
- graceDays?: number
+  storageBillingModel?: 'DAILY' | 'WEEKLY_ARRIVAL_CUTOFF' | 'WEEKLY_PALLET'
+  cutoffHour?: number
+  halfWeekRate?: number
+  fullWeekRate?: number
+  weeklyPalletRate?: number
+  graceDays?: number
 }
 
 function parseWarehouseBillingConfig(raw: unknown): WarehouseBillingConfig | null {
- if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
- const obj = raw as Record<string, unknown>
- if (obj.storageBillingModel === 'WEEKLY_PALLET') {
-  return {
-   storageBillingModel: 'WEEKLY_PALLET',
-   weeklyPalletRate: typeof obj.weeklyPalletRate === 'number' ? obj.weeklyPalletRate : undefined,
-   graceDays: typeof obj.graceDays === 'number' ? obj.graceDays : 2,
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const obj = raw as Record<string, unknown>
+  if (obj.storageBillingModel === 'WEEKLY_PALLET') {
+    return {
+      storageBillingModel: 'WEEKLY_PALLET',
+      weeklyPalletRate: typeof obj.weeklyPalletRate === 'number' ? obj.weeklyPalletRate : undefined,
+      graceDays: typeof obj.graceDays === 'number' ? obj.graceDays : 2,
+    }
   }
- }
- if (obj.storageBillingModel !== 'WEEKLY_ARRIVAL_CUTOFF') return null
- return {
-  storageBillingModel: 'WEEKLY_ARRIVAL_CUTOFF',
-  cutoffHour: typeof obj.cutoffHour === 'number' ? obj.cutoffHour : 12,
-  halfWeekRate: typeof obj.halfWeekRate === 'number' ? obj.halfWeekRate : undefined,
-  fullWeekRate: typeof obj.fullWeekRate === 'number' ? obj.fullWeekRate : undefined,
- }
+  if (obj.storageBillingModel !== 'WEEKLY_ARRIVAL_CUTOFF') return null
+  return {
+    storageBillingModel: 'WEEKLY_ARRIVAL_CUTOFF',
+    cutoffHour: typeof obj.cutoffHour === 'number' ? obj.cutoffHour : 12,
+    halfWeekRate: typeof obj.halfWeekRate === 'number' ? obj.halfWeekRate : undefined,
+    fullWeekRate: typeof obj.fullWeekRate === 'number' ? obj.fullWeekRate : undefined,
+  }
 }
 
 export async function recordStorageCostEntry({
- warehouseCode,
- warehouseName,
- skuCode,
- skuDescription,
- lotRef,
- transactionDate,
+  warehouseCode,
+  warehouseName,
+  skuCode,
+  skuDescription,
+  lotRef,
+  transactionDate,
 }: RecordStorageCostParams) {
- const prisma = await getTenantPrisma()
- const weekEndingDate = endOfWeek(transactionDate, { weekStartsOn: 1 })
- const weekStartingDate = startOfWeek(transactionDate, { weekStartsOn: 1 })
+  const prisma = await getTenantPrisma()
+  const weekEndingDate = endOfWeek(transactionDate, { weekStartsOn: 1 })
+  const weekStartingDate = startOfWeek(transactionDate, { weekStartsOn: 1 })
 
- // Check for warehouse-specific billing model (e.g. FMC half-week/full-week cutoff)
- const warehouseRow = await prisma.warehouse.findFirst({
-  where: { code: warehouseCode },
-  select: { billingConfig: true },
- })
- const billingConfig = parseWarehouseBillingConfig(warehouseRow?.billingConfig)
+  // Check for warehouse-specific billing model (e.g. FMC half-week/full-week cutoff)
+  const warehouseRow = await prisma.warehouse.findFirst({
+    where: { code: warehouseCode },
+    select: { billingConfig: true },
+  })
+  const billingConfig = parseWarehouseBillingConfig(warehouseRow?.billingConfig)
 
- const firstReceive = await prisma.inventoryTransaction.findFirst({
- where: {
- warehouseCode,
- skuCode,
- lotRef,
- transactionType: TransactionType.RECEIVE,
- storageCartonsPerPallet: { not: null },
- },
- orderBy: { transactionDate: 'asc' },
- select: { transactionDate: true, storageCartonsPerPallet: true },
- })
+  const firstReceive = await prisma.inventoryTransaction.findFirst({
+    where: {
+      warehouseCode,
+      skuCode,
+      lotRef,
+      transactionType: TransactionType.RECEIVE,
+      storageCartonsPerPallet: { not: null },
+    },
+    orderBy: { transactionDate: 'asc' },
+    select: { transactionDate: true, storageCartonsPerPallet: true },
+  })
 
- const cartonsPerPallet =
- firstReceive?.storageCartonsPerPallet != null ? Number(firstReceive.storageCartonsPerPallet) : null
+  const cartonsPerPallet =
+    firstReceive?.storageCartonsPerPallet != null
+      ? Number(firstReceive.storageCartonsPerPallet)
+      : null
 
- const sixPlusStartDate = firstReceive?.transactionDate
- ? addMonths(firstReceive.transactionDate, 6)
- : null
- const sixPlusStartKey = sixPlusStartDate ? format(sixPlusStartDate, 'yyyy-MM-dd') : null
+  const sixPlusStartDate = firstReceive?.transactionDate
+    ? addMonths(firstReceive.transactionDate, 6)
+    : null
+  const sixPlusStartKey = sixPlusStartDate ? format(sixPlusStartDate, 'yyyy-MM-dd') : null
 
- // Compute storage week number from first receive
- const firstReceiveWeekEnd = firstReceive?.transactionDate
-  ? endOfWeek(firstReceive.transactionDate, { weekStartsOn: 1 })
-  : null
- const weekNumber = firstReceiveWeekEnd
-  ? Math.round((weekEndingDate.getTime() - firstReceiveWeekEnd.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
-  : null
+  // Compute storage week number from first receive
+  const firstReceiveWeekEnd = firstReceive?.transactionDate
+    ? endOfWeek(firstReceive.transactionDate, { weekStartsOn: 1 })
+    : null
+  const weekNumber = firstReceiveWeekEnd
+    ? Math.round(
+        (weekEndingDate.getTime() - firstReceiveWeekEnd.getTime()) / (7 * 24 * 60 * 60 * 1000)
+      ) + 1
+    : null
 
- // Calculate opening carton balance (inventory prior to the start of the week)
- const openingAggregate = await prisma.inventoryTransaction.aggregate({
- _sum: {
- cartonsIn: true,
- cartonsOut: true,
- },
- where: {
- warehouseCode,
- skuCode,
- lotRef,
- transactionDate: { lt: weekStartingDate },
- },
- })
+  // Calculate opening carton balance (inventory prior to the start of the week)
+  const openingAggregate = await prisma.inventoryTransaction.aggregate({
+    _sum: {
+      cartonsIn: true,
+      cartonsOut: true,
+    },
+    where: {
+      warehouseCode,
+      skuCode,
+      lotRef,
+      transactionDate: { lt: weekStartingDate },
+    },
+  })
 
- const openingBalance =
- Number(openingAggregate._sum.cartonsIn || 0) - Number(openingAggregate._sum.cartonsOut || 0)
+  const openingBalance =
+    Number(openingAggregate._sum.cartonsIn || 0) - Number(openingAggregate._sum.cartonsOut || 0)
 
- // Gather all transactions for the week to understand weekly movement
- const weeklyTransactions: WeeklyTransactionMovement[] = await prisma.inventoryTransaction.findMany({
- where: {
- warehouseCode,
- skuCode,
- lotRef,
- transactionDate: {
- gte: weekStartingDate,
- lte: weekEndingDate,
- },
- },
- select: {
- transactionType: true,
- cartonsIn: true,
- cartonsOut: true,
- transactionDate: true,
- },
- orderBy: { transactionDate: 'asc' },
- })
+  // Gather all transactions for the week to understand weekly movement
+  const weeklyTransactions: WeeklyTransactionMovement[] =
+    await prisma.inventoryTransaction.findMany({
+      where: {
+        warehouseCode,
+        skuCode,
+        lotRef,
+        transactionDate: {
+          gte: weekStartingDate,
+          lte: weekEndingDate,
+        },
+      },
+      select: {
+        transactionType: true,
+        cartonsIn: true,
+        cartonsOut: true,
+        transactionDate: true,
+      },
+      orderBy: { transactionDate: 'asc' },
+    })
 
- let weeklyReceive = 0
- let weeklyShip = 0
- let weeklyAdjust = 0
+  let weeklyReceive = 0
+  let weeklyShip = 0
+  let weeklyAdjust = 0
 
- for (const movement of weeklyTransactions) {
- const inValue = Number(movement.cartonsIn || 0)
- const outValue = Number(movement.cartonsOut || 0)
+  for (const movement of weeklyTransactions) {
+    const inValue = Number(movement.cartonsIn || 0)
+    const outValue = Number(movement.cartonsOut || 0)
 
- switch (movement.transactionType) {
- case TransactionType.RECEIVE:
- weeklyReceive += inValue
- break
- case TransactionType.SHIP:
- weeklyShip += outValue
- break
- case TransactionType.ADJUST_IN:
- weeklyAdjust += inValue
- break
- case TransactionType.ADJUST_OUT:
- weeklyAdjust -= outValue
- break
- default:
- weeklyAdjust += inValue - outValue
- break
- }
- }
-
- const closingBalance = openingBalance + weeklyReceive - weeklyShip + weeklyAdjust
- const normalizedClosingBalance = Math.max(0, closingBalance)
-
- const dailyNetCartons = new Map<string, number>()
- for (const movement of weeklyTransactions) {
- const dayKey = format(new Date(movement.transactionDate), 'yyyy-MM-dd')
- const net = Number(movement.cartonsIn || 0) - Number(movement.cartonsOut || 0)
- dailyNetCartons.set(dayKey, (dailyNetCartons.get(dayKey) ?? 0) + net)
- }
-
- const daysInWeek = eachDayOfInterval({ start: weekStartingDate, end: weekEndingDate })
- const dailyRows: Array<{
- date: string
- tier: StorageTier
- netCartons: number
- closingCartons: number
- closingPallets: number | null
- }> = []
-
- let runningCartons = Math.max(0, openingBalance)
- let totalClosingCartons = 0
- let palletDays = 0
- let palletDaysStandard = 0
- let palletDaysSixPlus = 0
- let closingPallets = 0
-
- for (const day of daysInWeek) {
- const dayKey = format(day, 'yyyy-MM-dd')
- const dayTier: StorageTier =
- sixPlusStartKey && dayKey >= sixPlusStartKey ? 'SIX_PLUS' : 'STANDARD'
- const netCartons = dailyNetCartons.get(dayKey) ?? 0
-
- runningCartons = Math.max(0, runningCartons + netCartons)
- totalClosingCartons += runningCartons
-
- let dayClosingPallets: number | null = null
- if (cartonsPerPallet && cartonsPerPallet > 0) {
- dayClosingPallets = runningCartons === 0 ? 0 : Math.ceil(runningCartons / cartonsPerPallet)
- palletDays += dayClosingPallets
- if (dayTier === 'SIX_PLUS') {
- palletDaysSixPlus += dayClosingPallets
- } else {
- palletDaysStandard += dayClosingPallets
- }
- closingPallets = dayClosingPallets
- }
-
- dailyRows.push({
- date: dayKey,
- tier: dayTier,
- netCartons,
- closingCartons: runningCartons,
- closingPallets: dayClosingPallets,
- })
- }
-
- const averageBalance =
- daysInWeek.length > 0 ? Number((totalClosingCartons / daysInWeek.length).toFixed(2)) : 0
-
- const hasMovement =
- openingBalance !== 0 || weeklyReceive !== 0 || weeklyShip !== 0 || weeklyAdjust !== 0
-
- if (!hasMovement) {
- return null
- }
-
- const existing = await prisma.storageLedger.findUnique({
- where: {
- warehouseCode_skuCode_lotRef_weekEndingDate: {
- warehouseCode,
- skuCode,
- lotRef,
- weekEndingDate,
- },
- },
- })
-
- let storageRateStandard: StorageRateResult | null = null
- let storageRateSixPlus: StorageRateResult | null = null
- let ratePerPalletDay: number | null = null
- let rateEffectiveDate: Date | null = null
- let costRateId: string | null = null
- let isCostCalculated = false
- let totalCost: number | null = null
- let rateStandardPerPalletDay: number | null = null
- let rateSixPlusPerPalletDay: number | null = null
- let rateStandardEffectiveDate: string | null = null
- let rateSixPlusEffectiveDate: string | null = null
-
- if (cartonsPerPallet && cartonsPerPallet > 0) {
- if (billingConfig?.storageBillingModel === 'WEEKLY_PALLET' && billingConfig.weeklyPalletRate != null) {
-  // V Global-style weekly pallet billing: charge per pallet per week if stock present > graceDays
-  const daysWithStock = dailyRows.filter((d) => d.closingCartons > 0).length
-  const graceDays = billingConfig.graceDays ?? 2
-
-  if (daysWithStock > graceDays && closingPallets > 0) {
-   totalCost = Number((closingPallets * billingConfig.weeklyPalletRate).toFixed(2))
-  } else {
-   totalCost = 0
+    switch (movement.transactionType) {
+      case TransactionType.RECEIVE:
+        weeklyReceive += inValue
+        break
+      case TransactionType.SHIP:
+        weeklyShip += outValue
+        break
+      case TransactionType.ADJUST_IN:
+        weeklyAdjust += inValue
+        break
+      case TransactionType.ADJUST_OUT:
+        weeklyAdjust -= outValue
+        break
+      default:
+        weeklyAdjust += inValue - outValue
+        break
+    }
   }
-  ratePerPalletDay = billingConfig.weeklyPalletRate
-  isCostCalculated = true
- } else try {
-   if (existing?.isCostCalculated) {
-    const existingRate = existing.storageRatePerPalletDay != null ? Number(existing.storageRatePerPalletDay) : null
-    const existingTotal = existing.totalStorageCost != null ? Number(existing.totalStorageCost) : null
-    const snapshot = isRecord(existing.dailyBalanceData) ? existing.dailyBalanceData : null
-    const snapshotStandardRate = snapshot ? asNumber(snapshot['rateStandardPerPalletDay']) : null
-    const snapshotSixPlusRate = snapshot ? asNumber(snapshot['rateSixPlusPerPalletDay']) : null
-    const snapshotStandardEffective = snapshot ? asIsoDateString(snapshot['rateStandardEffectiveDate']) : null
-    const snapshotSixPlusEffective = snapshot ? asIsoDateString(snapshot['rateSixPlusEffectiveDate']) : null
 
-    rateStandardPerPalletDay = snapshotStandardRate ?? existingRate
-    rateSixPlusPerPalletDay = snapshotSixPlusRate ?? rateStandardPerPalletDay
-    rateStandardEffectiveDate =
-     snapshotStandardEffective ?? (existing.rateEffectiveDate ? existing.rateEffectiveDate.toISOString() : null)
-    rateSixPlusEffectiveDate = snapshotSixPlusEffective
+  const closingBalance = openingBalance + weeklyReceive - weeklyShip + weeklyAdjust
+  const normalizedClosingBalance = Math.max(0, closingBalance)
 
-    const canComputeStandard = palletDaysStandard === 0 || rateStandardPerPalletDay != null
-    const canComputeSixPlus = palletDaysSixPlus === 0 || rateSixPlusPerPalletDay != null
+  const dailyNetCartons = new Map<string, number>()
+  for (const movement of weeklyTransactions) {
+    const dayKey = format(new Date(movement.transactionDate), 'yyyy-MM-dd')
+    const net = Number(movement.cartonsIn || 0) - Number(movement.cartonsOut || 0)
+    dailyNetCartons.set(dayKey, (dailyNetCartons.get(dayKey) ?? 0) + net)
+  }
 
-    if (canComputeStandard && canComputeSixPlus && (palletDaysStandard + palletDaysSixPlus > 0)) {
-     const standardCost = await calculateStorageCost(palletDaysStandard, rateStandardPerPalletDay ?? 0)
-     const sixPlusCost = await calculateStorageCost(palletDaysSixPlus, rateSixPlusPerPalletDay ?? 0)
-     totalCost = Number((standardCost + sixPlusCost).toFixed(2))
-     isCostCalculated = true
+  const daysInWeek = eachDayOfInterval({ start: weekStartingDate, end: weekEndingDate })
+  const dailyRows: Array<{
+    date: string
+    tier: StorageTier
+    netCartons: number
+    closingCartons: number
+    closingPallets: number | null
+  }> = []
 
-     // FMC-style arrival-week override (cached-rate path)
-     if (
-      billingConfig?.storageBillingModel === 'WEEKLY_ARRIVAL_CUTOFF' &&
-      openingBalance === 0 &&
-      weeklyReceive > 0 &&
-      closingPallets > 0 &&
-      billingConfig.halfWeekRate != null &&
-      billingConfig.fullWeekRate != null
-     ) {
-      const earliestReceive = weeklyTransactions.find(
-       (t) => t.transactionType === TransactionType.RECEIVE && Number(t.cartonsIn || 0) > 0
-      )
-      if (earliestReceive) {
-       const deliveryHour = new Date(earliestReceive.transactionDate).getHours()
-       const weeklyRate =
-        deliveryHour < billingConfig.cutoffHour!
-         ? billingConfig.halfWeekRate
-         : billingConfig.fullWeekRate
-       totalCost = Number((closingPallets * weeklyRate).toFixed(2))
+  let runningCartons = Math.max(0, openingBalance)
+  let totalClosingCartons = 0
+  let palletDays = 0
+  let palletDaysStandard = 0
+  let palletDaysSixPlus = 0
+  let closingPallets = 0
+
+  for (const day of daysInWeek) {
+    const dayKey = format(day, 'yyyy-MM-dd')
+    const dayTier: StorageTier =
+      sixPlusStartKey && dayKey >= sixPlusStartKey ? 'SIX_PLUS' : 'STANDARD'
+    const netCartons = dailyNetCartons.get(dayKey) ?? 0
+
+    runningCartons = Math.max(0, runningCartons + netCartons)
+    totalClosingCartons += runningCartons
+
+    let dayClosingPallets: number | null = null
+    if (cartonsPerPallet && cartonsPerPallet > 0) {
+      dayClosingPallets = runningCartons === 0 ? 0 : Math.ceil(runningCartons / cartonsPerPallet)
+      palletDays += dayClosingPallets
+      if (dayTier === 'SIX_PLUS') {
+        palletDaysSixPlus += dayClosingPallets
+      } else {
+        palletDaysStandard += dayClosingPallets
       }
-     }
-    } else {
-     totalCost = existingTotal
-     isCostCalculated = true
+      closingPallets = dayClosingPallets
     }
 
-    costRateId = existing.costRateId ?? null
-    rateEffectiveDate = existing.rateEffectiveDate ?? null
+    dailyRows.push({
+      date: dayKey,
+      tier: dayTier,
+      netCartons,
+      closingCartons: runningCartons,
+      closingPallets: dayClosingPallets,
+    })
+  }
 
-    if (palletDays > 0 && totalCost != null) {
-     if (palletDaysSixPlus === 0 && rateStandardPerPalletDay != null) {
-      ratePerPalletDay = rateStandardPerPalletDay
-     } else if (palletDaysStandard === 0 && rateSixPlusPerPalletDay != null) {
-      ratePerPalletDay = rateSixPlusPerPalletDay
-     } else {
-      ratePerPalletDay = Number((totalCost / palletDays).toFixed(4))
-     }
-    } else {
-     ratePerPalletDay = existingRate
-    }
-   } else {
-    storageRateStandard = await getStorageRate(warehouseCode, weekEndingDate, 'STANDARD')
-    if (storageRateStandard) {
-     const standardCost = await calculateStorageCost(palletDaysStandard, storageRateStandard.ratePerPalletDay)
+  const averageBalance =
+    daysInWeek.length > 0 ? Number((totalClosingCartons / daysInWeek.length).toFixed(2)) : 0
 
-     let sixPlusCost = 0
-     if (palletDaysSixPlus > 0) {
-      storageRateSixPlus = await getStorageRate(warehouseCode, weekEndingDate, 'SIX_PLUS')
-      if (!storageRateSixPlus) {
-       throw new Error('Missing storage rate for 6+ month tier')
+  const hasMovement =
+    openingBalance !== 0 || weeklyReceive !== 0 || weeklyShip !== 0 || weeklyAdjust !== 0
+
+  if (!hasMovement) {
+    return null
+  }
+
+  const existing = await prisma.storageLedger.findUnique({
+    where: {
+      warehouseCode_skuCode_lotRef_weekEndingDate: {
+        warehouseCode,
+        skuCode,
+        lotRef,
+        weekEndingDate,
+      },
+    },
+  })
+
+  let storageRateStandard: StorageRateResult | null = null
+  let storageRateSixPlus: StorageRateResult | null = null
+  let ratePerPalletDay: number | null = null
+  let rateEffectiveDate: Date | null = null
+  let costRateId: string | null = null
+  let isCostCalculated = false
+  let totalCost: number | null = null
+  let rateStandardPerPalletDay: number | null = null
+  let rateSixPlusPerPalletDay: number | null = null
+  let rateStandardEffectiveDate: string | null = null
+  let rateSixPlusEffectiveDate: string | null = null
+
+  if (cartonsPerPallet && cartonsPerPallet > 0) {
+    if (
+      billingConfig?.storageBillingModel === 'WEEKLY_PALLET' &&
+      billingConfig.weeklyPalletRate != null
+    ) {
+      // V Global-style weekly pallet billing: charge per pallet per week if stock present > graceDays
+      const daysWithStock = dailyRows.filter(d => d.closingCartons > 0).length
+      const graceDays = billingConfig.graceDays ?? 2
+
+      if (daysWithStock > graceDays && closingPallets > 0) {
+        totalCost = Number((closingPallets * billingConfig.weeklyPalletRate).toFixed(2))
+      } else {
+        totalCost = 0
       }
-      sixPlusCost = await calculateStorageCost(palletDaysSixPlus, storageRateSixPlus.ratePerPalletDay)
-     }
+      ratePerPalletDay = billingConfig.weeklyPalletRate
+      isCostCalculated = true
+    } else
+      try {
+        if (existing?.isCostCalculated) {
+          const existingRate =
+            existing.storageRatePerPalletDay != null
+              ? Number(existing.storageRatePerPalletDay)
+              : null
+          const existingTotal =
+            existing.totalStorageCost != null ? Number(existing.totalStorageCost) : null
+          const snapshot = isRecord(existing.dailyBalanceData) ? existing.dailyBalanceData : null
+          const snapshotStandardRate = snapshot
+            ? asNumber(snapshot['rateStandardPerPalletDay'])
+            : null
+          const snapshotSixPlusRate = snapshot
+            ? asNumber(snapshot['rateSixPlusPerPalletDay'])
+            : null
+          const snapshotStandardEffective = snapshot
+            ? asIsoDateString(snapshot['rateStandardEffectiveDate'])
+            : null
+          const snapshotSixPlusEffective = snapshot
+            ? asIsoDateString(snapshot['rateSixPlusEffectiveDate'])
+            : null
 
-     totalCost = Number((standardCost + sixPlusCost).toFixed(2))
-     isCostCalculated = true
+          rateStandardPerPalletDay = snapshotStandardRate ?? existingRate
+          rateSixPlusPerPalletDay = snapshotSixPlusRate ?? rateStandardPerPalletDay
+          rateStandardEffectiveDate =
+            snapshotStandardEffective ??
+            (existing.rateEffectiveDate ? existing.rateEffectiveDate.toISOString() : null)
+          rateSixPlusEffectiveDate = snapshotSixPlusEffective
 
-     // FMC-style arrival-week override: half-week or full-week flat rate
-     if (
-      billingConfig?.storageBillingModel === 'WEEKLY_ARRIVAL_CUTOFF' &&
-      openingBalance === 0 &&
-      weeklyReceive > 0 &&
-      closingPallets > 0 &&
-      billingConfig.halfWeekRate != null &&
-      billingConfig.fullWeekRate != null
-     ) {
-      // Find earliest receive in this week to check delivery hour
-      const earliestReceive = weeklyTransactions.find(
-       (t) => t.transactionType === TransactionType.RECEIVE && Number(t.cartonsIn || 0) > 0
-      )
-      if (earliestReceive) {
-       const deliveryHour = new Date(earliestReceive.transactionDate).getHours()
-       const weeklyRate =
-        deliveryHour < billingConfig.cutoffHour!
-         ? billingConfig.halfWeekRate
-         : billingConfig.fullWeekRate
-       totalCost = Number((closingPallets * weeklyRate).toFixed(2))
+          const canComputeStandard = palletDaysStandard === 0 || rateStandardPerPalletDay != null
+          const canComputeSixPlus = palletDaysSixPlus === 0 || rateSixPlusPerPalletDay != null
+
+          if (
+            canComputeStandard &&
+            canComputeSixPlus &&
+            palletDaysStandard + palletDaysSixPlus > 0
+          ) {
+            const standardCost = await calculateStorageCost(
+              palletDaysStandard,
+              rateStandardPerPalletDay ?? 0
+            )
+            const sixPlusCost = await calculateStorageCost(
+              palletDaysSixPlus,
+              rateSixPlusPerPalletDay ?? 0
+            )
+            totalCost = Number((standardCost + sixPlusCost).toFixed(2))
+            isCostCalculated = true
+
+            // FMC-style arrival-week override (cached-rate path)
+            if (
+              billingConfig?.storageBillingModel === 'WEEKLY_ARRIVAL_CUTOFF' &&
+              openingBalance === 0 &&
+              weeklyReceive > 0 &&
+              closingPallets > 0 &&
+              billingConfig.halfWeekRate != null &&
+              billingConfig.fullWeekRate != null
+            ) {
+              const earliestReceive = weeklyTransactions.find(
+                t => t.transactionType === TransactionType.RECEIVE && Number(t.cartonsIn || 0) > 0
+              )
+              if (earliestReceive) {
+                const deliveryHour = new Date(earliestReceive.transactionDate).getHours()
+                const weeklyRate =
+                  deliveryHour < billingConfig.cutoffHour!
+                    ? billingConfig.halfWeekRate
+                    : billingConfig.fullWeekRate
+                totalCost = Number((closingPallets * weeklyRate).toFixed(2))
+              }
+            }
+          } else {
+            totalCost = existingTotal
+            isCostCalculated = true
+          }
+
+          costRateId = existing.costRateId ?? null
+          rateEffectiveDate = existing.rateEffectiveDate ?? null
+
+          if (palletDays > 0 && totalCost != null) {
+            if (palletDaysSixPlus === 0 && rateStandardPerPalletDay != null) {
+              ratePerPalletDay = rateStandardPerPalletDay
+            } else if (palletDaysStandard === 0 && rateSixPlusPerPalletDay != null) {
+              ratePerPalletDay = rateSixPlusPerPalletDay
+            } else {
+              ratePerPalletDay = Number((totalCost / palletDays).toFixed(4))
+            }
+          } else {
+            ratePerPalletDay = existingRate
+          }
+        } else {
+          storageRateStandard = await getStorageRate(warehouseCode, weekEndingDate, 'STANDARD')
+          if (storageRateStandard) {
+            const standardCost = await calculateStorageCost(
+              palletDaysStandard,
+              storageRateStandard.ratePerPalletDay
+            )
+
+            let sixPlusCost = 0
+            if (palletDaysSixPlus > 0) {
+              storageRateSixPlus = await getStorageRate(warehouseCode, weekEndingDate, 'SIX_PLUS')
+              if (!storageRateSixPlus) {
+                throw new Error('Missing storage rate for 6+ month tier')
+              }
+              sixPlusCost = await calculateStorageCost(
+                palletDaysSixPlus,
+                storageRateSixPlus.ratePerPalletDay
+              )
+            }
+
+            totalCost = Number((standardCost + sixPlusCost).toFixed(2))
+            isCostCalculated = true
+
+            // FMC-style arrival-week override: half-week or full-week flat rate
+            if (
+              billingConfig?.storageBillingModel === 'WEEKLY_ARRIVAL_CUTOFF' &&
+              openingBalance === 0 &&
+              weeklyReceive > 0 &&
+              closingPallets > 0 &&
+              billingConfig.halfWeekRate != null &&
+              billingConfig.fullWeekRate != null
+            ) {
+              // Find earliest receive in this week to check delivery hour
+              const earliestReceive = weeklyTransactions.find(
+                t => t.transactionType === TransactionType.RECEIVE && Number(t.cartonsIn || 0) > 0
+              )
+              if (earliestReceive) {
+                const deliveryHour = new Date(earliestReceive.transactionDate).getHours()
+                const weeklyRate =
+                  deliveryHour < billingConfig.cutoffHour!
+                    ? billingConfig.halfWeekRate
+                    : billingConfig.fullWeekRate
+                totalCost = Number((closingPallets * weeklyRate).toFixed(2))
+              }
+            }
+
+            rateStandardPerPalletDay = storageRateStandard.ratePerPalletDay
+            rateStandardEffectiveDate = storageRateStandard.effectiveDate.toISOString()
+
+            if (storageRateSixPlus) {
+              rateSixPlusPerPalletDay = storageRateSixPlus.ratePerPalletDay
+              rateSixPlusEffectiveDate = storageRateSixPlus.effectiveDate.toISOString()
+            }
+
+            if (palletDaysSixPlus === 0) {
+              ratePerPalletDay = storageRateStandard.ratePerPalletDay
+              rateEffectiveDate = storageRateStandard.effectiveDate
+              costRateId = storageRateStandard.costRateId ?? null
+            } else if (palletDaysStandard === 0 && storageRateSixPlus) {
+              ratePerPalletDay = storageRateSixPlus.ratePerPalletDay
+              rateEffectiveDate = storageRateSixPlus.effectiveDate
+              costRateId = storageRateSixPlus.costRateId ?? null
+            } else if (palletDays > 0) {
+              // Mixed-tier week: store a blended rate and keep the detailed split in dailyBalanceData.
+              ratePerPalletDay = Number((totalCost / palletDays).toFixed(4))
+              rateEffectiveDate = null
+              costRateId = null
+            } else {
+              ratePerPalletDay = storageRateStandard.ratePerPalletDay
+              rateEffectiveDate = storageRateStandard.effectiveDate
+              costRateId = storageRateStandard.costRateId ?? null
+            }
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        console.warn(`Storage rate lookup failed for ${warehouseCode}:`, message)
+        isCostCalculated = false
       }
-     }
+  }
 
-     rateStandardPerPalletDay = storageRateStandard.ratePerPalletDay
-     rateStandardEffectiveDate = storageRateStandard.effectiveDate.toISOString()
+  const daysWithStock = dailyRows.filter(d => d.closingCartons > 0).length
 
-     if (storageRateSixPlus) {
-      rateSixPlusPerPalletDay = storageRateSixPlus.ratePerPalletDay
-      rateSixPlusEffectiveDate = storageRateSixPlus.effectiveDate.toISOString()
-     }
+  const dailyBalanceData = {
+    methodology: 'tactical_storage_pallet_day_v2',
+    cartonsPerPallet,
+    billingModel: billingConfig?.storageBillingModel ?? 'DAILY',
+    weekNumber,
+    sixPlusStartDate: sixPlusStartDate ? sixPlusStartDate.toISOString() : null,
+    palletDaysStandard,
+    palletDaysSixPlus,
+    rateStandardPerPalletDay: rateStandardPerPalletDay ?? null,
+    rateSixPlusPerPalletDay: rateSixPlusPerPalletDay ?? null,
+    rateStandardEffectiveDate: rateStandardEffectiveDate ?? null,
+    rateSixPlusEffectiveDate: rateSixPlusEffectiveDate ?? null,
+    ...(billingConfig?.storageBillingModel === 'WEEKLY_PALLET' && {
+      weeklyPalletRate: billingConfig.weeklyPalletRate ?? null,
+      graceDays: billingConfig.graceDays ?? 2,
+      daysWithStock,
+    }),
+    days: dailyRows,
+  }
 
-     if (palletDaysSixPlus === 0) {
-      ratePerPalletDay = storageRateStandard.ratePerPalletDay
-      rateEffectiveDate = storageRateStandard.effectiveDate
-      costRateId = storageRateStandard.costRateId ?? null
-     } else if (palletDaysStandard === 0 && storageRateSixPlus) {
-      ratePerPalletDay = storageRateSixPlus.ratePerPalletDay
-      rateEffectiveDate = storageRateSixPlus.effectiveDate
-      costRateId = storageRateSixPlus.costRateId ?? null
-     } else if (palletDays > 0) {
-      // Mixed-tier week: store a blended rate and keep the detailed split in dailyBalanceData.
-      ratePerPalletDay = Number((totalCost / palletDays).toFixed(4))
-      rateEffectiveDate = null
-      costRateId = null
-     } else {
-      ratePerPalletDay = storageRateStandard.ratePerPalletDay
-      rateEffectiveDate = storageRateStandard.effectiveDate
-      costRateId = storageRateStandard.costRateId ?? null
-     }
-    }
-   }
- } catch (error) {
- const message = error instanceof Error ? error.message : 'Unknown error'
- console.warn(`Storage rate lookup failed for ${warehouseCode}:`, message)
- isCostCalculated = false
- }
- }
+  if (existing) {
+    const updated = await prisma.storageLedger.update({
+      where: { id: existing.id },
+      data: {
+        warehouseName,
+        skuDescription,
+        openingBalance,
+        weeklyReceive,
+        weeklyShip,
+        weeklyAdjust,
+        closingBalance: normalizedClosingBalance,
+        averageBalance,
+        dailyBalanceData,
+        closingPallets,
+        palletDays,
+        storageRatePerPalletDay: ratePerPalletDay,
+        totalStorageCost: totalCost,
+        rateEffectiveDate,
+        costRateId,
+        isCostCalculated,
+      },
+    })
 
- const daysWithStock = dailyRows.filter((d) => d.closingCartons > 0).length
+    await upsertFinancialLedgerEntryForStorage(prisma, updated)
+    return updated
+  }
 
- const dailyBalanceData = {
-  methodology: 'tactical_storage_pallet_day_v2',
-  cartonsPerPallet,
-  billingModel: billingConfig?.storageBillingModel ?? 'DAILY',
-  weekNumber,
-  sixPlusStartDate: sixPlusStartDate ? sixPlusStartDate.toISOString() : null,
-  palletDaysStandard,
-  palletDaysSixPlus,
-  rateStandardPerPalletDay: rateStandardPerPalletDay ?? null,
-  rateSixPlusPerPalletDay: rateSixPlusPerPalletDay ?? null,
-  rateStandardEffectiveDate: rateStandardEffectiveDate ?? null,
-  rateSixPlusEffectiveDate: rateSixPlusEffectiveDate ?? null,
-  ...(billingConfig?.storageBillingModel === 'WEEKLY_PALLET' && {
-   weeklyPalletRate: billingConfig.weeklyPalletRate ?? null,
-   graceDays: billingConfig.graceDays ?? 2,
-   daysWithStock,
-  }),
-  days: dailyRows,
- }
+  const created = await prisma.storageLedger.create({
+    data: {
+      storageLedgerId: randomUUID(),
+      warehouseCode,
+      warehouseName,
+      skuCode,
+      skuDescription,
+      lotRef,
+      weekEndingDate,
+      openingBalance,
+      weeklyReceive,
+      weeklyShip,
+      weeklyAdjust,
+      closingBalance: normalizedClosingBalance,
+      averageBalance,
+      dailyBalanceData,
+      closingPallets,
+      palletDays,
+      storageRatePerPalletDay: ratePerPalletDay,
+      totalStorageCost: totalCost,
+      rateEffectiveDate,
+      costRateId,
+      isCostCalculated,
+      createdByName: 'System',
+    },
+  })
 
- if (existing) {
- const updated = await prisma.storageLedger.update({
-  where: { id: existing.id },
-  data: {
-   warehouseName,
-   skuDescription,
-   openingBalance,
-   weeklyReceive,
-   weeklyShip,
-   weeklyAdjust,
-   closingBalance: normalizedClosingBalance,
-   averageBalance,
-   dailyBalanceData,
-   closingPallets,
-   palletDays,
-   storageRatePerPalletDay: ratePerPalletDay,
-   totalStorageCost: totalCost,
-   rateEffectiveDate,
-   costRateId,
-   isCostCalculated,
-  },
- })
-
- await upsertFinancialLedgerEntryForStorage(prisma, updated)
- return updated
- }
-
- const created = await prisma.storageLedger.create({
-  data: {
-   storageLedgerId: randomUUID(),
-   warehouseCode,
-   warehouseName,
-   skuCode,
-   skuDescription,
-   lotRef,
-   weekEndingDate,
-   openingBalance,
-   weeklyReceive,
-   weeklyShip,
-   weeklyAdjust,
-   closingBalance: normalizedClosingBalance,
-   averageBalance,
-   dailyBalanceData,
-   closingPallets,
-   palletDays,
-   storageRatePerPalletDay: ratePerPalletDay,
-   totalStorageCost: totalCost,
-   rateEffectiveDate,
-   costRateId,
-   isCostCalculated,
-   createdByName: 'System',
-  },
- })
-
- await upsertFinancialLedgerEntryForStorage(prisma, created)
- return created
+  await upsertFinancialLedgerEntryForStorage(prisma, created)
+  return created
 }
 
 async function upsertFinancialLedgerEntryForStorage(
- prisma: Prisma.TransactionClient,
- entry: {
-  id: string
-  storageLedgerId: string
-  warehouseCode: string
-  warehouseName: string
-  skuCode: string
-  skuDescription: string
-  lotRef: string
-  weekEndingDate: Date
-  palletDays: number
-  closingPallets: number
-  storageRatePerPalletDay: unknown
-  totalStorageCost: unknown
-  isCostCalculated: boolean
-  dailyBalanceData: unknown
-  createdAt: Date
-  createdByName: string
- }
+  prisma: Prisma.TransactionClient,
+  entry: {
+    id: string
+    storageLedgerId: string
+    warehouseCode: string
+    warehouseName: string
+    skuCode: string
+    skuDescription: string
+    lotRef: string
+    weekEndingDate: Date
+    palletDays: number
+    closingPallets: number
+    storageRatePerPalletDay: unknown
+    totalStorageCost: unknown
+    isCostCalculated: boolean
+    dailyBalanceData: unknown
+    createdAt: Date
+    createdByName: string
+  }
 ) {
- const total = entry.totalStorageCost != null ? Number(entry.totalStorageCost) : null
- if (!entry.isCostCalculated || total === null || !Number.isFinite(total)) {
-  await prisma.financialLedgerEntry.deleteMany({
-   where: {
-    sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
-    sourceId: entry.storageLedgerId,
-   },
+  const total = entry.totalStorageCost != null ? Number(entry.totalStorageCost) : null
+  if (!entry.isCostCalculated || total === null || !Number.isFinite(total)) {
+    await prisma.financialLedgerEntry.deleteMany({
+      where: {
+        sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+        sourceId: entry.storageLedgerId,
+      },
+    })
+    return
+  }
+
+  const unitRateRaw =
+    entry.storageRatePerPalletDay != null ? Number(entry.storageRatePerPalletDay) : null
+  const unitRate = unitRateRaw !== null && Number.isFinite(unitRateRaw) ? unitRateRaw : null
+
+  // Derive week number from dailyBalanceData for the cost name label
+  const snapshot = isRecord(entry.dailyBalanceData) ? entry.dailyBalanceData : null
+  const wn = snapshot ? asNumber(snapshot['weekNumber']) : null
+  const isWeeklyPallet = snapshot?.['billingModel'] === 'WEEKLY_PALLET'
+  const costName = wn != null && wn > 0 ? `Storage (Week ${wn})` : 'Storage'
+  // For weekly pallet model, quantity = closing pallets; otherwise pallet-days
+  const quantity = isWeeklyPallet ? entry.closingPallets : entry.palletDays
+
+  await prisma.financialLedgerEntry.upsert({
+    where: {
+      sourceType_sourceId: {
+        sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+        sourceId: entry.storageLedgerId,
+      },
+    },
+    create: {
+      id: entry.id,
+      sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
+      sourceId: entry.storageLedgerId,
+      category: FinancialLedgerCategory.Storage,
+      costName,
+      quantity: new Prisma.Decimal(quantity.toString()),
+      unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
+      amount: new Prisma.Decimal(total.toFixed(2)),
+      warehouseCode: entry.warehouseCode,
+      warehouseName: entry.warehouseName,
+      skuCode: entry.skuCode,
+      skuDescription: entry.skuDescription,
+      lotRef: entry.lotRef,
+      storageLedgerId: entry.id,
+      effectiveAt: entry.weekEndingDate,
+      createdAt: entry.createdAt,
+      createdByName: entry.createdByName,
+    },
+    update: {
+      category: FinancialLedgerCategory.Storage,
+      costName,
+      quantity: new Prisma.Decimal(quantity.toString()),
+      unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
+      amount: new Prisma.Decimal(total.toFixed(2)),
+      warehouseCode: entry.warehouseCode,
+      warehouseName: entry.warehouseName,
+      skuCode: entry.skuCode,
+      skuDescription: entry.skuDescription,
+      lotRef: entry.lotRef,
+      storageLedgerId: entry.id,
+      effectiveAt: entry.weekEndingDate,
+      createdByName: entry.createdByName,
+    },
   })
-  return
- }
-
- const unitRateRaw = entry.storageRatePerPalletDay != null ? Number(entry.storageRatePerPalletDay) : null
- const unitRate = unitRateRaw !== null && Number.isFinite(unitRateRaw) ? unitRateRaw : null
-
- // Derive week number from dailyBalanceData for the cost name label
- const snapshot = isRecord(entry.dailyBalanceData) ? entry.dailyBalanceData : null
- const wn = snapshot ? asNumber(snapshot['weekNumber']) : null
- const isWeeklyPallet = snapshot?.['billingModel'] === 'WEEKLY_PALLET'
- const costName = wn != null && wn > 0 ? `Storage (Week ${wn})` : 'Storage'
- // For weekly pallet model, quantity = closing pallets; otherwise pallet-days
- const quantity = isWeeklyPallet ? entry.closingPallets : entry.palletDays
-
- await prisma.financialLedgerEntry.upsert({
-  where: {
-   sourceType_sourceId: {
-    sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
-    sourceId: entry.storageLedgerId,
-   },
-  },
-  create: {
-   id: entry.id,
-   sourceType: FinancialLedgerSourceType.STORAGE_LEDGER,
-   sourceId: entry.storageLedgerId,
-   category: FinancialLedgerCategory.Storage,
-   costName,
-   quantity: new Prisma.Decimal(quantity.toString()),
-   unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
-   amount: new Prisma.Decimal(total.toFixed(2)),
-   warehouseCode: entry.warehouseCode,
-   warehouseName: entry.warehouseName,
-   skuCode: entry.skuCode,
-   skuDescription: entry.skuDescription,
-   lotRef: entry.lotRef,
-   storageLedgerId: entry.id,
-   effectiveAt: entry.weekEndingDate,
-   createdAt: entry.createdAt,
-   createdByName: entry.createdByName,
-  },
-  update: {
-   category: FinancialLedgerCategory.Storage,
-   costName,
-   quantity: new Prisma.Decimal(quantity.toString()),
-   unitRate: unitRate !== null ? new Prisma.Decimal(unitRate.toFixed(4)) : null,
-   amount: new Prisma.Decimal(total.toFixed(2)),
-   warehouseCode: entry.warehouseCode,
-   warehouseName: entry.warehouseName,
-   skuCode: entry.skuCode,
-   skuDescription: entry.skuDescription,
-   lotRef: entry.lotRef,
-   storageLedgerId: entry.id,
-   effectiveAt: entry.weekEndingDate,
-   createdByName: entry.createdByName,
-  },
- })
 }
 
 /**
@@ -608,77 +647,77 @@ async function upsertFinancialLedgerEntryForStorage(
  * This is run as a weekly scheduled process to catch any missed entries
  */
 export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
- const prisma = await getTenantPrisma()
- const weekEndingDate = endOfWeek(date, { weekStartsOn: 1 })
+  const prisma = await getTenantPrisma()
+  const weekEndingDate = endOfWeek(date, { weekStartsOn: 1 })
 
- // Get all lots with positive inventory balances
- const aggregates = await prisma.inventoryTransaction.groupBy({
-  by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
-  _sum: { cartonsIn: true, cartonsOut: true },
-  where: {
-  transactionDate: { lte: date },
-  },
+  // Get all lots with positive inventory balances
+  const aggregates = await prisma.inventoryTransaction.groupBy({
+    by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
+    _sum: { cartonsIn: true, cartonsOut: true },
+    where: {
+      transactionDate: { lte: date },
+    },
   })
 
- let processed = 0
- let costCalculated = 0
- let skipped = 0
- const errors: string[] = []
+  let processed = 0
+  let costCalculated = 0
+  let skipped = 0
+  const errors: string[] = []
 
- for (const agg of aggregates) {
- try {
- const netCartons = Number(agg._sum.cartonsIn ?? 0) - Number(agg._sum.cartonsOut ?? 0)
- if (netCartons <= 0) {
-  skipped++
-  continue
- }
+  for (const agg of aggregates) {
+    try {
+      const netCartons = Number(agg._sum.cartonsIn ?? 0) - Number(agg._sum.cartonsOut ?? 0)
+      if (netCartons <= 0) {
+        skipped++
+        continue
+      }
 
- // Check if entry already exists
- const exists = await prisma.storageLedger.findUnique({
- where: {
- warehouseCode_skuCode_lotRef_weekEndingDate: {
- warehouseCode: agg.warehouseCode,
- skuCode: agg.skuCode,
- lotRef: agg.lotRef,
- weekEndingDate
- }
- }
- })
+      // Check if entry already exists
+      const exists = await prisma.storageLedger.findUnique({
+        where: {
+          warehouseCode_skuCode_lotRef_weekEndingDate: {
+            warehouseCode: agg.warehouseCode,
+            skuCode: agg.skuCode,
+            lotRef: agg.lotRef,
+            weekEndingDate,
+          },
+        },
+      })
 
- if (!exists) {
- const result = await recordStorageCostEntry({
- warehouseCode: agg.warehouseCode,
- warehouseName: agg.warehouseName,
- skuCode: agg.skuCode,
- skuDescription: agg.skuDescription,
- lotRef: agg.lotRef,
- transactionDate: date,
- })
+      if (!exists) {
+        const result = await recordStorageCostEntry({
+          warehouseCode: agg.warehouseCode,
+          warehouseName: agg.warehouseName,
+          skuCode: agg.skuCode,
+          skuDescription: agg.skuDescription,
+          lotRef: agg.lotRef,
+          transactionDate: date,
+        })
 
- if (result) {
- processed++
- if (result.isCostCalculated) {
- costCalculated++
- }
- } else {
- skipped++
- }
- }
- } catch (error) {
- const message = error instanceof Error ? error.message : 'Unknown error'
- const errorMsg = `${agg.warehouseCode}/${agg.skuCode}/${agg.lotRef}: ${message}`
- errors.push(errorMsg)
- console.error('Storage entry creation failed:', errorMsg)
- }
- }
+        if (result) {
+          processed++
+          if (result.isCostCalculated) {
+            costCalculated++
+          }
+        } else {
+          skipped++
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      const errorMsg = `${agg.warehouseCode}/${agg.skuCode}/${agg.lotRef}: ${message}`
+      errors.push(errorMsg)
+      console.error('Storage entry creation failed:', errorMsg)
+    }
+  }
 
- return { 
- processed, 
- costCalculated, 
- skipped, 
- errors,
- weekEndingDate: weekEndingDate.toISOString()
- }
+  return {
+    processed,
+    costCalculated,
+    skipped,
+    errors,
+    weekEndingDate: weekEndingDate.toISOString(),
+  }
 }
 
 /**
@@ -686,63 +725,63 @@ export async function ensureWeeklyStorageEntries(date: Date = new Date()) {
  * This can be run after storage rates are updated
  */
 export async function recalculateStorageCosts(
- weekEndingDate?: Date,
- warehouseCode?: string
+  weekEndingDate?: Date,
+  warehouseCode?: string
 ): Promise<{
- recalculated: number
- errors: string[]
+  recalculated: number
+  errors: string[]
 }> {
- const prisma = await getTenantPrisma()
- const where: Prisma.StorageLedgerWhereInput = {
- isCostCalculated: false,
- }
- 
- if (weekEndingDate) {
- where.weekEndingDate = weekEndingDate
- }
- 
- if (warehouseCode) {
- where.warehouseCode = warehouseCode
- }
+  const prisma = await getTenantPrisma()
+  const where: Prisma.StorageLedgerWhereInput = {
+    isCostCalculated: false,
+  }
 
- // Get all entries without costs
- const entriesWithoutCosts = await prisma.storageLedger.findMany({
- where,
- select: {
- id: true,
- warehouseCode: true,
- warehouseName: true,
- skuCode: true,
- skuDescription: true,
- lotRef: true,
- weekEndingDate: true
- }
- })
+  if (weekEndingDate) {
+    where.weekEndingDate = weekEndingDate
+  }
 
- let recalculated = 0
- const errors: string[] = []
+  if (warehouseCode) {
+    where.warehouseCode = warehouseCode
+  }
 
- for (const entry of entriesWithoutCosts) {
- try {
- const result = await recordStorageCostEntry({
- warehouseCode: entry.warehouseCode,
- warehouseName: entry.warehouseName,
- skuCode: entry.skuCode,
- skuDescription: entry.skuDescription,
- lotRef: entry.lotRef,
- transactionDate: entry.weekEndingDate,
- })
+  // Get all entries without costs
+  const entriesWithoutCosts = await prisma.storageLedger.findMany({
+    where,
+    select: {
+      id: true,
+      warehouseCode: true,
+      warehouseName: true,
+      skuCode: true,
+      skuDescription: true,
+      lotRef: true,
+      weekEndingDate: true,
+    },
+  })
 
- if (result?.isCostCalculated) {
- recalculated++
- }
- } catch (error) {
- const message = error instanceof Error ? error.message : 'Unknown error'
- errors.push(`Entry ${entry.id}: ${message}`)
- }
- }
+  let recalculated = 0
+  const errors: string[] = []
 
- return { recalculated, errors }
+  for (const entry of entriesWithoutCosts) {
+    try {
+      const result = await recordStorageCostEntry({
+        warehouseCode: entry.warehouseCode,
+        warehouseName: entry.warehouseName,
+        skuCode: entry.skuCode,
+        skuDescription: entry.skuDescription,
+        lotRef: entry.lotRef,
+        transactionDate: entry.weekEndingDate,
+      })
+
+      if (result?.isCostCalculated) {
+        recalculated++
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      errors.push(`Entry ${entry.id}: ${message}`)
+    }
+  }
+
+  return { recalculated, errors }
 }
 
 /**
@@ -752,134 +791,243 @@ export async function recalculateStorageCosts(
  * weekly storage charges are recorded even when no inventory movement happens.
  */
 export async function backfillWeeklyStorageEntries(
- targetDate: Date = new Date(),
- warehouseCode?: string
+  targetDate: Date = new Date(),
+  warehouseCode?: string
 ): Promise<{
- created: number
- skipped: number
- errors: string[]
+  created: number
+  skipped: number
+  errors: string[]
 }> {
- const prisma = await getTenantPrisma()
- const targetWeekEnd = endOfWeek(targetDate, { weekStartsOn: 1 })
+  const prisma = await getTenantPrisma()
+  const targetWeekEnd = endOfWeek(targetDate, { weekStartsOn: 1 })
 
- // Find all distinct lot/warehouse combinations that have ever received inventory
- const lotsWithReceives = await prisma.inventoryTransaction.groupBy({
-  by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
-  _min: { transactionDate: true },
-  _sum: { cartonsIn: true, cartonsOut: true },
-  where: {
-   ...(warehouseCode ? { warehouseCode } : {}),
-  },
- })
+  // Find all distinct lot/warehouse combinations that have ever received inventory
+  const lotsWithReceives = await prisma.inventoryTransaction.groupBy({
+    by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
+    _min: { transactionDate: true },
+    _sum: { cartonsIn: true, cartonsOut: true },
+    where: {
+      ...(warehouseCode ? { warehouseCode } : {}),
+    },
+  })
 
- let created = 0
- let skipped = 0
- const errors: string[] = []
+  let created = 0
+  let skipped = 0
+  const errors: string[] = []
 
- for (const lot of lotsWithReceives) {
-  try {
-   const firstDate = lot._min.transactionDate
-   if (!firstDate) { skipped++; continue }
+  for (const lot of lotsWithReceives) {
+    try {
+      const firstDate = lot._min.transactionDate
+      if (!firstDate) {
+        skipped++
+        continue
+      }
 
-   const firstWeekEnd = endOfWeek(firstDate, { weekStartsOn: 1 })
+      const firstWeekEnd = endOfWeek(firstDate, { weekStartsOn: 1 })
 
-   // Walk through every week from first receive to target
-   let currentWeekEnd = firstWeekEnd
-   while (currentWeekEnd <= targetWeekEnd) {
-    // Check if entry already exists for this week
-    const exists = await prisma.storageLedger.findUnique({
-     where: {
-      warehouseCode_skuCode_lotRef_weekEndingDate: {
-       warehouseCode: lot.warehouseCode,
-       skuCode: lot.skuCode,
-       lotRef: lot.lotRef,
-       weekEndingDate: currentWeekEnd,
-      },
-     },
-     select: { id: true },
-    })
+      // Walk through every week from first receive to target
+      let currentWeekEnd = firstWeekEnd
+      while (currentWeekEnd <= targetWeekEnd) {
+        // Check if entry already exists for this week
+        const exists = await prisma.storageLedger.findUnique({
+          where: {
+            warehouseCode_skuCode_lotRef_weekEndingDate: {
+              warehouseCode: lot.warehouseCode,
+              skuCode: lot.skuCode,
+              lotRef: lot.lotRef,
+              weekEndingDate: currentWeekEnd,
+            },
+          },
+          select: { id: true },
+        })
 
-    if (!exists) {
-     // Check if lot had positive inventory at this point
-     const balanceAtWeek = await prisma.inventoryTransaction.aggregate({
-      _sum: { cartonsIn: true, cartonsOut: true },
-      where: {
-       warehouseCode: lot.warehouseCode,
-       skuCode: lot.skuCode,
-       lotRef: lot.lotRef,
-       transactionDate: { lte: currentWeekEnd },
-      },
-     })
-     const netCartons = Number(balanceAtWeek._sum.cartonsIn ?? 0) - Number(balanceAtWeek._sum.cartonsOut ?? 0)
+        if (!exists) {
+          // Check if lot had positive inventory at this point
+          const balanceAtWeek = await prisma.inventoryTransaction.aggregate({
+            _sum: { cartonsIn: true, cartonsOut: true },
+            where: {
+              warehouseCode: lot.warehouseCode,
+              skuCode: lot.skuCode,
+              lotRef: lot.lotRef,
+              transactionDate: { lte: currentWeekEnd },
+            },
+          })
+          const netCartons =
+            Number(balanceAtWeek._sum.cartonsIn ?? 0) - Number(balanceAtWeek._sum.cartonsOut ?? 0)
 
-     if (netCartons > 0) {
-      const result = await recordStorageCostEntry({
-       warehouseCode: lot.warehouseCode,
-       warehouseName: lot.warehouseName,
-       skuCode: lot.skuCode,
-       skuDescription: lot.skuDescription,
-       lotRef: lot.lotRef,
-       transactionDate: currentWeekEnd,
-      })
-      if (result) created++
-      else skipped++
-     } else {
-      skipped++
-     }
-    } else {
-     skipped++
+          if (netCartons > 0) {
+            const result = await recordStorageCostEntry({
+              warehouseCode: lot.warehouseCode,
+              warehouseName: lot.warehouseName,
+              skuCode: lot.skuCode,
+              skuDescription: lot.skuDescription,
+              lotRef: lot.lotRef,
+              transactionDate: currentWeekEnd,
+            })
+            if (result) created++
+            else skipped++
+          } else {
+            skipped++
+          }
+        } else {
+          skipped++
+        }
+
+        currentWeekEnd = addWeeks(currentWeekEnd, 1)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      errors.push(`${lot.warehouseCode}/${lot.skuCode}/${lot.lotRef}: ${message}`)
     }
-
-    currentWeekEnd = addWeeks(currentWeekEnd, 1)
-   }
-  } catch (error) {
-   const message = error instanceof Error ? error.message : 'Unknown error'
-   errors.push(`${lot.warehouseCode}/${lot.skuCode}/${lot.lotRef}: ${message}`)
   }
- }
 
- return { created, skipped, errors }
+  return { created, skipped, errors }
+}
+
+export async function materializeStorageLedgerEntriesForRange(
+  startDate: Date,
+  endDate: Date,
+  warehouseCode?: string
+): Promise<{
+  created: number
+  existing: number
+  skipped: number
+  errors: string[]
+}> {
+  const prisma = await getTenantPrisma()
+  const startWeekEnd = endOfWeek(startDate, { weekStartsOn: 1 })
+  const targetWeekEnd = endOfWeek(endDate, { weekStartsOn: 1 })
+
+  const transactionWhere: Prisma.InventoryTransactionWhereInput = {
+    transactionType: TransactionType.RECEIVE,
+    transactionDate: { lte: targetWeekEnd },
+  }
+  if (warehouseCode) {
+    transactionWhere.warehouseCode = warehouseCode
+  }
+
+  const lotsWithReceives = await prisma.inventoryTransaction.groupBy({
+    by: ['warehouseCode', 'warehouseName', 'skuCode', 'skuDescription', 'lotRef'],
+    _min: { transactionDate: true },
+    where: transactionWhere,
+  })
+
+  let created = 0
+  let existing = 0
+  let skipped = 0
+  const errors: string[] = []
+
+  for (const lot of lotsWithReceives) {
+    try {
+      const firstReceiveDate = lot._min.transactionDate
+      if (!firstReceiveDate) {
+        skipped++
+        continue
+      }
+
+      const firstReceiveWeekEnd = endOfWeek(firstReceiveDate, { weekStartsOn: 1 })
+      let currentWeekEnd = firstReceiveWeekEnd > startWeekEnd ? firstReceiveWeekEnd : startWeekEnd
+
+      while (currentWeekEnd <= targetWeekEnd) {
+        const existingEntry = await prisma.storageLedger.findUnique({
+          where: {
+            warehouseCode_skuCode_lotRef_weekEndingDate: {
+              warehouseCode: lot.warehouseCode,
+              skuCode: lot.skuCode,
+              lotRef: lot.lotRef,
+              weekEndingDate: currentWeekEnd,
+            },
+          },
+          select: { id: true },
+        })
+
+        if (existingEntry) {
+          existing++
+          currentWeekEnd = addWeeks(currentWeekEnd, 1)
+          continue
+        }
+
+        const balanceAtWeek = await prisma.inventoryTransaction.aggregate({
+          _sum: { cartonsIn: true, cartonsOut: true },
+          where: {
+            warehouseCode: lot.warehouseCode,
+            skuCode: lot.skuCode,
+            lotRef: lot.lotRef,
+            transactionDate: { lte: currentWeekEnd },
+          },
+        })
+        const netCartons =
+          Number(balanceAtWeek._sum.cartonsIn ?? 0) - Number(balanceAtWeek._sum.cartonsOut ?? 0)
+
+        if (netCartons > 0) {
+          const result = await recordStorageCostEntry({
+            warehouseCode: lot.warehouseCode,
+            warehouseName: lot.warehouseName,
+            skuCode: lot.skuCode,
+            skuDescription: lot.skuDescription,
+            lotRef: lot.lotRef,
+            transactionDate: currentWeekEnd,
+          })
+          if (result) {
+            created++
+          } else {
+            skipped++
+          }
+        } else {
+          skipped++
+        }
+
+        currentWeekEnd = addWeeks(currentWeekEnd, 1)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      errors.push(`${lot.warehouseCode}/${lot.skuCode}/${lot.lotRef}: ${message}`)
+    }
+  }
+
+  return { created, existing, skipped, errors }
 }
 
 /**
  * Get storage cost summary for a date range
  */
 export async function getStorageCostSummary(
- startDate: Date,
- endDate: Date,
- warehouseCode?: string
+  startDate: Date,
+  endDate: Date,
+  warehouseCode?: string
 ) {
- const prisma = await getTenantPrisma()
- const where: Prisma.StorageLedgerWhereInput = {
- weekEndingDate: {
- gte: startDate,
- lte: endDate
- }
- }
- 
- if (warehouseCode) {
- where.warehouseCode = warehouseCode
- }
+  const prisma = await getTenantPrisma()
+  const where: Prisma.StorageLedgerWhereInput = {
+    weekEndingDate: {
+      gte: startDate,
+      lte: endDate,
+    },
+  }
 
- const summary = await prisma.storageLedger.aggregate({
- _count: {
- id: true,
- totalStorageCost: true
- },
- _sum: {
- palletDays: true,
- totalStorageCost: true
- },
- where
- })
+  if (warehouseCode) {
+    where.warehouseCode = warehouseCode
+  }
 
- return {
- totalEntries: summary._count.id || 0,
- entriesWithCosts: summary._count.totalStorageCost || 0,
- totalPalletDays: Number(summary._sum.palletDays || 0),
- totalStorageCost: Number(summary._sum.totalStorageCost || 0),
- costCalculationRate: summary._count.id > 0 
- ? ((summary._count.totalStorageCost || 0) / summary._count.id * 100).toFixed(1)
- : '0'
- }
+  const summary = await prisma.storageLedger.aggregate({
+    _count: {
+      id: true,
+      totalStorageCost: true,
+    },
+    _sum: {
+      palletDays: true,
+      totalStorageCost: true,
+    },
+    where,
+  })
+
+  return {
+    totalEntries: summary._count.id || 0,
+    entriesWithCosts: summary._count.totalStorageCost || 0,
+    totalPalletDays: Number(summary._sum.palletDays || 0),
+    totalStorageCost: Number(summary._sum.totalStorageCost || 0),
+    costCalculationRate:
+      summary._count.id > 0
+        ? (((summary._count.totalStorageCost || 0) / summary._count.id) * 100).toFixed(1)
+        : '0',
+  }
 }
