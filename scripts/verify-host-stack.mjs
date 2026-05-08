@@ -36,7 +36,6 @@ export const HOST_ENVIRONMENTS = {
       'main-argus',
     ],
     workerProcesses: [
-      'main-plutus-cashflow-refresh',
       'main-plutus-settlement-sync',
       'main-hermes-orders-sync',
       'main-hermes-request-review',
@@ -71,7 +70,6 @@ export const HOST_ENVIRONMENTS = {
       'dev-argus',
     ],
     workerProcesses: [
-      'dev-plutus-cashflow-refresh',
       'dev-plutus-settlement-sync',
       'dev-hermes-orders-sync',
       'dev-hermes-request-review',
