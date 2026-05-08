@@ -159,7 +159,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'plutus',
     name: 'Plutus',
-    description: 'Settlment Controller',
+    description: 'Settlement Controller',
     url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
     category: 'Finance',
     devPath: '/plutus',
@@ -177,7 +177,7 @@ const BASE_APPS: AppBase[] = [
   {
     id: 'argus',
     name: 'Argus',
-    description: 'E-commerce Catalouge Monitoring',
+    description: 'E-commerce Catalogue Monitoring',
     url: joinBaseUrl(PORTAL_BASE_URL, '/argus'),
     category: 'Account / Listing',
     devPath: '/argus',

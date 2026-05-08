@@ -93,9 +93,11 @@ function resolveLocalBuildMetadata() {
   const headSha = runGit(['rev-parse', 'HEAD'])
   const latest = resolveLatestSemverTag()
   const latestTagSha = runGit(['rev-list', '-n', '1', latest.tag])
+  const buildTime = new Date().toISOString()
 
   if (latestTagSha === headSha) {
     return {
+      buildTime,
       commitSha: headSha,
       releaseUrl: `https://github.com/progami/targonos/releases/tag/${latest.tag}`,
       version: latest.version,
@@ -106,6 +108,7 @@ function resolveLocalBuildMetadata() {
   const bump = resolveBump(commitMessages)
 
   return {
+    buildTime,
     commitSha: headSha,
     releaseUrl: `https://github.com/progami/targonos/commit/${headSha}`,
     version: bumpVersion(latest, bump),
@@ -115,7 +118,13 @@ function resolveLocalBuildMetadata() {
 function resolveBuildMetadata() {
   const explicitVersion = readNonEmptyEnv('NEXT_PUBLIC_VERSION')
   if (explicitVersion !== undefined) {
+    const buildTime = readNonEmptyEnv('NEXT_PUBLIC_BUILD_TIME')
+    if (buildTime === undefined) {
+      throw new Error('NEXT_PUBLIC_BUILD_TIME is required when NEXT_PUBLIC_VERSION is set.')
+    }
+
     return {
+      buildTime,
       commitSha: readNonEmptyEnv('NEXT_PUBLIC_COMMIT_SHA'),
       releaseUrl: readNonEmptyEnv('NEXT_PUBLIC_RELEASE_URL'),
       version: explicitVersion,
@@ -134,6 +143,7 @@ const nextConfig = {
     NEXT_PUBLIC_RELEASE_URL: buildMetadata.releaseUrl,
     NEXT_PUBLIC_COMMIT_SHA: buildMetadata.commitSha,
     NEXT_PUBLIC_PORTAL_AUTH_URL: process.env.NEXT_PUBLIC_PORTAL_AUTH_URL,
+    NEXT_PUBLIC_BUILD_TIME: buildMetadata.buildTime,
   },
   async redirects() {
     return [
