@@ -126,7 +126,7 @@ test('talos deploy always applies pending prisma migrations for both tenant sche
   )
 })
 
-test('plutus deploy skips db push when prisma files did not change', () => {
+test('plutus deploy skips migrations when prisma files did not change', () => {
   assert.match(
     deployScript,
     /plutus_prisma_changed\(\)[\s\S]*?any_changed "apps\/plutus\/prisma\/schema\.prisma"[\s\S]*?any_changed_under "apps\/plutus\/prisma\/migrations\/"/,

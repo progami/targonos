@@ -1212,9 +1212,9 @@ fi
 
 if [[ "$app_key" == "plutus" && "$changed_files_available" == "true" ]]; then
   if plutus_prisma_changed; then
-    log "Plutus Prisma files changed; running db push"
+    log "Plutus Prisma files changed; running migrations"
   else
-    log "Skipping Plutus db push (no Prisma changes in deploy range)"
+    log "Skipping Plutus migrations (no Prisma changes in deploy range)"
     migrate_cmd=""
   fi
 fi
