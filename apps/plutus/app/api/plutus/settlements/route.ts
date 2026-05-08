@@ -249,7 +249,10 @@ export async function GET(req: NextRequest) {
 
     const totalCount = filteredRows.length;
     const pageStart = (page - 1) * pageSize;
-    const rows = filteredRows.slice(pageStart, pageStart + pageSize);
+    const rows = filteredRows.slice(pageStart, pageStart + pageSize).map((row) => ({
+      ...row,
+      qboStatus: 'Posted' as const,
+    }));
 
     return NextResponse.json({
       settlements: rows,

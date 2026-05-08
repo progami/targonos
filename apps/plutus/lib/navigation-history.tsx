@@ -24,9 +24,6 @@ function getDefaultBackPath(pathname: string): string | null {
   }
 
   if (/(^|\/)settlements\/[^/]+$/.test(path)) return '/settlements';
-  if (/(^|\/)bills$/.test(path)) return '/setup';
-  if (/(^|\/)chart-of-accounts$/.test(path)) return '/setup';
-  if (/(^|\/)setup$/.test(path)) return '/settlements';
 
   const segments = path.split('/').filter(Boolean);
   if (segments.length > 1) {

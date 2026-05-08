@@ -23,6 +23,7 @@ import {
   type QboJournalEntry,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { loadSharedPlutusEnv } from './shared-env';
 
 type DbClient = typeof import('@/lib/db').db;
 type BuildDeterministicSkuAllocations = typeof import('@/lib/plutus/fee-allocation').buildDeterministicSkuAllocations;
@@ -748,6 +749,9 @@ async function auditSettlementProcessingRow(input: {
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
+  if (options.amazonEnvPath === null) {
+    loadSharedPlutusEnv();
+  }
   await loadPlutusEnv();
   if (options.amazonEnvPath !== null) {
     await loadAmazonEnvFile(options.amazonEnvPath);

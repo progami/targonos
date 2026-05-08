@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -30,16 +30,6 @@ import {
   allocateManufacturingSplitAmounts,
   normalizeManufacturingSplits,
 } from '../lib/plutus/bills/split';
-import {
-  parseAutoRefreshTimeLocal,
-  shouldRefreshCashflowSnapshot,
-} from '../lib/plutus/cashflow/auto-refresh';
-import { buildCashflowForecast } from '../lib/plutus/cashflow/forecast';
-import {
-  mapOpenBillsToEvents,
-  mapRecurringTransactionsToEvents,
-} from '../lib/plutus/cashflow/qbo-mappers';
-import { buildProjectedSettlementEvents } from '../lib/plutus/cashflow/settlement-projection';
 import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
 import { computePnlAllocation } from '../lib/pnl-allocation';
 import {
@@ -47,6 +37,7 @@ import {
   extractInboundTransportationServiceFeeCharges,
   isInboundTransportationMemoDescription,
 } from '../lib/plutus/shipment-fee-allocation';
+import { deterministicSourceGuidanceForBucket } from '../lib/plutus/fee-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import {
@@ -75,9 +66,7 @@ import {
   buildSettlementMtdDailySummaryCsvBytes,
   buildSettlementMtdDailySummaryFilename,
 } from '../lib/amazon-finances/settlement-evidence';
-import { parseSpAdvertisedProductCsv } from '../lib/amazon-ads/sp-advertised-product-csv';
-import { parseAwdFeeCsv } from '../lib/awd/fee-report-csv';
-import { buildSettlementSkuProfitability } from '../lib/plutus/settlement-ads-profitability';
+import { settlementJournalEntryMatchesSource } from '../lib/amazon-finances/settlement-sync-existing';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { buildPrincipalGroupsByDate, matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
@@ -96,6 +85,7 @@ import {
   buildSettlementListRowViewModel,
   buildSettlementHistoryViewModel,
   buildSettlementPostingSectionViewModels,
+  formatPlutusSettlementStatus,
 } from '../lib/plutus/settlement-review';
 import { normalizeSettlementMarketplaceQuery } from '../lib/plutus/settlement-marketplace-query';
 import {
@@ -131,7 +121,7 @@ import { buildAuditCsv, buildAuditMarkdownSummary } from '../lib/qbo/full-histor
 import type { NormalizedAuditTransaction } from '../lib/qbo/full-history-audit/types';
 import { resolveMuiThemeMode } from '../lib/theme-mode';
 import type { ProcessingBlock } from '../lib/plutus/settlement-types';
-import type { QboAccount, QboBill, QboConnection, QboRecurringTransaction } from '../lib/qbo/api';
+import type { QboAccount, QboBill, QboConnection } from '../lib/qbo/api';
 
 const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [];
 
@@ -177,12 +167,6 @@ test('resolveMuiThemeMode waits for mount before applying dark mode', () => {
   assert.equal(resolveMuiThemeMode(true, undefined), 'light');
 });
 
-test('cashflow snapshot module remains safe for the Node refresh worker', () => {
-  const snapshotSource = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
-
-  assert.doesNotMatch(snapshotSource, /^import ['"]server-only['"];?$/m);
-});
-
 test('dbTableIdentifier uses the configured Prisma schema for raw query identifiers', () => {
   withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
     assert.equal(getDatasourceSchema(), 'plutus_dev');
@@ -203,22 +187,6 @@ test('dbTableIdentifier rejects missing schema and unsafe identifiers', () => {
   withDatabaseUrl('postgresql://user:pass@localhost:5432/portal_db?schema=plutus_dev', () => {
     assert.throws(() => dbTableIdentifier('AuditDataRow;DROP'), /Invalid database table identifier/);
   });
-});
-
-test('cashflow snapshot server-only guard stays out of standalone worker path', () => {
-  const snapshotModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.ts', import.meta.url), 'utf8');
-  const snapshotServerModule = readFileSync(new URL('../lib/plutus/cashflow/snapshot.server.ts', import.meta.url), 'utf8');
-  const workerModule = readFileSync(new URL('../scripts/cashflow-refresh-worker.ts', import.meta.url), 'utf8');
-  const snapshotRoute = readFileSync(new URL('../app/api/plutus/cashflow/snapshot/route.ts', import.meta.url), 'utf8');
-  const exportRoute = readFileSync(new URL('../app/api/plutus/cashflow/export/route.ts', import.meta.url), 'utf8');
-  const configRoute = readFileSync(new URL('../app/api/plutus/cashflow/config/route.ts', import.meta.url), 'utf8');
-
-  assert.equal(snapshotModule.includes("import 'server-only';"), false);
-  assert.equal(snapshotServerModule.includes("import 'server-only';"), true);
-  assert.equal(workerModule.includes("@/lib/plutus/cashflow/snapshot';"), true);
-  assert.equal(snapshotRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
-  assert.equal(exportRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
-  assert.equal(configRoute.includes("@/lib/plutus/cashflow/snapshot.server';"), true);
 });
 
 test('classifyQboRefreshFailure maps invalid_client to oauth client mismatch', () => {
@@ -293,6 +261,55 @@ test('extractSourceSettlementIdFromPrivateNote falls back to audit rebuild sourc
       'Plutus (audit rebuild) | Region: UK | Source invoice: UK-251205-260102-S1 | Upload: cmmffymev0000t93rviqvaytb',
     ),
     'UK-251205-260102-S1',
+  );
+});
+
+test('settlementJournalEntryMatchesSource recognizes legacy combined settlement postings', () => {
+  const journalEntry = {
+    Id: '1018',
+    SyncToken: '0',
+    TxnDate: '2026-03-05',
+    DocNumber: 'US-260219-260305-S1',
+    PrivateNote:
+      'Plutus (SP-API Finances) | Settlement: 25485000231 | Group: XjR5c86s8ZQPnKdKtg18A7digtRZjRZ8xMV6Rpd_9pM | Upload: cmmnga5jj0000t98sf88tez6i',
+    Line: [],
+  };
+
+  assert.equal(
+    settlementJournalEntryMatchesSource({
+      journalEntry,
+      settlementId: '25485000231',
+      eventGroupId: 'XjR5c86s8ZQPnKdKtg18A7digtRZjRZ8xMV6Rpd_9pM',
+    }),
+    true,
+  );
+});
+
+test('settlementJournalEntryMatchesSource rejects processing docs and mismatched groups', () => {
+  const base = {
+    Id: '1018',
+    SyncToken: '0',
+    TxnDate: '2026-03-05',
+    PrivateNote:
+      'Plutus (SP-API Finances) | Settlement: 25485000231 | Group: XjR5c86s8ZQPnKdKtg18A7digtRZjRZ8xMV6Rpd_9pM | Upload: cmmnga5jj0000t98sf88tez6i',
+    Line: [],
+  };
+
+  assert.equal(
+    settlementJournalEntryMatchesSource({
+      journalEntry: { ...base, DocNumber: 'PUS-260219-260305-S1' },
+      settlementId: '25485000231',
+      eventGroupId: 'XjR5c86s8ZQPnKdKtg18A7digtRZjRZ8xMV6Rpd_9pM',
+    }),
+    false,
+  );
+  assert.equal(
+    settlementJournalEntryMatchesSource({
+      journalEntry: { ...base, DocNumber: 'US-260219-260305-S1' },
+      settlementId: '25485000231',
+      eventGroupId: 'different-group',
+    }),
+    false,
   );
 });
 
@@ -490,6 +507,12 @@ test('buildSettlementListRowViewModel carries a warning when child posting state
   assert.equal(view.warningText, 'Child posting states need review');
 });
 
+test('formatPlutusSettlementStatus describes pending settlement postings as needing processing', () => {
+  assert.equal(formatPlutusSettlementStatus('Pending'), 'Needs Processing');
+  assert.equal(formatPlutusSettlementStatus('Processed'), 'Processed');
+  assert.equal(formatPlutusSettlementStatus('RolledBack'), 'Rolled Back');
+});
+
 test('buildSettlementPostingSectionViewModels orders child postings chronologically and carries inline blocking state', () => {
   const detail = {
     settlement: { sourceSettlementId: 'UK-260327-260331-S1', marketplace: { currency: 'GBP', region: 'UK', label: 'Amazon.co.uk' } },
@@ -683,6 +706,21 @@ test('settlements list does not expose manual sync or auto-process controls', ()
   assert.equal(source.includes('/api/plutus/autopost/check'), false);
 });
 
+test('settlements list labels the status column as Plutus processing state', () => {
+  const source = readFileSync('app/settlements/page.tsx', 'utf8');
+
+  assert.equal(source.includes('Plutus Processing'), true);
+  assert.equal(source.includes('Settlement Status'), false);
+  assert.equal(source.includes('QBO ${status}'), true);
+});
+
+test('settlements API marks listed settlements as posted QBO entries', () => {
+  const source = readFileSync('app/api/plutus/settlements/route.ts', 'utf8');
+
+  assert.equal(source.includes("qboStatus: 'Posted'"), true);
+  assert.equal(source.includes('fetchJournalEntries'), true);
+});
+
 test('settlement detail source does not expose processing or rollback controls', () => {
   const source = readFileSync('app/settlements/[region]/[settlementId]/page.tsx', 'utf8');
 
@@ -696,8 +734,6 @@ test('settlement detail source does not expose processing or rollback controls',
 
 test('settlement mutation routes require explicit human approval', () => {
   const routes = [
-    'app/api/plutus/autopost/check/route.ts',
-    'app/api/plutus/autopost/route.ts',
     'app/api/plutus/settlements/[region]/[settlementId]/route.ts',
     'app/api/plutus/settlements/[region]/[settlementId]/process/route.ts',
     'app/api/plutus/settlements/journal-entry/[id]/route.ts',
@@ -712,10 +748,12 @@ test('settlement mutation routes require explicit human approval', () => {
   }
 });
 
-test('settlement sync worker disables autopost unless explicitly enabled by env', () => {
+test('settlement sync worker has no hidden autopost processing branch', () => {
   const source = readFileSync('scripts/settlement-sync-worker.ts', 'utf8');
 
-  assert.equal(source.includes('PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED'), true);
+  assert.equal(source.includes('PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED'), false);
+  assert.equal(source.includes('runAutopostCheck'), false);
+  assert.equal(source.includes('autopost-check'), false);
 });
 
 test('ecosystem config runs settlement sync workers in explicit read-only QBO mode', () => {
@@ -723,12 +761,75 @@ test('ecosystem config runs settlement sync workers in explicit read-only QBO mo
 
   assert.match(
     source,
-    /name: 'dev-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'[\s\S]*PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0'/,
+    /name: 'dev-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'/,
   );
   assert.match(
     source,
-    /name: 'main-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'[\s\S]*PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0'/,
+    /name: 'main-plutus-settlement-sync'[\s\S]*PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only'/,
   );
+  assert.equal(source.includes('PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED'), false);
+});
+
+test('posted settlement rematch scripts load env before Prisma-backed modules', () => {
+  for (const script of ['scripts/us-settlement-rematch.ts', 'scripts/uk-settlement-rematch.ts']) {
+    const source = readFileSync(script, 'utf8');
+    assert.equal(source.includes("import { loadSharedPlutusEnv } from './shared-env';"), true, script);
+    assert.equal(source.includes("from '@/lib/db'"), false, script);
+    assert.match(source, /loadSharedPlutusEnv\(\);[\s\S]*await loadPlutusEnv\(\);/, script);
+    assert.match(source, /await loadPlutusEnv\(\);[\s\S]*await import\('@\/lib\/db'\)/, script);
+    assert.match(source, /await loadPlutusEnv\(\);[\s\S]*await import\('@\/lib\/plutus\/settlement-processing'\)/, script);
+  }
+});
+
+test('posted settlement rematch scripts require explicit human approval before posting', () => {
+  for (const script of ['scripts/us-settlement-rematch.ts', 'scripts/uk-settlement-rematch.ts']) {
+    const source = readFileSync(script, 'utf8');
+    assert.equal(source.includes("import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';"), true, script);
+    assert.equal(source.includes("arg === '--human-approval'"), true, script);
+    assert.match(source, /if \(post && humanApproval !== HUMAN_APPROVAL_PHRASE\)/, script);
+  }
+});
+
+test('posted settlement rematch scripts process oldest settlements first', () => {
+  for (const script of ['scripts/us-settlement-rematch.ts', 'scripts/uk-settlement-rematch.ts']) {
+    const source = readFileSync(script, 'utf8');
+    assert.equal(source.includes('.sort((a, b) => a.TxnDate.localeCompare(b.TxnDate))'), true, script);
+    assert.equal(source.includes('.sort((a, b) => b.TxnDate.localeCompare(a.TxnDate))'), false, script);
+  }
+});
+
+test('SP-API settlement sync CLI scripts require human approval before mutation', () => {
+  for (const script of ['scripts/us-settlement-sync-spapi.ts', 'scripts/uk-settlement-sync-spapi.ts']) {
+    const source = readFileSync(script, 'utf8');
+    assert.equal(source.includes("import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';"), true, script);
+    assert.equal(source.includes("arg === '--human-approval'"), true, script);
+    assert.match(source, /if \(\(postToQbo \|\| process\) && humanApproval !== HUMAN_APPROVAL_PHRASE\)/, script);
+  }
+});
+
+test('package scripts expose posted settlement rematch checks for both marketplaces', () => {
+  const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { scripts: Record<string, string> };
+
+  assert.equal(pkg.scripts['settlements:us:rematch'], 'tsx scripts/us-settlement-rematch.ts');
+  assert.equal(pkg.scripts['settlements:uk:rematch'], 'tsx scripts/uk-settlement-rematch.ts');
+  assert.equal(pkg.scripts['settlements:reclass:repair'], 'tsx scripts/settlement-reclass-repair.ts');
+});
+
+test('UK posted settlement rematch does not require COGS lines', () => {
+  const source = readFileSync('scripts/uk-settlement-rematch.ts', 'utf8');
+
+  assert.equal(source.includes('previewResult.preview.cogsJournalEntry.lines.length === 0 ||'), false);
+  assert.equal(source.includes('const hasEmptyJournals = previewResult.preview.pnlJournalEntry.lines.length === 0;'), true);
+});
+
+test('settlement reclass repair is approval-gated and protects source settlement JEs', () => {
+  const source = readFileSync('scripts/settlement-reclass-repair.ts', 'utf8');
+
+  assert.equal(source.includes('HUMAN_APPROVAL_PHRASE'), true);
+  assert.match(source, /if \(apply && humanApproval !== HUMAN_APPROVAL_PHRASE\)/);
+  assert.equal(source.includes('rollbackProcessedSettlementByJournalEntryId'), true);
+  assert.equal(source.includes('assertSameFingerprint(sourceBefore'), true);
+  assert.equal(source.includes("const BANK_ACCOUNT_TYPES = new Set(['Bank', 'Credit Card']);"), true);
 });
 
 test('plutus primary nav exposes only settlement accounting scope', () => {
@@ -737,9 +838,7 @@ test('plutus primary nav exposes only settlement accounting scope', () => {
   for (const expected of [
     "label: 'Settlements'",
     "label: 'COGS Inputs'",
-    "label: 'Exceptions'",
     "label: 'Mappings'",
-    "label: 'Sources'",
     "label: 'Settings'",
   ]) {
     assert.equal(source.includes(expected), true, expected);
@@ -747,12 +846,16 @@ test('plutus primary nav exposes only settlement accounting scope', () => {
 
   for (const removed of [
     "label: 'Transactions'",
+    "label: 'Exceptions'",
+    "label: 'Sources'",
     "label: 'Cashflow'",
     "label: 'Accounts & Taxes'",
     "label: 'Setup Wizard'",
     "label: 'Account Taxes'",
     "label: 'Chart of Accounts'",
     "href: '/transactions'",
+    "href: '/exceptions'",
+    "href: '/data-sources'",
     "href: '/cashflow'",
     "href: '/chart-of-accounts'",
   ]) {
@@ -760,11 +863,84 @@ test('plutus primary nav exposes only settlement accounting scope', () => {
   }
 });
 
-test('removed QBO clone pages redirect out of primary workflows', () => {
-  assert.equal(readFileSync('app/transactions/page.tsx', 'utf8').includes("redirect('/cogs-inputs')"), true);
-  assert.equal(readFileSync('app/bills/page.tsx', 'utf8').includes("redirect('/cogs-inputs')"), true);
-  assert.equal(readFileSync('app/cashflow/page.tsx', 'utf8').includes("redirect('/settlements')"), true);
-  assert.equal(readFileSync('app/chart-of-accounts/page.tsx', 'utf8').includes("redirect('/settlements')"), true);
+test('removed auxiliary Plutus surfaces are deleted', () => {
+  for (const path of [
+    'app/transactions/page.tsx',
+    'app/bills/page.tsx',
+    'app/chart-of-accounts/page.tsx',
+    'app/setup/page.tsx',
+    'app/cashflow/page.tsx',
+    'app/exceptions/page.tsx',
+    'app/data-sources/page.tsx',
+    'app/api/plutus/analytics',
+    'app/api/plutus/audit-data',
+    'app/api/plutus/audit-log',
+    'app/api/plutus/ads-data',
+    'app/api/plutus/autopost',
+    'app/api/plutus/cashflow',
+    'app/api/plutus/notifications',
+    'app/api/plutus/users',
+    'app/api/plutus/awd-data',
+    'lib/plutus/autopost-check.ts',
+    'lib/plutus/cashflow',
+    'lib/awd',
+    'lib/amazon-ads',
+    'lib/store/bills.ts',
+    'lib/store/chart-of-accounts.ts',
+    'scripts/autopost-check.ts',
+    'scripts/cashflow-refresh-worker.ts',
+    'scripts/import-awd-fee-reports.ts',
+  ]) {
+    assert.equal(existsSync(path), false, path);
+  }
+});
+
+test('settings page only exposes QBO connection settings', () => {
+  const source = readFileSync('app/settings/page.tsx', 'utf8');
+
+  assert.equal(source.includes('QuickBooks Online'), true);
+  for (const removed of [
+    'Notification Preferences',
+    'Autopost',
+    'Audit Log',
+    'Users with access',
+    '/api/plutus/notifications',
+    '/api/plutus/autopost',
+    '/api/plutus/audit-log',
+    '/api/plutus/users',
+  ]) {
+    assert.equal(source.includes(removed), false, removed);
+  }
+});
+
+test('auxiliary settings schema is removed', () => {
+  const schema = readFileSync('prisma/schema.prisma', 'utf8');
+
+  assert.equal(schema.includes('model NotificationPreference'), false);
+  assert.equal(schema.includes('autopostEnabled'), false);
+  assert.equal(schema.includes('autopostStartDate'), false);
+});
+
+test('ads report allocation schema is removed', () => {
+  const schema = readFileSync('prisma/schema.prisma', 'utf8');
+
+  for (const removed of [
+    'model AdsDataUpload',
+    'model AdsDataRow',
+    'model SettlementAdsAllocation',
+    'model SettlementAdsAllocationLine',
+    'adsAllocation SettlementAdsAllocation?',
+  ]) {
+    assert.equal(schema.includes(removed), false, removed);
+  }
+});
+
+test('AWD allocation warnings do not point to removed upload resources', () => {
+  const feeAllocationSource = readFileSync('lib/plutus/fee-allocation.ts', 'utf8');
+  const guidance = deterministicSourceGuidanceForBucket('warehousingAwd');
+
+  assert.equal(guidance.includes('Upload AWD fee report'), false);
+  assert.equal(feeAllocationSource.includes('Missing AWD report upload'), false);
 });
 
 test('cogs inputs page is read-only QBO source intake', () => {
@@ -793,15 +969,6 @@ test('cogs input scoping keeps tracked or mapped bills only', () => {
   ];
 
   assert.deepEqual(filterCogsInputRows(rows).map((row) => row.id), ['tracked', 'mapped']);
-});
-
-test('exceptions page links to settlement and COGS blocker queues', () => {
-  const source = readFileSync('app/exceptions/page.tsx', 'utf8');
-
-  assert.equal(source.includes('PageHeader title="Exceptions"'), true);
-  assert.equal(source.includes("href: '/settlements'"), true);
-  assert.equal(source.includes("href: '/cogs-inputs'"), true);
-  assert.equal(source.includes("redirect('/settlements')"), false);
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
@@ -1438,6 +1605,121 @@ test('buildUkSettlementDraftFromSpApiFinances maps compensated clawback adjustme
   );
 });
 
+test('buildUkSettlementDraftFromSpApiFinances maps warehouse lost adjustments', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-WAREHOUSE-LOST-UK-1',
+    eventGroupId: 'GROUP-WAREHOUSE-LOST-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 3.05 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-04-04T08:00:00.000Z',
+          AdjustmentType: 'WAREHOUSE_LOST',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: 3.05 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get(
+      'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Warehouse Lost',
+    ),
+    305,
+  );
+});
+
+test('buildUkSettlementDraftFromSpApiFinances maps failed disbursement adjustments', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-FAILED-DISBURSEMENT-UK-1',
+    eventGroupId: 'GROUP-FAILED-DISBURSEMENT-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-02-27T16:48:59.000Z',
+      FinancialEventGroupEnd: '2026-03-13T16:48:58.000Z',
+      FundTransferStatus: 'Failed',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: 0 },
+    },
+    events: {
+      AdjustmentEventList: [
+        {
+          PostedDate: '2026-02-28T10:29:01.000Z',
+          AdjustmentType: 'FailedDisbursement',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: 4508.25 },
+        },
+        {
+          PostedDate: '2026-03-13T16:49:07.000Z',
+          AdjustmentType: 'ReserveDebit',
+          AdjustmentAmount: { CurrencyCode: 'GBP', CurrencyAmount: -4508.25 },
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(
+    draft.segments[0]?.memoTotalsCents.get('Amazon Reserved Balances - Failed Disbursement'),
+    450825,
+  );
+});
+
+test('buildUkSettlementDraftFromSpApiFinances maps deal service fees', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-DEAL-FEES-UK-1',
+    eventGroupId: 'GROUP-DEAL-FEES-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-03-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-03-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -101.22 },
+    },
+    events: {
+      ServiceFeeEventList: [
+        {
+          FeeList: [
+            { FeeType: 'DealParticipationFee', FeeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -12.5 } },
+            { FeeType: 'DealPerformanceFee', FeeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -88.72 } },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon Seller Fees - Deal Participation Fee'), -1250);
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon Seller Fees - Deal Performance Fee'), -8872);
+});
+
+test('buildUkSettlementDraftFromSpApiFinances maps digital service fees', () => {
+  const draft = buildUkSettlementDraftFromSpApiFinances({
+    settlementId: 'SETTLEMENT-DIGITAL-SERVICE-FEES-UK-1',
+    eventGroupId: 'GROUP-DIGITAL-SERVICE-FEES-UK-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-03-01T08:00:00.000Z',
+      FinancialEventGroupEnd: '2026-03-10T08:00:00.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'GBP', CurrencyAmount: -3.21 },
+    },
+    events: {
+      ServiceFeeEventList: [
+        {
+          FeeList: [
+            { FeeType: 'DigitalServicesFee', FeeAmount: { CurrencyCode: 'GBP', CurrencyAmount: -3.21 } },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map(),
+  });
+
+  assert.equal(draft.segments[0]?.memoTotalsCents.get('Amazon Seller Fees - Digital Services Fee'), -321);
+});
+
 test('buildUsSettlementDraftFromSpApiFinances maps FBA disposal service fees', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-FBA-DISPOSAL-1',
@@ -1722,94 +2004,6 @@ test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch
       skuToBrandName: new Map([['SKU-3', 'UK-BRAND']]),
     }),
   );
-});
-
-test('parseSpAdvertisedProductCsv filters rows by selected country', () => {
-  const csv = [
-    'Date,Country,Advertised SKU,Spend',
-    '2026-02-01,United States,sku-a,1.00',
-    '2026-02-01,United Kingdom,sku-a,5.00',
-    '2026-02-02,U.S.,sku-a,2.50',
-    '2026-02-03,UK,sku-b,3.00',
-    '2026-02-04,US,sku-b,0.00',
-  ].join('\n');
-
-  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States', 'US'] });
-
-  assert.equal(parsed.rawRowCount, 5);
-  assert.equal(parsed.minDate, '2026-02-01');
-  assert.equal(parsed.maxDate, '2026-02-04');
-  assert.equal(parsed.skuCount, 1);
-  assert.deepEqual(parsed.rows, [
-    { date: '2026-02-01', sku: 'SKU-A', spendCents: 100 },
-    { date: '2026-02-02', sku: 'SKU-A', spendCents: 250 },
-  ]);
-});
-
-test('parseSpAdvertisedProductCsv requires Country when filtering by marketplace', () => {
-  const csv = ['Date,Advertised SKU,Spend', '2026-02-01,sku-a,1.00'].join('\n');
-  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /Missing required column: Country/);
-});
-
-test('parseSpAdvertisedProductCsv errors when marketplace has no rows', () => {
-  const csv = ['Date,Country,Advertised SKU,Spend', '2026-02-01,United Kingdom,sku-a,1.00'].join('\n');
-  assert.throws(() => parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] }), /CSV has no rows for selected marketplace/);
-});
-
-test('parseSpAdvertisedProductCsv accepts Excel date serials', () => {
-  const csv = ['Date,Country,Advertised SKU,Spend', '46012,United States,sku-a,1.00'].join('\n');
-  const parsed = parseSpAdvertisedProductCsv(csv, { allowedCountries: ['United States'] });
-  assert.equal(parsed.minDate, '2025-12-21');
-  assert.equal(parsed.maxDate, '2025-12-21');
-  assert.equal(parsed.rows[0]?.date, '2025-12-21');
-});
-
-test('parseAwdFeeCsv parses monthly SKU fee rows', () => {
-  const csv = [
-    'month_of_,year_of_ch,msku,country_c,fee_type,fee_amoun,currency',
-    'January,2026,cs-007,US,STORAGE_F,11.78,USD',
-    'January,2026,cs-010,US,STORAGE_F,7.17,USD',
-  ].join('\n');
-
-  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
-  assert.equal(parsed.rawRowCount, 2);
-  assert.equal(parsed.skuCount, 2);
-  assert.equal(parsed.minDate, '2026-01-01');
-  assert.equal(parsed.maxDate, '2026-01-31');
-  assert.equal(parsed.rows.length, 2);
-  assert.equal(parsed.rows[0]?.sku, 'CS-007');
-  assert.equal(parsed.rows[0]?.feeCents, 1178);
-});
-
-test('parseAwdFeeCsv prefers total_charged_amount over fee_amount', () => {
-  const csv = [
-    'month_of_charge,year_of_charge,msku,country_c,fee_type,fee_amount,total_charged_amount,currency',
-    'January,2026,cs-007,US,STORAGE_FEE,11.78,7.50,USD',
-  ].join('\n');
-
-  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
-  assert.equal(parsed.rows.length, 1);
-  assert.equal(parsed.rows[0]?.feeCents, 750);
-});
-
-test('parseAwdFeeCsv parses charged_amount and charge_type', () => {
-  const csv = [
-    'month_of_charge,year_of_charge,msku,country_c,fee_type,charge_type,charged_amount,currency',
-    'December,2025,cs-007,US,PROCESSING_FEE,inbound,1.23,USD',
-    'December,2025,cs-007,US,PROCESSING_FEE,Inbound,2.00,USD',
-    'December,2025,cs-007,US,PROCESSING_FEE,Outbound,4.56,USD',
-  ].join('\n');
-
-  const parsed = parseAwdFeeCsv(csv, { allowedCountries: ['US'] });
-  assert.equal(parsed.rawRowCount, 3);
-  assert.equal(parsed.skuCount, 1);
-  assert.equal(parsed.minDate, '2025-12-01');
-  assert.equal(parsed.maxDate, '2025-12-31');
-  assert.equal(parsed.rows.length, 2);
-  assert.equal(parsed.rows[0]?.chargeType, 'Inbound');
-  assert.equal(parsed.rows[0]?.feeCents, 323);
-  assert.equal(parsed.rows[1]?.chargeType, 'Outbound');
-  assert.equal(parsed.rows[1]?.feeCents, 456);
 });
 
 test('computePnlAllocation leaves SKU-less fees unallocated without deterministic source', () => {
@@ -2245,6 +2439,15 @@ test('isBlockingProcessingCode treats PNL allocation warnings as non-blocking', 
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
   assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
+  assert.equal(isBlockingProcessingCode('REFUND_UNMATCHED'), true);
+});
+
+test('settlement processing skips refund matching when COGS is disabled', () => {
+  const source = readFileSync('lib/plutus/settlement-processing.ts', 'utf8');
+
+  assert.match(source, /const refundPairs = cogsEnabled \?/);
+  assert.match(source, /if \(cogsEnabled\) \{\s*for \(const \[refundKey, refund\] of refundGroups\.entries\(\)\)/);
+  assert.match(source, /!cogsEnabled \|\| currentSettlementRefundGroups\.size === 0/);
 });
 
 test('ledger blocks missing cost basis', () => {
@@ -2593,100 +2796,6 @@ test('manufacturing split validation rejects duplicate sku and invalid qty', () 
   );
 });
 
-test('settlement ads profitability combines sales returns and ads by sku', () => {
-  const result = buildSettlementSkuProfitability({
-    sales: [
-      {
-        sku: 'sku-a',
-        quantity: 3,
-        principalCents: 3000,
-        costManufacturingCents: 900,
-        costFreightCents: 150,
-        costDutyCents: 90,
-        costMfgAccessoriesCents: 60,
-      },
-      {
-        sku: 'SKU-B',
-        quantity: 1,
-        principalCents: 1000,
-        costManufacturingCents: 250,
-        costFreightCents: 80,
-        costDutyCents: 40,
-        costMfgAccessoriesCents: 30,
-      },
-    ],
-    returns: [
-      {
-        sku: 'SKU A',
-        quantity: 1,
-        principalCents: -1000,
-        costManufacturingCents: 300,
-        costFreightCents: 50,
-        costDutyCents: 30,
-        costMfgAccessoriesCents: 20,
-      },
-    ],
-    allocationLines: [
-      { sku: 'SKU-A', allocatedCents: 600 },
-      { sku: 'SKU-B', allocatedCents: 400 },
-      { sku: 'SKU-C', allocatedCents: 100 },
-    ],
-  });
-
-  assert.equal(result.lines.length, 3);
-  assert.deepEqual(
-    result.lines.map((line) => line.sku),
-    ['SKU-A', 'SKU-B', 'SKU-C'],
-  );
-
-  const skuA = result.lines[0];
-  assert.equal(skuA?.soldUnits, 3);
-  assert.equal(skuA?.returnedUnits, 1);
-  assert.equal(skuA?.netUnits, 2);
-  assert.equal(skuA?.principalCents, 2000);
-  assert.equal(skuA?.cogsCents, 800);
-  assert.equal(skuA?.adsAllocatedCents, 600);
-  assert.equal(skuA?.contributionBeforeAdsCents, 1200);
-  assert.equal(skuA?.contributionAfterAdsCents, 600);
-
-  const skuB = result.lines[1];
-  assert.equal(skuB?.principalCents, 1000);
-  assert.equal(skuB?.cogsCents, 400);
-  assert.equal(skuB?.adsAllocatedCents, 400);
-  assert.equal(skuB?.contributionAfterAdsCents, 200);
-
-  const skuC = result.lines[2];
-  assert.equal(skuC?.principalCents, 0);
-  assert.equal(skuC?.cogsCents, 0);
-  assert.equal(skuC?.adsAllocatedCents, 100);
-  assert.equal(skuC?.contributionAfterAdsCents, -100);
-
-  assert.equal(result.totals.soldUnits, 4);
-  assert.equal(result.totals.returnedUnits, 1);
-  assert.equal(result.totals.netUnits, 3);
-  assert.equal(result.totals.principalCents, 3000);
-  assert.equal(result.totals.cogsCents, 1200);
-  assert.equal(result.totals.adsAllocatedCents, 1100);
-  assert.equal(result.totals.contributionBeforeAdsCents, 1800);
-  assert.equal(result.totals.contributionAfterAdsCents, 700);
-});
-
-test('settlement ads profitability normalizes sku keys and sums duplicate ads lines', () => {
-  const result = buildSettlementSkuProfitability({
-    sales: [],
-    returns: [],
-    allocationLines: [
-      { sku: ' sku-a ', allocatedCents: 101 },
-      { sku: 'SKU A', allocatedCents: 202 },
-    ],
-  });
-
-  assert.equal(result.lines.length, 1);
-  assert.equal(result.lines[0]?.sku, 'SKU-A');
-  assert.equal(result.lines[0]?.adsAllocatedCents, 303);
-  assert.equal(result.totals.adsAllocatedCents, 303);
-});
-
 test('tracked line extraction includes configured and inventory accounts', () => {
   const accounts: QboAccount[] = [
     {
@@ -2842,247 +2951,6 @@ test('buildBillMappingPullSyncUpdates detects PO and metadata drift', () => {
   assert.equal(updates[0]?.billDate, '2026-01-02');
   assert.equal(updates[0]?.vendorName, 'Vendor B');
   assert.equal(updates[0]?.totalAmount, 101);
-});
-
-test('cashflow week bucketing ignores events earlier in the as-of week', () => {
-  const forecast = buildCashflowForecast({
-    asOfDate: '2026-02-11',
-    weekStartsOn: 1,
-    horizonWeeks: 2,
-    startingCashCents: 100_000,
-    events: [
-      {
-        date: '2026-02-10',
-        amountCents: 5_000,
-        label: 'Earlier this week',
-        source: 'manual_adjustment',
-      },
-      {
-        date: '2026-02-11',
-        amountCents: -2_500,
-        label: 'Same day',
-        source: 'manual_adjustment',
-      },
-    ],
-  });
-
-  assert.equal(forecast.weeks[0]?.events.length, 1);
-  assert.equal(forecast.weeks[0]?.events[0]?.label, 'Same day');
-  assert.equal(forecast.weeks[0]?.endingCashCents, 97_500);
-});
-
-test('open bill mapping warns on missing due date and falls back to txn date', () => {
-  const warnings: Array<{ code: string; message: string }> = [];
-  const bill: QboBill = {
-    Id: 'bill-1',
-    SyncToken: '0',
-    TxnDate: '2026-03-05',
-    TotalAmt: 125.5,
-    Balance: 125.5,
-  };
-
-  const mapped = mapOpenBillsToEvents({
-    bills: [bill],
-    asOfDate: '2026-03-01',
-    warnings,
-  });
-
-  assert.equal(mapped.events.length, 1);
-  assert.equal(mapped.events[0]?.date, '2026-03-05');
-  assert.equal(mapped.events[0]?.amountCents, -12_550);
-  assert.equal(warnings[0]?.code, 'OPEN_BILL_MISSING_DUEDATE');
-});
-
-test('recurring monthly expansion creates expected occurrences in horizon', () => {
-  const warnings: Array<{ code: string; message: string }> = [];
-  const recurring: QboRecurringTransaction = {
-    Id: 'rec-1',
-    RecurringInfo: {
-      Name: 'Rent',
-      Active: true,
-      ScheduleInfo: {
-        IntervalType: 'Monthly',
-        NumInterval: 1,
-        DayOfMonth: 1,
-        NextDate: '2026-01-01',
-      },
-    },
-    Purchase: {
-      Id: 'purchase-template',
-      SyncToken: '0',
-      TxnDate: '2026-01-01',
-      TotalAmt: 1000,
-      PaymentType: 'Cash',
-      AccountRef: { value: 'cash-1', name: 'Operating Bank' },
-    },
-  };
-
-  const mapped = mapRecurringTransactionsToEvents({
-    recurringTransactions: [recurring],
-    horizonStart: '2026-01-15',
-    horizonEnd: '2026-04-20',
-    cashAccountIds: ['cash-1'],
-    warnings,
-  });
-
-  assert.deepEqual(
-    mapped.events.map((event) => event.date),
-    ['2026-02-01', '2026-03-01', '2026-04-01'],
-  );
-  assert.equal(mapped.events[0]?.amountCents, -100_000);
-  assert.equal(warnings.length, 0);
-});
-
-test('recurring transfer netting respects selected cash accounts', () => {
-  const transfer: QboRecurringTransaction = {
-    Id: 'rec-transfer',
-    RecurringInfo: {
-      Name: 'Transfer sweep',
-      Active: true,
-      ScheduleInfo: {
-        IntervalType: 'Weekly',
-        NumInterval: 1,
-        NextDate: '2026-02-16',
-      },
-    },
-    Transfer: {
-      Amount: 500,
-      FromAccountRef: { value: 'acc-a', name: 'Bank A' },
-      ToAccountRef: { value: 'acc-b', name: 'Bank B' },
-    },
-  };
-
-  const bothIncluded = mapRecurringTransactionsToEvents({
-    recurringTransactions: [transfer],
-    horizonStart: '2026-02-09',
-    horizonEnd: '2026-02-23',
-    cashAccountIds: ['acc-a', 'acc-b'],
-    warnings: [],
-  });
-
-  const fromOnly = mapRecurringTransactionsToEvents({
-    recurringTransactions: [transfer],
-    horizonStart: '2026-02-09',
-    horizonEnd: '2026-02-23',
-    cashAccountIds: ['acc-a'],
-    warnings: [],
-  });
-
-  const toOnly = mapRecurringTransactionsToEvents({
-    recurringTransactions: [transfer],
-    horizonStart: '2026-02-09',
-    horizonEnd: '2026-02-23',
-    cashAccountIds: ['acc-b'],
-    warnings: [],
-  });
-
-  assert.equal(bothIncluded.events.length, 0);
-  assert.equal(fromOnly.events[0]?.amountCents, -50_000);
-  assert.equal(toOnly.events[0]?.amountCents, 50_000);
-});
-
-test('settlement projection infers cadence and average from recent history', () => {
-  const warnings: Array<{ code: string; message: string }> = [];
-  const projected = buildProjectedSettlementEvents({
-    history: [
-      {
-        journalEntryId: 'je-1',
-        channel: 'US',
-        docNumber: 'US-01JAN-14JAN-26-001',
-        txnDate: '2026-01-16',
-        periodEnd: '2026-01-14',
-        cashImpactCents: 100_000,
-      },
-      {
-        journalEntryId: 'je-2',
-        channel: 'US',
-        docNumber: 'US-15JAN-28JAN-26-002',
-        txnDate: '2026-01-30',
-        periodEnd: '2026-01-28',
-        cashImpactCents: 120_000,
-      },
-      {
-        journalEntryId: 'je-3',
-        channel: 'US',
-        docNumber: 'US-29JAN-11FEB-26-003',
-        txnDate: '2026-02-13',
-        periodEnd: '2026-02-11',
-        cashImpactCents: 140_000,
-      },
-    ],
-    asOfDate: '2026-02-12',
-    forecastEndDate: '2026-03-20',
-    settlementAverageCount: 3,
-    settlementDefaultIntervalDays: 14,
-    warnings,
-  });
-
-  assert.equal(projected.events.length > 0, true);
-  assert.equal(projected.events[0]?.date, '2026-02-27');
-  assert.equal(projected.events[0]?.amountCents, 120_000);
-  assert.equal(warnings.length, 0);
-});
-
-test('cashflow roll-forward arithmetic and minimum cash summary are correct', () => {
-  const forecast = buildCashflowForecast({
-    asOfDate: '2026-02-09',
-    weekStartsOn: 1,
-    horizonWeeks: 3,
-    startingCashCents: 100_000,
-    events: [
-      { date: '2026-02-09', amountCents: -30_000, label: 'Week 1 expense', source: 'manual_adjustment' },
-      { date: '2026-02-10', amountCents: 10_000, label: 'Week 1 income', source: 'manual_adjustment' },
-      { date: '2026-02-18', amountCents: -50_000, label: 'Week 2 expense', source: 'manual_adjustment' },
-      { date: '2026-02-25', amountCents: 20_000, label: 'Week 3 income', source: 'manual_adjustment' },
-    ],
-  });
-
-  assert.equal(forecast.weeks[0]?.endingCashCents, 80_000);
-  assert.equal(forecast.weeks[1]?.endingCashCents, 30_000);
-  assert.equal(forecast.weeks[2]?.endingCashCents, 50_000);
-  assert.equal(forecast.summary.minCashCents, 30_000);
-  assert.equal(forecast.summary.minCashWeekStart, '2026-02-16');
-  assert.equal(forecast.summary.endCashCents, 50_000);
-});
-
-test('auto refresh time parser rejects invalid HH:MM values', () => {
-  assert.throws(() => parseAutoRefreshTimeLocal('6:00'));
-  assert.throws(() => parseAutoRefreshTimeLocal('24:00'));
-  assert.throws(() => parseAutoRefreshTimeLocal('aa:bb'));
-});
-
-test('shouldRefreshCashflowSnapshot handles no snapshot, stale date, and min age guard', () => {
-  const now = new Date('2026-02-12T10:00:00Z');
-
-  const noSnapshot = shouldRefreshCashflowSnapshot({
-    now,
-    todayLocalDate: '2026-02-12',
-    latestSnapshot: null,
-    autoRefreshMinSnapshotAgeMinutes: 720,
-  });
-  assert.equal(noSnapshot, true);
-
-  const staleDateSnapshot = shouldRefreshCashflowSnapshot({
-    now,
-    todayLocalDate: '2026-02-12',
-    latestSnapshot: {
-      asOfDate: '2026-02-11',
-      createdAt: new Date('2026-02-11T06:00:00Z'),
-    },
-    autoRefreshMinSnapshotAgeMinutes: 720,
-  });
-  assert.equal(staleDateSnapshot, true);
-
-  const todayTooFresh = shouldRefreshCashflowSnapshot({
-    now,
-    todayLocalDate: '2026-02-12',
-    latestSnapshot: {
-      asOfDate: '2026-02-12',
-      createdAt: new Date('2026-02-12T09:50:00Z'),
-    },
-    autoRefreshMinSnapshotAgeMinutes: 30,
-  });
-  assert.equal(todayTooFresh, false);
 });
 
 test('matchRefundsToSales ignores future sale layers when refunding historical orders', () => {

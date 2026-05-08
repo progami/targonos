@@ -8,7 +8,7 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import type { SettlementPostingSectionViewModel } from '@/lib/plutus/settlement-review';
+import { formatPlutusSettlementStatus, type SettlementPostingSectionViewModel } from '@/lib/plutus/settlement-review';
 
 type SettlementLedgerLine = {
   id?: string;
@@ -88,13 +88,13 @@ export function SettlementLedgerSection({ section, currency, lines }: Settlement
             {section.docNumber}
           </Typography>
           <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-            {section.invoiceId === null ? 'Invoice pending' : `Invoice ${section.invoiceId}`}
+            {section.invoiceId === null ? 'Invoice unresolved' : `Invoice ${section.invoiceId}`}
           </Typography>
         </Box>
 
         <Box sx={{ display: 'grid', justifyItems: 'end', gap: 0.35 }}>
           <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
-            {section.plutusStatus}
+            {formatPlutusSettlementStatus(section.plutusStatus)}
           </Typography>
           <Typography sx={{ fontSize: '0.95rem', fontWeight: 700 }}>
             {section.settlementTotal === null ? '—' : formatMoney(section.settlementTotal, currency)}

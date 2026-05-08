@@ -95,6 +95,12 @@ export type SettlementHistoryEventInput = {
   kind: 'posted' | 'processed' | 'rolled_back';
 };
 
+export function formatPlutusSettlementStatus(status: PlutusSettlementStatus): string {
+  if (status === 'Pending') return 'Needs Processing';
+  if (status === 'RolledBack') return 'Rolled Back';
+  return status;
+}
+
 function formatHistoryTimestamp(value: string): string {
   return new Date(value).toLocaleString('en-US', {
     timeZone: 'UTC',

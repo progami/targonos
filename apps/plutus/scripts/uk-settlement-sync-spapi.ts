@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { loadSharedPlutusEnv } from './shared-env';
 import { parseSettlementSyncCliPostFlag } from '@/lib/amazon-finances/settlement-sync-post-mode';
+import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';
 
 type CliOptions = {
   startDate: string;
@@ -10,6 +11,7 @@ type CliOptions = {
   plutusEnvPath: string;
   postToQbo: boolean;
   process: boolean;
+  humanApproval: string | null;
 };
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
@@ -70,6 +72,7 @@ function parseArgs(argv: string[]): CliOptions {
   let plutusEnvPath = '.env.local';
   const postToQbo = postFlag.postToQbo;
   let process = false;
+  let humanApproval: string | null = null;
 
   let i = 0;
   while (i < postFlag.argv.length) {
@@ -124,10 +127,22 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--human-approval') {
+      const next = postFlag.argv[i + 1];
+      if (!next) throw new Error('Missing value for --human-approval');
+      humanApproval = next;
+      i += 2;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { startDate, endDate, settlementIds, amazonEnvPath, plutusEnvPath, postToQbo, process };
+  if ((postToQbo || process) && humanApproval !== HUMAN_APPROVAL_PHRASE) {
+    throw new Error(`UK SP-API settlement mutation requires --human-approval "${HUMAN_APPROVAL_PHRASE}"`);
+  }
+
+  return { startDate, endDate, settlementIds, amazonEnvPath, plutusEnvPath, postToQbo, process, humanApproval };
 }
 
 async function main(): Promise<void> {
