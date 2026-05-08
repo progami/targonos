@@ -26,6 +26,21 @@ def load_module(data_dir: Path, monitoring_root: Path):
     return module
 
 
+def write_required_empty_sources(monitoring_root: Path) -> None:
+    account_health_root = monitoring_root / "Daily" / "Account Health Dashboard (API)"
+    account_health_root.mkdir(parents=True, exist_ok=True)
+    with (account_health_root / "account-health.csv").open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["date"])
+        writer.writeheader()
+
+    hourly_root = monitoring_root / "Hourly" / "Listing Attributes (API)"
+    hourly_root.mkdir(parents=True, exist_ok=True)
+    for name in ("Listings-Changes-History.csv", "Listings-Snapshot-History.csv"):
+        with (hourly_root / name).open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(handle, fieldnames=["snapshot_timestamp_utc"])
+            writer.writeheader()
+
+
 class RebuildWprTest(unittest.TestCase):
     def test_slices_listing_attribute_history_and_preserves_existing_inputs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -278,6 +293,43 @@ class RebuildWprTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaisesRegex(RuntimeError, "must be local"):
                 load_module(cloud_wpr_data_dir, Path(tmp_dir) / "Monitoring")
+
+    def test_canonicalizes_browser_duplicate_download_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            monitoring_root = Path(tmp_dir) / "Monitoring"
+            wpr_data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            wpr_data_dir.mkdir(parents=True, exist_ok=True)
+
+            weekly_root = monitoring_root / "Weekly" / "Business Reports (API)"
+            weekly_root.mkdir(parents=True, exist_ok=True)
+            (weekly_root / "report_W01_2026-01-03 (1).csv").write_text("header\nvalue\n", encoding="utf-8")
+            write_required_empty_sources(monitoring_root)
+
+            module = load_module(wpr_data_dir, monitoring_root)
+            module.main()
+
+            canonical = sales_root / "WPR" / "W01" / "input" / "Business Reports (API)" / "report_W01_2026-01-03.csv"
+            duplicate = sales_root / "WPR" / "W01" / "input" / "Business Reports (API)" / "report_W01_2026-01-03 (1).csv"
+            self.assertTrue(canonical.exists())
+            self.assertFalse(duplicate.exists())
+
+    def test_rejects_divergent_browser_duplicate_download_names(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            monitoring_root = Path(tmp_dir) / "Monitoring"
+            wpr_data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            wpr_data_dir.mkdir(parents=True, exist_ok=True)
+
+            weekly_root = monitoring_root / "Weekly" / "Business Reports (API)"
+            weekly_root.mkdir(parents=True, exist_ok=True)
+            (weekly_root / "report_W01_2026-01-03.csv").write_text("header\nvalue\n", encoding="utf-8")
+            (weekly_root / "report_W01_2026-01-03 (1).csv").write_text("header\nother\n", encoding="utf-8")
+            write_required_empty_sources(monitoring_root)
+
+            module = load_module(wpr_data_dir, monitoring_root)
+            with self.assertRaisesRegex(ValueError, "WPR destination conflict after canonicalizing artifact name"):
+                module.main()
 
 
 if __name__ == "__main__":
