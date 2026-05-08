@@ -3,6 +3,7 @@ import path from 'node:path'
 
 export const DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/queue.jsonl'
 export const WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/wpr-queue.jsonl'
+export const WPR_CANONICAL_WEEK_FOLDER_RE = /^W\d{2}$/
 
 export function parseArgusMarket(raw) {
   const value = String(raw).trim().toLowerCase()
@@ -119,6 +120,10 @@ export function enqueueWprDriveSync({ market, localPath }) {
   const relativePath = normalizeArtifactRelativePath(path.relative(root, path.resolve(localPath)))
   if (relativePath === WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH) {
     return null
+  }
+  const [weekFolder] = relativePath.split('/')
+  if (!WPR_CANONICAL_WEEK_FOLDER_RE.test(weekFolder)) {
+    throw new Error(`WPR Drive sync path must start with a canonical WNN week folder: ${relativePath}`)
   }
 
   const stat = fs.statSync(localPath)
