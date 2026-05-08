@@ -224,6 +224,14 @@ function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   };
 }
 
+function createArgusRuntimeEnv(rootDir, environment, runtimeEnv) {
+  return createNextAppEnvWithPortal(rootDir, 'argus', environment, {
+    ...runtimeEnv,
+    ARGUS_MONITORING_ROOT_US: path.join(HOME_DIR, '.local/share/targon/argus-monitoring/us'),
+    ARGUS_MONITORING_ROOT_UK: path.join(HOME_DIR, '.local/share/targon/argus-monitoring/uk'),
+  });
+}
+
 function createHermesWorkerEnv(rootDir, environment, runtimeEnv) {
   return {
     ...loadAppEnv(rootDir, 'hermes', environment),
@@ -482,7 +490,7 @@ module.exports = {
       script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'argus', 'dev', {
+      env: createArgusRuntimeEnv(DEV_DIR, 'dev', {
         NODE_ENV: 'production',
         PORT: 3116,
         BASE_PATH: '/argus',
@@ -710,7 +718,7 @@ module.exports = {
       script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'argus', 'production', {
+      env: createArgusRuntimeEnv(MAIN_DIR, 'production', {
         NODE_ENV: 'production',
         PORT: 3016,
         BASE_PATH: '/argus',
@@ -724,6 +732,7 @@ module.exports = {
 };
 module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
 module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
+module.exports.createArgusRuntimeEnv = createArgusRuntimeEnv;
 module.exports.createHermesWorkerEnv = createHermesWorkerEnv;
 module.exports.buildHostedAppUrl = buildHostedAppUrl;
 module.exports.getHostedCookieDomain = getHostedCookieDomain;
