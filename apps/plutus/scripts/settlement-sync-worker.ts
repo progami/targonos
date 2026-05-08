@@ -22,7 +22,6 @@ type WorkerDeps = {
   getQboConnection: typeof import('@/lib/qbo/connection-store').getQboConnection;
   listAllFinancialEventGroups: typeof import('@/lib/amazon-finances/sp-api-finances').listAllFinancialEventGroups;
   listSettlementEventGroupsFromTransactions: typeof import('@/lib/amazon-finances/sp-api-finances').listSettlementEventGroupsFromTransactions;
-  runAutopostCheck: typeof import('@/lib/plutus/autopost-check').runAutopostCheck;
   saveServerQboConnection: typeof import('@/lib/qbo/connection-store').saveServerQboConnection;
   syncUkSettlementsFromSpApiFinances: typeof import('@/lib/amazon-finances/uk-settlement-sync').syncUkSettlementsFromSpApiFinances;
   syncUsSettlementsFromSpApiFinances: typeof import('@/lib/amazon-finances/us-settlement-sync').syncUsSettlementsFromSpApiFinances;
@@ -43,7 +42,6 @@ async function getWorkerDeps(): Promise<WorkerDeps> {
       qboApiMod,
       qboConnectionMod,
       spApiFinancesMod,
-      autopostMod,
       usSettlementSyncMod,
       ukSettlementSyncMod,
     ] = await Promise.all([
@@ -51,7 +49,6 @@ async function getWorkerDeps(): Promise<WorkerDeps> {
       import('@/lib/qbo/api'),
       import('@/lib/qbo/connection-store'),
       import('@/lib/amazon-finances/sp-api-finances'),
-      import('@/lib/plutus/autopost-check'),
       import('@/lib/amazon-finances/us-settlement-sync'),
       import('@/lib/amazon-finances/uk-settlement-sync'),
     ]);
@@ -62,7 +59,6 @@ async function getWorkerDeps(): Promise<WorkerDeps> {
       getQboConnection: qboConnectionMod.getQboConnection,
       listAllFinancialEventGroups: spApiFinancesMod.listAllFinancialEventGroups,
       listSettlementEventGroupsFromTransactions: spApiFinancesMod.listSettlementEventGroupsFromTransactions,
-      runAutopostCheck: autopostMod.runAutopostCheck,
       saveServerQboConnection: qboConnectionMod.saveServerQboConnection,
       syncUkSettlementsFromSpApiFinances: ukSettlementSyncMod.syncUkSettlementsFromSpApiFinances,
       syncUsSettlementsFromSpApiFinances: usSettlementSyncMod.syncUsSettlementsFromSpApiFinances,
@@ -370,25 +366,6 @@ async function findMissingUkSettlementIds(input: {
   return missingSettlementIds.sort((a, b) => a.localeCompare(b));
 }
 
-async function maybeRunAutopost() {
-  if (process.env.PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED !== '1') {
-    return null;
-  }
-
-  const deps = await getWorkerDeps();
-  const config = await deps.db.setupConfig.findFirst({
-    select: {
-      autopostEnabled: true,
-    },
-  });
-
-  if (!config || config.autopostEnabled !== true) {
-    return null;
-  }
-
-  return deps.runAutopostCheck();
-}
-
 async function runTick(input: { lookbackDays: number; postToQbo: boolean }): Promise<void> {
   const deps = await getWorkerDeps();
   const now = new Date();
@@ -451,20 +428,6 @@ async function runTick(input: { lookbackDays: number; postToQbo: boolean }): Pro
     });
   }
 
-  try {
-    const result = await maybeRunAutopost();
-    if (result && (result.processed.length > 0 || result.skipped.length > 0 || result.errors.length > 0)) {
-      log(result.errors.length > 0 ? 'warn' : 'info', 'Autopost check complete', {
-        processed: result.processed.length,
-        skipped: result.skipped.length,
-        errors: result.errors.length,
-      });
-    }
-  } catch (error) {
-    log('error', 'Autopost check failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
 }
 
 async function main(): Promise<void> {

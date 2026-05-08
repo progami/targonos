@@ -447,6 +447,18 @@ function recordPublishedArtifact({ market, scope, entry, result }) {
   writePublishedState(market, scope, { version: 1, items })
 }
 
+function entryMatchesPublishedArtifact({ market, scope, entry }) {
+  const state = readPublishedState(market, scope)
+  const item = state.items?.[entry.relativePath]
+  if (item === undefined) return false
+  if (item.localPath !== entry.localPath) return false
+  if (item.size !== entry.size) return false
+  if (item.mtimeMs !== entry.mtimeMs) return false
+  if (item.fileId === null) return false
+  if (item.driveModifiedTime === null) return false
+  return true
+}
+
 function compactEntries(entries) {
   const byRelativePath = new Map()
   for (const entry of entries) {
@@ -503,9 +515,10 @@ export async function drainScopedDriveSyncQueue({ market, dryRun, scope }) {
     })
   }
 
-  const token = accessToken()
+  const pending = compacted.filter((entry) => !entryMatchesPublishedArtifact({ market, scope: parsedScope, entry }))
+  const token = pending.length === 0 ? null : accessToken()
   const failed = []
-  for (const entry of compacted) {
+  for (const entry of pending) {
     try {
       const result = await syncDriveFile({
         token,

@@ -51,6 +51,7 @@ import {
 
 import type {
   ProcessingBlock,
+  ProcessingReturn,
   ProcessingSale,
   KnownLedgerEvent,
   JournalEntryPreview,
@@ -67,6 +68,8 @@ export type {
   SettlementProcessingPreview,
   SettlementProcessingResult,
 } from './settlement-types';
+
+type PrincipalGroup = { orderId: string; sku: string; date: string; quantity: number; principalCents: number };
 
 function isCogsEnabledForMarketplace(marketplace: string): boolean {
   if (marketplace === 'amazon.com') return true;
@@ -814,9 +817,9 @@ export async function computeSettlementPreview(input: {
     };
   }
 
-  // Match refunds to historical sales first; fallback for remaining refunds is handled
-  // after current settlement sales get costed.
-  const refundPairs = Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku }));
+  // Match refunds to historical sales only when COGS is active. P&L-only marketplaces
+  // must not be blocked by inventory-return matching that has no journal impact.
+  const refundPairs = cogsEnabled ? Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku })) : [];
   const historicalSaleLayers: RefundSaleLayer[] = [];
   const historicalExistingReturns: ExistingReturnLayer[] = [];
   if (refundPairs.length > 0) {
@@ -873,19 +876,21 @@ export async function computeSettlementPreview(input: {
   }
 
   const historicalSaleKeys = new Set(historicalSaleLayers.map((sale) => `${sale.orderId}::${sale.sku}`));
-  const historicalRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
-  const currentSettlementRefundGroups = new Map<string, { orderId: string; sku: string; date: string; quantity: number; principalCents: number }>();
-  for (const [refundKey, refund] of refundGroups.entries()) {
-    const key = `${refund.orderId}::${refund.sku}`;
-    if (historicalSaleKeys.has(key)) {
-      historicalRefundGroups.set(refundKey, refund);
-      continue;
+  const historicalRefundGroups = new Map<string, PrincipalGroup>();
+  const currentSettlementRefundGroups = new Map<string, PrincipalGroup>();
+  if (cogsEnabled) {
+    for (const [refundKey, refund] of refundGroups.entries()) {
+      const key = `${refund.orderId}::${refund.sku}`;
+      if (historicalSaleKeys.has(key)) {
+        historicalRefundGroups.set(refundKey, refund);
+        continue;
+      }
+      currentSettlementRefundGroups.set(refundKey, refund);
     }
-    currentSettlementRefundGroups.set(refundKey, refund);
   }
 
-  const matchedReturnsFromHistory =
-    historicalRefundGroups.size === 0
+  const matchedReturnsFromHistory: ProcessingReturn[] =
+    !cogsEnabled || historicalRefundGroups.size === 0
       ? []
       : matchRefundsToSales(historicalRefundGroups, historicalSaleLayers, historicalExistingReturns, blocks);
 
@@ -1063,7 +1068,7 @@ export async function computeSettlementPreview(input: {
   }));
 
   const matchedReturnsFromCurrentSettlement =
-    currentSettlementRefundGroups.size === 0
+    !cogsEnabled || currentSettlementRefundGroups.size === 0
       ? []
       : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks, {
           allowFutureSales: true,

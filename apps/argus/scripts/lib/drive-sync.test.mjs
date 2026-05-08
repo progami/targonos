@@ -144,6 +144,79 @@ test('Drive sync preserves entries enqueued while a drain is running', async (t)
   }
 })
 
+test('Drive sync skips queue entries already matching the published ledger', async (t) => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-drive-sync-published-'))
+  const previousEnv = {
+    ARGUS_MONITORING_ROOT_US: process.env.ARGUS_MONITORING_ROOT_US,
+    ARGUS_DRIVE_MONITORING_FOLDER_ID_US: process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US,
+    ARGUS_DRIVE_PROFILE: process.env.ARGUS_DRIVE_PROFILE,
+    GWORKSPACE_API_BIN: process.env.GWORKSPACE_API_BIN,
+    GWORKSPACE_API_PYTHON: process.env.GWORKSPACE_API_PYTHON,
+  }
+
+  process.env.ARGUS_MONITORING_ROOT_US = tempRoot
+  process.env.ARGUS_DRIVE_MONITORING_FOLDER_ID_US = 'monitoring-root-us'
+  process.env.ARGUS_DRIVE_PROFILE = 'targon'
+  process.env.GWORKSPACE_API_BIN = 'gworkspace-api'
+  process.env.GWORKSPACE_API_PYTHON = '/usr/bin/false'
+
+  const queuePath = path.join(tempRoot, '.drive-sync', 'queue.jsonl')
+  const publishedPath = path.join(tempRoot, '.drive-sync', 'published.json')
+  const relativePath = 'Logs/tracking-fetch/run-log.jsonl'
+  const localPath = path.join(tempRoot, relativePath)
+  fs.mkdirSync(path.dirname(localPath), { recursive: true })
+  fs.mkdirSync(path.dirname(queuePath), { recursive: true })
+  fs.writeFileSync(localPath, 'already uploaded\n', 'utf8')
+
+  const stat = fs.statSync(localPath)
+  const entry = {
+    enqueuedAt: '2026-05-05T17:00:00.000Z',
+    market: 'us',
+    localPath,
+    relativePath,
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+  }
+  fs.writeFileSync(queuePath, `${JSON.stringify(entry)}\n`, 'utf8')
+  fs.writeFileSync(publishedPath, `${JSON.stringify({
+    version: 1,
+    items: {
+      [relativePath]: {
+        relativePath,
+        localPath,
+        fileId: 'existing-drive-file',
+        driveModifiedTime: '2026-05-05T17:01:00.000Z',
+        publishedAt: '2026-05-05T17:01:01.000Z',
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+      },
+    },
+  }, null, 2)}\n`, 'utf8')
+
+  t.mock.method(globalThis, 'fetch', async () => {
+    assert.fail('Already-published queue entries must not call Drive API')
+  })
+
+  try {
+    const { drainDriveSyncQueue } = await import(moduleUrl.href)
+    await drainDriveSyncQueue({ market: 'us', dryRun: false })
+
+    assert.equal(fs.existsSync(queuePath), false)
+    assert.deepEqual(
+      fs.readdirSync(path.dirname(queuePath)).filter((name) => name.endsWith('.processing')),
+      [],
+    )
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key]
+      } else {
+        process.env[key] = value
+      }
+    }
+  }
+})
+
 test('Drive sync recovers claimed processing queues after early abort', async (t) => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-drive-sync-recover-'))
   const previousEnv = {

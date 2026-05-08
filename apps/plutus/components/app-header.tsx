@@ -12,8 +12,6 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import InventoryIcon from '@mui/icons-material/Inventory';
 import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -106,9 +104,7 @@ type NavItem = { href: string; label: string; icon: SvgIconComponent };
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
   { href: '/cogs-inputs', label: 'COGS Inputs', icon: AssignmentTurnedInIcon },
-  { href: '/exceptions', label: 'Exceptions', icon: ErrorOutlineIcon },
   { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
-  { href: '/data-sources', label: 'Sources', icon: InventoryIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 

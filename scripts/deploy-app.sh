@@ -194,6 +194,18 @@ build_talos_changed_migrate_cmd() {
   join_commands "${commands[@]}"
 }
 
+plutus_prisma_changed() {
+  if any_changed "apps/plutus/prisma/schema.prisma"; then
+    return 0
+  fi
+
+  if any_changed_under "apps/plutus/prisma/migrations/"; then
+    return 0
+  fi
+
+  return 1
+}
+
 skip_git="${DEPLOY_SKIP_GIT:-false}"
 skip_install="${DEPLOY_SKIP_INSTALL:-false}"
 skip_pm2_save="${DEPLOY_SKIP_PM2_SAVE:-false}"
@@ -324,7 +336,7 @@ case "$app_key" in
     app_dir="$REPO_DIR/apps/plutus"
     pm2_name="${PM2_PREFIX}-plutus"
     prisma_cmd=""
-    migrate_cmd="pnpm --filter $workspace db:push"
+    migrate_cmd="pnpm --filter $workspace db:migrate:deploy"
     build_cmd="pnpm --filter $workspace build"
     ;;
   hermes)
@@ -1198,6 +1210,15 @@ if [[ "$app_key" == "talos" && "$changed_files_available" == "true" ]]; then
   fi
 fi
 
+if [[ "$app_key" == "plutus" && "$changed_files_available" == "true" ]]; then
+  if plutus_prisma_changed; then
+    log "Plutus Prisma files changed; running migrations"
+  else
+    log "Skipping Plutus migrations (no Prisma changes in deploy range)"
+    migrate_cmd=""
+  fi
+fi
+
 # Step 2: Install dependencies
 if is_truthy "$skip_install"; then
   log "Step 2: Skipping dependency install (DEPLOY_SKIP_INSTALL=$skip_install)"
@@ -1468,7 +1489,7 @@ if [[ "$app_key" == "hermes" ]]; then
 fi
 
 if [[ "$app_key" == "plutus" ]]; then
-  plutus_workers=("${PM2_PREFIX}-plutus-cashflow-refresh" "${PM2_PREFIX}-plutus-settlement-sync")
+  plutus_workers=("${PM2_PREFIX}-plutus-settlement-sync")
   for worker in "${plutus_workers[@]}"; do
     log "Step 7: Starting $worker"
     start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"

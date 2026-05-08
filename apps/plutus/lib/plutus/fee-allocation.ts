@@ -228,7 +228,7 @@ async function resolveAwdFeeTypeForMonth(input: {
       ok: false,
       monthStart,
       monthEnd,
-      message: `Missing AWD report upload for ${input.feeType} covering ${monthStart}..${monthEnd}`,
+      message: `Missing AWD allocation source for ${input.feeType} covering ${monthStart}..${monthEnd}`,
     };
   }
 
@@ -552,7 +552,7 @@ const DETERMINISTIC_SOURCE_GUIDANCE: Record<PnlBucketKey, string> = {
   amazonFbaInventoryReimbursement:
     'Amazon FBA Inventory Reimbursement is posted without SKU-level allocation when a SKU is not present in the settlement data.',
   warehousingAwd:
-    'Missing deterministic source for SKU-less AWD fees. Upload AWD fee report covering the invoice range and matching fee types (e.g., STORAGE_FEE / PROCESSING_FEE / TRANSPORTATION_FEE).',
+    'Missing deterministic internal allocation source for SKU-less AWD fees.',
 };
 
 export function deterministicSourceGuidanceForBucket(bucket: PnlBucketKey): string {

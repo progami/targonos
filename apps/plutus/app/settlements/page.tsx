@@ -34,7 +34,7 @@ import {
   useSettlementsListStore,
   type SettlementListStatus,
 } from '@/lib/store/settlements';
-import { buildSettlementListRowViewModel } from '@/lib/plutus/settlement-review';
+import { buildSettlementListRowViewModel, formatPlutusSettlementStatus } from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -143,10 +143,21 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
     );
   return (
     <Chip
-      label="Pending"
+      label={formatPlutusSettlementStatus(status)}
       size="small"
       variant="outlined"
       sx={{ ...chipBase, borderColor: 'rgba(34, 197, 94, 0.5)', color: 'success.dark', bgcolor: 'rgba(34, 197, 94, 0.05)' }}
+    />
+  );
+}
+
+function QboPill({ status }: { status: SettlementRow['qboStatus'] }) {
+  return (
+    <Chip
+      label={`QBO ${status}`}
+      size="small"
+      variant="outlined"
+      sx={{ ...chipBase, borderColor: 'divider', color: 'text.secondary', bgcolor: 'background.paper' }}
     />
   );
 }
@@ -375,7 +386,7 @@ export default function SettlementsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Review Amazon settlement postings in QuickBooks."
+            description="Review Amazon settlement postings in QuickBooks and their Plutus processing state."
             variant="accent"
           />
         </Box>
@@ -476,7 +487,7 @@ export default function SettlementsPage() {
 
           <Box sx={{ width: { xs: '100%', sm: '12rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
-              Settlement Status
+              Plutus Processing
             </Typography>
             <Box>
               <MuiButton
@@ -491,7 +502,7 @@ export default function SettlementsPage() {
                 }}
               >
                 <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {statusFilter.length === 0 ? 'All Statuses' : statusFilter.join(', ')}
+                  {statusFilter.length === 0 ? 'All States' : statusFilter.map(formatPlutusSettlementStatus).join(', ')}
                 </Box>
                 <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>&#9662;</Box>
               </MuiButton>
@@ -516,7 +527,7 @@ export default function SettlementsPage() {
                             sx={{ py: 0.25 }}
                           />
                         }
-                        label={<Typography sx={{ fontSize: '0.875rem' }}>{status === 'RolledBack' ? 'Rolled Back' : status}</Typography>}
+                        label={<Typography sx={{ fontSize: '0.875rem' }}>{formatPlutusSettlementStatus(status)}</Typography>}
                         sx={{ display: 'flex', mx: 0 }}
                       />
                     ))}
@@ -566,7 +577,7 @@ export default function SettlementsPage() {
                   <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement</MuiTableCell>
                   <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
                   <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Status</MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus Processing</MuiTableCell>
                 </MuiTableRow>
               </MuiTableHead>
               <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -642,6 +653,7 @@ export default function SettlementsPage() {
                         </MuiTableCell>
                         <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+                            <QboPill status={s.qboStatus} />
                             <PlutusPill status={rowView.statusText} />
                             <MuiButton
                               variant="contained"

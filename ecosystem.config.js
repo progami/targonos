@@ -224,6 +224,14 @@ function createNextAppEnvWithPortal(rootDir, appName, environment, runtimeEnv) {
   };
 }
 
+function createArgusRuntimeEnv(rootDir, environment, runtimeEnv) {
+  return createNextAppEnvWithPortal(rootDir, 'argus', environment, {
+    ...runtimeEnv,
+    ARGUS_MONITORING_ROOT_US: path.join(HOME_DIR, '.local/share/targon/argus-monitoring/us'),
+    ARGUS_MONITORING_ROOT_UK: path.join(HOME_DIR, '.local/share/targon/argus-monitoring/uk'),
+  });
+}
+
 function createHermesWorkerEnv(rootDir, environment, runtimeEnv) {
   return {
     ...loadAppEnv(rootDir, 'hermes', environment),
@@ -409,24 +417,6 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
-      name: 'dev-plutus-cashflow-refresh',
-      cwd: path.join(DEV_DIR, 'apps/plutus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/cashflow-refresh-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
-        NODE_ENV: 'production',
-        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '0',
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
       name: 'dev-plutus-settlement-sync',
       cwd: path.join(DEV_DIR, 'apps/plutus'),
       script: 'node_modules/.bin/tsx',
@@ -437,7 +427,6 @@ module.exports = {
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '0',
         PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only',
-        PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
         PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
         PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
@@ -501,7 +490,7 @@ module.exports = {
       script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'argus', 'dev', {
+      env: createArgusRuntimeEnv(DEV_DIR, 'dev', {
         NODE_ENV: 'production',
         PORT: 3116,
         BASE_PATH: '/argus',
@@ -656,24 +645,6 @@ module.exports = {
       max_memory_restart: '300M'
     },
     {
-      name: 'main-plutus-cashflow-refresh',
-      cwd: path.join(MAIN_DIR, 'apps/plutus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/cashflow-refresh-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
-        NODE_ENV: 'production',
-        PLUTUS_CASHFLOW_REFRESH_WORKER_ENABLED: '1',
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
       name: 'main-plutus-settlement-sync',
       cwd: path.join(MAIN_DIR, 'apps/plutus'),
       script: 'node_modules/.bin/tsx',
@@ -684,7 +655,6 @@ module.exports = {
         NODE_ENV: 'production',
         PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '1',
         PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only',
-        PLUTUS_SETTLEMENT_SYNC_AUTOPROCESS_ENABLED: '0',
         PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
         PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
         PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
@@ -748,7 +718,7 @@ module.exports = {
       script: '.next/standalone/apps/argus/server.js',
       interpreter: 'node',
       exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'argus', 'production', {
+      env: createArgusRuntimeEnv(MAIN_DIR, 'production', {
         NODE_ENV: 'production',
         PORT: 3016,
         BASE_PATH: '/argus',
@@ -762,6 +732,7 @@ module.exports = {
 };
 module.exports.createPortalRuntimeEnv = createPortalRuntimeEnv;
 module.exports.createNextAppEnvWithPortal = createNextAppEnvWithPortal;
+module.exports.createArgusRuntimeEnv = createArgusRuntimeEnv;
 module.exports.createHermesWorkerEnv = createHermesWorkerEnv;
 module.exports.buildHostedAppUrl = buildHostedAppUrl;
 module.exports.getHostedCookieDomain = getHostedCookieDomain;

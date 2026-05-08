@@ -186,6 +186,9 @@ function feeTypeMemoForRefund(feeType: string): string | null {
 
 function serviceFeeMemo(feeType: string): string | null {
   if (feeType === 'Subscription') return 'Amazon Seller Fees - Subscription Fee';
+  if (feeType === 'DigitalServicesFee') return 'Amazon Seller Fees - Digital Services Fee';
+  if (feeType === 'DealParticipationFee') return 'Amazon Seller Fees - Deal Participation Fee';
+  if (feeType === 'DealPerformanceFee') return 'Amazon Seller Fees - Deal Performance Fee';
   if (feeType === 'FBAInboundTransportationFee') return 'Amazon FBA Fees - FBA Inbound Transportation Fee';
   if (feeType === 'AmazonUpstreamProcessingFee') return 'Amazon FBA Fees - AWD Processing Fee';
   if (feeType === 'AmazonUpstreamStorageTransportationFee') return 'Amazon FBA Fees - AWD Transportation Fee';
@@ -201,7 +204,9 @@ function adjustmentMemo(event: SpApiAdjustmentEvent): string | null {
   const type = event.AdjustmentType;
   if (type === 'ReserveCredit') return 'Amazon Reserved Balances - Previous Reserve Amount Balance';
   if (type === 'ReserveDebit') return 'Amazon Reserved Balances - Current Reserve Amount';
+  if (type === 'FailedDisbursement') return 'Amazon Reserved Balances - Failed Disbursement';
   if (type === 'WAREHOUSE_DAMAGE') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Warehouse Damage';
+  if (type === 'WAREHOUSE_LOST') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Warehouse Lost';
   if (type === 'MISSING_FROM_INBOUND') return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Missing From Inbound';
   if (type === 'REVERSAL_REIMBURSEMENT')
     return 'Amazon FBA Inventory Reimbursement - FBA Inventory Reimbursement - Reversal Reimbursement';

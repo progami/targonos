@@ -127,12 +127,7 @@ className="hover:bg-slate-50 dark:hover:bg-slate-700"
 
 ```
 Settlements          (top-level link)
-Transactions         (top-level link)
-Benchmarking         (top-level link)
-Accounts & Taxes ▾   (dropdown)
-  ├── Setup Wizard
-  └── Chart of Accounts
-Cost Management ▾    (dropdown)
-  └── Data Sources
+COGS Inputs          (top-level link)
+Mappings             (top-level link)
 Settings             (top-level link)
 ```
