@@ -158,24 +158,16 @@ function readCachedBitwardenSession(env) {
   return cachedSession
 }
 
-function createBitwardenResolver(env = process.env) {
+function createBitwardenResolver(env = process.env, options = {}) {
   const itemCache = new Map()
+  const readItemOutput = createBitwardenItemReader(options)
 
   return function resolveBitwardenRef(ref) {
     const parsed = parseBwRef(ref)
     let item = itemCache.get(parsed.itemName)
     if (!item) {
       const session = readCachedBitwardenSession(env)
-      const result = spawnSync('bw', ['get', 'item', parsed.itemName, '--session', session], {
-        encoding: 'utf8',
-      })
-      if (result.status !== 0) {
-        throw new Error(`Failed to read Bitwarden item "${parsed.itemName}": ${result.stderr.trim()}`)
-      }
-      const output = result.stdout.trim()
-      if (output.length === 0) {
-        throw new Error(`Failed to read Bitwarden item "${parsed.itemName}": empty response from bw`)
-      }
+      const output = readItemOutput(parsed.itemName, session)
       try {
         item = JSON.parse(output)
       } catch (error) {
@@ -204,6 +196,42 @@ function createBitwardenResolver(env = process.env) {
     }
     return field.value
   }
+}
+
+function createBitwardenItemReader(options = {}) {
+  const spawnSyncImpl = options.spawnSyncImpl ? options.spawnSyncImpl : spawnSync
+  const retryDelayMs = Number.isInteger(options.retryDelayMs) ? options.retryDelayMs : 250
+
+  return function readBitwardenItemOutput(itemName, session) {
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const result = spawnSyncImpl('bw', ['get', 'item', itemName, '--session', session], {
+        encoding: 'utf8',
+      })
+      if (result.status !== 0) {
+        throw new Error(`Failed to read Bitwarden item "${itemName}": ${result.stderr.trim()}`)
+      }
+
+      const output = typeof result.stdout === 'string' ? result.stdout.trim() : ''
+      if (output.length > 0) {
+        return output
+      }
+
+      if (attempt < 3) {
+        waitForBitwardenRetry(retryDelayMs)
+      }
+    }
+
+    throw new Error(`Failed to read Bitwarden item "${itemName}": empty response from bw`)
+  }
+}
+
+function waitForBitwardenRetry(retryDelayMs) {
+  if (retryDelayMs <= 0) {
+    return
+  }
+  const retryBuffer = new SharedArrayBuffer(4)
+  const retryState = new Int32Array(retryBuffer)
+  Atomics.wait(retryState, 0, 0, retryDelayMs)
 }
 
 function resolveEnvEntries(entries, resolveBitwardenRef) {
