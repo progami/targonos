@@ -5,8 +5,8 @@
 export const SKU_FIELD_LIMITS = {
   /** SKU code max length - matches skuCode unique constraint */
   SKU_CODE_MAX: 50,
-  /** Description max length - matches @db.VarChar(42) */
-  DESCRIPTION_MAX: 42,
+  /** Description max length - matches @db.VarChar(255) */
+  DESCRIPTION_MAX: 255,
   /** ASIN max length */
   ASIN_MAX: 64,
   /** Category max length */

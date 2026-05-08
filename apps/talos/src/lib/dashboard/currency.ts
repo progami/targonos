@@ -1,5 +1,18 @@
 import { getTenantConfig, isValidTenantCode } from '@/lib/tenant/constants'
 
+export function formatCurrencyForCode(
+  amount: number,
+  currency: string,
+  fractionDigits = 2
+): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(amount)
+}
+
 export function formatDashboardCurrency(
   amount: number,
   tenantCode: string | null | undefined
@@ -10,10 +23,5 @@ export function formatDashboardCurrency(
 
   const currency = getTenantConfig(tenantCode).currency
 
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount)
+  return formatCurrencyForCode(amount, currency)
 }

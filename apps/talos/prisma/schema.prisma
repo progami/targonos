@@ -115,7 +115,7 @@ model Sku {
   amazonReferralFeePercent Decimal? @map("amazon_referral_fee_percent") @db.Decimal(5, 2)
   amazonListingPrice   Decimal?   @map("amazon_listing_price") @db.Decimal(12, 2)
   amazonReferenceWeightKg Decimal? @map("amazon_reference_weight_kg") @db.Decimal(8, 3)
-  description         String     @db.VarChar(42)
+  description         String     @db.VarChar(255)
   packSize            Int?       @map("pack_size")
   defaultSupplierId   String?    @map("default_supplier_id")
   secondarySupplierId String?    @map("secondary_supplier_id")

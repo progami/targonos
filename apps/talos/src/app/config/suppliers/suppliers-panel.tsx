@@ -265,9 +265,13 @@ export default function SuppliersPanel({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <Users className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">Supplier Directory</h2>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+                Supplier Directory
+              </h2>
             </div>
-            <p className="text-sm text-slate-600 dark:text-slate-400">Manage supplier information and contacts</p>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Manage supplier information and contacts
+            </p>
           </div>
           <Badge className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800 font-medium">
             {suppliers.length} suppliers
@@ -317,17 +321,32 @@ export default function SuppliersPanel({
             <table className="min-w-[980px] w-full table-auto text-sm">
               <thead>
                 <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Name</th>
-                  <th className="min-w-[120px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Contact</th>
-                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Email</th>
-                  <th className="min-w-[140px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Phone</th>
-                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Default Terms</th>
-                  <th className="w-[72px] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">Actions</th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Name
+                  </th>
+                  <th className="min-w-[120px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Contact
+                  </th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Email
+                  </th>
+                  <th className="min-w-[140px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Phone
+                  </th>
+                  <th className="min-w-[220px] text-left font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Default Terms
+                  </th>
+                  <th className="w-[72px] text-right font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredSuppliers.map(supplier => (
-                  <tr key={supplier.id} className="border-t border-slate-200 align-top dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+                  <tr
+                    key={supplier.id}
+                    className="border-t border-slate-200 align-top dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+                  >
                     <td className="px-3 py-2 font-medium text-foreground">
                       <button
                         type="button"
@@ -338,7 +357,10 @@ export default function SuppliersPanel({
                         {supplier.name}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground whitespace-normal break-words leading-5" title={supplier.contactName ?? undefined}>
+                    <td
+                      className="px-3 py-2 text-muted-foreground whitespace-normal break-words leading-5"
+                      title={supplier.contactName ?? undefined}
+                    >
                       {supplier.contactName ?? '—'}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground break-all leading-5">
@@ -347,9 +369,18 @@ export default function SuppliersPanel({
                     <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
                       {supplier.phone ?? '—'}
                     </td>
-                    <td className="px-3 py-2 text-sm text-muted-foreground whitespace-normal break-words leading-5" title={[supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ') || undefined}>
+                    <td
+                      className="px-3 py-2 text-sm text-muted-foreground whitespace-normal break-words leading-5"
+                      title={
+                        [supplier.defaultIncoterms, supplier.defaultPaymentTerms]
+                          .filter(Boolean)
+                          .join(' · ') || undefined
+                      }
+                    >
                       {supplier.defaultPaymentTerms || supplier.defaultIncoterms ? (
-                        [supplier.defaultIncoterms, supplier.defaultPaymentTerms].filter(Boolean).join(' · ')
+                        [supplier.defaultIncoterms, supplier.defaultPaymentTerms]
+                          .filter(Boolean)
+                          .join(' · ')
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
@@ -360,6 +391,7 @@ export default function SuppliersPanel({
                         size="sm"
                         onClick={() => setConfirmDelete(supplier)}
                         className="border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300"
+                        aria-label={`Delete supplier ${supplier.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -489,7 +521,9 @@ export default function SuppliersPanel({
                     placeholder="e.g., Net 30, 50% deposit"
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-700 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400 focus:border-cyan-500 dark:focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-100 dark:focus:ring-cyan-900 transition-shadow"
                   />
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Auto-filled when creating new Inbound
+                  </p>
                 </div>
 
                 <div className="space-y-1">
@@ -509,7 +543,9 @@ export default function SuppliersPanel({
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Auto-filled when creating new Inbound</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Auto-filled when creating new Inbound
+                  </p>
                 </div>
               </div>
             </div>

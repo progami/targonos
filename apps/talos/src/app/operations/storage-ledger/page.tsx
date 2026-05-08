@@ -4,11 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSession } from '@/hooks/usePortalSession'
 import { useRouter } from 'next/navigation'
 import { Package, Calendar } from '@/lib/lucide-icons'
-import {
-  PageContainer,
-  PageHeaderSection,
-  PageContent,
-} from '@/components/layout/page-container'
+import { PageContainer, PageHeaderSection, PageContent } from '@/components/layout/page-container'
 import { EmptyState } from '@/components/ui/empty-state'
 import { PageLoading, ContentLoading } from '@/components/ui/loading-spinner'
 import { StorageLedgerHeader } from '@/components/finance/storage-ledger/StorageLedgerHeader'
@@ -21,7 +17,7 @@ import { useStorageLedger } from '@/hooks/useStorageLedger'
 import { usePageState } from '@/lib/store/page-state'
 import { format } from 'date-fns'
 import { buildAppCallbackUrl, redirectToPortal } from '@/lib/portal'
-import { withBasePath } from '@/lib/utils/base-path'
+import { getTenantConfig } from '@/lib/tenant/constants'
 
 const PAGE_KEY = '/operations/storage-ledger'
 
@@ -49,50 +45,53 @@ export default function StorageLedgerPage() {
     )
   }
 
+  if (!session || !['staff', 'admin'].includes(session.user.role)) {
+    return null
+  }
+
   return (
     <PageContainer>
-      <StorageLedgerContent />
+      <StorageLedgerContent currency={getTenantConfig(session.user.region).currency} />
     </PageContainer>
   )
 }
 
-function StorageLedgerContent() {
+function StorageLedgerContent({ currency }: { currency: string }) {
   const pageState = usePageState(PAGE_KEY)
-  
+
   const aggregationView = (pageState.custom?.aggregationView as 'weekly' | 'monthly') ?? 'weekly'
-  const setAggregationView = (value: 'weekly' | 'monthly') => pageState.setCustom('aggregationView', value)
-  
+  const setAggregationView = (value: 'weekly' | 'monthly') =>
+    pageState.setCustom('aggregationView', value)
+
   const storedFilters = pageState.custom?.filters as StorageLedgerColumnFilters | undefined
   const [filters, setFiltersState] = useState<StorageLedgerColumnFilters>(
-    () => storedFilters ?? createDefaultFilters(),
+    () => storedFilters ?? createDefaultFilters()
   )
-  
-  const setFilters = (newFilters: StorageLedgerColumnFilters | ((prev: StorageLedgerColumnFilters) => StorageLedgerColumnFilters)) => {
+
+  const setFilters = (
+    newFilters:
+      | StorageLedgerColumnFilters
+      | ((prev: StorageLedgerColumnFilters) => StorageLedgerColumnFilters)
+  ) => {
     setFiltersState(prev => {
       const resolved = typeof newFilters === 'function' ? newFilters(prev) : newFilters
       pageState.setCustom('filters', resolved)
       return resolved
     })
   }
-  
+
   const [dateRange] = useState({
-    start: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
-      .toISOString()
-      .split('T')[0],
+    start: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0],
   })
 
-  const { entries, summary, loading, error, exportData, refetch } =
-    useStorageLedger({
-      startDate: dateRange.start,
-      endDate: dateRange.end,
-      includeCosts: true,
-    })
+  const { entries, summary, loading, error, exportData, refetch } = useStorageLedger({
+    startDate: dateRange.start,
+    endDate: dateRange.end,
+    includeCosts: true,
+  })
 
-  const filteredEntries = useMemo(
-    () => filterEntries(entries, filters),
-    [entries, filters],
-  )
+  const filteredEntries = useMemo(() => filterEntries(entries, filters), [entries, filters])
 
   const headerActions = (
     <StorageLedgerHeader
@@ -118,12 +117,13 @@ function StorageLedgerContent() {
           <EmptyState icon={Package} title="Error Loading Data" description={error} />
         ) : (
           <div className="space-y-6">
-            {summary && <StorageLedgerStats summary={summary} />}
+            {summary && <StorageLedgerStats summary={summary} currency={currency} />}
             <StorageLedgerTable
               entries={filteredEntries}
               aggregationView={aggregationView}
               filters={filters}
               onFilterChange={setFilters}
+              currency={currency}
             />
           </div>
         )}
@@ -151,7 +151,7 @@ function createDefaultFilters(): StorageLedgerColumnFilters {
 
 function filterEntries(
   entries: ReturnType<typeof useStorageLedger>['entries'],
-  filters: StorageLedgerColumnFilters,
+  filters: StorageLedgerColumnFilters
 ) {
   const parseNumber = (value: string) => {
     const trimmed = value.trim()
@@ -213,9 +213,7 @@ function filterEntries(
       return false
     }
 
-    const rate = entry.storageRatePerPalletDay
-      ? Number(entry.storageRatePerPalletDay)
-      : null
+    const rate = entry.storageRatePerPalletDay ? Number(entry.storageRatePerPalletDay) : null
     if (rateMin !== null && (rate ?? 0) < rateMin) {
       return false
     }

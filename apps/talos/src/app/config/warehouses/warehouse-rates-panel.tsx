@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { fetchWithCSRF } from '@/lib/fetch-with-csrf'
 import { usePageState } from '@/lib/store/page-state'
 import { toast } from 'react-hot-toast'
+import { formatCurrencyForCode } from '@/lib/dashboard/currency'
 
 interface CostRate {
   id: string
@@ -29,6 +30,7 @@ interface WarehouseRatesPanelProps {
   warehouseId: string
   warehouseName: string
   warehouseCode: string
+  currency: string
 }
 
 type TabKey = 'inbound' | 'storage' | 'outbound' | 'forwarding'
@@ -103,7 +105,7 @@ const RATE_TEMPLATES = {
       costName: 'Pallets Putaway',
       costCategory: 'Inbound',
       unitOfMeasure: 'per_pallet',
-      defaultValue: 2.10,
+      defaultValue: 2.1,
     },
     {
       costName: 'Pallets Supplied',
@@ -209,6 +211,7 @@ export function WarehouseRatesPanel({
   warehouseId,
   warehouseName,
   warehouseCode,
+  currency,
 }: WarehouseRatesPanelProps) {
   const pageState = usePageState(`/config/warehouses/${warehouseId}/rates`)
   const activeTab = (pageState.activeTab as TabKey) ?? 'inbound'
@@ -233,7 +236,7 @@ export function WarehouseRatesPanel({
       const response = await fetchWithCSRF(`/api/warehouses/${warehouseId}/cost-rates`)
       if (response.ok) {
         const data = await response.json()
-        setRates(data.costRates || [])
+        setRates(Array.isArray(data.costRates) ? data.costRates : [])
       }
     } catch (error) {
       console.error('Failed to load rates:', error)
@@ -293,7 +296,7 @@ export function WarehouseRatesPanel({
         cancelEditing()
       } else {
         const error = await response.json().catch(() => null)
-        toast.error(error?.error || 'Failed to update rate')
+        toast.error(error?.error ?? 'Failed to update rate')
       }
     } catch (_error) {
       toast.error('Failed to update rate')
@@ -332,7 +335,7 @@ export function WarehouseRatesPanel({
         cancelEditing()
       } else {
         const error = await response.json().catch(() => null)
-        toast.error(error?.error || 'Failed to create rate')
+        toast.error(error?.error ?? 'Failed to create rate')
       }
     } catch (_error) {
       toast.error('Failed to create rate')
@@ -348,7 +351,10 @@ export function WarehouseRatesPanel({
     const isAddingNew = isEditingThis && editState?.field === 'new'
 
     return (
-      <tr key={template.costName} className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50">
+      <tr
+        key={template.costName}
+        className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50"
+      >
         <td className="px-3 py-2 text-foreground whitespace-nowrap w-[55%]">
           {template.costName}
           {showCategory && (
@@ -359,11 +365,11 @@ export function WarehouseRatesPanel({
           {rate ? (
             isEditingRate ? (
               <div className="flex items-center justify-end gap-2">
-                <span className="text-muted-foreground">$</span>
+                <span className="text-muted-foreground">{currency}</span>
                 <input
                   type="number"
                   step="0.01"
-                  value={editState?.value || ''}
+                  value={editState?.value ?? ''}
                   onChange={e =>
                     setEditState(prev => (prev ? { ...prev, value: e.target.value } : null))
                   }
@@ -371,28 +377,36 @@ export function WarehouseRatesPanel({
                   autoFocus
                 />
                 <button
+                  type="button"
                   onClick={() => saveRate(rate)}
                   disabled={saving}
                   className="p-1 text-green-600 hover:bg-green-50 rounded"
                   title="Save"
+                  aria-label={`Save ${template.costName} rate`}
                 >
                   <Save className="h-4 w-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={cancelEditing}
                   className="p-1 text-muted-foreground hover:bg-muted rounded"
                   title="Cancel"
+                  aria-label={`Cancel ${template.costName} rate edit`}
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             ) : (
               <div className="flex items-center justify-end gap-2">
-                <span className="font-semibold text-foreground">${rate.costValue.toFixed(2)}</span>
+                <span className="font-semibold text-foreground">
+                  {formatCurrencyForCode(rate.costValue, currency)}
+                </span>
                 <button
+                  type="button"
                   onClick={() => startEditingRate(rate)}
                   className="p-1 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 rounded transition-colors"
                   title="Edit rate"
+                  aria-label={`Edit ${template.costName} rate`}
                 >
                   <Edit className="h-3.5 w-3.5" />
                 </button>
@@ -400,11 +414,11 @@ export function WarehouseRatesPanel({
             )
           ) : isAddingNew ? (
             <div className="flex items-center justify-end gap-2">
-              <span className="text-muted-foreground">$</span>
+              <span className="text-muted-foreground">{currency}</span>
               <input
                 type="number"
                 step="0.01"
-                value={editState?.value || ''}
+                value={editState?.value ?? ''}
                 onChange={e =>
                   setEditState(prev => (prev ? { ...prev, value: e.target.value } : null))
                 }
@@ -412,17 +426,21 @@ export function WarehouseRatesPanel({
                 autoFocus
               />
               <button
+                type="button"
                 onClick={() => createRate(template)}
                 disabled={saving}
                 className="p-1 text-green-600 hover:bg-green-50 rounded"
                 title="Save"
+                aria-label={`Save ${template.costName} rate`}
               >
                 <Save className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={cancelEditing}
                 className="p-1 text-muted-foreground hover:bg-muted rounded"
                 title="Cancel"
+                aria-label={`Cancel ${template.costName} rate add`}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -438,8 +456,10 @@ export function WarehouseRatesPanel({
             formatUnit(template.unitOfMeasure)
           ) : (
             <button
+              type="button"
               onClick={() => startAddingRate(template)}
               className="inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+              aria-label={`Add ${template.costName} rate`}
             >
               <Plus className="h-3.5 w-3.5" />
               Add
@@ -462,7 +482,7 @@ export function WarehouseRatesPanel({
       per_shipment: 'per shipment',
       flat: 'flat',
     }
-    return unitLabels[unit] || unit
+    return unitLabels[unit] ?? unit
   }
 
   if (loading) {
@@ -479,7 +499,9 @@ export function WarehouseRatesPanel({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">{warehouseName}</h2>
-          <p className="text-sm text-muted-foreground">Template Rates • {warehouseCode} • USD</p>
+          <p className="text-sm text-muted-foreground">
+            Template Rates • {warehouseCode} • {currency}
+          </p>
           <p className="text-xs text-muted-foreground mt-1">
             Used to prefill warehouse-stage costs in the Inbound workflow.
           </p>
@@ -494,6 +516,7 @@ export function WarehouseRatesPanel({
         <nav className="flex gap-1 -mb-px">
           {tabs.map(tab => (
             <button
+              type="button"
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={`
@@ -518,10 +541,7 @@ export function WarehouseRatesPanel({
           <InboundTab templates={RATE_TEMPLATES.inbound} renderRateRow={renderRateRow} />
         )}
         {activeTab === 'storage' && (
-          <StorageTab
-            templates={RATE_TEMPLATES.storage}
-            renderRateRow={renderRateRow}
-          />
+          <StorageTab templates={RATE_TEMPLATES.storage} renderRateRow={renderRateRow} />
         )}
         {activeTab === 'outbound' && (
           <OutboundTab templates={RATE_TEMPLATES.outbound} renderRateRow={renderRateRow} />
@@ -569,9 +589,15 @@ function InboundTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Container Type</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">
+                Container Type
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">
+                Rate
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">
+                Unit
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -620,9 +646,15 @@ function StorageTab({ templates, renderRateRow }: StorageTabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Description</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">
+                Description
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">
+                Rate
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">
+                Unit
+              </th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>
@@ -652,9 +684,15 @@ function OutboundTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Pallet Range</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">
+                Pallet Range
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">
+                Rate
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">
+                Unit
+              </th>
             </tr>
           </thead>
           <tbody>{truckingRates.map(t => renderRateRow(t))}</tbody>
@@ -697,9 +735,15 @@ function ForwardingTab({ templates, renderRateRow }: TabProps) {
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="border-b bg-slate-50/50 dark:bg-slate-700/50">
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">Service</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">Rate</th>
-              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">Unit</th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[55%]">
+                Service
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-right w-[25%]">
+                Rate
+              </th>
+              <th className="font-medium text-muted-foreground px-3 py-2 whitespace-nowrap text-xs text-left w-[20%]">
+                Unit
+              </th>
             </tr>
           </thead>
           <tbody>{templates.map(t => renderRateRow(t))}</tbody>

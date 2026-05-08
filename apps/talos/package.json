@@ -46,7 +46,7 @@
     "db:migrate:erd-v10-views": "tsx scripts/migrations/ensure-erd-v10-views.ts",
     "db:migrate:inbound-line-packaging-snapshots": "tsx scripts/migrations/backfill-inbound-line-packaging-snapshots.ts",
     "db:migrate:inbound-base-currency": "tsx scripts/migrations/normalize-inbound-base-currency.ts",
-    "db:migrate:sku-description-42": "tsx scripts/migrations/truncate-sku-description-42.ts",
+    "db:migrate:sku-description-255": "tsx scripts/migrations/expand-sku-description-255.ts",
     "db:studio": "prisma studio",
     "demo": "tsx scripts/demo.ts",
     "demo:headed": "tsx scripts/demo.ts --headed",
