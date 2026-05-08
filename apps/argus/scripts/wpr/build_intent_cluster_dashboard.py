@@ -331,6 +331,34 @@ def discover_week_folders_by_label() -> dict[str, Path]:
     return folders
 
 
+def normalize_week_meta_with_discovered_folders(
+    week_meta: dict[str, dict[str, object]],
+) -> dict[str, dict[str, object]]:
+    normalized = {
+        week_label: dict(meta)
+        for week_label, meta in week_meta.items()
+    }
+    for week_label, folder in discover_week_folders_by_label().items():
+        week_number, _, start_date = detect_week_folder(folder)
+        existing = normalized.get(week_label)
+        if existing is None:
+            normalized[week_label] = {
+                "week_number": week_number,
+                "week_label": week_label,
+                "start_date": start_date,
+            }
+            continue
+        if existing.get("week_number") != week_number:
+            existing["week_number"] = week_number
+        if existing.get("week_label") != week_label:
+            existing["week_label"] = week_label
+        if existing.get("start_date") == "":
+            existing["start_date"] = start_date
+    return dict(
+        sorted(normalized.items(), key=lambda item: int(item[1]["week_number"]))
+    )
+
+
 def discover_files(pattern: str) -> list[Path]:
     if pattern.startswith(WEEK_FOLDER_PREFIX):
         suffix = pattern[len(WEEK_FOLDER_PREFIX) :]
@@ -10302,6 +10330,7 @@ def main() -> None:
     tst_term_week = load_tst(week_meta, cluster_terms, target_asin, term_info)
     load_rank_radar(cluster_week, cluster_terms, term_rollup, week_meta, term_info, rank_term_week_detail)
     load_ppc(cluster_week, cluster_terms, term_rollup, week_meta, term_info, ppc_term_week)
+    week_meta = normalize_week_meta_with_discovered_folders(week_meta)
 
     if not week_meta:
         raise SystemExit("No weekly data found.")
