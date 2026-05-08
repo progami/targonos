@@ -10,6 +10,7 @@ const talosDbCommon = fs.readFileSync(path.join(rootDir, 'scripts', 'db', 'talos
 const talosLoadEnv = fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'scripts', 'load-env.ts'), 'utf8')
 const authPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'packages', 'auth', 'package.json'), 'utf8'))
 const talosPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'package.json'), 'utf8'))
+const plutusPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'plutus', 'package.json'), 'utf8'))
 
 test('auth package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
@@ -21,6 +22,13 @@ test('auth package exposes a deploy-safe prisma migrate command', () => {
 test('talos package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
     talosPackage.scripts['db:migrate:deploy'],
+    'prisma migrate deploy --schema prisma/schema.prisma',
+  )
+})
+
+test('plutus package exposes a deploy-safe prisma migrate command', () => {
+  assert.equal(
+    plutusPackage.scripts['db:migrate:deploy'],
     'prisma migrate deploy --schema prisma/schema.prisma',
   )
 })
@@ -40,6 +48,17 @@ test('sso deploy uses PORTAL_DB_URL for migration readiness instead of app DATAB
   assert.match(
     deployScript,
     /error "PORTAL_DB_URL is not set and no env file found; cannot apply auth migrations"/,
+  )
+})
+
+test('plutus deploy applies Prisma migrations instead of db push', () => {
+  assert.match(
+    deployScript,
+    /plutus\)[\s\S]*?migrate_cmd="pnpm --filter \$workspace db:migrate:deploy"/,
+  )
+  assert.doesNotMatch(
+    deployScript,
+    /plutus\)[\s\S]*?migrate_cmd="pnpm --filter \$workspace db:push"/,
   )
 })
 
