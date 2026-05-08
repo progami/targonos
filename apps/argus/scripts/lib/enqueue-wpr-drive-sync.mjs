@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { enqueueWprDriveSync, parseArgusMarket, wprRootForMarket } from './artifacts.mjs'
+import { WPR_CANONICAL_WEEK_FOLDER_RE, enqueueWprDriveSync, parseArgusMarket, wprRootForMarket } from './artifacts.mjs'
 
 function parseCliArgs(argv) {
   const args = { market: null }
@@ -51,10 +51,25 @@ function enqueueTree({ market, root }) {
   return count
 }
 
+export function enqueueWprWeekTrees({ market, root }) {
+  let count = 0
+  const entries = fs.readdirSync(root, { withFileTypes: true })
+  for (const entry of entries) {
+    if (!entry.isDirectory()) {
+      continue
+    }
+    if (!WPR_CANONICAL_WEEK_FOLDER_RE.test(entry.name)) {
+      continue
+    }
+    count += enqueueTree({ market, root: path.join(root, entry.name) })
+  }
+  return count
+}
+
 function main() {
   const args = parseCliArgs(process.argv.slice(2))
   const root = wprRootForMarket(args.market)
-  const count = enqueueTree({ market: args.market, root })
+  const count = enqueueWprWeekTrees({ market: args.market, root })
   process.stdout.write(`Queued ${count} WPR artifact(s) for Drive sync from ${root}\n`)
 }
 

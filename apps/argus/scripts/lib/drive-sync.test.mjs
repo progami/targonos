@@ -27,7 +27,7 @@ test('Drive sync planner targets Shared Drive folders with supportsAllDrives', a
 
     const wprPlan = buildDriveSyncPlan({
       market: 'us',
-      relativePath: 'Week 1 - 2025-12-28 (Sun)/input/source.csv',
+      relativePath: 'W01/input/source.csv',
       size: 10,
       scope: 'wpr',
     })
