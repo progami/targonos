@@ -34,138 +34,118 @@ export const AtlasIcon = (
   <img src={`${assetBasePath}/app-logos/atlas.png`} alt="" aria-hidden="true" />
 )
 
-/** Kairos (Forecasting): time window and moment mark */
+/** Kairos: clock window and hourglass */
 export const KairosIcon = (
-  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    <circle cx="12" cy="12" r="8.5" fill="none" stroke="var(--icon-navy)" strokeWidth="1.6" />
-    <path d="M8 5.5h8M8 18.5h8" stroke="var(--icon-gold)" strokeWidth="1.7" strokeLinecap="round" />
+  <svg viewBox="0 0 24 24" width="52" height="52" style={{ width: '52px', height: '52px' }} aria-hidden="true">
     <path
-      d="M8.7 6.5c0 3.2 2.2 4.1 3.3 5.5-1.1 1.4-3.3 2.3-3.3 5.5M15.3 6.5c0 3.2-2.2 4.1-3.3 5.5 1.1 1.4 3.3 2.3 3.3 5.5"
+      d="M4.8 12a7.2 7.2 0 0 1 2.1-5.1M12 4.8a7.2 7.2 0 0 1 5.1 2.1M19.2 12a7.2 7.2 0 0 1-2.1 5.1M12 19.2a7.2 7.2 0 0 1-5.1-2.1"
+      fill="none"
+      stroke="var(--icon-navy)"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+    />
+    <path d="M8.7 7.1h6.6M8.7 16.9h6.6" stroke="var(--icon-navy)" strokeWidth="1.5" strokeLinecap="round" />
+    <path
+      d="M9.7 8c0 2.4 1.6 3 2.3 4-.7 1-2.3 1.6-2.3 4M14.3 8c0 2.4-1.6 3-2.3 4 .7 1 2.3 1.6 2.3 4"
       fill="none"
       stroke="var(--icon-teal)"
-      strokeWidth="1.45"
+      strokeWidth="1.55"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
-    <circle cx="17.7" cy="6.3" r="1.45" fill="var(--icon-gold)" />
+    <path d="M12 12.5 10.4 15h3.2L12 12.5Z" fill="var(--icon-teal)" />
+    <path d="M12 2.7v1.4M21.3 12h-1.4M12 21.3v-1.4M2.7 12h1.4" stroke="var(--icon-gold)" strokeWidth="1.35" strokeLinecap="round" />
+    <circle cx="17.7" cy="6.3" r="1.15" fill="var(--icon-gold)" />
   </svg>
 )
 
-/** X-Plan (S&OP): Bold X mark - cross-functional planning */
+/** X-Plan: cross-functional compass mark */
 export const XPlanIcon = (
-  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="54" height="54" style={{ width: '54px', height: '54px' }} aria-hidden="true">
     <path
-      d="M7 7L17 17"
+      d="M12 3.4 14.1 9.7 20.1 6.6 16 12 20.1 17.4 14.1 14.3 12 20.6 9.9 14.3 3.9 17.4 8 12 3.9 6.6 9.9 9.7 12 3.4Z"
+      fill="var(--icon-navy)"
+    />
+    <circle cx="12" cy="12" r="1.9" fill="var(--icon-teal)" />
+    <path
+      d="M12 4.2v2.5M19.1 12h-2.5M12 19.8v-2.5M4.9 12h2.5"
       stroke="var(--icon-navy)"
-      strokeWidth="2.8"
+      strokeWidth="1.35"
       strokeLinecap="round"
     />
     <path
-      d="M17 7L7 17"
-      stroke="var(--icon-navy)"
-      strokeWidth="2.8"
+      d="M12 3.8v3.1M20.2 12h-3.1M12 20.2v-3.1M3.8 12h3.1"
+      stroke="var(--icon-gold)"
+      strokeWidth="1.25"
       strokeLinecap="round"
     />
-    <path
-      d="M12 4.4v15.2M4.4 12h15.2"
-      stroke="var(--icon-teal)"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      opacity="0.8"
-    />
-    <circle cx="12" cy="12" r="2" fill="var(--icon-teal)" />
-    <circle cx="18.7" cy="5.3" r="1.35" fill="var(--icon-gold)" />
+    <circle cx="12" cy="3.8" r="1.05" fill="var(--icon-gold)" />
+    <circle cx="20.2" cy="12" r="1.05" fill="var(--icon-teal)" />
+    <circle cx="12" cy="20.2" r="1.05" fill="var(--icon-navy)" />
+    <circle cx="3.8" cy="12" r="1.05" fill="var(--icon-navy)" />
   </svg>
 )
 
-/** Plutus (Financials): Cornucopia - horn of abundance */
+/** Plutus: treasury temple and settlement coin */
 export const PlutusIcon = (
-  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+  <svg viewBox="0 0 24 24" width="52" height="52" style={{ width: '52px', height: '52px' }} aria-hidden="true">
+    <path d="M4.9 8.5 12 4.4l7.1 4.1H4.9Z" fill="var(--icon-navy)" />
+    <rect x="5.6" y="9.4" width="12.8" height="1.6" fill="var(--icon-navy)" rx="0.35" />
+    <rect x="6.3" y="17.4" width="11.4" height="1.5" fill="var(--icon-navy)" rx="0.35" />
+    <rect x="5.1" y="19.5" width="13.8" height="1.4" fill="var(--icon-teal)" rx="0.35" />
     <path
-      d="M7 15.2c0-5 4-9 9-9c2.8 0 4.9 1.8 4.9 4.6c0 5.2-5.2 9.8-12 9.8c-1.9 0-3.4-.6-4.4-1.7c-.7-.8-1-1.7-1-2.7Z"
-      fill="currentColor"
-      opacity="0.16"
-    />
-    <path
-      d="M7 15.2c0-5 4-9 9-9c2.8 0 4.9 1.8 4.9 4.6c0 5.2-5.2 9.8-12 9.8c-1.9 0-3.4-.6-4.4-1.7c-.7-.8-1-1.7-1-2.7Z"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
+      d="M7.3 11.3v5.4M10.3 11.3v5.4M13.7 11.3v5.4M16.7 11.3v5.4"
+      stroke="var(--icon-navy)"
+      strokeWidth="1.35"
       strokeLinecap="round"
-      strokeLinejoin="round"
     />
+    <circle cx="12" cy="14.1" r="2.45" fill="var(--icon-gold)" />
     <path
-      d="M11 14.9c0-2.4 2-4.3 4.4-4.3c1.8 0 3.2 1.1 3.2 2.9c0 2.7-2.7 5.2-6.6 5.2c-.6 0-1.1-.1-1.6-.3"
+      d="M12 12.5v3.3M10.9 13.2c.25-.45.65-.7 1.2-.7.7 0 1.15.35 1.15.85 0 .55-.45.8-1.25.95-.75.15-1.2.4-1.2.95 0 .52.48.85 1.17.85.58 0 1-.24 1.28-.68"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
+      stroke="var(--icon-navy)"
+      strokeWidth="0.75"
       strokeLinecap="round"
-      strokeLinejoin="round"
-      opacity="0.65"
     />
-    <path
-      d="M14.3 9.2c.6-.5 1.3-.9 2-.9"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      opacity="0.5"
-    />
-    <circle cx="6.7" cy="8.0" r="1.35" fill="currentColor" opacity="0.95" />
-    <circle cx="8.9" cy="6.3" r="1.05" fill="currentColor" opacity="0.8" />
-    <circle cx="9.5" cy="8.9" r="0.85" fill="currentColor" opacity="0.7" />
   </svg>
 )
 
-/** Hermes (Messaging): Winged messenger shoe */
+/** Hermes: winged messenger helm */
 export const HermesIcon = (
-  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
-    {/* Wing */}
+  <svg viewBox="0 0 24 24" width="54" height="54" style={{ width: '54px', height: '54px' }} aria-hidden="true">
     <path
-      d="M9.6 10.4c-2.6-1.1-4.3-3-4.9-5.7c2.7 0.2 5.1 1.2 6.9 3"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
+      d="M4.4 5.1c3.6.4 6.5 2 8.6 4.8-3.4-.5-6.2-2.1-8.6-4.8Z"
+      fill="var(--icon-navy)"
     />
     <path
-      d="M10.4 9.0c-1.6-0.8-2.7-1.9-3.3-3.3c1.7 0.1 3.1 0.6 4.4 1.6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      opacity="0.75"
+      d="M5.5 8.4c2.7.35 4.9 1.45 6.5 3.3-2.6-.25-4.8-1.35-6.5-3.3Z"
+      fill="var(--icon-navy)"
+      opacity="0.9"
     />
     <path
-      d="M10.9 7.7c-1.2-.6-2-1.4-2.5-2.3c1.2.1 2.3.4 3.4 1"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      opacity="0.55"
-    />
-
-    {/* Shoe */}
-    <path
-      d="M7.6 16h8.1c2.4 0 4.3-1.6 4.3-3.9c0-1-0.4-1.9-1.1-2.6l-1.1-1.1c-.6-.6-1.4-.9-2.2-.9h-3.4c-1 0-1.9.4-2.6 1.1l-1.7 1.7c-.8.8-1.2 1.6-1.2 2.7V16Z"
-      fill="currentColor"
-      opacity="0.18"
+      d="M7.1 11.3c1.9.25 3.4.95 4.5 2.1-1.8-.15-3.3-.85-4.5-2.1Z"
+      fill="var(--icon-navy)"
+      opacity="0.72"
     />
     <path
-      d="M7.6 16h8.1c2.4 0 4.3-1.6 4.3-3.9c0-1-0.4-1.9-1.1-2.6l-1.1-1.1c-.6-.6-1.4-.9-2.2-.9h-3.4c-1 0-1.9.4-2.6 1.1l-1.7 1.7c-.8.8-1.2 1.6-1.2 2.7V16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      d="M11.5 12.9c.3-2.7 2.35-4.45 5.05-4.45 2.35 0 4.2 1.35 4.8 3.45l-2.2.3c.4.55.6 1.1.6 1.7 0 1.9-1.7 3.4-4.2 3.4h-1.45l-1.35 2.35-2.45-1.3 1.2-2.2c-1.1-.8-1.5-1.85-1.25-3.25h1.25Z"
+      fill="var(--icon-navy)"
     />
     <path
-      d="M7.6 16h12.8"
+      d="M15.9 10.4c1.45 0 2.55.8 2.9 2.05"
       fill="none"
-      stroke="currentColor"
-      strokeWidth="1.7"
+      stroke="var(--icon-gold)"
+      strokeWidth="1.05"
       strokeLinecap="round"
-      opacity="0.65"
+    />
+    <circle cx="13.15" cy="15.25" r="2.15" fill="var(--icon-teal)" />
+    <circle cx="13.15" cy="15.25" r="1.05" fill="var(--surface)" />
+    <path
+      d="M12.6 17.35c.75.95 1.8 1.45 3.15 1.55"
+      fill="none"
+      stroke="var(--icon-gold)"
+      strokeWidth="1.15"
+      strokeLinecap="round"
     />
   </svg>
 )
