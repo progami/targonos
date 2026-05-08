@@ -815,7 +815,7 @@ export function buildQboJournalEntriesFromUsSettlementDraft(input: {
         });
       } else {
         lines.push({
-          accountId: input.paymentAccountId,
+          accountId: input.settlementControlAccountId,
           postingType: 'Credit',
           amount,
           description: 'Payment to Amazon',
