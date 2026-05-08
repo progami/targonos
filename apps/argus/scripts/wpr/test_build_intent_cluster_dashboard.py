@@ -238,6 +238,39 @@ class ListingChangeAggregationTest(unittest.TestCase):
             self.assertEqual(entries[0]["summary"], "Listing price")
 
 
+class WeekFolderInclusionTest(unittest.TestCase):
+    def test_includes_discovered_week_without_metric_week_meta(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            sales_root = Path(tmp_dir) / "Sales"
+            data_dir = sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir.mkdir(parents=True, exist_ok=True)
+
+            week_input = (
+                sales_root
+                / "WPR"
+                / "W02"
+                / "input"
+                / "Listing Attributes (API)"
+            )
+            week_input.mkdir(parents=True, exist_ok=True)
+            module = load_module(data_dir)
+
+            resolved = module.normalize_week_meta_with_discovered_folders(
+                {
+                    "W01": {
+                        "week_number": 1,
+                        "week_label": "W01",
+                        "start_date": "2025-12-28",
+                    }
+                }
+            )
+
+            self.assertEqual(list(resolved.keys()), ["W01", "W02"])
+            self.assertEqual(resolved["W02"]["week_number"], 2)
+            self.assertEqual(resolved["W02"]["week_label"], "W02")
+            self.assertEqual(resolved["W02"]["start_date"], "2026-01-04")
+
+
 class ManualChangeLogParsingTest(unittest.TestCase):
     def test_parses_standardized_plan_log_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
