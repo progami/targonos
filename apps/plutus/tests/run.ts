@@ -67,6 +67,7 @@ import {
   buildSettlementMtdDailySummaryFilename,
 } from '../lib/amazon-finances/settlement-evidence';
 import { settlementJournalEntryMatchesSource } from '../lib/amazon-finances/settlement-sync-existing';
+import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '../lib/amazon-finances/settlement-cash-account-guardrails';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { buildPrincipalGroupsByDate, matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
@@ -4035,6 +4036,41 @@ test('SP-API settlement sync routes require explicit postToQbo', async () => {
   assert.match(String(ukPayload.details ?? ukPayload.error), /postToQbo/);
 });
 
+test('settlement cash mapping guardrail rejects real bank and credit card accounts', () => {
+  assert.throws(
+    () =>
+      assertSettlementCashMappingDoesNotUseRealBankMovement(
+        { Id: '136', Name: 'Targon US Chase USD (9899)', AccountType: 'Bank' } as QboAccount,
+        'Transfer to Bank',
+      ),
+    /cannot use real bank or card account/,
+  );
+
+  assert.throws(
+    () =>
+      assertSettlementCashMappingDoesNotUseRealBankMovement(
+        { Id: '148', Name: 'Chase Ink CC (0922)', AccountType: 'Credit Card' } as QboAccount,
+        'Payment to Amazon',
+      ),
+    /cannot use real bank or card account/,
+  );
+
+  assert.doesNotThrow(() =>
+    assertSettlementCashMappingDoesNotUseRealBankMovement(
+      { Id: '178', Name: 'Plutus Settlement Control', AccountType: 'Other Current Asset' } as QboAccount,
+      'Payment to Amazon',
+    ),
+  );
+});
+
+test('audit settlement JE rebuild script posts cash legs to settlement control only', () => {
+  const source = readFileSync('scripts/create-settlement-je-from-audit.ts', 'utf8');
+
+  assert.equal(source.includes('accountId: bankAccountId,'), false);
+  assert.equal(source.includes('accountId: paymentAccountId,'), false);
+  assert.equal(source.includes('accountId: settlementControlAccountId,'), true);
+});
+
 test('successful US settlement payouts post to settlement control instead of bank account', () => {
   const entries = buildQboJournalEntriesFromUsSettlementDraft({
     draft: {
@@ -4112,6 +4148,88 @@ test('successful UK settlement payouts post to settlement control instead of ban
         line.postingType === 'Debit' &&
         line.amount === 13946.96 &&
         line.description === 'Settlement Control (FundTransferStatus=Succeeded)',
+    ),
+    true,
+  );
+});
+
+test('negative US settlement payments post to settlement control instead of payment account', () => {
+  const entries = buildQboJournalEntriesFromUsSettlementDraft({
+    draft: {
+      settlementId: '26189598302',
+      eventGroupId: 'group-us-negative',
+      timeZone: 'America/Los_Angeles',
+      originalTotalCents: -545378,
+      fundTransferStatus: 'Succeeded',
+      segments: [
+        {
+          seq: 1,
+          yearMonth: '2026-05',
+          startIsoDay: '2026-05-01',
+          endIsoDay: '2026-05-01',
+          txnDate: '2026-05-01',
+          docNumber: 'US-260501-260501-S1',
+          memoTotalsCents: new Map([['Amazon FBA Fees - Domestic Orders', -545378]]),
+          auditRows: [],
+        },
+      ],
+    } as any,
+    privateNote: 'test',
+    settlementControlAccountId: 'control',
+    bankAccountId: 'bank',
+    paymentAccountId: 'payment',
+    accountIdByMemo: new Map([['Amazon FBA Fees - Domestic Orders', 'fees']]),
+  });
+
+  assert.equal(entries[0]!.lines.some((line) => line.accountId === 'payment'), false);
+  assert.equal(
+    entries[0]!.lines.some(
+      (line) =>
+        line.accountId === 'control' &&
+        line.postingType === 'Credit' &&
+        line.amount === 5453.78 &&
+        line.description === 'Payment to Amazon',
+    ),
+    true,
+  );
+});
+
+test('negative UK settlement payments post to settlement control instead of payment account', () => {
+  const entries = buildQboJournalEntriesFromUkSettlementDraft({
+    draft: {
+      settlementId: 'EG-group-uk-negative',
+      eventGroupId: 'group-uk-negative',
+      timeZone: 'Europe/London',
+      originalTotalCents: -401753,
+      fundTransferStatus: 'Succeeded',
+      segments: [
+        {
+          seq: 1,
+          yearMonth: '2026-05',
+          startIsoDay: '2026-05-01',
+          endIsoDay: '2026-05-01',
+          txnDate: '2026-05-01',
+          docNumber: 'UK-260501-260501-S1',
+          memoTotalsCents: new Map([['Amazon FBA Fees - Domestic Orders', -401753]]),
+          auditRows: [],
+        },
+      ],
+    } as any,
+    privateNote: 'test',
+    settlementControlAccountId: 'control',
+    bankAccountId: 'bank',
+    paymentAccountId: 'payment',
+    accountIdByMemo: new Map([['Amazon FBA Fees - Domestic Orders', 'fees']]),
+  });
+
+  assert.equal(entries[0]!.lines.some((line) => line.accountId === 'payment'), false);
+  assert.equal(
+    entries[0]!.lines.some(
+      (line) =>
+        line.accountId === 'control' &&
+        line.postingType === 'Credit' &&
+        line.amount === 4017.53 &&
+        line.description === 'Payment to Amazon',
     ),
     true,
   );
