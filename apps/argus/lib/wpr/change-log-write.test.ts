@@ -8,17 +8,18 @@ import { createWprChangeLogEntry } from './change-log-write'
 function createWprWorkspaceRoot() {
   const root = mkdtempSync(path.join(tmpdir(), 'argus-wpr-change-log-'))
   const salesRoot = path.join(root, 'Sales')
+  const monitoringRoot = path.join(root, 'Monitoring')
   const wprRoot = path.join(salesRoot, 'WPR')
   const dataDir = path.join(wprRoot, 'wpr-workspace', 'output')
-  return { root, salesRoot, wprRoot, dataDir }
+  return { root, salesRoot, monitoringRoot, wprRoot, dataDir }
 }
 
 test('createWprChangeLogEntry writes the canonical markdown log into the selected week folder', async () => {
-  const { salesRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
-  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  const { monitoringRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_MONITORING_ROOT_US = monitoringRoot
   process.env.WPR_DATA_DIR_US = dataDir
 
-  const weekDir = path.join(wprRoot, 'Week 16 - 2026-04-12 (Sun)')
+  const weekDir = path.join(wprRoot, 'W16')
   await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(weekDir, 'output', 'Plans'), { recursive: true }))
 
   let rebuildCalls = 0
@@ -41,7 +42,7 @@ test('createWprChangeLogEntry writes the canonical markdown log into the selecte
   )
 
   assert.equal(rebuildCalls, 1)
-  assert.match(result.filePath, /Week 16 - 2026-04-12 \(Sun\)\/output\/Plans\/W16_Content_update_across_2_ASINs_Log_2026-04-20\.md$/)
+  assert.match(result.filePath, /W16\/output\/Plans\/W16_Content_update_across_2_ASINs_Log_2026-04-20\.md$/)
 
   const markdown = readFileSync(result.filePath, 'utf8')
   assert.match(markdown, /^# Content update across 2 ASINs/m)
@@ -59,8 +60,8 @@ test('createWprChangeLogEntry writes the canonical markdown log into the selecte
 })
 
 test('createWprChangeLogEntry fails when the target week folder does not exist', async () => {
-  const { salesRoot, dataDir } = createWprWorkspaceRoot()
-  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  const { monitoringRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_MONITORING_ROOT_US = monitoringRoot
   process.env.WPR_DATA_DIR_US = dataDir
 
   await assert.rejects(
@@ -85,11 +86,11 @@ test('createWprChangeLogEntry fails when the target week folder does not exist',
 })
 
 test('createWprChangeLogEntry rejects the removed manual category for new entries', async () => {
-  const { salesRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
-  process.env.ARGUS_SALES_ROOT_US = salesRoot
+  const { monitoringRoot, wprRoot, dataDir } = createWprWorkspaceRoot()
+  process.env.ARGUS_MONITORING_ROOT_US = monitoringRoot
   process.env.WPR_DATA_DIR_US = dataDir
 
-  const weekDir = path.join(wprRoot, 'Week 16 - 2026-04-12 (Sun)')
+  const weekDir = path.join(wprRoot, 'W16')
   await import('node:fs/promises').then(({ mkdir }) => mkdir(path.join(weekDir, 'output', 'Plans'), { recursive: true }))
 
   await assert.rejects(

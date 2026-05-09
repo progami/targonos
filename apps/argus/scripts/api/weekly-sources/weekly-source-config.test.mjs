@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-process.env.ARGUS_SALES_ROOT_US = '/tmp/argus-us-sales'
-process.env.ARGUS_SALES_ROOT_UK = '/tmp/argus-uk-sales'
 process.env.ARGUS_MONITORING_ROOT_US = '/tmp/argus-monitoring-us'
 process.env.ARGUS_MONITORING_ROOT_UK = '/tmp/argus-monitoring-uk'
 process.env.ARGUS_ENV_MODE = 'ci'

@@ -135,7 +135,7 @@ function buildPayload() {
 
 test('GET /api/wpr/payload returns the validated payload', async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'argus-wpr-payload-route-'))
-  process.env.ARGUS_SALES_ROOT_US = path.join(dataDir, '..', '..', '..')
+  process.env.ARGUS_MONITORING_ROOT_US = path.join(dataDir, '..', 'monitoring-us')
   process.env.WPR_DATA_DIR_US = dataDir
   writeFileSync(path.join(dataDir, 'wpr-data-latest.json'), JSON.stringify(buildPayload()))
 

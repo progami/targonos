@@ -6,7 +6,6 @@ export type ArgusMarketOption = {
 }
 
 export type ArgusMarketConfig = ArgusMarketOption & {
-  salesRoot: string
   monitoringRoot: string
   wprRoot: string
   wprDataDir: string
@@ -56,19 +55,20 @@ export function getArgusMarketOption(market: ArgusMarket): ArgusMarketOption {
 export function getArgusMarketConfig(market: ArgusMarket): ArgusMarketConfig {
   const option = getArgusMarketOption(market)
   const envSuffix = market.toUpperCase()
-  const salesRoot = requireEnv(`ARGUS_SALES_ROOT_${envSuffix}`)
   const monitoringRoot = requireEnv(`ARGUS_MONITORING_ROOT_${envSuffix}`)
   const wprDataDir = requireEnv(`WPR_DATA_DIR_${envSuffix}`)
-  const normalizedSalesRoot = stripTrailingSlash(salesRoot)
-  const normalizedMonitoringRoot = stripTrailingSlash(monitoringRoot)
+  const normalizedMonitoringRoot = expectLocalRoot(
+    `ARGUS_MONITORING_ROOT_${envSuffix}`,
+    stripTrailingSlash(monitoringRoot),
+  )
+  const normalizedWprDataDir = expectLocalRoot(`WPR_DATA_DIR_${envSuffix}`, stripTrailingSlash(wprDataDir))
 
   return {
     slug: option.slug,
     label: option.label,
-    salesRoot: normalizedSalesRoot,
     monitoringRoot: normalizedMonitoringRoot,
-    wprRoot: joinPath(normalizedSalesRoot, 'WPR'),
-    wprDataDir: stripTrailingSlash(wprDataDir),
+    wprRoot: parentPath(parentPath(normalizedWprDataDir)),
+    wprDataDir: normalizedWprDataDir,
   }
 }
 
@@ -99,6 +99,18 @@ function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/g, '')
 }
 
-function joinPath(root: string, child: string): string {
-  return `${stripTrailingSlash(root)}/${child}`
+function parentPath(value: string): string {
+  const normalized = stripTrailingSlash(value)
+  const separator = normalized.lastIndexOf('/')
+  if (separator <= 0) {
+    throw new Error(`Cannot resolve parent path for Argus path: ${value}`)
+  }
+  return normalized.slice(0, separator)
+}
+
+function expectLocalRoot(name: string, value: string): string {
+  if (value.includes('/Library/CloudStorage/')) {
+    throw new Error(`${name} must be local, not a Google Drive mount.`)
+  }
+  return value
 }

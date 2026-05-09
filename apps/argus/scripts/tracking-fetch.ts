@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { buildTrackingAsinSeedsFromEnv } from '../lib/tracking/seeds'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://os.targonglobal.com/argus'
 const MARKET = parseMarket(readMarketArg())
@@ -134,7 +135,9 @@ async function main() {
     }
 
     const url = `${APP_URL.replace(/\/+$/g, '')}/api/tracking/fetch?market=${MARKET}`
+    const trackedAsins = buildTrackingAsinSeedsFromEnv(process.env, MARKET)
     console.log(`[tracking-fetch] POSTing to ${url}`)
+    console.log(`[tracking-fetch] Seeding ${trackedAsins.length} configured ${MARKET.toUpperCase()} ASINs`)
 
     const res = await fetch(url, {
       method: 'POST',
@@ -142,7 +145,7 @@ async function main() {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ triggeredBy: 'cron', market: MARKET }),
+      body: JSON.stringify({ triggeredBy: 'cron', market: MARKET, trackedAsins }),
     })
 
     const json = await res.json()
@@ -158,6 +161,10 @@ async function main() {
 
     const asinCount = readNumber((json as { asinCount?: unknown }).asinCount)
     const runId = readString((json as { runId?: unknown }).runId)
+    if (asinCount === 0) {
+      throw new Error(`Tracking fetch returned zero ASINs for ${MARKET}.`)
+    }
+
     status = 'ok'
     summary =
       asinCount === null

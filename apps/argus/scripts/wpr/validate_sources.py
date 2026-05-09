@@ -88,10 +88,6 @@ def monitoring_root_for_market(market: str) -> Path:
     return Path(required_env(f"ARGUS_MONITORING_ROOT_{market.upper()}")).expanduser().resolve()
 
 
-def sales_root_for_market(market: str) -> Path:
-    return Path(required_env(f"ARGUS_SALES_ROOT_{market.upper()}")).expanduser().resolve()
-
-
 def sibling_market(market: str) -> str:
     if market == "us":
         return "uk"

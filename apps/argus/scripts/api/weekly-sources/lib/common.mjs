@@ -101,10 +101,6 @@ export function wprSourceConfigForMarket(market = resolveArgusMarket()) {
   }
 }
 
-export function salesRootForMarket(market = resolveArgusMarket()) {
-  return requireEnv(`ARGUS_SALES_ROOT_${marketEnvSuffix(market)}`)
-}
-
 export function monitoringBaseForMarket(market = resolveArgusMarket()) {
   return monitoringRootForMarket(market)
 }

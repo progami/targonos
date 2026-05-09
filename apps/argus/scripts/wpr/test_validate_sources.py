@@ -44,12 +44,9 @@ class ValidateSourcesTest(unittest.TestCase):
     def test_uk_validation_rejects_us_duplicate_critical_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            us_sales_root = root / "Dust Sheets - US" / "Sales"
-            uk_sales_root = root / "Dust Sheets - UK" / "Sales"
+            uk_wpr_root = root / "argus-wpr" / "uk" / "WPR"
             us_monitoring_root = root / "argus-monitoring" / "us"
             uk_monitoring_root = root / "argus-monitoring" / "uk"
-            os.environ["ARGUS_SALES_ROOT_US"] = str(us_sales_root)
-            os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
             os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
             os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
@@ -61,7 +58,7 @@ class ValidateSourcesTest(unittest.TestCase):
                     [{"date": "2026-04-20", "searchTerm": "plastic drop cloth", "clicks": "4"}],
                 )
 
-            data_dir = uk_sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir = uk_wpr_root / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
             module = load_module(data_dir, "uk")
 
@@ -71,12 +68,9 @@ class ValidateSourcesTest(unittest.TestCase):
     def test_duplicate_check_uses_latest_source_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)
-            us_sales_root = root / "Dust Sheets - US" / "Sales"
-            uk_sales_root = root / "Dust Sheets - UK" / "Sales"
+            uk_wpr_root = root / "argus-wpr" / "uk" / "WPR"
             us_monitoring_root = root / "argus-monitoring" / "us"
             uk_monitoring_root = root / "argus-monitoring" / "uk"
-            os.environ["ARGUS_SALES_ROOT_US"] = str(us_sales_root)
-            os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
             os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
             os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
@@ -102,7 +96,7 @@ class ValidateSourcesTest(unittest.TestCase):
                 [{"date": "2026-04-20", "searchTerm": "dust sheet", "clicks": "4"}],
             )
 
-            data_dir = uk_sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir = uk_wpr_root / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
             module = load_module(data_dir, "uk")
             rule = module.SourceRule("SP Search Term", relative_dir)
@@ -111,10 +105,9 @@ class ValidateSourcesTest(unittest.TestCase):
 
     def test_uk_validation_rejects_wrong_datadive_niche(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
-            uk_sales_root = Path(tmp_dir) / "Dust Sheets - UK" / "Sales"
+            uk_wpr_root = Path(tmp_dir) / "argus-wpr" / "uk" / "WPR"
             uk_monitoring_root = Path(tmp_dir) / "argus-monitoring" / "uk"
             us_monitoring_root = Path(tmp_dir) / "argus-monitoring" / "us"
-            os.environ["ARGUS_SALES_ROOT_UK"] = str(uk_sales_root)
             os.environ["ARGUS_MONITORING_ROOT_US"] = str(us_monitoring_root)
             os.environ["ARGUS_MONITORING_ROOT_UK"] = str(uk_monitoring_root)
 
@@ -122,7 +115,7 @@ class ValidateSourcesTest(unittest.TestCase):
             manifest.parent.mkdir(parents=True, exist_ok=True)
             manifest.write_text('{"nicheId":"79IvywKLfF","heroAsin":"B09HXC3NL8"}', encoding="utf-8")
 
-            data_dir = uk_sales_root / "WPR" / "wpr-workspace" / "output"
+            data_dir = uk_wpr_root / "wpr-workspace" / "output"
             data_dir.mkdir(parents=True, exist_ok=True)
             module = load_module(data_dir, "uk")
 
