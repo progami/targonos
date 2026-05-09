@@ -9,12 +9,10 @@ const moduleUrl = new URL(`./artifacts.mjs?test=${Date.now()}`, import.meta.url)
 test('Argus artifacts write to local monitoring roots and enqueue Drive sync', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-artifacts-'))
   const previousRoot = process.env.ARGUS_MONITORING_ROOT_US
-  const previousSalesRoot = process.env.ARGUS_SALES_ROOT_US
   const previousWprDataDir = process.env.WPR_DATA_DIR_US
 
   process.env.ARGUS_MONITORING_ROOT_US = path.join(tempRoot, 'monitoring-us')
   process.env.WPR_DATA_DIR_US = path.join(tempRoot, 'wpr-us', 'WPR', 'wpr-workspace', 'output')
-  delete process.env.ARGUS_SALES_ROOT_US
 
   try {
     const { appendRunLog, enqueueWprDriveSync, monitoringRootForMarket, wprRootForMarket, writeTextArtifact } = await import(moduleUrl.href)
@@ -66,9 +64,22 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
     const workspaceArtifactPath = path.join(wprRoot, 'wpr-workspace', 'output', 'wpr-data-latest.json')
     fs.mkdirSync(path.dirname(workspaceArtifactPath), { recursive: true })
     fs.writeFileSync(workspaceArtifactPath, '{}\n', 'utf8')
+    enqueueWprDriveSync({ market: 'us', localPath: workspaceArtifactPath })
+    const wprQueuedAfterWorkspace = fs.readFileSync(wprQueuePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
+    assert.deepEqual(
+      wprQueuedAfterWorkspace.map((entry) => entry.relativePath),
+      [
+        'W01/input/source.csv',
+        'wpr-workspace/output/wpr-data-latest.json',
+      ],
+    )
+
+    const workspaceInputArtifactPath = path.join(wprRoot, 'wpr-workspace', 'input', 'source.csv')
+    fs.mkdirSync(path.dirname(workspaceInputArtifactPath), { recursive: true })
+    fs.writeFileSync(workspaceInputArtifactPath, 'wpr\n', 'utf8')
     assert.throws(
-      () => enqueueWprDriveSync({ market: 'us', localPath: workspaceArtifactPath }),
-      /WPR Drive sync path must start with a canonical WNN week folder: wpr-workspace\/output\/wpr-data-latest\.json/,
+      () => enqueueWprDriveSync({ market: 'us', localPath: workspaceInputArtifactPath }),
+      /WPR Drive sync path must start with a canonical WNN week folder or wpr-workspace\/output\/: wpr-workspace\/input\/source\.csv/,
     )
 
     const duplicateNamedArtifactPath = path.join(wprRoot, 'W01', 'input', 'source (1).csv')
@@ -82,11 +93,6 @@ test('Argus artifacts write to local monitoring roots and enqueue Drive sync', a
       delete process.env.ARGUS_MONITORING_ROOT_US
     } else {
       process.env.ARGUS_MONITORING_ROOT_US = previousRoot
-    }
-    if (previousSalesRoot === undefined) {
-      delete process.env.ARGUS_SALES_ROOT_US
-    } else {
-      process.env.ARGUS_SALES_ROOT_US = previousSalesRoot
     }
     if (previousWprDataDir === undefined) {
       delete process.env.WPR_DATA_DIR_US

@@ -2,7 +2,13 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { WPR_CANONICAL_WEEK_FOLDER_RE, enqueueWprDriveSync, parseArgusMarket, wprRootForMarket } from './artifacts.mjs'
+import {
+  WPR_CANONICAL_WEEK_FOLDER_RE,
+  WPR_WORKSPACE_OUTPUT_PREFIX,
+  enqueueWprDriveSync,
+  parseArgusMarket,
+  wprRootForMarket,
+} from './artifacts.mjs'
 
 function parseCliArgs(argv) {
   const args = { market: null }
@@ -62,6 +68,10 @@ export function enqueueWprWeekTrees({ market, root }) {
       continue
     }
     count += enqueueTree({ market, root: path.join(root, entry.name) })
+  }
+  const outputRoot = path.join(root, WPR_WORKSPACE_OUTPUT_PREFIX)
+  if (fs.existsSync(outputRoot)) {
+    count += enqueueTree({ market, root: outputRoot })
   }
   return count
 }
