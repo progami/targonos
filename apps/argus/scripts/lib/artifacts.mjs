@@ -4,6 +4,7 @@ import path from 'node:path'
 export const DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/queue.jsonl'
 export const WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH = '.drive-sync/wpr-queue.jsonl'
 export const WPR_CANONICAL_WEEK_FOLDER_RE = /^W\d{2}$/
+export const WPR_WORKSPACE_OUTPUT_PREFIX = 'wpr-workspace/output/'
 export const WPR_NONCANONICAL_NAME_RE = / \(\d+\)(?=\.|$)|__(?:backup|wpr_recovery|legacy|dup\d+)\b/i
 
 export function parseArgusMarket(raw) {
@@ -67,6 +68,18 @@ export function normalizeArtifactRelativePath(relativePath) {
   return normalized.split(path.sep).join('/')
 }
 
+export function isPublishableWprRelativePath(relativePath) {
+  const normalizedRelativePath = normalizeArtifactRelativePath(relativePath)
+  const [firstSegment] = normalizedRelativePath.split('/')
+  if (WPR_CANONICAL_WEEK_FOLDER_RE.test(firstSegment)) {
+    return true
+  }
+  if (normalizedRelativePath.startsWith(WPR_WORKSPACE_OUTPUT_PREFIX)) {
+    return true
+  }
+  return false
+}
+
 export function localPathForArtifact({ market, relativePath }) {
   return path.join(monitoringRootForMarket(market), normalizeArtifactRelativePath(relativePath))
 }
@@ -122,9 +135,8 @@ export function enqueueWprDriveSync({ market, localPath }) {
   if (relativePath === WPR_DRIVE_SYNC_QUEUE_RELATIVE_PATH) {
     return null
   }
-  const [weekFolder] = relativePath.split('/')
-  if (!WPR_CANONICAL_WEEK_FOLDER_RE.test(weekFolder)) {
-    throw new Error(`WPR Drive sync path must start with a canonical WNN week folder: ${relativePath}`)
+  if (!isPublishableWprRelativePath(relativePath)) {
+    throw new Error(`WPR Drive sync path must start with a canonical WNN week folder or ${WPR_WORKSPACE_OUTPUT_PREFIX}: ${relativePath}`)
   }
   const badSegment = relativePath.split('/').find((segment) => WPR_NONCANONICAL_NAME_RE.test(segment))
   if (badSegment !== undefined) {

@@ -6,7 +6,7 @@ import test from 'node:test'
 
 const moduleUrl = new URL(`./enqueue-wpr-drive-sync.mjs?test=${Date.now()}`, import.meta.url)
 
-test('WPR Drive enqueue publishes canonical week folders only', async () => {
+test('WPR Drive enqueue publishes canonical week folders and workspace output', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'argus-wpr-enqueue-'))
   const monitoringRoot = path.join(tempRoot, 'monitoring-us')
   const wprRoot = path.join(tempRoot, 'wpr-us', 'WPR')
@@ -28,11 +28,14 @@ test('WPR Drive enqueue publishes canonical week folders only', async () => {
   try {
     const { enqueueWprWeekTrees } = await import(moduleUrl.href)
     const count = enqueueWprWeekTrees({ market: 'us', root: wprRoot })
-    assert.equal(count, 1)
+    assert.equal(count, 2)
 
     const queuePath = path.join(monitoringRoot, '.drive-sync', 'wpr-queue.jsonl')
     const queued = fs.readFileSync(queuePath, 'utf8').trim().split('\n').map((line) => JSON.parse(line))
-    assert.deepEqual(queued.map((entry) => entry.relativePath), ['W01/input/source.csv'])
+    assert.deepEqual(queued.map((entry) => entry.relativePath).sort(), [
+      'W01/input/source.csv',
+      'wpr-workspace/output/wpr-data-latest.json',
+    ])
   } finally {
     for (const [key, value] of Object.entries(previousEnv)) {
       if (value === undefined) {

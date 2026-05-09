@@ -2,15 +2,18 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  WPR_NONCANONICAL_NAME_RE,
   driveSyncQueuePath,
+  isPublishableWprRelativePath,
   marketEnvSuffix,
   monitoringRootForMarket,
   normalizeArtifactRelativePath,
   parseArgusMarket,
   requireEnv,
   wprDriveSyncQueuePath,
+  wprRootForMarket,
 } from './artifacts.mjs'
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
@@ -18,7 +21,11 @@ const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 1024 * 1024
 const DRIVE_SYNC_PUBLISHED_RELATIVE_PATH = '.drive-sync/published.json'
 const WPR_DRIVE_SYNC_PUBLISHED_RELATIVE_PATH = '.drive-sync/wpr-published.json'
+const DRIVE_SYNC_REJECTED_RELATIVE_PATH = '.drive-sync/rejected.jsonl'
+const WPR_DRIVE_SYNC_REJECTED_RELATIVE_PATH = '.drive-sync/wpr-rejected.jsonl'
 const DRIVE_SYNC_SCOPES = new Set(['monitoring', 'wpr'])
+const WPR_WORKSPACE_LOCK_FILE = '/tmp/argus-wpr-workspace.lock'
+const WPR_DRIVE_SYNC_LOCK_ENV = 'ARGUS_WPR_DRIVE_SYNC_LOCKED'
 
 function driveApiUrl(pathname, params = {}) {
   const url = new URL(pathname, 'https://www.googleapis.com')
@@ -166,6 +173,34 @@ async function createFolder({ token, parentId, name }) {
   })
 }
 
+async function listChildren({ token, parentId }) {
+  const files = []
+  let pageToken = null
+  do {
+    const params = {
+      q: [
+        `'${escapeDriveQueryValue(parentId)}' in parents`,
+        'trashed = false',
+      ].join(' and '),
+      fields: 'nextPageToken,files(id,name,mimeType,modifiedTime)',
+      supportsAllDrives: 'true',
+      includeItemsFromAllDrives: 'true',
+      pageSize: '1000',
+    }
+    if (pageToken !== null) {
+      params.pageToken = pageToken
+    }
+    const data = await driveJsonRequest({
+      method: 'GET',
+      url: driveApiUrl('/drive/v3/files', params),
+      token,
+    })
+    files.push(...(Array.isArray(data.files) ? data.files : []))
+    pageToken = typeof data.nextPageToken === 'string' ? data.nextPageToken : null
+  } while (pageToken !== null)
+  return files
+}
+
 async function ensureFolderPath({ token, rootFolderId, folderSegments }) {
   let parentId = rootFolderId
   for (const name of folderSegments) {
@@ -178,6 +213,67 @@ async function ensureFolderPath({ token, rootFolderId, folderSegments }) {
     parentId = created.id
   }
   return parentId
+}
+
+async function trashDriveFile({ token, fileId }) {
+  return driveJsonRequest({
+    method: 'PATCH',
+    url: driveApiUrl(`/drive/v3/files/${encodeURIComponent(fileId)}`, {
+      fields: 'id,name,trashed',
+      supportsAllDrives: 'true',
+    }),
+    token,
+    body: { trashed: true },
+  })
+}
+
+export async function pruneRemoteWprTree({ token, market }) {
+  const localRoot = wprRootForMarket(market)
+  const rootFolderId = driveRootFolderIdForMarket(market, 'wpr')
+
+  async function pruneFolder(parentId, relativeSegments) {
+    const children = [...await listChildren({ token, parentId })].sort((left, right) => {
+      const leftKey = `${left.name}\0${left.mimeType}`
+      const rightKey = `${right.name}\0${right.mimeType}`
+      if (leftKey !== rightKey) {
+        return leftKey.localeCompare(rightKey)
+      }
+      return String(right.modifiedTime ?? '').localeCompare(String(left.modifiedTime ?? ''))
+    })
+    const seenRemoteChildren = new Set()
+    for (const child of children) {
+      const remoteChildKey = `${child.name}\0${child.mimeType}`
+      if (seenRemoteChildren.has(remoteChildKey)) {
+        await trashDriveFile({ token, fileId: child.id })
+        continue
+      }
+      seenRemoteChildren.add(remoteChildKey)
+
+      const relativePath = path.join(...relativeSegments, child.name)
+      const localPath = path.join(localRoot, relativePath)
+      const isRemoteFolder = child.mimeType === FOLDER_MIME_TYPE
+      if (!fs.existsSync(localPath)) {
+        await trashDriveFile({ token, fileId: child.id })
+        continue
+      }
+
+      const localStat = fs.statSync(localPath)
+      if (isRemoteFolder) {
+        if (!localStat.isDirectory()) {
+          await trashDriveFile({ token, fileId: child.id })
+          continue
+        }
+        await pruneFolder(child.id, [...relativeSegments, child.name])
+        continue
+      }
+
+      if (!localStat.isFile()) {
+        await trashDriveFile({ token, fileId: child.id })
+      }
+    }
+  }
+
+  await pruneFolder(rootFolderId, [])
 }
 
 async function createEmptyFile({ token, parentId, fileName, contentType }) {
@@ -297,6 +393,14 @@ function queuePathForScope(market, scope) {
     return wprDriveSyncQueuePath(market)
   }
   return driveSyncQueuePath(market)
+}
+
+function rejectedQueuePathForScope(market, scope) {
+  const parsedScope = parseDriveSyncScope(scope)
+  const relativePath = parsedScope === 'wpr'
+    ? WPR_DRIVE_SYNC_REJECTED_RELATIVE_PATH
+    : DRIVE_SYNC_REJECTED_RELATIVE_PATH
+  return path.join(monitoringRootForMarket(market), relativePath)
 }
 
 function readQueueEntries(market, scope) {
@@ -448,6 +552,7 @@ function recordPublishedArtifact({ market, scope, entry, result }) {
 }
 
 function entryMatchesPublishedArtifact({ market, scope, entry }) {
+  if (parseDriveSyncScope(scope) === 'wpr') return false
   const state = readPublishedState(market, scope)
   const item = state.items?.[entry.relativePath]
   if (item === undefined) return false
@@ -465,6 +570,74 @@ function compactEntries(entries) {
     byRelativePath.set(entry.relativePath, entry)
   }
   return [...byRelativePath.values()]
+}
+
+function rejectReasonForQueueEntry(entry, scope) {
+  let normalizedRelativePath
+  try {
+    normalizedRelativePath = normalizeArtifactRelativePath(entry.relativePath)
+  } catch (error) {
+    if (error instanceof Error) {
+      return error.message
+    }
+    return String(error)
+  }
+
+  if (scope === 'wpr') {
+    if (!isPublishableWprRelativePath(normalizedRelativePath)) {
+      return `noncanonical WPR Drive sync path: ${normalizedRelativePath}`
+    }
+    const badSegment = normalizedRelativePath.split('/').find((segment) => WPR_NONCANONICAL_NAME_RE.test(segment))
+    if (badSegment !== undefined) {
+      return `noncanonical WPR Drive sync artifact name: ${badSegment}`
+    }
+  }
+
+  let stat
+  try {
+    stat = fs.statSync(entry.localPath)
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      return `missing local file: ${entry.localPath}`
+    }
+    throw error
+  }
+
+  if (!stat.isFile()) {
+    return `local path is not a file: ${entry.localPath}`
+  }
+  return null
+}
+
+function partitionQueueEntries(entries, scope) {
+  const valid = []
+  const rejected = []
+  for (const entry of entries) {
+    const reason = rejectReasonForQueueEntry(entry, scope)
+    if (reason === null) {
+      valid.push(entry)
+      continue
+    }
+    rejected.push({ entry, reason })
+  }
+  return { valid, rejected }
+}
+
+function recordRejectedQueueEntries({ market, scope, rejected }) {
+  if (rejected.length === 0) {
+    return
+  }
+  const rejectedPath = rejectedQueuePathForScope(market, scope)
+  fs.mkdirSync(path.dirname(rejectedPath), { recursive: true })
+  const rejectedAt = new Date().toISOString()
+  const lines = rejected.map(({ entry, reason }) => JSON.stringify({
+    rejectedAt,
+    market,
+    scope,
+    reason,
+    entry,
+  }))
+  fs.appendFileSync(rejectedPath, `${lines.join('\n')}\n`, 'utf8')
 }
 
 function parseCliArgs(argv) {
@@ -499,6 +672,45 @@ function parseCliArgs(argv) {
   return args
 }
 
+function driveSyncScopeNeedsWprLock(scope) {
+  return scope === 'all' || parseDriveSyncScope(scope) === 'wpr'
+}
+
+function rerunCliUnderWprWorkspaceLock(args) {
+  if (!driveSyncScopeNeedsWprLock(args.scope)) {
+    return false
+  }
+  if (process.env[WPR_DRIVE_SYNC_LOCK_ENV] === '1') {
+    return false
+  }
+
+  const result = spawnSync(
+    '/usr/bin/lockf',
+    [
+      WPR_WORKSPACE_LOCK_FILE,
+      process.execPath,
+      process.argv[1],
+      ...process.argv.slice(2),
+    ],
+    {
+      env: { ...process.env, [WPR_DRIVE_SYNC_LOCK_ENV]: '1' },
+      stdio: 'inherit',
+    },
+  )
+
+  if (result.error !== undefined) {
+    throw result.error
+  }
+  if (result.signal !== null) {
+    throw new Error(`Drive sync lock wrapper terminated by signal: ${result.signal}`)
+  }
+  if (result.status === null) {
+    throw new Error('Drive sync lock wrapper exited without a status.')
+  }
+
+  process.exit(result.status)
+}
+
 export async function drainDriveSyncQueue({ market, dryRun }) {
   return drainScopedDriveSyncQueue({ market, dryRun, scope: 'monitoring' })
 }
@@ -508,15 +720,18 @@ export async function drainScopedDriveSyncQueue({ market, dryRun, scope }) {
   const queue = dryRun ? readQueueEntries(market, parsedScope) : claimQueueEntries(market, parsedScope)
   const { queuePath, processingPath, entries } = queue
   const compacted = compactEntries(entries)
+  const partitioned = partitionQueueEntries(compacted, parsedScope)
   if (dryRun) {
-    return compacted.map((entry) => {
+    return partitioned.valid.map((entry) => {
       const stat = fs.statSync(entry.localPath)
       return buildDriveSyncPlan({ market, relativePath: entry.relativePath, size: stat.size, scope: parsedScope })
     })
   }
+  recordRejectedQueueEntries({ market, scope: parsedScope, rejected: partitioned.rejected })
 
-  const pending = compacted.filter((entry) => !entryMatchesPublishedArtifact({ market, scope: parsedScope, entry }))
-  const token = pending.length === 0 ? null : accessToken()
+  const pending = partitioned.valid.filter((entry) => !entryMatchesPublishedArtifact({ market, scope: parsedScope, entry }))
+  const shouldPruneWpr = parsedScope === 'wpr' && compacted.length > 0
+  const token = pending.length === 0 && !shouldPruneWpr ? null : accessToken()
   const failed = []
   for (const entry of pending) {
     try {
@@ -537,7 +752,11 @@ export async function drainScopedDriveSyncQueue({ market, dryRun, scope }) {
   if (processingPath !== null) {
     fs.rmSync(processingPath, { force: true })
   }
+
   if (failed.length === 0) {
+    if (shouldPruneWpr) {
+      await pruneRemoteWprTree({ token, market })
+    }
     return []
   }
 
@@ -564,6 +783,7 @@ export async function drainAllDriveSyncQueues({ market, dryRun }) {
 
 async function main() {
   const args = parseCliArgs(process.argv.slice(2))
+  rerunCliUnderWprWorkspaceLock(args)
   monitoringRootForMarket(args.market)
   const result = args.scope === 'all'
     ? await drainAllDriveSyncQueues(args)
