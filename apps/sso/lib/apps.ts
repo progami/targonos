@@ -112,6 +112,7 @@ export type AppDef = AppBase & {
 }
 
 const PORTAL_BASE_URL = resolvePortalBaseUrl()
+const DEFAULT_ACTIVE_APP_IDS = new Set(['website', 'argus', 'plutus'])
 
 const BASE_APPS: AppBase[] = [
   {
@@ -250,10 +251,6 @@ function getEnvLifecycle(appId: string): AppLifecycle | undefined {
 }
 
 function resolveLifecycle(appId: string): AppLifecycle {
-  if (appId.toLowerCase() === 'atlas') {
-    return 'active'
-  }
-
   const envLifecycle = getEnvLifecycle(appId)
   if (envLifecycle) {
     return envLifecycle
@@ -278,16 +275,20 @@ function resolveLifecycle(appId: string): AppLifecycle {
     return 'dev'
   }
 
-  return 'active'
+  return DEFAULT_ACTIVE_APP_IDS.has(appId.toLowerCase()) ? 'active' : 'dev'
 }
 
 const SOURCE_APPS = overrideAppIds ? BASE_APPS.filter((app) => overrideAppIds.has(app.id)) : BASE_APPS
 
-export const ALL_APPS: AppDef[] = SOURCE_APPS.map((app) => ({
-  ...app,
-  lifecycle: resolveLifecycle(app.id),
-  entryPolicy: app.entryPolicy ?? 'role_gated',
-}))
+export const ALL_APPS: AppDef[] = SOURCE_APPS.map((sourceApp) => {
+  const { devUrl: _legacyDevUrl, ...app } = sourceApp
+
+  return {
+    ...app,
+    lifecycle: resolveLifecycle(app.id),
+    entryPolicy: app.entryPolicy ?? 'role_gated',
+  }
+})
 
 export function filterAppsForUser(allowedAppIds: string[]) {
   const set = new Set(allowedAppIds)
