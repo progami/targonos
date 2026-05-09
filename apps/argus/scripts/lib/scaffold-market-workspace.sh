@@ -5,7 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 MARKET=""
-SALES_ROOT=""
+MONITORING_ROOT=""
+WPR_DATA_DIR=""
 DRY_RUN="false"
 
 load_env_file() {
@@ -52,12 +53,20 @@ while [ "$#" -gt 0 ]; do
       MARKET="$2"
       shift
       ;;
-    --sales-root)
+    --monitoring-root)
       if [ "$#" -lt 2 ]; then
-        echo "Missing value for --sales-root" >&2
+        echo "Missing value for --monitoring-root" >&2
         exit 1
       fi
-      SALES_ROOT="$2"
+      MONITORING_ROOT="$2"
+      shift
+      ;;
+    --wpr-data-dir)
+      if [ "$#" -lt 2 ]; then
+        echo "Missing value for --wpr-data-dir" >&2
+        exit 1
+      fi
+      WPR_DATA_DIR="$2"
       shift
       ;;
     --dry-run)
@@ -76,66 +85,89 @@ if [ "$MARKET" != "us" ] && [ "$MARKET" != "uk" ]; then
   exit 1
 fi
 
-if [ -z "$SALES_ROOT" ]; then
-  env_name="ARGUS_SALES_ROOT_$(printf '%s' "$MARKET" | tr '[:lower:]' '[:upper:]')"
+MARKET_SUFFIX="$(printf '%s' "$MARKET" | tr '[:lower:]' '[:upper:]')"
+
+if [ -z "$MONITORING_ROOT" ]; then
+  env_name="ARGUS_MONITORING_ROOT_${MARKET_SUFFIX}"
   if [ -z "${!env_name+x}" ]; then
-    echo "Missing --sales-root for market=$MARKET" >&2
+    echo "Missing --monitoring-root for market=$MARKET" >&2
     exit 1
   fi
-  SALES_ROOT="${!env_name}"
+  MONITORING_ROOT="${!env_name}"
 fi
 
-if [ -z "$SALES_ROOT" ]; then
-  echo "Missing --sales-root for market=$MARKET" >&2
+if [ -z "$WPR_DATA_DIR" ]; then
+  env_name="WPR_DATA_DIR_${MARKET_SUFFIX}"
+  if [ -z "${!env_name+x}" ]; then
+    echo "Missing --wpr-data-dir for market=$MARKET" >&2
+    exit 1
+  fi
+  WPR_DATA_DIR="${!env_name}"
+fi
+
+if [[ "$MONITORING_ROOT" == *"/Library/CloudStorage/"* ]]; then
+  echo "ARGUS_MONITORING_ROOT_${MARKET_SUFFIX} must be local, not a Google Drive mount: $MONITORING_ROOT" >&2
   exit 1
 fi
 
-PATHS=(
-  "Monitoring/Hourly/Listing Attributes (API)"
-  "Monitoring/Daily/Account Health Dashboard (API)"
-  "Monitoring/Daily/Visuals (Browser)"
-  "Monitoring/Daily/Voice of the Customer (Manual)"
-  "Monitoring/Weekly/Amazon Inventory Ledger (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Advertised Product Report (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Campaign Report (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Placement Report (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Purchased Product Report (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Search Term Report (API)"
-  "Monitoring/Weekly/Ad Console/SP - Sponsored Products (API)/SP - Targeting Report (API)"
-  "Monitoring/Weekly/Ad Console/Brand Metrics (Browser)"
-  "Monitoring/Weekly/Brand Analytics (API)/SCP - Search Catalog Performance (API)"
-  "Monitoring/Weekly/Brand Analytics (API)/SQP - Search Query Performance (API)"
-  "Monitoring/Weekly/Brand Analytics (API)/TST - Top Search Terms (API)"
-  "Monitoring/Weekly/Business Reports (API)/Sales & Traffic (API)"
-  "Monitoring/Weekly/Category Insights (Browser)"
-  "Monitoring/Weekly/Datadive (API)/DD-Competitors - Datadive Competitors (API)"
-  "Monitoring/Weekly/Datadive (API)/DD-Keywords - Datadive Keywords (API)"
-  "Monitoring/Weekly/Datadive (API)/Rank Radar - Datadive Rank Radar (API)"
-  "Monitoring/Weekly/Product Opportunity Explorer (Browser)"
-  "Monitoring/Weekly/ScaleInsights/KeywordRanking (Browser)"
-  "Monitoring/Weekly/Sellerboard (API)/SB - Dashboard Report (API)"
-  "Monitoring/Weekly/Sellerboard (API)/SB - Orders Report (API)"
-  "Monitoring/Logs/tracking-fetch"
-  "Monitoring/Logs/hourly-listing-attributes-api"
-  "Monitoring/Logs/daily-account-health"
-  "Monitoring/Logs/daily-visuals"
-  "Monitoring/Logs/weekly-api-sources"
-  "Monitoring/Logs/weekly-api-sources/metadata"
-  "Monitoring/Logs/weekly-browser-sources"
-  "Monitoring/Logs/sellerboard-sync"
-  "Monitoring/Logs/nightly-app-routes"
-  "WPR/wpr-workspace/output"
+if [[ "$WPR_DATA_DIR" == *"/Library/CloudStorage/"* ]]; then
+  echo "WPR_DATA_DIR_${MARKET_SUFFIX} must be local, not a Google Drive mount: $WPR_DATA_DIR" >&2
+  exit 1
+fi
+
+MONITORING_PATHS=(
+  "Hourly/Listing Attributes (API)"
+  "Daily/Account Health Dashboard (API)"
+  "Daily/Visuals (Browser)"
+  "Daily/Voice of the Customer (Manual)"
+  "Weekly/Amazon Inventory Ledger (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Advertised Product Report (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Campaign Report (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Placement Report (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Purchased Product Report (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Search Term Report (API)"
+  "Weekly/Ad Console/SP - Sponsored Products (API)/SP - Targeting Report (API)"
+  "Weekly/Ad Console/Brand Metrics (Browser)"
+  "Weekly/Brand Analytics (API)/SCP - Search Catalog Performance (API)"
+  "Weekly/Brand Analytics (API)/SQP - Search Query Performance (API)"
+  "Weekly/Brand Analytics (API)/TST - Top Search Terms (API)"
+  "Weekly/Business Reports (API)/Sales & Traffic (API)"
+  "Weekly/Category Insights (Browser)"
+  "Weekly/Datadive (API)/DD-Competitors - Datadive Competitors (API)"
+  "Weekly/Datadive (API)/DD-Keywords - Datadive Keywords (API)"
+  "Weekly/Datadive (API)/Rank Radar - Datadive Rank Radar (API)"
+  "Weekly/Product Opportunity Explorer (Browser)"
+  "Weekly/ScaleInsights/KeywordRanking (Browser)"
+  "Weekly/Sellerboard (API)/SB - Dashboard Report (API)"
+  "Weekly/Sellerboard (API)/SB - Orders Report (API)"
+  "Logs/tracking-fetch"
+  "Logs/hourly-listing-attributes-api"
+  "Logs/daily-account-health"
+  "Logs/daily-visuals"
+  "Logs/weekly-api-sources"
+  "Logs/weekly-api-sources/metadata"
+  "Logs/weekly-browser-sources"
+  "Logs/sellerboard-sync"
+  "Logs/nightly-app-routes"
 )
 
 echo "market=$MARKET"
-echo "sales_root=$SALES_ROOT"
+echo "monitoring_root=$MONITORING_ROOT"
+echo "wpr_data_dir=$WPR_DATA_DIR"
 
-for relative_path in "${PATHS[@]}"; do
-  target="$SALES_ROOT/$relative_path"
+for relative_path in "${MONITORING_PATHS[@]}"; do
+  target="$MONITORING_ROOT/$relative_path"
   if [ "$DRY_RUN" = "true" ]; then
     echo "mkdir -p $target"
   else
     mkdir -p "$target"
-    echo "created $relative_path"
+    echo "created Monitoring/$relative_path"
   fi
 done
+
+if [ "$DRY_RUN" = "true" ]; then
+  echo "mkdir -p $WPR_DATA_DIR"
+else
+  mkdir -p "$WPR_DATA_DIR"
+  echo "created WPR_DATA_DIR"
+fi

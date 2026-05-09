@@ -137,7 +137,7 @@ function buildPayload() {
 
 test('GET /api/wpr/changelog/[week] returns only the requested week entries', async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'argus-wpr-changelog-week-route-'))
-  process.env.ARGUS_SALES_ROOT_US = path.join(dataDir, '..', '..', '..')
+  process.env.ARGUS_MONITORING_ROOT_US = path.join(dataDir, '..', 'monitoring-us')
   process.env.WPR_DATA_DIR_US = dataDir
   writeFileSync(path.join(dataDir, 'wpr-data-latest.json'), JSON.stringify(buildPayload()))
 
@@ -167,7 +167,7 @@ test('GET /api/wpr/changelog/[week] returns only the requested week entries', as
 
 test('GET /api/wpr/changelog/[week] returns 404 for an unknown week', async () => {
   const dataDir = mkdtempSync(path.join(tmpdir(), 'argus-wpr-changelog-week-route-'))
-  process.env.ARGUS_SALES_ROOT_US = path.join(dataDir, '..', '..', '..')
+  process.env.ARGUS_MONITORING_ROOT_US = path.join(dataDir, '..', 'monitoring-us')
   process.env.WPR_DATA_DIR_US = dataDir
   writeFileSync(path.join(dataDir, 'wpr-data-latest.json'), JSON.stringify(buildPayload()))
 

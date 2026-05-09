@@ -1,4 +1,4 @@
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { execFile as execFileCallback } from 'node:child_process'
@@ -6,8 +6,6 @@ import { DEFAULT_ARGUS_MARKET, getArgusMarketConfig, type ArgusMarket } from '@/
 import { expectWritableWprChangeCategory } from './change-log-categories'
 
 const execFile = promisify(execFileCallback)
-
-const WEEK_FOLDER_PATTERN = /^Week (\d+) - \d{4}-\d{2}-\d{2} \(Sun\)(?: \(Partial\))?$/
 
 export type CreateWprChangeLogEntryInput = {
   weekLabel: string
@@ -84,36 +82,18 @@ function expectLineItems(values: string[], fieldName: string): string[] {
   return lines
 }
 
-function resolveWeekFolderNumber(weekLabel: string): number {
-  return Number.parseInt(weekLabel.slice(1), 10)
-}
-
 async function resolveWeekFolderPath(weekLabel: string, market: ArgusMarket): Promise<string> {
   const { wprRoot } = resolveWprPaths(market)
+  const weekFolderPath = join(wprRoot, weekLabel)
   try {
-    await stat(wprRoot)
+    const weekFolderStat = await stat(weekFolderPath)
+    if (!weekFolderStat.isDirectory()) {
+      throw new Error(`Missing WPR week folder for ${weekLabel}.`)
+    }
   } catch {
     throw new Error(`Missing WPR week folder for ${weekLabel}.`)
   }
-  const targetWeekNumber = resolveWeekFolderNumber(weekLabel)
-  const entries = await readdir(wprRoot, { withFileTypes: true })
-  for (const entry of entries) {
-    if (!entry.isDirectory()) {
-      continue
-    }
-
-    const match = WEEK_FOLDER_PATTERN.exec(entry.name)
-    if (match === null) {
-      continue
-    }
-
-    const folderWeekNumber = Number.parseInt(match[1], 10)
-    if (folderWeekNumber === targetWeekNumber) {
-      return join(wprRoot, entry.name)
-    }
-  }
-
-  throw new Error(`Missing WPR week folder for ${weekLabel}.`)
+  return weekFolderPath
 }
 
 function sanitizeFileStem(value: string): string {

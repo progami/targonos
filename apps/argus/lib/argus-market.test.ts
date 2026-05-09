@@ -27,15 +27,13 @@ test('parseArgusMarket rejects unsupported slugs', () => {
 
 test('getArgusMarketConfig resolves market-specific local monitoring and WPR paths from env', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'argus-market-config-'))
-  const usSalesRoot = path.join(root, 'Dust Sheets - US', 'Sales')
-  const ukSalesRoot = path.join(root, 'Dust Sheets - UK', 'Sales')
   const usMonitoringRoot = path.join(root, 'argus-monitoring', 'us')
   const ukMonitoringRoot = path.join(root, 'argus-monitoring', 'uk')
-  const usWprDataDir = path.join(usSalesRoot, 'WPR', 'wpr-workspace', 'output')
-  const ukWprDataDir = path.join(ukSalesRoot, 'WPR', 'wpr-workspace', 'output')
+  const usWprRoot = path.join(root, 'argus-wpr', 'us', 'WPR')
+  const ukWprRoot = path.join(root, 'argus-wpr', 'uk', 'WPR')
+  const usWprDataDir = path.join(usWprRoot, 'wpr-workspace', 'output')
+  const ukWprDataDir = path.join(ukWprRoot, 'wpr-workspace', 'output')
 
-  process.env.ARGUS_SALES_ROOT_US = usSalesRoot
-  process.env.ARGUS_SALES_ROOT_UK = ukSalesRoot
   process.env.ARGUS_MONITORING_ROOT_US = usMonitoringRoot
   process.env.ARGUS_MONITORING_ROOT_UK = ukMonitoringRoot
   process.env.WPR_DATA_DIR_US = usWprDataDir
@@ -44,11 +42,20 @@ test('getArgusMarketConfig resolves market-specific local monitoring and WPR pat
   assert.deepEqual(getArgusMarketConfig('uk'), {
     slug: 'uk',
     label: 'UK',
-    salesRoot: ukSalesRoot,
     monitoringRoot: ukMonitoringRoot,
-    wprRoot: path.join(ukSalesRoot, 'WPR'),
+    wprRoot: ukWprRoot,
     wprDataDir: ukWprDataDir,
   })
+})
+
+test('getArgusMarketConfig rejects Google Drive mounted roots', () => {
+  process.env.ARGUS_MONITORING_ROOT_US = '/Users/test/Library/CloudStorage/GoogleDrive-test/Shared drives/Dust Sheets - US/Sales/Monitoring'
+  process.env.WPR_DATA_DIR_US = '/tmp/argus-wpr/us/WPR/wpr-workspace/output'
+
+  assert.throws(
+    () => getArgusMarketConfig('us'),
+    /ARGUS_MONITORING_ROOT_US must be local, not a Google Drive mount/,
+  )
 })
 
 test('appendMarketParam preserves US default and appends UK explicitly', () => {
