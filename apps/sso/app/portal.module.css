@@ -101,7 +101,8 @@
 .buildMeta,
 .stateBadge,
 .workspaceCategory,
-.launcherMeta {
+.launcherMeta,
+.workspaceSectionMeta {
   font-family: var(--font-mono), var(--font-sans), sans-serif;
   font-size: 0.68rem;
   line-height: 1;
@@ -271,6 +272,40 @@
 }
 
 .launcherMeta {
+  white-space: nowrap;
+}
+
+.workspaceSections {
+  display: grid;
+  gap: var(--space-lg);
+}
+
+.workspaceSection {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.workspaceSectionHeader {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.workspaceSectionTitle {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.workspaceSectionMeta {
+  color: var(--slate);
+  font-weight: 800;
   white-space: nowrap;
 }
 
@@ -545,6 +580,12 @@
   }
 
   .launcherTop {
+    align-items: start;
+    flex-direction: column;
+    gap: var(--space-xs);
+  }
+
+  .workspaceSectionHeader {
     align-items: start;
     flex-direction: column;
     gap: var(--space-xs);
