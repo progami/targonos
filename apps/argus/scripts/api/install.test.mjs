@@ -80,12 +80,9 @@ test('API launchd installer writes shared env runtime blocks for generated UK co
     assert.equal(envValue(plist, 'AMAZON_REFRESH_TOKEN_UK'), null)
     assert.equal(envValue(plist, 'AMAZON_SP_APP_CLIENT_ID'), null)
     assert.equal(envValue(plist, 'AMAZON_SP_APP_CLIENT_SECRET'), null)
+    assert.equal(envValue(plist, 'ARGUS_SALES_ROOT_UK'), null)
   }
 
-  assert.equal(
-    envValue(trackingPlist, 'ARGUS_SALES_ROOT_UK'),
-    '/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales',
-  )
   assert.match(driveSyncPlist, /scripts\/lib\/drive-sync\.mjs/)
   assert.match(driveSyncPlist, /<string>--market<\/string>\s*<string>uk<\/string>/)
 })

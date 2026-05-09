@@ -82,8 +82,6 @@ DAILY_ACCOUNT_HEALTH_PLIST="$LAUNCH_AGENTS_DIR/$DAILY_ACCOUNT_HEALTH_LABEL.plist
 WEEKLY_API_PLIST="$LAUNCH_AGENTS_DIR/$WEEKLY_API_LABEL.plist"
 DRIVE_SYNC_PLIST="$LAUNCH_AGENTS_DIR/$DRIVE_SYNC_LABEL.plist"
 if [ "$MARKET" = "us" ]; then
-  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_US"
-  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - US/Sales"
   ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_US"
   ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/us"
   WPR_DATA_DIR_ENV_KEY="WPR_DATA_DIR_US"
@@ -93,8 +91,6 @@ if [ "$MARKET" = "us" ]; then
   ARGUS_DRIVE_WPR_FOLDER_ID_ENV_KEY="ARGUS_DRIVE_WPR_FOLDER_ID_US"
   ARGUS_DRIVE_WPR_FOLDER_ID="1hjKflwTsqRLZU8IWSIvYI_q5tJX3GHNt"
 else
-  ARGUS_SALES_ROOT_ENV_KEY="ARGUS_SALES_ROOT_UK"
-  ARGUS_SALES_ROOT="/Users/jarraramjad/Library/CloudStorage/GoogleDrive-jarrar@targonglobal.com/Shared drives/Dust Sheets - UK/Sales"
   ARGUS_MONITORING_ROOT_ENV_KEY="ARGUS_MONITORING_ROOT_UK"
   ARGUS_MONITORING_ROOT="$HOME/.local/share/targon/argus-monitoring/uk"
   WPR_DATA_DIR_ENV_KEY="WPR_DATA_DIR_UK"
@@ -178,8 +174,6 @@ cat > "$TRACKING_FETCH_PLIST" <<PLIST
     <string>https://os.targonglobal.com/argus</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
     <key>${WPR_DATA_DIR_ENV_KEY}</key>
@@ -233,8 +227,6 @@ cat <<PLIST
     <string>${TARGONOS_ENV_MODE}</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
     <key>${WPR_DATA_DIR_ENV_KEY}</key>
@@ -289,8 +281,6 @@ cat > "$DAILY_ACCOUNT_HEALTH_PLIST" <<PLIST
     <string>${TARGONOS_ENV_MODE}</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
     <key>${WPR_DATA_DIR_ENV_KEY}</key>
@@ -348,8 +338,6 @@ cat > "$WEEKLY_API_PLIST" <<PLIST
     <string>${TARGONOS_ENV_MODE}</string>
     <key>ARGUS_MARKET</key>
     <string>${MARKET}</string>
-    <key>${ARGUS_SALES_ROOT_ENV_KEY}</key>
-    <string>${ARGUS_SALES_ROOT}</string>
     <key>${ARGUS_MONITORING_ROOT_ENV_KEY}</key>
     <string>${ARGUS_MONITORING_ROOT}</string>
     <key>${WPR_DATA_DIR_ENV_KEY}</key>

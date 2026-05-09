@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/db'
 import { parseArgusMarket, type ArgusMarket } from '@/lib/argus-market'
 import { getCompetitivePricing, getCatalogItemWithRanks } from '@/lib/sp-api'
+import { normalizeTrackingAsinSeeds, type TrackingAsinSeed } from '@/lib/tracking/seeds'
 
 function extractBearerToken(header: string | null): string | null {
   if (!header) return null
@@ -29,6 +30,31 @@ function marketplaceForMarket(market: ArgusMarket): 'US' | 'UK' {
   throw new Error(`Unsupported Argus market: ${market}`)
 }
 
+async function ensureTrackedAsins(marketplace: 'US' | 'UK', trackedAsins: TrackingAsinSeed[]) {
+  for (const seed of trackedAsins) {
+    await prisma.trackedAsin.upsert({
+      where: {
+        marketplace_asin: {
+          marketplace,
+          asin: seed.asin,
+        },
+      },
+      update: {
+        ownership: seed.ownership,
+        label: seed.label,
+        enabled: true,
+      },
+      create: {
+        asin: seed.asin,
+        marketplace,
+        ownership: seed.ownership,
+        label: seed.label,
+        enabled: true,
+      },
+    })
+  }
+}
+
 export async function POST(request: NextRequest) {
   const authError = requireCronAuth(request)
   if (authError) return authError
@@ -37,26 +63,34 @@ export async function POST(request: NextRequest) {
   const market = parseArgusMarket(request.nextUrl.searchParams.get('market'))
   const marketplace = marketplaceForMarket(market)
   const triggeredBy = (body as { triggeredBy?: string }).triggeredBy ?? 'manual'
+  const trackedAsins = normalizeTrackingAsinSeeds((body as { trackedAsins?: unknown }).trackedAsins)
 
   // Create a fetch run record
   const run = await prisma.trackingFetchRun.create({
     data: { triggeredBy },
   })
 
+  if (trackedAsins.length > 0) {
+    await ensureTrackedAsins(marketplace, trackedAsins)
+  }
+
   const enabledAsins = await prisma.trackedAsin.findMany({
     where: { enabled: true, marketplace },
   })
 
   if (enabledAsins.length === 0) {
+    const error = `No enabled tracked ASINs configured for ${marketplace}.`
     await prisma.trackingFetchRun.update({
       where: { id: run.id },
       data: {
         finishedAt: new Date(),
-        status: 'SUCCEEDED',
+        status: 'FAILED',
         asinCount: 0,
+        errorCount: 1,
+        errors: [{ asin: '*', error }],
       },
     })
-    return NextResponse.json({ runId: run.id, market, marketplace, asinCount: 0, errorCount: 0 })
+    return NextResponse.json({ runId: run.id, market, marketplace, asinCount: 0, errorCount: 1, errors: [{ asin: '*', error }] }, { status: 409 })
   }
 
   const asinStrings = enabledAsins.map((a) => a.asin)

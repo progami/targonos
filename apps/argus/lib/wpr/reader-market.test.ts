@@ -161,8 +161,8 @@ test('getWprWeekSummary caches payloads by market and path', async () => {
   writePayload(usDataDir, 'W16', 'W17')
   writePayload(ukDataDir, 'W07', 'W08')
 
-  process.env.ARGUS_SALES_ROOT_US = path.join(usDataDir, '..', '..')
-  process.env.ARGUS_SALES_ROOT_UK = path.join(ukDataDir, '..', '..')
+  process.env.ARGUS_MONITORING_ROOT_US = path.join(usDataDir, '..', 'monitoring-us')
+  process.env.ARGUS_MONITORING_ROOT_UK = path.join(ukDataDir, '..', 'monitoring-uk')
   process.env.WPR_DATA_DIR_US = usDataDir
   process.env.WPR_DATA_DIR_UK = ukDataDir
 
