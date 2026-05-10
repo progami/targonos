@@ -1,13 +1,13 @@
 {
   "apps": {
     "sso": { "lifecycle": "active" },
-    "talos": { "lifecycle": "active" },
+    "talos": { "lifecycle": "dev" },
     "website": { "lifecycle": "active" },
-    "kairos": { "lifecycle": "active" },
-    "atlas": { "lifecycle": "active" },
-    "xplan": { "lifecycle": "active" },
+    "kairos": { "lifecycle": "dev" },
+    "atlas": { "lifecycle": "dev" },
+    "xplan": { "lifecycle": "dev" },
     "plutus": { "lifecycle": "active" },
-    "hermes": { "lifecycle": "active" },
+    "hermes": { "lifecycle": "dev" },
     "argus": { "lifecycle": "active" },
     "legal-suite": { "lifecycle": "archived" },
     "jason": { "lifecycle": "archived" }

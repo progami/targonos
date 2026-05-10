@@ -72,10 +72,7 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
     ? ALL_APPS.filter((app) => app.lifecycle !== 'archive')
     : filterAppsForUser(allowedAppIds)
 
-  const apps = ALL_APPS.filter((app) => (
-    app.lifecycle !== 'archive'
-    && (app.lifecycle !== 'dev' || isPlatformAdmin)
-  ))
+  const apps = ALL_APPS.filter((app) => app.lifecycle !== 'archive')
 
   // Resolve URLs on the server side so the client never sees placeholder slugs or stale hosts
   const appsWithUrls = apps.map(withLaunchUrl)
