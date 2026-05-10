@@ -121,9 +121,8 @@ const weekStartDateByLabel: Record<string, string> = {
   W18: '2026-05-03',
 }
 
-function writePayload(dataDir: string, stableWeek: string, latestCompletedWeek: string) {
-  const currentWeek = 'W18'
-  const weeks = [stableWeek, latestCompletedWeek, currentWeek]
+function writePayload(dataDir: string, defaultWeek: string, comparisonWeek: string) {
+  const weeks = [defaultWeek, comparisonWeek]
   const windowsByWeek: Record<string, ReturnType<typeof buildWeekBundle>> = {}
   const weekStartDates: Record<string, string> = {}
   const changeLogByWeek: Record<string, unknown[]> = {}
@@ -132,17 +131,17 @@ function writePayload(dataDir: string, stableWeek: string, latestCompletedWeek: 
     weekStartDates[week] = weekStartDateByLabel[week]
     changeLogByWeek[week] = []
   }
-  const bundle = windowsByWeek[currentWeek]
+  const bundle = windowsByWeek[defaultWeek]
   writeFileSync(
     path.join(dataDir, 'wpr-data-latest.json'),
     JSON.stringify({
       ...bundle,
-      defaultWeek: currentWeek,
+      defaultWeek,
       weeks,
       weekStartDates,
       sourceOverview: {
         week_labels: weeks,
-        latest_week: currentWeek,
+        latest_week: defaultWeek,
         weeks_with_data: weeks.length,
         source_completeness: 'ok',
         critical_gaps: [],
@@ -173,20 +172,20 @@ test('getWprWeekSummary caches payloads by market and path', async () => {
   assert.equal(ukSummary.defaultWeek, 'W07')
 })
 
-test('createWprWeekSummary excludes current and newest completed weeks by default', () => {
+test('createWprWeekSummary returns the chart-ready weeks already selected by the payload builder', () => {
   const summary = createWprWeekSummary({
-    defaultWeek: 'W18',
-    weeks: ['W16', 'W17', 'W18'],
+    defaultWeek: 'W17',
+    weeks: ['W16', 'W17'],
     weekStartDates: {
       W16: '2026-04-12',
       W17: '2026-04-19',
-      W18: '2026-04-26',
     },
   }, new Date('2026-04-28T16:00:00.000Z'))
 
-  assert.equal(summary.defaultWeek, 'W16')
-  assert.deepEqual(summary.weeks, ['W16'])
+  assert.equal(summary.defaultWeek, 'W17')
+  assert.deepEqual(summary.weeks, ['W16', 'W17'])
   assert.deepEqual(summary.weekStartDates, {
     W16: '2026-04-12',
+    W17: '2026-04-19',
   })
 })
