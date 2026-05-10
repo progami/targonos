@@ -40,8 +40,6 @@ const CATEGORY_ORDER = [
 
 const OTHER_CATEGORY = 'Other'
 
-const assetBasePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
-
 type PortalClientProps = {
   accessApps?: PortalAppCard[]
   accessError?: string
@@ -265,7 +263,7 @@ export default function PortalClient({
               {profileInitial}
             </span>
             <span className={styles.identityCopy}>
-              <span className={styles.identityLabel}>{accessModeLabel}</span>
+              <span className={styles.srOnly}>{accessModeLabel}</span>
               {signedInEmail ? <span className={styles.identityValue}>{signedInEmail}</span> : null}
             </span>
           </div>
@@ -278,9 +276,9 @@ export default function PortalClient({
               className={styles.buildMeta}
               data-portal-version-badge="true"
               aria-label={`TargonOS version v${version}, last updated ${buildTimeLabel}`}
+              title={`Updated ${buildTimeLabel}`}
             >
               <span>v{version}</span>
-              <span>Updated {buildTimeLabel}</span>
             </a>
             <button
               type="button"
@@ -292,11 +290,6 @@ export default function PortalClient({
             >
               Sign out
             </button>
-            <img
-              className={styles.targonWordmark}
-              src={`${assetBasePath}/brand/logo-inverted.svg`}
-              alt="Targon"
-            />
           </div>
         </header>
       </div>
