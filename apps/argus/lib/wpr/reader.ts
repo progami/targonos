@@ -21,9 +21,6 @@ type CacheState = {
 };
 
 const cacheByMarket = new Map<ArgusMarket, CacheState>();
-const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * DAY_MS;
-
 function resolveLatestJsonPath(market: ArgusMarket): string {
   return join(getArgusMarketConfig(market).wprDataDir, 'wpr-data-latest.json');
 }
@@ -62,19 +59,6 @@ export async function getWprWeekSummary(market: ArgusMarket = DEFAULT_ARGUS_MARK
   return createWprWeekSummary(payload);
 }
 
-function dateOnlyTime(date: Date): number {
-  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-}
-
-function parseWeekStartDate(value: string, week: WeekLabel): number {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (match === null) {
-    throw new Error(`Invalid WPR week start date for ${week}: ${value}`);
-  }
-
-  return Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-}
-
 function requireWeekStartDate(
   weekStartDates: Record<WeekLabel, string>,
   week: WeekLabel,
@@ -86,55 +70,22 @@ function requireWeekStartDate(
   return value;
 }
 
-function resolveCompletedWeeks(
-  weeks: WeekLabel[],
-  weekStartDates: Record<WeekLabel, string>,
-  today: Date,
-): WeekLabel[] {
-  const todayTime = dateOnlyTime(today);
-  const completedWeeks: WeekLabel[] = [];
-  for (const week of weeks) {
-    const startTime = parseWeekStartDate(requireWeekStartDate(weekStartDates, week), week);
-    const endTime = startTime + WEEK_MS;
-    if (endTime <= todayTime) {
-      completedWeeks.push(week);
-    }
-  }
-
-  return completedWeeks;
-}
-
-function resolveStableWeeks(
-  weeks: WeekLabel[],
-  weekStartDates: Record<WeekLabel, string>,
-  today: Date,
-): WeekLabel[] {
-  const completedWeeks = resolveCompletedWeeks(weeks, weekStartDates, today);
-  if (completedWeeks.length <= 1) {
-    throw new Error('No stable WPR chart weeks are available.');
-  }
-
-  return completedWeeks.slice(0, completedWeeks.length - 1);
-}
-
 export function createWprWeekSummary(
   payload: Pick<WprPayload, 'defaultWeek' | 'weeks' | 'weekStartDates'>,
-  today = new Date(),
+  _today = new Date(),
 ): WprWeekSummaryResponse {
-  const weeks = resolveStableWeeks(payload.weeks, payload.weekStartDates, today);
-  let defaultWeek = payload.defaultWeek;
-  if (!weeks.includes(defaultWeek)) {
-    defaultWeek = weeks[weeks.length - 1];
+  if (!payload.weeks.includes(payload.defaultWeek)) {
+    throw new Error(`WPR default week is not in the payload week list: ${payload.defaultWeek}`);
   }
 
   const weekStartDates: Record<WeekLabel, string> = {};
-  for (const week of weeks) {
+  for (const week of payload.weeks) {
     weekStartDates[week] = requireWeekStartDate(payload.weekStartDates, week);
   }
 
   return {
-    defaultWeek,
-    weeks,
+    defaultWeek: payload.defaultWeek,
+    weeks: payload.weeks,
     weekStartDates,
   };
 }
