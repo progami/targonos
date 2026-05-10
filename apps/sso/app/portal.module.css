@@ -60,9 +60,9 @@
   margin: 0 auto;
   padding: 10px 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
 }
 
 .brand,
@@ -125,6 +125,7 @@
 }
 
 .identity {
+  min-width: 0;
   justify-content: flex-end;
   gap: var(--space-sm);
 }
@@ -142,7 +143,7 @@
 }
 
 .identityValue {
-  max-width: 34ch;
+  max-width: min(34ch, 32vw);
   overflow: hidden;
   color: color-mix(in srgb, var(--canvas) 88%, var(--slate));
   font-size: 0.88rem;
@@ -152,6 +153,7 @@
 }
 
 .actions {
+  min-width: 0;
   justify-content: flex-end;
   gap: var(--space-sm);
 }
@@ -160,18 +162,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: wrap;
-  max-width: 220px;
   min-height: 32px;
   border: 1px solid color-mix(in srgb, var(--canvas) 16%, transparent);
   border-radius: 999px;
   color: color-mix(in srgb, var(--canvas) 72%, var(--slate));
   padding: 0 10px;
   font-weight: 800;
-  gap: 6px;
   line-height: 1.15;
-  text-align: right;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .buildMeta span:first-child {
@@ -195,6 +194,7 @@
   font-family: inherit;
   font-size: 0.88rem;
   font-weight: 900;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -202,12 +202,6 @@
 .signOut:focus-visible {
   background: color-mix(in srgb, var(--teal) 88%, var(--canvas));
   outline: none;
-}
-
-.targonWordmark {
-  height: 18px;
-  width: auto;
-  opacity: 0.92;
 }
 
 .main {
@@ -565,17 +559,16 @@
 
 @media (max-width: 860px) {
   .header {
-    grid-template-columns: 1fr;
-    gap: var(--space-md);
+    width: min(calc(100% - 24px), var(--content-max));
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) auto;
+    gap: var(--space-sm);
   }
 
-  .identity,
-  .actions {
-    justify-content: space-between;
+  .identityValue {
+    max-width: 24vw;
   }
 
-  .main,
-  .header {
+  .main {
     width: min(calc(100% - 24px), var(--content-max));
   }
 
@@ -598,13 +591,12 @@
     width: min(calc(100% - 18px), var(--content-max));
   }
 
-  .actions {
-    flex-wrap: wrap;
+  .header {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .buildMeta {
-    justify-content: flex-start;
-    text-align: left;
+  .identity {
+    display: none;
   }
 
   .workspaceList {
@@ -613,6 +605,20 @@
 
   .workspaceRow {
     min-height: 168px;
+  }
+}
+
+@media (max-width: 440px) {
+  .brandText {
+    display: none;
+  }
+
+  .buildMeta {
+    display: none;
+  }
+
+  .signOut {
+    padding: 0 var(--space-sm);
   }
 }
 
