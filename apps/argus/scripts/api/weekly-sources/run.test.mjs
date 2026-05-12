@@ -11,3 +11,7 @@ test('weekly API no-arg Sunday run uses the last fully available API week', () =
   assert.match(source, /DATE_FLAGS="--start-date \$START_DATE --end-date \$END_DATE"/)
   assert.match(source, /Weekly API source window: \$START_DATE\.\.\$END_DATE/)
 })
+
+test('weekly API runner exposes failed step detail to the outer Argus runner', () => {
+  assert.match(source, /tail -40 "\$LOG" >&2/)
+})

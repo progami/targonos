@@ -3,6 +3,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { execFileSync, spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import {
   WPR_NONCANONICAL_NAME_RE,
   driveSyncQueuePath,
@@ -16,6 +18,12 @@ import {
   wprRootForMarket,
 } from './artifacts.mjs'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const REPO_ROOT = path.resolve(__dirname, '../../../../')
+const require = createRequire(import.meta.url)
+const { loadEnvForApp } = require(path.join(REPO_ROOT, 'scripts/lib/shared-env.cjs'))
+
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder'
 const RESUMABLE_UPLOAD_THRESHOLD_BYTES = 1024 * 1024
@@ -26,6 +34,22 @@ const WPR_DRIVE_SYNC_REJECTED_RELATIVE_PATH = '.drive-sync/wpr-rejected.jsonl'
 const DRIVE_SYNC_SCOPES = new Set(['monitoring', 'wpr'])
 const WPR_WORKSPACE_LOCK_FILE = '/tmp/argus-wpr-workspace.lock'
 const WPR_DRIVE_SYNC_LOCK_ENV = 'ARGUS_WPR_DRIVE_SYNC_LOCKED'
+
+function loadArgusEnv() {
+  let mode = 'local'
+  if (process.env.ARGUS_ENV_MODE && process.env.ARGUS_ENV_MODE.trim().length > 0) {
+    mode = process.env.ARGUS_ENV_MODE
+  } else if (process.env.TARGONOS_ENV_MODE && process.env.TARGONOS_ENV_MODE.trim().length > 0) {
+    mode = process.env.TARGONOS_ENV_MODE
+  }
+
+  loadEnvForApp({
+    repoRoot: REPO_ROOT,
+    appName: 'argus',
+    mode,
+    targetEnv: process.env,
+  })
+}
 
 function driveApiUrl(pathname, params = {}) {
   const url = new URL(pathname, 'https://www.googleapis.com')
@@ -782,6 +806,7 @@ export async function drainAllDriveSyncQueues({ market, dryRun }) {
 }
 
 async function main() {
+  loadArgusEnv()
   const args = parseCliArgs(process.argv.slice(2))
   rerunCliUnderWprWorkspaceLock(args)
   monitoringRootForMarket(args.market)
