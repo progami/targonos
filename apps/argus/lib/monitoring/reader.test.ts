@@ -9,5 +9,6 @@ test('monitoring reader reports Argus runner tasks instead of legacy per-source 
   assert.match(source, /taskId: schedulerTaskId\(market, 'tracking-fetch'\)/)
   assert.match(source, /launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL/)
   assert.match(source, /readRunnerLedgerTask\(spec\.taskId\)/)
+  assert.match(source, /const HEALTHY_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob\['taskStatus'\]>\(\['succeeded'\]\)/)
   assert.doesNotMatch(source, /schedulerLaunchdLabel\(market, 'com\.targon\.weekly-api-sources'\)/)
 })

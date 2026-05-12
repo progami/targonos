@@ -36,3 +36,10 @@ test('runner tick persists the global lock before doing scheduled work', () => {
     /if \(!lock\.acquired\) \{[\s\S]*return\n  \}\n  saveLedger\(ledgerPath, ledger\)\n\n  try \{/,
   )
 })
+
+test('runner tick records a terminal task state when execution throws', () => {
+  assert.match(
+    cliSource,
+    /try \{\n    result = await runTask\(task, ARGUS_DIR, process\.env\)\n  \} catch \(error\) \{[\s\S]*status: 'failed'[\s\S]*outcome: 'process-error'/,
+  )
+})

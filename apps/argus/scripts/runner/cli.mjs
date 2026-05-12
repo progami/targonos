@@ -134,7 +134,16 @@ async function executeTask({ task, owner, ledgerPath }) {
   const startedAt = new Date()
   ledger = markTaskRunning(ledger, task.task_id, owner, startedAt)
   saveLedger(ledgerPath, ledger)
-  const result = await runTask(task, ARGUS_DIR, process.env)
+  let result
+  try {
+    result = await runTask(task, ARGUS_DIR, process.env)
+  } catch (error) {
+    result = {
+      status: 'failed',
+      lastError: error instanceof Error ? error.message : String(error),
+      metadata: { outcome: 'process-error' },
+    }
+  }
   ledger = loadLedger(ledgerPath)
   ledger = markTaskFinished(ledger, task.task_id, {
     ...result,

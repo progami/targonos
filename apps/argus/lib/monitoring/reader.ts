@@ -92,7 +92,7 @@ const DAY_IN_MINUTES = 24 * HOUR_IN_MINUTES
 const ARGUS_RUNNER_LAUNCHD_LABEL = 'com.targon.argus.runner'
 const ARGUS_RUNNER_PLIST_PATH = path.join(HOME_DIR, `Library/LaunchAgents/${ARGUS_RUNNER_LAUNCHD_LABEL}.plist`)
 const FAILED_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob['taskStatus']>(['failed', 'blocked', 'stale'])
-const HEALTHY_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob['taskStatus']>(['succeeded', 'queued', 'waiting'])
+const HEALTHY_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob['taskStatus']>(['succeeded'])
 
 interface SchedulerSpec {
   id: string
