@@ -117,6 +117,36 @@ test('blocked browser auth tasks stay blocked for operator recovery', () => {
   assert.equal(task.last_error, 'browser-auth')
 })
 
+test('stale running publisher tasks clear their lock and preserve stale evidence', () => {
+  const now = new Date('2026-05-11T08:00:00.000Z')
+  const ledger = scheduleDueTasks(createEmptyLedger(), buildDefaultTasks(), now)
+  const running = markTaskRunning(ledger, 'us:drive-sync', 'runner-1', now)
+  const staled = scheduleDueTasks(running, buildDefaultTasks(), new Date('2026-05-11T08:31:00.000Z'))
+  const task = staled.tasks.find((entry) => entry.task_id === 'us:drive-sync')
+
+  assert.equal(task.status, 'stale')
+  assert.equal(task.due_at, '2026-05-11T08:31:00.000Z')
+  assert.equal(task.finished_at, '2026-05-11T08:31:00.000Z')
+  assert.equal(task.lock_owner, null)
+  assert.equal(task.last_error, 'stale-running-task')
+  assert.equal(task.metadata.outcome, 'stale-running-task')
+  assert.equal(task.metadata.staleStartedAt, '2026-05-11T08:00:00.000Z')
+  assert.equal(task.metadata.staleLockOwner, 'runner-1')
+})
+
+test('stale tasks requeue on a later scheduler pass', () => {
+  const now = new Date('2026-05-11T08:00:00.000Z')
+  const ledger = scheduleDueTasks(createEmptyLedger(), buildDefaultTasks(), now)
+  const running = markTaskRunning(ledger, 'us:drive-sync', 'runner-1', now)
+  const staled = scheduleDueTasks(running, buildDefaultTasks(), new Date('2026-05-11T08:31:00.000Z'))
+  const requeued = scheduleDueTasks(staled, buildDefaultTasks(), new Date('2026-05-11T08:32:00.000Z'))
+  const task = requeued.tasks.find((entry) => entry.task_id === 'us:drive-sync')
+
+  assert.equal(task.status, 'queued')
+  assert.equal(task.lock_owner, null)
+  assert.equal(task.last_error, 'stale-running-task')
+})
+
 test('global runner lock prevents overlapping ticks', () => {
   const now = new Date('2026-05-11T08:00:00.000Z')
   const first = tryAcquireLock(createEmptyLedger(), 'runner-1', now)

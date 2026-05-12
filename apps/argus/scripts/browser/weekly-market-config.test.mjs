@@ -36,6 +36,11 @@ test('weekly browser runner passes market-specific detail logs into child collec
   assert.match(runWeekly, /ARGUS_BRAND_METRICS_LOG/)
 })
 
+test('weekly browser runner emits failure details for runner outcome classification', () => {
+  assert.match(runWeekly, /printf '%s\\n' "\$RUN_ERROR_MESSAGE" >&2/)
+  assert.match(runWeekly, /tail -120 "\$LOG" >&2/)
+})
+
 test('ScaleInsights reruns reuse an existing same-week XLSX', () => {
   assert.match(scaleInsights, /target_file="\$DEST\/\$\{PREFIX\}_SI-KeywordRanking\.xlsx"/)
   assert.match(scaleInsights, /target_meta_file="\$target_file\.meta\.json"/)
