@@ -280,7 +280,16 @@ export default function SourceHealthGrid({ health, healthError }: SourceHealthGr
                       sx={{ mt: 1.5, pt: 1, borderTop: '1px solid rgba(255, 255, 255, 0.04)' }}
                     >
                       <MetaItem label="LaunchAgent" value={job.launchdLabel} mono />
+                      {job.taskStatus ? (
+                        <MetaItem label="Task" value={job.taskStatus} />
+                      ) : null}
                       <MetaItem label="Status" value={job.status === 'running' ? `Running (PID ${job.pid})` : job.status} />
+                      {job.nextDueAt ? (
+                        <MetaItem label="Next due" value={formatDateTime(job.nextDueAt)} />
+                      ) : null}
+                      {job.currentBlocker ? (
+                        <MetaItem label="Blocker" value={job.currentBlocker} mono />
+                      ) : null}
                       {job.latestRunStatus && job.latestRunAt ? (
                         <MetaItem
                           label="Latest run"

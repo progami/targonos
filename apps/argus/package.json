@@ -10,6 +10,7 @@
     "media:import-us-listing-assets": "tsx scripts/import-us-listing-assets.ts",
     "media:remove-bad-source-gallery-revisions": "tsx scripts/remove-bad-source-gallery-revisions.ts",
     "media:upload-local-to-s3": "tsx scripts/upload-local-media-to-s3.ts",
+    "runner": "node scripts/runner/cli.mjs",
     "lint": "eslint app components lib middleware.ts",
     "type-check": "node -e \"require('fs').rmSync('.next/types', { recursive: true, force: true })\" && prisma generate --schema prisma/schema.prisma && tsc --noEmit --skipLibCheck"
   },

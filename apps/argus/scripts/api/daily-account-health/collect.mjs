@@ -22,7 +22,7 @@ const REPORT_TYPE = 'GET_V2_SELLER_PERFORMANCE_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const OUTPUT_DIR = path.join(MONITORING_BASE, 'Daily', 'Account Health Dashboard (API)')
 const OUTPUT_FILE = path.join(OUTPUT_DIR, 'account-health.csv')
-const REPORT_TIMEOUT_MS = 2 * 60 * 60 * 1000
+const REPORT_TIMEOUT_MS = readReportTimeoutMs()
 const POLL_INTERVAL_MS = 15_000
 const ACTIVE_REPORT_STATUSES = new Set(['IN_PROGRESS', 'IN_QUEUE'])
 const ACTIVE_REPORT_REUSE_MAX_AGE_MS = 30 * 60 * 1000
@@ -85,6 +85,20 @@ function sleep(ms) {
 
 function nowIso() {
   return new Date().toISOString()
+}
+
+function readReportTimeoutMs() {
+  const raw = process.env.ARGUS_ACCOUNT_HEALTH_REPORT_WAIT_TIMEOUT_MS
+  if (raw === undefined) return 2 * 60 * 60 * 1000
+
+  const value = Number(raw)
+  if (!Number.isInteger(value)) {
+    throw new Error('ARGUS_ACCOUNT_HEALTH_REPORT_WAIT_TIMEOUT_MS must be an integer')
+  }
+  if (value <= 0) {
+    throw new Error('ARGUS_ACCOUNT_HEALTH_REPORT_WAIT_TIMEOUT_MS must be greater than zero')
+  }
+  return value
 }
 
 function localDateString(date = new Date()) {

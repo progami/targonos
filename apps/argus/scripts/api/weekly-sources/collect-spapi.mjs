@@ -31,7 +31,7 @@ const TST_REPORT_TYPE = 'GET_BRAND_ANALYTICS_SEARCH_TERMS_REPORT'
 const TALOS_PACKAGE_JSON = path.join(REPO_ROOT, 'apps/talos/package.json')
 const ACTIVE_REPORT_STATUSES = new Set(['IN_QUEUE', 'IN_PROGRESS'])
 const DONE_REPORT_STATUSES = new Set(['DONE'])
-const REPORT_WAIT_TIMEOUT_MS = 120 * 60 * 1000
+const REPORT_WAIT_TIMEOUT_MS = readReportWaitTimeoutMs()
 const ACTIVE_REPORT_REUSE_MAX_AGE_MS = 30 * 60 * 1000
 
 const WEEKLY_ROOT = path.join(MONITORING_BASE, 'Weekly')
@@ -220,6 +220,21 @@ const SALES_BY_ASIN_HEADERS = [
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+export function readReportWaitTimeoutMs() {
+  const raw = process.env.ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS
+  if (raw === undefined) {
+    return 120 * 60 * 1000
+  }
+  const value = Number(raw)
+  if (!Number.isInteger(value)) {
+    throw new Error(`ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS must be an integer, received "${raw}".`)
+  }
+  if (value <= 0) {
+    throw new Error(`ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS must be positive, received "${raw}".`)
+  }
+  return value
 }
 
 function parseArgs() {
