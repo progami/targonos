@@ -117,6 +117,7 @@ export interface MonitoringHealthDataset {
 
 export interface MonitoringSchedulerJob {
   id: string
+  taskId: string
   label: string
   cadence: 'hourly' | 'daily' | 'weekly'
   sourceType: Exclude<MonitoringSourceType, 'MANUAL'>
@@ -127,6 +128,9 @@ export interface MonitoringSchedulerJob {
   stdoutPath: string | null
   stderrPath: string | null
   outputs: string[]
+  taskStatus: 'queued' | 'running' | 'waiting' | 'succeeded' | 'failed' | 'blocked' | 'stale' | null
+  nextDueAt: string | null
+  currentBlocker: string | null
   lastExitStatus: number | null
   pid: number | null
   latestRunStatus: 'ok' | 'failed' | null

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { createManifestState, persistManifestReportId } from './collect-spapi.mjs'
+import { createManifestState, persistManifestReportId, readReportWaitTimeoutMs } from './collect-spapi.mjs'
 
 test('createManifestState starts with the weekly defaults', () => {
   const sourceConfig = {
@@ -64,4 +64,19 @@ test('persistManifestReportId merges report ids into the same manifest file', ()
     salesReportId: 'sales-456',
   })
   assert.equal(writtenManifest.weekCode, 'W14')
+})
+
+test('readReportWaitTimeoutMs accepts a runner-owned short poll window', () => {
+  const previousValue = process.env.ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS
+  process.env.ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS = '60000'
+
+  try {
+    assert.equal(readReportWaitTimeoutMs(), 60000)
+  } finally {
+    if (previousValue === undefined) {
+      delete process.env.ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS
+    } else {
+      process.env.ARGUS_SPAPI_REPORT_WAIT_TIMEOUT_MS = previousValue
+    }
+  }
 })

@@ -141,6 +141,7 @@ run_step() {
     log "OK: $name"
   else
     log "FAILED: $name"
+    tail -40 "$LOG" >&2
     FAILED_STEPS+=("$name")
     FAILED=$((FAILED + 1))
   fi

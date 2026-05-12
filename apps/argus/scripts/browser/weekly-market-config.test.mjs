@@ -52,8 +52,9 @@ test('ScaleInsights export URL is scoped to market country and ASIN', () => {
   assert.match(scaleInsights, /enqueue_drive_sync "\$target_meta_file"/)
 })
 
-test('browser launchd installer injects ScaleInsights ASIN config', () => {
-  assert.match(install, /WPR_HERO_ASIN_ENV_KEY="WPR_HERO_ASIN_\$\{MARKET_SUFFIX\}"/)
-  assert.match(install, /WPR_HERO_ASIN="\$\(require_env_value "\$WPR_HERO_ASIN_ENV_KEY"\)"/)
-  assert.match(install, /<key>\$\{WPR_HERO_ASIN_ENV_KEY\}<\/key>/)
+test('browser launchd installer delegates to the unified Argus runner', () => {
+  assert.match(install, /\.\.\/runner\/install\.sh/)
+  assert.doesNotMatch(install, /WPR_HERO_ASIN_ENV_KEY=/)
+  assert.doesNotMatch(install, /com\.targon\.weekly-browser-sources/)
+  assert.doesNotMatch(install, /com\.targon\.daily-visuals/)
 })

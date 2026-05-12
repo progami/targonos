@@ -89,9 +89,14 @@ function buildMonitoringPaths(market: ArgusMarket): MonitoringPaths {
 
 const HOUR_IN_MINUTES = 60
 const DAY_IN_MINUTES = 24 * HOUR_IN_MINUTES
+const ARGUS_RUNNER_LAUNCHD_LABEL = 'com.targon.argus.runner'
+const ARGUS_RUNNER_PLIST_PATH = path.join(HOME_DIR, `Library/LaunchAgents/${ARGUS_RUNNER_LAUNCHD_LABEL}.plist`)
+const FAILED_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob['taskStatus']>(['failed', 'blocked', 'stale'])
+const HEALTHY_RUNNER_TASK_STATUSES = new Set<MonitoringSchedulerJob['taskStatus']>(['succeeded'])
 
 interface SchedulerSpec {
   id: string
+  taskId: string
   label: string
   cadence: MonitoringHealthDataset['cadence']
   sourceType: Exclude<MonitoringSourceType, 'MANUAL'>
@@ -102,57 +107,57 @@ interface SchedulerSpec {
   outputs: string[]
 }
 
-function schedulerLaunchdLabel(market: ArgusMarket, baseLabel: string): string {
-  if (market === 'us') {
-    return baseLabel
-  }
-
-  return `${baseLabel}.${market}`
+function schedulerTaskId(market: ArgusMarket, source: string): string {
+  return `${market}:${source}`
 }
 
 function buildArgusSchedulerSpecs(market: ArgusMarket, paths: MonitoringPaths): SchedulerSpec[] {
   return [
   {
     id: 'tracking-fetch',
+    taskId: schedulerTaskId(market, 'tracking-fetch'),
     label: 'Tracking fetch',
     cadence: 'hourly',
     sourceType: 'API',
     schedule: 'Every hour',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.argus.tracking-fetch'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.argus.tracking-fetch')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/tracking-fetch/run-log.jsonl'),
     outputs: ['Argus tracking snapshots (DB)'],
   },
   {
     id: 'hourly-listing-attributes-api',
+    taskId: schedulerTaskId(market, 'hourly-listing-attributes-api'),
     label: 'Hourly listing attributes',
     cadence: 'hourly',
     sourceType: 'API',
     schedule: 'Every hour',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.hourly-listing-attributes-api'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.hourly-listing-attributes-api')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/hourly-listing-attributes-api/run-log.jsonl'),
     outputs: ['Hourly latest state', 'Snapshot history', 'Change Feed -> Email'],
   },
   {
     id: 'daily-account-health',
+    taskId: schedulerTaskId(market, 'daily-account-health'),
     label: 'Daily account health',
     cadence: 'daily',
     sourceType: 'API',
     schedule: 'Daily at 3:00 AM',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.daily-account-health'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.daily-account-health')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/daily-account-health/run-log.jsonl'),
     outputs: ['Account Health Dashboard (API)'],
   },
   {
     id: 'weekly-api-sources',
+    taskId: schedulerTaskId(market, 'weekly-api-sources'),
     label: 'Weekly API sources',
     cadence: 'weekly',
     sourceType: 'API',
     schedule: 'Monday at 4:00 AM',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.weekly-api-sources'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.weekly-api-sources')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/weekly-api-sources/run-log.jsonl'),
     outputs: [
       'Brand Analytics (API)',
@@ -164,23 +169,25 @@ function buildArgusSchedulerSpecs(market: ArgusMarket, paths: MonitoringPaths): 
   },
   {
     id: 'daily-visuals',
+    taskId: schedulerTaskId(market, 'daily-visuals'),
     label: 'Daily visuals',
     cadence: 'daily',
     sourceType: 'BROWSER',
     schedule: 'Daily at 3:30 AM',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.daily-visuals'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.daily-visuals')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/daily-visuals/run-log.jsonl'),
     outputs: ['Visuals (Browser)'],
   },
   {
     id: 'weekly-browser-sources',
+    taskId: schedulerTaskId(market, 'weekly-browser-sources'),
     label: 'Weekly browser sources',
     cadence: 'weekly',
     sourceType: 'BROWSER',
     schedule: 'Monday at 3:00 AM',
-    launchdLabel: schedulerLaunchdLabel(market, 'com.targon.weekly-browser-sources'),
-    plistPath: path.join(HOME_DIR, `Library/LaunchAgents/${schedulerLaunchdLabel(market, 'com.targon.weekly-browser-sources')}.plist`),
+    launchdLabel: ARGUS_RUNNER_LAUNCHD_LABEL,
+    plistPath: ARGUS_RUNNER_PLIST_PATH,
     runLogPath: path.join(paths.monitoringBase, 'Logs/weekly-browser-sources/run-log.jsonl'),
     outputs: [
       'Category Insights (Browser)',
@@ -403,6 +410,18 @@ interface LaunchAgentPlist {
 interface MonitoringRunLogEntry {
   timestamp: string
   status: 'ok' | 'failed'
+}
+
+interface RunnerLedgerTask {
+  task_id: string
+  status: MonitoringSchedulerJob['taskStatus']
+  due_at: string | null
+  last_error: string | null
+}
+
+interface RunnerLedger {
+  version: number
+  tasks: RunnerLedgerTask[]
 }
 
 interface DrivePublishedState {
@@ -1610,10 +1629,12 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
   const stderrPath = plist?.StandardErrorPath ?? null
   const latestRun = await readLatestRunLogEntry(spec.runLogPath)
   const lastLaunchAt = await readLatestTimestamp(stdoutPath, stderrPath)
+  const runnerTask = await readRunnerLedgerTask(spec.taskId)
 
   if (!plist) {
     return {
       id: spec.id,
+      taskId: spec.taskId,
       label: spec.label,
       cadence: spec.cadence,
       sourceType: spec.sourceType,
@@ -1624,6 +1645,9 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
       stdoutPath,
       stderrPath,
       outputs: [...spec.outputs],
+      taskStatus: runnerTask?.status ?? null,
+      nextDueAt: runnerTask?.due_at ?? null,
+      currentBlocker: runnerTask?.last_error ?? null,
       lastExitStatus: null,
       pid: null,
       latestRunStatus: latestRun?.status ?? null,
@@ -1636,6 +1660,7 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
   if (!launchdState) {
     return {
       id: spec.id,
+      taskId: spec.taskId,
       label: spec.label,
       cadence: spec.cadence,
       sourceType: spec.sourceType,
@@ -1646,6 +1671,9 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
       stdoutPath,
       stderrPath,
       outputs: [...spec.outputs],
+      taskStatus: runnerTask?.status ?? null,
+      nextDueAt: runnerTask?.due_at ?? null,
+      currentBlocker: runnerTask?.last_error ?? null,
       lastExitStatus: null,
       pid: null,
       latestRunStatus: latestRun?.status ?? null,
@@ -1654,23 +1682,11 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
     }
   }
 
-  const status =
-    launchdState.pid !== null
-      ? 'running'
-      : latestRun?.status === 'ok' && launchdState.lastExitStatus !== 0
-        ? isIsoAfter(latestRun.timestamp, lastLaunchAt)
-          ? 'healthy'
-          : 'failed'
-        : latestRun?.status === 'ok'
-        ? 'healthy'
-        : latestRun?.status === 'failed'
-          ? 'failed'
-          : launchdState.lastExitStatus === 0
-            ? 'healthy'
-            : 'failed'
+  const status = schedulerStatusForRunnerTask(launchdState, runnerTask, latestRun, lastLaunchAt)
 
   return {
     id: spec.id,
+    taskId: spec.taskId,
     label: spec.label,
     cadence: spec.cadence,
     sourceType: spec.sourceType,
@@ -1681,12 +1697,51 @@ async function getSchedulerHealth(spec: SchedulerSpec): Promise<MonitoringSchedu
     stdoutPath,
     stderrPath,
     outputs: [...spec.outputs],
+    taskStatus: runnerTask?.status ?? null,
+    nextDueAt: runnerTask?.due_at ?? null,
+    currentBlocker: runnerTask?.last_error ?? null,
     lastExitStatus: launchdState.lastExitStatus,
     pid: launchdState.pid,
     latestRunStatus: latestRun?.status ?? null,
     latestRunAt: latestRun?.timestamp ?? null,
     status,
   }
+}
+
+function schedulerStatusForRunnerTask(
+  launchdState: { lastExitStatus: number | null; pid: number | null },
+  runnerTask: RunnerLedgerTask | null,
+  latestRun: MonitoringRunLogEntry | null,
+  lastLaunchAt: string | null,
+): MonitoringSchedulerJob['status'] {
+  if (runnerTask?.status === 'running') {
+    return 'running'
+  }
+  if (FAILED_RUNNER_TASK_STATUSES.has(runnerTask?.status ?? null)) {
+    return 'failed'
+  }
+  if (HEALTHY_RUNNER_TASK_STATUSES.has(runnerTask?.status ?? null)) {
+    return 'healthy'
+  }
+  if (launchdState.pid !== null) {
+    return 'running'
+  }
+  if (latestRun?.status === 'ok' && launchdState.lastExitStatus !== 0) {
+    if (isIsoAfter(latestRun.timestamp, lastLaunchAt)) {
+      return 'healthy'
+    }
+    return 'failed'
+  }
+  if (latestRun?.status === 'ok') {
+    return 'healthy'
+  }
+  if (latestRun?.status === 'failed') {
+    return 'failed'
+  }
+  if (launchdState.lastExitStatus === 0) {
+    return 'healthy'
+  }
+  return 'failed'
 }
 
 async function readLaunchAgentPlist(plistPath: string): Promise<LaunchAgentPlist | null> {
@@ -1714,6 +1769,30 @@ async function readLaunchdState(
     if (isLaunchctlMissing(error)) return null
     throw error
   }
+}
+
+async function readRunnerLedgerTask(taskId: string): Promise<RunnerLedgerTask | null> {
+  const ledgerPath = argusRunnerLedgerPath()
+  try {
+    const raw = await fs.readFile(ledgerPath, 'utf8')
+    const ledger = JSON.parse(raw) as RunnerLedger
+    const task = ledger.tasks.find((entry) => entry.task_id === taskId)
+    if (task === undefined) {
+      return null
+    }
+    return task
+  } catch (error) {
+    if (isMissing(error)) return null
+    throw error
+  }
+}
+
+function argusRunnerLedgerPath(): string {
+  const explicit = process.env.ARGUS_RUNNER_LEDGER_PATH
+  if (explicit !== undefined && explicit.trim() !== '') {
+    return explicit
+  }
+  return path.join(HOME_DIR, '.local/share/targon/argus-runner/task-ledger.json')
 }
 
 function resolveLaunchAgentTarget(plist: LaunchAgentPlist | null): string | null {
