@@ -83,6 +83,7 @@ async function tick(args) {
     console.log('Argus runner tick skipped: runner lock already held.')
     return
   }
+  saveLedger(ledgerPath, ledger)
 
   try {
     ledger = scheduleDueTasks(ledger, buildDefaultTasks(), now)
@@ -91,6 +92,7 @@ async function tick(args) {
       console.log(JSON.stringify({ selected: runnable.map((task) => task.task_id) }, null, 2))
       return
     }
+    saveLedger(ledgerPath, ledger)
 
     for (const task of runnable) {
       if (task.kind === 'browser') {
