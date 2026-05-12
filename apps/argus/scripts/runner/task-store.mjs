@@ -7,6 +7,11 @@ const LEDGER_VERSION = 1
 const MARKETS = ['us', 'uk']
 const RUNNER_LOCK_TTL_MS = 20 * 60 * 1000
 const BROWSER_LANE_LOCK_TTL_MS = 4 * 60 * 60 * 1000
+const RUNNING_TASK_STALE_AFTER_MS = {
+  api: 2 * 60 * 60 * 1000,
+  browser: 4 * 60 * 60 * 1000,
+  publisher: 30 * 60 * 1000,
+}
 const REQUEUEABLE_STATUSES = new Set(['succeeded', 'failed', 'waiting', 'stale'])
 
 const SOURCE_DEFINITIONS = [
@@ -142,6 +147,10 @@ export function scheduleDueTasks(ledger, definitions, now) {
     task.cadence = definition.cadence
     task.freshness_window = `${definition.freshnessWindowMinutes}m`
     task.outputs = [...definition.outputs]
+    if (isRunningTaskStale(task, now)) {
+      markTaskStale(task, nowIso)
+      continue
+    }
     if (REQUEUEABLE_STATUSES.has(task.status) && task.due_at <= nowIso) {
       task.status = 'queued'
       task.lock_owner = null
@@ -329,6 +338,46 @@ function retryMinutesForTask(task) {
     return task.retry_minutes
   }
   return 30
+}
+
+function isRunningTaskStale(task, now) {
+  if (task.status !== 'running') {
+    return false
+  }
+  if (task.started_at === null) {
+    return true
+  }
+
+  const startedAtMs = Date.parse(task.started_at)
+  if (Number.isNaN(startedAtMs)) {
+    return true
+  }
+
+  const ageMs = now.getTime() - startedAtMs
+  return ageMs > staleAfterMsForTaskKind(task.kind)
+}
+
+function staleAfterMsForTaskKind(kind) {
+  const staleAfterMs = RUNNING_TASK_STALE_AFTER_MS[kind]
+  if (staleAfterMs === undefined) {
+    throw new Error(`Unsupported Argus runner task kind: ${kind}`)
+  }
+  return staleAfterMs
+}
+
+function markTaskStale(task, finishedAt) {
+  const staleStartedAt = task.started_at
+  const staleLockOwner = task.lock_owner
+  task.status = 'stale'
+  task.finished_at = finishedAt
+  task.lock_owner = null
+  task.last_error = 'stale-running-task'
+  task.due_at = finishedAt
+  task.metadata = mergeMetadata(task.metadata, {
+    outcome: 'stale-running-task',
+    staleStartedAt,
+    staleLockOwner,
+  })
 }
 
 function mergeMetadata(existing, updates) {

@@ -136,6 +136,8 @@ if [ "$FAILED" -gt 0 ]; then
   RUN_SUMMARY="$FAILED of 4 weekly browser collectors failed: $FAILED_STEPS_CSV"
   RUN_ERROR_MESSAGE="Failed steps: $FAILED_STEPS_CSV"
   log "$RUN_ERROR_MESSAGE"
+  printf '%s\n' "$RUN_ERROR_MESSAGE" >&2
+  tail -120 "$LOG" >&2
 fi
 
 RUN_LOG_ARGS=(
