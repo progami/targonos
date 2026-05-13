@@ -333,6 +333,8 @@ model SkuAlias {
   marketplace        String
   aliasType          String
   value              String
+  normalizedAliasType String
+  normalizedValue     String
   active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
@@ -340,13 +342,16 @@ model SkuAlias {
   canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Cascade)
 
   @@unique([marketplace, aliasType, value])
+  @@unique([marketplace, normalizedAliasType, normalizedValue])
   @@index([canonicalProductId])
   @@index([marketplace])
 }
 
 model PurchaseOrder {
   id           String   @id @default(cuid())
-  internalRef  String   @unique
+  internalRef  String
+  sourceType   String
+  sourceId     String
   supplierRef  String?
   marketplace  String?
   status       String   @default("OPEN")
@@ -356,6 +361,8 @@ model PurchaseOrder {
 
   costLayers PoCostLayer[]
 
+  @@unique([sourceType, sourceId])
+  @@index([internalRef])
   @@index([marketplace])
   @@index([status])
 }
@@ -776,10 +783,24 @@ export type LegacyBillLineMappingRow = {
 export type LegacySubledgerBackfillPlan = {
   productGroups: Array<{ code: string; name: string }>;
   canonicalProducts: Array<{ key: string; name: string; productGroupCode: string }>;
-  skuAliases: Array<{ canonicalProductKey: string; marketplace: string; aliasType: 'SKU' | 'ASIN'; value: string }>;
-  purchaseOrders: Array<{ internalRef: string; marketplace: string; supplierRef: string | null }>;
+  skuAliases: Array<{
+    canonicalProductKey: string;
+    marketplace: string;
+    aliasType: 'SKU' | 'ASIN';
+    value: string;
+    normalizedAliasType: string;
+    normalizedValue: string;
+  }>;
+  purchaseOrders: Array<{
+    internalRef: string;
+    sourceType: 'LEGACY_PO' | 'LEGACY_BILL';
+    sourceId: string;
+    marketplace: string;
+    supplierRef: string | null;
+  }>;
   costLayers: Array<{
-    purchaseOrderInternalRef: string;
+    purchaseOrderSourceType: 'LEGACY_PO' | 'LEGACY_BILL';
+    purchaseOrderSourceId: string;
     canonicalProductKey: string | null;
     component: string;
     quantity: number | null;
@@ -805,6 +826,27 @@ function canonicalProductKeyForSku(input: { marketplace: string; sku: string; as
   const asin = input.asin ? normalizeAliasValue(input.asin) : '';
   if (asin !== '') return `ASIN:${asin}`;
   return `SKU:${input.marketplace}:${normalizeAliasValue(input.sku)}`;
+}
+
+function purchaseOrderKeyForBillMapping(mapping: LegacyBillMappingRow, marketplace: string): {
+  internalRef: string;
+  sourceType: 'LEGACY_PO' | 'LEGACY_BILL';
+  sourceId: string;
+} {
+  const poNumber = mapping.poNumber.trim();
+  if (poNumber !== '') {
+    return {
+      internalRef: poNumber,
+      sourceType: 'LEGACY_PO',
+      sourceId: `${marketplace}:${poNumber}`,
+    };
+  }
+
+  return {
+    internalRef: `UNASSIGNED-BILL-${mapping.qboBillId}`,
+    sourceType: 'LEGACY_BILL',
+    sourceId: mapping.qboBillId,
+  };
 }
 
 export function planLegacySubledgerBackfill(input: {
@@ -847,6 +889,8 @@ export function planLegacySubledgerBackfill(input: {
           marketplace: brand.marketplace,
           aliasType: alias.aliasType,
           value: alias.value.trim(),
+          normalizedAliasType: alias.aliasType,
+          normalizedValue,
         });
       }
     }
@@ -855,8 +899,9 @@ export function planLegacySubledgerBackfill(input: {
   const purchaseOrders = input.billMappings.map((mapping) => {
     const brand = brandsById.get(mapping.brandId);
     if (!brand) throw new Error(`Missing brand for bill mapping ${mapping.id}`);
+    const key = purchaseOrderKeyForBillMapping(mapping, brand.marketplace);
     return {
-      internalRef: mapping.poNumber,
+      ...key,
       marketplace: brand.marketplace,
       supplierRef: null,
     };
@@ -871,9 +916,11 @@ export function planLegacySubledgerBackfill(input: {
     const canonicalProductKey = line.sku
       ? canonicalKeyByLegacySkuValue.get(`${brand.marketplace}:${normalizeAliasValue(line.sku)}`) ?? null
       : null;
+    const purchaseOrderKey = purchaseOrderKeyForBillMapping(mapping, brand.marketplace);
 
     return {
-      purchaseOrderInternalRef: mapping.poNumber,
+      purchaseOrderSourceType: purchaseOrderKey.sourceType,
+      purchaseOrderSourceId: purchaseOrderKey.sourceId,
       canonicalProductKey,
       component: line.component,
       quantity: line.quantity,
@@ -1167,7 +1214,7 @@ async function main() {
       const productGroupId = productGroupIdByCode.get(product.productGroupCode);
       if (!productGroupId) throw new Error(`Missing product group ${product.productGroupCode}`);
       const existingAlias = await tx.skuAlias.findFirst({
-        where: { value: product.key.replace(/^ASIN:/, ''), aliasType: 'ASIN' },
+        where: { normalizedValue: product.key.replace(/^ASIN:/, ''), normalizedAliasType: 'ASIN' },
       });
       const row = existingAlias
         ? await tx.canonicalProduct.update({ where: { id: existingAlias.canonicalProductId }, data: { name: product.name, productGroupId, active: true } })
@@ -1179,23 +1226,54 @@ async function main() {
       const canonicalProductId = canonicalProductIdByKey.get(alias.canonicalProductKey);
       if (!canonicalProductId) throw new Error(`Missing canonical product ${alias.canonicalProductKey}`);
       await tx.skuAlias.upsert({
-        where: { marketplace_aliasType_value: { marketplace: alias.marketplace, aliasType: alias.aliasType, value: alias.value } },
-        create: { canonicalProductId, marketplace: alias.marketplace, aliasType: alias.aliasType, value: alias.value },
-        update: { canonicalProductId, active: true },
+        where: {
+          marketplace_normalizedAliasType_normalizedValue: {
+            marketplace: alias.marketplace,
+            normalizedAliasType: alias.normalizedAliasType,
+            normalizedValue: alias.normalizedValue,
+          },
+        },
+        create: {
+          canonicalProductId,
+          marketplace: alias.marketplace,
+          aliasType: alias.aliasType,
+          value: alias.value,
+          normalizedAliasType: alias.normalizedAliasType,
+          normalizedValue: alias.normalizedValue,
+        },
+        update: {
+          canonicalProductId,
+          aliasType: alias.aliasType,
+          value: alias.value,
+          active: true,
+        },
       });
     }
 
     for (const po of plan.purchaseOrders) {
       await tx.purchaseOrder.upsert({
-        where: { internalRef: po.internalRef },
-        create: { internalRef: po.internalRef, supplierRef: po.supplierRef, marketplace: po.marketplace },
+        where: { sourceType_sourceId: { sourceType: po.sourceType, sourceId: po.sourceId } },
+        create: {
+          internalRef: po.internalRef,
+          sourceType: po.sourceType,
+          sourceId: po.sourceId,
+          supplierRef: po.supplierRef,
+          marketplace: po.marketplace,
+        },
         update: { supplierRef: po.supplierRef, marketplace: po.marketplace },
       });
     }
 
     for (const layer of plan.costLayers) {
       if (layer.canonicalProductKey === null) continue;
-      const purchaseOrder = await tx.purchaseOrder.findUniqueOrThrow({ where: { internalRef: layer.purchaseOrderInternalRef } });
+      const purchaseOrder = await tx.purchaseOrder.findUniqueOrThrow({
+        where: {
+          sourceType_sourceId: {
+            sourceType: layer.purchaseOrderSourceType,
+            sourceId: layer.purchaseOrderSourceId,
+          },
+        },
+      });
       const canonicalProductId = canonicalProductIdByKey.get(layer.canonicalProductKey);
       if (!canonicalProductId) throw new Error(`Missing canonical product ${layer.canonicalProductKey}`);
       const existing = await tx.poCostLayer.findFirst({
