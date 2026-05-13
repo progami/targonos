@@ -11,7 +11,10 @@ import FormControl from '@mui/material/FormControl';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import AssignmentTurnedInIcon from '@mui/icons-material/AssignmentTurnedIn';
+import CategoryIcon from '@mui/icons-material/Category';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -103,8 +106,11 @@ type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
-  { href: '/cogs-inputs', label: 'COGS Inputs', icon: AssignmentTurnedInIcon },
+  { href: '/products', label: 'Products', icon: CategoryIcon },
+  { href: '/purchase-orders', label: 'Purchase Orders', icon: LocalShippingIcon },
+  { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
   { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
+  { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -166,6 +172,7 @@ export function AppHeader() {
           {/* Desktop nav */}
           <Box component="nav" sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', gap: 0.25 }}>
             {NAV_ITEMS.map((item) => {
+              const Icon = item.icon;
               const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
               return (
                 <Link
@@ -176,17 +183,21 @@ export function AppHeader() {
                   <Box
                     sx={{
                       position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
                       whiteSpace: 'nowrap',
                       borderRadius: 2,
-                      px: 1.25,
+                      px: 1,
                       py: 1,
-                      fontSize: '13px',
+                      fontSize: '12.5px',
                       fontWeight: 500,
                       transition: 'all 0.15s',
                       color: isActive ? '#008f87' : 'text.secondary',
                       '&:hover': { color: 'text.primary' },
                     }}
                   >
+                    <Icon sx={{ fontSize: 15, color: isActive ? '#00C2B9' : 'text.disabled' }} />
                     {item.label}
                     {isActive && (
                       <Box

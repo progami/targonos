@@ -1036,13 +1036,16 @@ test('settlement reclass repair is approval-gated and protects source settlement
   assert.equal(source.includes("const BANK_ACCOUNT_TYPES = new Set(['Bank', 'Credit Card']);"), true);
 });
 
-test('plutus primary nav exposes only settlement accounting scope', () => {
+test('plutus primary nav exposes settlement and subledger accounting scope', () => {
   const source = readFileSync('components/app-header.tsx', 'utf8');
 
   for (const expected of [
     "label: 'Settlements'",
-    "label: 'COGS Inputs'",
+    "label: 'Products'",
+    "label: 'Purchase Orders'",
+    "label: 'Inventory Ledger'",
     "label: 'Mappings'",
+    "label: 'QBO Audit'",
     "label: 'Settings'",
   ]) {
     assert.equal(source.includes(expected), true, expected);
@@ -1053,6 +1056,7 @@ test('plutus primary nav exposes only settlement accounting scope', () => {
     "label: 'Exceptions'",
     "label: 'Sources'",
     "label: 'Cashflow'",
+    "label: 'COGS Inputs'",
     "label: 'Accounts & Taxes'",
     "label: 'Setup Wizard'",
     "label: 'Account Taxes'",
@@ -1061,6 +1065,7 @@ test('plutus primary nav exposes only settlement accounting scope', () => {
     "href: '/exceptions'",
     "href: '/data-sources'",
     "href: '/cashflow'",
+    "href: '/cogs-inputs'",
     "href: '/chart-of-accounts'",
   ]) {
     assert.equal(source.includes(removed), false, removed);
@@ -1212,6 +1217,13 @@ test('subledger navigation exposes LMB-style Plutus control surfaces', () => {
   ]) {
     assert.equal(source.includes(expected), true, expected);
   }
+});
+
+test('subledger pages are wired to route wrappers', () => {
+  assert.equal(readFileSync(new URL('../app/products/page.tsx', import.meta.url), 'utf8').includes('ProductsPage'), true);
+  assert.equal(readFileSync(new URL('../app/purchase-orders/page.tsx', import.meta.url), 'utf8').includes('PurchaseOrdersPage'), true);
+  assert.equal(readFileSync(new URL('../app/inventory-ledger/page.tsx', import.meta.url), 'utf8').includes('InventoryLedgerPage'), true);
+  assert.equal(readFileSync(new URL('../app/qbo-audit/page.tsx', import.meta.url), 'utf8').includes('QboAuditPage'), true);
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
