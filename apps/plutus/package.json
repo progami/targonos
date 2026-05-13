@@ -23,10 +23,10 @@
     "settlements:backfill-docnumbers": "tsx scripts/backfill-settlement-doc-numbers.ts",
     "settlements:backfill-fx": "tsx scripts/backfill-settlement-exchange-rates.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
-    "db:push": "prisma db push --schema prisma/schema.prisma",
-    "db:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
-    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
-    "db:studio": "prisma studio --schema prisma/schema.prisma"
+    "db:push": "tsx scripts/require-database-url-schema.ts && prisma db push --schema prisma/schema.prisma",
+    "db:migrate:deploy": "tsx scripts/require-database-url-schema.ts && prisma migrate deploy --schema prisma/schema.prisma",
+    "db:migrate": "tsx scripts/require-database-url-schema.ts && prisma migrate dev --schema prisma/schema.prisma",
+    "db:studio": "tsx scripts/require-database-url-schema.ts && prisma studio --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

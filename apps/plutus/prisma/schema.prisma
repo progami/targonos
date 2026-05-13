@@ -345,25 +345,30 @@ model CanonicalProduct {
 }
 
 model SkuAlias {
-  id                 String   @id @default(cuid())
-  canonicalProductId String
-  marketplace        String
-  aliasType          String
-  value              String
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  canonicalProductId  String
+  marketplace         String
+  aliasType           String
+  value               String
+  normalizedAliasType String
+  normalizedValue     String
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Cascade)
 
   @@unique([marketplace, aliasType, value])
+  @@unique([marketplace, normalizedAliasType, normalizedValue])
   @@index([canonicalProductId])
   @@index([marketplace])
 }
 
 model PurchaseOrder {
   id           String   @id @default(cuid())
-  internalRef  String   @unique
+  internalRef  String
+  sourceType   String
+  sourceId     String
   supplierRef  String?
   marketplace  String?
   status       String   @default("OPEN")
@@ -373,6 +378,8 @@ model PurchaseOrder {
 
   costLayers PoCostLayer[]
 
+  @@unique([sourceType, sourceId])
+  @@index([internalRef])
   @@index([marketplace])
   @@index([status])
 }

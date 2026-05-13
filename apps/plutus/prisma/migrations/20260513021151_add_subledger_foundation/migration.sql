@@ -29,6 +29,8 @@ CREATE TABLE "SkuAlias" (
     "marketplace" TEXT NOT NULL,
     "aliasType" TEXT NOT NULL,
     "value" TEXT NOT NULL,
+    "normalizedAliasType" TEXT NOT NULL,
+    "normalizedValue" TEXT NOT NULL,
     "active" BOOLEAN NOT NULL DEFAULT true,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -40,6 +42,8 @@ CREATE TABLE "SkuAlias" (
 CREATE TABLE "PurchaseOrder" (
     "id" TEXT NOT NULL,
     "internalRef" TEXT NOT NULL,
+    "sourceType" TEXT NOT NULL,
+    "sourceId" TEXT NOT NULL,
     "supplierRef" TEXT,
     "marketplace" TEXT,
     "status" TEXT NOT NULL DEFAULT 'OPEN',
@@ -178,13 +182,19 @@ CREATE INDEX "SkuAlias_marketplace_idx" ON "SkuAlias"("marketplace");
 CREATE UNIQUE INDEX "SkuAlias_marketplace_aliasType_value_key" ON "SkuAlias"("marketplace", "aliasType", "value");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PurchaseOrder_internalRef_key" ON "PurchaseOrder"("internalRef");
+CREATE UNIQUE INDEX "SkuAlias_marketplace_normalizedAliasType_normalizedValue_key" ON "SkuAlias"("marketplace", "normalizedAliasType", "normalizedValue");
+
+-- CreateIndex
+CREATE INDEX "PurchaseOrder_internalRef_idx" ON "PurchaseOrder"("internalRef");
 
 -- CreateIndex
 CREATE INDEX "PurchaseOrder_marketplace_idx" ON "PurchaseOrder"("marketplace");
 
 -- CreateIndex
 CREATE INDEX "PurchaseOrder_status_idx" ON "PurchaseOrder"("status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PurchaseOrder_sourceType_sourceId_key" ON "PurchaseOrder"("sourceType", "sourceId");
 
 -- CreateIndex
 CREATE INDEX "PoCostLayer_purchaseOrderId_idx" ON "PoCostLayer"("purchaseOrderId");
@@ -269,4 +279,3 @@ ALTER TABLE "QboPosting" ADD CONSTRAINT "QboPosting_postingIntentId_fkey" FOREIG
 
 -- AddForeignKey
 ALTER TABLE "QboPostingLineFingerprint" ADD CONSTRAINT "QboPostingLineFingerprint_qboPostingId_fkey" FOREIGN KEY ("qboPostingId") REFERENCES "QboPosting"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
