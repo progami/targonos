@@ -102,6 +102,23 @@ import {
   remapLegacySettlementPath,
 } from '../lib/plutus/legacy-settlement-routes';
 import {
+  buildPlutusLineDescription,
+  buildPlutusTraceMemo,
+  comparePostingFingerprints,
+  fingerprintPostingLines,
+} from '../lib/plutus/subledger/qbo-trace';
+import {
+  resolveCanonicalProductAlias,
+} from '../lib/plutus/subledger/sku-alias';
+import {
+  consumeInventoryMovementsFifo,
+} from '../lib/plutus/subledger/cost-flow';
+import {
+  mapLegacyBrandNameToProductGroupCode,
+  normalizeAliasValue,
+  planLegacySubledgerBackfill,
+} from '../lib/plutus/subledger/backfill';
+import {
   buildPlutusHomeRedirectPath,
   classifyQboRefreshFailure,
   classifyQboVerificationFailure,
@@ -241,6 +258,138 @@ test('buildPlutusHomeRedirectPath preserves qbo callback query params', () => {
   assert.equal(
     buildPlutusHomeRedirectPath({ connected: ['true', 'false'], error: ['invalid_state'] }),
     '/settlements?connected=true&error=invalid_state',
+  );
+});
+
+test('Plutus QBO trace fields are deterministic and minimal', () => {
+  assert.equal(
+    buildPlutusTraceMemo({
+      plutusRef: 'posting_123',
+      source: 'AMZ_SETTLEMENT',
+      market: 'US',
+      period: '2026-05',
+    }),
+    'PLUTUS_REF=posting_123; SOURCE=AMZ_SETTLEMENT; MARKET=US; PERIOD=2026-05',
+  );
+
+  assert.equal(
+    buildPlutusLineDescription({
+      category: 'Amazon Sales - Principal',
+      plutusLineId: 'line_abc',
+    }),
+    'Amazon Sales - Principal; PLUTUS_LINE=line_abc',
+  );
+
+  assert.throws(
+    () => buildPlutusTraceMemo({ plutusRef: '', source: 'AMZ_SETTLEMENT', market: 'US', period: '2026-05' }),
+    /plutusRef is required/,
+  );
+});
+
+test('posting fingerprint comparison detects QBO line drift', () => {
+  const expected = fingerprintPostingLines([
+    { lineId: 'line_1', accountId: '187', amountCents: 1200, description: 'Amazon Sales; PLUTUS_LINE=line_1' },
+    { lineId: 'line_2', accountId: '193', amountCents: -300, description: 'Amazon Seller Fees; PLUTUS_LINE=line_2' },
+  ]);
+
+  const live = fingerprintPostingLines([
+    { lineId: 'line_1', accountId: '187', amountCents: 1200, description: 'Amazon Sales; PLUTUS_LINE=line_1' },
+    { lineId: 'line_2', accountId: '194', amountCents: -300, description: 'Amazon Seller Fees; PLUTUS_LINE=line_2' },
+  ]);
+
+  assert.deepEqual(comparePostingFingerprints(expected, live), {
+    status: 'drifted',
+    missingLineIds: [],
+    extraLineIds: [],
+    changedLineIds: ['line_2'],
+  });
+});
+
+test('SKU alias resolver maps market aliases to canonical products', () => {
+  const aliases = [
+    { canonicalProductId: 'prod_pds_7', marketplace: 'amazon.com', aliasType: 'SKU', value: 'CS-007' },
+    { canonicalProductId: 'prod_pds_7', marketplace: 'amazon.co.uk', aliasType: 'SKU', value: 'CS 007' },
+    { canonicalProductId: 'prod_pds_7', marketplace: 'amazon.com', aliasType: 'ASIN', value: 'B09HXC3NL8' },
+  ];
+
+  assert.equal(resolveCanonicalProductAlias(aliases, 'amazon.com', 'sku', 'cs-007'), 'prod_pds_7');
+  assert.equal(resolveCanonicalProductAlias(aliases, 'amazon.co.uk', 'SKU', 'CS 007'), 'prod_pds_7');
+  assert.equal(resolveCanonicalProductAlias(aliases, 'amazon.com', 'ASIN', 'b09hxc3nl8'), 'prod_pds_7');
+  assert.equal(resolveCanonicalProductAlias(aliases, 'amazon.co.uk', 'ASIN', 'B09HXC3NL8'), null);
+});
+
+test('FIFO inventory movement consumes PO cost layers deterministically', () => {
+  const result = consumeInventoryMovementsFifo({
+    layers: [
+      {
+        id: 'layer_old',
+        canonicalProductId: 'prod_pds_7',
+        receivedDate: '2026-01-01',
+        quantity: 5,
+        componentCostsCents: { manufacturing: 500, freight: 100, duty: 0, mfgAccessories: 50 },
+      },
+      {
+        id: 'layer_new',
+        canonicalProductId: 'prod_pds_7',
+        receivedDate: '2026-02-01',
+        quantity: 10,
+        componentCostsCents: { manufacturing: 2000, freight: 300, duty: 100, mfgAccessories: 0 },
+      },
+    ],
+    movements: [
+      {
+        id: 'sale_1',
+        canonicalProductId: 'prod_pds_7',
+        movementDate: '2026-03-01',
+        movementType: 'SALE',
+        quantity: -7,
+      },
+    ],
+  });
+
+  assert.equal(result.blocks.length, 0);
+  assert.deepEqual(result.movementCosts[0], {
+    movementId: 'sale_1',
+    quantity: 7,
+    manufacturingCents: 900,
+    freightCents: 160,
+    dutyCents: 20,
+    mfgAccessoriesCents: 50,
+  });
+  assert.deepEqual(result.endingLayers.map((layer) => ({ id: layer.id, remainingQuantity: layer.remainingQuantity })), [
+    { id: 'layer_old', remainingQuantity: 0 },
+    { id: 'layer_new', remainingQuantity: 8 },
+  ]);
+});
+
+test('legacy subledger backfill groups current Brand and Sku rows without false PO merges', () => {
+  assert.equal(mapLegacyBrandNameToProductGroupCode('US-PDS'), 'PDS');
+  assert.equal(mapLegacyBrandNameToProductGroupCode('UK-CDS'), 'CDS');
+  assert.equal(normalizeAliasValue(' cs-007 '), 'CS-007');
+
+  const plan = planLegacySubledgerBackfill({
+    brands: [
+      { id: 'brand_us_pds', name: 'US-PDS', marketplace: 'amazon.com', currency: 'USD' },
+      { id: 'brand_uk_pds', name: 'UK-PDS', marketplace: 'amazon.co.uk', currency: 'GBP' },
+    ],
+    skus: [
+      { id: 'sku_us', sku: 'CS-007', asin: 'B09HXC3NL8', productName: 'PDS 7', brandId: 'brand_us_pds' },
+      { id: 'sku_uk', sku: 'CS 007', asin: 'B09HXC3NL8', productName: 'PDS 7', brandId: 'brand_uk_pds' },
+    ],
+    billMappings: [],
+    billLineMappings: [],
+  });
+
+  assert.deepEqual(plan.productGroups.map((group) => group.code), ['PDS']);
+  assert.equal(plan.canonicalProducts.length, 1);
+  assert.deepEqual(
+    plan.skuAliases.map((alias) => [alias.marketplace, alias.aliasType, alias.value]).sort(),
+    [
+      ['amazon.co.uk', 'ASIN', 'B09HXC3NL8'],
+      ['amazon.co.uk', 'SKU', 'CS 007'],
+      ['amazon.com', 'ASIN', 'B09HXC3NL8'],
+      ['amazon.com', 'SKU', 'CS-007'],
+    ],
   );
 });
 
@@ -1024,6 +1173,45 @@ test('cogs input scoping keeps tracked or mapped bills only', () => {
   ];
 
   assert.deepEqual(filterCogsInputRows(rows).map((row) => row.id), ['tracked', 'mapped']);
+});
+
+test('subledger schema defines the structured Plutus-owned tables', () => {
+  const schema = readFileSync(new URL('../prisma/schema.prisma', import.meta.url), 'utf8');
+
+  for (const expected of [
+    'model ProductGroup',
+    'model CanonicalProduct',
+    'model SkuAlias',
+    'model PurchaseOrder',
+    'model PoCostLayer',
+    'model InventoryMovement',
+    'model PostingIntent',
+    'model PostingIntentLine',
+    'model QboPosting',
+    'model QboPostingLineFingerprint',
+  ]) {
+    assert.equal(schema.includes(expected), true, expected);
+  }
+
+  assert.equal(schema.includes('@@unique([marketplace, aliasType, value])'), true);
+  assert.equal(schema.includes('@@unique([sourceType, sourceId])'), true);
+  assert.equal(schema.includes('@@unique([qboTxnType, qboTxnId])'), true);
+});
+
+test('subledger navigation exposes LMB-style Plutus control surfaces', () => {
+  const source = readFileSync(new URL('../components/app-header.tsx', import.meta.url), 'utf8');
+
+  for (const expected of [
+    "label: 'Settlements'",
+    "label: 'Products'",
+    "label: 'Purchase Orders'",
+    "label: 'Inventory Ledger'",
+    "label: 'Mappings'",
+    "label: 'QBO Audit'",
+    "label: 'Settings'",
+  ]) {
+    assert.equal(source.includes(expected), true, expected);
+  }
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
