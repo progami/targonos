@@ -1213,8 +1213,16 @@ async function main() {
     for (const product of plan.canonicalProducts) {
       const productGroupId = productGroupIdByCode.get(product.productGroupCode);
       if (!productGroupId) throw new Error(`Missing product group ${product.productGroupCode}`);
+      const [productKeyType, ...productKeyParts] = product.key.split(':');
+      const productKeyValue = productKeyParts.join(':');
+      if (productKeyType !== 'ASIN' && productKeyType !== 'SKU') {
+        throw new Error(`Unsupported canonical product key ${product.key}`);
+      }
       const existingAlias = await tx.skuAlias.findFirst({
-        where: { normalizedValue: product.key.replace(/^ASIN:/, ''), normalizedAliasType: 'ASIN' },
+        where: {
+          normalizedAliasType: productKeyType,
+          normalizedValue: productKeyValue,
+        },
       });
       const row = existingAlias
         ? await tx.canonicalProduct.update({ where: { id: existingAlias.canonicalProductId }, data: { name: product.name, productGroupId, active: true } })

@@ -29,7 +29,7 @@ test('talos package exposes a deploy-safe prisma migrate command', () => {
 test('plutus package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
     plutusPackage.scripts['db:migrate:deploy'],
-    'prisma migrate deploy --schema prisma/schema.prisma',
+    'tsx scripts/require-database-url-schema.ts && prisma migrate deploy --schema prisma/schema.prisma',
   )
 })
 
