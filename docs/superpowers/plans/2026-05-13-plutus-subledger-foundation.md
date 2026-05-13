@@ -1214,14 +1214,28 @@ async function main() {
       const productGroupId = productGroupIdByCode.get(product.productGroupCode);
       if (!productGroupId) throw new Error(`Missing product group ${product.productGroupCode}`);
       const [productKeyType, ...productKeyParts] = product.key.split(':');
-      const productKeyValue = productKeyParts.join(':');
       if (productKeyType !== 'ASIN' && productKeyType !== 'SKU') {
         throw new Error(`Unsupported canonical product key ${product.key}`);
       }
+      const productAliasLookup = (() => {
+        if (productKeyType === 'ASIN') {
+          return {
+            normalizedAliasType: 'ASIN',
+            normalizedValue: productKeyParts.join(':'),
+          };
+        }
+        if (productKeyParts.length < 2) {
+          throw new Error(`Unsupported SKU canonical product key ${product.key}`);
+        }
+        return {
+          marketplace: productKeyParts[0]!,
+          normalizedAliasType: 'SKU',
+          normalizedValue: productKeyParts.slice(1).join(':'),
+        };
+      })();
       const existingAlias = await tx.skuAlias.findFirst({
         where: {
-          normalizedAliasType: productKeyType,
-          normalizedValue: productKeyValue,
+          ...productAliasLookup,
         },
       });
       const row = existingAlias
