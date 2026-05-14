@@ -125,6 +125,93 @@ function isBankFeeAccount(account: string): boolean {
   return ACCEPTED_FEE_ACCOUNT_CUES.some((cue) => lower.includes(cue));
 }
 
+function parseTraceFields(description: string): Map<string, string> {
+  const fields = new Map<string, string>();
+  for (const part of description.split(';')) {
+    const delimiterIndex = part.indexOf(':');
+    if (delimiterIndex === -1) {
+      continue;
+    }
+    const key = part.slice(0, delimiterIndex).trim().toLowerCase();
+    const value = part.slice(delimiterIndex + 1).trim();
+    if (key !== '') {
+      fields.set(key, value);
+    }
+  }
+  return fields;
+}
+
+function hasRequiredValue(value: string | undefined, allowNa: boolean): boolean {
+  if (value === undefined) {
+    return false;
+  }
+  const trimmed = value.trim();
+  if (trimmed === '') {
+    return false;
+  }
+  if (allowNa) {
+    return true;
+  }
+  return trimmed.toUpperCase() !== 'N/A';
+}
+
+function hasCogsTraceDescription(description: string): boolean {
+  const fields = parseTraceFields(description);
+  return (
+    hasRequiredValue(fields.get('sku'), false) &&
+    hasRequiredValue(fields.get('internal po'), false) &&
+    hasRequiredValue(fields.get('external pi'), false)
+  );
+}
+
+function hasWarehousingTraceDescription(description: string): boolean {
+  const fields = parseTraceFields(description);
+  return (
+    hasRequiredValue(fields.get('sku'), true) &&
+    hasRequiredValue(fields.get('internal po'), true) &&
+    hasRequiredValue(fields.get('external pi'), false) &&
+    hasRequiredValue(fields.get('service period'), false)
+  );
+}
+
+function isPlutusCogsTransaction(tx: NormalizedAuditTransaction): boolean {
+  if (tx.transactionType !== 'JournalEntry') {
+    return false;
+  }
+  if (tx.privateNote === null) {
+    return false;
+  }
+  return tx.privateNote.trim().toLowerCase().startsWith('plutus cogs |');
+}
+
+function hasMissingCogsTraceLine(tx: NormalizedAuditTransaction): boolean {
+  if (tx.lineDescriptions.length === 0) {
+    return true;
+  }
+  return tx.lineDescriptions.some((description) => !hasCogsTraceDescription(description));
+}
+
+function isWarehousingTraceAccount(account: string): boolean {
+  const lower = account.toLowerCase();
+  return ['warehousing:3pl', 'warehousing:awd', '3pl -', 'awd -'].some((cue) => lower.includes(cue));
+}
+
+function hasMissingWarehousingTraceLine(tx: NormalizedAuditTransaction): boolean {
+  const postingLines = tx.postingLines;
+  if (postingLines !== undefined && postingLines.length > 0) {
+    const warehousingLines = postingLines.filter((line) => isWarehousingTraceAccount(line.account));
+    if (warehousingLines.length === 0) {
+      return false;
+    }
+    return warehousingLines.some((line) => !hasWarehousingTraceDescription(line.description));
+  }
+
+  if (tx.lineDescriptions.length === 0) {
+    return true;
+  }
+  return tx.lineDescriptions.some((description) => !hasWarehousingTraceDescription(description));
+}
+
 function isLikelyBankCardFee(tx: NormalizedAuditTransaction): boolean {
   const text = `${tx.counterparty || ''} ${tx.privateNote || ''} ${tx.lineDescriptions.join(' ')}`.toLowerCase();
   const hasFeeCue = FEE_CUES.some((cue) => text.includes(cue));
@@ -222,6 +309,32 @@ export function classifyAuditExceptions(
         'Bill has no attachment.',
         'Attach the supporting invoice.',
         'missing',
+      );
+    }
+
+    if (isPlutusCogsTransaction(tx) && hasMissingCogsTraceLine(tx)) {
+      pushFinding(
+        findings,
+        tx,
+        'COGS_TRACE_METADATA_MISSING',
+        'traceability_controls',
+        'High',
+        'Plutus COGS journal line is missing SKU, Internal PO, or External PI trace metadata.',
+        'Regenerate from PO-layer inventory trace before posting.',
+        'not_required',
+      );
+    }
+
+    if (tx.postingAccounts.some((account) => isWarehousingTraceAccount(account)) && hasMissingWarehousingTraceLine(tx)) {
+      pushFinding(
+        findings,
+        tx,
+        'WAREHOUSING_TRACE_METADATA_MISSING',
+        'traceability_controls',
+        'High',
+        'Warehousing line is missing explicit SKU, Internal PO, External PI, or Service Period trace metadata.',
+        'Add SKU/Internal PO/External PI/Service Period trace to each warehousing line.',
+        'not_required',
       );
     }
 

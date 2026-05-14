@@ -21,42 +21,50 @@ type QboTransfer = {
   };
 };
 
-function collectPurchasePostingAccounts(purchase: QboPurchase): string[] {
-  const accounts: string[] = [];
+type NormalizedPostingLine = NonNullable<NormalizedAuditTransaction['postingLines']>[number];
+type ExpenseLineForAudit = {
+  Description?: string;
+  AccountBasedExpenseLineDetail?: {
+    AccountRef: {
+      name?: string;
+    };
+  };
+  ItemBasedExpenseLineDetail?: {
+    AccountRef?: {
+      name?: string;
+    };
+  };
+};
 
-  for (const line of purchase.Line ?? []) {
-    const accountName =
-      line.AccountBasedExpenseLineDetail?.AccountRef.name ??
-      line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
-      null;
+function expenseLineAccountName(line: ExpenseLineForAudit): string | null {
+  return (
+    line.AccountBasedExpenseLineDetail?.AccountRef.name ??
+    line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
+    null
+  );
+}
 
+function collectExpensePostingLines(lines: ExpenseLineForAudit[]): NormalizedPostingLine[] {
+  const postingLines: NormalizedPostingLine[] = [];
+
+  for (const line of lines) {
+    const accountName = expenseLineAccountName(line);
     if (accountName !== null) {
-      accounts.push(accountName);
+      postingLines.push({
+        account: accountName,
+        description: line.Description ?? '',
+      });
     }
   }
 
-  return accounts;
+  return postingLines;
 }
 
-function collectJournalEntryPostingAccounts(journalEntry: QboJournalEntry): string[] {
-  return journalEntry.Line.map((line) => line.JournalEntryLineDetail.AccountRef.name ?? '');
-}
-
-function collectBillPostingAccounts(bill: QboBill): string[] {
-  const accounts: string[] = [];
-
-  for (const line of bill.Line ?? []) {
-    const accountName =
-      line.AccountBasedExpenseLineDetail?.AccountRef.name ??
-      line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
-      null;
-
-    if (accountName !== null) {
-      accounts.push(accountName);
-    }
-  }
-
-  return accounts;
+function collectJournalEntryPostingLines(journalEntry: QboJournalEntry): NormalizedPostingLine[] {
+  return journalEntry.Line.map((line) => ({
+    account: line.JournalEntryLineDetail.AccountRef.name ?? '',
+    description: line.Description ?? '',
+  }));
 }
 
 function collectTransferPostingAccounts(transfer: QboTransfer): string[] {
@@ -84,6 +92,8 @@ export function normalizePurchaseForAudit(
   purchase: QboPurchase,
   attachmentFileNames: string[],
 ): NormalizedAuditTransaction {
+  const postingLines = collectExpensePostingLines(purchase.Line ?? []);
+
   return {
     transactionType: 'Purchase',
     transactionId: purchase.Id,
@@ -94,8 +104,9 @@ export function normalizePurchaseForAudit(
     docNumber: purchase.DocNumber ?? null,
     privateNote: purchase.PrivateNote ?? null,
     dueDate: null,
-    postingAccounts: collectPurchasePostingAccounts(purchase),
+    postingAccounts: postingLines.map((line) => line.account),
     lineDescriptions: collectLineDescriptions(purchase.Line ?? []),
+    postingLines,
     attachmentFileNames,
     isInReconciledPeriod: null,
     lastUpdatedTime: purchase.MetaData?.LastUpdatedTime ?? null,
@@ -107,6 +118,8 @@ export function normalizeJournalEntryForAudit(
   journalEntry: QboJournalEntry,
   attachmentFileNames: string[],
 ): NormalizedAuditTransaction {
+  const postingLines = collectJournalEntryPostingLines(journalEntry);
+
   return {
     transactionType: 'JournalEntry',
     transactionId: journalEntry.Id,
@@ -117,8 +130,9 @@ export function normalizeJournalEntryForAudit(
     docNumber: journalEntry.DocNumber ?? null,
     privateNote: journalEntry.PrivateNote ?? null,
     dueDate: null,
-    postingAccounts: collectJournalEntryPostingAccounts(journalEntry),
+    postingAccounts: postingLines.map((line) => line.account),
     lineDescriptions: collectLineDescriptions(journalEntry.Line),
+    postingLines,
     attachmentFileNames,
     isInReconciledPeriod: null,
     lastUpdatedTime: journalEntry.MetaData?.LastUpdatedTime ?? null,
@@ -130,6 +144,8 @@ export function normalizeBillForAudit(
   bill: QboBill,
   attachmentFileNames: string[],
 ): NormalizedAuditTransaction {
+  const postingLines = collectExpensePostingLines(bill.Line ?? []);
+
   return {
     transactionType: 'Bill',
     transactionId: bill.Id,
@@ -140,8 +156,9 @@ export function normalizeBillForAudit(
     docNumber: bill.DocNumber ?? null,
     privateNote: bill.PrivateNote ?? null,
     dueDate: bill.DueDate ?? null,
-    postingAccounts: collectBillPostingAccounts(bill),
+    postingAccounts: postingLines.map((line) => line.account),
     lineDescriptions: collectLineDescriptions(bill.Line ?? []),
+    postingLines,
     attachmentFileNames,
     isInReconciledPeriod: null,
     lastUpdatedTime: bill.MetaData?.LastUpdatedTime ?? null,

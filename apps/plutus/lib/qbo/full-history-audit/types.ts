@@ -13,6 +13,8 @@ export type AuditRuleId =
   | 'OWNER_ACTIVITY_MISCLASSIFIED'
   | 'BANK_FEE_MISCLASSIFIED'
   | 'CURRENCY_COUNTERPARTY_MISMATCH'
+  | 'COGS_TRACE_METADATA_MISSING'
+  | 'WAREHOUSING_TRACE_METADATA_MISSING'
   | 'LIKELY_DUPLICATE'
   | 'UNRESOLVED_CONTROL_ACCOUNT_ACTIVITY'
   | 'POST_RECONCILE_MODIFICATION';
@@ -29,6 +31,10 @@ export interface NormalizedAuditTransaction {
   dueDate: string | null;
   postingAccounts: string[];
   lineDescriptions: string[];
+  postingLines?: Array<{
+    account: string;
+    description: string;
+  }>;
   attachmentFileNames: string[];
   isInReconciledPeriod: boolean | null;
   lastUpdatedTime: string | null;

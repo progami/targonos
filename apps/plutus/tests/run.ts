@@ -2500,7 +2500,7 @@ test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch
   );
 });
 
-test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
+test('buildCogsJournalLines blocks inventory COGS without SKU PO PI trace', () => {
   const blocks: ProcessingBlock[] = [];
   const accounts: QboAccount[] = [
     {
@@ -2565,10 +2565,99 @@ test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
     },
   );
 
-  assert.equal(lines.length, 2);
-  assert.equal(lines[0]?.description, 'Manufacturing COGS | SKUs CS-007:$82.30, CS-010:$41.15');
-  assert.equal(lines[1]?.description, 'Manufacturing inventory | SKUs CS-007:$82.30, CS-010:$41.15');
+  assert.equal(lines.length, 0);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0]?.code, 'COGS_TRACE_METADATA_MISSING');
+});
+
+test('buildCogsJournalLines emits one traced COGS pair per SKU PO PI layer', () => {
+  const blocks: ProcessingBlock[] = [];
+  const accounts: QboAccount[] = [
+    {
+      Id: '203',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+    },
+    {
+      Id: '211',
+      SyncToken: '0',
+      Name: 'Manufacturing',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+    },
+    {
+      Id: '209',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Other Current Asset',
+      AccountSubType: 'Inventory',
+      ParentRef: { value: '203', name: 'Manufacturing' },
+    },
+    {
+      Id: '217',
+      SyncToken: '0',
+      Name: 'Manufacturing - US-PDS',
+      AccountType: 'Cost of Goods Sold',
+      AccountSubType: 'SuppliesMaterialsCogs',
+      ParentRef: { value: '211', name: 'Manufacturing' },
+    },
+  ];
+
+  const lines = buildCogsJournalLines(
+    {
+      'US-PDS': {
+        manufacturing: 12345,
+        freight: 0,
+        duty: 0,
+        mfgAccessories: 0,
+      },
+    },
+    ['US-PDS'],
+    {
+      invManufacturing: '203',
+      cogsManufacturing: '211',
+    },
+    accounts,
+    'INV-COGS-1',
+    blocks,
+    {
+      'US-PDS': {
+        manufacturing: {
+          'CS-007': 8230,
+          'CS-010': 4115,
+        },
+        freight: {},
+        duty: {},
+        mfgAccessories: {},
+      },
+    },
+    {
+      'US-PDS': {
+        manufacturing: [
+          { sku: 'CS-007', internalPo: 'PO-19-PDS', externalPi: 'PI-PDS-19', amountCents: 8230 },
+          { sku: 'CS-010', internalPo: 'PO-20-PDS', externalPi: 'PI-PDS-20', amountCents: 4115 },
+        ],
+      },
+    },
+  );
+
   assert.equal(blocks.length, 0);
+  assert.equal(lines.length, 4);
+  assert.equal(
+    lines[0]?.description,
+    'Manufacturing COGS; SKU: CS-007; Internal PO: PO-19-PDS; External PI: PI-PDS-19',
+  );
+  assert.equal(
+    lines[1]?.description,
+    'Manufacturing inventory; SKU: CS-007; Internal PO: PO-19-PDS; External PI: PI-PDS-19',
+  );
+  assert.equal(lines[2]?.amountCents, 4115);
+  assert.equal(
+    lines[2]?.description,
+    'Manufacturing COGS; SKU: CS-010; Internal PO: PO-20-PDS; External PI: PI-PDS-20',
+  );
 });
 
 test('settlement processing no longer builds brand or SKU P&L reclass lines', () => {
@@ -3989,6 +4078,136 @@ test('audit flags bank fee activity from note and line description cues', () => 
 
   const findings = classifyAuditExceptions([tx]);
   assert.deepEqual(ruleIds(findings), ['BANK_FEE_MISCLASSIFIED']);
+});
+
+test('audit flags Plutus COGS journal lines missing SKU PO PI trace', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'JournalEntry',
+    transactionId: 'COGS1',
+    txnDate: '2026-05-01',
+    amount: 123.45,
+    currency: 'USD',
+    counterparty: null,
+    docNumber: 'CUS-260501-S1',
+    privateNote: 'Plutus COGS | Invoice: US-260501-S1 | Hash: abc123',
+    dueDate: null,
+    postingAccounts: ['Manufacturing - US-PDS', 'Manufacturing - US-PDS'],
+    lineDescriptions: [
+      'Manufacturing COGS | SKUs CS-007:$82.30, CS-010:$41.15',
+      'Manufacturing inventory | SKUs CS-007:$82.30, CS-010:$41.15',
+    ],
+    attachmentFileNames: [],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-05-01T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), ['COGS_TRACE_METADATA_MISSING']);
+});
+
+test('audit accepts traced Plutus COGS and period warehousing descriptions', () => {
+  const cogs: NormalizedAuditTransaction = {
+    transactionType: 'JournalEntry',
+    transactionId: 'COGS2',
+    txnDate: '2026-05-02',
+    amount: 82.3,
+    currency: 'USD',
+    counterparty: null,
+    docNumber: 'CUS-260502-S1',
+    privateNote: 'Plutus COGS | Invoice: US-260502-S1 | Hash: abc123',
+    dueDate: null,
+    postingAccounts: ['Manufacturing - US-PDS', 'Manufacturing - US-PDS'],
+    lineDescriptions: [
+      'Manufacturing COGS; SKU: CS-007; Internal PO: PO-19-PDS; External PI: PI-PDS-19',
+      'Manufacturing inventory; SKU: CS-007; Internal PO: PO-19-PDS; External PI: PI-PDS-19',
+    ],
+    attachmentFileNames: [],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-05-02T10:00:00Z',
+    sourceTag: null,
+  };
+  const warehousing: NormalizedAuditTransaction = {
+    transactionType: 'Bill',
+    transactionId: 'WH1',
+    txnDate: '2026-05-03',
+    amount: 77,
+    currency: 'USD',
+    counterparty: '3PL Warehouse',
+    docNumber: 'WH-2026-W17',
+    privateNote: 'Weekly 3PL charges',
+    dueDate: '2026-05-10',
+    postingAccounts: ['Warehousing:3PL:3PL - US-PDS'],
+    lineDescriptions: [
+      'SKU: N/A; Internal PO: N/A; External PI: WH-2026-W17; Service Period: W17 2026',
+    ],
+    attachmentFileNames: ['wh-2026-w17.pdf'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-05-03T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([cogs, warehousing]);
+  assert.deepEqual(ruleIds(findings), []);
+});
+
+test('audit flags warehousing lines missing explicit period trace', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Bill',
+    transactionId: 'WH2',
+    txnDate: '2026-05-04',
+    amount: 99,
+    currency: 'USD',
+    counterparty: '3PL Warehouse',
+    docNumber: 'WH-2026-W18',
+    privateNote: 'Weekly 3PL charges',
+    dueDate: '2026-05-11',
+    postingAccounts: ['Warehousing:3PL:3PL - US-PDS'],
+    lineDescriptions: ['Charges for week 18 2026'],
+    attachmentFileNames: ['wh-2026-w18.pdf'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-05-04T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), ['WAREHOUSING_TRACE_METADATA_MISSING']);
+});
+
+test('audit validates warehousing trace only on warehousing lines in mixed bills', () => {
+  const tx: NormalizedAuditTransaction = {
+    transactionType: 'Bill',
+    transactionId: 'WH3',
+    txnDate: '2026-05-05',
+    amount: 150,
+    currency: 'USD',
+    counterparty: '3PL Warehouse',
+    docNumber: 'WH-2026-W19',
+    privateNote: 'Weekly 3PL and supplies',
+    dueDate: '2026-05-12',
+    postingAccounts: ['Warehousing:3PL:3PL - US-PDS', 'Office Supplies'],
+    lineDescriptions: [
+      'SKU: N/A; Internal PO: N/A; External PI: WH-2026-W19; Service Period: W19 2026',
+      'Tape and labels',
+    ],
+    postingLines: [
+      {
+        account: 'Warehousing:3PL:3PL - US-PDS',
+        description: 'SKU: N/A; Internal PO: N/A; External PI: WH-2026-W19; Service Period: W19 2026',
+      },
+      {
+        account: 'Office Supplies',
+        description: 'Tape and labels',
+      },
+    ],
+    attachmentFileNames: ['wh-2026-w19.pdf'],
+    isInReconciledPeriod: false,
+    lastUpdatedTime: '2026-05-05T10:00:00Z',
+    sourceTag: null,
+  };
+
+  const findings = classifyAuditExceptions([tx]);
+  assert.deepEqual(ruleIds(findings), []);
 });
 
 test('audit accepts merchant processing fee accounts', () => {
