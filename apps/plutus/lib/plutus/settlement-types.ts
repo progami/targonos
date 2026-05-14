@@ -9,6 +9,7 @@ export type ProcessingBlock =
         | 'AUDIT_NET_SCALE_SUSPECT'
         | 'MISSING_ACCOUNT_MAPPING'
         | 'MISSING_BRAND_SUBACCOUNT'
+        | 'COGS_TRACE_METADATA_MISSING'
         | 'ALREADY_PROCESSED'
         | 'INVOICE_CONFLICT'
         | 'ORDER_ALREADY_PROCESSED'

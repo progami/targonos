@@ -3,36 +3,74 @@ import type { InventoryComponent } from '@/lib/inventory/ledger';
 import type { ProcessingBlock, JournalEntryLinePreview } from './settlement-types';
 import { findRequiredSubAccountId } from './settlement-validation';
 
-function formatCents(cents: number): string {
-  const sign = cents < 0 ? '-' : '';
-  const abs = Math.abs(cents);
-  return `${sign}$${(abs / 100).toFixed(2)}`;
+export type CogsTraceLine = {
+  sku: string;
+  internalPo: string;
+  externalPi: string;
+  amountCents: number;
+};
+
+export type CogsTraceLinesByBrandComponent = Partial<Record<string, Partial<Record<InventoryComponent, CogsTraceLine[]>>>>;
+
+function componentLabels(component: InventoryComponent): {
+  invParentKey: string;
+  cogsParentKey: string;
+  invLabel: string;
+  cogsLabel: string;
+} {
+  if (component === 'manufacturing') {
+    return {
+      invParentKey: 'invManufacturing',
+      cogsParentKey: 'cogsManufacturing',
+      invLabel: 'Manufacturing',
+      cogsLabel: 'Manufacturing',
+    };
+  }
+  if (component === 'freight') {
+    return {
+      invParentKey: 'invFreight',
+      cogsParentKey: 'cogsFreight',
+      invLabel: 'Freight',
+      cogsLabel: 'Freight',
+    };
+  }
+  if (component === 'duty') {
+    return {
+      invParentKey: 'invDuty',
+      cogsParentKey: 'cogsDuty',
+      invLabel: 'Duty',
+      cogsLabel: 'Duty',
+    };
+  }
+
+  return {
+    invParentKey: 'invMfgAccessories',
+    cogsParentKey: 'cogsMfgAccessories',
+    invLabel: 'Mfg Accessories',
+    cogsLabel: 'Mfg Accessories',
+  };
 }
 
-function buildSkuBreakdownSuffix(skuBreakdown: Record<string, number> | undefined): string {
-  if (!skuBreakdown) {
-    return '';
-  }
+function hasRequiredTraceValue(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed !== '' && trimmed.toUpperCase() !== 'N/A';
+}
 
-  const entries = Object.entries(skuBreakdown).filter((entry) => entry[1] !== 0);
-  if (entries.length === 0) {
-    return '';
-  }
+function traceDescription(label: string, suffix: string, trace: CogsTraceLine): string {
+  return `${label}${suffix}; SKU: ${trace.sku.trim()}; Internal PO: ${trace.internalPo.trim()}; External PI: ${trace.externalPi.trim()}`;
+}
 
-  entries.sort((a, b) => {
-    const delta = Math.abs(b[1]) - Math.abs(a[1]);
-    if (delta !== 0) return delta;
-    return a[0].localeCompare(b[0]);
+function addTraceBlock(
+  blocks: ProcessingBlock[],
+  brand: string,
+  component: InventoryComponent,
+  details: Record<string, string | number>,
+): void {
+  blocks.push({
+    code: 'COGS_TRACE_METADATA_MISSING',
+    message: 'COGS line missing SKU PO PI trace metadata',
+    details: { brand, component, ...details },
   });
-
-  const maxShown = 4;
-  const shown = entries.slice(0, maxShown).map((entry) => `${entry[0]}:${formatCents(entry[1])}`);
-  const hiddenCount = entries.length - shown.length;
-  if (hiddenCount > 0) {
-    shown.push(`+${hiddenCount} more`);
-  }
-
-  return ` | SKUs ${shown.join(', ')}`;
 }
 
 export function buildCogsJournalLines(
@@ -42,7 +80,8 @@ export function buildCogsJournalLines(
   accounts: QboAccount[],
   _invoiceId: string,
   blocks: ProcessingBlock[],
-  skuBreakdownByBrandComponent?: Record<string, Record<InventoryComponent, Record<string, number>>>,
+  _skuBreakdownByBrandComponent?: Record<string, Record<InventoryComponent, Record<string, number>>>,
+  traceLinesByBrandComponent?: CogsTraceLinesByBrandComponent,
 ): JournalEntryLinePreview[] {
   const cogsLines: JournalEntryLinePreview[] = [];
 
@@ -54,41 +93,7 @@ export function buildCogsJournalLines(
       const cents = componentTotals[component];
       if (cents === 0) continue;
 
-      const invParentKey =
-        component === 'manufacturing'
-          ? 'invManufacturing'
-          : component === 'freight'
-            ? 'invFreight'
-            : component === 'duty'
-              ? 'invDuty'
-              : 'invMfgAccessories';
-
-      const cogsParentKey =
-        component === 'manufacturing'
-          ? 'cogsManufacturing'
-          : component === 'freight'
-            ? 'cogsFreight'
-            : component === 'duty'
-              ? 'cogsDuty'
-              : 'cogsMfgAccessories';
-
-      const invLabel =
-        component === 'manufacturing'
-          ? 'Manufacturing'
-          : component === 'freight'
-            ? 'Freight'
-            : component === 'duty'
-              ? 'Duty'
-              : 'Mfg Accessories';
-
-      const cogsLabel =
-        component === 'manufacturing'
-          ? 'Manufacturing'
-          : component === 'freight'
-            ? 'Freight'
-            : component === 'duty'
-              ? 'Duty'
-              : 'Mfg Accessories';
+      const { invParentKey, cogsParentKey, invLabel, cogsLabel } = componentLabels(component);
 
       const invSubName = `${invLabel} - ${brand}`;
       const cogsSubName = `${cogsLabel} - ${brand}`;
@@ -112,40 +117,71 @@ export function buildCogsJournalLines(
         continue;
       }
 
-      const absCents = Math.abs(cents);
-      const componentBreakdown = skuBreakdownByBrandComponent ? skuBreakdownByBrandComponent[brand] : undefined;
-      const skuBreakdown = componentBreakdown ? componentBreakdown[component] : undefined;
-      const skuSuffix = buildSkuBreakdownSuffix(skuBreakdown);
-      if (cents > 0) {
-        // Sale: Debit COGS, Credit Inventory
-        cogsLines.push({
-          accountId: cogsAccount.id,
-          accountName: cogsAccount.name,
-          accountFullyQualifiedName: cogsAccount.fullyQualifiedName,
-          accountNumber: cogsAccount.acctNum,
-          postingType: 'Debit',
-          amountCents: absCents,
-          description: `${cogsLabel} COGS${skuSuffix}`,
-        });
+      const traceByComponent = traceLinesByBrandComponent ? traceLinesByBrandComponent[brand] : undefined;
+      const traceLines = traceByComponent ? traceByComponent[component] : undefined;
+      if (!traceLines || traceLines.length === 0) {
+        addTraceBlock(blocks, brand, component, { expectedCents: cents });
+        continue;
+      }
+
+      let traceCents = 0;
+      let hasInvalidTrace = false;
+      traceLines.forEach((trace, index) => {
+        if (
+          !hasRequiredTraceValue(trace.sku) ||
+          !hasRequiredTraceValue(trace.internalPo) ||
+          !hasRequiredTraceValue(trace.externalPi) ||
+          !Number.isFinite(trace.amountCents) ||
+          !Number.isInteger(trace.amountCents) ||
+          trace.amountCents === 0
+        ) {
+          hasInvalidTrace = true;
+          addTraceBlock(blocks, brand, component, { traceIndex: index });
+        }
+        traceCents += trace.amountCents;
+      });
+      if (hasInvalidTrace) {
+        continue;
+      }
+      if (traceCents !== cents) {
+        addTraceBlock(blocks, brand, component, { expectedCents: cents, traceCents });
+        continue;
+      }
+
+      for (const trace of traceLines) {
+        const absCents = Math.abs(trace.amountCents);
+        if (trace.amountCents > 0) {
+          // Sale: Debit COGS, Credit Inventory.
+          cogsLines.push({
+            accountId: cogsAccount.id,
+            accountName: cogsAccount.name,
+            accountFullyQualifiedName: cogsAccount.fullyQualifiedName,
+            accountNumber: cogsAccount.acctNum,
+            postingType: 'Debit',
+            amountCents: absCents,
+            description: traceDescription(`${cogsLabel} COGS`, '', trace),
+          });
+          cogsLines.push({
+            accountId: invAccount.id,
+            accountName: invAccount.name,
+            accountFullyQualifiedName: invAccount.fullyQualifiedName,
+            accountNumber: invAccount.acctNum,
+            postingType: 'Credit',
+            amountCents: absCents,
+            description: traceDescription(`${invLabel} inventory`, '', trace),
+          });
+          continue;
+        }
+
+        // Return: Debit Inventory, Credit COGS.
         cogsLines.push({
           accountId: invAccount.id,
           accountName: invAccount.name,
           accountFullyQualifiedName: invAccount.fullyQualifiedName,
           accountNumber: invAccount.acctNum,
-          postingType: 'Credit',
-          amountCents: absCents,
-          description: `${invLabel} inventory${skuSuffix}`,
-        });
-      } else {
-        // Return: Debit Inventory, Credit COGS
-        cogsLines.push({
-          accountId: invAccount.id,
-          accountName: invAccount.name,
-          accountFullyQualifiedName: invAccount.fullyQualifiedName,
-          accountNumber: invAccount.acctNum,
           postingType: 'Debit',
           amountCents: absCents,
-          description: `${invLabel} inventory (return)${skuSuffix}`,
+          description: traceDescription(`${invLabel} inventory`, ' (return)', trace),
         });
         cogsLines.push({
           accountId: cogsAccount.id,
@@ -154,7 +190,7 @@ export function buildCogsJournalLines(
           accountNumber: cogsAccount.acctNum,
           postingType: 'Credit',
           amountCents: absCents,
-          description: `${cogsLabel} COGS (return)${skuSuffix}`,
+          description: traceDescription(`${cogsLabel} COGS`, ' (return)', trace),
         });
       }
     }
