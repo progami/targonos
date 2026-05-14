@@ -16,9 +16,7 @@ export type ProcessingBlock =
         | 'REFUND_ADJUSTMENT'
         | 'REFUND_PARTIAL'
         | 'BILLS_FETCH_ERROR'
-        | 'BILLS_PARSE_ERROR'
-        | 'PNL_ALLOCATION_ERROR'
-        | 'PNL_ALLOCATION_SOURCE_GAP';
+        | 'BILLS_PARSE_ERROR';
       message: string;
       details?: Record<string, string | number>;
     };

@@ -6,6 +6,7 @@ import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import { fromCents } from '@/lib/inventory/money';
 import { buildNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { computeProcessingHash } from '@/lib/plutus/settlement-validation';
 
 type DbClient = typeof import('@/lib/db').db;
 type ComputeSettlementPreview = typeof import('@/lib/plutus/settlement-processing').computeSettlementPreview;
@@ -159,25 +160,6 @@ function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP
   throw new Error(`Unsupported marketplace for settlement currency: ${marketplace}`);
 }
 
-async function chooseAuditUploadForProcessing(input: {
-  db: DbClient;
-  sourceFilename: string;
-  processedAt: Date;
-}): Promise<{ uploadId: string; sourceFilename: string }> {
-  const uploads = await input.db.auditDataUpload.findMany({
-    where: { filename: input.sourceFilename },
-    orderBy: { uploadedAt: 'desc' },
-    select: { id: true, filename: true, uploadedAt: true },
-  });
-
-  const chosen = uploads.find((u) => u.uploadedAt <= input.processedAt);
-  if (!chosen) {
-    throw new Error(`Missing audit upload for filename ${input.sourceFilename} at or before ${input.processedAt.toISOString()}`);
-  }
-
-  return { uploadId: chosen.id, sourceFilename: chosen.filename };
-}
-
 async function loadAuditRowsForProcessing(input: {
   db: DbClient;
   invoiceId: string;
@@ -185,16 +167,24 @@ async function loadAuditRowsForProcessing(input: {
   sourceFilename: string;
   processedAt: Date;
 }): Promise<{ rows: SettlementAuditRow[]; sourceFilename: string }> {
-  const market = input.marketplace === 'amazon.com' ? 'us' : 'uk';
-  const chosen = await chooseAuditUploadForProcessing({
-    db: input.db,
-    sourceFilename: input.sourceFilename,
-    processedAt: input.processedAt,
+  const uploads = await input.db.auditDataUpload.findMany({
+    where: {
+      filename: input.sourceFilename,
+      rows: { some: { invoiceId: input.invoiceId } },
+    },
+    orderBy: { uploadedAt: 'desc' },
+    select: { id: true, filename: true, uploadedAt: true },
   });
+
+  const candidates = uploads.filter((upload) => upload.uploadedAt <= input.processedAt);
+  const chosen = candidates[0] ?? uploads[0] ?? null;
+  if (chosen === null) {
+    return { rows: [], sourceFilename: input.sourceFilename };
+  }
 
   const storedRows = await input.db.auditDataRow.findMany({
     where: {
-      uploadId: chosen.uploadId,
+      uploadId: chosen.id,
       invoiceId: input.invoiceId,
     },
     select: {
@@ -213,7 +203,6 @@ async function loadAuditRowsForProcessing(input: {
   for (const row of storedRows) {
     const marketplaceId = normalizeAuditMarketToMarketplaceId(row.market);
     if (marketplaceId !== input.marketplace) continue;
-    if (row.market.trim().toLowerCase() !== market) continue;
 
     scoped.push({
       invoiceId: row.invoiceId,
@@ -227,11 +216,7 @@ async function loadAuditRowsForProcessing(input: {
     });
   }
 
-  if (scoped.length === 0) {
-    throw new Error(`No audit rows found for invoice ${input.invoiceId} in upload ${chosen.uploadId}`);
-  }
-
-  return { rows: scoped, sourceFilename: chosen.sourceFilename };
+  return { rows: scoped, sourceFilename: chosen.filename };
 }
 
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
@@ -267,6 +252,7 @@ async function main(): Promise<void> {
       id: true,
       marketplace: true,
       invoiceId: true,
+      processingHash: true,
       sourceFilename: true,
       uploadedAt: true,
       qboSettlementJournalEntryId: true,
@@ -337,6 +323,9 @@ async function main(): Promise<void> {
       sourceFilename: processing.sourceFilename,
       processedAt: processing.uploadedAt,
     });
+    if (audit.rows.length === 0 && processing.processingHash !== computeProcessingHash([])) {
+      throw new Error(`No audit rows found for non-empty invoice ${processing.invoiceId} (file ${processing.sourceFilename})`);
+    }
 
     const computed = await computeSettlementPreview({
       connection,
@@ -382,7 +371,7 @@ async function main(): Promise<void> {
     const desiredCogsDocNumber = buildProcessingDocNumber('C', processing.invoiceId);
 
     if (computed.preview.cogsJournalEntry.lines.length === 0) {
-      if (processing._count.orderSales > 0 || processing._count.orderReturns > 0) {
+      if (options.marketplace === 'amazon.com' && (processing._count.orderSales > 0 || processing._count.orderReturns > 0)) {
         throw new Error(`Unexpected empty COGS preview for invoice with unit movements: ${processing.invoiceId}`);
       }
 
@@ -471,10 +460,9 @@ async function main(): Promise<void> {
     }
 
     // ---------------------------------------------------------------------
-    // P&L JE repair (non-inventory, but keeps processing consistent)
+    // P&L JE repair: target architecture is always NOOP.
     // ---------------------------------------------------------------------
     const desiredPnlNoopId = buildNoopJournalEntryId('PNL', processing.invoiceId);
-    const desiredPnlDocNumber = buildProcessingDocNumber('P', processing.invoiceId);
 
     if (computed.preview.pnlJournalEntry.lines.length === 0) {
       if (processing.qboPnlReclassJournalEntryId !== desiredPnlNoopId) {
@@ -488,75 +476,7 @@ async function main(): Promise<void> {
       }
       summary.pnl.noop += 1;
     } else {
-      let pnlExists = false;
-      if (isQboJournalEntryId(processing.qboPnlReclassJournalEntryId)) {
-        try {
-          await fetchJournalEntryById(connection, processing.qboPnlReclassJournalEntryId);
-          pnlExists = true;
-        } catch (error) {
-          if (!isQboNotFoundError(error)) throw error;
-          pnlExists = false;
-        }
-      }
-
-      if (pnlExists) {
-        summary.pnl.ok += 1;
-      } else {
-        const search = await fetchJournalEntries(connection, {
-          docNumberContains: processing.invoiceId,
-          maxResults: 50,
-          startPosition: 1,
-        });
-        if (search.updatedConnection) {
-          connection = search.updatedConnection;
-          await saveServerQboConnection(search.updatedConnection);
-        }
-
-        const exact = search.journalEntries.filter((je) => (je.DocNumber ? je.DocNumber.trim().toUpperCase() : '') === desiredPnlDocNumber.toUpperCase());
-        exact.sort((a, b) => b.TxnDate.localeCompare(a.TxnDate));
-        const existing = exact.find((je) => (je.PrivateNote ? je.PrivateNote : '').includes('Plutus')) ?? null;
-
-        if (existing) {
-          if (processing.qboPnlReclassJournalEntryId !== existing.Id) {
-            if (options.apply) {
-              await db.settlementProcessing.update({
-                where: { id: processing.id },
-                data: { qboPnlReclassJournalEntryId: existing.Id },
-              });
-            }
-            summary.pnl.updatedId += 1;
-          }
-          summary.pnl.ok += 1;
-        } else {
-          if (!options.apply) {
-            summary.pnl.created += 1;
-          } else {
-            const posted = await createJournalEntry(connection, {
-              txnDate: computed.preview.pnlJournalEntry.txnDate,
-              docNumber: computed.preview.pnlJournalEntry.docNumber,
-              privateNote: computed.preview.pnlJournalEntry.privateNote,
-              currencyCode: settlementCurrencyCode,
-              exchangeRate: settlementExchangeRate,
-              lines: computed.preview.pnlJournalEntry.lines.map((line) => ({
-                amount: fromCents(line.amountCents),
-                postingType: line.postingType,
-                accountId: line.accountId,
-                description: line.description,
-              })),
-            });
-            if (posted.updatedConnection) {
-              connection = posted.updatedConnection;
-              await saveServerQboConnection(posted.updatedConnection);
-            }
-
-            await db.settlementProcessing.update({
-              where: { id: processing.id },
-              data: { qboPnlReclassJournalEntryId: posted.journalEntry.Id },
-            });
-            summary.pnl.created += 1;
-          }
-        }
-      }
+      throw new Error(`Unexpected P&L reclass lines for inventory-COGS-only architecture: ${processing.invoiceId}`);
     }
   }
 

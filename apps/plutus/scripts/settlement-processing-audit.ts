@@ -1,10 +1,9 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-import { classifyPnlBucket, computePnlAllocation, type PnlBucketKey } from '@/lib/pnl-allocation';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
-import { buildCogsJournalLines, buildPnlJournalLines } from '@/lib/plutus/journal-builder';
+import { buildCogsJournalLines } from '@/lib/plutus/journal-builder';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
 import {
   computeProcessingHash,
@@ -26,7 +25,6 @@ import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-
 import { loadSharedPlutusEnv } from './shared-env';
 
 type DbClient = typeof import('@/lib/db').db;
-type BuildDeterministicSkuAllocations = typeof import('@/lib/plutus/fee-allocation').buildDeterministicSkuAllocations;
 
 type CliOptions = {
   invoiceId: string | null;
@@ -185,10 +183,6 @@ function datePartFromUtcDate(date: Date): string {
 
 function centsFromAmount(amount: number): number {
   return Math.round(amount * 100);
-}
-
-function centsFromNet(net: number): number {
-  return Math.round(net * 100);
 }
 
 function keyOfLine(line: LineSummary): JournalLineKey {
@@ -360,7 +354,6 @@ async function loadAuditRowsForProcessing(input: {
 
 async function auditSettlementProcessingRow(input: {
   db: DbClient;
-  buildDeterministicSkuAllocations: BuildDeterministicSkuAllocations;
   processing: {
     id: string;
     marketplace: string;
@@ -380,7 +373,7 @@ async function auditSettlementProcessingRow(input: {
   skuToBrand: Map<string, string>;
 }): Promise<{ result: SettlementAuditResult; updatedConnection?: QboConnection }> {
   const warnings: string[] = [];
-  let deterministicPnlOk = true;
+  const deterministicPnlOk = true;
 
   let connection = input.connection;
 
@@ -530,88 +523,14 @@ async function auditSettlementProcessingRow(input: {
   const hashMatches = computedHash !== '' && computedHash === processing.processingHash;
 
   if (auditRows.length === 0) {
-    warnings.push('No audit rows found for invoice (cannot fully audit P&L allocation)');
+    warnings.push('No audit rows found for invoice (cannot fully audit processing hash)');
   }
 
   if (!hashMatches) {
     warnings.push('Processing hash mismatch vs stored audit upload rows');
   }
 
-  let minDate = '';
-  let maxDate = '';
-  for (const row of auditRows) {
-    if (minDate === '' || row.date < minDate) minDate = row.date;
-    if (maxDate === '' || row.date > maxDate) maxDate = row.date;
-  }
-
-  let pnlExpectedLines: LineSummary[] = [];
-  if (auditRows.length > 0 && minDate !== '' && maxDate !== '') {
-    const skuLessTotalsByBucket = new Map<PnlBucketKey, number>();
-    for (const row of auditRows) {
-      const description = row.description.trim();
-      const sku = row.sku.trim();
-
-      const bucket = classifyPnlBucket(row.description);
-      if (bucket === null) continue;
-
-      if (sku === '') {
-        const cents = centsFromNet(row.net);
-        if (cents === 0) continue;
-        const current = skuLessTotalsByBucket.get(bucket);
-        skuLessTotalsByBucket.set(bucket, (current === undefined ? 0 : current) + cents);
-        continue;
-      }
-    }
-
-    const brandResolver = {
-      getBrandForSku: (skuRaw: string) => {
-        const sku = normalizeSku(skuRaw);
-        const brand = input.skuToBrand.get(sku);
-        if (!brand) throw new Error(`SKU not mapped to brand: ${sku}`);
-        return brand;
-      },
-    };
-
-    const deterministic = await input.buildDeterministicSkuAllocations({
-      rows: auditRows,
-      marketplace: processing.marketplace as 'amazon.com' | 'amazon.co.uk',
-      invoiceStartDate: minDate,
-      invoiceEndDate: maxDate,
-      skuToBrand: input.skuToBrand,
-      sourceFilename: processing.sourceFilename,
-    });
-    if (deterministic.issues.length > 0) {
-      for (const issue of deterministic.issues) {
-        warnings.push(`Deterministic allocation issue: ${issue.bucket} ${issue.message}`);
-      }
-    }
-
-    const pnlAllocation = computePnlAllocation(auditRows, brandResolver, {
-      skuAllocationsByBucket: deterministic.skuAllocationsByBucket,
-    });
-    if (pnlAllocation.unallocatedSkuLessBuckets.length > 0) {
-      for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
-        warnings.push(`Unallocated SKU-less bucket: ${issue.bucket} ${issue.reason} (${issue.totalCents} cents)`);
-      }
-    }
-
-    const blockingUnallocatedBuckets = pnlAllocation.unallocatedSkuLessBuckets;
-    deterministicPnlOk = deterministic.issues.length === 0 && blockingUnallocatedBuckets.length === 0;
-
-    pnlExpectedLines = buildPnlJournalLines(
-      pnlAllocation.allocationsByBucket,
-      mapping,
-      input.accounts,
-      processing.invoiceId,
-      [],
-      pnlAllocation.skuBreakdownByBucketBrand,
-    ).map((line) => ({
-      accountId: line.accountId,
-      postingType: line.postingType,
-      amountCents: line.amountCents,
-      description: line.description.trim(),
-    }));
-  }
+  const pnlExpectedLines: LineSummary[] = [];
 
   const hashPrefix = processing.processingHash.slice(0, 10);
   const expectedCogsDoc = buildProcessingDocNumber('C', processing.invoiceId);
@@ -695,6 +614,9 @@ async function auditSettlementProcessingRow(input: {
     if (res.updatedConnection) connection = res.updatedConnection;
 
     const actualLines = extractLinesFromJe(res.journalEntry);
+    if (pnlExpectedLines.length === 0 && actualLines.length > 0) {
+      warnings.push('Legacy P&L reclass JE exists but target architecture expects NOOP P&L');
+    }
     const compared = compareJeLines({ expected: pnlExpectedLines, actual: actualLines });
 
     const docNumberRaw = res.journalEntry.DocNumber;
@@ -771,7 +693,6 @@ async function main(): Promise<void> {
   }
 
   const { db } = await import('@/lib/db');
-  const { buildDeterministicSkuAllocations } = await import('@/lib/plutus/fee-allocation');
 
   const connectionMaybe = await getQboConnection();
   if (connectionMaybe === null) {
@@ -844,7 +765,6 @@ async function main(): Promise<void> {
 
     const audited = await auditSettlementProcessingRow({
       db,
-      buildDeterministicSkuAllocations,
       processing: row,
       connection,
       accounts,

@@ -66,7 +66,11 @@ function parseStructuredFieldEntries(value: string): Array<{ key: string; value:
           : Math.min(equalsIndex, colonIndex);
     if (separatorIndex === -1) continue;
 
-    const key = trimmed.slice(0, separatorIndex).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const key = trimmed
+      .slice(0, separatorIndex)
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
     const fieldValue = trimmed.slice(separatorIndex + 1).trim();
     if (key === '' || fieldValue === '') continue;
     fields.push({ key, value: fieldValue });
@@ -111,7 +115,7 @@ function parseInternalRefPo(value: string): string {
   return '';
 }
 
-function parsePoFromDescription(description: string): string {
+export function parsePoFromDescription(description: string): string {
   const fields = parseStructuredFields(description.trim().replace(/×/g, 'x').replace(/\s+/g, ' '));
   const structuredPo = fields.get('PO');
   if (structuredPo && structuredPo.trim() !== '') return structuredPo.trim();
@@ -161,9 +165,7 @@ function extractPoNumberFromPrivateNote(privateNote: string | undefined): string
       if (!match) continue;
       const po = match[1];
       if (!po) continue;
-      const trimmed = pattern.source.includes('INTERNAL')
-        ? parseInternalRefPo(po)
-        : po.trim();
+      const trimmed = pattern.source.includes('INTERNAL') ? parseInternalRefPo(po) : po.trim();
       if (trimmed === '') continue;
       return trimmed;
     }
@@ -199,14 +201,19 @@ export function parseSkuFromDescription(description: string): string {
   }
 
   const fields = parseStructuredFields(normalized);
-  const structuredSku = normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+  const structuredSku =
+    normalizeStructuredSkuValue(fields.get('SKU')) ??
+    normalizeStructuredSkuValue(fields.get('FORSKU'));
   if (structuredSku) return structuredSku;
 
   const parsed = parseSkuQuantityFromDescription(description);
   return parsed.sku;
 }
 
-export function parseSkuQuantityFromDescription(description: string): { sku: string; quantity: number } {
+export function parseSkuQuantityFromDescription(description: string): {
+  sku: string;
+  quantity: number;
+} {
   const normalized = description.trim().replace(/×/g, 'x').replace(/\s+/g, ' ');
   if (normalized === '') {
     throw new Error('Line description is empty');
@@ -216,7 +223,8 @@ export function parseSkuQuantityFromDescription(description: string): { sku: str
   const structuredQty = fields.get('QTY') ?? fields.get('QUANTITY');
   if (structuredQty) {
     const structuredSku =
-      normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+      normalizeStructuredSkuValue(fields.get('SKU')) ??
+      normalizeStructuredSkuValue(fields.get('FORSKU'));
     if (!structuredSku) {
       throw new Error(`Missing SKU in description: "${description}"`);
     }
@@ -263,7 +271,9 @@ function classifyInventoryComponentFromAccount(account: QboAccount): InventoryCo
   return null;
 }
 
-function inferInventoryAccountMarketplace(account: QboAccount): 'amazon.com' | 'amazon.co.uk' | null {
+function inferInventoryAccountMarketplace(
+  account: QboAccount,
+): 'amazon.com' | 'amazon.co.uk' | null {
   const values = [
     account.Name.trim().toLowerCase(),
     (account.FullyQualifiedName ? account.FullyQualifiedName : account.Name).trim().toLowerCase(),
@@ -277,7 +287,9 @@ function inferInventoryAccountMarketplace(account: QboAccount): 'amazon.com' | '
     const hasUs = value.includes('amazon.com') || tokens.includes('us') || tokens.includes('usa');
 
     if (hasUk && hasUs) {
-      throw new Error(`Inventory account has ambiguous marketplace marker: accountId=${account.Id} name="${account.Name}"`);
+      throw new Error(
+        `Inventory account has ambiguous marketplace marker: accountId=${account.Id} name="${account.Name}"`,
+      );
     }
 
     const inferred = hasUk ? 'amazon.co.uk' : hasUs ? 'amazon.com' : null;
@@ -298,14 +310,19 @@ function inferInventoryAccountMarketplace(account: QboAccount): 'amazon.com' | '
   return detectedMarketplace;
 }
 
-function isInventoryAccountAllowedForMarketplace(account: QboAccount, marketplace: string): boolean {
+function isInventoryAccountAllowedForMarketplace(
+  account: QboAccount,
+  marketplace: string,
+): boolean {
   if (marketplace !== 'amazon.com' && marketplace !== 'amazon.co.uk') {
     throw new Error(`Unsupported marketplace: ${marketplace}`);
   }
 
   const accountMarketplace = inferInventoryAccountMarketplace(account);
   if (accountMarketplace === null) {
-    throw new Error(`Inventory account is missing marketplace marker: accountId=${account.Id} name="${account.Name}"`);
+    throw new Error(
+      `Inventory account is missing marketplace marker: accountId=${account.Id} name="${account.Name}"`,
+    );
   }
 
   return accountMarketplace === marketplace;
@@ -349,7 +366,12 @@ function compareBillEvents(a: BillEvent, b: BillEvent): number {
   return 0;
 }
 
-function addPoUnits(poUnitsBySku: Map<string, Map<string, number>>, poNumber: string, sku: string, units: number) {
+function addPoUnits(
+  poUnitsBySku: Map<string, Map<string, number>>,
+  poNumber: string,
+  sku: string,
+  units: number,
+) {
   const existing = poUnitsBySku.get(poNumber);
   if (!existing) {
     const skuMap = new Map<string, number>();
@@ -391,7 +413,9 @@ export function parseQboBillsToInventoryEvents(
       const accountId = line.AccountBasedExpenseLineDetail.AccountRef.value;
       const account = accountsById.get(accountId);
       if (!account) {
-        throw new Error(`Unknown QBO account referenced on bill line: billId=${bill.Id} accountId=${accountId}`);
+        throw new Error(
+          `Unknown QBO account referenced on bill line: billId=${bill.Id} accountId=${accountId}`,
+        );
       }
       const component = classifyInventoryComponentFromAccount(account);
       if (!component) continue;
@@ -473,13 +497,12 @@ export type BillMappingWithLines = {
     component: string;
     amountCents: number;
     sku: string | null;
+    poNumber?: string | null;
     quantity: number | null;
   }>;
 };
 
-export function buildInventoryEventsFromMappings(
-  mappings: BillMappingWithLines[],
-): ParsedBills {
+export function buildInventoryEventsFromMappings(mappings: BillMappingWithLines[]): ParsedBills {
   const events: BillEvent[] = [];
   const poUnitsBySku = new Map<string, Map<string, number>>();
 
@@ -521,7 +544,8 @@ export function buildInventoryEventsFromMappings(
 
       const component = line.component as InventoryComponent;
 
-      const poNumber = mapping.poNumber.trim();
+      const linePoNumber = typeof line.poNumber === 'string' ? line.poNumber.trim() : '';
+      const poNumber = linePoNumber !== '' ? linePoNumber : mapping.poNumber.trim();
 
       if (component === 'manufacturing') {
         if (poNumber === '') {
