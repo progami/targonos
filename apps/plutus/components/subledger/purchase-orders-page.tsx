@@ -14,13 +14,18 @@ import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  buildPurchaseOrderCurrencyTotals,
+  buildPurchaseOrderProductSummaries,
+  type PurchaseOrderProductLayer,
+} from '@/lib/plutus/purchase-orders-view';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
   throw new Error('NEXT_PUBLIC_BASE_PATH is required');
 }
 
-type CostLayer = {
+type CostLayer = PurchaseOrderProductLayer & {
   id: string;
   component: string;
   quantity: number | null;
@@ -41,6 +46,12 @@ type CostLayer = {
       code: string;
       name: string;
     };
+    aliases: Array<{
+      marketplace: string;
+      aliasType: string;
+      value: string;
+      active: boolean;
+    }>;
   };
 };
 
@@ -50,7 +61,6 @@ type PurchaseOrderRow = {
   supplierRef: string | null;
   marketplace: string | null;
   status: string;
-  totalAmountCents: number;
   costLayers: CostLayer[];
 };
 
@@ -103,9 +113,9 @@ function formatCents(amountCents: number, currency: string) {
 }
 
 function formatPurchaseOrderTotal(order: PurchaseOrderRow) {
-  const firstLayer = order.costLayers[0];
-  if (firstLayer === undefined) return '-';
-  return formatCents(order.totalAmountCents, firstLayer.currency);
+  const totals = buildPurchaseOrderCurrencyTotals(order.costLayers);
+  if (totals.length === 0) return '-';
+  return totals.map((total) => formatCents(total.amountCents, total.currency)).join(' / ');
 }
 
 function StatusChip({ status }: { status: string }) {
@@ -123,38 +133,61 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function LayerSummary({ layer }: { layer: CostLayer }) {
-  const quantity = layer.quantity === null ? '-' : new Intl.NumberFormat('en-US').format(layer.quantity);
-
-  return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: '104px minmax(160px, 1fr) 96px', gap: 1.25, alignItems: 'baseline' }}>
-      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: 'text.primary' }}>{layer.component}</Typography>
-      <Typography sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.8125rem', color: 'text.primary' }}>
-        {layer.product.productGroup.code} / {layer.product.name}
-      </Typography>
-      <Typography sx={{ textAlign: 'right', fontSize: '0.8125rem', fontWeight: 600, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
-        {formatCents(layer.amountCents, layer.currency)}
-      </Typography>
-      <Typography sx={quietTextSx}>Qty {quantity}</Typography>
-      <Typography sx={quietTextSx}>{layer.allocationMethod}</Typography>
-      <Box />
-    </Box>
-  );
+function formatQuantity(quantity: number | null) {
+  if (quantity === null) return '-';
+  return new Intl.NumberFormat('en-US').format(quantity);
 }
 
-function QboSourceSummary({ layer }: { layer: CostLayer }) {
-  const hasQboTxn = layer.sourceQboTxnType !== null && layer.sourceQboTxnId !== null;
-  const txn = hasQboTxn ? `${layer.sourceQboTxnType} ${layer.sourceQboTxnId}` : '-';
-  const line = layer.sourceQboLineId === null ? '-' : `Line ${layer.sourceQboLineId}`;
-  const document = layer.sourceDocumentName === null ? '-' : layer.sourceDocumentName;
+function formatComponentLabel(component: string) {
+  if (component === 'mfgAccessories') return 'Accessories';
+  return component.slice(0, 1).toUpperCase() + component.slice(1);
+}
+
+function ProductSummary({ order }: { order: PurchaseOrderRow }) {
+  const products = buildPurchaseOrderProductSummaries(order.marketplace, order.costLayers);
 
   return (
-    <Box sx={{ display: 'grid', gap: 0.25 }}>
-      <Typography sx={{ fontSize: '0.8125rem', color: 'text.primary' }}>{txn}</Typography>
-      <Typography sx={quietTextSx}>{line}</Typography>
-      <Typography title={document} sx={{ ...quietTextSx, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {document}
-      </Typography>
+    <Box sx={{ display: 'grid', gap: 1.25 }}>
+      {products.map((product) => (
+        <Box
+          key={product.key}
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'minmax(220px, 1fr) 120px 132px' },
+            gap: { xs: 0.5, md: 1.5 },
+            alignItems: 'start',
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography sx={{ fontSize: '0.875rem', fontWeight: 700, color: 'text.primary' }}>
+              {product.groupCode} / {product.sku}
+            </Typography>
+            <Typography sx={{ ...quietTextSx, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {product.productName}
+            </Typography>
+          </Box>
+          <Typography sx={{ fontSize: '0.8125rem', color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+            Qty {formatQuantity(product.quantity)}
+          </Typography>
+          <Typography sx={{ textAlign: { xs: 'left', md: 'right' }, fontSize: '0.875rem', fontWeight: 700, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+            {formatCents(product.totalAmountCents, product.currency)}
+          </Typography>
+          <Box sx={{ gridColumn: { xs: 'auto', md: '1 / -1' }, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+            {product.componentAmounts.map((component) => (
+              <Chip
+                key={component.component}
+                label={`${formatComponentLabel(component.component)} ${formatCents(component.amountCents, product.currency)}`}
+                size="small"
+                variant="outlined"
+                sx={{ borderRadius: 1, height: 22, fontSize: '0.6875rem' }}
+              />
+            ))}
+          </Box>
+        </Box>
+      ))}
+      {products.length === 0 && (
+        <Typography sx={quietTextSx}>No SKU layers</Typography>
+      )}
     </Box>
   );
 }
@@ -174,15 +207,14 @@ export function PurchaseOrdersPage() {
 
       <Box sx={tableWrapSx}>
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 1160 }}>
+          <Table size="small" sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={headCellSx}>PO</TableCell>
-                <TableCell sx={headCellSx}>Market</TableCell>
-                <TableCell sx={headCellSx}>Status</TableCell>
+                <TableCell sx={headCellSx}>Market / Supplier Ref</TableCell>
+                <TableCell sx={headCellSx}>Products</TableCell>
                 <TableCell sx={{ ...headCellSx, textAlign: 'right' }}>Total</TableCell>
-                <TableCell sx={headCellSx}>Cost Layers</TableCell>
-                <TableCell sx={headCellSx}>QBO Source</TableCell>
+                <TableCell sx={headCellSx}>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -190,7 +222,7 @@ export function PurchaseOrdersPage() {
                 <>
                   {Array.from({ length: 6 }).map((_, index) => (
                     <TableRow key={index}>
-                      <TableCell colSpan={6} sx={{ py: 1.5 }}>
+                      <TableCell colSpan={5} sx={{ py: 1.5 }}>
                         <Skeleton height={34} />
                       </TableCell>
                     </TableRow>
@@ -200,7 +232,7 @@ export function PurchaseOrdersPage() {
 
               {!isLoading && error && (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ py: 5, textAlign: 'center', color: 'error.main' }}>
+                  <TableCell colSpan={5} sx={{ py: 5, textAlign: 'center', color: 'error.main' }}>
                     {error instanceof Error ? error.message : String(error)}
                   </TableCell>
                 </TableRow>
@@ -208,7 +240,7 @@ export function PurchaseOrdersPage() {
 
               {!isLoading && !error && purchaseOrders.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={5}>
                     <EmptyState
                       icon={<LocalShippingIcon sx={{ fontSize: 40 }} />}
                       title="No purchase orders loaded"
@@ -224,32 +256,23 @@ export function PurchaseOrdersPage() {
                       <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
                         {order.internalRef}
                       </Typography>
+                    </TableCell>
+                    <TableCell sx={bodyCellSx}>
+                      <Typography sx={{ fontSize: '0.8125rem', color: 'text.primary' }}>
+                        {order.marketplace === null ? '-' : order.marketplace}
+                      </Typography>
                       <Typography sx={quietTextSx}>
                         {order.supplierRef === null ? '-' : order.supplierRef}
                       </Typography>
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
-                      {order.marketplace === null ? '-' : order.marketplace}
-                    </TableCell>
-                    <TableCell sx={bodyCellSx}>
-                      <StatusChip status={order.status} />
+                      <ProductSummary order={order} />
                     </TableCell>
                     <TableCell sx={{ ...bodyCellSx, textAlign: 'right', fontWeight: 700, color: 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
                       {formatPurchaseOrderTotal(order)}
                     </TableCell>
                     <TableCell sx={bodyCellSx}>
-                      <Box sx={{ display: 'grid', gap: 1 }}>
-                        {order.costLayers.map((layer) => (
-                          <LayerSummary key={layer.id} layer={layer} />
-                        ))}
-                      </Box>
-                    </TableCell>
-                    <TableCell sx={bodyCellSx}>
-                      <Box sx={{ display: 'grid', gap: 1 }}>
-                        {order.costLayers.map((layer) => (
-                          <QboSourceSummary key={layer.id} layer={layer} />
-                        ))}
-                      </Box>
+                      <StatusChip status={order.status} />
                     </TableCell>
                   </TableRow>
               ))}

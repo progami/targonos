@@ -110,6 +110,10 @@ import {
   fingerprintPostingLines,
 } from '../lib/plutus/subledger/qbo-trace';
 import {
+  buildPurchaseOrderCurrencyTotals,
+  buildPurchaseOrderProductSummaries,
+} from '../lib/plutus/purchase-orders-view';
+import {
   resolveCanonicalProductAlias,
 } from '../lib/plutus/subledger/sku-alias';
 import {
@@ -1349,6 +1353,120 @@ test('subledger pages are wired to route wrappers', () => {
   assert.equal(readFileSync(new URL('../app/purchase-orders/page.tsx', import.meta.url), 'utf8').includes('PurchaseOrdersPage'), true);
   assert.equal(readFileSync(new URL('../app/inventory-ledger/page.tsx', import.meta.url), 'utf8').includes('InventoryLedgerPage'), true);
   assert.equal(readFileSync(new URL('../app/qbo-audit/page.tsx', import.meta.url), 'utf8').includes('QboAuditPage'), true);
+});
+
+test('purchase order view groups cost layers by product group and SKU', () => {
+  const summaries = buildPurchaseOrderProductSummaries('amazon.com', [
+    {
+      id: 'mfg',
+      component: 'manufacturing',
+      quantity: 100,
+      amountCents: 120000,
+      currency: 'USD',
+      product: {
+        id: 'prod-1',
+        name: 'Comfort Step 7',
+        productGroup: { code: 'PDS', name: 'PDS' },
+        aliases: [
+          { marketplace: 'amazon.com', aliasType: 'SKU', value: 'CS-007', active: true },
+          { marketplace: 'amazon.co.uk', aliasType: 'SKU', value: 'CS 007', active: true },
+        ],
+      },
+    },
+    {
+      id: 'freight',
+      component: 'freight',
+      quantity: null,
+      amountCents: 15000,
+      currency: 'USD',
+      product: {
+        id: 'prod-1',
+        name: 'Comfort Step 7',
+        productGroup: { code: 'PDS', name: 'PDS' },
+        aliases: [
+          { marketplace: 'amazon.com', aliasType: 'SKU', value: 'CS-007', active: true },
+        ],
+      },
+    },
+  ]);
+
+  assert.deepEqual(summaries, [
+    {
+      key: 'prod-1|USD',
+      groupCode: 'PDS',
+      productName: 'Comfort Step 7',
+      sku: 'CS-007',
+      quantity: 100,
+      currency: 'USD',
+      totalAmountCents: 135000,
+      componentAmounts: [
+        { component: 'manufacturing', amountCents: 120000 },
+        { component: 'freight', amountCents: 15000 },
+      ],
+    },
+  ]);
+});
+
+test('purchase order view keeps mixed-currency PO product summaries separate', () => {
+  const layers = [
+    {
+      id: 'usd',
+      component: 'manufacturing',
+      quantity: 100,
+      amountCents: 120000,
+      currency: 'USD',
+      product: {
+        id: 'prod-1',
+        name: 'Comfort Step 7',
+        productGroup: { code: 'PDS', name: 'PDS' },
+        aliases: [
+          { marketplace: 'amazon.com', aliasType: 'SKU', value: 'CS-007', active: true },
+        ],
+      },
+    },
+    {
+      id: 'gbp',
+      component: 'freight',
+      quantity: null,
+      amountCents: 30000,
+      currency: 'GBP',
+      product: {
+        id: 'prod-1',
+        name: 'Comfort Step 7',
+        productGroup: { code: 'PDS', name: 'PDS' },
+        aliases: [
+          { marketplace: 'amazon.com', aliasType: 'SKU', value: 'CS-007', active: true },
+        ],
+      },
+    },
+  ];
+
+  assert.deepEqual(buildPurchaseOrderCurrencyTotals(layers), [
+    { currency: 'GBP', amountCents: 30000 },
+    { currency: 'USD', amountCents: 120000 },
+  ]);
+  assert.deepEqual(
+    buildPurchaseOrderProductSummaries('amazon.com', layers).map((summary) => ({
+      key: summary.key,
+      currency: summary.currency,
+      totalAmountCents: summary.totalAmountCents,
+      componentAmounts: summary.componentAmounts,
+    })),
+    [
+      {
+        key: 'prod-1|GBP',
+        currency: 'GBP',
+        totalAmountCents: 30000,
+        componentAmounts: [{ component: 'freight', amountCents: 30000 }],
+      },
+      {
+        key: 'prod-1|USD',
+        currency: 'USD',
+        totalAmountCents: 120000,
+        componentAmounts: [{ component: 'manufacturing', amountCents: 120000 }],
+      },
+    ],
+  );
 });
 
 test('QBO audit API exposes flattened posting source fields', () => {
@@ -2677,6 +2795,22 @@ test('settlement processing no longer builds brand or SKU P&L reclass lines', ()
   assert.equal(source.includes("docNumber: buildProcessingDocNumber('P', invoiceId)"), true);
   assert.equal(source.includes('privateNote: `Plutus P&L Reclass | Invoice: ${invoiceId} | Hash: ${hashPrefix}`'), true);
   assert.equal(source.includes('lines: [],'), true);
+});
+
+test('settlement processing no longer requires fee allocation account mappings', () => {
+  const source = readFileSync('lib/plutus/settlement-processing.ts', 'utf8');
+
+  for (const removed of [
+    "'amazonSellerFees'",
+    "'amazonFbaFees'",
+    "'amazonStorageFees'",
+    "'amazonAdvertisingCosts'",
+    "'amazonPromotions'",
+    "'amazonFbaInventoryReimbursement'",
+    "'warehousingAwd'",
+  ]) {
+    assert.equal(source.includes(removed), false, removed);
+  }
 });
 
 test('journal builder exposes only inventory COGS lines, not P&L brand reclass lines', () => {

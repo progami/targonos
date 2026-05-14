@@ -41,6 +41,20 @@ export async function GET() {
                 id: true,
                 name: true,
                 active: true,
+                aliases: {
+                  orderBy: [
+                    { marketplace: 'asc' },
+                    { aliasType: 'asc' },
+                    { value: 'asc' },
+                    { id: 'asc' },
+                  ],
+                  select: {
+                    marketplace: true,
+                    aliasType: true,
+                    value: true,
+                    active: true,
+                  },
+                },
                 productGroup: {
                   select: {
                     id: true,
@@ -61,7 +75,6 @@ export async function GET() {
       supplierRef: row.supplierRef,
       marketplace: row.marketplace,
       status: row.status,
-      totalAmountCents: row.costLayers.reduce((sum, layer) => sum + layer.amountCents, 0),
       costLayers: row.costLayers.map((layer) => ({
         id: layer.id,
         component: layer.component,
