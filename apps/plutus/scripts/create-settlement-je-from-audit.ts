@@ -1,5 +1,10 @@
 import { promises as fs } from 'node:fs';
 
+import {
+  normalizeSettlementOperatingMemo,
+  settlementParentAccountKeyForMemo,
+  type SettlementParentAccountKey,
+} from '@/lib/amazon-finances/settlement-memo-normalization';
 import { buildPlutusSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import type { QboConnection } from '@/lib/qbo/api';
 import { createJournalEntry, fetchAccounts, fetchExchangeRate, fetchJournalEntries, fetchPreferences } from '@/lib/qbo/api';
@@ -154,6 +159,35 @@ function requireMemoMapping(value: unknown): Record<string, MemoMappingEntry> {
   return result;
 }
 
+function requireSetupSettlementParentAccount(
+  setupConfig: Record<string, unknown>,
+  key: SettlementParentAccountKey,
+): string {
+  const value = setupConfig[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Missing SetupConfig.${key}`);
+  }
+  return value.trim();
+}
+
+function normalizeMemoMapping(input: {
+  setupConfig: Record<string, unknown>;
+  memoMapping: Record<string, MemoMappingEntry>;
+}): Record<string, MemoMappingEntry> {
+  const result: Record<string, MemoMappingEntry> = {};
+
+  for (const [memo, entry] of Object.entries(input.memoMapping)) {
+    const normalizedMemo = normalizeSettlementOperatingMemo(memo);
+    const parentKey = settlementParentAccountKeyForMemo(normalizedMemo);
+    result[normalizedMemo] = {
+      accountId: parentKey ? requireSetupSettlementParentAccount(input.setupConfig, parentKey) : entry.accountId,
+      taxCodeId: entry.taxCodeId,
+    };
+  }
+
+  return result;
+}
+
 function postingForNonBank(cents: number): { postingType: 'Debit' | 'Credit'; amount: number } {
   const abs = Math.abs(cents);
   const amount = abs / 100;
@@ -239,7 +273,7 @@ async function main(): Promise<void> {
   for (const row of auditRows) {
     const marketplaceId = normalizeAuditMarketToMarketplaceId(row.market);
     if (marketplaceId !== options.marketplace) continue;
-    const memo = row.description.trim();
+    const memo = normalizeSettlementOperatingMemo(row.description);
     if (memo === '') continue;
     const current = memoTotals.get(memo);
     memoTotals.set(memo, (current === undefined ? 0 : current) + row.net);
@@ -259,7 +293,15 @@ async function main(): Promise<void> {
     throw new Error(`Missing settlement posting config for marketplace=${options.marketplace}`);
   }
 
-  const memoMapping = requireMemoMapping(postingConfig.accountIdByMemo);
+  const setupConfig = await db.setupConfig.findFirst();
+  if (!setupConfig) {
+    throw new Error('Missing SetupConfig');
+  }
+
+  const memoMapping = normalizeMemoMapping({
+    setupConfig: setupConfig as Record<string, unknown>,
+    memoMapping: requireMemoMapping(postingConfig.accountIdByMemo),
+  });
 
   const missingMemos = Array.from(memoTotals.keys()).filter((memo) => memoMapping[memo] === undefined).sort();
   if (missingMemos.length > 0) {

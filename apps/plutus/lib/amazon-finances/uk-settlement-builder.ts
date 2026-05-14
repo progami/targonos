@@ -106,20 +106,18 @@ function orderScopeFromMarketplaceName(marketplaceName: unknown): OrderScope {
 
 function salesMemo(input: {
   kind: 'Principal' | 'Shipping' | 'Shipping Promotion' | 'Promotional Discounts';
-  brandLabel: string;
   marketplaceVatResponsible: boolean;
 }): string {
   const suffix = input.marketplaceVatResponsible ? ' (Marketplace VAT Responsible)' : '';
-  return `Amazon Sales - ${input.kind}${suffix} - ${input.brandLabel}`;
+  return `Amazon Sales - ${input.kind}${suffix}`;
 }
 
 function refundMemo(input: {
   kind: 'Refunded Principal' | 'Refunded Shipping' | 'Refunded Shipping Promotion' | 'Refunded Promotional Discounts';
-  brandLabel: string;
   marketplaceVatResponsible: boolean;
 }): string {
   const suffix = input.marketplaceVatResponsible ? ' (Marketplace VAT Responsible)' : '';
-  return `Amazon Refunds - ${input.kind}${suffix} - ${input.brandLabel}`;
+  return `Amazon Refunds - ${input.kind}${suffix}`;
 }
 
 function feeTypeMemoForShipment(input: { feeType: string; scope: OrderScope }): string | null {
@@ -537,7 +535,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       }
 
       if (principalNetCents !== 0) {
-        const memo = salesMemo({ kind: 'Principal', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
+        const memo = salesMemo({ kind: 'Principal', marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, principalNetCents);
         segment.auditRows.push({
           invoiceId: segment.docNumber,
@@ -552,7 +550,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       }
 
       if (shippingNetCents !== 0) {
-        const memo = salesMemo({ kind: 'Shipping', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
+        const memo = salesMemo({ kind: 'Shipping', marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, shippingNetCents);
       }
 
@@ -564,7 +562,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.shippingPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              salesMemo({ kind: 'Shipping Promotion', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
+              salesMemo({ kind: 'Shipping Promotion', marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.shippingPromoCents,
             );
           }
@@ -572,7 +570,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.discountPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              salesMemo({ kind: 'Promotional Discounts', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
+              salesMemo({ kind: 'Promotional Discounts', marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.discountPromoCents,
             );
           }
@@ -704,7 +702,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       }
 
       if (principalNetCents !== 0) {
-        const memo = refundMemo({ kind: 'Refunded Principal', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
+        const memo = refundMemo({ kind: 'Refunded Principal', marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, principalNetCents);
         segment.auditRows.push({
           invoiceId: segment.docNumber,
@@ -719,7 +717,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       }
 
       if (shippingNetCents !== 0) {
-        const memo = refundMemo({ kind: 'Refunded Shipping', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible });
+        const memo = refundMemo({ kind: 'Refunded Shipping', marketplaceVatResponsible: orderMarketplaceVatResponsible });
         addCents(segment.memoTotalsCents, memo, shippingNetCents);
       }
 
@@ -731,7 +729,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.shippingPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              refundMemo({ kind: 'Refunded Shipping Promotion', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
+              refundMemo({ kind: 'Refunded Shipping Promotion', marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.shippingPromoCents,
             );
           }
@@ -739,7 +737,7 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
           if (split.discountPromoCents !== 0) {
             addCents(
               segment.memoTotalsCents,
-              refundMemo({ kind: 'Refunded Promotional Discounts', brandLabel: itemData.brandLabel, marketplaceVatResponsible: orderMarketplaceVatResponsible }),
+              refundMemo({ kind: 'Refunded Promotional Discounts', marketplaceVatResponsible: orderMarketplaceVatResponsible }),
               split.discountPromoCents,
             );
           }

@@ -99,24 +99,18 @@ function brandNameForSku(skuRaw: string, skuToBrandName: Map<string, string>): s
   return brandName;
 }
 
-function brandLabelForName(brandName: string, brandLabelByBrandName?: Map<string, string>): string {
-  if (!brandLabelByBrandName) return brandName;
-  const label = brandLabelByBrandName.get(brandName);
-  return label ? label : brandName;
-}
-
-function chargeTypeMemoForShipment(input: { chargeType: string; brandLabel: string }): string | null {
-  if (input.chargeType === 'Principal') return `Amazon Sales - Principal - ${input.brandLabel}`;
-  if (input.chargeType === 'ShippingCharge') return `Amazon Sales - Shipping - ${input.brandLabel}`;
-  if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Sales Tax (Principal)';
-  if (input.chargeType === 'ShippingTax') return 'Amazon Sales Tax - Sales Tax (Shipping)';
-  if (input.chargeType === 'GiftWrap') return null;
-  if (input.chargeType === 'GiftWrapTax') return null;
+function chargeTypeMemoForShipment(chargeType: string): string | null {
+  if (chargeType === 'Principal') return 'Amazon Sales - Principal';
+  if (chargeType === 'ShippingCharge') return 'Amazon Sales - Shipping';
+  if (chargeType === 'Tax') return 'Amazon Sales Tax - Sales Tax (Principal)';
+  if (chargeType === 'ShippingTax') return 'Amazon Sales Tax - Sales Tax (Shipping)';
+  if (chargeType === 'GiftWrap') return null;
+  if (chargeType === 'GiftWrapTax') return null;
   return null;
 }
 
-function promotionMemoForShipment(brandLabel: string): string {
-  return `Amazon Sales - Shipping Promotion - ${brandLabel}`;
+function promotionMemoForShipment(): string {
+  return 'Amazon Sales - Shipping Promotion';
 }
 
 function feeTypeMemoForShipment(feeType: string): string | null {
@@ -157,19 +151,19 @@ function withheldChargeMemo(chargeType: string, context: 'shipment' | 'refund'):
   return null;
 }
 
-function chargeTypeMemoForRefund(input: { chargeType: string; brandLabel: string }): string | null {
-  if (input.chargeType === 'Principal') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
-  if (input.chargeType === 'RestockingFee') return `Amazon Refunds - Refunded Principal - ${input.brandLabel}`;
-  if (input.chargeType === 'ShippingCharge') return `Amazon Refunds - Refunded Shipping - ${input.brandLabel}`;
-  if (input.chargeType === 'Tax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
-  if (input.chargeType === 'ShippingTax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
-  if (input.chargeType === 'GiftWrap') return null;
-  if (input.chargeType === 'GiftWrapTax') return null;
+function chargeTypeMemoForRefund(chargeType: string): string | null {
+  if (chargeType === 'Principal') return 'Amazon Refunds - Refunded Principal';
+  if (chargeType === 'RestockingFee') return 'Amazon Refunds - Refunded Principal';
+  if (chargeType === 'ShippingCharge') return 'Amazon Refunds - Refunded Shipping';
+  if (chargeType === 'Tax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
+  if (chargeType === 'ShippingTax') return 'Amazon Sales Tax - Refund - Item Price - Tax';
+  if (chargeType === 'GiftWrap') return null;
+  if (chargeType === 'GiftWrapTax') return null;
   return null;
 }
 
-function promotionMemoForRefund(brandLabel: string): string {
-  return `Amazon Refunds - Refunded Shipping Promotion - ${brandLabel}`;
+function promotionMemoForRefund(): string {
+  return 'Amazon Refunds - Refunded Shipping Promotion';
 }
 
 function feeTypeMemoForRefund(feeType: string): string | null {
@@ -307,8 +301,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     for (const item of items) {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qty = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
-      const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
-      const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
+      if (skuRaw !== '') brandNameForSku(skuRaw, input.skuToBrandName);
 
       for (const charge of toChargeComponents(item.ItemChargeList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';
@@ -317,7 +310,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(chargeAmount, `Shipment charge ${chargeType}`);
         if (cents === 0) continue;
 
-        const memo = chargeTypeMemoForShipment({ chargeType, brandLabel });
+        const memo = chargeTypeMemoForShipment(chargeType);
         if (!memo) {
           throw new Error(`Unhandled shipment charge type: ${chargeType}`);
         }
@@ -345,7 +338,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         promoCents += moneyToCents(amount, 'Shipment promotion');
       }
       if (promoCents !== 0) {
-        const memo = promotionMemoForShipment(brandLabel);
+        const memo = promotionMemoForShipment();
         addCents(segment.memoTotalsCents, memo, promoCents);
       }
 
@@ -407,8 +400,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qtyRaw = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const qty = qtyRaw === 0 ? 0 : -qtyRaw;
-      const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
-      const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
+      if (skuRaw !== '') brandNameForSku(skuRaw, input.skuToBrandName);
 
       for (const charge of toChargeComponents(item.ItemChargeAdjustmentList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';
@@ -417,7 +409,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         const cents = moneyToCents(chargeAmount, `Refund charge ${chargeType}`);
         if (cents === 0) continue;
 
-        const memo = chargeTypeMemoForRefund({ chargeType, brandLabel });
+        const memo = chargeTypeMemoForRefund(chargeType);
         if (!memo) {
           throw new Error(`Unhandled refund charge type: ${chargeType}`);
         }
@@ -445,7 +437,7 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
         promoCents += moneyToCents(amount, 'Refund promotion');
       }
       if (promoCents !== 0) {
-        const memo = promotionMemoForRefund(brandLabel);
+        const memo = promotionMemoForRefund();
         addCents(segment.memoTotalsCents, memo, promoCents);
       }
 

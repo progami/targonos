@@ -1,6 +1,11 @@
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
 import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '@/lib/amazon-finances/settlement-cash-account-guardrails';
 import {
+  normalizeSettlementOperatingMemo,
+  settlementParentAccountKeyForMemo,
+  type SettlementParentAccountKey,
+} from '@/lib/amazon-finances/settlement-memo-normalization';
+import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
   listAllFinancialEventGroups,
@@ -238,6 +243,17 @@ async function ensureJournalEntryHasSettlementEvidenceAttachments(
 
 type MemoMappingEntry = { accountId: string; taxCodeId: string | null };
 
+function requireSetupSettlementParentAccount(
+  setupConfig: Record<string, unknown>,
+  key: SettlementParentAccountKey,
+): string {
+  const value = setupConfig[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Missing SetupConfig.${key}`);
+  }
+  return value.trim();
+}
+
 function requireMemoMapping(value: unknown): Record<string, MemoMappingEntry> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     throw new Error('US settlement memo mapping must be an object');
@@ -303,11 +319,19 @@ async function loadUsSettlementPostingMapping(input: {
   const paymentAccountId = config.paymentAccountId ? config.paymentAccountId.trim() : '';
 
   const memoMapping = requireMemoMapping(config.accountIdByMemo);
+  const setupConfig = await db.setupConfig.findFirst();
+  if (setupConfig === null) {
+    throw new Error('Missing SetupConfig');
+  }
+  const setupConfigRecord = setupConfig as Record<string, unknown>;
   const accountIdByMemo = new Map<string, string>();
   const taxCodeIdByMemo = new Map<string, string | null>();
   for (const [memo, entry] of Object.entries(memoMapping)) {
-    accountIdByMemo.set(memo, entry.accountId);
-    taxCodeIdByMemo.set(memo, entry.taxCodeId);
+    const normalizedMemo = normalizeSettlementOperatingMemo(memo);
+    const parentKey = settlementParentAccountKeyForMemo(normalizedMemo);
+    const accountId = parentKey ? requireSetupSettlementParentAccount(setupConfigRecord, parentKey) : entry.accountId;
+    accountIdByMemo.set(normalizedMemo, accountId);
+    taxCodeIdByMemo.set(normalizedMemo, entry.taxCodeId);
   }
 
   const missingMemos = Array.from(input.requiredMemos).filter((memo) => !accountIdByMemo.has(memo)).sort();

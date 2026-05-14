@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
+import { isSettlementOperatingBrandAccountName } from '@/lib/amazon-finances/settlement-memo-normalization';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { buildCogsJournalLines } from '@/lib/plutus/journal-builder';
@@ -51,6 +52,12 @@ type JeCompareResult = {
   txnDate?: { expected: string; actual: string | null; ok: boolean };
 };
 
+type SettlementBrandAccountViolation = {
+  accountId: string;
+  accountName: string;
+  description: string;
+};
+
 type SettlementAuditResult = {
   marketplace: string;
   invoiceId: string;
@@ -64,6 +71,7 @@ type SettlementAuditResult = {
   auditUpload?: { id: string; filename: string; uploadedAt: string };
 
   settlementJe: { status: 'ok' | 'missing' | 'mismatch'; docNumber: string | null; txnDate: string | null };
+  settlementBrandAccountViolations: SettlementBrandAccountViolation[];
   cogsJe: JeCompareResult;
   pnlJe: JeCompareResult;
   deterministicPnlOk: boolean;
@@ -224,6 +232,33 @@ function extractLinesFromJe(je: QboJournalEntry): LineSummary[] {
   }
 
   return result;
+}
+
+function findSettlementBrandAccountViolations(je: QboJournalEntry, accounts: QboAccount[]): SettlementBrandAccountViolation[] {
+  const accountById = new Map(accounts.map((account) => [account.Id, account]));
+  const violations: SettlementBrandAccountViolation[] = [];
+
+  for (const line of je.Line) {
+    const accountId = line.JournalEntryLineDetail?.AccountRef?.value;
+    if (typeof accountId !== 'string' || accountId.trim() === '') continue;
+
+    const account = accountById.get(accountId);
+    const accountName =
+      account?.FullyQualifiedName?.trim() ||
+      line.JournalEntryLineDetail?.AccountRef?.name?.trim() ||
+      account?.Name?.trim() ||
+      accountId;
+
+    if (!isSettlementOperatingBrandAccountName(accountName)) continue;
+
+    violations.push({
+      accountId,
+      accountName,
+      description: typeof line.Description === 'string' ? line.Description.trim() : '',
+    });
+  }
+
+  return violations;
 }
 
 function compareJeLines(input: { expected: LineSummary[]; actual: LineSummary[] }): { mismatches: Array<{ key: string; expectedCents: number; actualCents: number }> } {
@@ -391,10 +426,16 @@ async function auditSettlementProcessingRow(input: {
 
   const settlementDocOk = settlementDocNumber === expectedSettlementDocNumber;
   const settlementDateOk = settlementTxnDate === expectedSettlementTxnDate;
+  const settlementBrandAccountViolations = findSettlementBrandAccountViolations(settlementRes.journalEntry, input.accounts);
 
   let settlementStatus: 'ok' | 'mismatch' = 'ok';
-  if (!settlementDocOk || !settlementDateOk) {
+  if (!settlementDocOk || !settlementDateOk || settlementBrandAccountViolations.length > 0) {
     settlementStatus = 'mismatch';
+  }
+  for (const violation of settlementBrandAccountViolations) {
+    warnings.push(
+      `Settlement JE uses branded operating P&L account ${violation.accountName} on "${violation.description || 'blank description'}"`,
+    );
   }
 
   const requiredMappingKeys = [
@@ -673,6 +714,7 @@ async function auditSettlementProcessingRow(input: {
       docNumber: settlementDocNumber,
       txnDate: settlementTxnDate,
     },
+    settlementBrandAccountViolations,
     cogsJe: cogsJeResult,
     pnlJe: pnlJeResult,
       warnings,
