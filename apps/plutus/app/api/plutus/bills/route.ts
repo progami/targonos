@@ -31,6 +31,42 @@ import { parsePoFromDescription } from '@/lib/inventory/qbo-bills';
 
 const logger = createLogger({ name: 'plutus-bills' });
 
+function buildPrivateNoteWithPo(privateNote: string | undefined, poNumber: string): string {
+  const normalizedPoNumber = poNumber.trim();
+  const existingNote = privateNote ? privateNote : '';
+  if (normalizedPoNumber === '') return existingNote;
+
+  const rawLines = existingNote.split(/\r?\n/);
+  const outputLines: string[] = [];
+  let replacedInternalRef = false;
+
+  for (const rawLine of rawLines) {
+    const line = rawLine.trim();
+    if (line === '') continue;
+
+    if (/^INTERNAL\s+REF\s*:/i.test(line)) {
+      const [, rest = ''] = line.split(/:(.*)/s);
+      const remainingFields = rest
+        .split(';')
+        .map((part) => part.trim())
+        .filter((part) => part !== '' && !/^PO\s*[:=]/i.test(part));
+      outputLines.push(
+        `INTERNAL REF: PO=${normalizedPoNumber}${remainingFields.length > 0 ? `; ${remainingFields.join('; ')}` : ''}`,
+      );
+      replacedInternalRef = true;
+      continue;
+    }
+
+    outputLines.push(line);
+  }
+
+  if (!replacedInternalRef) {
+    outputLines.unshift(`INTERNAL REF: PO=${normalizedPoNumber}`);
+  }
+
+  return outputLines.join('\n');
+}
+
 export async function GET(req: NextRequest) {
   try {
     const connection = await getQboConnection();
@@ -435,7 +471,7 @@ export async function POST(req: NextRequest) {
       quantity: typeof line.quantity === 'number' ? line.quantity : null,
     }));
 
-    let syncedAt: Date | null = new Date();
+    let syncedAt: Date | null = null;
     const hasSplitLines = parsedLines.some(
       (line) => Array.isArray(line.splits) && line.splits.length > 0,
     );
@@ -531,7 +567,7 @@ export async function POST(req: NextRequest) {
 
       const payload: Record<string, unknown> = {
         ...(currentBill as unknown as Record<string, unknown>),
-        PrivateNote: currentBill.PrivateNote,
+        PrivateNote: buildPrivateNoteWithPo(currentBill.PrivateNote, normalizedPoNumber),
         Line: updatedLines,
       };
 
@@ -586,7 +622,6 @@ export async function POST(req: NextRequest) {
       });
 
       persistedLines = [...nonSplitPersistedLines, ...splitPersistedLines];
-    } else {
       syncedAt = new Date();
     }
 

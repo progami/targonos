@@ -2748,6 +2748,15 @@ test('split manufacturing bill mappings persist line-level PO numbers', () => {
   );
 });
 
+test('bill mapping route marks only QBO-mutated split saves as synced', () => {
+  const source = readFileSync('app/api/plutus/bills/route.ts', 'utf8');
+
+  assert.equal(source.includes('let syncedAt: Date | null = null;'), true);
+  assert.equal(source.includes('PrivateNote: buildPrivateNoteWithPo(currentBill.PrivateNote, normalizedPoNumber)'), true);
+  assert.equal(source.includes('PrivateNote: currentBill.PrivateNote'), false);
+  assert.equal(source.includes('} else {\n      syncedAt = new Date();\n    }'), false);
+});
+
 test('parseQboBillsToInventoryEvents scopes explicit inventory accounts by marketplace', () => {
   const bill: QboBill = {
     Id: 'B-1',
