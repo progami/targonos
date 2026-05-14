@@ -6,7 +6,7 @@ export type SkuAliasCandidate = {
 };
 
 export function normalizeAliasLookupValue(value: string): string {
-  return value.trim().toUpperCase();
+  return value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 export function resolveCanonicalProductAlias(

@@ -367,7 +367,8 @@ test('FIFO inventory movement consumes PO cost layers deterministically', () => 
 test('legacy subledger backfill groups current Brand and Sku rows without false PO merges', () => {
   assert.equal(mapLegacyBrandNameToProductGroupCode('US-PDS'), 'PDS');
   assert.equal(mapLegacyBrandNameToProductGroupCode('UK-CDS'), 'CDS');
-  assert.equal(normalizeAliasValue(' cs-007 '), 'CS-007');
+  assert.equal(normalizeAliasValue(' cs-007 '), 'CS007');
+  assert.equal(normalizeAliasValue('CS 007'), normalizeAliasValue('CS-007'));
 
   const plan = planLegacySubledgerBackfill({
     brands: [
@@ -380,6 +381,26 @@ test('legacy subledger backfill groups current Brand and Sku rows without false 
     ],
     billMappings: [],
     billLineMappings: [],
+    orderSales: [
+      {
+        id: 'sale_uk',
+        marketplace: 'amazon.co.uk',
+        orderId: 'ORDER-1',
+        sku: 'CS-007',
+        saleDate: new Date('2026-04-01T00:00:00.000Z'),
+        quantity: 2,
+      },
+    ],
+    orderReturns: [
+      {
+        id: 'return_uk',
+        marketplace: 'amazon.co.uk',
+        orderId: 'ORDER-1',
+        sku: 'CS-007',
+        returnDate: new Date('2026-04-02T00:00:00.000Z'),
+        quantity: 1,
+      },
+    ],
   });
 
   assert.deepEqual(plan.productGroups.map((group) => group.code), ['PDS']);
@@ -391,6 +412,40 @@ test('legacy subledger backfill groups current Brand and Sku rows without false 
       ['amazon.co.uk', 'SKU', 'CS 007'],
       ['amazon.com', 'ASIN', 'B09HXC3NL8'],
       ['amazon.com', 'SKU', 'CS-007'],
+    ],
+  );
+  assert.deepEqual(
+    plan.inventoryMovements.map((movement) => ({
+      canonicalProductKey: movement.canonicalProductKey,
+      marketplace: movement.marketplace,
+      movementType: movement.movementType,
+      quantity: movement.quantity,
+      movementDate: movement.movementDate.toISOString(),
+      sourceType: movement.sourceType,
+      sourceId: movement.sourceId,
+      sourceLineId: movement.sourceLineId,
+    })),
+    [
+      {
+        canonicalProductKey: 'ASIN:B09HXC3NL8',
+        marketplace: 'amazon.co.uk',
+        movementType: 'SALE',
+        quantity: -2,
+        movementDate: '2026-04-01T00:00:00.000Z',
+        sourceType: 'ORDER_SALE',
+        sourceId: 'ORDER-1',
+        sourceLineId: 'sale_uk',
+      },
+      {
+        canonicalProductKey: 'ASIN:B09HXC3NL8',
+        marketplace: 'amazon.co.uk',
+        movementType: 'RETURN',
+        quantity: 1,
+        movementDate: '2026-04-02T00:00:00.000Z',
+        sourceType: 'ORDER_RETURN',
+        sourceId: 'ORDER-1',
+        sourceLineId: 'return_uk',
+      },
     ],
   );
 });
