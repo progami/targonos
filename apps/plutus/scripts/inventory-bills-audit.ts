@@ -50,6 +50,18 @@ type BillIssue =
       lineId: string;
       amount: number;
       description: string;
+    }
+  | {
+      code: 'INVENTORY_BILL_MAPPING_SKU_WITHOUT_SOURCE';
+      billId: string;
+      txnDate: string;
+      vendorName: string;
+      docNumber: string;
+      privateNote: string;
+      lineId: string;
+      amount: number;
+      mappedSku: string;
+      description: string;
     };
 
 function printUsage(): void {
@@ -195,6 +207,16 @@ function classifyInventoryMarketplaceFromAccount(account: QboAccount): Inventory
   return null;
 }
 
+function hasStructuredPlaceholderSku(description: string): boolean {
+  return description
+    .replace(/×/g, 'x')
+    .split(';')
+    .some((part) => {
+      const trimmed = part.trim();
+      return /^(?:SKU|FOR_SKU|FORSKU)\s*[:=]\s*N\/A$/i.test(trimmed);
+    });
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   await loadPlutusEnv();
@@ -304,11 +326,37 @@ async function main(): Promise<void> {
 
     const mapping = mappingByBillId.get(billId);
     const mapped = mapping !== undefined;
+    const lineItemById = new Map(lineItems.map((line) => [line.lineId, line]));
 
     let poNumber: string | null = null;
     if (mapped) {
       poNumber = mapping.poNumber;
       for (const mLine of mapping.lines) {
+        const sourceLine = lineItemById.get(mLine.qboLineId);
+        if (mLine.sku && sourceLine && hasStructuredPlaceholderSku(sourceLine.description)) {
+          let parsedSku: string | null = null;
+          try {
+            parsedSku = parseSkuFromDescription(sourceLine.description);
+          } catch {
+            parsedSku = null;
+          }
+
+          if (parsedSku === null) {
+            issues.push({
+              code: 'INVENTORY_BILL_MAPPING_SKU_WITHOUT_SOURCE',
+              billId,
+              txnDate,
+              vendorName,
+              docNumber,
+              privateNote,
+              lineId: sourceLine.lineId,
+              amount: sourceLine.amount,
+              mappedSku: mLine.sku,
+              description: sourceLine.description,
+            });
+          }
+        }
+
         if (mLine.component === 'manufacturing') {
           if (!mLine.sku || !mLine.quantity || mLine.quantity <= 0) {
             continue;

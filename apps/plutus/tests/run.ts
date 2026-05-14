@@ -3048,6 +3048,56 @@ test('bill mappings allocate non-sku costs by PO units', () => {
   assert.equal(stateB?.valueByComponentCents.freight, 200);
 });
 
+test('bill mappings keep blank-PO sku-less costs at brand level', () => {
+  const parsed = buildInventoryEventsFromMappings([
+    {
+      qboBillId: 'B-BRAND',
+      poNumber: '',
+      brandId: 'brand-us-pds',
+      billDate: '2026-02-01',
+      lines: [
+        { qboLineId: '1', component: 'mfgAccessories', amountCents: 56000, sku: null, quantity: null },
+      ],
+    },
+  ]);
+
+  assert.equal(parsed.events.length, 1);
+  const event = parsed.events[0];
+  assert.equal(event?.kind, 'brand_cost');
+  if (event?.kind !== 'brand_cost') throw new Error('expected brand-level cost event');
+  assert.equal(event.brandId, 'brand-us-pds');
+  assert.equal(event.component, 'mfgAccessories');
+  assert.equal(event.costCents, 56000);
+
+  const replay = replayInventoryLedger({
+    parsedBills: parsed,
+    knownSales: [],
+    knownReturns: [],
+    computeSales: [],
+  });
+
+  assert.equal(replay.blocks.length, 0);
+  assert.equal(replay.snapshot.bySku.size, 0);
+});
+
+test('bill mappings require PO on manufacturing lines', () => {
+  assert.throws(
+    () =>
+      buildInventoryEventsFromMappings([
+        {
+          qboBillId: 'B-MFG',
+          poNumber: '',
+          brandId: 'brand-us-pds',
+          billDate: '2026-02-01',
+          lines: [
+            { qboLineId: '1', component: 'manufacturing', amountCents: 56000, sku: 'SKU-A', quantity: 10 },
+          ],
+        },
+      ]),
+    /Manufacturing bill mapping line requires poNumber/,
+  );
+});
+
 test('parseQboBillsToInventoryEvents scopes explicit inventory accounts by marketplace', () => {
   const bill: QboBill = {
     Id: 'B-1',
