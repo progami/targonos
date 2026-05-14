@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { loadSharedPlutusEnv } from './shared-env';
 
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
+import { normalizeSettlementOperatingMemo } from '@/lib/amazon-finances/settlement-memo-normalization';
 import {
   fetchAllFinancialEventsByGroupId,
   findFinancialEventGroupIdForSettlementId,
@@ -122,7 +123,7 @@ function extractLinesFromJe(je: QboJournalEntry): QboLine[] {
     const amount = line.Amount;
     if (typeof amount !== 'number' || !Number.isFinite(amount) || amount === 0) continue;
 
-    const description = typeof line.Description === 'string' ? line.Description : '';
+    const description = normalizeSettlementOperatingMemo(typeof line.Description === 'string' ? line.Description : '');
     result.push({ accountId, postingType, amount: normalizeAmount(amount), description });
   }
 
@@ -137,37 +138,6 @@ function requireSettlementIdFromPrivateNote(input: { docNumber: string; privateN
   }
 
   throw new Error(`Missing SP-API settlementId in PrivateNote for ${input.docNumber}`);
-}
-
-function extractBrandLabelFromMemo(description: string): string | null {
-  const prefixes = [
-    'Amazon Sales - Principal - ',
-    'Amazon Sales - Shipping - ',
-    'Amazon Sales - Shipping Promotion - ',
-    'Amazon Refunds - Refunded Principal - ',
-    'Amazon Refunds - Refunded Shipping - ',
-    'Amazon Refunds - Refunded Shipping Promotion - ',
-  ];
-
-  for (const prefix of prefixes) {
-    if (!description.startsWith(prefix)) continue;
-    const label = description.slice(prefix.length).trim();
-    return label === '' ? null : label;
-  }
-
-  return null;
-}
-
-function collectBrandLabelsFromJournalEntries(journalEntries: QboJournalEntry[]): Set<string> {
-  const result = new Set<string>();
-  for (const je of journalEntries) {
-    const lines = extractLinesFromJe(je);
-    for (const line of lines) {
-      const label = extractBrandLabelFromMemo(line.description);
-      if (label) result.add(label);
-    }
-  }
-  return result;
 }
 
 function requireSkuBrandName(skuRaw: string, skuToBrandName: Map<string, string>): string {
@@ -199,51 +169,6 @@ function collectBrandNamesFromEvents(events: SpApiFinancialEvents, skuToBrandNam
   }
 
   return result;
-}
-
-function buildBrandLabelByBrandName(input: {
-  brandNamesUsed: Set<string>;
-  journalBrandLabels: Set<string>;
-}): Map<string, string> | undefined {
-  if (input.brandNamesUsed.size === 0 && input.journalBrandLabels.size === 0) return undefined;
-
-  if (input.brandNamesUsed.size === 0) {
-    throw new Error(`Journal uses brand labels, but no brands were detected from SP-API events: ${Array.from(input.journalBrandLabels).join(', ')}`);
-  }
-
-  if (input.journalBrandLabels.size === 0) {
-    throw new Error(`SP-API events use brands (${Array.from(input.brandNamesUsed).join(', ')}), but journal entry has no brand-labeled memos`);
-  }
-
-  const brandNames = Array.from(input.brandNamesUsed).sort();
-  const labels = Array.from(input.journalBrandLabels).sort();
-
-  const mapping = new Map<string, string>();
-
-  for (const brandName of brandNames) {
-    if (input.journalBrandLabels.has(brandName)) {
-      mapping.set(brandName, brandName);
-    }
-  }
-
-  const usedLabels = new Set(mapping.values());
-  const unmappedBrandNames = brandNames.filter((b) => !mapping.has(b));
-  const remainingLabels = labels.filter((l) => !usedLabels.has(l));
-
-  if (unmappedBrandNames.length === 0 && remainingLabels.length === 0) {
-    return mapping;
-  }
-
-  if (unmappedBrandNames.length === 1 && remainingLabels.length === 1) {
-    mapping.set(unmappedBrandNames[0]!, remainingLabels[0]!);
-    return mapping;
-  }
-
-  if (brandNames.length !== labels.length) {
-    throw new Error(`Brand mismatch: SP-API brands (${brandNames.join(', ')}) vs QBO brand labels (${labels.join(', ')})`);
-  }
-
-  throw new Error(`Ambiguous brand label mapping: SP-API brands (${brandNames.join(', ')}) vs QBO labels (${labels.join(', ')})`);
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -451,9 +376,7 @@ async function main(): Promise<void> {
 
     const events = await fetchAllFinancialEventsByGroupId({ tenantCode: 'US', eventGroupId });
 
-    const journalBrandLabels = collectBrandLabelsFromJournalEntries(settlementJournals);
-    const brandNamesUsed = collectBrandNamesFromEvents(events, skuToBrandName);
-    const brandLabelByBrandName = buildBrandLabelByBrandName({ brandNamesUsed, journalBrandLabels });
+    collectBrandNamesFromEvents(events, skuToBrandName);
 
     const draft = buildUsSettlementDraftFromSpApiFinances({
       settlementId,
@@ -461,7 +384,6 @@ async function main(): Promise<void> {
       eventGroup,
       events,
       skuToBrandName,
-      brandLabelByBrandName,
     });
 
     const journalsByDocNumber = new Map<string, QboJournalEntry>();
