@@ -3198,6 +3198,27 @@ test('parseSkuFromDescription reads package cost FOR_SKU fields', () => {
   assert.equal(parsedSku, 'CS-007');
 });
 
+test('structured SKU parsers ignore placeholder SKU values', () => {
+  assert.equal(
+    parseSkuFromDescription(
+      'PKG; OWNER=PO-19-PDS; SKU=N/A; FOR_SKU=CS-007; QTY=29440; PO=PO-19-PDS; SOURCE=PI-250804BOXB',
+    ),
+    'CS-007',
+  );
+
+  assert.deepEqual(
+    parseSkuQuantityFromDescription(
+      'MFG; OWNER=US-PDS; PO=PO-19-PDS; SKU=N/A; FOR_SKU=CS-007; QTY=29440; SOURCE=PI-250804BOXB',
+    ),
+    { sku: 'CS-007', quantity: 29440 },
+  );
+
+  assert.throws(
+    () => parseSkuQuantityFromDescription('MFG; OWNER=US-PDS; SKU=N/A; QTY=29440; SOURCE=PI-250804BOXB'),
+    /Missing SKU/,
+  );
+});
+
 test('parseQboBillsToInventoryEvents reads SOP internal ref and deterministic line fields', () => {
   const bill: QboBill = {
     Id: 'B-PO20',

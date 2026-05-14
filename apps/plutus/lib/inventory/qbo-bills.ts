@@ -85,6 +85,14 @@ function parseStructuredFields(value: string): Map<string, string> {
   return fields;
 }
 
+function normalizeStructuredSkuValue(value: string | undefined): string | null {
+  if (value === undefined) return null;
+
+  const sku = value.trim().replace(/\s+/g, '-').toUpperCase();
+  if (sku === '' || sku === 'N/A') return null;
+  return sku;
+}
+
 function parseInternalRefPo(value: string): string {
   const trimmed = value.trim();
   if (trimmed === '') return '';
@@ -191,11 +199,8 @@ export function parseSkuFromDescription(description: string): string {
   }
 
   const fields = parseStructuredFields(normalized);
-  const structuredSku = fields.get('SKU') ?? fields.get('FORSKU');
-  if (structuredSku && structuredSku.trim() !== '') {
-    const sku = structuredSku.trim().replace(/\s+/g, '-').toUpperCase();
-    if (sku !== 'N/A') return sku;
-  }
+  const structuredSku = normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+  if (structuredSku) return structuredSku;
 
   const parsed = parseSkuQuantityFromDescription(description);
   return parsed.sku;
@@ -208,11 +213,16 @@ export function parseSkuQuantityFromDescription(description: string): { sku: str
   }
 
   const fields = parseStructuredFields(normalized);
-  const structuredSku = fields.get('SKU');
   const structuredQty = fields.get('QTY') ?? fields.get('QUANTITY');
-  if (structuredSku && structuredQty) {
+  if (structuredQty) {
+    const structuredSku =
+      normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+    if (!structuredSku) {
+      throw new Error(`Missing SKU in description: "${description}"`);
+    }
+
     return {
-      sku: structuredSku.trim().replace(/\s+/g, '-').toUpperCase(),
+      sku: structuredSku,
       quantity: parsePositiveIntegerField(structuredQty, 'quantity', description),
     };
   }
