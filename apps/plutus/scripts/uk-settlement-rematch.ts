@@ -378,7 +378,7 @@ async function main(): Promise<void> {
     }
 
     const hasBlockingBlocks = previewResult.preview.blocks.some((block) => isBlockingProcessingBlock(block));
-    const hasEmptyJournals = previewResult.preview.pnlJournalEntry.lines.length === 0;
+    const hasEmptyJournals = false;
 
     if (hasBlockingBlocks || hasEmptyJournals) {
       statusRows.push({

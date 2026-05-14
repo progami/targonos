@@ -304,6 +304,7 @@ model BillLineMapping {
   component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
   amountCents   Int
   sku           String?
+  poNumber      String?
   quantity      Int?
 
   billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
