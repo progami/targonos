@@ -295,7 +295,9 @@ export function computeSettlementTotalFromJournalEntry(
 
     hasAnyLine = true;
 
-    if (account.AccountType !== 'Bank' && account.AccountType !== 'Credit Card') continue;
+    const isCashLine = account.AccountType === 'Bank' || account.AccountType === 'Credit Card';
+    const isSettlementControlLine = account.Name.trim().toLowerCase() === 'plutus settlement control';
+    if (!isCashLine && !isSettlementControlLine) continue;
 
     found = true;
     const signed = line.JournalEntryLineDetail.PostingType === 'Debit' ? amount : -amount;
