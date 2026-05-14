@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { extractPoNumberFromBill } from '@/lib/plutus/bills/pull-sync';
 
-import { parseSkuQuantityFromDescription } from '@/lib/inventory/qbo-bills';
+import { parseSkuFromDescription, parseSkuQuantityFromDescription } from '@/lib/inventory/qbo-bills';
 
 type CliOptions = {
   since: string;
@@ -367,7 +367,7 @@ async function main(): Promise<void> {
 
       let parsedSku: string | null = null;
       try {
-        parsedSku = parseSkuQuantityFromDescription(line.description).sku;
+        parsedSku = parseSkuFromDescription(line.description);
       } catch {
         parsedSku = null;
       }
