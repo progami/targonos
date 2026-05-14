@@ -83,6 +83,17 @@ function isSkuLessParentOnlyMemo(bucket: PnlBucketKey, description: string): boo
   return false;
 }
 
+function isPositiveInboundTransportationReversal(bucket: PnlBucketKey, description: string, cents: number): boolean {
+  if (bucket !== 'amazonFbaFees') return false;
+  if (cents <= 0) return false;
+
+  const normalized = description.trim();
+  if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Fee') return true;
+  if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Fee - Domestic Orders') return true;
+  if (normalized === 'Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders') return true;
+  return false;
+}
+
 function shouldRequirePnlBucketClassification(description: string): boolean {
   const normalized = description.trim();
   if (normalized === '') return false;
@@ -179,7 +190,11 @@ export function computePnlAllocation(
       continue;
     }
 
-    if (skuLessParentOnlyBuckets.has(bucket) || isSkuLessParentOnlyMemo(bucket, row.description)) {
+    if (
+      skuLessParentOnlyBuckets.has(bucket) ||
+      isSkuLessParentOnlyMemo(bucket, row.description) ||
+      isPositiveInboundTransportationReversal(bucket, row.description, cents)
+    ) {
       continue;
     }
 

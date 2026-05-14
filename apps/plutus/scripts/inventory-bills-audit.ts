@@ -1,10 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { extractPoNumberFromBill } from '@/lib/plutus/bills/pull-sync';
 
 import { parseSkuQuantityFromDescription } from '@/lib/inventory/qbo-bills';
 
 type CliOptions = {
   since: string;
+  marketplace: 'all' | 'amazon.com' | 'amazon.co.uk';
 };
 
 type BillIssue =
@@ -55,6 +57,7 @@ function printUsage(): void {
   console.log('');
   console.log('Options:');
   console.log('  --since <YYYY-MM-DD>   (default: 2024-01-01)');
+  console.log('  --marketplace <all|amazon.com|amazon.co.uk>   (default: all)');
   console.log('');
 }
 
@@ -117,6 +120,7 @@ function requireIsoDay(value: string, label: string): string {
 
 function parseArgs(argv: string[]): CliOptions {
   let since = '2024-01-01';
+  let marketplace: CliOptions['marketplace'] = 'all';
 
   let i = 0;
   while (i < argv.length) {
@@ -135,14 +139,26 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--marketplace') {
+      const next = argv[i + 1];
+      if (!next) throw new Error('Missing value for --marketplace');
+      if (next !== 'all' && next !== 'amazon.com' && next !== 'amazon.co.uk') {
+        throw new Error(`Invalid --marketplace value: ${next}`);
+      }
+      marketplace = next;
+      i += 2;
+      continue;
+    }
+
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { since };
+  return { since, marketplace };
 }
 
 type InventoryLine = {
   component: 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
+  marketplace: 'amazon.com' | 'amazon.co.uk' | null;
   lineId: string;
   amount: number;
   description: string;
@@ -151,6 +167,7 @@ type InventoryLine = {
 type QboAccount = {
   Id: string;
   Name: string;
+  FullyQualifiedName?: string;
   AccountType?: string;
   AccountSubType?: string;
 };
@@ -171,23 +188,11 @@ function classifyInventoryComponentFromAccount(account: QboAccount): InventoryLi
   return null;
 }
 
-function isPoMemoCaseMismatch(memo: string): boolean {
-  const trimmed = memo.trim();
-  if (trimmed === '') return false;
-  if (trimmed.startsWith('PO: ')) return false;
-  return /^po:\s+/i.test(trimmed);
-}
-
-function parsePoNumber(memo: string): string {
-  const trimmed = memo.trim();
-  if (!trimmed.startsWith('PO: ')) {
-    throw new Error(`Bill memo must start with "PO: " (got "${memo}")`);
-  }
-  const po = trimmed.slice(4).trim();
-  if (po === '') {
-    throw new Error(`Bill memo PO number is empty (got "${memo}")`);
-  }
-  return po;
+function classifyInventoryMarketplaceFromAccount(account: QboAccount): InventoryLine['marketplace'] {
+  const name = `${account.FullyQualifiedName ?? ''} ${account.Name}`.trim();
+  if (name.includes('US-PDS')) return 'amazon.com';
+  if (name.includes('UK-PDS')) return 'amazon.co.uk';
+  return null;
 }
 
 async function main(): Promise<void> {
@@ -280,12 +285,15 @@ async function main(): Promise<void> {
       if (!account) continue;
       const component = classifyInventoryComponentFromAccount(account);
       if (component === null) continue;
+      const lineMarketplace = classifyInventoryMarketplaceFromAccount(account);
+      if (options.marketplace !== 'all' && lineMarketplace !== options.marketplace) continue;
 
       const amount = typeof line.Amount === 'number' ? line.Amount : 0;
       const description = typeof line.Description === 'string' ? line.Description : '';
 
       lineItems.push({
         component,
+        marketplace: lineMarketplace,
         lineId: String(line.Id),
         amount,
         description,
@@ -309,15 +317,11 @@ async function main(): Promise<void> {
         }
       }
     } else {
-      const trimmedMemo = privateNote.trim();
-      if (!trimmedMemo.startsWith('PO: ')) {
-        if (isPoMemoCaseMismatch(privateNote)) {
-          issues.push({ code: 'INVENTORY_BILL_UNMAPPED_PO_MEMO_CASE_MISMATCH', billId, txnDate, vendorName, docNumber, privateNote });
-        } else {
-          issues.push({ code: 'INVENTORY_BILL_UNMAPPED_MISSING_PO_MEMO', billId, txnDate, vendorName, docNumber, privateNote });
-        }
+      const extractedPoNumber = extractPoNumberFromBill(bill);
+      if (extractedPoNumber === '') {
+        issues.push({ code: 'INVENTORY_BILL_UNMAPPED_MISSING_PO_MEMO', billId, txnDate, vendorName, docNumber, privateNote });
       } else {
-        poNumber = parsePoNumber(privateNote);
+        poNumber = extractedPoNumber;
         for (const line of lineItems) {
           if (line.component !== 'manufacturing') continue;
           try {
@@ -395,6 +399,7 @@ async function main(): Promise<void> {
       {
         ok: issues.length === 0,
         since: options.since,
+        marketplace: options.marketplace,
         totals: {
           billsFetched: bills.length,
           inventoryBills: inventoryBills.length,

@@ -21,6 +21,7 @@ export type BillMappingPullSyncUpdate = {
 
 const poCustomFieldNamePattern = /\b(?:po|p\/o|purchase\s*order)\b/i;
 const poMemoPatterns = [
+  /^INTERNAL\s+REF\s*:\s*(.+)$/i,
   /^P(?:\s*\/\s*)?O\s*(?:#|:|-)\s*(.+)$/i,
   /^P(?:\s*\/\s*)?O\s+(.+)$/i,
 ];

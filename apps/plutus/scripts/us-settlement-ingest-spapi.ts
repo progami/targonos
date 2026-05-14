@@ -301,7 +301,13 @@ async function main(): Promise<void> {
   const skuToBrandName = new Map<string, string>();
   for (const row of skus) {
     if (row.brand.marketplace !== 'amazon.com') continue;
-    skuToBrandName.set(normalizeSku(row.sku), row.brand.name);
+    const aliases = [row.sku];
+    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
+      aliases.push(row.asin);
+    }
+    for (const alias of aliases) {
+      skuToBrandName.set(normalizeSku(alias), row.brand.name);
+    }
   }
 
   const maybeConnection = await getQboConnection();

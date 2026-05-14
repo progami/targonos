@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -36,8 +38,12 @@ import {
   allocateShipmentFeeChargesBySkuQuantity,
   extractInboundTransportationServiceFeeCharges,
   isInboundTransportationMemoDescription,
+  loadInboundShipmentItemsFromAwdInboundShipmentReports,
 } from '../lib/plutus/shipment-fee-allocation';
-import { deterministicSourceGuidanceForBucket } from '../lib/plutus/fee-allocation';
+import {
+  buildDeterministicSkuAllocations,
+  deterministicSourceGuidanceForBucket,
+} from '../lib/plutus/fee-allocation';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import {
@@ -415,6 +421,39 @@ test('normalizeSettlementDocNumber extracts embedded settlement ids', () => {
   assert.equal(meta.marketplace.id, 'amazon.co.uk');
   assert.equal(meta.periodStart, '2026-01-16');
   assert.equal(meta.periodEnd, '2026-01-30');
+});
+
+test('computeSettlementTotalFromJournalEntry reads Plutus settlement control lines', () => {
+  const accounts = new Map([
+    ['178', { Id: '178', Name: 'Plutus Settlement Control', AccountType: 'Other Current Asset' }],
+    ['400', { Id: '400', Name: 'Amazon Sales', AccountType: 'Income' }],
+  ]) as any;
+
+  const total = computeSettlementTotalFromJournalEntry(
+    {
+      Id: 'je-1',
+      SyncToken: '0',
+      TxnDate: '2026-04-30',
+      DocNumber: 'US-260416-260430-S1',
+      Line: [
+        {
+          Amount: 119.34,
+          Description: 'Amazon Sales - Principal - US-PDS',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Credit', AccountRef: { value: '400' } },
+        },
+        {
+          Amount: 119.34,
+          Description: 'Settlement Control (FundTransferStatus=Succeeded)',
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: { PostingType: 'Debit', AccountRef: { value: '178' } },
+        },
+      ],
+    },
+    accounts,
+  );
+
+  assert.equal(total, 119.34);
 });
 
 test('extractSourceSettlementIdFromPrivateNote reads opaque source ids', () => {
@@ -803,7 +842,7 @@ test('buildSettlementPostingSectionViewModels preserves preview severity and sha
         docNumber: 'UK-260401-260405-S1-A',
         invoiceId: 'INV-PREVIEW-WARN',
         preview: {
-          blocks: [{ code: 'PNL_ALLOCATION_WARNING', message: 'Preview warning' }],
+          blocks: [{ code: 'PNL_ALLOCATION_SOURCE_GAP', message: 'Preview warning' }],
           sales: [],
           returns: [],
           cogsJournalEntry: { lines: [] },
@@ -827,8 +866,8 @@ test('buildSettlementPostingSectionViewModels preserves preview severity and sha
 
   const sections = buildSettlementPostingSectionViewModels(detail, preview);
   assert.equal(sections[0]?.invoiceId, 'INV-KEEP');
-  assert.equal(sections[0]?.blockState, 'warning');
-  assert.equal(sections[0]?.blocks[0]?.severity, 'warning');
+  assert.equal(sections[0]?.blockState, 'blocked');
+  assert.equal(sections[0]?.blocks[0]?.severity, 'blocked');
   assert.equal(sections[0]?.blocks[0]?.message, 'Preview warning');
   assert.equal(sections[1]?.blockState, 'blocked');
   assert.equal(sections[1]?.blocks[0]?.severity, 'blocked');
@@ -1009,6 +1048,21 @@ test('SP-API settlement sync CLI scripts require human approval before mutation'
     assert.equal(source.includes("arg === '--human-approval'"), true, script);
     assert.match(source, /if \(\(postToQbo \|\| process\) && humanApproval !== HUMAN_APPROVAL_PHRASE\)/, script);
   }
+});
+
+test('US SP-API settlement reset is approval-gated and can target settlement ids', () => {
+  const source = readFileSync('scripts/us-settlement-reset-spapi.ts', 'utf8');
+
+  assert.equal(source.includes("import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';"), true);
+  assert.equal(source.includes('settlementIds: string[] | undefined;'), true);
+  assert.equal(source.includes("arg === '--settlement-ids'"), true);
+  assert.equal(source.includes("arg === '--human-approval'"), true);
+  assert.match(source, /if \(apply && humanApproval !== HUMAN_APPROVAL_PHRASE\)/);
+  assert.equal(source.includes('function buildApplyCommand'), true);
+  assert.equal(source.includes("'--post-qbo'"), true);
+  assert.equal(source.includes('targetSettlementIds'), true);
+  assert.equal(source.includes('extractSettlementIdFromPrivateNote'), true);
+  assert.equal(source.includes('settlementIds: options.settlementIds'), true);
 });
 
 test('package scripts expose posted settlement rematch checks for both marketplaces', () => {
@@ -1224,6 +1278,19 @@ test('subledger pages are wired to route wrappers', () => {
   assert.equal(readFileSync(new URL('../app/purchase-orders/page.tsx', import.meta.url), 'utf8').includes('PurchaseOrdersPage'), true);
   assert.equal(readFileSync(new URL('../app/inventory-ledger/page.tsx', import.meta.url), 'utf8').includes('InventoryLedgerPage'), true);
   assert.equal(readFileSync(new URL('../app/qbo-audit/page.tsx', import.meta.url), 'utf8').includes('QboAuditPage'), true);
+});
+
+test('QBO audit API exposes flattened posting source fields', () => {
+  const source = readFileSync(new URL('../app/api/plutus/qbo-audit/route.ts', import.meta.url), 'utf8');
+
+  for (const expected of [
+    'sourceType: row.postingIntent.sourceType',
+    'sourceId: row.postingIntent.sourceId',
+    'market: row.postingIntent.market',
+    'lineCount: row.lineFingerprints.length',
+  ]) {
+    assert.equal(source.includes(expected), true, expected);
+  }
 });
 
 test('normalizeSettlementMarketplaceQuery maps settlement route params to marketplace filters', () => {
@@ -1649,6 +1716,20 @@ test('US settlement SP-API paths do not gate month splitting on runtime env', ()
     const source = readFileSync(new URL(sourcePath, import.meta.url), 'utf8');
     assert.equal(source.includes('PLUTUS_SPLIT_SETTLEMENTS_BY_MONTH'), false);
   }
+});
+
+test('US settlement SP-API reconcile accepts missing QBO JE for empty expected segments', () => {
+  const source = readFileSync(new URL('../scripts/us-settlement-reconcile-spapi.ts', import.meta.url), 'utf8');
+
+  assert.equal(source.includes('if (!actualJe && !hasExpectedJournalLines)'), true);
+  assert.equal(source.includes("reason: 'No QBO JE expected for empty segment'"), true);
+});
+
+test('US settlement SP-API reconcile no longer requires real bank transfer lines', () => {
+  const source = readFileSync(new URL('../scripts/us-settlement-reconcile-spapi.ts', import.meta.url), 'utf8');
+
+  assert.equal(source.includes("throw new Error(`Missing 'Transfer to Bank' line"), false);
+  assert.equal(source.includes("throw new Error(`Missing 'Payment to Amazon' line"), false);
 });
 
 test('buildUsSettlementDraftFromSpApiFinances maps low value goods withheld tax', () => {
@@ -2306,6 +2387,31 @@ test('computePnlAllocation leaves SKU-less fees unallocated without deterministi
   assert.equal(allocation.unallocatedSkuLessBuckets[0]?.totalCents, -900);
 });
 
+test('computePnlAllocation keeps positive inbound transportation reversals parent-level', () => {
+  const allocation = computePnlAllocation(
+    [
+      {
+        invoiceId: 'US-260401-260410-S2',
+        market: 'Amazon.com',
+        date: '2026-04-10',
+        orderId: 'n/a',
+        sku: '',
+        quantity: 0,
+        description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
+        net: 2583.96,
+      },
+    ],
+    {
+      getBrandForSku: () => {
+        throw new Error('SKU resolver should not run for parent-level reversal');
+      },
+    },
+  );
+
+  assert.deepEqual(allocation.allocationsByBucket.amazonFbaFees, {});
+  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+});
+
 test('computePnlAllocation allocates amazon seller fees when SKU is present', () => {
   const rows = [
     {
@@ -2337,6 +2443,31 @@ test('computePnlAllocation allocates amazon seller fees when SKU is present', ()
   assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -250);
   assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -250);
   assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+});
+
+test('buildDeterministicSkuAllocations keeps inbound transportation reversals parent-level', async () => {
+  const allocation = await buildDeterministicSkuAllocations({
+    rows: [
+      {
+        invoiceId: 'US-260401-260410-S2',
+        market: 'Amazon.com',
+        date: '2026-04-10',
+        orderId: 'n/a',
+        sku: '',
+        quantity: 0,
+        description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
+        net: 2583.96,
+      },
+    ],
+    marketplace: 'amazon.com',
+    invoiceStartDate: '2026-04-01',
+    invoiceEndDate: '2026-04-10',
+    skuToBrand: new Map(),
+    settlementId: '26003231841',
+  });
+
+  assert.deepEqual(allocation.skuAllocationsByBucket, {});
+  assert.deepEqual(allocation.issues, []);
 });
 
 test('extractInboundTransportationServiceFeeCharges parses transaction and context entries', () => {
@@ -2414,6 +2545,35 @@ test('allocateShipmentFeeChargesBySkuQuantity allocates by shipped quantity', ()
   assert.equal(allocation.issues.length, 0);
   assert.equal(allocation.allocationBySku['SKU-A'], -7500);
   assert.equal(allocation.allocationBySku['SKU-B'], -7500);
+});
+
+test('loadInboundShipmentItemsFromAwdInboundShipmentReports reads Seller Central shipment quantities', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'awd-inbound-report-'));
+  try {
+    writeFileSync(
+      path.join(dir, 'awd-inbound.csv'),
+      [
+        '"shipment_id","shipment_create_date_utc","msku","expected_unit_count"',
+        '"STAR-SPME55WHX5UYW","2026-04-29 16:15:15","CS-010","1020"',
+        '"STAR-SPME55WHX5UYW","2026-04-29 16:15:15","CS-007","7168"',
+        '"STAR-OTHER","2026-04-29 16:15:15","CS-999","1"',
+      ].join('\n'),
+    );
+
+    const lookup = await loadInboundShipmentItemsFromAwdInboundShipmentReports({
+      shipmentId: 'STAR-SPME55WHX5UYW',
+      reportDir: dir,
+    });
+
+    assert.equal(lookup.issues.length, 0);
+    assert.equal(lookup.sourceFiles.length, 1);
+    assert.deepEqual(lookup.items, [
+      { sku: 'CS-010', quantity: 1020 },
+      { sku: 'CS-007', quantity: 7168 },
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
@@ -2688,13 +2848,21 @@ test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(lines[0]?.description.includes('SKU-B'), true);
 });
 
-test('isBlockingProcessingCode treats PNL allocation warnings as non-blocking', () => {
+test('isBlockingProcessingCode blocks deterministic PNL allocation source gaps', () => {
   assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), false);
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_SOURCE_GAP'), true);
+  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), true);
   assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
   assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
   assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
   assert.equal(isBlockingProcessingCode('REFUND_UNMATCHED'), true);
+});
+
+test('settlement processing audit fails when deterministic PNL allocation is incomplete', () => {
+  const source = readFileSync('scripts/settlement-processing-audit.ts', 'utf8');
+
+  assert.equal(source.includes('deterministicNotOk.length > 0'), true);
+  assert.equal(source.includes('mismatched.length > 0 || deterministicNotOk.length > 0'), true);
 });
 
 test('settlement processing skips refund matching when COGS is disabled', () => {
@@ -2703,6 +2871,43 @@ test('settlement processing skips refund matching when COGS is disabled', () => 
   assert.match(source, /const refundPairs = cogsEnabled \?/);
   assert.match(source, /if \(cogsEnabled\) \{\s*for \(const \[refundKey, refund\] of refundGroups\.entries\(\)\)/);
   assert.match(source, /!cogsEnabled \|\| currentSettlementRefundGroups\.size === 0/);
+});
+
+test('settlement processing treats empty split settlement segments as no-op processing', () => {
+  const source = readFileSync('lib/plutus/settlement-processing.ts', 'utf8');
+
+  assert.equal(source.includes('const hasAuditRows = scopedInvoiceRows.length > 0;'), true);
+  assert.equal(source.includes('if (hasAuditRows) {'), true);
+  assert.equal(source.includes('const emptyPnlAllocation'), true);
+  assert.equal(source.includes('meta.periodStart'), true);
+});
+
+test('inventory audit treats empty split COGS no-op rows as valid', () => {
+  const source = readFileSync('scripts/inventory-audit.ts', 'utf8');
+
+  assert.equal(source.includes("import { computeProcessingHash } from '@/lib/plutus/settlement-validation';"), true);
+  assert.equal(source.includes('const emptyProcessingHash = computeProcessingHash([]);'), true);
+  assert.equal(source.includes("status: 'noop'"), true);
+  assert.equal(source.includes('input.processing.processingHash === emptyProcessingHash'), true);
+});
+
+test('settlement SKU brand maps include ASIN aliases', () => {
+  const processingSource = readFileSync('lib/plutus/settlement-processing.ts', 'utf8');
+  const auditSource = readFileSync('scripts/settlement-processing-audit.ts', 'utf8');
+  const usSyncSource = readFileSync('lib/amazon-finances/us-settlement-sync.ts', 'utf8');
+
+  for (const source of [processingSource, auditSource, usSyncSource]) {
+    assert.equal(source.includes('row.asin'), true);
+    assert.equal(source.includes('aliases.push(row.asin)'), true);
+  }
+});
+
+test('inventory bills audit can scope by marketplace and SOP internal ref', () => {
+  const source = readFileSync('scripts/inventory-bills-audit.ts', 'utf8');
+
+  assert.equal(source.includes("--marketplace <all|amazon.com|amazon.co.uk>"), true);
+  assert.equal(source.includes('classifyInventoryMarketplaceFromAccount'), true);
+  assert.equal(source.includes('extractPoNumberFromBill(bill)'), true);
 });
 
 test('ledger blocks missing cost basis', () => {
@@ -3142,6 +3347,14 @@ test('extractPoNumberFromBill reads PO from memo when no custom field exists', (
   });
 
   assert.equal(po, 'US-PO-123');
+});
+
+test('extractPoNumberFromBill reads internal ref from SOP memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'INTERNAL REF: PO-20-PDS\nOWNER: US-PDS\nPI: PI-2601082',
+  });
+
+  assert.equal(po, 'PO-20-PDS');
 });
 
 test('extractPoNumberFromBill preserves direct PO code in memo', () => {
