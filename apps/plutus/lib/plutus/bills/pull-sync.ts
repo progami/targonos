@@ -27,6 +27,50 @@ const poMemoPatterns = [
 ];
 const directPoCodePattern = /^P(?:\s*\/\s*)?O-[A-Za-z0-9].*$/i;
 
+function parseStructuredFieldEntries(value: string): Array<{ key: string; value: string }> {
+  const fields: Array<{ key: string; value: string }> = [];
+
+  for (const part of value.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed === '') continue;
+
+    const equalsIndex = trimmed.indexOf('=');
+    const colonIndex = trimmed.indexOf(':');
+    const separatorIndex =
+      equalsIndex === -1
+        ? colonIndex
+        : colonIndex === -1
+          ? equalsIndex
+          : Math.min(equalsIndex, colonIndex);
+    if (separatorIndex === -1) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const fieldValue = trimmed.slice(separatorIndex + 1).trim();
+    if (key === '' || fieldValue === '') continue;
+    fields.push({ key, value: fieldValue });
+  }
+
+  return fields;
+}
+
+function parseInternalRefPo(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') return '';
+
+  const poValues = parseStructuredFieldEntries(trimmed)
+    .filter((field) => field.key === 'PO')
+    .map((field) => field.value.trim())
+    .filter((fieldValue) => fieldValue !== '');
+  const uniquePoValues = Array.from(new Set(poValues));
+  if (uniquePoValues.length === 1) return uniquePoValues[0]!;
+  if (uniquePoValues.length > 1) return '';
+
+  const firstSegment = trimmed.split(';')[0]!.trim();
+  if (directPoCodePattern.test(firstSegment)) return firstSegment;
+
+  return '';
+}
+
 export function extractPoNumberFromBill(bill: Pick<QboBill, 'PrivateNote' | 'CustomField'>): string {
   const customFieldPo = extractPoNumberFromCustomFields(bill.CustomField);
   if (customFieldPo !== '') return customFieldPo;
@@ -76,7 +120,9 @@ function extractPoNumberFromPrivateNote(privateNote: string | undefined): string
       if (!match) continue;
       const po = match[1];
       if (!po) continue;
-      const trimmed = po.trim();
+      const trimmed = pattern.source.includes('INTERNAL')
+        ? parseInternalRefPo(po)
+        : po.trim();
       if (trimmed === '') continue;
       return trimmed;
     }

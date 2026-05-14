@@ -43,10 +43,80 @@ export type ParsedBills = {
 
 const poCustomFieldNamePattern = /\b(?:po|p\/o|purchase\s*order)\b/i;
 const poMemoPatterns = [
+  /^INTERNAL\s+REF\s*:\s*(.+)$/i,
   /^P(?:\s*\/\s*)?O\s*(?:#|:|-)\s*(.+)$/i,
   /^P(?:\s*\/\s*)?O\s+(.+)$/i,
 ];
 const directPoCodePattern = /^P(?:\s*\/\s*)?O-[A-Za-z0-9].*$/i;
+
+function parseStructuredFieldEntries(value: string): Array<{ key: string; value: string }> {
+  const fields: Array<{ key: string; value: string }> = [];
+
+  for (const part of value.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed === '') continue;
+
+    const equalsIndex = trimmed.indexOf('=');
+    const colonIndex = trimmed.indexOf(':');
+    const separatorIndex =
+      equalsIndex === -1
+        ? colonIndex
+        : colonIndex === -1
+          ? equalsIndex
+          : Math.min(equalsIndex, colonIndex);
+    if (separatorIndex === -1) continue;
+
+    const key = trimmed.slice(0, separatorIndex).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const fieldValue = trimmed.slice(separatorIndex + 1).trim();
+    if (key === '' || fieldValue === '') continue;
+    fields.push({ key, value: fieldValue });
+  }
+
+  return fields;
+}
+
+function parseStructuredFields(value: string): Map<string, string> {
+  const fields = new Map<string, string>();
+
+  for (const field of parseStructuredFieldEntries(value)) {
+    fields.set(field.key, field.value);
+  }
+
+  return fields;
+}
+
+function normalizeStructuredSkuValue(value: string | undefined): string | null {
+  if (value === undefined) return null;
+
+  const sku = value.trim().replace(/\s+/g, '-').toUpperCase();
+  if (sku === '' || sku === 'N/A') return null;
+  return sku;
+}
+
+function parseInternalRefPo(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed === '') return '';
+
+  const poValues = parseStructuredFieldEntries(trimmed)
+    .filter((field) => field.key === 'PO')
+    .map((field) => field.value.trim())
+    .filter((fieldValue) => fieldValue !== '');
+  const uniquePoValues = Array.from(new Set(poValues));
+  if (uniquePoValues.length === 1) return uniquePoValues[0]!;
+  if (uniquePoValues.length > 1) return '';
+
+  const firstSegment = trimmed.split(';')[0]!.trim();
+  if (directPoCodePattern.test(firstSegment)) return firstSegment;
+
+  return '';
+}
+
+function parsePoFromDescription(description: string): string {
+  const fields = parseStructuredFields(description.trim().replace(/×/g, 'x').replace(/\s+/g, ' '));
+  const structuredPo = fields.get('PO');
+  if (structuredPo && structuredPo.trim() !== '') return structuredPo.trim();
+  return '';
+}
 
 function extractPoNumberFromCustomFields(customFields: QboBill['CustomField']): string {
   if (!customFields || customFields.length === 0) return '';
@@ -91,7 +161,9 @@ function extractPoNumberFromPrivateNote(privateNote: string | undefined): string
       if (!match) continue;
       const po = match[1];
       if (!po) continue;
-      const trimmed = po.trim();
+      const trimmed = pattern.source.includes('INTERNAL')
+        ? parseInternalRefPo(po)
+        : po.trim();
       if (trimmed === '') continue;
       return trimmed;
     }
@@ -106,10 +178,53 @@ function extractPoNumberFromBill(bill: Pick<QboBill, 'PrivateNote' | 'CustomFiel
   return extractPoNumberFromPrivateNote(bill.PrivateNote);
 }
 
+function parsePositiveIntegerField(value: string, label: string, description: string): number {
+  const normalized = value.replace(/,/g, '').trim();
+  if (!/^\d+$/.test(normalized)) {
+    throw new Error(`Invalid ${label} in description: "${description}"`);
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid ${label} in description: "${description}"`);
+  }
+
+  return parsed;
+}
+
+export function parseSkuFromDescription(description: string): string {
+  const normalized = description.trim().replace(/×/g, 'x').replace(/\s+/g, ' ');
+  if (normalized === '') {
+    throw new Error('Line description is empty');
+  }
+
+  const fields = parseStructuredFields(normalized);
+  const structuredSku = normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+  if (structuredSku) return structuredSku;
+
+  const parsed = parseSkuQuantityFromDescription(description);
+  return parsed.sku;
+}
+
 export function parseSkuQuantityFromDescription(description: string): { sku: string; quantity: number } {
   const normalized = description.trim().replace(/×/g, 'x').replace(/\s+/g, ' ');
   if (normalized === '') {
     throw new Error('Line description is empty');
+  }
+
+  const fields = parseStructuredFields(normalized);
+  const structuredQty = fields.get('QTY') ?? fields.get('QUANTITY');
+  if (structuredQty) {
+    const structuredSku =
+      normalizeStructuredSkuValue(fields.get('SKU')) ?? normalizeStructuredSkuValue(fields.get('FORSKU'));
+    if (!structuredSku) {
+      throw new Error(`Missing SKU in description: "${description}"`);
+    }
+
+    return {
+      sku: structuredSku,
+      quantity: parsePositiveIntegerField(structuredQty, 'quantity', description),
+    };
   }
 
   const qtyMatch = normalized.match(/(\d+)\s*(units?)?$/i);
@@ -286,8 +401,7 @@ export function parseQboBillsToInventoryEvents(
 
     if (candidateLines.length === 0) continue;
 
-    const poNumber = extractPoNumberFromBill(bill);
-    if (poNumber === '') continue;
+    const billPoNumber = extractPoNumberFromBill(bill);
 
     candidateLines.sort((a, b) => {
       const aLineId = a.line.Id ? a.line.Id : '';
@@ -307,6 +421,9 @@ export function parseQboBillsToInventoryEvents(
       const costCents = toCents(rawAmount);
 
       const description = line.Description ? line.Description : '';
+      const linePoNumber = parsePoFromDescription(description);
+      const poNumber = linePoNumber !== '' ? linePoNumber : billPoNumber;
+      if (poNumber === '') continue;
 
       if (component === 'manufacturing') {
         const parsed = parseSkuQuantityFromDescription(description);
@@ -325,8 +442,7 @@ export function parseQboBillsToInventoryEvents(
       // Cost-only components (freight/duty/accessories)
       let sku: string | undefined = undefined;
       try {
-        const parsed = parseSkuQuantityFromDescription(description);
-        sku = parsed.sku;
+        sku = parseSkuFromDescription(description);
       } catch {
         sku = undefined;
       }
