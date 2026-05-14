@@ -72,6 +72,7 @@ import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { buildPrincipalGroupsByDate, matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
   buildPlutusSettlementDocNumber,
+  computeSettlementTotalFromJournalEntry,
   isSettlementDocNumber,
   normalizeSettlementDocNumber,
   parseSettlementDocNumber,
@@ -281,6 +282,41 @@ test('extractSourceSettlementIdFromPrivateNote falls back to audit rebuild sourc
     ),
     'UK-251205-260102-S1',
   );
+});
+
+test('computeSettlementTotalFromJournalEntry reads Plutus settlement control lines', () => {
+  const total = computeSettlementTotalFromJournalEntry(
+    {
+      Id: '1375',
+      SyncToken: '0',
+      TxnDate: '2026-04-30',
+      DocNumber: 'US-260416-260430-S1',
+      Line: [
+        {
+          Id: '1',
+          Amount: 119.34,
+          DetailType: 'JournalEntryLineDetail',
+          JournalEntryLineDetail: {
+            PostingType: 'Debit',
+            AccountRef: { value: '178', name: 'Plutus Settlement Control' },
+          },
+        },
+      ],
+    },
+    new Map([
+      [
+        '178',
+        {
+          Id: '178',
+          Name: 'Plutus Settlement Control',
+          AccountType: 'Other Current Asset',
+          Active: true,
+        },
+      ],
+    ]),
+  );
+
+  assert.equal(total, 119.34);
 });
 
 test('settlementJournalEntryMatchesSource recognizes legacy combined settlement postings', () => {
