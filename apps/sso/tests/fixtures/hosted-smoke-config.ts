@@ -51,13 +51,6 @@ export const hostedSmokeAppGrants: HostedSmokeGrant[] = [
     tenantMemberships: [],
     locked: false,
   },
-  {
-    appSlug: 'argus',
-    appName: 'Argus',
-    departments: ['Account / Listing'],
-    tenantMemberships: [],
-    locked: false,
-  },
 ]
 
 function requireHostedSmokeEnv(name: string, env: HostedSmokeEnv): string {
