@@ -21,6 +21,8 @@ type BackfillSummary = {
   purchaseOrders: number;
   costLayers: number;
   unassignedCostLayers: number;
+  inventoryMovements: number;
+  unassignedInventoryMovements: number;
 };
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
@@ -92,7 +94,7 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 async function buildBackfillPlan(db: PlutusDb): Promise<LegacySubledgerBackfillPlan> {
-  const [brands, skus, billMappings, billLineMappings] = await Promise.all([
+  const [brands, skus, billMappings, billLineMappings, orderSales, orderReturns] = await Promise.all([
     db.brand.findMany({
       select: {
         id: true,
@@ -132,6 +134,26 @@ async function buildBackfillPlan(db: PlutusDb): Promise<LegacySubledgerBackfillP
         quantity: true,
       },
     }),
+    db.orderSale.findMany({
+      select: {
+        id: true,
+        marketplace: true,
+        orderId: true,
+        sku: true,
+        saleDate: true,
+        quantity: true,
+      },
+    }),
+    db.orderReturn.findMany({
+      select: {
+        id: true,
+        marketplace: true,
+        orderId: true,
+        sku: true,
+        returnDate: true,
+        quantity: true,
+      },
+    }),
   ]);
 
   return planLegacySubledgerBackfill({
@@ -139,6 +161,8 @@ async function buildBackfillPlan(db: PlutusDb): Promise<LegacySubledgerBackfillP
     skus,
     billMappings,
     billLineMappings,
+    orderSales,
+    orderReturns,
   });
 }
 
@@ -152,6 +176,10 @@ function summarizeBackfillPlan(plan: LegacySubledgerBackfillPlan, apply: boolean
     costLayers: plan.costLayers.length,
     unassignedCostLayers: plan.costLayers.filter((layer) => layer.canonicalProductKey === null)
       .length,
+    inventoryMovements: plan.inventoryMovements.length,
+    unassignedInventoryMovements: plan.inventoryMovements.filter(
+      (movement) => movement.canonicalProductKey === null,
+    ).length,
   };
 }
 
@@ -226,6 +254,19 @@ function getRequiredMapValue(map: Map<string, string>, key: string, label: strin
 }
 
 async function applyBackfillPlan(db: PlutusDb, plan: LegacySubledgerBackfillPlan): Promise<void> {
+  const unassignedInventoryMovements = plan.inventoryMovements.filter(
+    (movement) => movement.canonicalProductKey === null,
+  );
+  if (unassignedInventoryMovements.length > 0) {
+    const sample = unassignedInventoryMovements
+      .slice(0, 10)
+      .map((movement) => `${movement.marketplace}:${movement.sourceType}:${movement.sourceId}`)
+      .join(', ');
+    throw new Error(
+      `Cannot apply subledger backfill with ${unassignedInventoryMovements.length} unassigned inventory movements. Sample: ${sample}`,
+    );
+  }
+
   await db.$transaction(async (tx) => {
     const productGroupIdByCode = new Map<string, string>();
     for (const productGroup of plan.productGroups) {
@@ -392,6 +433,35 @@ async function applyBackfillPlan(db: PlutusDb, plan: LegacySubledgerBackfillPlan
       await tx.poCostLayer.update({
         where: { id: existingLayers[0]!.id },
         data,
+      });
+    }
+
+    await tx.inventoryMovement.deleteMany({
+      where: {
+        sourceType: {
+          in: ['ORDER_SALE', 'ORDER_RETURN'],
+        },
+      },
+    });
+
+    const movementRows = plan.inventoryMovements.map((movement) => ({
+      canonicalProductId: getRequiredMapValue(
+        canonicalProductIdByKey,
+        movement.canonicalProductKey!,
+        'canonical product',
+      ),
+      marketplace: movement.marketplace,
+      movementType: movement.movementType,
+      quantity: movement.quantity,
+      movementDate: movement.movementDate,
+      sourceType: movement.sourceType,
+      sourceId: movement.sourceId,
+      sourceLineId: movement.sourceLineId,
+    }));
+
+    for (let i = 0; i < movementRows.length; i += 1000) {
+      await tx.inventoryMovement.createMany({
+        data: movementRows.slice(i, i + 1000),
       });
     }
   });

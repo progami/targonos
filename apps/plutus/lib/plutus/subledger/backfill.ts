@@ -35,6 +35,24 @@ export type LegacyBillLineMappingRow = {
   quantity: number | null;
 };
 
+export type LegacyOrderSaleRow = {
+  id: string;
+  marketplace: string;
+  orderId: string;
+  sku: string;
+  saleDate: Date;
+  quantity: number;
+};
+
+export type LegacyOrderReturnRow = {
+  id: string;
+  marketplace: string;
+  orderId: string;
+  sku: string;
+  returnDate: Date;
+  quantity: number;
+};
+
 export type LegacySubledgerBackfillPlan = {
   productGroups: Array<{ code: string; name: string }>;
   canonicalProducts: Array<{ key: string; name: string; productGroupCode: string }>;
@@ -65,6 +83,16 @@ export type LegacySubledgerBackfillPlan = {
     sourceQboTxnId: string;
     sourceQboLineId: string;
   }>;
+  inventoryMovements: Array<{
+    canonicalProductKey: string | null;
+    marketplace: string;
+    movementType: 'SALE' | 'RETURN';
+    quantity: number;
+    movementDate: Date;
+    sourceType: 'ORDER_SALE' | 'ORDER_RETURN';
+    sourceId: string;
+    sourceLineId: string;
+  }>;
 };
 
 export type LegacySubledgerBackfillInput = {
@@ -72,6 +100,8 @@ export type LegacySubledgerBackfillInput = {
   skus: LegacySkuRow[];
   billMappings: LegacyBillMappingRow[];
   billLineMappings: LegacyBillLineMappingRow[];
+  orderSales?: LegacyOrderSaleRow[];
+  orderReturns?: LegacyOrderReturnRow[];
 };
 
 type PurchaseOrderSource = {
@@ -131,6 +161,22 @@ function sortBillLines(lines: LegacyBillLineMappingRow[]): LegacyBillLineMapping
     if (mappingComparison !== 0) return mappingComparison;
     const qboLineComparison = compareText(left.qboLineId, right.qboLineId);
     if (qboLineComparison !== 0) return qboLineComparison;
+    return compareText(left.id, right.id);
+  });
+}
+
+function sortOrderSales(rows: LegacyOrderSaleRow[]): LegacyOrderSaleRow[] {
+  return [...rows].sort((left, right) => {
+    const dateComparison = left.saleDate.getTime() - right.saleDate.getTime();
+    if (dateComparison !== 0) return dateComparison;
+    return compareText(left.id, right.id);
+  });
+}
+
+function sortOrderReturns(rows: LegacyOrderReturnRow[]): LegacyOrderReturnRow[] {
+  return [...rows].sort((left, right) => {
+    const dateComparison = left.returnDate.getTime() - right.returnDate.getTime();
+    if (dateComparison !== 0) return dateComparison;
     return compareText(left.id, right.id);
   });
 }
@@ -331,6 +377,47 @@ export function planLegacySubledgerBackfill(
     });
   }
 
+  const inventoryMovements: LegacySubledgerBackfillPlan['inventoryMovements'] = [];
+  for (const row of sortOrderSales(input.orderSales ?? [])) {
+    if (!(Number.isFinite(row.quantity) && row.quantity > 0)) continue;
+
+    const canonicalProductKey =
+      canonicalProductKeyByMarketplaceSku.get(
+        `${row.marketplace.trim()}:${normalizeAliasLookupValue(row.sku)}`,
+      ) ?? null;
+
+    inventoryMovements.push({
+      canonicalProductKey,
+      marketplace: row.marketplace.trim(),
+      movementType: 'SALE',
+      quantity: -Math.abs(row.quantity),
+      movementDate: row.saleDate,
+      sourceType: 'ORDER_SALE',
+      sourceId: row.orderId,
+      sourceLineId: row.id,
+    });
+  }
+
+  for (const row of sortOrderReturns(input.orderReturns ?? [])) {
+    if (!(Number.isFinite(row.quantity) && row.quantity > 0)) continue;
+
+    const canonicalProductKey =
+      canonicalProductKeyByMarketplaceSku.get(
+        `${row.marketplace.trim()}:${normalizeAliasLookupValue(row.sku)}`,
+      ) ?? null;
+
+    inventoryMovements.push({
+      canonicalProductKey,
+      marketplace: row.marketplace.trim(),
+      movementType: 'RETURN',
+      quantity: Math.abs(row.quantity),
+      movementDate: row.returnDate,
+      sourceType: 'ORDER_RETURN',
+      sourceId: row.orderId,
+      sourceLineId: row.id,
+    });
+  }
+
   return {
     productGroups: Array.from(productGroupsByCode.values()).sort((left, right) =>
       compareText(left.code, right.code),
@@ -358,6 +445,13 @@ export function planLegacySubledgerBackfill(
       const qboLineComparison = compareText(left.sourceQboLineId, right.sourceQboLineId);
       if (qboLineComparison !== 0) return qboLineComparison;
       return compareText(left.component, right.component);
+    }),
+    inventoryMovements: inventoryMovements.sort((left, right) => {
+      const dateComparison = left.movementDate.getTime() - right.movementDate.getTime();
+      if (dateComparison !== 0) return dateComparison;
+      const sourceTypeComparison = compareText(left.sourceType, right.sourceType);
+      if (sourceTypeComparison !== 0) return sourceTypeComparison;
+      return compareText(left.sourceLineId, right.sourceLineId);
     }),
   };
 }
