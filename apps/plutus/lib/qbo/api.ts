@@ -1366,6 +1366,50 @@ export async function updateJournalEntry(
   };
 }
 
+export async function updateJournalEntryWithPayload(
+  connection: QboConnection,
+  payload: QboJournalEntry,
+): Promise<{ journalEntry: QboJournalEntry; updatedConnection?: QboConnection }> {
+  if (!payload.Id || !payload.SyncToken) {
+    throw new Error('updateJournalEntryWithPayload requires Id and SyncToken');
+  }
+
+  let activeConnection = connection;
+  const { accessToken, updatedConnection } = await getValidToken(activeConnection);
+  if (updatedConnection) {
+    activeConnection = updatedConnection;
+  }
+
+  const baseUrl = getApiBaseUrl();
+  const updateUrl = `${baseUrl}/v3/company/${activeConnection.realmId}/journalentry?operation=update`;
+
+  const response = await fetchWithRetry(updateUrl, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to update journal entry with payload', {
+      journalEntryId: payload.Id,
+      status: response.status,
+      error: errorText,
+    });
+    throw new Error(`Failed to update journal entry with payload: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { JournalEntry: QboJournalEntry };
+  return {
+    journalEntry: data.JournalEntry,
+    updatedConnection: activeConnection === connection ? undefined : activeConnection,
+  };
+}
+
 /**
  * Delete a single JournalEntry by ID.
  *

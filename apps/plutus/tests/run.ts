@@ -66,6 +66,10 @@ import {
 } from '../lib/amazon-finances/settlement-evidence';
 import { settlementJournalEntryMatchesSource } from '../lib/amazon-finances/settlement-sync-existing';
 import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '../lib/amazon-finances/settlement-cash-account-guardrails';
+import {
+  isSettlementOperatingBrandAccountName,
+  normalizeSettlementOperatingMemo,
+} from '../lib/amazon-finances/settlement-memo-normalization';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { buildPrincipalGroupsByDate, matchRefundsToSales } from '../lib/plutus/settlement-validation';
 import {
@@ -1100,6 +1104,16 @@ test('settlement reclass repair is approval-gated and protects source settlement
   assert.equal(source.includes("const BANK_ACCOUNT_TYPES = new Set(['Bank', 'Credit Card']);"), true);
 });
 
+test('settlement parent account repair is approval-gated and targets settlement JEs only by payload', () => {
+  const source = readFileSync('scripts/repair-settlement-parent-pnl-accounts.ts', 'utf8');
+
+  assert.equal(source.includes('HUMAN_APPROVAL_PHRASE'), true);
+  assert.equal(source.includes('updateJournalEntryWithPayload'), true);
+  assert.equal(source.includes('qboSettlementJournalEntryId'), true);
+  assert.equal(source.includes('qboCogsJournalEntryId'), false);
+  assert.equal(source.includes('qboPnlReclassJournalEntryId'), false);
+});
+
 test('plutus primary nav exposes settlement and subledger accounting scope', () => {
   const source = readFileSync('components/app-header.tsx', 'utf8');
 
@@ -1562,11 +1576,11 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
     startIsoDay: '2026-01-16',
     endIsoDay: '2026-01-17',
     accountIdByMemo: new Map([
-      ['Amazon Sales - Principal - UK-PDS', '188'],
+      ['Amazon Sales - Principal', '188'],
       ['Amazon Seller Fees - Commission', '183'],
     ]),
     taxCodeIdByMemo: new Map([
-      ['Amazon Sales - Principal - UK-PDS', null],
+      ['Amazon Sales - Principal', null],
       ['Amazon Seller Fees - Commission', null],
     ]),
     rows: [
@@ -1577,7 +1591,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
         orderId: 'o-1',
         sku: 'SKU-1',
         quantity: 1,
-        description: 'Amazon Sales - Principal - UK-PDS',
+        description: 'Amazon Sales - Principal',
         netCents: 1000,
       },
       {
@@ -1587,7 +1601,7 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
         orderId: 'o-2',
         sku: 'SKU-2',
         quantity: 1,
-        description: 'Amazon Sales - Principal - UK-PDS',
+        description: 'Amazon Sales - Principal',
         netCents: 500,
       },
       {
@@ -1608,11 +1622,89 @@ test('buildSettlementMtdDailySummaryCsvBytes builds daily totals by memo', () =>
     'Marketplace,Amazon.co.uk,Currency,GBP,Start Date,2026-01-16,End Date,2026-01-17',
     '',
     'Description,Tax Code,Account Code,Total,2026-01-16,2026-01-17',
-    'Amazon Sales - Principal - UK-PDS,No Tax Rate Applicable,188,15.00,10.00,5.00',
+    'Amazon Sales - Principal,No Tax Rate Applicable,188,15.00,10.00,5.00',
     'Amazon Seller Fees - Commission,No Tax Rate Applicable,183,-2.50,0.00,-2.50',
   ].join('\n');
 
   assert.equal(csv, expected);
+});
+
+test('normalizeSettlementOperatingMemo removes legacy brand suffixes from sales and refunds only', () => {
+  assert.equal(normalizeSettlementOperatingMemo('Amazon Sales - Principal - US-PDS'), 'Amazon Sales - Principal');
+  assert.equal(
+    normalizeSettlementOperatingMemo('Amazon Sales - Principal (Marketplace VAT Responsible) - UK-PDS'),
+    'Amazon Sales - Principal (Marketplace VAT Responsible)',
+  );
+  assert.equal(
+    normalizeSettlementOperatingMemo('Amazon Refunds - Refunded Shipping Promotion - US-PDS'),
+    'Amazon Refunds - Refunded Shipping Promotion',
+  );
+  assert.equal(normalizeSettlementOperatingMemo('Amazon Seller Fees - Commission'), 'Amazon Seller Fees - Commission');
+});
+
+test('isSettlementOperatingBrandAccountName flags branded settlement P&L accounts', () => {
+  assert.equal(isSettlementOperatingBrandAccountName('Amazon Sales:Amazon Sales - US-PDS'), true);
+  assert.equal(isSettlementOperatingBrandAccountName('Amazon Refunds:Amazon Refunds - UK-PDS'), true);
+  assert.equal(isSettlementOperatingBrandAccountName('Amazon FBA Fees:Amazon FBA Fees - US-PDS'), true);
+  assert.equal(isSettlementOperatingBrandAccountName('Amazon Sales'), false);
+  assert.equal(isSettlementOperatingBrandAccountName('Inventory Asset:Manufacturing - US-PDS'), false);
+});
+
+test('buildUsSettlementDraftFromSpApiFinances emits parent sales and refund memos', () => {
+  const draft = buildUsSettlementDraftFromSpApiFinances({
+    settlementId: 'US-SET-PARENT-1',
+    eventGroupId: 'US-GROUP-PARENT-1',
+    eventGroup: {
+      FinancialEventGroupStart: '2026-04-16T00:00:00.000Z',
+      FinancialEventGroupEnd: '2026-04-30T23:59:59.000Z',
+      FundTransferStatus: 'Unknown',
+      OriginalTotal: { CurrencyCode: 'USD', CurrencyAmount: 8 },
+    },
+    events: {
+      ShipmentEventList: [
+        {
+          PostedDate: '2026-04-20T12:00:00.000Z',
+          AmazonOrderId: 'ORDER-US-1',
+          ShipmentItemList: [
+            {
+              SellerSKU: 'SKU-US-1',
+              QuantityShipped: 1,
+              ItemChargeList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: 10 } },
+                { ChargeType: 'ShippingCharge', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: 2 } },
+              ],
+            },
+          ],
+        },
+      ],
+      RefundEventList: [
+        {
+          PostedDate: '2026-04-21T12:00:00.000Z',
+          AmazonOrderId: 'ORDER-US-2',
+          ShipmentItemAdjustmentList: [
+            {
+              SellerSKU: 'SKU-US-1',
+              QuantityShipped: 1,
+              ItemChargeAdjustmentList: [
+                { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: -3 } },
+                { ChargeType: 'ShippingCharge', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 } },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    skuToBrandName: new Map([['SKU-US-1', 'US-PDS']]),
+    brandLabelByBrandName: new Map([['US-PDS', 'US-PDS']]),
+  });
+
+  const totals = draft.segments[0]!.memoTotalsCents;
+  assert.equal(totals.get('Amazon Sales - Principal'), 1000);
+  assert.equal(totals.get('Amazon Sales - Shipping'), 200);
+  assert.equal(totals.get('Amazon Refunds - Refunded Principal'), -300);
+  assert.equal(totals.get('Amazon Refunds - Refunded Shipping'), -100);
+  assert.equal(totals.has('Amazon Sales - Principal - US-PDS'), false);
+  assert.equal(totals.has('Amazon Refunds - Refunded Principal - US-PDS'), false);
 });
 
 test('buildUsSettlementDraftFromSpApiFinances splits cross-month settlement periods by default', () => {
@@ -1732,6 +1824,15 @@ test('US settlement SP-API reconcile no longer requires real bank transfer lines
 
   assert.equal(source.includes("throw new Error(`Missing 'Transfer to Bank' line"), false);
   assert.equal(source.includes("throw new Error(`Missing 'Payment to Amazon' line"), false);
+});
+
+test('US settlement SP-API reconcile supports parent sales and refund memos', () => {
+  const source = readFileSync(new URL('../scripts/us-settlement-reconcile-spapi.ts', import.meta.url), 'utf8');
+
+  assert.equal(source.includes('normalizeSettlementOperatingMemo'), true);
+  assert.equal(source.includes('extractBrandLabelFromMemo'), false);
+  assert.equal(source.includes('brandLabelByBrandName'), false);
+  assert.equal(source.includes('journal entry has no brand-labeled memos'), false);
 });
 
 test('buildUsSettlementDraftFromSpApiFinances maps low value goods withheld tax', () => {
@@ -2232,7 +2333,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
     skuToBrandName: new Map([['SKU-1', 'UK-BRAND']]),
   });
 
-  const principalMemo = 'Amazon Sales - Principal (Marketplace VAT Responsible) - UK-BRAND';
+  const principalMemo = 'Amazon Sales - Principal (Marketplace VAT Responsible)';
   const principalCents = draft.segments[0]?.memoTotalsCents.get(principalMemo);
   assert.equal(principalCents, 3000);
 });
@@ -2288,7 +2389,7 @@ test('buildUkSettlementDraftFromSpApiFinances validates marketplace VAT at order
     skuToBrandName: new Map([['SKU-2', 'UK-BRAND']]),
   });
 
-  const principalMemo = 'Amazon Refunds - Refunded Principal (Marketplace VAT Responsible) - UK-BRAND';
+  const principalMemo = 'Amazon Refunds - Refunded Principal (Marketplace VAT Responsible)';
   const principalCents = draft.segments[0]?.memoTotalsCents.get(principalMemo);
   assert.equal(principalCents, -3000);
 });
@@ -4468,7 +4569,7 @@ test('successful US settlement payouts post to settlement control instead of ban
           endIsoDay: '2026-04-30',
           txnDate: '2026-04-30',
           docNumber: 'US-260416-260430-S1',
-          memoTotalsCents: new Map([['Amazon Sales - Principal - US-PDS', 11934]]),
+          memoTotalsCents: new Map([['Amazon Sales - Principal', 11934]]),
           auditRows: [],
         },
       ],
@@ -4477,7 +4578,7 @@ test('successful US settlement payouts post to settlement control instead of ban
     settlementControlAccountId: 'control',
     bankAccountId: 'bank',
     paymentAccountId: 'payment',
-    accountIdByMemo: new Map([['Amazon Sales - Principal - US-PDS', 'sales']]),
+    accountIdByMemo: new Map([['Amazon Sales - Principal', 'sales']]),
   });
 
   assert.equal(entries[0]!.lines.some((line) => line.accountId === 'bank'), false);
@@ -4509,7 +4610,7 @@ test('successful UK settlement payouts post to settlement control instead of ban
           endIsoDay: '2026-04-21',
           txnDate: '2026-04-21',
           docNumber: 'UK-260401-260421-S1',
-          memoTotalsCents: new Map([['Amazon Sales - Principal - UK-PDS', 1394696]]),
+          memoTotalsCents: new Map([['Amazon Sales - Principal', 1394696]]),
           auditRows: [],
         },
       ],
@@ -4518,7 +4619,7 @@ test('successful UK settlement payouts post to settlement control instead of ban
     settlementControlAccountId: 'control',
     bankAccountId: 'bank',
     paymentAccountId: 'payment',
-    accountIdByMemo: new Map([['Amazon Sales - Principal - UK-PDS', 'sales']]),
+    accountIdByMemo: new Map([['Amazon Sales - Principal', 'sales']]),
   });
 
   assert.equal(entries[0]!.lines.some((line) => line.accountId === 'bank'), false);
