@@ -1826,6 +1826,15 @@ test('US settlement SP-API reconcile no longer requires real bank transfer lines
   assert.equal(source.includes("throw new Error(`Missing 'Payment to Amazon' line"), false);
 });
 
+test('US settlement SP-API reconcile supports parent sales and refund memos', () => {
+  const source = readFileSync(new URL('../scripts/us-settlement-reconcile-spapi.ts', import.meta.url), 'utf8');
+
+  assert.equal(source.includes('normalizeSettlementOperatingMemo'), true);
+  assert.equal(source.includes('extractBrandLabelFromMemo'), false);
+  assert.equal(source.includes('brandLabelByBrandName'), false);
+  assert.equal(source.includes('journal entry has no brand-labeled memos'), false);
+});
+
 test('buildUsSettlementDraftFromSpApiFinances maps low value goods withheld tax', () => {
   const draft = buildUsSettlementDraftFromSpApiFinances({
     settlementId: 'SETTLEMENT-LVG-1',
