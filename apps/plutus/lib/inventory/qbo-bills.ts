@@ -521,7 +521,14 @@ export function buildInventoryEventsFromMappings(
 
       const component = line.component as InventoryComponent;
 
+      const poNumber = mapping.poNumber.trim();
+
       if (component === 'manufacturing') {
+        if (poNumber === '') {
+          throw new Error(
+            `Manufacturing bill mapping line requires poNumber: billId=${mapping.qboBillId} lineId=${line.qboLineId}`,
+          );
+        }
         if (!line.sku || !line.quantity || line.quantity <= 0) {
           throw new Error(
             `Manufacturing bill mapping line requires sku+quantity: billId=${mapping.qboBillId} lineId=${line.qboLineId}`,
@@ -529,13 +536,25 @@ export function buildInventoryEventsFromMappings(
         }
 
         // Per-SKU manufacturing event
-        addPoUnits(poUnitsBySku, mapping.poNumber, line.sku, line.quantity);
+        addPoUnits(poUnitsBySku, poNumber, line.sku, line.quantity);
         events.push({
           kind: 'manufacturing',
           date: mapping.billDate,
-          poNumber: mapping.poNumber,
+          poNumber,
           sku: line.sku,
           units: line.quantity,
+          costCents: line.amountCents,
+        });
+        continue;
+      }
+
+      if (poNumber === '' && !line.sku) {
+        events.push({
+          kind: 'brand_cost',
+          date: mapping.billDate,
+          poNumber,
+          brandId: mapping.brandId,
+          component,
           costCents: line.amountCents,
         });
         continue;
@@ -545,7 +564,7 @@ export function buildInventoryEventsFromMappings(
       events.push({
         kind: 'cost',
         date: mapping.billDate,
-        poNumber: mapping.poNumber,
+        poNumber,
         component,
         costCents: line.amountCents,
         ...(line.sku ? { sku: line.sku } : {}),
