@@ -109,7 +109,13 @@ async function main(): Promise<void> {
   const skuToBrand = new Map<string, string>();
   for (const row of skuRows) {
     if (row.brand.marketplace !== options.marketplace) continue;
-    skuToBrand.set(normalizeSku(row.sku), row.brand.name);
+    const aliases = [row.sku];
+    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
+      aliases.push(row.asin);
+    }
+    for (const alias of aliases) {
+      skuToBrand.set(normalizeSku(alias), row.brand.name);
+    }
   }
 
   const storedRows = await db.auditDataRow.findMany({

@@ -6,6 +6,7 @@ import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-
 import { fetchJournalEntryById, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { isNoopJournalEntryId, isQboJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { computeProcessingHash } from '@/lib/plutus/settlement-validation';
 
 type DbClient = typeof import('@/lib/db').db;
 type ComputeSettlementPreview = typeof import('@/lib/plutus/settlement-processing').computeSettlementPreview;
@@ -315,6 +316,44 @@ async function auditProcessingRow(input: {
   });
 
   if (rows.length === 0) {
+    const emptyProcessingHash = computeProcessingHash([]);
+    if (isNoopJournalEntryId(input.processing.qboCogsJournalEntryId)) {
+      return {
+        result: {
+          marketplace: input.processing.marketplace,
+          invoiceId: input.processing.invoiceId,
+          settlementProcessingId: input.processing.id,
+          createdAt: input.processing.createdAt.toISOString(),
+          processingHash: {
+            stored: input.processing.processingHash,
+            computed: emptyProcessingHash,
+            matches: input.processing.processingHash === emptyProcessingHash,
+          },
+          auditUpload: upload
+            ? {
+                id: upload.id,
+                filename: upload.filename,
+                uploadedAt: upload.uploadedAt.toISOString(),
+              }
+            : null,
+          blocks: [],
+          inventoryBlockSummary: {
+            missingCostBasisCount: 0,
+            negativeInventoryCount: 0,
+            billsErrorCount: 0,
+          },
+          cogsJe: {
+            id: input.processing.qboCogsJournalEntryId,
+            status: 'noop',
+            previewLineCount: 0,
+            qboLineCount: 0,
+            mismatchedAccounts: [],
+          },
+        },
+        updatedConnection: input.connection,
+      };
+    }
+
     throw new Error(`No audit rows found for invoice ${input.processing.invoiceId} (file ${input.processing.sourceFilename})`);
   }
 

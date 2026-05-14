@@ -13,10 +13,12 @@ import {
   allocateShipmentFeeChargesBySkuQuantity,
   extractInboundTransportationServiceFeeCharges,
   isInboundTransportationMemoDescription,
+  loadInboundShipmentItemsFromAwdInboundShipmentReports,
   type InboundShipmentItem,
 } from './shipment-fee-allocation';
 
 const AWD_REPORT_TYPE = 'AWD_FEE_MONTHLY';
+const AWD_INBOUND_SHIPMENT_REPORT_DIR_ENV = 'PLUTUS_AWD_INBOUND_SHIPMENT_REPORT_DIR';
 
 type AwdFeeType = 'STORAGE_FEE' | 'PROCESSING_FEE' | 'TRANSPORTATION_FEE';
 type MarketplaceId = 'amazon.com' | 'amazon.co.uk';
@@ -496,14 +498,37 @@ async function buildInboundTransportationAllocationFromSpApi(input: {
   const shipmentItemsByShipmentId = new Map<string, InboundShipmentItem[]>();
   const uniqueShipmentIds = Array.from(new Set(extraction.charges.map((charge) => charge.shipmentId))).sort();
   for (const shipmentId of uniqueShipmentIds) {
-    const items = await fetchInboundShipmentItemsByShipmentId({ tenantCode, shipmentId });
-    shipmentItemsByShipmentId.set(
-      shipmentId,
-      items.map((item) => ({
+    let shipmentItems: InboundShipmentItem[] = [];
+    let spApiLookupIssue: string | null = null;
+    try {
+      const items = await fetchInboundShipmentItemsByShipmentId({ tenantCode, shipmentId });
+      shipmentItems = items.map((item) => ({
         sku: item.sellerSku,
         quantity: item.quantityShipped,
-      })),
-    );
+      }));
+    } catch (error) {
+      spApiLookupIssue = `SP-API inbound shipment item lookup failed for ${shipmentId}: ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+    }
+
+    if (shipmentItems.length === 0) {
+      const reportDir = process.env[AWD_INBOUND_SHIPMENT_REPORT_DIR_ENV];
+      if (typeof reportDir !== 'string' || reportDir.trim() === '') {
+        if (spApiLookupIssue !== null) issues.push(spApiLookupIssue);
+        issues.push(`Missing ${AWD_INBOUND_SHIPMENT_REPORT_DIR_ENV} for Seller Central AWD inbound shipment report lookup`);
+      } else {
+        const reportLookup = await loadInboundShipmentItemsFromAwdInboundShipmentReports({
+          shipmentId,
+          reportDir,
+        });
+        shipmentItems = reportLookup.items;
+        issues.push(...reportLookup.issues);
+        if (shipmentItems.length === 0 && spApiLookupIssue !== null) issues.push(spApiLookupIssue);
+      }
+    }
+
+    shipmentItemsByShipmentId.set(shipmentId, shipmentItems);
   }
 
   const allocation = allocateShipmentFeeChargesBySkuQuantity({
@@ -585,6 +610,10 @@ export async function buildDeterministicSkuAllocations(input: {
       if (isInboundTransportationMemoDescription(description)) {
         if (isSkuLessParentOnlyInboundTransportationMemo(description)) {
           // SKU-less and not deterministically allocatable with current SP-API transaction data.
+          continue;
+        }
+        if (cents > 0) {
+          // Positive inbound transportation rows are Amazon reversals/refunds, not shipment costs.
           continue;
         }
         inboundExpectedTotalCents += cents;

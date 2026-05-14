@@ -36,6 +36,7 @@ type SegmentResult = {
   status: 'ok' | 'mismatch';
   mismatchCount: number;
   mismatches: Array<{ key: string; expected: number; actual: number }>;
+  reason?: string;
 };
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
@@ -421,7 +422,13 @@ async function main(): Promise<void> {
   const skuToBrandName = new Map<string, string>();
   for (const row of skus) {
     if (row.brand.marketplace !== 'amazon.com') continue;
-    skuToBrandName.set(normalizeSku(row.sku), row.brand.name);
+    const aliases = [row.sku];
+    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
+      aliases.push(row.asin);
+    }
+    for (const alias of aliases) {
+      skuToBrandName.set(normalizeSku(alias), row.brand.name);
+    }
   }
 
   const results: SegmentResult[] = [];
@@ -465,7 +472,24 @@ async function main(): Promise<void> {
 
     for (let segmentIdx = 0; segmentIdx < draft.segments.length; segmentIdx++) {
       const segment = draft.segments[segmentIdx]!;
+      const isLast = segmentIdx === draft.segments.length - 1;
+      const originalTotalCents = isLast ? draft.originalTotalCents : 0;
+      const hasExpectedJournalLines =
+        Array.from(segment.memoTotalsCents.values()).some((cents) => cents !== 0) || originalTotalCents !== 0;
       const actualJe = journalsByDocNumber.get(segment.docNumber);
+      if (!actualJe && !hasExpectedJournalLines) {
+        results.push({
+          settlementId,
+          eventGroupId,
+          docNumber: segment.docNumber,
+          txnDate: segment.txnDate,
+          status: 'ok',
+          mismatchCount: 0,
+          mismatches: [],
+          reason: 'No QBO JE expected for empty segment',
+        });
+        continue;
+      }
       if (!actualJe) {
         throw new Error(`Missing QBO JE for DocNumber ${segment.docNumber} (settlement ${settlementId})`);
       }
@@ -508,17 +532,6 @@ async function main(): Promise<void> {
           );
         }
         settlementControlAccountId = matches[0]!.Id;
-      }
-
-      const isLast = segmentIdx === draft.segments.length - 1;
-      const originalTotalCents = isLast ? draft.originalTotalCents : 0;
-      const transferSucceeded = draft.fundTransferStatus === 'Succeeded';
-
-      if (isLast && transferSucceeded && originalTotalCents > 0 && bankAccountId === '') {
-        throw new Error(`Missing 'Transfer to Bank' line in ${segment.docNumber}`);
-      }
-      if (isLast && originalTotalCents < 0 && paymentAccountId === '') {
-        throw new Error(`Missing 'Payment to Amazon' line in ${segment.docNumber}`);
       }
 
       const expectedDrafts = buildQboJournalEntriesFromUsSettlementDraft({

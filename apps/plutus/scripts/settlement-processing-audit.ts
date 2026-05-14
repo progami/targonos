@@ -260,7 +260,7 @@ async function requireAccounts(connection: QboConnection): Promise<{ accounts: Q
 }
 
 function buildSkuToBrandMapsByMarketplace(
-  skuRows: Array<{ sku: string; brand: { name: string; marketplace: string } }>,
+  skuRows: Array<{ sku: string; asin: string | null; brand: { name: string; marketplace: string } }>,
 ): Map<string, Map<string, string>> {
   const byMarketplace = new Map<string, Map<string, string>>();
 
@@ -271,7 +271,20 @@ function buildSkuToBrandMapsByMarketplace(
       skuToBrand = new Map<string, string>();
       byMarketplace.set(marketplace, skuToBrand);
     }
-    skuToBrand.set(normalizeSku(row.sku), row.brand.name);
+
+    const aliases = [row.sku];
+    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
+      aliases.push(row.asin);
+    }
+
+    for (const alias of aliases) {
+      const sku = normalizeSku(alias);
+      const existing = skuToBrand.get(sku);
+      if (existing !== undefined && existing !== row.brand.name) {
+        throw new Error(`SKU maps to multiple brands in same marketplace: ${sku}`);
+      }
+      skuToBrand.set(sku, row.brand.name);
+    }
   }
 
   return byMarketplace;
@@ -891,7 +904,7 @@ async function main(): Promise<void> {
     );
   }
 
-  if (mismatched.length > 0) {
+  if (mismatched.length > 0 || deterministicNotOk.length > 0) {
     process.exitCode = 1;
   }
 }
