@@ -3,6 +3,7 @@ import { loadSharedPlutusEnv } from './shared-env';
 
 import { parseSettlementSyncCliPostFlag } from '@/lib/amazon-finances/settlement-sync-post-mode';
 import { isSettlementDocNumber, parseSettlementDocNumber, stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
+import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';
 
 type CliOptions = {
   startDate: string;
@@ -12,6 +13,8 @@ type CliOptions = {
   apply: boolean;
   resync: boolean;
   postToQbo: boolean;
+  settlementIds: string[] | undefined;
+  humanApproval: string | null;
 };
 
 function parseDotenvLine(rawLine: string): { key: string; value: string } | null {
@@ -85,6 +88,8 @@ function parseArgs(argv: string[]): CliOptions {
   let plutusEnvPath = '.env.local';
   let apply = false;
   let resync = true;
+  let settlementIds: string[] | undefined;
+  let humanApproval: string | null = null;
 
   let i = 0;
   while (i < postFlag.argv.length) {
@@ -122,6 +127,28 @@ function parseArgs(argv: string[]): CliOptions {
       continue;
     }
 
+    if (arg === '--settlement-ids') {
+      const next = postFlag.argv[i + 1];
+      if (!next) throw new Error('Missing value for --settlement-ids');
+      settlementIds = next
+        .split(',')
+        .map((x) => x.trim())
+        .filter((x) => x !== '');
+      if (settlementIds.length === 0) {
+        throw new Error('Missing value for --settlement-ids');
+      }
+      i += 2;
+      continue;
+    }
+
+    if (arg === '--human-approval') {
+      const next = postFlag.argv[i + 1];
+      if (!next) throw new Error('Missing value for --human-approval');
+      humanApproval = next;
+      i += 2;
+      continue;
+    }
+
     if (arg === '--apply') {
       apply = true;
       i += 1;
@@ -137,11 +164,34 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error(`Unknown argument: ${arg}`);
   }
 
-  return { startDate, endDate, amazonEnvPath, plutusEnvPath, apply, resync, postToQbo: postFlag.postToQbo };
+  if (apply && humanApproval !== HUMAN_APPROVAL_PHRASE) {
+    throw new Error(`US SP-API settlement reset requires --human-approval "${HUMAN_APPROVAL_PHRASE}"`);
+  }
+
+  return { startDate, endDate, amazonEnvPath, plutusEnvPath, apply, resync, postToQbo: postFlag.postToQbo, settlementIds, humanApproval };
 }
 
 function buildQboJournalHref(journalEntryId: string): string {
   return `https://app.qbo.intuit.com/app/journal?txnId=${journalEntryId}`;
+}
+
+function buildApplyCommand(startDate: string, endDate: string | undefined, settlementIds: string[] | undefined): string {
+  const args = [
+    'pnpm -C apps/plutus exec tsx scripts/us-settlement-reset-spapi.ts',
+    '--apply',
+    '--post-qbo',
+    '--human-approval',
+    JSON.stringify(HUMAN_APPROVAL_PHRASE),
+    '--start-date',
+    startDate,
+  ];
+  if (endDate !== undefined) {
+    args.push('--end-date', endDate);
+  }
+  if (settlementIds !== undefined) {
+    args.push('--settlement-ids', settlementIds.join(','));
+  }
+  return args.join(' ');
 }
 
 function isNoopJournalEntryId(value: string): boolean {
@@ -198,6 +248,36 @@ function isNotFoundError(error: unknown): boolean {
   return false;
 }
 
+function extractSettlementIdFromPrivateNote(privateNote: string | undefined): string | null {
+  if (typeof privateNote !== 'string') return null;
+  const match = privateNote.match(/Settlement:\s*([0-9]+)/);
+  if (!match) return null;
+  return match[1]!;
+}
+
+function processingDocSettlementDocNumber(docNumber: string): string | null {
+  const stripped = stripPlutusDocPrefix(docNumber).trim();
+  const first = stripped[0] ? stripped[0].toUpperCase() : '';
+  if (first !== 'C' && first !== 'P') return null;
+  const settlementDocNumber = stripped.slice(1);
+  if (!isSettlementDocNumber(settlementDocNumber)) return null;
+  const meta = parseSettlementDocNumber(settlementDocNumber);
+  if (meta.marketplace.id !== 'amazon.com') return null;
+  return settlementDocNumber;
+}
+
+function qboSearchResultBelongsToSettlementDocs(
+  row: { docNumber: string },
+  targetSettlementDocNumbers: ReadonlySet<string>,
+): boolean {
+  const stripped = stripPlutusDocPrefix(row.docNumber).trim();
+  if (targetSettlementDocNumbers.has(stripped)) return true;
+
+  const processingDoc = processingDocSettlementDocNumber(stripped);
+  if (processingDoc === null) return false;
+  return targetSettlementDocNumbers.has(processingDoc);
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const startDate = requireIsoDay(options.startDate, 'startDate');
@@ -224,7 +304,7 @@ async function main(): Promise<void> {
   const rangeStart = toIsoStart(startDate);
   const rangeEnd = toIsoEnd(endDate);
 
-  const processingRows = await db.settlementProcessing.findMany({
+  const allProcessingRows = await db.settlementProcessing.findMany({
     where: {
       marketplace: 'amazon.com',
       settlementDocNumber: { contains: 'US-' },
@@ -240,7 +320,7 @@ async function main(): Promise<void> {
     },
   });
 
-  const rollbackRows = await db.settlementRollback.findMany({
+  const allRollbackRows = await db.settlementRollback.findMany({
     where: {
       marketplace: 'amazon.com',
       settlementDocNumber: { contains: 'US-' },
@@ -255,34 +335,6 @@ async function main(): Promise<void> {
       qboPnlReclassJournalEntryId: true,
     },
   });
-
-  const qboIdsToDelete = new Set<string>();
-  const invoiceIdsToDelete = new Set<string>();
-  const auditUploadsMaybeEmpty = new Set<string>();
-
-  for (const row of processingRows) {
-    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
-    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
-      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
-    }
-    invoiceIdsToDelete.add(row.invoiceId);
-    invoiceIdsToDelete.add(row.settlementDocNumber);
-  }
-
-  for (const row of rollbackRows) {
-    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
-    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
-      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
-    }
-    invoiceIdsToDelete.add(row.invoiceId);
-    invoiceIdsToDelete.add(row.settlementDocNumber);
-  }
 
   // QBO search by DocNumber contains "US-" catches:
   // - settlement JEs (DocNumber contains a US settlement id)
@@ -314,13 +366,82 @@ async function main(): Promise<void> {
     startPosition += page.journalEntries.length;
   }
 
-  for (const r of qboSearchResults) {
+  const targetSettlementIds = new Set(options.settlementIds ?? []);
+  const targetSettlementDocNumbers = new Set<string>();
+  let selectedQboSearchResults = qboSearchResults;
+
+  if (targetSettlementIds.size > 0) {
+    const selectedSettlementRows: Array<{ id: string; txnDate: string; docNumber: string }> = [];
+
+    for (const row of qboSearchResults) {
+      if (classifyDocNumber(row.docNumber) !== 'settlement') continue;
+
+      const full = await fetchJournalEntryById(activeConnection, row.id);
+      if (full.updatedConnection) {
+        activeConnection = full.updatedConnection;
+      }
+
+      const settlementId = extractSettlementIdFromPrivateNote(full.journalEntry.PrivateNote);
+      if (settlementId === null) continue;
+      if (!targetSettlementIds.has(settlementId)) continue;
+
+      selectedSettlementRows.push(row);
+      targetSettlementDocNumbers.add(stripPlutusDocPrefix(row.docNumber).trim());
+    }
+
+    const selectedProcessingRows = qboSearchResults.filter((row) =>
+      qboSearchResultBelongsToSettlementDocs(row, targetSettlementDocNumbers),
+    );
+    selectedQboSearchResults = Array.from(
+      new Map([...selectedSettlementRows, ...selectedProcessingRows].map((row) => [row.id, row])).values(),
+    );
+  }
+
+  const processingRows =
+    targetSettlementIds.size === 0
+      ? allProcessingRows
+      : allProcessingRows.filter((row) => targetSettlementDocNumbers.has(row.invoiceId) || targetSettlementDocNumbers.has(row.settlementDocNumber));
+
+  const rollbackRows =
+    targetSettlementIds.size === 0
+      ? allRollbackRows
+      : allRollbackRows.filter((row) => targetSettlementDocNumbers.has(row.invoiceId) || targetSettlementDocNumbers.has(row.settlementDocNumber));
+
+  const qboIdsToDelete = new Set<string>();
+  const invoiceIdsToDelete = new Set<string>();
+  const auditUploadsMaybeEmpty = new Set<string>();
+
+  for (const row of processingRows) {
+    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
+    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
+      qboIdsToDelete.add(row.qboCogsJournalEntryId);
+    }
+    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
+      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
+    }
+    invoiceIdsToDelete.add(row.invoiceId);
+    invoiceIdsToDelete.add(row.settlementDocNumber);
+  }
+
+  for (const row of rollbackRows) {
+    qboIdsToDelete.add(row.qboSettlementJournalEntryId);
+    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
+      qboIdsToDelete.add(row.qboCogsJournalEntryId);
+    }
+    if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
+      qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
+    }
+    invoiceIdsToDelete.add(row.invoiceId);
+    invoiceIdsToDelete.add(row.settlementDocNumber);
+  }
+
+  for (const r of selectedQboSearchResults) {
     qboIdsToDelete.add(r.id);
   }
 
   const targets: DeletionTarget[] = [];
 
-  for (const r of qboSearchResults) {
+  for (const r of selectedQboSearchResults) {
     targets.push({
       journalEntryId: r.id,
       txnDate: r.txnDate,
@@ -331,7 +452,7 @@ async function main(): Promise<void> {
     });
   }
 
-  const seenFromSearch = new Set(qboSearchResults.map((r) => r.id));
+  const seenFromSearch = new Set(selectedQboSearchResults.map((r) => r.id));
 
   for (const row of processingRows) {
     const ids = [row.qboSettlementJournalEntryId, row.qboCogsJournalEntryId, row.qboPnlReclassJournalEntryId];
@@ -407,9 +528,9 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           dryRun: true,
-          options: { startDate, endDate, resync: options.resync },
+          options: { startDate, endDate, resync: options.resync, settlementIds: options.settlementIds },
           totals: {
-            qboJournalEntriesMatchedByDocNumber: qboSearchResults.length,
+            qboJournalEntriesMatchedByDocNumber: selectedQboSearchResults.length,
             qboJournalEntriesToDelete: existingTargetCount,
             qboJournalEntriesMissing: missingTargetCount,
             dbSettlementProcessingRows: processingRows.length,
@@ -418,7 +539,7 @@ async function main(): Promise<void> {
           },
           plan: deletionPlan,
           next: {
-            command: 'pnpm -C apps/plutus exec tsx scripts/us-settlement-reset-spapi.ts --apply --start-date <YYYY-MM-DD> [--end-date <YYYY-MM-DD>]',
+            command: buildApplyCommand(startDate, endDate, options.settlementIds),
           },
         },
         null,
@@ -471,7 +592,7 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           dryRun: false,
-          options: { startDate, endDate, resync: options.resync },
+          options: { startDate, endDate, resync: options.resync, settlementIds: options.settlementIds },
           error: 'Some settlement JEs could not be deleted; aborting before processing JE/DB cleanup.',
           failedDeletions: deletions.filter((d) => !d.ok),
           qboLinks: deletions
@@ -497,7 +618,7 @@ async function main(): Promise<void> {
       JSON.stringify(
         {
           dryRun: false,
-          options: { startDate, endDate, resync: options.resync },
+          options: { startDate, endDate, resync: options.resync, settlementIds: options.settlementIds },
           error: 'Some QBO deletions failed; aborting DB cleanup and resync.',
           failedDeletions,
           qboLinks: failedDeletions.map((d) => ({ journalEntryId: d.journalEntryId, qboUrl: buildQboJournalHref(d.journalEntryId) })),
@@ -548,6 +669,7 @@ async function main(): Promise<void> {
     resyncResult = await syncUsSettlementsFromSpApiFinances({
       startDate,
       endDate,
+      settlementIds: options.settlementIds,
       postToQbo: options.postToQbo,
       process: true,
     });
@@ -557,7 +679,7 @@ async function main(): Promise<void> {
     JSON.stringify(
       {
         dryRun: false,
-        options: { startDate, endDate, resync: options.resync, postToQbo: options.postToQbo },
+        options: { startDate, endDate, resync: options.resync, postToQbo: options.postToQbo, settlementIds: options.settlementIds },
         totals: {
           deletedQboJournalEntries: deletedCount,
           skippedQboJournalEntries: skippedCount,

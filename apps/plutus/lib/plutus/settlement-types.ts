@@ -18,7 +18,7 @@ export type ProcessingBlock =
         | 'BILLS_FETCH_ERROR'
         | 'BILLS_PARSE_ERROR'
         | 'PNL_ALLOCATION_ERROR'
-        | 'PNL_ALLOCATION_WARNING';
+        | 'PNL_ALLOCATION_SOURCE_GAP';
       message: string;
       details?: Record<string, string | number>;
     };
@@ -27,7 +27,6 @@ const NON_BLOCKING_PROCESSING_CODES = new Set([
   'LATE_COST_ON_HAND_ZERO',
   'REFUND_ADJUSTMENT',
   'REFUND_PARTIAL',
-  'PNL_ALLOCATION_WARNING',
 ]);
 
 export function isBlockingProcessingCode(code: string): boolean {

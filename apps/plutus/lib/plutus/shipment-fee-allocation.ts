@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+
 import { moneyToCents } from '@/lib/amazon-finances/money';
 import type {
   SpApiMoney,
@@ -10,6 +13,7 @@ import { normalizeSku } from './settlement-validation';
 const INBOUND_TRANSPORT_FEE_PHRASE = 'inbound transportation';
 const INBOUND_TRANSPORT_FEE_CODE_FRAGMENT = 'inboundtransportation';
 const SHIPMENT_IDENTIFIER_NAMES = ['ORDER_ID', 'SHIPMENT_ID', 'INBOUND_SHIPMENT_ID'];
+const AWD_INBOUND_REPORT_FILENAME_PATTERN = /\.csv$/i;
 
 export type InboundTransportationServiceFeeCharge = {
   shipmentId: string;
@@ -21,6 +25,12 @@ export type InboundTransportationServiceFeeCharge = {
 export type InboundShipmentItem = {
   sku: string;
   quantity: number;
+};
+
+export type AwdInboundShipmentReportLookup = {
+  items: InboundShipmentItem[];
+  sourceFiles: string[];
+  issues: string[];
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -42,6 +52,158 @@ function readTrimmedString(value: unknown): string | null {
   const trimmed = value.trim();
   if (trimmed === '') return null;
   return trimmed;
+}
+
+function splitCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (char === '"') {
+      if (inQuotes && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+        continue;
+      }
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+
+  result.push(current);
+  return result;
+}
+
+function parsePositiveInteger(value: string): number | null {
+  const normalized = value.trim();
+  if (!/^\d+$/.test(normalized)) return null;
+  const parsed = Number.parseInt(normalized, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+async function listCsvFiles(dirPath: string): Promise<string[]> {
+  const entries = await fs.readdir(dirPath, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listCsvFiles(fullPath)));
+      continue;
+    }
+    if (entry.isFile() && AWD_INBOUND_REPORT_FILENAME_PATTERN.test(entry.name)) {
+      files.push(fullPath);
+    }
+  }
+
+  return files.sort();
+}
+
+function parseAwdInboundReportRows(input: {
+  csv: string;
+  shipmentId: string;
+  sourceFile: string;
+}): { items: InboundShipmentItem[]; issues: string[] } {
+  const lines = input.csv.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length === 0) {
+    return { items: [], issues: [`AWD inbound report is empty: ${input.sourceFile}`] };
+  }
+
+  const headers = splitCsvLine(lines[0]!).map((header) => header.trim());
+  const shipmentIdIndex = headers.indexOf('shipment_id');
+  const skuIndex = headers.indexOf('msku');
+  const expectedUnitCountIndex = headers.indexOf('expected_unit_count');
+  if (shipmentIdIndex === -1 || skuIndex === -1 || expectedUnitCountIndex === -1) {
+    return {
+      items: [],
+      issues: [`AWD inbound report missing required columns in ${input.sourceFile}`],
+    };
+  }
+
+  const quantityBySku = new Map<string, number>();
+  const issues: string[] = [];
+
+  for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+    const cols = splitCsvLine(lines[lineIndex]!);
+    if ((cols[shipmentIdIndex] ?? '').trim() !== input.shipmentId) continue;
+
+    const sku = normalizeSku(cols[skuIndex] ?? '');
+    if (sku === '') {
+      issues.push(`AWD inbound report row ${lineIndex + 1} missing MSKU in ${input.sourceFile}`);
+      continue;
+    }
+
+    const quantity = parsePositiveInteger(cols[expectedUnitCountIndex] ?? '');
+    if (quantity === null) {
+      issues.push(`AWD inbound report row ${lineIndex + 1} has invalid expected_unit_count in ${input.sourceFile}`);
+      continue;
+    }
+
+    const existing = quantityBySku.get(sku);
+    quantityBySku.set(sku, (existing === undefined ? 0 : existing) + quantity);
+  }
+
+  return {
+    items: Array.from(quantityBySku.entries()).map(([sku, quantity]) => ({ sku, quantity })),
+    issues,
+  };
+}
+
+export async function loadInboundShipmentItemsFromAwdInboundShipmentReports(input: {
+  shipmentId: string;
+  reportDir: string;
+}): Promise<AwdInboundShipmentReportLookup> {
+  const reportDir = input.reportDir.trim();
+  if (reportDir === '') {
+    return {
+      items: [],
+      sourceFiles: [],
+      issues: ['PLUTUS_AWD_INBOUND_SHIPMENT_REPORT_DIR is empty'],
+    };
+  }
+
+  const files = await listCsvFiles(reportDir);
+  const quantityBySku = new Map<string, number>();
+  const sourceFiles = new Set<string>();
+  const issues: string[] = [];
+
+  for (const filePath of files) {
+    const parsed = parseAwdInboundReportRows({
+      csv: await fs.readFile(filePath, 'utf8'),
+      shipmentId: input.shipmentId,
+      sourceFile: filePath,
+    });
+    if (parsed.items.length === 0) {
+      if (parsed.issues.length > 0) issues.push(...parsed.issues);
+      continue;
+    }
+
+    sourceFiles.add(filePath);
+    for (const item of parsed.items) {
+      const current = quantityBySku.get(item.sku);
+      quantityBySku.set(item.sku, (current === undefined ? 0 : current) + item.quantity);
+    }
+    issues.push(...parsed.issues);
+  }
+
+  if (quantityBySku.size === 0) {
+    issues.push(`No AWD inbound shipment report rows found for ${input.shipmentId}`);
+  }
+
+  return {
+    items: Array.from(quantityBySku.entries()).map(([sku, quantity]) => ({ sku, quantity })),
+    sourceFiles: Array.from(sourceFiles).sort(),
+    issues,
+  };
 }
 
 function toIdentifiers(value: unknown): SpApiTransactionRelatedIdentifier[] {

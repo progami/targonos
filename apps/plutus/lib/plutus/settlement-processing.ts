@@ -15,7 +15,7 @@ import {
   type SaleCost,
 } from '@/lib/inventory/ledger';
 import { fromCents } from '@/lib/inventory/money';
-import { computePnlAllocation } from '@/lib/pnl-allocation';
+import { computePnlAllocation, type PnlAllocation, type PnlBucketKey } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
@@ -338,6 +338,24 @@ function isLikelyCentScaledAuditInput(stats: {
   return stats.medianAbsNet >= 100 || stats.p90AbsNet >= 300;
 }
 
+const PNL_BUCKET_KEYS: PnlBucketKey[] = [
+  'amazonSellerFees',
+  'amazonFbaFees',
+  'amazonStorageFees',
+  'amazonAdvertisingCosts',
+  'amazonPromotions',
+  'amazonFbaInventoryReimbursement',
+  'warehousingAwd',
+];
+
+function buildEmptyBucketAmounts(): Record<PnlBucketKey, Record<string, number>> {
+  return Object.fromEntries(PNL_BUCKET_KEYS.map((bucket) => [bucket, {}])) as Record<PnlBucketKey, Record<string, number>>;
+}
+
+function buildEmptyBucketSkuBreakdown(): Record<PnlBucketKey, Record<string, Record<string, number>>> {
+  return Object.fromEntries(PNL_BUCKET_KEYS.map((bucket) => [bucket, {}])) as Record<PnlBucketKey, Record<string, Record<string, number>>>;
+}
+
 export async function computeSettlementPreview(input: {
   connection: QboConnection;
   settlementJournalEntryId: string;
@@ -357,14 +375,13 @@ export async function computeSettlementPreview(input: {
   const meta = parseSettlementDocNumber(settlement.DocNumber);
   const marketplace = meta.marketplace.id;
   const cogsEnabled = isCogsEnabledForMarketplace(marketplace);
+  if (meta.periodStart === null || meta.periodEnd === null) {
+    throw new Error(`Missing settlement period in DocNumber ${settlement.DocNumber}`);
+  }
 
   const invoiceId = input.invoiceId.trim();
   if (invoiceId === '') {
     throw new Error('Missing invoiceId');
-  }
-
-  if (input.auditRows.length === 0) {
-    throw new Error(`No audit rows provided for invoice ${invoiceId}`);
   }
 
   for (const row of input.auditRows) {
@@ -382,31 +399,31 @@ export async function computeSettlementPreview(input: {
   }
 
   const scopedInvoiceRows = input.auditRows;
-  const auditNetScaleStats = buildAuditNetScaleStats(scopedInvoiceRows);
-  if (isLikelyCentScaledAuditInput(auditNetScaleStats)) {
-    blocks.push({
-      code: 'AUDIT_NET_SCALE_SUSPECT',
-      message: 'Audit row net values appear cent-scaled (100x risk). Posting blocked until source net units are validated.',
-      details: {
-        rowCount: auditNetScaleStats.rowCount,
-        integerDollarRatio: Number(auditNetScaleStats.integerDollarRatio.toFixed(4)),
-        medianAbsNet: Number(auditNetScaleStats.medianAbsNet.toFixed(2)),
-        p90AbsNet: Number(auditNetScaleStats.p90AbsNet.toFixed(2)),
-        maxAbsNet: Number(auditNetScaleStats.maxAbsNet.toFixed(2)),
-      },
-    });
+  const hasAuditRows = scopedInvoiceRows.length > 0;
+  if (hasAuditRows) {
+    const auditNetScaleStats = buildAuditNetScaleStats(scopedInvoiceRows);
+    if (isLikelyCentScaledAuditInput(auditNetScaleStats)) {
+      blocks.push({
+        code: 'AUDIT_NET_SCALE_SUSPECT',
+        message: 'Audit row net values appear cent-scaled (100x risk). Posting blocked until source net units are validated.',
+        details: {
+          rowCount: auditNetScaleStats.rowCount,
+          integerDollarRatio: Number(auditNetScaleStats.integerDollarRatio.toFixed(4)),
+          medianAbsNet: Number(auditNetScaleStats.medianAbsNet.toFixed(2)),
+          p90AbsNet: Number(auditNetScaleStats.p90AbsNet.toFixed(2)),
+          maxAbsNet: Number(auditNetScaleStats.maxAbsNet.toFixed(2)),
+        },
+      });
+    }
   }
 
   const processingHash = computeProcessingHash(scopedInvoiceRows);
 
-  let minDate = scopedInvoiceRows[0]?.date;
-  let maxDate = scopedInvoiceRows[0]?.date;
+  let minDate = hasAuditRows ? scopedInvoiceRows[0]!.date : meta.periodStart;
+  let maxDate = hasAuditRows ? scopedInvoiceRows[0]!.date : meta.periodEnd;
   for (const row of scopedInvoiceRows) {
-    if (minDate === undefined || row.date < minDate) minDate = row.date;
-    if (maxDate === undefined || row.date > maxDate) maxDate = row.date;
-  }
-  if (minDate === undefined || maxDate === undefined) {
-    throw new Error('Audit file has no rows');
+    if (row.date < minDate) minDate = row.date;
+    if (row.date > maxDate) maxDate = row.date;
   }
 
   const existingSettlement = await db.settlementProcessing.findUnique({
@@ -528,12 +545,19 @@ export async function computeSettlementPreview(input: {
   for (const row of skuRows) {
     if (row.brand.marketplace !== marketplace) continue;
 
-    const sku = normalizeSku(row.sku);
-    const existing = skuToBrand.get(sku);
-    if (existing !== undefined && existing !== row.brand.name) {
-      throw new Error(`SKU maps to multiple brands in same marketplace: ${sku}`);
+    const aliases = [row.sku];
+    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
+      aliases.push(row.asin);
     }
-    skuToBrand.set(sku, row.brand.name);
+
+    for (const alias of aliases) {
+      const sku = normalizeSku(alias);
+      const existing = skuToBrand.get(sku);
+      if (existing !== undefined && existing !== row.brand.name) {
+        throw new Error(`SKU maps to multiple brands in same marketplace: ${sku}`);
+      }
+      skuToBrand.set(sku, row.brand.name);
+    }
   }
 
   const missingSkus: string[] = [];
@@ -767,35 +791,45 @@ export async function computeSettlementPreview(input: {
   const refundGroups = buildPrincipalGroupsByDate(scopedInvoiceRows, isRefundPrincipal);
   const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
 
-  let pnlAllocation;
+  let pnlAllocation: PnlAllocation;
   try {
-    const deterministicAllocations = await buildDeterministicSkuAllocations({
-      rows: scopedInvoiceRows,
-      marketplace,
-      invoiceStartDate: minDate,
-      invoiceEndDate: maxDate,
-      skuToBrand,
-      settlementId: input.settlementId,
-      sourceFilename: input.sourceFilename,
-    });
-    for (const issue of deterministicAllocations.issues) {
-      blocks.push({
-        code: 'PNL_ALLOCATION_WARNING',
-        message: issue.message,
-        details: { bucket: issue.bucket },
+    if (hasAuditRows) {
+      const deterministicAllocations = await buildDeterministicSkuAllocations({
+        rows: scopedInvoiceRows,
+        marketplace,
+        invoiceStartDate: minDate,
+        invoiceEndDate: maxDate,
+        skuToBrand,
+        settlementId: input.settlementId,
+        sourceFilename: input.sourceFilename,
       });
-    }
+      for (const issue of deterministicAllocations.issues) {
+        blocks.push({
+          code: 'PNL_ALLOCATION_SOURCE_GAP',
+          message: issue.message,
+          details: { bucket: issue.bucket },
+        });
+      }
 
-    pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
-      skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
-    });
-
-    for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
-      blocks.push({
-        code: 'PNL_ALLOCATION_WARNING',
-        message: `SKU-less bucket amount left in parent account. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
-        details: { bucket: issue.bucket, totalCents: issue.totalCents, reason: issue.reason },
+      pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
+        skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
       });
+
+      for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
+        blocks.push({
+          code: 'PNL_ALLOCATION_SOURCE_GAP',
+          message: `SKU-less bucket amount left in parent account. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
+          details: { bucket: issue.bucket, totalCents: issue.totalCents, reason: issue.reason },
+        });
+      }
+    } else {
+      const emptyPnlAllocation: PnlAllocation = {
+        invoiceId,
+        allocationsByBucket: buildEmptyBucketAmounts(),
+        skuBreakdownByBucketBrand: buildEmptyBucketSkuBreakdown(),
+        unallocatedSkuLessBuckets: [],
+      };
+      pnlAllocation = emptyPnlAllocation;
     }
   } catch (error) {
     blocks.push({
@@ -814,6 +848,8 @@ export async function computeSettlementPreview(input: {
         amazonFbaInventoryReimbursement: {},
         warehousingAwd: {},
       },
+      skuBreakdownByBucketBrand: buildEmptyBucketSkuBreakdown(),
+      unallocatedSkuLessBuckets: [],
     };
   }
 

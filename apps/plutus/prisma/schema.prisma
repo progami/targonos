@@ -314,6 +314,205 @@ model BillLineMapping {
   @@unique([billMappingId, qboLineId])
 }
 
+model ProductGroup {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products CanonicalProduct[]
+
+  @@index([active])
+}
+
+model CanonicalProduct {
+  id             String   @id @default(cuid())
+  name           String
+  productGroupId String
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  productGroup       ProductGroup        @relation(fields: [productGroupId], references: [id])
+  aliases            SkuAlias[]
+  costLayers         PoCostLayer[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([productGroupId])
+  @@index([active])
+}
+
+model SkuAlias {
+  id                  String   @id @default(cuid())
+  canonicalProductId  String
+  marketplace         String
+  aliasType           String
+  value               String
+  normalizedAliasType String
+  normalizedValue     String
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Cascade)
+
+  @@unique([marketplace, aliasType, value])
+  @@unique([marketplace, normalizedAliasType, normalizedValue])
+  @@index([canonicalProductId])
+  @@index([marketplace])
+}
+
+model PurchaseOrder {
+  id           String   @id @default(cuid())
+  internalRef  String
+  sourceType   String
+  sourceId     String
+  supplierRef  String?
+  marketplace  String?
+  status       String   @default("OPEN")
+  sourceNotes  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  costLayers PoCostLayer[]
+
+  @@unique([sourceType, sourceId])
+  @@index([internalRef])
+  @@index([marketplace])
+  @@index([status])
+}
+
+model PoCostLayer {
+  id                 String   @id @default(cuid())
+  purchaseOrderId    String
+  canonicalProductId String
+  component          String
+  quantity           Int?
+  amountCents        Int
+  currency           String
+  allocationMethod   String
+  sourceQboTxnType   String?
+  sourceQboTxnId     String?
+  sourceQboLineId    String?
+  sourceDocumentName String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  purchaseOrder    PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id])
+
+  @@index([purchaseOrderId])
+  @@index([canonicalProductId])
+  @@index([component])
+  @@index([sourceQboTxnType, sourceQboTxnId])
+}
+
+model InventoryMovement {
+  id                 String   @id @default(cuid())
+  canonicalProductId String
+  marketplace        String
+  movementType       String
+  quantity           Int
+  movementDate       DateTime
+  sourceType         String
+  sourceId           String
+  sourceLineId       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id])
+
+  @@index([canonicalProductId])
+  @@index([marketplace])
+  @@index([movementType])
+  @@index([movementDate])
+  @@index([sourceType, sourceId])
+}
+
+model PostingIntent {
+  id             String   @id @default(cuid())
+  sourceType     String
+  sourceId       String
+  market         String
+  periodStart    String?
+  periodEnd      String?
+  sourceHash     String
+  mappingVersion String
+  postingHash    String
+  status         String   @default("draft")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lines       PostingIntentLine[]
+  qboPostings QboPosting[]
+
+  @@unique([sourceType, sourceId])
+  @@index([market])
+  @@index([status])
+}
+
+model PostingIntentLine {
+  id              String   @id @default(cuid())
+  postingIntentId String
+  lineRef         String
+  category        String
+  accountId       String?
+  amountCents     Int
+  currency        String
+  description     String
+  lineHash        String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  postingIntent PostingIntent @relation(fields: [postingIntentId], references: [id], onDelete: Cascade)
+
+  @@unique([postingIntentId, lineRef])
+  @@index([postingIntentId])
+}
+
+model QboPosting {
+  id               String    @id @default(cuid())
+  postingIntentId  String
+  qboTxnType       String
+  qboTxnId         String
+  qboSyncToken     String?
+  qboDocNumber     String?
+  qboPrivateNote   String?
+  qboTxnDate       String?
+  postingHash      String
+  driftStatus      String    @default("unchecked")
+  attachmentStatus String    @default("missing")
+  lastCheckedAt    DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  postingIntent    PostingIntent              @relation(fields: [postingIntentId], references: [id], onDelete: Cascade)
+  lineFingerprints QboPostingLineFingerprint[]
+
+  @@unique([qboTxnType, qboTxnId])
+  @@index([postingIntentId])
+  @@index([driftStatus])
+}
+
+model QboPostingLineFingerprint {
+  id               String   @id @default(cuid())
+  qboPostingId     String
+  qboLineId        String
+  expectedLineHash String
+  liveLineHash     String?
+  driftStatus      String   @default("unchecked")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  qboPosting QboPosting @relation(fields: [qboPostingId], references: [id], onDelete: Cascade)
+
+  @@unique([qboPostingId, qboLineId])
+  @@index([qboPostingId])
+  @@index([driftStatus])
+}
+
 /// AwdDataUpload tracks AWD monthly fee report uploads used for deterministic AWD fee allocation.
 model AwdDataUpload {
   id         String   @id @default(cuid())
