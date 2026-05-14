@@ -474,33 +474,25 @@ export async function computeSettlementPreview(input: {
   }
 
   const setupConfig = await db.setupConfig.findFirst();
-  if (!setupConfig || setupConfig.accountsCreated !== true) {
+  const requiredMappingKeys = cogsEnabled
+    ? [
+        'invManufacturing',
+        'invFreight',
+        'invDuty',
+        'invMfgAccessories',
+        'cogsManufacturing',
+        'cogsFreight',
+        'cogsDuty',
+        'cogsMfgAccessories',
+      ]
+    : [];
+
+  const hasInventoryAccountSetup = setupConfig === null ? false : setupConfig.accountsCreated === true;
+  if (requiredMappingKeys.length > 0 && !hasInventoryAccountSetup) {
     blocks.push({
       code: 'MISSING_SETUP',
-      message: 'Setup is incomplete. Complete Accounts mapping + sub-account creation first.',
+      message: 'Setup is incomplete. Complete inventory asset and COGS account mapping first.',
     });
-  }
-
-  const requiredMappingKeys = [
-    'amazonSellerFees',
-    'amazonFbaFees',
-    'amazonStorageFees',
-    'amazonAdvertisingCosts',
-    'amazonPromotions',
-    'amazonFbaInventoryReimbursement',
-    'warehousingAwd',
-  ];
-  if (cogsEnabled) {
-    requiredMappingKeys.unshift(
-      'invManufacturing',
-      'invFreight',
-      'invDuty',
-      'invMfgAccessories',
-      'cogsManufacturing',
-      'cogsFreight',
-      'cogsDuty',
-      'cogsMfgAccessories',
-    );
   }
 
   const mapping: Record<string, string | undefined> = {};
