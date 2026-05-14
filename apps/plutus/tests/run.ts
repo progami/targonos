@@ -18,7 +18,12 @@ import {
   createEmptyLedgerSnapshot,
   replayInventoryLedger,
 } from '../lib/inventory/ledger';
-import { buildInventoryEventsFromMappings, parseQboBillsToInventoryEvents } from '../lib/inventory/qbo-bills';
+import {
+  buildInventoryEventsFromMappings,
+  parseQboBillsToInventoryEvents,
+  parseSkuFromDescription,
+  parseSkuQuantityFromDescription,
+} from '../lib/inventory/qbo-bills';
 import {
   buildAccountComponentMap,
   extractTrackedLinesFromBill,
@@ -3168,6 +3173,195 @@ test('parseQboBillsToInventoryEvents reads PO number from bill custom fields', (
   assert.equal(parsed.events[0].poNumber, 'PO-CF-1');
 });
 
+test('parseSkuQuantityFromDescription reads deterministic manufacturing line fields', () => {
+  const parsed = parseSkuQuantityFromDescription(
+    'MFG; OWNER=US-PDS; PO=PO-20-PDS; SKU=CS-12LD-7M; QTY=6720; UNIT_COST=1.250; SOURCE=PI-2601082',
+  );
+
+  assert.equal(parsed.sku, 'CS-12LD-7M');
+  assert.equal(parsed.quantity, 6720);
+});
+
+test('parseSkuFromDescription reads deterministic cost line fields without quantity', () => {
+  const parsedSku = parseSkuFromDescription(
+    'FREIGHT; OWNER=US-PDS; PO=PO-19-PDS; SKU=CS-007; SERVICE=FOREST SHIPPING; SOURCE=FSHY2509087198',
+  );
+
+  assert.equal(parsedSku, 'CS-007');
+});
+
+test('parseSkuFromDescription reads package cost FOR_SKU fields', () => {
+  const parsedSku = parseSkuFromDescription(
+    'PKG; OWNER=PO-19-PDS; ITEM=CS-007-BOX; QTY=29440; FOR_SKU=CS-007; PO=PO-19-PDS; SOURCE=PI-250804BOXB',
+  );
+
+  assert.equal(parsedSku, 'CS-007');
+});
+
+test('parseQboBillsToInventoryEvents reads SOP internal ref and deterministic line fields', () => {
+  const bill: QboBill = {
+    Id: 'B-PO20',
+    SyncToken: '0',
+    TxnDate: '2026-02-07',
+    TotalAmt: 9559.54,
+    PrivateNote: 'INTERNAL REF: PO=PO-20-PDS; OWNER=US-PDS\nPI: PI-2601082',
+    Line: [
+      {
+        Id: '1',
+        Amount: 8400,
+        Description: 'MFG; OWNER=US-PDS; PO=PO-20-PDS; SKU=CS-12LD-7M; QTY=6720; UNIT_COST=1.250; SOURCE=PI-2601082',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-mfg', name: 'Manufacturing - US-PDS' },
+        },
+      },
+      {
+        Id: '2',
+        Amount: 1159.54,
+        Description: 'MFG; OWNER=US-PDS; PO=PO-20-PDS; SKU=CS-1SD-32M; QTY=2856; UNIT_COST=0.406; SOURCE=PI-2601082',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-mfg', name: 'Manufacturing - US-PDS' },
+        },
+      },
+      {
+        Id: '3',
+        Amount: 100,
+        Description: 'FREIGHT; OWNER=US-PDS; PO=PO-20-PDS; SKU=CS-12LD-7M; SERVICE=FOREST SHIPPING; SOURCE=FSHY-1',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-freight', name: 'Freight - US-PDS' },
+        },
+      },
+    ],
+  };
+
+  const accountsById = new Map<string, QboAccount>([
+    [
+      'us-mfg',
+      {
+        Id: 'us-mfg',
+        SyncToken: '0',
+        Name: 'Manufacturing - US-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Manufacturing - US-PDS',
+      },
+    ],
+    [
+      'us-freight',
+      {
+        Id: 'us-freight',
+        SyncToken: '0',
+        Name: 'Freight - US-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Freight - US-PDS',
+      },
+    ],
+  ]);
+
+  const mappings = {
+    invManufacturing: 'inventory-root',
+    invFreight: 'inventory-root',
+    invDuty: 'inventory-root',
+    invMfgAccessories: 'inventory-root',
+  };
+
+  const parsed = parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.com');
+  assert.equal(parsed.events.length, 3);
+  const mfgEvents = parsed.events.filter((event) => event.kind === 'manufacturing');
+  assert.equal(mfgEvents.length, 2);
+  assert.equal(mfgEvents[0]?.poNumber, 'PO-20-PDS');
+  assert.equal(mfgEvents[0]?.sku, 'CS-12LD-7M');
+  assert.equal(mfgEvents[0]?.units, 6720);
+  assert.equal(mfgEvents[1]?.sku, 'CS-1SD-32M');
+  assert.equal(mfgEvents[1]?.units, 2856);
+
+  const freightEvent = parsed.events.find((event) => event.kind === 'cost' && event.component === 'freight');
+  assert.equal(freightEvent?.kind, 'cost');
+  if (freightEvent?.kind !== 'cost') throw new Error('expected freight cost event');
+  assert.equal(freightEvent.poNumber, 'PO-20-PDS');
+  assert.equal(freightEvent.sku, 'CS-12LD-7M');
+});
+
+test('parseQboBillsToInventoryEvents uses line PO for multi-PO package bills', () => {
+  const bill: QboBill = {
+    Id: 'B-MULTI-PO',
+    SyncToken: '0',
+    TxnDate: '2025-08-04',
+    TotalAmt: 1484.85,
+    PrivateNote: 'INTERNAL REF: PO=PO-18-PDS; PO=PO-19-PDS; OWNER=RESIDUAL\nSUPPLIER REF: PI=PI-250804BOXB',
+    Line: [
+      {
+        Id: '19',
+        Amount: 409.6,
+        Description: 'PKG; OWNER=PO-18-PDS; ITEM=CS-12LD-7M-BOX; QTY=4096; FOR_SKU=CS-12LD-7M; PO=PO-18-PDS; SOURCE=PI-250804BOXB',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-accessories', name: 'Mfg Accessories - US-PDS' },
+        },
+      },
+      {
+        Id: '20',
+        Amount: 969.6,
+        Description: 'PKG; OWNER=PO-19-PDS; ITEM=CS-12LD-7M-BOX; QTY=9696; FOR_SKU=CS-12LD-7M; PO=PO-19-PDS; SOURCE=PI-250804BOXB',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-accessories', name: 'Mfg Accessories - US-PDS' },
+        },
+      },
+      {
+        Id: '21',
+        Amount: 2,
+        Description: 'PKG; OWNER=RESIDUAL; ITEM=CS-12LD-7M-BOX; QTY=20; FOR_SKU=CS-12LD-7M; SOURCE=PI-250804BOXB',
+        AccountBasedExpenseLineDetail: {
+          AccountRef: { value: 'us-accessories', name: 'Mfg Accessories - US-PDS' },
+        },
+      },
+    ],
+  };
+
+  const accountsById = new Map<string, QboAccount>([
+    [
+      'us-accessories',
+      {
+        Id: 'us-accessories',
+        SyncToken: '0',
+        Name: 'Mfg Accessories - US-PDS',
+        AccountType: 'Other Current Asset',
+        AccountSubType: 'Inventory',
+        FullyQualifiedName: 'Inventory Asset:Mfg Accessories - US-PDS',
+      },
+    ],
+  ]);
+
+  const mappings = {
+    invManufacturing: 'inventory-root',
+    invFreight: 'inventory-root',
+    invDuty: 'inventory-root',
+    invMfgAccessories: 'inventory-root',
+  };
+
+  const parsed = parseQboBillsToInventoryEvents([bill], accountsById, mappings, 'amazon.com');
+  const costEvents = parsed.events.filter((event) => event.kind === 'cost');
+  assert.equal(costEvents.length, 2);
+  assert.equal(costEvents[0]?.poNumber, 'PO-18-PDS');
+  assert.equal(costEvents[0]?.sku, 'CS-12LD-7M');
+  assert.equal(costEvents[1]?.poNumber, 'PO-19-PDS');
+  assert.equal(costEvents[1]?.sku, 'CS-12LD-7M');
+});
+
+test('pull-sync does not collapse non-PO or multi-PO internal refs into one PO', () => {
+  assert.equal(
+    extractPoNumberFromBill({
+      PrivateNote: 'INTERNAL REF: OWNER=US-PDS; PRODUCT=NITRILE_GLOVES',
+    }),
+    '',
+  );
+  assert.equal(
+    extractPoNumberFromBill({
+      PrivateNote: 'INTERNAL REF: PO=PO-18-PDS; PO=PO-19-PDS; OWNER=RESIDUAL',
+    }),
+    '',
+  );
+});
+
 test('parseQboBillsToInventoryEvents rejects inventory accounts without marketplace markers', () => {
   const bill: QboBill = {
     Id: 'B-NO-MARKET',
@@ -3355,6 +3549,14 @@ test('extractPoNumberFromBill reads internal ref from SOP memo', () => {
   });
 
   assert.equal(po, 'PO-20-PDS');
+});
+
+test('extractPoNumberFromBill reads structured PO from SOP memo', () => {
+  const po = extractPoNumberFromBill({
+    PrivateNote: 'INTERNAL REF: PO=PO-19-PDS; SHIPMENT=FBA19523CMQ9; OWNER=US-PDS\nNOTES: Actuals',
+  });
+
+  assert.equal(po, 'PO-19-PDS');
 });
 
 test('extractPoNumberFromBill preserves direct PO code in memo', () => {

@@ -1,4 +1,4 @@
-import type { QboAccount, QboBill, QboConnection } from '@/lib/qbo/api';
+import type { QboBill, QboConnection } from '@/lib/qbo/api';
 import {
   createJournalEntry,
   deleteJournalEntry,
@@ -8,7 +8,7 @@ import {
   fetchPreferences,
 } from '@/lib/qbo/api';
 import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
-import { parseQboBillsToInventoryEvents, buildInventoryEventsFromMappings, type InventoryAccountMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
+import { buildInventoryEventsFromMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
 import {
   replayInventoryLedger,
   type LedgerBlock,
@@ -599,9 +599,6 @@ export async function computeSettlementPreview(input: {
     includeInactive: true,
   });
 
-  const accountsById = new Map<string, QboAccount>();
-  for (const account of accountsResult.accounts) accountsById.set(account.Id, account);
-
   let billsConnection =
     accountsResult.updatedConnection
       ? accountsResult.updatedConnection
@@ -609,62 +606,15 @@ export async function computeSettlementPreview(input: {
         ? settlementResult.updatedConnection
         : input.connection;
 
-  let inventoryMappings: InventoryAccountMappings | null = null;
   if (cogsEnabled) {
-    const invManufacturing = mapping.invManufacturing;
-    if (!invManufacturing) throw new Error('Missing invManufacturing mapping');
-    const invFreight = mapping.invFreight;
-    if (!invFreight) throw new Error('Missing invFreight mapping');
-    const invDuty = mapping.invDuty;
-    if (!invDuty) throw new Error('Missing invDuty mapping');
-    const invMfgAccessories = mapping.invMfgAccessories;
-    if (!invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
-
-    inventoryMappings = {
-      invManufacturing,
-      invFreight,
-      invDuty,
-      invMfgAccessories,
-    };
+    if (!mapping.invManufacturing) throw new Error('Missing invManufacturing mapping');
+    if (!mapping.invFreight) throw new Error('Missing invFreight mapping');
+    if (!mapping.invDuty) throw new Error('Missing invDuty mapping');
+    if (!mapping.invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
   }
 
-  // Bill sources:
-  // - QBO bills parsing (best-effort, relies on memo/description conventions)
-  // - Plutus bill mappings (authoritative for mapped bills)
-  //
-  // Important: we must NOT ignore QBO bills just because *some* mappings exist, otherwise a single mapped
-  // warehousing/expense bill can accidentally wipe out inventory cost basis from all other QBO bills.
-  function mergeParsedBills(a: ParsedBills, b: ParsedBills): ParsedBills {
-    const poUnitsBySku = new Map<string, Map<string, number>>();
-
-    function mergePoUnits(source: Map<string, Map<string, number>>) {
-      for (const [poNumber, skuUnits] of source.entries()) {
-        const existing = poUnitsBySku.get(poNumber);
-        if (!existing) {
-          poUnitsBySku.set(poNumber, new Map(skuUnits));
-          continue;
-        }
-
-        for (const [sku, units] of skuUnits.entries()) {
-          const current = existing.get(sku);
-          existing.set(sku, (current === undefined ? 0 : current) + units);
-        }
-      }
-    }
-
-    mergePoUnits(a.poUnitsBySku);
-    mergePoUnits(b.poUnitsBySku);
-
-    const events = [...a.events, ...b.events];
-    events.sort((x, y) => {
-      if (x.date !== y.date) return x.date.localeCompare(y.date);
-      if (x.kind !== y.kind) return x.kind === 'manufacturing' ? -1 : 1;
-      return 0;
-    });
-
-    return { events, poUnitsBySku };
-  }
-
+  // Plutus bill mappings are the COGS-approved bill source. Raw QBO inventory
+  // bills can be audited separately, but they must not enter COGS until mapped.
   const plutusMappings = cogsEnabled
     ? await db.billMapping.findMany({
         where: {
@@ -676,11 +626,7 @@ export async function computeSettlementPreview(input: {
       })
     : [];
 
-  const mappedBillIds = new Set(plutusMappings.map((m) => m.qboBillId));
-
-  // QBO Bills -> Inventory events (only inventory-account lines are used)
   let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
-  let parsedBillsFromQbo: ParsedBills = { events: [], poUnitsBySku: new Map() };
   let allBills: QboBill[] = [];
 
   if (cogsEnabled) {
@@ -760,21 +706,9 @@ export async function computeSettlementPreview(input: {
       }
     }
 
-    try {
-      if (inventoryMappings === null) throw new Error('Missing inventory mappings');
-      const unmappedBills = allBills.filter((b) => !mappedBillIds.has(b.Id));
-      parsedBillsFromQbo = parseQboBillsToInventoryEvents(unmappedBills, accountsById, inventoryMappings, marketplace);
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_PARSE_ERROR',
-        message: 'Failed to parse bills into inventory events',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      parsedBillsFromQbo = { events: [], poUnitsBySku: new Map() };
-    }
   }
 
-  const parsedBills = mergeParsedBills(parsedBillsFromQbo, parsedBillsFromMappings);
+  const parsedBills = parsedBillsFromMappings;
 
   // Build brand resolver for P&L allocation
   const brandResolver = {
