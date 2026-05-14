@@ -15,14 +15,9 @@ import {
   type SaleCost,
 } from '@/lib/inventory/ledger';
 import { fromCents } from '@/lib/inventory/money';
-import { computePnlAllocation, type PnlAllocation, type PnlBucketKey } from '@/lib/pnl-allocation';
 import { db } from '@/lib/db';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
-import {
-  buildDeterministicSkuAllocations,
-  deterministicSourceGuidanceForBucket,
-} from '@/lib/plutus/fee-allocation';
 
 import {
   normalizeSku,
@@ -43,7 +38,7 @@ import {
 } from './settlement-validation';
 import type { SettlementAuditRow } from './settlement-audit';
 
-import { buildCogsJournalLines, buildPnlJournalLines } from './journal-builder';
+import { buildCogsJournalLines } from './journal-builder';
 import {
   buildBillMappingPullSyncUpdates,
   type BillMappingPullSyncCandidate,
@@ -54,6 +49,7 @@ import type {
   ProcessingReturn,
   ProcessingSale,
   KnownLedgerEvent,
+  JournalEntryLinePreview,
   JournalEntryPreview,
   SettlementProcessingPreview,
   SettlementProcessingResult,
@@ -336,24 +332,6 @@ function isLikelyCentScaledAuditInput(stats: {
   if (stats.rowCount < 50) return false;
   if (stats.integerDollarRatio < 0.98) return false;
   return stats.medianAbsNet >= 100 || stats.p90AbsNet >= 300;
-}
-
-const PNL_BUCKET_KEYS: PnlBucketKey[] = [
-  'amazonSellerFees',
-  'amazonFbaFees',
-  'amazonStorageFees',
-  'amazonAdvertisingCosts',
-  'amazonPromotions',
-  'amazonFbaInventoryReimbursement',
-  'warehousingAwd',
-];
-
-function buildEmptyBucketAmounts(): Record<PnlBucketKey, Record<string, number>> {
-  return Object.fromEntries(PNL_BUCKET_KEYS.map((bucket) => [bucket, {}])) as Record<PnlBucketKey, Record<string, number>>;
-}
-
-function buildEmptyBucketSkuBreakdown(): Record<PnlBucketKey, Record<string, Record<string, number>>> {
-  return Object.fromEntries(PNL_BUCKET_KEYS.map((bucket) => [bucket, {}])) as Record<PnlBucketKey, Record<string, Record<string, number>>>;
 }
 
 export async function computeSettlementPreview(input: {
@@ -710,82 +688,14 @@ export async function computeSettlementPreview(input: {
 
   const parsedBills = parsedBillsFromMappings;
 
-  // Build brand resolver for P&L allocation
-  const brandResolver = {
-    getBrandForSku: (skuRaw: string) => {
-      const sku = normalizeSku(skuRaw);
-      const brand = skuToBrand.get(sku);
-      if (!brand) throw new Error(`SKU not mapped to brand: ${sku}`);
-      return brand;
-    },
-  };
-
   // Principal groups for unit movements
   const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
   const refundGroups = buildPrincipalGroupsByDate(scopedInvoiceRows, isRefundPrincipal);
   const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
 
-  let pnlAllocation: PnlAllocation;
-  try {
-    if (hasAuditRows) {
-      const deterministicAllocations = await buildDeterministicSkuAllocations({
-        rows: scopedInvoiceRows,
-        marketplace,
-        invoiceStartDate: minDate,
-        invoiceEndDate: maxDate,
-        skuToBrand,
-        settlementId: input.settlementId,
-        sourceFilename: input.sourceFilename,
-      });
-      for (const issue of deterministicAllocations.issues) {
-        blocks.push({
-          code: 'PNL_ALLOCATION_SOURCE_GAP',
-          message: issue.message,
-          details: { bucket: issue.bucket },
-        });
-      }
-
-      pnlAllocation = computePnlAllocation(scopedInvoiceRows, brandResolver, {
-        skuAllocationsByBucket: deterministicAllocations.skuAllocationsByBucket,
-      });
-
-      for (const issue of pnlAllocation.unallocatedSkuLessBuckets) {
-        blocks.push({
-          code: 'PNL_ALLOCATION_SOURCE_GAP',
-          message: `SKU-less bucket amount left in parent account. ${deterministicSourceGuidanceForBucket(issue.bucket)}`,
-          details: { bucket: issue.bucket, totalCents: issue.totalCents, reason: issue.reason },
-        });
-      }
-    } else {
-      const emptyPnlAllocation: PnlAllocation = {
-        invoiceId,
-        allocationsByBucket: buildEmptyBucketAmounts(),
-        skuBreakdownByBucketBrand: buildEmptyBucketSkuBreakdown(),
-        unallocatedSkuLessBuckets: [],
-      };
-      pnlAllocation = emptyPnlAllocation;
-    }
-  } catch (error) {
-    blocks.push({
-      code: 'PNL_ALLOCATION_ERROR',
-      message: 'Failed to compute P&L allocation',
-      details: { error: error instanceof Error ? error.message : String(error) },
-    });
-    pnlAllocation = {
-      invoiceId,
-      allocationsByBucket: {
-        amazonSellerFees: {},
-        amazonFbaFees: {},
-        amazonStorageFees: {},
-        amazonAdvertisingCosts: {},
-        amazonPromotions: {},
-        amazonFbaInventoryReimbursement: {},
-        warehousingAwd: {},
-      },
-      skuBreakdownByBucketBrand: buildEmptyBucketSkuBreakdown(),
-      unallocatedSkuLessBuckets: [],
-    };
-  }
+  // Settlement operating P&L is already posted on the settlement JE by category.
+  // Plutus no longer builds brand/SKU fee reclass lines. SKU detail is used only for inventory COGS.
+  const pnlLines: JournalEntryLinePreview[] = [];
 
   // Match refunds to historical sales only when COGS is active. P&L-only marketplaces
   // must not be blocked by inventory-return matching that has no journal impact.
@@ -1067,14 +977,6 @@ export async function computeSettlementPreview(input: {
         netCogsByBrandSku,
       )
     : [];
-  const pnlLines = buildPnlJournalLines(
-    pnlAllocation.allocationsByBucket,
-    mapping,
-    accountsResult.accounts,
-    invoiceId,
-    blocks,
-    pnlAllocation.skuBreakdownByBucketBrand,
-  );
 
   const hashPrefix = processingHash.slice(0, 10);
 
@@ -1108,7 +1010,7 @@ export async function computeSettlementPreview(input: {
     sales: computedSales,
     returns: matchedReturns,
     cogsByBrandComponentCents: netCogsByBrand,
-    pnlByBucketBrandCents: pnlAllocation.allocationsByBucket,
+    pnlByBucketBrandCents: {},
     cogsJournalEntry: cogsPreview,
     pnlJournalEntry: pnlPreview,
   };

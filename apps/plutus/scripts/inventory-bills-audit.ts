@@ -2,7 +2,11 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { extractPoNumberFromBill } from '@/lib/plutus/bills/pull-sync';
 
-import { parseSkuFromDescription, parseSkuQuantityFromDescription } from '@/lib/inventory/qbo-bills';
+import {
+  parsePoFromDescription,
+  parseSkuFromDescription,
+  parseSkuQuantityFromDescription,
+} from '@/lib/inventory/qbo-bills';
 
 type CliOptions = {
   since: string;
@@ -62,6 +66,22 @@ type BillIssue =
       amount: number;
       mappedSku: string;
       description: string;
+    }
+  | {
+      code:
+        | 'INVENTORY_BILL_MAPPING_LINE_MISSING'
+        | 'INVENTORY_BILL_MAPPING_LINE_NOT_IN_QBO'
+        | 'INVENTORY_BILL_MAPPING_LINE_COMPONENT_MISMATCH'
+        | 'INVENTORY_BILL_MAPPING_LINE_AMOUNT_MISMATCH'
+        | 'INVENTORY_BILL_MAPPING_LINE_SKU_MISMATCH'
+        | 'INVENTORY_BILL_MAPPING_LINE_PO_MISMATCH';
+      billId: string;
+      txnDate: string;
+      vendorName: string;
+      docNumber: string;
+      privateNote: string;
+      lineId: string;
+      details: Record<string, string | number | null>;
     };
 
 function printUsage(): void {
@@ -184,7 +204,9 @@ type QboAccount = {
   AccountSubType?: string;
 };
 
-function classifyInventoryComponentFromAccount(account: QboAccount): InventoryLine['component'] | null {
+function classifyInventoryComponentFromAccount(
+  account: QboAccount,
+): InventoryLine['component'] | null {
   if (account.AccountType !== 'Other Current Asset') return null;
   if (account.AccountSubType !== 'Inventory') return null;
 
@@ -200,11 +222,17 @@ function classifyInventoryComponentFromAccount(account: QboAccount): InventoryLi
   return null;
 }
 
-function classifyInventoryMarketplaceFromAccount(account: QboAccount): InventoryLine['marketplace'] {
+function classifyInventoryMarketplaceFromAccount(
+  account: QboAccount,
+): InventoryLine['marketplace'] {
   const name = `${account.FullyQualifiedName ?? ''} ${account.Name}`.trim();
   if (name.includes('US-PDS')) return 'amazon.com';
   if (name.includes('UK-PDS')) return 'amazon.co.uk';
   return null;
+}
+
+function requiresPlutusCogsMapping(line: InventoryLine): boolean {
+  return line.marketplace === 'amazon.com';
 }
 
 function hasStructuredPlaceholderSku(description: string): boolean {
@@ -252,7 +280,12 @@ async function main(): Promise<void> {
   const pageSize = 100;
 
   while (true) {
-    const page = await fetchBills(connection, { startDate, endDate, startPosition, maxResults: pageSize });
+    const page = await fetchBills(connection, {
+      startDate,
+      endDate,
+      startPosition,
+      maxResults: pageSize,
+    });
     if (page.updatedConnection) {
       connection = page.updatedConnection;
       await saveServerQboConnection(page.updatedConnection);
@@ -333,15 +366,118 @@ async function main(): Promise<void> {
       poNumber = mapping.poNumber;
       for (const mLine of mapping.lines) {
         const sourceLine = lineItemById.get(mLine.qboLineId);
+        if (!sourceLine) {
+          issues.push({
+            code: 'INVENTORY_BILL_MAPPING_LINE_NOT_IN_QBO',
+            billId,
+            txnDate,
+            vendorName,
+            docNumber,
+            privateNote,
+            lineId: mLine.qboLineId,
+            details: {
+              mappedComponent: mLine.component,
+              mappedAmountCents: mLine.amountCents,
+              mappedSku: mLine.sku,
+              mappedPoNumber: (mLine as { poNumber?: string | null }).poNumber ?? null,
+            },
+          });
+          continue;
+        }
+
+        if (mLine.component !== sourceLine.component) {
+          issues.push({
+            code: 'INVENTORY_BILL_MAPPING_LINE_COMPONENT_MISMATCH',
+            billId,
+            txnDate,
+            vendorName,
+            docNumber,
+            privateNote,
+            lineId: sourceLine.lineId,
+            details: {
+              expectedComponent: sourceLine.component,
+              mappedComponent: mLine.component,
+              description: sourceLine.description,
+            },
+          });
+        }
+
+        const sourceAmountCents = Math.round(sourceLine.amount * 100);
+        if (mLine.amountCents !== sourceAmountCents) {
+          issues.push({
+            code: 'INVENTORY_BILL_MAPPING_LINE_AMOUNT_MISMATCH',
+            billId,
+            txnDate,
+            vendorName,
+            docNumber,
+            privateNote,
+            lineId: sourceLine.lineId,
+            details: {
+              expectedAmountCents: sourceAmountCents,
+              mappedAmountCents: mLine.amountCents,
+              description: sourceLine.description,
+            },
+          });
+        }
+
+        let parsedSku: string | null = null;
+        try {
+          parsedSku = parseSkuFromDescription(sourceLine.description);
+        } catch {
+          parsedSku = null;
+        }
+
+        if (parsedSku !== null && mLine.sku !== parsedSku) {
+          issues.push({
+            code: 'INVENTORY_BILL_MAPPING_LINE_SKU_MISMATCH',
+            billId,
+            txnDate,
+            vendorName,
+            docNumber,
+            privateNote,
+            lineId: sourceLine.lineId,
+            details: {
+              expectedSku: parsedSku,
+              mappedSku: mLine.sku,
+              description: sourceLine.description,
+            },
+          });
+        }
+
+        const sourcePoNumber = parsePoFromDescription(sourceLine.description);
+        const mappedLinePoNumber = (mLine as { poNumber?: string | null }).poNumber ?? null;
+        const effectiveMappedPoNumber =
+          mappedLinePoNumber !== null && mappedLinePoNumber !== ''
+            ? mappedLinePoNumber
+            : mapping.poNumber;
+        if (sourcePoNumber !== '' && effectiveMappedPoNumber !== sourcePoNumber) {
+          issues.push({
+            code: 'INVENTORY_BILL_MAPPING_LINE_PO_MISMATCH',
+            billId,
+            txnDate,
+            vendorName,
+            docNumber,
+            privateNote,
+            lineId: sourceLine.lineId,
+            details: {
+              expectedPoNumber: sourcePoNumber,
+              mappedPoNumber: effectiveMappedPoNumber,
+              mappedHeaderPoNumber: mapping.poNumber,
+              mappedLinePoNumber,
+              description: sourceLine.description,
+            },
+          });
+        }
+
         if (mLine.sku && sourceLine && hasStructuredPlaceholderSku(sourceLine.description)) {
-          let parsedSku: string | null = null;
+          let placeholderParsedSku: string | null = null;
           try {
-            parsedSku = parseSkuFromDescription(sourceLine.description);
+            placeholderParsedSku = parseSkuFromDescription(sourceLine.description);
           } catch {
-            parsedSku = null;
+            placeholderParsedSku = null;
           }
 
-          if (parsedSku === null) {
+          if (placeholderParsedSku === null) {
             issues.push({
               code: 'INVENTORY_BILL_MAPPING_SKU_WITHOUT_SOURCE',
               billId,
@@ -364,10 +500,38 @@ async function main(): Promise<void> {
           addPoUnits(poNumber, mLine.sku, mLine.quantity);
         }
       }
+
+      const mappedLineIds = new Set(mapping.lines.map((line) => line.qboLineId));
+      for (const sourceLine of lineItems) {
+        if (mappedLineIds.has(sourceLine.lineId)) continue;
+        if (!requiresPlutusCogsMapping(sourceLine)) continue;
+        issues.push({
+          code: 'INVENTORY_BILL_MAPPING_LINE_MISSING',
+          billId,
+          txnDate,
+          vendorName,
+          docNumber,
+          privateNote,
+          lineId: sourceLine.lineId,
+          details: {
+            expectedComponent: sourceLine.component,
+            expectedAmountCents: Math.round(sourceLine.amount * 100),
+            description: sourceLine.description,
+          },
+        });
+      }
     } else {
       const extractedPoNumber = extractPoNumberFromBill(bill);
-      if (extractedPoNumber === '') {
-        issues.push({ code: 'INVENTORY_BILL_UNMAPPED_MISSING_PO_MEMO', billId, txnDate, vendorName, docNumber, privateNote });
+      const awaitingGoods = /\bRECON\s*=\s*AWAITING_GOODS\b/i.test(privateNote);
+      if (extractedPoNumber === '' && !awaitingGoods) {
+        issues.push({
+          code: 'INVENTORY_BILL_UNMAPPED_MISSING_PO_MEMO',
+          billId,
+          txnDate,
+          vendorName,
+          docNumber,
+          privateNote,
+        });
       } else {
         poNumber = extractedPoNumber;
         for (const line of lineItems) {

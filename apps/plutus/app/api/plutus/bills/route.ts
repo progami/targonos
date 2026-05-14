@@ -3,7 +3,6 @@ import {
   fetchBillById,
   fetchBills,
   fetchAccounts,
-  updateBill,
   updateBillWithPayload,
   QboAuthError,
   type QboBill,
@@ -28,6 +27,7 @@ import {
   normalizeSku,
   type ManufacturingSplitInput,
 } from '@/lib/plutus/bills/split';
+import { parsePoFromDescription } from '@/lib/inventory/qbo-bills';
 
 const logger = createLogger({ name: 'plutus-bills' });
 
@@ -172,6 +172,7 @@ export async function GET(req: NextRequest) {
                 component: l.component,
                 amountCents: l.amountCents,
                 sku: l.sku,
+                poNumber: l.poNumber,
                 quantity: l.quantity,
               })),
             }
@@ -208,7 +209,10 @@ export async function GET(req: NextRequest) {
     }
     logger.error('Failed to fetch plutus bills', error);
     return NextResponse.json(
-      { error: 'Failed to fetch bills', details: error instanceof Error ? error.message : String(error) },
+      {
+        error: 'Failed to fetch bills',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }
@@ -239,6 +243,7 @@ export async function POST(req: NextRequest) {
       component: string;
       amountCents: number;
       sku?: string;
+      poNumber?: string;
       quantity?: number;
       splits?: Array<{ sku: string; quantity: number }>;
     };
@@ -247,11 +252,21 @@ export async function POST(req: NextRequest) {
     for (const rawLine of lines as unknown[]) {
       const line = rawLine as Record<string, unknown>;
       if (typeof line.qboLineId !== 'string' || typeof line.component !== 'string') {
-        return NextResponse.json({ error: 'Each line must have qboLineId and component' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Each line must have qboLineId and component' },
+          { status: 400 },
+        );
       }
 
-      if (typeof line.amountCents !== 'number' || !Number.isInteger(line.amountCents) || line.amountCents <= 0) {
-        return NextResponse.json({ error: 'Each line must have positive integer amountCents' }, { status: 400 });
+      if (
+        typeof line.amountCents !== 'number' ||
+        !Number.isInteger(line.amountCents) ||
+        line.amountCents <= 0
+      ) {
+        return NextResponse.json(
+          { error: 'Each line must have positive integer amountCents' },
+          { status: 400 },
+        );
       }
       const amountCents = line.amountCents;
 
@@ -264,17 +279,25 @@ export async function POST(req: NextRequest) {
               { status: 400 },
             );
           }
-          const normalizedSplits = normalizeManufacturingSplits(line.splits as ManufacturingSplitInput[]);
+          const normalizedSplits = normalizeManufacturingSplits(
+            line.splits as ManufacturingSplitInput[],
+          );
           parsedLines.push({
             qboLineId: line.qboLineId,
             component: line.component,
             amountCents,
+            poNumber: typeof line.poNumber === 'string' ? line.poNumber.trim() : undefined,
             splits: normalizedSplits,
           });
           continue;
         }
 
-        if (typeof line.sku !== 'string' || line.sku === '' || typeof line.quantity !== 'number' || !isPositiveInteger(line.quantity)) {
+        if (
+          typeof line.sku !== 'string' ||
+          line.sku === '' ||
+          typeof line.quantity !== 'number' ||
+          !isPositiveInteger(line.quantity)
+        ) {
           return NextResponse.json(
             { error: 'Manufacturing lines require sku and quantity' },
             { status: 400 },
@@ -286,30 +309,112 @@ export async function POST(req: NextRequest) {
           component: line.component,
           amountCents,
           sku: normalizeSku(line.sku),
+          poNumber: typeof line.poNumber === 'string' ? line.poNumber.trim() : undefined,
           quantity: line.quantity,
         });
         continue;
       }
 
       if (Array.isArray(line.splits) && line.splits.length > 0) {
-        return NextResponse.json({ error: 'Only manufacturing lines support splits' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Only manufacturing lines support splits' },
+          { status: 400 },
+        );
       }
 
-      const sku = typeof line.sku === 'string' && line.sku !== '' ? normalizeSku(line.sku) : undefined;
-      const quantity = typeof line.quantity === 'number' && isPositiveInteger(line.quantity) ? line.quantity : undefined;
+      const sku =
+        typeof line.sku === 'string' && line.sku !== '' ? normalizeSku(line.sku) : undefined;
+      const quantity =
+        typeof line.quantity === 'number' && isPositiveInteger(line.quantity)
+          ? line.quantity
+          : undefined;
 
       parsedLines.push({
         qboLineId: line.qboLineId,
         component: line.component,
         amountCents,
         sku,
+        poNumber: typeof line.poNumber === 'string' ? line.poNumber.trim() : undefined,
         quantity,
       });
     }
 
-    const hasManufacturingLines = parsedLines.some((line) => line.component === 'manufacturing');
-    if (hasManufacturingLines && normalizedPoNumber === '') {
-      return NextResponse.json({ error: 'PO number is required when manufacturing lines are present' }, { status: 400 });
+    let connection = await getQboConnection();
+    if (!connection) {
+      return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
+    }
+    let activeConnection = connection;
+
+    const accountsResult = await fetchAccounts(activeConnection, { includeInactive: true });
+    if (accountsResult.updatedConnection) {
+      activeConnection = accountsResult.updatedConnection;
+    }
+
+    const config = await db.setupConfig.findFirst();
+    const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
+      warehousing3pl: config?.warehousing3pl,
+      warehousingAmazonFc: config?.warehousingAmazonFc,
+      warehousingAwd: config?.warehousingAwd,
+      productExpenses: config?.productExpenses,
+    });
+
+    const fetchBillResult = await fetchBillById(activeConnection, qboBillId);
+    if (fetchBillResult.updatedConnection) {
+      activeConnection = fetchBillResult.updatedConnection;
+    }
+
+    const currentBill = fetchBillResult.bill;
+    const trackedLineById = new Map(
+      extractTrackedLinesFromBill(currentBill, accountComponentMap).map((line) => [
+        line.lineId,
+        line,
+      ]),
+    );
+
+    for (const line of parsedLines) {
+      const sourceLine = trackedLineById.get(line.qboLineId);
+      if (!sourceLine) {
+        return NextResponse.json(
+          { error: `QBO bill line is not a tracked bill line: ${line.qboLineId}` },
+          { status: 400 },
+        );
+      }
+
+      if (sourceLine.component !== line.component) {
+        return NextResponse.json(
+          {
+            error: `Mapped component does not match QBO account for line ${line.qboLineId}: expected ${sourceLine.component}, got ${line.component}`,
+          },
+          { status: 400 },
+        );
+      }
+
+      const sourceAmountCents = Math.round(sourceLine.amount * 100);
+      if (sourceAmountCents !== line.amountCents) {
+        return NextResponse.json(
+          {
+            error: `Mapped amount does not match QBO amount for line ${line.qboLineId}: expected ${sourceAmountCents}, got ${line.amountCents}`,
+          },
+          { status: 400 },
+        );
+      }
+
+      if (!line.poNumber) {
+        const sourcePoNumber = parsePoFromDescription(sourceLine.description);
+        if (sourcePoNumber !== '') {
+          line.poNumber = sourcePoNumber;
+        }
+      }
+    }
+
+    const hasManufacturingLineWithoutPo = parsedLines.some(
+      (line) => line.component === 'manufacturing' && !line.poNumber && normalizedPoNumber === '',
+    );
+    if (hasManufacturingLineWithoutPo) {
+      return NextResponse.json(
+        { error: 'PO number is required when manufacturing lines are present' },
+        { status: 400 },
+      );
     }
 
     type PersistedLine = {
@@ -317,6 +422,7 @@ export async function POST(req: NextRequest) {
       component: string;
       amountCents: number;
       sku: string | null;
+      poNumber: string | null;
       quantity: number | null;
     };
 
@@ -325,166 +431,163 @@ export async function POST(req: NextRequest) {
       component: line.component,
       amountCents: line.amountCents,
       sku: typeof line.sku === 'string' ? line.sku : null,
+      poNumber: typeof line.poNumber === 'string' && line.poNumber !== '' ? line.poNumber : null,
       quantity: typeof line.quantity === 'number' ? line.quantity : null,
     }));
 
-    let syncedAt: Date | null = null;
-    let connection = await getQboConnection();
-    if (connection) {
-      const hasSplitLines = parsedLines.some((line) => Array.isArray(line.splits) && line.splits.length > 0);
+    let syncedAt: Date | null = new Date();
+    const hasSplitLines = parsedLines.some(
+      (line) => Array.isArray(line.splits) && line.splits.length > 0,
+    );
 
-      if (!hasSplitLines) {
-        const lineDescriptions = parsedLines
-          .filter((line) => line.component === 'manufacturing')
-          .map((line) => ({
-            lineId: line.qboLineId,
-            description: buildManufacturingDescription(line.sku!, line.quantity!),
-          }));
-
-        const { updatedConnection } = await updateBill(connection, qboBillId, {
-          privateNote: normalizedPoNumber === '' ? undefined : `PO: ${normalizedPoNumber}`,
-          lineDescriptions,
-        });
-        if (updatedConnection) {
-          connection = updatedConnection;
-          await saveServerQboConnection(updatedConnection);
-        }
-      } else {
-        const fetchBillResult = await fetchBillById(connection, qboBillId);
-        const currentBill = fetchBillResult.bill;
-        if (fetchBillResult.updatedConnection) {
-          connection = fetchBillResult.updatedConnection;
-        }
-
-        const splitByLineId = new Map<string, ReturnType<typeof allocateManufacturingSplitAmounts>>();
-        const lineDescriptions = new Map<string, string>();
-
-        for (const line of parsedLines) {
-          if (line.component !== 'manufacturing') continue;
-          if (Array.isArray(line.splits) && line.splits.length > 0) {
-            const sourceLine = (currentBill.Line ?? []).find((candidate) => candidate.Id === line.qboLineId);
-            if (!sourceLine || !sourceLine.AccountBasedExpenseLineDetail) {
-              throw new Error(`Manufacturing split source line not found in QBO bill: ${line.qboLineId}`);
-            }
-            const sourceAmountCents = Math.round(sourceLine.Amount * 100);
-            if (sourceAmountCents !== line.amountCents) {
-              throw new Error(`Bill line amount changed in QBO: ${line.qboLineId}`);
-            }
-            const allocated = allocateManufacturingSplitAmounts(sourceAmountCents, line.splits);
-            splitByLineId.set(line.qboLineId, allocated);
-            continue;
-          }
-
-          lineDescriptions.set(line.qboLineId, buildManufacturingDescription(line.sku!, line.quantity!));
-        }
-
-        const updatedLines: Array<Record<string, unknown>> = [];
-        const splitDescriptors: Array<{
-          accountId: string;
+    if (hasSplitLines) {
+      const splitByLineId = new Map<
+        string,
+        {
+          poNumber: string;
           lines: ReturnType<typeof allocateManufacturingSplitAmounts>;
-        }> = [];
-
-        for (const currentLine of currentBill.Line ?? []) {
-          const allocatedSplits = splitByLineId.get(currentLine.Id);
-          if (allocatedSplits) {
-            if (!currentLine.AccountBasedExpenseLineDetail) {
-              throw new Error(`Split source line must be account-based: ${currentLine.Id}`);
-            }
-            const detail = {
-              ...currentLine.AccountBasedExpenseLineDetail,
-              AccountRef: {
-                value: currentLine.AccountBasedExpenseLineDetail.AccountRef.value,
-                name: currentLine.AccountBasedExpenseLineDetail.AccountRef.name,
-              },
-            };
-            splitDescriptors.push({
-              accountId: detail.AccountRef.value,
-              lines: allocatedSplits,
-            });
-            for (const splitLine of allocatedSplits) {
-              updatedLines.push({
-                DetailType: 'AccountBasedExpenseLineDetail',
-                Amount: splitLine.amountCents / 100,
-                Description: splitLine.description,
-                AccountBasedExpenseLineDetail: detail,
-              });
-            }
-            continue;
-          }
-
-          const updatedLine: Record<string, unknown> = {
-            ...(currentLine as unknown as Record<string, unknown>),
-          };
-          const description = lineDescriptions.get(currentLine.Id);
-          if (description !== undefined) {
-            updatedLine.Description = description;
-          }
-          updatedLines.push(updatedLine);
         }
+      >();
+      const lineDescriptions = new Map<string, string>();
 
-        const payload: Record<string, unknown> = {
-          ...(currentBill as unknown as Record<string, unknown>),
-          PrivateNote: normalizedPoNumber === '' ? currentBill.PrivateNote : `PO: ${normalizedPoNumber}`,
-          Line: updatedLines,
-        };
-
-        const updatedBillResult = await updateBillWithPayload(connection, payload);
-        if (updatedBillResult.updatedConnection) {
-          connection = updatedBillResult.updatedConnection;
-          await saveServerQboConnection(updatedBillResult.updatedConnection);
-        }
-
-        const updatedBill = updatedBillResult.bill;
-        const candidateLines = (updatedBill.Line ?? [])
-          .filter((line) => line.Id && line.AccountBasedExpenseLineDetail)
-          .map((line) => ({
-            lineId: line.Id,
-            accountId: line.AccountBasedExpenseLineDetail!.AccountRef.value,
-            amountCents: Math.round(line.Amount * 100),
-            description: line.Description ? line.Description : '',
-          }));
-
-        const usedLineIds = new Set<string>();
-        const splitPersistedLines: PersistedLine[] = [];
-
-        for (const descriptor of splitDescriptors) {
-          for (const splitLine of descriptor.lines) {
-            const match = candidateLines.find(
-              (candidate) =>
-                !usedLineIds.has(candidate.lineId) &&
-                candidate.accountId === descriptor.accountId &&
-                candidate.amountCents === splitLine.amountCents &&
-                candidate.description === splitLine.description,
+      for (const line of parsedLines) {
+        if (line.component !== 'manufacturing') continue;
+        if (Array.isArray(line.splits) && line.splits.length > 0) {
+          const sourceLine = (currentBill.Line ?? []).find(
+            (candidate) => candidate.Id === line.qboLineId,
+          );
+          if (!sourceLine || !sourceLine.AccountBasedExpenseLineDetail) {
+            throw new Error(
+              `Manufacturing split source line not found in QBO bill: ${line.qboLineId}`,
             );
-            if (!match) {
-              throw new Error(`Failed to resolve QBO line id for split description: ${splitLine.description}`);
-            }
-            usedLineIds.add(match.lineId);
-            splitPersistedLines.push({
-              qboLineId: match.lineId,
-              component: 'manufacturing',
-              amountCents: splitLine.amountCents,
-              sku: splitLine.sku,
-              quantity: splitLine.quantity,
-            });
           }
+          const sourceAmountCents = Math.round(sourceLine.Amount * 100);
+          if (sourceAmountCents !== line.amountCents) {
+            throw new Error(`Bill line amount changed in QBO: ${line.qboLineId}`);
+          }
+          const allocated = allocateManufacturingSplitAmounts(sourceAmountCents, line.splits);
+          const splitPoNumber =
+            typeof line.poNumber === 'string' && line.poNumber !== ''
+              ? line.poNumber
+              : normalizedPoNumber;
+          splitByLineId.set(line.qboLineId, {
+            poNumber: splitPoNumber,
+            lines: allocated,
+          });
+          continue;
         }
 
-        const nonSplitPersistedLines = persistedLines.filter((line) => {
-          const source = parsedLines.find((candidate) => candidate.qboLineId === line.qboLineId);
-          if (!source) return false;
-          return !Array.isArray(source.splits) || source.splits.length === 0;
-        });
-
-        persistedLines = [...nonSplitPersistedLines, ...splitPersistedLines];
+        lineDescriptions.set(
+          line.qboLineId,
+          buildManufacturingDescription(line.sku!, line.quantity!),
+        );
       }
 
-      syncedAt = new Date();
+      const updatedLines: Array<Record<string, unknown>> = [];
+      const splitDescriptors: Array<{
+        accountId: string;
+        poNumber: string;
+        lines: ReturnType<typeof allocateManufacturingSplitAmounts>;
+      }> = [];
+
+      for (const currentLine of currentBill.Line ?? []) {
+        const splitDescriptor = splitByLineId.get(currentLine.Id);
+        if (splitDescriptor) {
+          if (!currentLine.AccountBasedExpenseLineDetail) {
+            throw new Error(`Split source line must be account-based: ${currentLine.Id}`);
+          }
+          const detail = {
+            ...currentLine.AccountBasedExpenseLineDetail,
+            AccountRef: {
+              value: currentLine.AccountBasedExpenseLineDetail.AccountRef.value,
+              name: currentLine.AccountBasedExpenseLineDetail.AccountRef.name,
+            },
+          };
+          splitDescriptors.push({
+            accountId: detail.AccountRef.value,
+            poNumber: splitDescriptor.poNumber,
+            lines: splitDescriptor.lines,
+          });
+          for (const splitLine of splitDescriptor.lines) {
+            updatedLines.push({
+              DetailType: 'AccountBasedExpenseLineDetail',
+              Amount: splitLine.amountCents / 100,
+              Description: splitLine.description,
+              AccountBasedExpenseLineDetail: detail,
+            });
+          }
+          continue;
+        }
+
+        const updatedLine: Record<string, unknown> = {
+          ...(currentLine as unknown as Record<string, unknown>),
+        };
+        const description = lineDescriptions.get(currentLine.Id);
+        if (description !== undefined) {
+          updatedLine.Description = description;
+        }
+        updatedLines.push(updatedLine);
+      }
+
+      const payload: Record<string, unknown> = {
+        ...(currentBill as unknown as Record<string, unknown>),
+        PrivateNote: currentBill.PrivateNote,
+        Line: updatedLines,
+      };
+
+      const updatedBillResult = await updateBillWithPayload(activeConnection, payload);
+      if (updatedBillResult.updatedConnection) {
+        activeConnection = updatedBillResult.updatedConnection;
+      }
+
+      const updatedBill = updatedBillResult.bill;
+      const candidateLines = (updatedBill.Line ?? [])
+        .filter((line) => line.Id && line.AccountBasedExpenseLineDetail)
+        .map((line) => ({
+          lineId: line.Id,
+          accountId: line.AccountBasedExpenseLineDetail!.AccountRef.value,
+          amountCents: Math.round(line.Amount * 100),
+          description: line.Description ? line.Description : '',
+        }));
+
+      const usedLineIds = new Set<string>();
+      const splitPersistedLines: PersistedLine[] = [];
+
+      for (const descriptor of splitDescriptors) {
+        for (const splitLine of descriptor.lines) {
+          const match = candidateLines.find(
+            (candidate) =>
+              !usedLineIds.has(candidate.lineId) &&
+              candidate.accountId === descriptor.accountId &&
+              candidate.amountCents === splitLine.amountCents &&
+              candidate.description === splitLine.description,
+          );
+          if (!match) {
+            throw new Error(
+              `Failed to resolve QBO line id for split description: ${splitLine.description}`,
+            );
+          }
+          usedLineIds.add(match.lineId);
+          splitPersistedLines.push({
+            qboLineId: match.lineId,
+            component: 'manufacturing',
+            amountCents: splitLine.amountCents,
+            sku: splitLine.sku,
+            poNumber: descriptor.poNumber !== '' ? descriptor.poNumber : null,
+            quantity: splitLine.quantity,
+          });
+        }
+      }
+
+      const nonSplitPersistedLines = persistedLines.filter((line) => {
+        const source = parsedLines.find((candidate) => candidate.qboLineId === line.qboLineId);
+        if (!source) return false;
+        return !Array.isArray(source.splits) || source.splits.length === 0;
+      });
+
+      persistedLines = [...nonSplitPersistedLines, ...splitPersistedLines];
     } else {
-      const hasSplitLines = parsedLines.some((line) => Array.isArray(line.splits) && line.splits.length > 0);
-      if (hasSplitLines) {
-        return NextResponse.json({ error: 'Not connected to QBO' }, { status: 401 });
-      }
+      syncedAt = new Date();
     }
 
     const mapping = await db.billMapping.upsert({
@@ -519,12 +622,13 @@ export async function POST(req: NextRequest) {
         component: line.component,
         amountCents: line.amountCents,
         sku: line.sku,
+        poNumber: line.poNumber,
         quantity: line.quantity,
       })),
     });
 
-    if (connection) {
-      await saveServerQboConnection(connection);
+    if (activeConnection !== connection) {
+      await saveServerQboConnection(activeConnection);
     }
 
     const result = await db.billMapping.findUnique({
@@ -536,7 +640,10 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     logger.error('Failed to save bill mapping', error);
     return NextResponse.json(
-      { error: 'Failed to save bill mapping', details: error instanceof Error ? error.message : String(error) },
+      {
+        error: 'Failed to save bill mapping',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }

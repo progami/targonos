@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
 
 import {
   normalizeAuditMarketToMarketplaceId,
@@ -37,18 +35,7 @@ import {
   allocateManufacturingSplitAmounts,
   normalizeManufacturingSplits,
 } from '../lib/plutus/bills/split';
-import { buildCogsJournalLines, buildPnlJournalLines } from '../lib/plutus/journal-builder';
-import { computePnlAllocation } from '../lib/pnl-allocation';
-import {
-  allocateShipmentFeeChargesBySkuQuantity,
-  extractInboundTransportationServiceFeeCharges,
-  isInboundTransportationMemoDescription,
-  loadInboundShipmentItemsFromAwdInboundShipmentReports,
-} from '../lib/plutus/shipment-fee-allocation';
-import {
-  buildDeterministicSkuAllocations,
-  deterministicSourceGuidanceForBucket,
-} from '../lib/plutus/fee-allocation';
+import { buildCogsJournalLines } from '../lib/plutus/journal-builder';
 import { parseAmazonTransactionCsv } from '../lib/reconciliation/amazon-csv';
 import { parseAmazonUnifiedTransactionCsv } from '../lib/amazon-payments/unified-transaction-csv';
 import {
@@ -847,7 +834,7 @@ test('buildSettlementPostingSectionViewModels preserves preview severity and sha
         docNumber: 'UK-260401-260405-S1-A',
         invoiceId: 'INV-PREVIEW-WARN',
         preview: {
-          blocks: [{ code: 'PNL_ALLOCATION_SOURCE_GAP', message: 'Preview warning' }],
+          blocks: [{ code: 'MISSING_SKU_MAPPING', message: 'Preview warning' }],
           sales: [],
           returns: [],
           cogsJournalEntry: { lines: [] },
@@ -1078,11 +1065,29 @@ test('package scripts expose posted settlement rematch checks for both marketpla
   assert.equal(pkg.scripts['settlements:reclass:repair'], 'tsx scripts/settlement-reclass-repair.ts');
 });
 
-test('UK posted settlement rematch does not require COGS lines', () => {
+test('repair and rematch scripts do not require P&L reclass lines', () => {
+  const repairSource = readFileSync('scripts/repair-missing-processing-jes.ts', 'utf8');
+  const usRematchSource = readFileSync('scripts/us-settlement-rematch.ts', 'utf8');
+  const ukRematchSource = readFileSync('scripts/uk-settlement-rematch.ts', 'utf8');
+  const reclassRepairSource = readFileSync('scripts/settlement-reclass-repair.ts', 'utf8');
+
+  assert.equal(repairSource.includes('createJournalEntry(connection'), true);
+  assert.equal(repairSource.includes('computed.preview.pnlJournalEntry.lines.length === 0'), true);
+  assert.equal(repairSource.includes('processing.processingHash !== computeProcessingHash([])'), true);
+  assert.equal(repairSource.includes("options.marketplace === 'amazon.com' &&"), true);
+  assert.equal(usRematchSource.includes('previewResult.preview.pnlJournalEntry.lines.length === 0 ||'), false);
+  assert.equal(ukRematchSource.includes('previewResult.preview.pnlJournalEntry.lines.length === 0'), false);
+  assert.equal(
+    reclassRepairSource.includes('assertNoBankLines({ invoiceId, accountsById, journal: previewResult.preview.pnlJournalEntry })'),
+    false,
+  );
+});
+
+test('UK posted settlement rematch does not require COGS or P&L lines', () => {
   const source = readFileSync('scripts/uk-settlement-rematch.ts', 'utf8');
 
   assert.equal(source.includes('previewResult.preview.cogsJournalEntry.lines.length === 0 ||'), false);
-  assert.equal(source.includes('const hasEmptyJournals = previewResult.preview.pnlJournalEntry.lines.length === 0;'), true);
+  assert.equal(source.includes('const hasEmptyJournals = false;'), true);
 });
 
 test('settlement reclass repair is approval-gated and protects source settlement JEs', () => {
@@ -1201,14 +1206,6 @@ test('ads report allocation schema is removed', () => {
   ]) {
     assert.equal(schema.includes(removed), false, removed);
   }
-});
-
-test('AWD allocation warnings do not point to removed upload resources', () => {
-  const feeAllocationSource = readFileSync('lib/plutus/fee-allocation.ts', 'utf8');
-  const guidance = deterministicSourceGuidanceForBucket('warehousingAwd');
-
-  assert.equal(guidance.includes('Upload AWD fee report'), false);
-  assert.equal(feeAllocationSource.includes('Missing AWD report upload'), false);
 });
 
 test('cogs inputs page is read-only QBO source intake', () => {
@@ -2347,344 +2344,6 @@ test('buildUkSettlementDraftFromSpApiFinances still fails aggregate VAT mismatch
   );
 });
 
-test('computePnlAllocation leaves SKU-less fees unallocated without deterministic source', () => {
-  const rows = [
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-1',
-      sku: 'SKU-A',
-      quantity: -2,
-      description: 'Amazon Sales - Principal - Brand A',
-      net: 20,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-2',
-      sku: 'SKU-B',
-      quantity: -1,
-      description: 'Amazon Sales - Principal - Brand B',
-      net: 10,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'n/a',
-      sku: '',
-      quantity: 0,
-      description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
-      net: -9,
-    },
-  ];
-
-  const allocation = computePnlAllocation(rows, {
-    getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
-  });
-
-  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
-  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandB, undefined);
-  assert.equal(allocation.unallocatedSkuLessBuckets.length, 1);
-  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.bucket, 'amazonFbaFees');
-  assert.equal(allocation.unallocatedSkuLessBuckets[0]?.totalCents, -900);
-});
-
-test('computePnlAllocation keeps positive inbound transportation reversals parent-level', () => {
-  const allocation = computePnlAllocation(
-    [
-      {
-        invoiceId: 'US-260401-260410-S2',
-        market: 'Amazon.com',
-        date: '2026-04-10',
-        orderId: 'n/a',
-        sku: '',
-        quantity: 0,
-        description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
-        net: 2583.96,
-      },
-    ],
-    {
-      getBrandForSku: () => {
-        throw new Error('SKU resolver should not run for parent-level reversal');
-      },
-    },
-  );
-
-  assert.deepEqual(allocation.allocationsByBucket.amazonFbaFees, {});
-  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
-});
-
-test('computePnlAllocation allocates amazon seller fees when SKU is present', () => {
-  const rows = [
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-1',
-      sku: 'SKU-A',
-      quantity: 0,
-      description: 'Amazon Seller Fees - Commission',
-      net: -2.5,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'n/a',
-      sku: '',
-      quantity: 0,
-      description: 'Amazon Seller Fees - Subscription Fee',
-      net: -1.25,
-    },
-  ];
-
-  const allocation = computePnlAllocation(rows, {
-    getBrandForSku: () => 'BrandA',
-  });
-
-  assert.equal(allocation.allocationsByBucket.amazonSellerFees.BrandA, -250);
-  assert.equal(allocation.skuBreakdownByBucketBrand.amazonSellerFees.BrandA?.['SKU-A'], -250);
-  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
-});
-
-test('buildDeterministicSkuAllocations keeps inbound transportation reversals parent-level', async () => {
-  const allocation = await buildDeterministicSkuAllocations({
-    rows: [
-      {
-        invoiceId: 'US-260401-260410-S2',
-        market: 'Amazon.com',
-        date: '2026-04-10',
-        orderId: 'n/a',
-        sku: '',
-        quantity: 0,
-        description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
-        net: 2583.96,
-      },
-    ],
-    marketplace: 'amazon.com',
-    invoiceStartDate: '2026-04-01',
-    invoiceEndDate: '2026-04-10',
-    skuToBrand: new Map(),
-    settlementId: '26003231841',
-  });
-
-  assert.deepEqual(allocation.skuAllocationsByBucket, {});
-  assert.deepEqual(allocation.issues, []);
-});
-
-test('extractInboundTransportationServiceFeeCharges parses transaction and context entries', () => {
-  const parsed = extractInboundTransportationServiceFeeCharges([
-    {
-      transactionType: 'ServiceFee',
-      transactionId: 'TX-1',
-      description: 'FBA Inbound Transportation Fee',
-      totalAmount: { currencyAmount: -100 },
-      relatedIdentifiers: [{ relatedIdentifierName: 'ORDER_ID', relatedIdentifierValue: 'FBA-SHIP-1' }],
-    },
-    {
-      transactionType: 'ServiceFee',
-      transactionId: 'TX-2',
-      description: 'Service fee',
-      relatedIdentifiers: [{ relatedIdentifierName: 'SETTLEMENT_ID', relatedIdentifierValue: 'S-1' }],
-      contexts: [
-        {
-          description: 'FBA Inbound Transportation Fee',
-          amount: { currencyAmount: -50 },
-          relatedIdentifiers: [{ relatedIdentifierName: 'ORDER_ID', relatedIdentifierValue: 'FBA-SHIP-2' }],
-        },
-      ],
-    },
-    {
-      transactionType: 'DebtRecovery',
-      transactionId: 'TX-3',
-    },
-  ]);
-
-  assert.equal(parsed.issues.length, 0);
-  assert.equal(parsed.charges.length, 2);
-  assert.equal(parsed.charges[0]?.shipmentId, 'FBA-SHIP-1');
-  assert.equal(parsed.charges[0]?.cents, -10000);
-  assert.equal(parsed.charges[1]?.shipmentId, 'FBA-SHIP-2');
-  assert.equal(parsed.charges[1]?.cents, -5000);
-  assert.equal(isInboundTransportationMemoDescription('Amazon FBA Fees - FBA Inbound Transportation Fee'), true);
-  assert.equal(isInboundTransportationMemoDescription('Amazon FBA Fees - FBA Inbound Transportation Program Fee - Domestic Orders'), true);
-  assert.equal(isInboundTransportationMemoDescription('Amazon Seller Fees - Subscription Fee'), false);
-});
-
-test('allocateShipmentFeeChargesBySkuQuantity allocates by shipped quantity', () => {
-  const allocation = allocateShipmentFeeChargesBySkuQuantity({
-    charges: [
-      {
-        shipmentId: 'FBA-SHIP-1',
-        cents: -10000,
-        transactionId: 'TX-1',
-        description: 'FBA Inbound Transportation Fee',
-      },
-      {
-        shipmentId: 'FBA-SHIP-2',
-        cents: -5000,
-        transactionId: 'TX-2',
-        description: 'FBA Inbound Transportation Fee',
-      },
-    ],
-    shipmentItemsByShipmentId: new Map([
-      [
-        'FBA-SHIP-1',
-        [
-          { sku: 'SKU-A', quantity: 3 },
-          { sku: 'SKU-B', quantity: 1 },
-        ],
-      ],
-      [
-        'FBA-SHIP-2',
-        [
-          { sku: 'SKU-B', quantity: 2 },
-        ],
-      ],
-    ]),
-  });
-
-  assert.equal(allocation.issues.length, 0);
-  assert.equal(allocation.allocationBySku['SKU-A'], -7500);
-  assert.equal(allocation.allocationBySku['SKU-B'], -7500);
-});
-
-test('loadInboundShipmentItemsFromAwdInboundShipmentReports reads Seller Central shipment quantities', async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'awd-inbound-report-'));
-  try {
-    writeFileSync(
-      path.join(dir, 'awd-inbound.csv'),
-      [
-        '"shipment_id","shipment_create_date_utc","msku","expected_unit_count"',
-        '"STAR-SPME55WHX5UYW","2026-04-29 16:15:15","CS-010","1020"',
-        '"STAR-SPME55WHX5UYW","2026-04-29 16:15:15","CS-007","7168"',
-        '"STAR-OTHER","2026-04-29 16:15:15","CS-999","1"',
-      ].join('\n'),
-    );
-
-    const lookup = await loadInboundShipmentItemsFromAwdInboundShipmentReports({
-      shipmentId: 'STAR-SPME55WHX5UYW',
-      reportDir: dir,
-    });
-
-    assert.equal(lookup.issues.length, 0);
-    assert.equal(lookup.sourceFiles.length, 1);
-    assert.deepEqual(lookup.items, [
-      { sku: 'CS-010', quantity: 1020 },
-      { sku: 'CS-007', quantity: 7168 },
-    ]);
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('computePnlAllocation routes AWD rows using deterministic SKU map', () => {
-  const rows = [
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-1',
-      sku: 'SKU-A',
-      quantity: -2,
-      description: 'Amazon Sales - Principal - Brand A',
-      net: 20,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-2',
-      sku: 'SKU-B',
-      quantity: -1,
-      description: 'Amazon Sales - Principal - Brand B',
-      net: 10,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'n/a',
-      sku: '',
-      quantity: 0,
-      description: 'Amazon FBA Fees - AWD Processing Fee',
-      net: -9,
-    },
-    {
-      invoice: 'INV-1',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'n/a',
-      sku: 'SKU-A',
-      quantity: 0,
-      description: 'Amazon Storage Fees - AWD Storage Fee',
-      net: -3,
-    },
-  ];
-
-  const allocation = computePnlAllocation(
-    rows,
-    {
-      getBrandForSku: (sku) => (sku === 'SKU-A' ? 'BrandA' : sku === 'SKU-B' ? 'BrandB' : 'Unknown'),
-    },
-    {
-      skuAllocationsByBucket: {
-        warehousingAwd: {
-          'SKU-A': -600,
-          'SKU-B': -300,
-        },
-      },
-    },
-  );
-
-  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandA, -900);
-  assert.equal(allocation.allocationsByBucket.warehousingAwd.BrandB, -300);
-  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, undefined);
-  assert.equal(allocation.allocationsByBucket.amazonStorageFees.BrandA, undefined);
-  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
-});
-
-test('buildPnlJournalLines uses prefixed leaf accounts under AWD parent', () => {
-  const blocks: ProcessingBlock[] = [];
-  const accounts: QboAccount[] = [
-    {
-      Id: '238',
-      SyncToken: '0',
-      Name: 'AWD',
-      AccountType: 'Cost of Goods Sold',
-      AccountSubType: 'ShippingFreightDeliveryCos',
-    },
-    {
-      Id: '245',
-      SyncToken: '0',
-      Name: 'AWD - US-PDS',
-      AccountType: 'Cost of Goods Sold',
-      AccountSubType: 'ShippingFreightDeliveryCos',
-      ParentRef: { value: '238', name: 'AWD' },
-    },
-  ];
-
-  const lines = buildPnlJournalLines(
-    { warehousingAwd: { 'US-PDS': -12345 } },
-    { warehousingAwd: '238' },
-    accounts,
-    'INV-1',
-    blocks,
-  );
-
-  assert.equal(lines.length, 2);
-  assert.equal(lines[0]?.accountId, '245');
-  assert.equal(lines[0]?.postingType, 'Debit');
-  assert.equal(lines[0]?.amountCents, 12345);
-  assert.equal(lines[1]?.accountId, '238');
-  assert.equal(lines[1]?.postingType, 'Credit');
-  assert.equal(lines[1]?.amountCents, 12345);
-  assert.equal(blocks.length, 0);
-});
-
 test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
   const blocks: ProcessingBlock[] = [];
   const accounts: QboAccount[] = [
@@ -2756,118 +2415,69 @@ test('buildCogsJournalLines includes SKU breakdown in descriptions', () => {
   assert.equal(blocks.length, 0);
 });
 
-test('computePnlAllocation tracks SKU breakdown for deterministic SKU-less fee rows', () => {
-  const rows = [
-    {
-      invoice: 'INV-2',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-1',
-      sku: 'SKU-A',
-      quantity: -2,
-      description: 'Amazon Sales - Principal - Brand A',
-      net: 20,
-    },
-    {
-      invoice: 'INV-2',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'ORD-2',
-      sku: 'SKU-B',
-      quantity: -1,
-      description: 'Amazon Sales - Principal - Brand A',
-      net: 10,
-    },
-    {
-      invoice: 'INV-2',
-      market: 'Amazon.com',
-      date: '2025-12-01',
-      orderId: 'n/a',
-      sku: '',
-      quantity: 0,
-      description: 'Amazon FBA Fees - FBA Inbound Transportation Fee',
-      net: -3,
-    },
-  ];
+test('settlement processing no longer builds brand or SKU P&L reclass lines', () => {
+  const source = readFileSync('lib/plutus/settlement-processing.ts', 'utf8');
 
-  const allocation = computePnlAllocation(
-    rows,
-    {
-      getBrandForSku: () => 'BrandA',
-    },
-    {
-      skuAllocationsByBucket: {
-        amazonFbaFees: {
-          'SKU-A': -200,
-          'SKU-B': -100,
-        },
-      },
-    },
-  );
+  for (const forbidden of [
+    'compute' + 'PnlAllocation',
+    'buildDeterministic' + 'SkuAllocations',
+    'deterministicSource' + 'GuidanceForBucket',
+    'build' + 'PnlJournalLines',
+    'PNL' + '_ALLOCATION_SOURCE_GAP',
+    'PNL' + '_ALLOCATION_ERROR',
+  ]) {
+    assert.equal(source.includes(forbidden), false, forbidden);
+  }
 
-  assert.equal(allocation.allocationsByBucket.amazonFbaFees.BrandA, -300);
-  assert.equal(allocation.skuBreakdownByBucketBrand.amazonFbaFees.BrandA?.['SKU-A'], -200);
-  assert.equal(allocation.skuBreakdownByBucketBrand.amazonFbaFees.BrandA?.['SKU-B'], -100);
-  assert.equal(allocation.unallocatedSkuLessBuckets.length, 0);
+  assert.equal(source.includes("docNumber: buildProcessingDocNumber('P', invoiceId)"), true);
+  assert.equal(source.includes('privateNote: `Plutus P&L Reclass | Invoice: ${invoiceId} | Hash: ${hashPrefix}`'), true);
+  assert.equal(source.includes('lines: [],'), true);
 });
 
-test('buildPnlJournalLines includes SKU breakdown in descriptions', () => {
-  const blocks: ProcessingBlock[] = [];
-  const accounts: QboAccount[] = [
-    {
-      Id: '186',
-      SyncToken: '0',
-      Name: 'Amazon Seller Fees',
-      AccountType: 'Expense',
-      AccountSubType: 'AdvertisingPromotional',
-    },
-    {
-      Id: '199',
-      SyncToken: '0',
-      Name: 'Amazon Seller Fees - US-PDS',
-      AccountType: 'Expense',
-      AccountSubType: 'AdvertisingPromotional',
-      ParentRef: { value: '186', name: 'Amazon Seller Fees' },
-    },
-  ];
+test('journal builder exposes only inventory COGS lines, not P&L brand reclass lines', () => {
+  const source = readFileSync('lib/plutus/journal-builder.ts', 'utf8');
 
-  const lines = buildPnlJournalLines(
-    { amazonSellerFees: { 'US-PDS': -12345 } },
-    { amazonSellerFees: '186' },
-    accounts,
-    'INV-3',
-    blocks,
-    {
-      amazonSellerFees: {
-        'US-PDS': {
-          'SKU-A': -8230,
-          'SKU-B': -4115,
-        },
-      },
-    },
-  );
-
-  assert.equal(lines.length, 2);
-  assert.equal(lines[0]?.description.includes('SKUs'), true);
-  assert.equal(lines[0]?.description.includes('SKU-A'), true);
-  assert.equal(lines[0]?.description.includes('SKU-B'), true);
+  assert.equal(source.includes('export function buildCogsJournalLines'), true);
+  assert.equal(source.includes('export function build' + 'PnlJournalLines'), false);
+  assert.equal(source.includes('MISSING_BRAND_SUBACCOUNT'), true);
+  assert.equal(source.includes('Amazon Seller Fees - ${brand}'), false);
+  assert.equal(source.includes('Amazon FBA Fees - ${brand}'), false);
 });
 
-test('isBlockingProcessingCode blocks deterministic PNL allocation source gaps', () => {
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_ERROR'), true);
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_SOURCE_GAP'), true);
-  assert.equal(isBlockingProcessingCode('PNL_ALLOCATION_WARNING'), true);
-  assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
-  assert.equal(isBlockingProcessingCode('MISSING_COST_BASIS'), true);
-  assert.equal(isBlockingProcessingCode('MISSING_SETUP'), true);
-  assert.equal(isBlockingProcessingCode('REFUND_UNMATCHED'), true);
-});
-
-test('settlement processing audit fails when deterministic PNL allocation is incomplete', () => {
+test('settlement audit expects P&L reclass to be NOOP', () => {
   const source = readFileSync('scripts/settlement-processing-audit.ts', 'utf8');
 
-  assert.equal(source.includes('deterministicNotOk.length > 0'), true);
-  assert.equal(source.includes('mismatched.length > 0 || deterministicNotOk.length > 0'), true);
+  assert.equal(source.includes('const pnlExpectedLines: LineSummary[] = [];'), true);
+  assert.equal(source.includes('compute' + 'PnlAllocation'), false);
+  assert.equal(source.includes('build' + 'PnlJournalLines'), false);
+  assert.equal(source.includes('buildDeterministic' + 'SkuAllocations'), false);
+});
+
+test('legacy settlement fee allocation files are removed', () => {
+  for (const removed of [
+    'lib/pnl-allocation.ts',
+    'lib/plutus/fee-allocation.ts',
+    'lib/plutus/shipment-fee-allocation.ts',
+    'scripts/us-settlement-allocation-check.ts',
+  ]) {
+    assert.equal(existsSync(removed), false, removed);
+  }
+});
+
+test('legacy P&L retirement script is dry-run by default and requires apply', () => {
+  const source = readFileSync('scripts/retire-legacy-pnl-reclass.ts', 'utf8');
+
+  assert.equal(source.includes("const apply = args.includes('--apply');"), true);
+  assert.equal(source.includes('deleteJournalEntry(activeConnection, row.qboPnlReclassJournalEntryId)'), true);
+  assert.equal(source.includes("buildNoopJournalEntryId('PNL', row.invoiceId)"), true);
+  assert.equal(source.includes('if (!apply)'), true);
+});
+
+test('isBlockingProcessingCode only treats inventory and setup issues as processing blockers', () => {
+  assert.equal(isBlockingProcessingCode('MISSING_SKU_MAPPING'), true);
+  assert.equal(isBlockingProcessingCode('BILLS_PARSE_ERROR'), true);
+  assert.equal(isBlockingProcessingCode('LATE_COST_ON_HAND_ZERO'), false);
+  assert.equal(isBlockingProcessingCode('REFUND_ADJUSTMENT'), false);
 });
 
 test('settlement processing skips refund matching when COGS is disabled', () => {
@@ -2883,7 +2493,7 @@ test('settlement processing treats empty split settlement segments as no-op proc
 
   assert.equal(source.includes('const hasAuditRows = scopedInvoiceRows.length > 0;'), true);
   assert.equal(source.includes('if (hasAuditRows) {'), true);
-  assert.equal(source.includes('const emptyPnlAllocation'), true);
+  assert.equal(source.includes('const pnlLines: JournalEntryLinePreview[] = [];'), true);
   assert.equal(source.includes('meta.periodStart'), true);
 });
 
@@ -2912,7 +2522,10 @@ test('inventory bills audit can scope by marketplace and SOP internal ref', () =
 
   assert.equal(source.includes("--marketplace <all|amazon.com|amazon.co.uk>"), true);
   assert.equal(source.includes('classifyInventoryMarketplaceFromAccount'), true);
+  assert.equal(source.includes('function requiresPlutusCogsMapping(line: InventoryLine): boolean'), true);
+  assert.equal(source.includes("return line.marketplace === 'amazon.com';"), true);
   assert.equal(source.includes('extractPoNumberFromBill(bill)'), true);
+  assert.equal(source.includes('RECON\\s*=\\s*AWAITING_GOODS'), true);
 });
 
 test('ledger blocks missing cost basis', () => {
@@ -3048,6 +2661,29 @@ test('bill mappings allocate non-sku costs by PO units', () => {
   assert.equal(stateB?.valueByComponentCents.freight, 200);
 });
 
+test('bill mappings prefer line PO over bill header PO', () => {
+  const parsed = buildInventoryEventsFromMappings([
+    {
+      qboBillId: 'B-MIXED',
+      poNumber: '',
+      brandId: 'brand',
+      billDate: '2026-02-01',
+      lines: [
+        { qboLineId: '1', component: 'manufacturing', amountCents: 1000, sku: 'SKU-A', poNumber: 'PO-A', quantity: 1 },
+        { qboLineId: '2', component: 'manufacturing', amountCents: 2000, sku: 'SKU-B', poNumber: 'PO-B', quantity: 2 },
+        { qboLineId: '3', component: 'freight', amountCents: 300, sku: null, poNumber: 'PO-A', quantity: null },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    parsed.events.map((event) => ('poNumber' in event ? event.poNumber : null)),
+    ['PO-A', 'PO-A', 'PO-B'],
+  );
+  assert.equal(parsed.poUnitsBySku.get('PO-A')?.get('SKU-A'), 1);
+  assert.equal(parsed.poUnitsBySku.get('PO-B')?.get('SKU-B'), 2);
+});
+
 test('bill mappings keep blank-PO sku-less costs at brand level', () => {
   const parsed = buildInventoryEventsFromMappings([
     {
@@ -3095,6 +2731,20 @@ test('bill mappings require PO on manufacturing lines', () => {
         },
       ]),
     /Manufacturing bill mapping line requires poNumber/,
+  );
+});
+
+test('split manufacturing bill mappings persist line-level PO numbers', () => {
+  const source = readFileSync('app/api/plutus/bills/route.ts', 'utf8');
+
+  assert.equal(source.includes('poNumber: splitPoNumber,'), true);
+  assert.equal(
+    source.includes("poNumber: descriptor.poNumber !== '' ? descriptor.poNumber : null"),
+    true,
+  );
+  assert.equal(
+    source.includes("poNumber: normalizedPoNumber !== '' ? normalizedPoNumber : null"),
+    false,
   );
 });
 

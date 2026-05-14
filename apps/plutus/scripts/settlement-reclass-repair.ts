@@ -291,7 +291,9 @@ async function main(): Promise<void> {
     const alreadyProcessed = existingProcessing !== null;
     const blocks = effectiveBlocks(previewResult.preview.blocks, alreadyProcessed);
     assertNoBankLines({ invoiceId, accountsById, journal: previewResult.preview.cogsJournalEntry });
-    assertNoBankLines({ invoiceId, accountsById, journal: previewResult.preview.pnlJournalEntry });
+    if (previewResult.preview.pnlJournalEntry.lines.length !== 0) {
+      throw new Error(`Unexpected P&L reclass lines for inventory-COGS-only architecture: ${invoiceId}`);
+    }
 
     if (blocks.length > 0) {
       results.push({
