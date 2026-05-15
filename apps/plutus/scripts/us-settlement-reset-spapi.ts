@@ -413,9 +413,6 @@ async function main(): Promise<void> {
 
   for (const row of processingRows) {
     qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
     if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
       qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
     }
@@ -425,9 +422,6 @@ async function main(): Promise<void> {
 
   for (const row of rollbackRows) {
     qboIdsToDelete.add(row.qboSettlementJournalEntryId);
-    if (!isNoopJournalEntryId(row.qboCogsJournalEntryId)) {
-      qboIdsToDelete.add(row.qboCogsJournalEntryId);
-    }
     if (!isNoopJournalEntryId(row.qboPnlReclassJournalEntryId)) {
       qboIdsToDelete.add(row.qboPnlReclassJournalEntryId);
     }
@@ -435,13 +429,15 @@ async function main(): Promise<void> {
     invoiceIdsToDelete.add(row.settlementDocNumber);
   }
 
-  for (const r of selectedQboSearchResults) {
+  const selectedQboDeletionResults = selectedQboSearchResults.filter((row) => classifyDocNumber(row.docNumber) !== 'cogs');
+
+  for (const r of selectedQboDeletionResults) {
     qboIdsToDelete.add(r.id);
   }
 
   const targets: DeletionTarget[] = [];
 
-  for (const r of selectedQboSearchResults) {
+  for (const r of selectedQboDeletionResults) {
     targets.push({
       journalEntryId: r.id,
       txnDate: r.txnDate,
@@ -452,10 +448,10 @@ async function main(): Promise<void> {
     });
   }
 
-  const seenFromSearch = new Set(selectedQboSearchResults.map((r) => r.id));
+  const seenFromSearch = new Set(selectedQboDeletionResults.map((r) => r.id));
 
   for (const row of processingRows) {
-    const ids = [row.qboSettlementJournalEntryId, row.qboCogsJournalEntryId, row.qboPnlReclassJournalEntryId];
+    const ids = [row.qboSettlementJournalEntryId, row.qboPnlReclassJournalEntryId];
     for (const id of ids) {
       if (isNoopJournalEntryId(id)) continue;
       if (seenFromSearch.has(id)) continue;
@@ -464,7 +460,7 @@ async function main(): Promise<void> {
   }
 
   for (const row of rollbackRows) {
-    const ids = [row.qboSettlementJournalEntryId, row.qboCogsJournalEntryId, row.qboPnlReclassJournalEntryId];
+    const ids = [row.qboSettlementJournalEntryId, row.qboPnlReclassJournalEntryId];
     for (const id of ids) {
       if (isNoopJournalEntryId(id)) continue;
       if (seenFromSearch.has(id)) continue;
@@ -531,6 +527,7 @@ async function main(): Promise<void> {
           options: { startDate, endDate, resync: options.resync, settlementIds: options.settlementIds },
           totals: {
             qboJournalEntriesMatchedByDocNumber: selectedQboSearchResults.length,
+            qboCogsJournalEntriesProtected: selectedQboSearchResults.length - selectedQboDeletionResults.length,
             qboJournalEntriesToDelete: existingTargetCount,
             qboJournalEntriesMissing: missingTargetCount,
             dbSettlementProcessingRows: processingRows.length,
