@@ -10,6 +10,7 @@ import {
   buildUkSettlementDraftFromSpApiFinances,
 } from '../lib/amazon-finances/uk-settlement-builder';
 import { normalizeSettlementOperatingMemo } from '../lib/amazon-finances/settlement-memo-normalization';
+import { isPostableFundTransferStatus } from '../lib/amazon-finances/fund-transfer-status';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { computeProcessingHash } from '../lib/plutus/settlement-utils';
 
@@ -104,6 +105,20 @@ test('package scripts do not expose inventory ownership workflows', () => {
   ]) {
     assert.equal(pkg.includes(forbidden), false, `${forbidden} should not be callable`);
   }
+});
+
+test('QBO audit page uses bridge language, not subledger language', () => {
+  const source = read('components/subledger/qbo-audit-page.tsx');
+  assert.equal(source.includes('kicker="Subledger"'), false);
+  assert.equal(source.includes('Posting drift and attachment state will appear after QBO traces are recorded.'), false);
+});
+
+test('SP-API settlements with processing fund transfers are not postable', () => {
+  assert.equal(isPostableFundTransferStatus('Succeeded'), true);
+  assert.equal(isPostableFundTransferStatus('Failed'), true);
+  assert.equal(isPostableFundTransferStatus('Unknown'), true);
+  assert.equal(isPostableFundTransferStatus('Processing'), false);
+  assert.equal(isPostableFundTransferStatus(' processing '), false);
 });
 
 test('US SP-API settlement build does not require SKU brand mapping', () => {

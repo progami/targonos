@@ -1,5 +1,6 @@
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
 import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '@/lib/amazon-finances/settlement-cash-account-guardrails';
+import { isPostableFundTransferStatus } from '@/lib/amazon-finances/fund-transfer-status';
 import {
   normalizeSettlementOperatingMemo,
   settlementParentAccountKeyForMemo,
@@ -146,6 +147,7 @@ function computeGroupStartedAfterIso(startDate: string): string {
 function isClosedFinancialEventGroup(group: any): boolean {
   if (!group || typeof group !== 'object') return false;
   if (group.ProcessingStatus !== 'Closed') return false;
+  if (!isPostableFundTransferStatus(group.FundTransferStatus)) return false;
   const start = group.FinancialEventGroupStart;
   const end = group.FinancialEventGroupEnd;
   if (typeof start !== 'string' || start.trim() === '') return false;
