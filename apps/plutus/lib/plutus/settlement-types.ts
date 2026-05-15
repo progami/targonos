@@ -1,66 +1,20 @@
-import type { InventoryComponent, LedgerBlock } from '@/lib/inventory/ledger';
-
-export type ProcessingBlock =
-  | LedgerBlock
-  | {
-      code:
-        | 'MISSING_SETUP'
-        | 'MISSING_SKU_MAPPING'
-        | 'AUDIT_NET_SCALE_SUSPECT'
-        | 'MISSING_ACCOUNT_MAPPING'
-        | 'MISSING_BRAND_SUBACCOUNT'
-        | 'COGS_TRACE_METADATA_MISSING'
-        | 'ALREADY_PROCESSED'
-        | 'INVOICE_CONFLICT'
-        | 'ORDER_ALREADY_PROCESSED'
-        | 'REFUND_UNMATCHED'
-        | 'REFUND_ADJUSTMENT'
-        | 'REFUND_PARTIAL'
-        | 'BILLS_FETCH_ERROR'
-        | 'BILLS_PARSE_ERROR';
-      message: string;
-      details?: Record<string, string | number>;
-    };
-
-const NON_BLOCKING_PROCESSING_CODES = new Set([
-  'LATE_COST_ON_HAND_ZERO',
-  'REFUND_ADJUSTMENT',
-  'REFUND_PARTIAL',
-]);
+export type ProcessingBlock = {
+  code:
+    | 'MISSING_SETUP'
+    | 'AUDIT_NET_SCALE_SUSPECT'
+    | 'ALREADY_PROCESSED'
+    | 'INVOICE_CONFLICT';
+  message: string;
+  details?: Record<string, string | number>;
+};
 
 export function isBlockingProcessingCode(code: string): boolean {
-  return !NON_BLOCKING_PROCESSING_CODES.has(code);
+  return code.trim() !== '';
 }
 
 export function isBlockingProcessingBlock(block: { code: string }): boolean {
   return isBlockingProcessingCode(block.code);
 }
-
-export type ProcessingSale = {
-  orderId: string;
-  sku: string;
-  date: string;
-  quantity: number;
-  principalCents: number;
-  costByComponentCents: Record<InventoryComponent, number>;
-};
-
-export type ProcessingReturn = {
-  orderId: string;
-  sku: string;
-  date: string;
-  quantity: number;
-  principalCents: number;
-  costByComponentCents: Record<InventoryComponent, number>;
-};
-
-export type KnownLedgerEvent = {
-  date: string;
-  orderId: string;
-  sku: string;
-  units: number;
-  costByComponentCents: Record<InventoryComponent, number>;
-};
 
 export type JournalEntryLinePreview = {
   accountId: string;
@@ -85,7 +39,7 @@ export type SettlementProcessingPreview = {
   settlementDocNumber: string;
   settlementPostedDate: string;
   // The ExchangeRate from the settlement JE in QBO (when the settlement currency is not the QBO home currency).
-  // We reuse this for posting P&L/COGS JEs so parent-account reclasses net to zero in home currency.
+  // Reclass postings reuse this so parent-account reclasses net to zero in home currency.
   settlementExchangeRate?: number;
 
   invoiceId: string;
@@ -96,13 +50,8 @@ export type SettlementProcessingPreview = {
 
   blocks: ProcessingBlock[];
 
-  sales: ProcessingSale[];
-  returns: ProcessingReturn[];
-
-  cogsByBrandComponentCents: Record<string, Record<InventoryComponent, number>>;
   pnlByBucketBrandCents: Record<string, Record<string, number>>;
 
-  cogsJournalEntry: JournalEntryPreview;
   pnlJournalEntry: JournalEntryPreview;
 };
 
@@ -112,7 +61,6 @@ export type SettlementProcessingResult =
       ok: true;
       preview: SettlementProcessingPreview;
       posted: {
-        cogsJournalEntryId: string;
         pnlJournalEntryId: string;
       };
     };

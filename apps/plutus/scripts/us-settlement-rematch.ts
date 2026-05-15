@@ -379,7 +379,7 @@ async function main(): Promise<void> {
     }
 
     const hasBlockingBlocks = previewResult.preview.blocks.some((block) => isBlockingProcessingBlock(block));
-    const hasEmptyJournals = previewResult.preview.cogsJournalEntry.lines.length === 0;
+    const hasEmptyJournals = false;
 
     if (hasBlockingBlocks || hasEmptyJournals) {
       statusRows.push({
@@ -390,7 +390,6 @@ async function main(): Promise<void> {
         reason: hasBlockingBlocks ? 'preview_blocking_blocks' : 'preview_empty_journal_lines',
         invoiceId: match.invoiceId,
         matchType: match.matchType,
-        cogsLineCount: previewResult.preview.cogsJournalEntry.lines.length,
         pnlLineCount: previewResult.preview.pnlJournalEntry.lines.length,
         blocks: previewResult.preview.blocks,
       });
@@ -405,7 +404,6 @@ async function main(): Promise<void> {
       reason: 'contained_match',
       invoiceId: match.invoiceId,
       matchType: match.matchType,
-      cogsLineCount: previewResult.preview.cogsJournalEntry.lines.length,
       pnlLineCount: previewResult.preview.pnlJournalEntry.lines.length,
     });
 
@@ -458,7 +456,6 @@ async function main(): Promise<void> {
             settlementId: item.settlementId,
             docNumber: item.docNumber,
             invoiceId: item.invoiceId,
-            cogsJournalEntryId: result.result.posted.cogsJournalEntryId,
             pnlJournalEntryId: result.result.posted.pnlJournalEntryId,
           });
           continue;

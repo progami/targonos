@@ -115,9 +115,6 @@ async function main(): Promise<void> {
       ...(options.invoiceId ? { invoiceId: options.invoiceId } : {}),
       ...(options.marketplace ? { marketplace: options.marketplace } : {}),
     },
-    include: {
-      _count: { select: { orderSales: true, orderReturns: true } },
-    },
     orderBy: { uploadedAt: 'desc' },
   });
 
@@ -144,8 +141,8 @@ async function main(): Promise<void> {
             pnlJournalEntryId: row.qboPnlReclassJournalEntryId,
             uploadedAt: row.uploadedAt,
             sourceFilename: row.sourceFilename,
-            orderSalesCount: row._count.orderSales,
-            orderReturnsCount: row._count.orderReturns,
+            orderSalesCount: 0,
+            orderReturnsCount: 0,
           })),
           next: {
             command:
@@ -193,8 +190,8 @@ async function main(): Promise<void> {
           processedAt: row.uploadedAt,
           qboCogsJournalEntryId: row.qboCogsJournalEntryId,
           qboPnlReclassJournalEntryId: row.qboPnlReclassJournalEntryId,
-          orderSalesCount: row._count.orderSales,
-          orderReturnsCount: row._count.orderReturns,
+          orderSalesCount: 0,
+          orderReturnsCount: 0,
         },
       });
 

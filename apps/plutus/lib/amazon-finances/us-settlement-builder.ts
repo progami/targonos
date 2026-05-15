@@ -1,4 +1,3 @@
-import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { buildCanonicalSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 import { moneyToCents } from './money';
@@ -88,15 +87,6 @@ function normalizeFundTransferStatus(value: string, settlementId: string): 'Succ
   if (normalized === 'failed') return 'Failed';
   if (normalized === 'unknown') return 'Unknown';
   throw new Error(`Unhandled FundTransferStatus for settlement ${settlementId}: ${value}`);
-}
-
-function brandNameForSku(skuRaw: string, skuToBrandName: Map<string, string>): string {
-  const normalized = normalizeSku(skuRaw);
-  const brandName = skuToBrandName.get(normalized);
-  if (!brandName) {
-    throw new Error(`SKU not mapped to brand: ${normalized}`);
-  }
-  return brandName;
 }
 
 function chargeTypeMemoForShipment(chargeType: string): string | null {
@@ -244,8 +234,6 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
   eventGroupId: string;
   eventGroup: SpApiFinancialEventGroup;
   events: SpApiFinancialEvents;
-  skuToBrandName: Map<string, string>;
-  brandLabelByBrandName?: Map<string, string>;
   timeZone?: string;
 }): UsSettlementDraft {
   const timeZone = input.timeZone === undefined ? US_TIME_ZONE : input.timeZone;
@@ -301,7 +289,6 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
     for (const item of items) {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qty = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
-      if (skuRaw !== '') brandNameForSku(skuRaw, input.skuToBrandName);
 
       for (const charge of toChargeComponents(item.ItemChargeList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';
@@ -400,7 +387,6 @@ export function buildUsSettlementDraftFromSpApiFinances(input: {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qtyRaw = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const qty = qtyRaw === 0 ? 0 : -qtyRaw;
-      if (skuRaw !== '') brandNameForSku(skuRaw, input.skuToBrandName);
 
       for (const charge of toChargeComponents(item.ItemChargeAdjustmentList)) {
         const chargeType = typeof charge.ChargeType === 'string' ? charge.ChargeType : '';

@@ -6,19 +6,6 @@ import { logAudit } from '@/lib/plutus/audit-log';
 
 const AccountMappingsSchema = z.object({
   accountMappings: z.object({
-    invManufacturing: z.string().optional(),
-    invFreight: z.string().optional(),
-    invDuty: z.string().optional(),
-    invMfgAccessories: z.string().optional(),
-    cogsManufacturing: z.string().optional(),
-    cogsFreight: z.string().optional(),
-    cogsDuty: z.string().optional(),
-    cogsMfgAccessories: z.string().optional(),
-    cogsShrinkage: z.string().optional(),
-    productExpenses: z.string().optional(),
-    warehousing3pl: z.string().optional(),
-    warehousingAmazonFc: z.string().optional(),
-    warehousingAwd: z.string().optional(),
     amazonSales: z.string().optional(),
     amazonRefunds: z.string().optional(),
     amazonFbaInventoryReimbursement: z.string().optional(),

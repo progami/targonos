@@ -1,0 +1,28 @@
+DROP TABLE IF EXISTS "InventoryMovement";
+DROP TABLE IF EXISTS "PoCostLayer";
+DROP TABLE IF EXISTS "PurchaseOrder";
+DROP TABLE IF EXISTS "SkuAlias";
+DROP TABLE IF EXISTS "CanonicalProduct";
+DROP TABLE IF EXISTS "ProductGroup";
+DROP TABLE IF EXISTS "BillLineMapping";
+DROP TABLE IF EXISTS "BillMapping";
+DROP TABLE IF EXISTS "OrderReturn";
+DROP TABLE IF EXISTS "OrderSale";
+DROP TABLE IF EXISTS "Sku";
+DROP TABLE IF EXISTS "Brand";
+
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "invManufacturing";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "invFreight";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "invDuty";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "invMfgAccessories";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsManufacturing";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsFreight";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsDuty";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsMfgAccessories";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsLandFreight";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsStorage3pl";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "cogsShrinkage";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "warehousing3pl";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "warehousingAmazonFc";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "warehousingAwd";
+ALTER TABLE "SetupConfig" DROP COLUMN IF EXISTS "productExpenses";
