@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { fromCents } from '@/lib/inventory/money';
+import { fromCents } from '@/lib/plutus/settlement-utils';
 
 import type { MarketplaceId } from './audit-invoice-matching';
 import type { SettlementAuditRow } from './settlement-audit';

@@ -13,24 +13,12 @@ import {
   type QboPurchase,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
-import db from '@/lib/db';
-import {
-  buildAccountComponentMap,
-  extractTrackedLinesFromBill,
-  type TrackedBillLine,
-} from '@/lib/plutus/bills/classification';
-import {
-  buildBillMappingPullSyncUpdates,
-  type BillMappingPullSyncCandidate,
-} from '@/lib/plutus/bills/pull-sync';
-import { filterCogsInputRows } from '@/lib/plutus/cogs-inputs/scope';
 
 const logger = createLogger({ name: 'plutus-transactions' });
 
 class RequestValidationError extends Error {}
 
 type TransactionTypeParam = 'journalEntry' | 'bill' | 'purchase';
-type TransactionScopeParam = 'all' | 'cogsInput';
 
 type TransactionLine = {
   id: string;
@@ -54,21 +42,6 @@ type TransactionRow = {
   lines: TransactionLine[];
   createdAt?: string;
   updatedAt?: string;
-  isTrackedBill?: boolean;
-  trackedLines?: TrackedBillLine[];
-  mapping?: {
-    id: string;
-    poNumber: string;
-    brandId: string;
-    syncedAt: string | null;
-    lines: Array<{
-      qboLineId: string;
-      component: string;
-      amountCents: number;
-      sku: string | null;
-      quantity: number | null;
-    }>;
-  } | null;
 };
 
 type TransactionsAccountOption = {
@@ -82,12 +55,6 @@ type TransactionsAccountOption = {
 function requireTransactionType(raw: string | null): TransactionTypeParam {
   if (raw === 'journalEntry' || raw === 'bill' || raw === 'purchase') return raw;
   throw new RequestValidationError('Invalid transaction type');
-}
-
-function requireTransactionScope(raw: string | null): TransactionScopeParam {
-  if (raw === null) return 'all';
-  if (raw === 'cogsInput') return raw;
-  throw new RequestValidationError('Invalid transaction scope');
 }
 
 function requirePositiveInt(raw: string | null, fallback: number, label: string): number {
@@ -106,68 +73,9 @@ function buildAccountLookup(accounts: QboAccount[]): Map<string, QboAccount> {
   return map;
 }
 
-async function fetchAllBillsForCogsInput(
-  connection: QboConnection,
-  input: {
-    startDate: string | undefined;
-    endDate: string | undefined;
-    search: string | undefined;
-  },
-): Promise<{ bills: QboBill[]; updatedConnection?: QboConnection }> {
-  const maxResults = 500;
-  let startPosition = 1;
-  let activeConnection = connection;
-  let updatedConnection: QboConnection | undefined;
-  let bills: QboBill[] = [];
-
-  while (true) {
-    const result = await fetchBills(activeConnection, {
-      startDate: input.startDate,
-      endDate: input.endDate,
-      docNumberContains: input.search,
-      maxResults,
-      startPosition,
-      includeTotalCount: startPosition === 1,
-    });
-
-    if (result.updatedConnection) {
-      activeConnection = result.updatedConnection;
-      updatedConnection = result.updatedConnection;
-    }
-
-    bills = bills.concat(result.bills);
-
-    if (result.bills.length < maxResults) break;
-
-    startPosition += result.bills.length;
-  }
-
-  return { bills, updatedConnection };
-}
-
-type MappingRecord = {
-  id: string;
-  qboBillId: string;
-  poNumber: string;
-  brandId: string;
-  billDate: string;
-  vendorName: string;
-  totalAmount: number;
-  syncedAt: Date | null;
-  lines: Array<{
-    qboLineId: string;
-    component: string;
-    amountCents: number;
-    sku: string | null;
-    quantity: number | null;
-  }>;
-};
-
 function mapBill(
   bill: QboBill,
   accountsById: Map<string, QboAccount>,
-  trackedLines: TrackedBillLine[],
-  mapping: MappingRecord | null,
 ): TransactionRow {
   const lines: TransactionLine[] = (bill.Line ?? [])
     .filter((line) => line.AccountBasedExpenseLineDetail !== undefined || line.ItemBasedExpenseLineDetail !== undefined)
@@ -200,23 +108,6 @@ function mapBill(
     lines,
     createdAt: bill.MetaData?.CreateTime,
     updatedAt: bill.MetaData?.LastUpdatedTime,
-    isTrackedBill: trackedLines.length > 0,
-    trackedLines,
-    mapping: mapping
-      ? {
-          id: mapping.id,
-          poNumber: mapping.poNumber,
-          brandId: mapping.brandId,
-          syncedAt: mapping.syncedAt ? mapping.syncedAt.toISOString() : null,
-          lines: mapping.lines.map((line) => ({
-            qboLineId: line.qboLineId,
-            component: line.component,
-            amountCents: line.amountCents,
-            sku: line.sku,
-            quantity: line.quantity,
-          })),
-        }
-      : null,
   };
 }
 
@@ -307,10 +198,6 @@ export async function GET(req: NextRequest) {
 
     const searchParams = req.nextUrl.searchParams;
     const type = requireTransactionType(searchParams.get('type'));
-    const scope = requireTransactionScope(searchParams.get('scope'));
-    if (scope === 'cogsInput' && type !== 'bill') {
-      throw new RequestValidationError('COGS input scope only supports bills');
-    }
 
     const rawStartDate = searchParams.get('startDate');
     const rawEndDate = searchParams.get('endDate');
@@ -341,8 +228,6 @@ export async function GET(req: NextRequest) {
     let transactions: TransactionRow[];
     let totalCount = 0;
     let updatedConnection: QboConnection | undefined;
-    let brands: Array<{ id: string; name: string }> | undefined;
-    let skus: Array<{ id: string; sku: string; productName: string | null; brandId: string }> | undefined;
     let accounts: TransactionsAccountOption[] | undefined;
 
     if (type === 'journalEntry') {
@@ -357,100 +242,16 @@ export async function GET(req: NextRequest) {
       totalCount = result.totalCount;
       transactions = result.journalEntries.map((je) => mapJournalEntry(je, accountsById));
     } else if (type === 'bill') {
-      let bills: QboBill[];
-      if (scope === 'cogsInput') {
-        const result = await fetchAllBillsForCogsInput(activeConnection, {
-          startDate,
-          endDate,
-          search,
-        });
-        bills = result.bills;
-        updatedConnection = result.updatedConnection;
-      } else {
-        const result = await fetchBills(activeConnection, {
-          startDate,
-          endDate,
-          docNumberContains: search,
-          maxResults: pageSize,
-          startPosition,
-        });
-        bills = result.bills;
-        updatedConnection = result.updatedConnection;
-        totalCount = result.totalCount;
-      }
-
-      const config = await db.setupConfig.findFirst();
-      const accountComponentMap = buildAccountComponentMap(accountsResult.accounts, {
-        warehousing3pl: config?.warehousing3pl,
-        warehousingAmazonFc: config?.warehousingAmazonFc,
-        warehousingAwd: config?.warehousingAwd,
-        productExpenses: config?.productExpenses,
+      const result = await fetchBills(activeConnection, {
+        startDate,
+        endDate,
+        docNumberContains: search,
+        maxResults: pageSize,
+        startPosition,
       });
-
-      const qboBillIds = bills.map((bill) => bill.Id);
-      const mappings = await db.billMapping.findMany({
-        where: { qboBillId: { in: qboBillIds } },
-        include: { lines: true },
-      });
-      const mappingByBillId = new Map(mappings.map((mapping) => [mapping.qboBillId, mapping]));
-
-      const billsById = new Map(bills.map((bill) => [bill.Id, bill]));
-      const pullSyncUpdates = buildBillMappingPullSyncUpdates(
-        mappings as BillMappingPullSyncCandidate[],
-        billsById,
-      );
-
-      if (pullSyncUpdates.length > 0) {
-        const syncedAt = new Date();
-        await db.$transaction(
-          pullSyncUpdates.map((update) =>
-            db.billMapping.update({
-              where: { id: update.id },
-              data: {
-                poNumber: update.poNumber,
-                billDate: update.billDate,
-                vendorName: update.vendorName,
-                totalAmount: update.totalAmount,
-                syncedAt,
-              },
-            }),
-          ),
-        );
-
-        for (const update of pullSyncUpdates) {
-          const existing = mappingByBillId.get(update.qboBillId);
-          if (!existing) continue;
-          existing.poNumber = update.poNumber;
-          existing.billDate = update.billDate;
-          existing.vendorName = update.vendorName;
-          existing.totalAmount = update.totalAmount;
-          existing.syncedAt = syncedAt;
-        }
-      }
-
-      const mappedBills = bills.map((bill) => {
-        const trackedLines = extractTrackedLinesFromBill(bill, accountComponentMap);
-        const mapping = mappingByBillId.get(bill.Id);
-        return mapBill(bill, accountsById, trackedLines, mapping ? mapping : null);
-      });
-
-      if (scope === 'cogsInput') {
-        const cogsInputRows = filterCogsInputRows(mappedBills);
-        totalCount = cogsInputRows.length;
-        transactions = cogsInputRows.slice(startPosition - 1, startPosition - 1 + pageSize);
-      } else {
-        transactions = mappedBills;
-      }
-
-      brands = await db.brand.findMany({
-        select: { id: true, name: true },
-        orderBy: { name: 'asc' },
-      });
-
-      skus = await db.sku.findMany({
-        select: { id: true, sku: true, productName: true, brandId: true },
-        orderBy: { sku: 'asc' },
-      });
+      updatedConnection = result.updatedConnection;
+      totalCount = result.totalCount;
+      transactions = result.bills.map((bill) => mapBill(bill, accountsById));
     } else {
       const result = await fetchPurchases(activeConnection, {
         startDate,
@@ -463,11 +264,6 @@ export async function GET(req: NextRequest) {
       updatedConnection = result.updatedConnection;
       totalCount = result.totalCount;
       transactions = result.purchases.map((purchase) => mapPurchase(purchase, accountsById));
-
-      skus = await db.sku.findMany({
-        select: { id: true, sku: true, productName: true, brandId: true },
-        orderBy: { sku: 'asc' },
-      });
 
       accounts = accountsResult.accounts
         .filter((account) => account.Active !== false)
@@ -488,8 +284,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       transactions,
-      ...(brands ? { brands } : {}),
-      ...(skus ? { skus } : {}),
       ...(accounts ? { accounts } : {}),
       pagination: {
         page,

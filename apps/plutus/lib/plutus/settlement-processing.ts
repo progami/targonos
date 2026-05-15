@@ -1,54 +1,19 @@
-import type { QboBill, QboConnection } from '@/lib/qbo/api';
+import type { QboConnection } from '@/lib/qbo/api';
 import {
   createJournalEntry,
   deleteJournalEntry,
-  fetchAccounts,
-  fetchBills,
   fetchJournalEntryById,
   fetchPreferences,
 } from '@/lib/qbo/api';
-import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
-import { buildInventoryEventsFromMappings, type ParsedBills } from '@/lib/inventory/qbo-bills';
-import {
-  replayInventoryLedger,
-  type LedgerBlock,
-  type SaleCost,
-} from '@/lib/inventory/ledger';
-import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
 import { buildNoopJournalEntryId } from '@/lib/plutus/journal-entry-id';
+import { parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-matching';
+import { computeProcessingHash, fromCents } from '@/lib/plutus/settlement-utils';
 
-import {
-  normalizeSku,
-  dateToIsoDay,
-  computeProcessingHash,
-  isSalePrincipal,
-  isRefundPrincipal,
-  buildPrincipalGroups,
-  buildPrincipalGroupsByDate,
-  requireAccountMapping,
-  matchRefundsToSales,
-  type ExistingReturnLayer,
-  type RefundSaleLayer,
-  sumCentsByBrandComponent,
-  sumCentsByBrandComponentSku,
-  mergeBrandComponentCents,
-  mergeBrandComponentSkuCents,
-} from './settlement-validation';
 import type { SettlementAuditRow } from './settlement-audit';
-
-import { buildCogsJournalLines } from './journal-builder';
-import {
-  buildBillMappingPullSyncUpdates,
-  type BillMappingPullSyncCandidate,
-} from './bills/pull-sync';
-
 import type {
   ProcessingBlock,
-  ProcessingReturn,
-  ProcessingSale,
-  KnownLedgerEvent,
   JournalEntryLinePreview,
   JournalEntryPreview,
   SettlementProcessingPreview,
@@ -56,7 +21,7 @@ import type {
 } from './settlement-types';
 import { isBlockingProcessingBlock } from './settlement-types';
 
-// Re-export all public types so existing imports from this file continue to work
+// Re-export public types so existing route imports stay stable.
 export type {
   ProcessingBlock,
   JournalEntryLinePreview,
@@ -64,14 +29,6 @@ export type {
   SettlementProcessingPreview,
   SettlementProcessingResult,
 } from './settlement-types';
-
-type PrincipalGroup = { orderId: string; sku: string; date: string; quantity: number; principalCents: number };
-
-function isCogsEnabledForMarketplace(marketplace: string): boolean {
-  if (marketplace === 'amazon.com') return true;
-  if (marketplace === 'amazon.co.uk') return false;
-  throw new Error(`Unsupported marketplace for COGS processing: ${marketplace}`);
-}
 
 function settlementCurrencyCodeForMarketplace(marketplace: string): 'USD' | 'GBP' {
   if (marketplace === 'amazon.com') return 'USD';
@@ -86,7 +43,7 @@ async function resolveExchangeRateForJournalPosting(input: {
   preferredExchangeRate?: number;
 }): Promise<{ exchangeRate?: number; updatedConnection?: QboConnection }> {
   const preferencesResult = await fetchPreferences(input.connection);
-  let activeConnection = preferencesResult.updatedConnection ? preferencesResult.updatedConnection : input.connection;
+  const activeConnection = preferencesResult.updatedConnection ? preferencesResult.updatedConnection : input.connection;
 
   const homeCurrencyCode = preferencesResult.preferences.CurrencyPrefs?.HomeCurrency?.value
     ? preferencesResult.preferences.CurrencyPrefs.HomeCurrency.value.trim().toUpperCase()
@@ -100,8 +57,6 @@ async function resolveExchangeRateForJournalPosting(input: {
     return { updatedConnection: activeConnection === input.connection ? undefined : activeConnection };
   }
 
-  // Deterministic posting: for foreign currency settlements we must reuse the settlement JE's ExchangeRate.
-  // Otherwise the P&L reclass won't net to zero in home currency (FX drift between JEs).
   if (input.preferredExchangeRate === undefined) {
     throw new Error(
       `Missing ExchangeRate for ${txnCurrencyCode}->${homeCurrencyCode} posting on ${input.txnDate}. Settlement JE ExchangeRate is required.`,
@@ -122,9 +77,7 @@ async function resolveExchangeRateForJournalPosting(input: {
 
 function buildProcessingDocNumber(kind: 'C' | 'P', invoiceId: string): string {
   const base = `${kind}${invoiceId}`;
-  if (base.length <= 21) {
-    return base;
-  }
+  if (base.length <= 21) return base;
   return `${kind}${invoiceId.slice(-20)}`;
 }
 
@@ -142,17 +95,10 @@ function buildEmptyPreview(input: {
 }): SettlementProcessingPreview {
   const hashPrefix = input.processingHash.slice(0, 10);
 
-  const cogsPreview: JournalEntryPreview = {
-    txnDate: input.settlementPostedDate,
-    docNumber: buildProcessingDocNumber('C', input.invoiceId),
-    privateNote: `Plutus COGS | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
-    lines: [],
-  };
-
   const pnlPreview: JournalEntryPreview = {
     txnDate: input.settlementPostedDate,
     docNumber: buildProcessingDocNumber('P', input.invoiceId),
-    privateNote: `Plutus P&L Reclass | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
+    privateNote: `Plutus Settlement Bridge | Invoice: ${input.invoiceId} | Hash: ${hashPrefix}`,
     lines: [],
   };
 
@@ -167,130 +113,9 @@ function buildEmptyPreview(input: {
     minDate: input.minDate,
     maxDate: input.maxDate,
     blocks: input.blocks,
-    sales: [],
-    returns: [],
-    cogsByBrandComponentCents: {},
     pnlByBucketBrandCents: {},
-    cogsJournalEntry: cogsPreview,
     pnlJournalEntry: pnlPreview,
   };
-}
-
-function summarizeLedgerBlocks(blocks: LedgerBlock[]): LedgerBlock[] {
-  const missingCostBasisBySku = new Map<string, number>();
-  const result: LedgerBlock[] = [];
-
-  for (const block of blocks) {
-    if (block.code !== 'MISSING_COST_BASIS') {
-      result.push(block);
-      continue;
-    }
-
-    const details = block.details;
-    const skuValue = details ? details.sku : undefined;
-    const sku = typeof skuValue === 'string' ? skuValue : '';
-    if (sku === '') {
-      result.push(block);
-      continue;
-    }
-
-    const current = missingCostBasisBySku.get(sku);
-    missingCostBasisBySku.set(sku, (current === undefined ? 0 : current) + 1);
-  }
-
-  const entries = Array.from(missingCostBasisBySku.entries()).sort((a, b) => {
-    if (b[1] !== a[1]) return b[1] - a[1];
-    return a[0].localeCompare(b[0]);
-  });
-
-  const limit = 200;
-  if (entries.length > limit) {
-    result.push({
-      code: 'MISSING_COST_BASIS',
-      message: `Missing cost basis for ${entries.length} SKUs (showing top ${limit} by count)`,
-      details: { skuCount: entries.length, shown: limit },
-    });
-  }
-
-  for (const [sku, count] of entries.slice(0, limit)) {
-    result.push({
-      code: 'MISSING_COST_BASIS',
-      message: 'No on-hand inventory / cost basis for SKU',
-      details: { sku, occurrences: count },
-    });
-  }
-
-  return result;
-}
-
-function summarizeRefundAdjustmentBlocks(blocks: ProcessingBlock[]): ProcessingBlock[] {
-  const matching = blocks.filter((block) => block.code === 'REFUND_ADJUSTMENT');
-  const threshold = 10;
-  if (matching.length <= threshold) {
-    return blocks;
-  }
-
-  const countBySku = new Map<string, number>();
-  const uniqueKeys = new Set<string>();
-  const examples: string[] = [];
-
-  for (const block of matching) {
-    const details = block.details;
-    const skuValue = details ? details.sku : undefined;
-    const sku = typeof skuValue === 'string' ? skuValue : '';
-    if (sku !== '') {
-      const current = countBySku.get(sku);
-      countBySku.set(sku, (current === undefined ? 0 : current) + 1);
-    }
-
-    const orderIdValue = details ? details.orderId : undefined;
-    const orderId = typeof orderIdValue === 'string' ? orderIdValue : '';
-    const key = orderId !== '' && sku !== '' ? `${orderId}::${sku}` : '';
-    if (key !== '' && !uniqueKeys.has(key)) {
-      uniqueKeys.add(key);
-      if (examples.length < 10) {
-        examples.push(key);
-      }
-    }
-  }
-
-  const skuBreakdown = Array.from(countBySku.entries())
-    .sort((a, b) => {
-      if (b[1] !== a[1]) return b[1] - a[1];
-      return a[0].localeCompare(b[0]);
-    })
-    .slice(0, 8)
-    .map(([sku, count]) => `${sku}=${count}`)
-    .join(', ');
-
-  const exampleList = examples.length === 0 ? '' : examples.join(', ');
-
-  const summaryBlock: ProcessingBlock = {
-    code: 'REFUND_ADJUSTMENT',
-    message: `Refund exceeds remaining sale quantity for ${matching.length} order lines; treated as a financial adjustment (no additional inventory return)`,
-    details: {
-      count: matching.length,
-      uniqueOrderSkuPairs: uniqueKeys.size,
-      ...(skuBreakdown !== '' ? { skuBreakdown } : {}),
-      ...(exampleList !== '' ? { examples: exampleList } : {}),
-    },
-  };
-
-  const summarized: ProcessingBlock[] = [];
-  let insertedSummary = false;
-  for (const block of blocks) {
-    if (block.code !== 'REFUND_ADJUSTMENT') {
-      summarized.push(block);
-      continue;
-    }
-
-    if (!insertedSummary) {
-      summarized.push(summaryBlock);
-      insertedSummary = true;
-    }
-  }
-
-  return summarized;
 }
 
 function buildAuditNetScaleStats(rows: SettlementAuditRow[]): {
@@ -352,7 +177,6 @@ export async function computeSettlementPreview(input: {
 
   const meta = parseSettlementDocNumber(settlement.DocNumber);
   const marketplace = meta.marketplace.id;
-  const cogsEnabled = isCogsEnabledForMarketplace(marketplace);
   if (meta.periodStart === null || meta.periodEnd === null) {
     throw new Error(`Missing settlement period in DocNumber ${settlement.DocNumber}`);
   }
@@ -407,8 +231,6 @@ export async function computeSettlementPreview(input: {
   const existingSettlement = await db.settlementProcessing.findUnique({
     where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
   });
-  const excludeSettlementProcessingId = existingSettlement ? existingSettlement.id : null;
-  const historicalProcessingCutoff = existingSettlement ? existingSettlement.uploadedAt : null;
   if (existingSettlement) {
     blocks.push({
       code: 'ALREADY_PROCESSED',
@@ -454,562 +276,20 @@ export async function computeSettlementPreview(input: {
     }
   }
 
-  const hasInvoiceConflict = blocks.some((b) => b.code === 'INVOICE_CONFLICT');
-  if (hasInvoiceConflict) {
-    return {
-      preview: buildEmptyPreview({
-        marketplace,
-        settlementJournalEntryId: settlement.Id,
-        settlementDocNumber: settlement.DocNumber,
-        settlementPostedDate: settlement.TxnDate,
-        settlementExchangeRate: settlement.ExchangeRate,
-        invoiceId,
-        processingHash,
-        minDate,
-        maxDate,
-        blocks,
-      }),
-      updatedConnection: settlementResult.updatedConnection,
-    };
-  }
-
-  const setupConfig = await db.setupConfig.findFirst();
-  const requiredMappingKeys = cogsEnabled
-    ? [
-        'invManufacturing',
-        'invFreight',
-        'invDuty',
-        'invMfgAccessories',
-        'cogsManufacturing',
-        'cogsFreight',
-        'cogsDuty',
-        'cogsMfgAccessories',
-      ]
-    : [];
-
-  const hasInventoryAccountSetup = setupConfig === null ? false : setupConfig.accountsCreated === true;
-  if (requiredMappingKeys.length > 0 && !hasInventoryAccountSetup) {
-    blocks.push({
-      code: 'MISSING_SETUP',
-      message: 'Setup is incomplete. Complete inventory asset and COGS account mapping first.',
-    });
-  }
-
-  const mapping: Record<string, string | undefined> = {};
-  if (setupConfig) {
-    for (const key of requiredMappingKeys) {
-      try {
-        mapping[key] = requireAccountMapping(setupConfig, key);
-      } catch {
-        blocks.push({
-          code: 'MISSING_ACCOUNT_MAPPING',
-          message: `Missing required account mapping: ${key}`,
-        });
-      }
-    }
-  }
-
-  const skuRows = await db.sku.findMany({ include: { brand: true } });
-  const skuToBrand = new Map<string, string>();
-
-  for (const row of skuRows) {
-    if (row.brand.marketplace !== marketplace) continue;
-
-    const aliases = [row.sku];
-    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
-      aliases.push(row.asin);
-    }
-
-    for (const alias of aliases) {
-      const sku = normalizeSku(alias);
-      const existing = skuToBrand.get(sku);
-      if (existing !== undefined && existing !== row.brand.name) {
-        throw new Error(`SKU maps to multiple brands in same marketplace: ${sku}`);
-      }
-      skuToBrand.set(sku, row.brand.name);
-    }
-  }
-
-  const missingSkus: string[] = [];
-  const uniqueSkus = new Set<string>();
-  for (const row of scopedInvoiceRows) {
-    const raw = row.sku.trim();
-    if (raw === '') continue;
-    uniqueSkus.add(normalizeSku(raw));
-  }
-  for (const sku of uniqueSkus) {
-    if (!skuToBrand.has(sku)) missingSkus.push(sku);
-  }
-  missingSkus.sort();
-  for (const sku of missingSkus) {
-    blocks.push({ code: 'MISSING_SKU_MAPPING', message: 'SKU not mapped to a brand', details: { sku } });
-  }
-
-  const prereqCodes = new Set(['MISSING_SETUP', 'MISSING_ACCOUNT_MAPPING', 'MISSING_SKU_MAPPING']);
-  const hasPrereqBlock = blocks.some((b) => prereqCodes.has(b.code));
-  if (hasPrereqBlock) {
-    return {
-      preview: buildEmptyPreview({
-        marketplace,
-        settlementJournalEntryId: settlement.Id,
-        settlementDocNumber: settlement.DocNumber,
-        settlementPostedDate: settlement.TxnDate,
-        settlementExchangeRate: settlement.ExchangeRate,
-        invoiceId,
-        processingHash,
-        minDate,
-        maxDate,
-        blocks,
-      }),
-      updatedConnection: settlementResult.updatedConnection,
-    };
-  }
-
-  const accountsResult = await fetchAccounts(settlementResult.updatedConnection ? settlementResult.updatedConnection : input.connection, {
-    includeInactive: true,
-  });
-
-  let billsConnection =
-    accountsResult.updatedConnection
-      ? accountsResult.updatedConnection
-      : settlementResult.updatedConnection
-        ? settlementResult.updatedConnection
-        : input.connection;
-
-  if (cogsEnabled) {
-    if (!mapping.invManufacturing) throw new Error('Missing invManufacturing mapping');
-    if (!mapping.invFreight) throw new Error('Missing invFreight mapping');
-    if (!mapping.invDuty) throw new Error('Missing invDuty mapping');
-    if (!mapping.invMfgAccessories) throw new Error('Missing invMfgAccessories mapping');
-  }
-
-  // Plutus bill mappings are the COGS-approved bill source. Raw QBO inventory
-  // bills can be audited separately, but they must not enter COGS until mapped.
-  const plutusMappings = cogsEnabled
-    ? await db.billMapping.findMany({
-        where: {
-          brand: {
-            marketplace,
-          },
-        },
-        include: { lines: true },
-      })
-    : [];
-
-  let parsedBillsFromMappings: ParsedBills = { events: [], poUnitsBySku: new Map() };
-  let allBills: QboBill[] = [];
-
-  if (cogsEnabled) {
-    try {
-      let startPosition = 1;
-      const pageSize = 100;
-
-      while (true) {
-        const page = await fetchBills(billsConnection, { endDate: maxDate, maxResults: pageSize, startPosition });
-        if (page.updatedConnection) {
-          billsConnection = page.updatedConnection;
-        }
-
-        allBills = allBills.concat(page.bills);
-
-        if (allBills.length >= page.totalCount) break;
-        if (page.bills.length === 0) break;
-
-        startPosition += page.bills.length;
-      }
-    } catch (error) {
-      blocks.push({
-        code: 'BILLS_FETCH_ERROR',
-        message: 'Failed to fetch bills from QBO',
-        details: { error: error instanceof Error ? error.message : String(error) },
-      });
-      allBills = [];
-    }
-
-    if (plutusMappings.length > 0 && allBills.length > 0) {
-      const billsById = new Map(allBills.map((bill) => [bill.Id, bill]));
-      const pullSyncUpdates = buildBillMappingPullSyncUpdates(
-        plutusMappings as BillMappingPullSyncCandidate[],
-        billsById,
-      );
-
-      if (pullSyncUpdates.length > 0) {
-        const syncedAt = new Date();
-        await db.$transaction(
-          pullSyncUpdates.map((update) =>
-            db.billMapping.update({
-              where: { id: update.id },
-              data: {
-                poNumber: update.poNumber,
-                billDate: update.billDate,
-                vendorName: update.vendorName,
-                totalAmount: update.totalAmount,
-                syncedAt,
-              },
-            }),
-          ),
-        );
-
-        const mappingByBillId = new Map(plutusMappings.map((mapping) => [mapping.qboBillId, mapping]));
-        for (const update of pullSyncUpdates) {
-          const existing = mappingByBillId.get(update.qboBillId);
-          if (!existing) continue;
-          existing.poNumber = update.poNumber;
-          existing.billDate = update.billDate;
-          existing.vendorName = update.vendorName;
-          existing.totalAmount = update.totalAmount;
-          existing.syncedAt = syncedAt;
-        }
-      }
-    }
-
-    if (plutusMappings.length > 0) {
-      try {
-        parsedBillsFromMappings = buildInventoryEventsFromMappings(plutusMappings);
-      } catch (error) {
-        blocks.push({
-          code: 'BILLS_PARSE_ERROR',
-          message: 'Failed to build inventory events from bill mappings',
-          details: { error: error instanceof Error ? error.message : String(error) },
-        });
-        parsedBillsFromMappings = { events: [], poUnitsBySku: new Map() };
-      }
-    }
-
-  }
-
-  const parsedBills = parsedBillsFromMappings;
-
-  // Principal groups for unit movements
-  const saleGroups = buildPrincipalGroups(scopedInvoiceRows, isSalePrincipal);
-  const refundGroups = buildPrincipalGroupsByDate(scopedInvoiceRows, isRefundPrincipal);
-  const hasInvoiceUnitMovements = saleGroups.size > 0 || refundGroups.size > 0;
-
-  // Settlement operating P&L is already posted on the settlement JE by category.
-  // Plutus no longer builds brand/SKU fee reclass lines. SKU detail is used only for inventory COGS.
-  const pnlLines: JournalEntryLinePreview[] = [];
-
-  // Match refunds to historical sales only when COGS is active. P&L-only marketplaces
-  // must not be blocked by inventory-return matching that has no journal impact.
-  const refundPairs = cogsEnabled ? Array.from(refundGroups.values()).map((r) => ({ orderId: r.orderId, sku: r.sku })) : [];
-  const historicalSaleLayers: RefundSaleLayer[] = [];
-  const historicalExistingReturns: ExistingReturnLayer[] = [];
-  if (refundPairs.length > 0) {
-    const refundSaleRecords = await db.orderSale.findMany({
-      where: {
-        marketplace,
-        ...(historicalProcessingCutoff
-          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
-          : {}),
-        ...(excludeSettlementProcessingId
-          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
-          : {}),
-        OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-      },
-      orderBy: [{ saleDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-    });
-    for (const sale of refundSaleRecords) {
-      historicalSaleLayers.push({
-        orderId: sale.orderId,
-        sku: normalizeSku(sale.sku),
-        date: dateToIsoDay(sale.saleDate),
-        quantity: sale.quantity,
-        principalCents: sale.principalCents,
-        costByComponentCents: {
-          manufacturing: sale.costManufacturingCents,
-          freight: sale.costFreightCents,
-          duty: sale.costDutyCents,
-          mfgAccessories: sale.costMfgAccessoriesCents,
-        },
-      });
-    }
-
-    const existingReturns = await db.orderReturn.findMany({
-      where: {
-        marketplace,
-        ...(historicalProcessingCutoff
-          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
-          : {}),
-        ...(excludeSettlementProcessingId
-          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
-          : {}),
-        OR: refundPairs.map((p) => ({ orderId: p.orderId, sku: p.sku })),
-      },
-      orderBy: [{ returnDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-    });
-    for (const ret of existingReturns) {
-      historicalExistingReturns.push({
-        orderId: ret.orderId,
-        sku: normalizeSku(ret.sku),
-        date: dateToIsoDay(ret.returnDate),
-        quantity: ret.quantity,
-      });
-    }
-  }
-
-  const historicalSaleKeys = new Set(historicalSaleLayers.map((sale) => `${sale.orderId}::${sale.sku}`));
-  const historicalRefundGroups = new Map<string, PrincipalGroup>();
-  const currentSettlementRefundGroups = new Map<string, PrincipalGroup>();
-  if (cogsEnabled) {
-    for (const [refundKey, refund] of refundGroups.entries()) {
-      const key = `${refund.orderId}::${refund.sku}`;
-      if (historicalSaleKeys.has(key)) {
-        historicalRefundGroups.set(refundKey, refund);
-        continue;
-      }
-      currentSettlementRefundGroups.set(refundKey, refund);
-    }
-  }
-
-  const matchedReturnsFromHistory: ProcessingReturn[] =
-    !cogsEnabled || historicalRefundGroups.size === 0
-      ? []
-      : matchRefundsToSales(historicalRefundGroups, historicalSaleLayers, historicalExistingReturns, blocks);
-
-  const maxDateObj = new Date(`${maxDate}T00:00:00Z`);
-
-  const knownSales: KnownLedgerEvent[] = [];
-  const knownReturns: KnownLedgerEvent[] = [];
-  if (cogsEnabled && hasInvoiceUnitMovements) {
-    const knownSalesRecords = await db.orderSale.findMany({
-      where: {
-        marketplace,
-        saleDate: { lte: maxDateObj },
-        ...(historicalProcessingCutoff
-          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
-          : {}),
-        ...(excludeSettlementProcessingId
-          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
-          : {}),
-      },
-    });
-    const knownReturnRecords = await db.orderReturn.findMany({
-      where: {
-        marketplace,
-        returnDate: { lte: maxDateObj },
-        ...(historicalProcessingCutoff
-          ? { settlementProcessing: { uploadedAt: { lte: historicalProcessingCutoff } } }
-          : {}),
-        ...(excludeSettlementProcessingId
-          ? { NOT: { settlementProcessingId: excludeSettlementProcessingId } }
-          : {}),
-      },
-    });
-
-    for (const sale of knownSalesRecords) {
-      knownSales.push({
-        date: dateToIsoDay(sale.saleDate),
-        orderId: sale.orderId,
-        sku: normalizeSku(sale.sku),
-        units: sale.quantity,
-        costByComponentCents: {
-          manufacturing: sale.costManufacturingCents,
-          freight: sale.costFreightCents,
-          duty: sale.costDutyCents,
-          mfgAccessories: sale.costMfgAccessoriesCents,
-        },
-      });
-    }
-
-    for (const ret of knownReturnRecords) {
-      knownReturns.push({
-        date: dateToIsoDay(ret.returnDate),
-        orderId: ret.orderId,
-        sku: normalizeSku(ret.sku),
-        units: ret.quantity,
-        costByComponentCents: {
-          manufacturing: ret.costManufacturingCents,
-          freight: ret.costFreightCents,
-          duty: ret.costDutyCents,
-          mfgAccessories: ret.costMfgAccessoriesCents,
-        },
-      });
-    }
-
-    for (const ret of matchedReturnsFromHistory) {
-      knownReturns.push({
-        date: ret.date,
-        orderId: ret.orderId,
-        sku: ret.sku,
-        units: ret.quantity,
-        costByComponentCents: ret.costByComponentCents,
-      });
-    }
-  }
-
-  const computeSales = Array.from(saleGroups.values())
-    .map((s) => ({
-      date: s.date,
-      orderId: s.orderId,
-      sku: s.sku,
-      units: Math.abs(s.quantity),
-      principalCents: s.principalCents,
-    }))
-    .filter((s) => s.units > 0);
-
-  const ledgerComputeSales = computeSales.map((s) => ({
-    date: s.date,
-    orderId: s.orderId,
-    sku: s.sku,
-    units: s.units,
-  }));
-
-  const billsErrorCodes = new Set(['BILLS_FETCH_ERROR', 'BILLS_PARSE_ERROR']);
-  const hasBillsError = blocks.some((b) => billsErrorCodes.has(b.code));
-
-  let ledgerBlocks: LedgerBlock[] = [];
-  let computedCosts: SaleCost[] = [];
-  if (cogsEnabled && !hasBillsError && hasInvoiceUnitMovements) {
-    const replay = replayInventoryLedger({
-      parsedBills,
-      knownSales,
-      knownReturns,
-      computeSales: ledgerComputeSales,
-    });
-    ledgerBlocks = replay.blocks;
-    computedCosts = replay.computedCosts;
-  }
-
-  const missingCostBasisSkus = new Set<string>();
-  for (const b of ledgerBlocks) {
-    if (b.code !== 'MISSING_COST_BASIS') continue;
-    const details = b.details;
-    const skuValue = details ? details.sku : undefined;
-    if (typeof skuValue === 'string' && skuValue !== '') {
-      missingCostBasisSkus.add(skuValue);
-    }
-  }
-
-  for (const block of summarizeLedgerBlocks(ledgerBlocks)) {
-    blocks.push(block);
-  }
-
-  const computedCostByKey = new Map<string, SaleCost>();
-  for (const cost of computedCosts) {
-    const key = `${cost.orderId}::${cost.sku}`;
-    computedCostByKey.set(key, cost);
-  }
-
-  const computedSales: ProcessingSale[] = [];
-  if (!hasBillsError) {
-    for (const sale of computeSales) {
-      const key = `${sale.orderId}::${sale.sku}`;
-      const cost = computedCostByKey.get(key);
-      if (!cost) {
-        if (cogsEnabled && !missingCostBasisSkus.has(sale.sku)) {
-          throw new Error(`Missing computed cost basis but no ledger block emitted: ${sale.orderId} ${sale.sku}`);
-        }
-        computedSales.push({
-          orderId: sale.orderId,
-          sku: sale.sku,
-          date: sale.date,
-          quantity: sale.units,
-          principalCents: sale.principalCents,
-          costByComponentCents: {
-            manufacturing: 0,
-            freight: 0,
-            duty: 0,
-            mfgAccessories: 0,
-          },
-        });
-        continue;
-      }
-      computedSales.push({
-        orderId: sale.orderId,
-        sku: sale.sku,
-        date: sale.date,
-        quantity: sale.units,
-        principalCents: sale.principalCents,
-        costByComponentCents: cost.costByComponentCents,
-      });
-    }
-  }
-
-  const currentSettlementSaleLayers: RefundSaleLayer[] = computedSales.map((sale) => ({
-    orderId: sale.orderId,
-    sku: sale.sku,
-    date: sale.date,
-    quantity: sale.quantity,
-    principalCents: sale.principalCents,
-    costByComponentCents: {
-      manufacturing: sale.costByComponentCents.manufacturing,
-      freight: sale.costByComponentCents.freight,
-      duty: sale.costByComponentCents.duty,
-      mfgAccessories: sale.costByComponentCents.mfgAccessories,
-    },
-  }));
-
-  const matchedReturnsFromCurrentSettlement =
-    !cogsEnabled || currentSettlementRefundGroups.size === 0
-      ? []
-      : matchRefundsToSales(currentSettlementRefundGroups, currentSettlementSaleLayers, [], blocks, {
-          allowFutureSales: true,
-        });
-
-  const matchedReturns = [...matchedReturnsFromHistory, ...matchedReturnsFromCurrentSettlement];
-
-  const salesCogsByBrand = sumCentsByBrandComponent(computedSales, skuToBrand);
-  const returnsCogsByBrand = sumCentsByBrandComponent(matchedReturns, skuToBrand);
-  const netCogsByBrand = mergeBrandComponentCents(salesCogsByBrand, returnsCogsByBrand, 'sub');
-  const salesCogsByBrandSku = sumCentsByBrandComponentSku(computedSales, skuToBrand);
-  const returnsCogsByBrandSku = sumCentsByBrandComponentSku(matchedReturns, skuToBrand);
-  const netCogsByBrandSku = mergeBrandComponentSkuCents(salesCogsByBrandSku, returnsCogsByBrandSku, 'sub');
-
-  // Build JE lines (resolve brand sub-accounts)
-  const brandNames = Array.from(new Set(skuToBrand.values())).sort();
-
-  const cogsLines = cogsEnabled
-    ? buildCogsJournalLines(
-        netCogsByBrand,
-        brandNames,
-        mapping,
-        accountsResult.accounts,
-        invoiceId,
-        blocks,
-        netCogsByBrandSku,
-      )
-    : [];
-
-  const hashPrefix = processingHash.slice(0, 10);
-
-  const cogsPreview: JournalEntryPreview = {
-    txnDate: settlement.TxnDate,
-    docNumber: buildProcessingDocNumber('C', invoiceId),
-    privateNote: `Plutus COGS | Invoice: ${invoiceId} | Hash: ${hashPrefix}`,
-    lines: cogsLines,
-  };
-
-  const pnlPreview: JournalEntryPreview = {
-    txnDate: settlement.TxnDate,
-    docNumber: buildProcessingDocNumber('P', invoiceId),
-    privateNote: `Plutus P&L Reclass | Invoice: ${invoiceId} | Hash: ${hashPrefix}`,
-    lines: pnlLines,
-  };
-
-  const summarizedBlocks = summarizeRefundAdjustmentBlocks(blocks);
-
-  const preview: SettlementProcessingPreview = {
-    marketplace,
-    settlementJournalEntryId: settlement.Id,
-    settlementDocNumber: settlement.DocNumber,
-    settlementPostedDate: settlement.TxnDate,
-    settlementExchangeRate: settlement.ExchangeRate,
-    invoiceId,
-    processingHash,
-    minDate,
-    maxDate,
-    blocks: summarizedBlocks,
-    sales: computedSales,
-    returns: matchedReturns,
-    cogsByBrandComponentCents: netCogsByBrand,
-    pnlByBucketBrandCents: {},
-    cogsJournalEntry: cogsPreview,
-    pnlJournalEntry: pnlPreview,
-  };
-
   return {
-    preview,
-    updatedConnection: billsConnection === input.connection ? undefined : billsConnection,
+    preview: buildEmptyPreview({
+      marketplace,
+      settlementJournalEntryId: settlement.Id,
+      settlementDocNumber: settlement.DocNumber,
+      settlementPostedDate: settlement.TxnDate,
+      settlementExchangeRate: settlement.ExchangeRate,
+      invoiceId,
+      processingHash,
+      minDate,
+      maxDate,
+      blocks,
+    }),
+    updatedConnection: settlementResult.updatedConnection,
   };
 }
 
@@ -1022,13 +302,12 @@ export async function processSettlement(input: {
   settlementId?: string;
 }): Promise<{ result: SettlementProcessingResult; updatedConnection?: QboConnection }> {
   const computed = await computeSettlementPreview(input);
-  const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);
-
   const blockingBlocks = computed.preview.blocks.filter((block) => isBlockingProcessingBlock(block));
   if (blockingBlocks.length > 0) {
     return { result: { ok: false, preview: computed.preview }, updatedConnection: computed.updatedConnection };
   }
 
+  const settlementCurrencyCode = settlementCurrencyCodeForMarketplace(computed.preview.marketplace);
   let postingConnection = computed.updatedConnection ? computed.updatedConnection : input.connection;
   let activeConnection = computed.updatedConnection;
 
@@ -1043,29 +322,7 @@ export async function processSettlement(input: {
     activeConnection = postingRate.updatedConnection;
   }
 
-  let cogsJournalEntryId = buildNoopJournalEntryId('COGS', computed.preview.invoiceId);
-  const noopCogsJournalEntryId = cogsJournalEntryId;
-  if (computed.preview.cogsJournalEntry.lines.length > 0) {
-    const cogs = await createJournalEntry(postingConnection, {
-      txnDate: computed.preview.cogsJournalEntry.txnDate,
-      docNumber: computed.preview.cogsJournalEntry.docNumber,
-      privateNote: computed.preview.cogsJournalEntry.privateNote,
-      currencyCode: settlementCurrencyCode,
-      exchangeRate: postingRate.exchangeRate,
-      lines: computed.preview.cogsJournalEntry.lines.map((line) => ({
-        amount: fromCents(line.amountCents),
-        postingType: line.postingType,
-        accountId: line.accountId,
-        description: line.description,
-      })),
-    });
-
-    cogsJournalEntryId = cogs.journalEntry.Id;
-    if (cogs.updatedConnection) {
-      postingConnection = cogs.updatedConnection;
-      activeConnection = cogs.updatedConnection;
-    }
-  }
+  const cogsJournalEntryId = buildNoopJournalEntryId('COGS', computed.preview.invoiceId);
 
   let pnlJournalEntryId = buildNoopJournalEntryId('PNL', computed.preview.invoiceId);
   const noopPnlJournalEntryId = pnlJournalEntryId;
@@ -1091,9 +348,7 @@ export async function processSettlement(input: {
   }
 
   try {
-    // Task 1: Atomic transaction with duplicate check inside
     await db.$transaction(async (tx) => {
-      // Re-check for duplicates inside the transaction to prevent race conditions
       const existingSettlement = await tx.settlementProcessing.findUnique({
         where: { qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId },
       });
@@ -1113,7 +368,7 @@ export async function processSettlement(input: {
         throw new Error(`Invoice already processed: ${existingInvoice.id}`);
       }
 
-      const processing = await tx.settlementProcessing.create({
+      await tx.settlementProcessing.create({
         data: {
           marketplace: computed.preview.marketplace,
           qboSettlementJournalEntryId: computed.preview.settlementJournalEntryId,
@@ -1126,43 +381,6 @@ export async function processSettlement(input: {
           qboPnlReclassJournalEntryId: pnlJournalEntryId,
         },
       });
-
-      if (computed.preview.sales.length > 0) {
-        // Task 2: Use createMany for bulk inserts
-        await tx.orderSale.createMany({
-          data: computed.preview.sales.map((sale) => ({
-            marketplace: computed.preview.marketplace,
-            orderId: sale.orderId,
-            sku: sale.sku,
-            saleDate: new Date(`${sale.date}T00:00:00Z`),
-            quantity: sale.quantity,
-            principalCents: sale.principalCents,
-            costManufacturingCents: sale.costByComponentCents.manufacturing,
-            costFreightCents: sale.costByComponentCents.freight,
-            costDutyCents: sale.costByComponentCents.duty,
-            costMfgAccessoriesCents: sale.costByComponentCents.mfgAccessories,
-            settlementProcessingId: processing.id,
-          })),
-        });
-      }
-
-      if (computed.preview.returns.length > 0) {
-        await tx.orderReturn.createMany({
-          data: computed.preview.returns.map((ret) => ({
-            marketplace: computed.preview.marketplace,
-            orderId: ret.orderId,
-            sku: ret.sku,
-            returnDate: new Date(`${ret.date}T00:00:00Z`),
-            quantity: ret.quantity,
-            principalCents: ret.principalCents,
-            costManufacturingCents: ret.costByComponentCents.manufacturing,
-            costFreightCents: ret.costByComponentCents.freight,
-            costDutyCents: ret.costByComponentCents.duty,
-            costMfgAccessoriesCents: ret.costByComponentCents.mfgAccessories,
-            settlementProcessingId: processing.id,
-          })),
-        });
-      }
     });
   } catch (error) {
     let cleanupConnection = activeConnection ? activeConnection : postingConnection;
@@ -1183,21 +401,6 @@ export async function processSettlement(input: {
       }
     }
 
-    if (cogsJournalEntryId !== noopCogsJournalEntryId) {
-      try {
-        const deleted = await deleteJournalEntry(cleanupConnection, cogsJournalEntryId);
-        if (deleted.updatedConnection) {
-          cleanupConnection = deleted.updatedConnection;
-        }
-      } catch (cleanupError) {
-        cleanupErrors.push(
-          cleanupError instanceof Error
-            ? `Failed to delete COGS JE ${cogsJournalEntryId}: ${cleanupError.message}`
-            : `Failed to delete COGS JE ${cogsJournalEntryId}: ${String(cleanupError)}`,
-        );
-      }
-    }
-
     if (cleanupErrors.length > 0) {
       const originalMessage = error instanceof Error ? error.message : String(error);
       throw new Error(
@@ -1213,7 +416,6 @@ export async function processSettlement(input: {
       ok: true,
       preview: computed.preview,
       posted: {
-        cogsJournalEntryId,
         pnlJournalEntryId,
       },
     },

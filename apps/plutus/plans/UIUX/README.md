@@ -127,7 +127,7 @@ className="hover:bg-slate-50 dark:hover:bg-slate-700"
 
 ```
 Settlements          (top-level link)
-COGS Inputs          (top-level link)
 Mappings             (top-level link)
+QBO Audit            (top-level link)
 Settings             (top-level link)
 ```

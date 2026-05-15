@@ -133,8 +133,6 @@ function buildProcessingMapRows(
     uploadedAt: Date;
     qboCogsJournalEntryId: string;
     qboPnlReclassJournalEntryId: string;
-    orderSales: Array<{ id: string }>;
-    orderReturns: Array<{ id: string }>;
   }>,
 ): Map<string, SettlementProcessingSummary> {
   return new Map(
@@ -148,8 +146,8 @@ function buildProcessingMapRows(
         uploadedAt: entry.uploadedAt.toISOString(),
         qboCogsJournalEntryId: entry.qboCogsJournalEntryId,
         qboPnlReclassJournalEntryId: entry.qboPnlReclassJournalEntryId,
-        orderSalesCount: entry.orderSales.length,
-        orderReturnsCount: entry.orderReturns.length,
+        orderSalesCount: 0,
+        orderReturnsCount: 0,
       },
     ]),
   );
@@ -226,7 +224,6 @@ export async function fetchSettlementParentDetail(input: {
 
   const processingRows = await db.settlementProcessing.findMany({
     where: { qboSettlementJournalEntryId: { in: journalEntryIds } },
-    include: { orderSales: true, orderReturns: true },
   });
   const rollbackRows = await db.settlementRollback.findMany({
     where: { qboSettlementJournalEntryId: { in: journalEntryIds } },
