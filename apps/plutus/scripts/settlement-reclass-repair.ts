@@ -4,8 +4,7 @@ import { normalizeAuditMarketToMarketplaceId } from '@/lib/plutus/audit-invoice-
 import { HUMAN_APPROVAL_PHRASE } from '@/lib/plutus/human-approval';
 import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
 import { isSettlementDocNumber, normalizeSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
-import type { JournalEntryPreview } from '@/lib/plutus/settlement-types';
-import type { QboAccount, QboConnection, QboJournalEntry } from '@/lib/qbo/api';
+import type { QboConnection, QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { loadSharedPlutusEnv } from './shared-env';
 
@@ -37,7 +36,6 @@ type SettlementFingerprint = {
   lineHash: string;
 };
 
-const BANK_ACCOUNT_TYPES = new Set(['Bank', 'Credit Card']);
 const IGNORED_REPROCESS_BLOCKS = new Set(['ALREADY_PROCESSED']);
 
 function parseArgs(argv: string[]): CliOptions {
@@ -211,22 +209,6 @@ async function loadSourceRows(input: {
   return { sourceFilename: selected.filename, auditRows: selected.rows };
 }
 
-function assertNoBankLines(input: {
-  invoiceId: string;
-  accountsById: Map<string, QboAccount>;
-  journal: JournalEntryPreview;
-}): void {
-  for (const line of input.journal.lines) {
-    const account = input.accountsById.get(line.accountId);
-    if (account === undefined) {
-      throw new Error(`Preview line references missing QBO account ${line.accountId} for invoiceId=${input.invoiceId}`);
-    }
-    if (BANK_ACCOUNT_TYPES.has(account.AccountType)) {
-      throw new Error(`Preview line would touch bank-facing account ${account.Id} ${account.Name} for invoiceId=${input.invoiceId}`);
-    }
-  }
-}
-
 function effectiveBlocks(blocks: Array<{ code: string }>, alreadyProcessed: boolean): string[] {
   const result: string[] = [];
   for (const block of blocks) {
@@ -253,10 +235,6 @@ async function main(): Promise<void> {
   const connection = await getQboConnection();
   if (connection === null) throw new Error('Not connected to QBO');
   let activeConnection = connection;
-
-  const accountsResult = await qboApi.fetchAccounts(activeConnection, { includeInactive: true });
-  if (accountsResult.updatedConnection !== undefined) activeConnection = accountsResult.updatedConnection;
-  const accountsById = new Map(accountsResult.accounts.map((account) => [account.Id, account]));
 
   const results: Array<Record<string, unknown>> = [];
 
@@ -290,10 +268,6 @@ async function main(): Promise<void> {
 
     const alreadyProcessed = existingProcessing !== null;
     const blocks = effectiveBlocks(previewResult.preview.blocks, alreadyProcessed);
-    assertNoBankLines({ invoiceId, accountsById, journal: previewResult.preview.cogsJournalEntry });
-    if (previewResult.preview.pnlJournalEntry.lines.length !== 0) {
-      throw new Error(`Unexpected P&L reclass lines for inventory-COGS-only architecture: ${invoiceId}`);
-    }
 
     if (blocks.length > 0) {
       results.push({
@@ -319,7 +293,6 @@ async function main(): Promise<void> {
                 pnlJournalEntryId: existingProcessing.qboPnlReclassJournalEntryId,
               },
         sourceSettlementFingerprint: sourceBefore,
-        cogsLineCount: previewResult.preview.cogsJournalEntry.lines.length,
         pnlLineCount: previewResult.preview.pnlJournalEntry.lines.length,
       });
       continue;

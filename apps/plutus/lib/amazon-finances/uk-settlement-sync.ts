@@ -18,9 +18,8 @@ import {
   buildSettlementMtdDailySummaryCsvBytes,
   buildSettlementMtdDailySummaryFilename,
 } from '@/lib/amazon-finances/settlement-evidence';
-import { fromCents } from '@/lib/inventory/money';
 import { db } from '@/lib/db';
-import { computeProcessingHash, normalizeSku } from '@/lib/plutus/settlement-validation';
+import { computeProcessingHash, fromCents } from '@/lib/plutus/settlement-utils';
 import { processSettlement } from '@/lib/plutus/settlement-processing';
 import { buildPlutusSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import {
@@ -157,22 +156,6 @@ function isClosedFinancialEventGroup(group: any): boolean {
   if (typeof start !== 'string' || start.trim() === '') return false;
   if (typeof end !== 'string' || end.trim() === '') return false;
   return true;
-}
-
-async function buildSkuToBrandName(): Promise<Map<string, string>> {
-  const skus = await db.sku.findMany({ include: { brand: true } });
-  const skuToBrandName = new Map<string, string>();
-  for (const row of skus) {
-    if (row.brand.marketplace !== 'amazon.co.uk') continue;
-    const aliases = [row.sku];
-    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
-      aliases.push(row.asin);
-    }
-    for (const alias of aliases) {
-      skuToBrandName.set(normalizeSku(alias), row.brand.name);
-    }
-  }
-  return skuToBrandName;
 }
 
 async function ensureJournalEntryHasSettlementEvidenceAttachments(
@@ -442,8 +425,6 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
   }
   let activeConnection: QboConnection = connection;
 
-  const skuToBrandName = await buildSkuToBrandName();
-
   const postedAfterIso = computePostedAfterIso(startDate);
   const postedBeforeIso = computePostedBeforeIso(endDate);
 
@@ -532,7 +513,6 @@ export async function syncUkSettlementsFromSpApiFinances(input: UkSpApiSettlemen
       eventGroupId,
       eventGroup,
       events,
-      skuToBrandName,
     });
 
     if (draft.originalTotalCents < 0) needPaymentAccount = true;

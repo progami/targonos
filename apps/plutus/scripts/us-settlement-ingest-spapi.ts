@@ -7,9 +7,8 @@ import {
   findFinancialEventGroupIdForSettlementId,
   listAllFinancialEventGroups,
 } from '@/lib/amazon-finances/sp-api-finances';
-import { fromCents } from '@/lib/inventory/money';
+import { fromCents } from '@/lib/plutus/settlement-utils';
 import { stripPlutusDocPrefix } from '@/lib/plutus/settlement-doc-number';
-import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import {
   createJournalEntry,
   fetchAccounts,
@@ -297,19 +296,6 @@ async function main(): Promise<void> {
   const { db } = await import('@/lib/db');
   const { processSettlement } = await import('@/lib/plutus/settlement-processing');
 
-  const skus = await db.sku.findMany({ include: { brand: true } });
-  const skuToBrandName = new Map<string, string>();
-  for (const row of skus) {
-    if (row.brand.marketplace !== 'amazon.com') continue;
-    const aliases = [row.sku];
-    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
-      aliases.push(row.asin);
-    }
-    for (const alias of aliases) {
-      skuToBrandName.set(normalizeSku(alias), row.brand.name);
-    }
-  }
-
   const maybeConnection = await getQboConnection();
   if (!maybeConnection) throw new Error('Not connected to QBO');
   let connection: QboConnection = maybeConnection;
@@ -425,7 +411,6 @@ async function main(): Promise<void> {
       eventGroupId,
       eventGroup,
       events,
-      skuToBrandName,
     });
 
     const jeDrafts = buildQboJournalEntriesFromUsSettlementDraft({

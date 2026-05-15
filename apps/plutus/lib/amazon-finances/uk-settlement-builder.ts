@@ -1,4 +1,3 @@
-import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { buildCanonicalSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 
 import { moneyToCents } from './money';
@@ -73,21 +72,6 @@ function requirePostedDate(value: string | undefined, context: string): string {
     throw new Error(`Missing PostedDate for ${context}`);
   }
   return value;
-}
-
-function brandNameForSku(skuRaw: string, skuToBrandName: Map<string, string>): string {
-  const normalized = normalizeSku(skuRaw);
-  const brandName = skuToBrandName.get(normalized);
-  if (!brandName) {
-    throw new Error(`SKU not mapped to brand: ${normalized}`);
-  }
-  return brandName;
-}
-
-function brandLabelForName(brandName: string, brandLabelByBrandName?: Map<string, string>): string {
-  if (!brandLabelByBrandName) return brandName;
-  const label = brandLabelByBrandName.get(brandName);
-  return label ? label : brandName;
 }
 
 type OrderScope = 'Domestic Orders' | 'International Orders';
@@ -391,8 +375,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
   eventGroupId: string;
   eventGroup: SpApiFinancialEventGroup;
   events: SpApiFinancialEvents;
-  skuToBrandName: Map<string, string>;
-  brandLabelByBrandName?: Map<string, string>;
   timeZone?: string;
 }): UkSettlementDraft {
   const timeZone = input.timeZone === undefined ? UK_TIME_ZONE : input.timeZone;
@@ -448,8 +430,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     const parsedItems = items.map((item) => {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qty = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
-      const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
-      const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
 
       let principalCents = 0;
       let taxCents = 0;
@@ -503,7 +483,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         item,
         skuRaw,
         qty,
-        brandLabel,
         principalCents,
         taxCents,
         shippingCents,
@@ -529,10 +508,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     for (const itemData of parsedItems) {
       const principalNetCents = orderMarketplaceVatResponsible ? itemData.principalCents : itemData.principalCents + itemData.taxCents;
       const shippingNetCents = orderMarketplaceVatResponsible ? itemData.shippingCents : itemData.shippingCents + itemData.shippingTaxCents;
-
-      if (itemData.brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
-        throw new Error(`Missing SKU/brand for shipment item with non-zero charges (orderId=${orderId})`);
-      }
 
       if (principalNetCents !== 0) {
         const memo = salesMemo({ kind: 'Principal', marketplaceVatResponsible: orderMarketplaceVatResponsible });
@@ -619,8 +594,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
       const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU : '';
       const qtyRaw = typeof item.QuantityShipped === 'number' && Number.isInteger(item.QuantityShipped) ? item.QuantityShipped : 0;
       const qty = qtyRaw === 0 ? 0 : -qtyRaw;
-      const brandName = skuRaw === '' ? '' : brandNameForSku(skuRaw, input.skuToBrandName);
-      const brandLabel = brandName === '' ? '' : brandLabelForName(brandName, input.brandLabelByBrandName);
 
       let principalCents = 0;
       let taxCents = 0;
@@ -670,7 +643,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
         item,
         skuRaw,
         qty,
-        brandLabel,
         principalCents,
         taxCents,
         shippingCents,
@@ -696,10 +668,6 @@ export function buildUkSettlementDraftFromSpApiFinances(input: {
     for (const itemData of parsedItems) {
       const principalNetCents = orderMarketplaceVatResponsible ? itemData.principalCents : itemData.principalCents + itemData.taxCents;
       const shippingNetCents = orderMarketplaceVatResponsible ? itemData.shippingCents : itemData.shippingCents + itemData.shippingTaxCents;
-
-      if (itemData.brandLabel === '' && (principalNetCents !== 0 || shippingNetCents !== 0)) {
-        throw new Error(`Missing SKU/brand for refund item with non-zero charges (orderId=${orderId})`);
-      }
 
       if (principalNetCents !== 0) {
         const memo = refundMemo({ kind: 'Refunded Principal', marketplaceVatResponsible: orderMarketplaceVatResponsible });

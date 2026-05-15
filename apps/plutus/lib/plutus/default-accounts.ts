@@ -10,53 +10,17 @@
 export const PLUTUS_PARENT_ACCOUNTS = [
   'Plutus Settlement Control',
 
-  // Plutus COGS Parent Accounts
-  'Freight & Custom Duty',
-  'Manufacturing',
-  'Mfg Accessories',
-  'Inventory Shrinkage',
-  'Inventory Variance',
-  'Product Expenses',
-  'Warehousing',
-
-  // Warehousing Sub-accounts (Plutus)
-  '3PL',
-  'Amazon FC',
-  'AWD',
-
-  // Inventory Asset (Plutus parent)
-  'Inventory Asset',
-] as const;
-
-/**
- * Prefixes that indicate a Plutus brand sub-account.
- * These accounts follow the pattern: "{Prefix} - {BrandName}"
- */
-export const PLUTUS_BRAND_ACCOUNT_PREFIXES = [
-  // Income sub-accounts
-  'Amazon Sales -',
-  'Amazon Refunds -',
-
-  // COGS sub-accounts
-  'Amazon Advertising Costs -',
-  'Amazon FBA Fees -',
-  'Amazon Promotions -',
-  'Amazon Seller Fees -',
-  'Amazon Storage Fees -',
-  'Manufacturing -',
-  'Freight -',
-  'Duty -',
-  'Mfg Accessories -',
-  'Inventory Shrinkage -',
-  'Product Expenses -',
-
-  // Warehousing buckets
-  '3PL -',
-  'Amazon FC -',
-  'AWD -',
-
-  // Other Income sub-accounts
-  'Amazon FBA Inventory Reimbursement -',
+  'Amazon Sales',
+  'Amazon Refunds',
+  'Amazon FBA Inventory Reimbursement',
+  'Amazon Seller Fees',
+  'Amazon FBA Fees',
+  'Amazon Storage Fees',
+  'Amazon Advertising Costs',
+  'Amazon Promotions',
+  'Amazon Reserved Balances',
+  'Amazon Split Month Rollovers',
+  'Amazon Sales Tax',
 ] as const;
 
 /**
@@ -79,26 +43,11 @@ function splitAccountPath(accountPath: string): { full: string; leaf: string } {
  */
 export function isPlutusDefaultAccount(accountPath: string): boolean {
   const { full, leaf } = splitAccountPath(accountPath);
-
-  // Special-case: Warehousing buckets are always part of the Plutus workflow (e.g. "Warehousing:3PL:3PL - US-PDS")
-  if (
-    full.startsWith('Warehousing:3PL:') ||
-    full.startsWith('Warehousing:Amazon FC:') ||
-    full.startsWith('Warehousing:AWD:')
-  ) {
-    return true;
-  }
+  if (full === '') return false;
 
   // Check exact matches first
   if (PLUTUS_PARENT_ACCOUNTS.includes(leaf as typeof PLUTUS_PARENT_ACCOUNTS[number])) {
     return true;
-  }
-
-  // Check brand sub-account prefixes (e.g., "Amazon Sales - UK-Dust Sheets")
-  for (const prefix of PLUTUS_BRAND_ACCOUNT_PREFIXES) {
-    if (leaf.startsWith(prefix)) {
-      return true;
-    }
   }
 
   // Check general prefixes

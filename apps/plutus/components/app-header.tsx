@@ -11,10 +11,7 @@ import FormControl from '@mui/material/FormControl';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import CategoryIcon from '@mui/icons-material/Category';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
-import Inventory2Icon from '@mui/icons-material/Inventory2';
-import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -106,9 +103,6 @@ type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
-  { href: '/products', label: 'Products', icon: CategoryIcon },
-  { href: '/purchase-orders', label: 'Purchase Orders', icon: LocalShippingIcon },
-  { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
   { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
   { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },

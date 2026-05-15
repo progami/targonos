@@ -8,8 +8,6 @@ import {
   findFinancialEventGroupIdForSettlementId,
   listAllFinancialEventGroups,
 } from '@/lib/amazon-finances/sp-api-finances';
-import type { SpApiFinancialEvents } from '@/lib/amazon-finances/types';
-import { normalizeSku } from '@/lib/plutus/settlement-validation';
 import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { fetchAccounts, fetchJournalEntries, fetchJournalEntryById, type QboAccount, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
@@ -138,37 +136,6 @@ function requireSettlementIdFromPrivateNote(input: { docNumber: string; privateN
   }
 
   throw new Error(`Missing SP-API settlementId in PrivateNote for ${input.docNumber}`);
-}
-
-function requireSkuBrandName(skuRaw: string, skuToBrandName: Map<string, string>): string {
-  const normalized = normalizeSku(skuRaw);
-  const brandName = skuToBrandName.get(normalized);
-  if (!brandName) {
-    throw new Error(`SKU not mapped to brand: ${normalized}`);
-  }
-  return brandName;
-}
-
-function collectBrandNamesFromEvents(events: SpApiFinancialEvents, skuToBrandName: Map<string, string>): Set<string> {
-  const result = new Set<string>();
-
-  for (const shipment of events.ShipmentEventList ?? []) {
-    for (const item of shipment.ShipmentItemList ?? []) {
-      const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU.trim() : '';
-      if (skuRaw === '') continue;
-      result.add(requireSkuBrandName(skuRaw, skuToBrandName));
-    }
-  }
-
-  for (const refund of events.RefundEventList ?? []) {
-    for (const item of refund.ShipmentItemAdjustmentList ?? []) {
-      const skuRaw = typeof item.SellerSKU === 'string' ? item.SellerSKU.trim() : '';
-      if (skuRaw === '') continue;
-      result.add(requireSkuBrandName(skuRaw, skuToBrandName));
-    }
-  }
-
-  return result;
 }
 
 function parseArgs(argv: string[]): CliOptions {
@@ -343,19 +310,6 @@ async function main(): Promise<void> {
     groupById.set(id, g);
   }
 
-  const skus = await db.sku.findMany({ include: { brand: true } });
-  const skuToBrandName = new Map<string, string>();
-  for (const row of skus) {
-    if (row.brand.marketplace !== 'amazon.com') continue;
-    const aliases = [row.sku];
-    if (typeof row.asin === 'string' && row.asin.trim() !== '') {
-      aliases.push(row.asin);
-    }
-    for (const alias of aliases) {
-      skuToBrandName.set(normalizeSku(alias), row.brand.name);
-    }
-  }
-
   const results: SegmentResult[] = [];
 
   for (const settlementId of targetSettlementIds) {
@@ -376,14 +330,11 @@ async function main(): Promise<void> {
 
     const events = await fetchAllFinancialEventsByGroupId({ tenantCode: 'US', eventGroupId });
 
-    collectBrandNamesFromEvents(events, skuToBrandName);
-
     const draft = buildUsSettlementDraftFromSpApiFinances({
       settlementId,
       eventGroupId,
       eventGroup,
       events,
-      skuToBrandName,
     });
 
     const journalsByDocNumber = new Map<string, QboJournalEntry>();

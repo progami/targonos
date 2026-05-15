@@ -60,7 +60,6 @@ export async function GET(_req: NextRequest, context: RouteContext) {
 
     const processing = await db.settlementProcessing.findUnique({
       where: { qboSettlementJournalEntryId: settlementId },
-      include: { orderSales: true, orderReturns: true },
     });
 
     const rollback = await db.settlementRollback.findFirst({
@@ -112,8 +111,8 @@ export async function GET(_req: NextRequest, context: RouteContext) {
             uploadedAt: processing.uploadedAt,
             qboCogsJournalEntryId: processing.qboCogsJournalEntryId,
             qboPnlReclassJournalEntryId: processing.qboPnlReclassJournalEntryId,
-            orderSalesCount: processing.orderSales.length,
-            orderReturnsCount: processing.orderReturns.length,
+            orderSalesCount: 0,
+            orderReturnsCount: 0,
           }
         : null,
       rollback: rollback

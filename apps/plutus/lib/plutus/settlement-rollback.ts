@@ -48,7 +48,6 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
       uploadedAt: true,
       qboCogsJournalEntryId: true,
       qboPnlReclassJournalEntryId: true,
-      _count: { select: { orderSales: true, orderReturns: true } },
     },
   });
 
@@ -95,8 +94,8 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
         processedAt: existing.uploadedAt,
         qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
         qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
-        orderSalesCount: existing._count.orderSales,
-        orderReturnsCount: existing._count.orderReturns,
+        orderSalesCount: 0,
+        orderReturnsCount: 0,
       },
     }),
     db.settlementProcessing.delete({
@@ -117,8 +116,8 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
       processedAt: existing.uploadedAt,
       qboCogsJournalEntryId: existing.qboCogsJournalEntryId,
       qboPnlReclassJournalEntryId: existing.qboPnlReclassJournalEntryId,
-      orderSalesCount: existing._count.orderSales,
-      orderReturnsCount: existing._count.orderReturns,
+      orderSalesCount: 0,
+      orderReturnsCount: 0,
     },
   };
 }

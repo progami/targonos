@@ -365,7 +365,7 @@ export async function main(): Promise<void> {
     settlementJournalEntryId: string;
     ok: boolean;
     blocks?: string[];
-    posted?: { cogsJournalEntryId: string; pnlJournalEntryId: string };
+    posted?: { pnlJournalEntryId: string };
     error?: string;
   }> = [];
 
@@ -416,7 +416,6 @@ export async function main(): Promise<void> {
         settlementJournalEntryId: rollback.qboSettlementJournalEntryId,
         ok: true,
         posted: {
-          cogsJournalEntryId: processedResult.result.posted.cogsJournalEntryId,
           pnlJournalEntryId: processedResult.result.posted.pnlJournalEntryId,
         },
       });

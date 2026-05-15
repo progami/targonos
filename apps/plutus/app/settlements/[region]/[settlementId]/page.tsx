@@ -130,9 +130,6 @@ type ParentPreviewResponse = {
     preview: {
       invoiceId: string;
       blocks: Array<{ code: string; message: string; details?: Record<string, string | number> }>;
-      sales: Array<unknown>;
-      returns: Array<unknown>;
-      cogsJournalEntry: { lines: Array<unknown> };
       pnlJournalEntry: { lines: Array<unknown> };
     };
   }>;

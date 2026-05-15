@@ -8,64 +8,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Brand represents a product line tracked separately for P&L (e.g., "US-Dust Sheets", "UK-Dust Sheets")
-model Brand {
-  id          String   @id @default(cuid())
-  name        String   @unique
-  marketplace String   // e.g., "amazon.com", "amazon.co.uk"
-  currency    String   // e.g., "USD", "GBP"
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  skus         Sku[]
-  billMappings BillMapping[]
-
-  @@index([marketplace])
-}
-
-/// Sku maps a product SKU to a brand for COGS calculation
-model Sku {
-  id          String   @id @default(cuid())
-  sku         String
-  productName String?
-  asin        String?
-  brandId     String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
-
-  @@unique([sku, brandId])
-  @@index([brandId])
-}
-
 /// SetupConfig stores the QBO account mappings and setup state
 /// There should only be one row in this table per tenant
 model SetupConfig {
   id        String   @id @default(cuid())
   
-  // QBO Account Mappings - stores the QBO account ID for each category
-  // Inventory Asset accounts
-  invManufacturing    String?
-  invFreight          String?
-  invDuty             String?
-  invMfgAccessories   String?
-  
-  // COGS accounts
-  cogsManufacturing   String?
-  cogsFreight         String?
-  cogsDuty            String?
-  cogsMfgAccessories  String?
-  cogsLandFreight     String?
-  cogsStorage3pl      String?
-  cogsShrinkage       String?
-
-  // Warehousing buckets (COGS)
-  warehousing3pl      String?
-  warehousingAmazonFc String?
-  warehousingAwd      String?
-  
-  // Amazon revenue/fee accounts
+  // Amazon settlement parent accounts used to collapse legacy brand-level sales/refund postings.
   amazonSales                      String?
   amazonRefunds                    String?
   amazonFbaInventoryReimbursement  String?
@@ -74,9 +22,6 @@ model SetupConfig {
   amazonStorageFees                String?
   amazonAdvertisingCosts           String?
   amazonPromotions                 String?
-
-  // Product Expenses
-  productExpenses                  String?
 
   // Setup status
   accountsCreated Boolean @default(false)
@@ -163,9 +108,6 @@ model SettlementProcessing {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderSales OrderSale[]
-  orderReturns OrderReturn[]
-
   @@unique([marketplace, invoiceId])
   @@unique([qboSettlementJournalEntryId])
   @@index([marketplace])
@@ -200,72 +142,13 @@ model SettlementRollback {
   @@index([marketplace])
 }
 
-/// OrderSale stores per-order, per-SKU COGS results for refund matching across periods.
-model OrderSale {
-  id String @id @default(cuid())
-
-  marketplace String
-  orderId     String
-  sku         String
-
-  saleDate    DateTime
-  quantity    Int
-
-  principalCents            Int
-  costManufacturingCents    Int
-  costFreightCents          Int
-  costDutyCents             Int
-  costMfgAccessoriesCents   Int
-
-  settlementProcessingId String
-  settlementProcessing   SettlementProcessing @relation(fields: [settlementProcessingId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([marketplace, orderId, sku, settlementProcessingId])
-  @@index([settlementProcessingId])
-  @@index([marketplace])
-  @@index([marketplace, orderId, sku])
-  @@index([saleDate])
-}
-
-/// OrderReturn stores per-order, per-SKU return (refund) COGS reversals for replaying inventory over time.
-model OrderReturn {
-  id String @id @default(cuid())
-
-  marketplace String
-  orderId     String
-  sku         String
-
-  returnDate  DateTime
-  quantity    Int
-
-  principalCents            Int
-  costManufacturingCents    Int
-  costFreightCents          Int
-  costDutyCents             Int
-  costMfgAccessoriesCents   Int
-
-  settlementProcessingId String
-  settlementProcessing   SettlementProcessing @relation(fields: [settlementProcessingId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([marketplace, orderId, sku, settlementProcessingId])
-  @@index([settlementProcessingId])
-  @@index([marketplace, orderId, sku])
-  @@index([returnDate])
-}
-
 /// AuditLog tracks user actions across the Plutus app for audit trail purposes.
 model AuditLog {
   id         String   @id @default(cuid())
   userId     String
   userName   String
-  action     String   // e.g., "SETTLEMENT_PROCESSED", "SETTLEMENT_ROLLED_BACK", "CONFIG_UPDATED", "BRAND_CREATED", "SKU_UPDATED", "ACCOUNTS_CREATED"
-  entityType String   // e.g., "SettlementProcessing", "SetupConfig", "Brand", "Sku"
+  action     String   // e.g., "SETTLEMENT_PROCESSED", "SETTLEMENT_ROLLED_BACK", "CONFIG_UPDATED", "ACCOUNTS_CREATED"
+  entityType String   // e.g., "SettlementProcessing", "SetupConfig", "QboAccount"
   entityId   String?
   details    Json?    // Additional context
   createdAt  DateTime @default(now())
@@ -274,162 +157,6 @@ model AuditLog {
   @@index([action])
   @@index([entityType, entityId])
   @@index([createdAt])
-}
-
-/// BillMapping links a QBO bill to a PO batch and brand for cost allocation.
-model BillMapping {
-  id          String    @id @default(cuid())
-  qboBillId   String    @unique
-  poNumber    String
-  brandId     String
-  billDate    String
-  vendorName  String
-  totalAmount Float
-  syncedAt    DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  brand Brand          @relation(fields: [brandId], references: [id])
-  lines BillLineMapping[]
-
-  @@index([poNumber])
-  @@index([brandId])
-}
-
-/// BillLineMapping tracks a QBO bill line's component, SKU assignment, and amount for cost allocation.
-model BillLineMapping {
-  id            String  @id @default(cuid())
-  billMappingId String
-  qboLineId     String
-  component     String  // 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories'
-  amountCents   Int
-  sku           String?
-  poNumber      String?
-  quantity      Int?
-
-  billMapping BillMapping @relation(fields: [billMappingId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([billMappingId, qboLineId])
-}
-
-model ProductGroup {
-  id        String   @id @default(cuid())
-  code      String   @unique
-  name      String
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  products CanonicalProduct[]
-
-  @@index([active])
-}
-
-model CanonicalProduct {
-  id             String   @id @default(cuid())
-  name           String
-  productGroupId String
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  productGroup       ProductGroup        @relation(fields: [productGroupId], references: [id])
-  aliases            SkuAlias[]
-  costLayers         PoCostLayer[]
-  inventoryMovements InventoryMovement[]
-
-  @@index([productGroupId])
-  @@index([active])
-}
-
-model SkuAlias {
-  id                  String   @id @default(cuid())
-  canonicalProductId  String
-  marketplace         String
-  aliasType           String
-  value               String
-  normalizedAliasType String
-  normalizedValue     String
-  active              Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Cascade)
-
-  @@unique([marketplace, aliasType, value])
-  @@unique([marketplace, normalizedAliasType, normalizedValue])
-  @@index([canonicalProductId])
-  @@index([marketplace])
-}
-
-model PurchaseOrder {
-  id           String   @id @default(cuid())
-  internalRef  String
-  sourceType   String
-  sourceId     String
-  supplierRef  String?
-  marketplace  String?
-  status       String   @default("OPEN")
-  sourceNotes  String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  costLayers PoCostLayer[]
-
-  @@unique([sourceType, sourceId])
-  @@index([internalRef])
-  @@index([marketplace])
-  @@index([status])
-}
-
-model PoCostLayer {
-  id                 String   @id @default(cuid())
-  purchaseOrderId    String
-  canonicalProductId String
-  component          String
-  quantity           Int?
-  amountCents        Int
-  currency           String
-  allocationMethod   String
-  sourceQboTxnType   String?
-  sourceQboTxnId     String?
-  sourceQboLineId    String?
-  sourceDocumentName String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  purchaseOrder    PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id])
-
-  @@index([purchaseOrderId])
-  @@index([canonicalProductId])
-  @@index([component])
-  @@index([sourceQboTxnType, sourceQboTxnId])
-}
-
-model InventoryMovement {
-  id                 String   @id @default(cuid())
-  canonicalProductId String
-  marketplace        String
-  movementType       String
-  quantity           Int
-  movementDate       DateTime
-  sourceType         String
-  sourceId           String
-  sourceLineId       String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id])
-
-  @@index([canonicalProductId])
-  @@index([marketplace])
-  @@index([movementType])
-  @@index([movementDate])
-  @@index([sourceType, sourceId])
 }
 
 model PostingIntent {
