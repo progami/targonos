@@ -55,19 +55,6 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
     throw new Error(`Settlement not processed: ${input.settlementJournalEntryId}`);
   }
 
-  if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
-    try {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
-      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
-    } catch (error) {
-      if (!isQboNotFoundError(error)) throw error;
-      logger.warn('COGS Journal Entry already missing in QBO; skipping delete during rollback', {
-        journalEntryId: existing.qboCogsJournalEntryId,
-        settlementJournalEntryId: input.settlementJournalEntryId,
-      });
-    }
-  }
-
   if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
     try {
       const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);

@@ -286,6 +286,21 @@ test('processing hash keeps SKU as evidence only', () => {
   assert.equal(left, right);
 });
 
+test('rollback/reset tools preserve historical COGS journal entries', () => {
+  const rollbackSource = read('lib/plutus/settlement-rollback.ts');
+  assert.equal(rollbackSource.includes('deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId)'), false);
+
+  for (const path of [
+    'scripts/rollback-settlement-processing.ts',
+    'scripts/us-settlement-reset-spapi.ts',
+    'scripts/uk-settlement-reset-spapi.ts',
+  ]) {
+    const source = read(path);
+    assert.equal(source.includes('deleteJournalEntry(activeConnection, row.qboCogsJournalEntryId)'), false);
+    assert.equal(source.includes('row.qboSettlementJournalEntryId, row.qboCogsJournalEntryId'), false);
+  }
+});
+
 test('processing blocks fail closed', () => {
   assert.equal(isBlockingProcessingCode(''), false);
   assert.equal(isBlockingProcessingCode('INVOICE_CONFLICT'), true);
