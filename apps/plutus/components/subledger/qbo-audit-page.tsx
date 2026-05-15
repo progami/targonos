@@ -190,7 +190,7 @@ export function QboAuditPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="QBO Audit" kicker="Subledger" />
+      <PageHeader title="QBO Audit" kicker="Bridge" />
 
       <Box sx={tableWrapSx}>
         <Box sx={{ overflowX: 'auto' }}>
@@ -233,7 +233,7 @@ export function QboAuditPage() {
                     <EmptyState
                       icon={<FactCheckIcon sx={{ fontSize: 40 }} />}
                       title="No QBO postings tracked"
-                      description="Posting drift and attachment state will appear after QBO traces are recorded."
+                      description="Bridge posting drift and attachment state will appear after QBO traces are recorded."
                     />
                   </TableCell>
                 </TableRow>
