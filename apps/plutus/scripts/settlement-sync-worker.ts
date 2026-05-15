@@ -3,6 +3,7 @@ import path from 'node:path';
 
 import { buildSyntheticUkSettlementId } from '@/lib/amazon-finances/uk-settlement-id';
 import { parseSettlementSyncWorkerPostMode } from '@/lib/amazon-finances/settlement-sync-post-mode';
+import { isPostableFundTransferStatus } from '@/lib/amazon-finances/fund-transfer-status';
 import {
   isSettlementDocNumber,
   normalizeSettlementDocNumber,
@@ -206,6 +207,7 @@ function isClosedFinancialEventGroup(group: unknown): group is {
 
   const candidate = group as Record<string, unknown>;
   if (candidate.ProcessingStatus !== 'Closed') return false;
+  if (!isPostableFundTransferStatus(candidate.FundTransferStatus)) return false;
   if (typeof candidate.FinancialEventGroupId !== 'string' || candidate.FinancialEventGroupId.trim() === '') return false;
   if (typeof candidate.FinancialEventGroupStart !== 'string' || candidate.FinancialEventGroupStart.trim() === '') return false;
   if (typeof candidate.FinancialEventGroupEnd !== 'string' || candidate.FinancialEventGroupEnd.trim() === '') return false;
