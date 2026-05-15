@@ -160,15 +160,6 @@ async function main(): Promise<void> {
 
   for (const row of processingRows) {
     try {
-      if (isQboJournalEntryId(row.qboCogsJournalEntryId)) {
-        try {
-          const deleted = await deleteJournalEntry(activeConnection, row.qboCogsJournalEntryId);
-          if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
-        } catch (error) {
-          if (!isQboNotFoundError(error)) throw error;
-        }
-      }
-
       if (isQboJournalEntryId(row.qboPnlReclassJournalEntryId)) {
         try {
           const deleted = await deleteJournalEntry(activeConnection, row.qboPnlReclassJournalEntryId);
