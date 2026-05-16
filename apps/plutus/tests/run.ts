@@ -190,7 +190,7 @@ test('fresh FIFO consumes READY layers only and oldest layer first', () => {
     ],
   );
   assert.equal(plan.cogsTotal, 123.75);
-  assert.equal(plan.qboCogsJournalDraft?.docNumber, 'COGS-US-260501-260515-S1');
+  assert.equal(plan.qboCogsJournalDraft?.docNumber, 'C-US-260501-260515-S1');
   assert.equal(plan.qboCogsJournalDraft?.lines[0]?.accountName, 'COGS - Product FIFO');
   assert.equal(plan.qboCogsJournalDraft?.lines[1]?.accountName, 'Inventory Asset - Plutus');
 });

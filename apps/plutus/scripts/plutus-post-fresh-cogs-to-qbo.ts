@@ -1,5 +1,6 @@
 import { createJournalEntry, fetchAccounts, type QboAccount } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { buildFreshCogsDocNumber } from '@/lib/plutus/fresh-start-fifo-cogs';
 import { db } from '@/lib/db';
 
 type CliOptions = {
@@ -71,7 +72,7 @@ async function main() {
 
   const payload = {
     txnDate: posting.txnDate,
-    docNumber: posting.qboDocNumber ?? `COGS-${posting.settlementId}`,
+    docNumber: posting.qboDocNumber ?? buildFreshCogsDocNumber(posting.settlementId),
     privateNote: `Plutus FIFO COGS | Settlement ${posting.settlementId}`,
     currencyCode: posting.currency,
     lines: [
