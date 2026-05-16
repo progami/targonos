@@ -12,9 +12,14 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
 import MapIcon from '@mui/icons-material/Map';
+import OutboxIcon from '@mui/icons-material/Outbox';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import SettingsIcon from '@mui/icons-material/Settings';
+import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
@@ -103,6 +108,11 @@ type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
 const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
+  { href: '/purchase-orders', label: 'Purchase Orders', icon: AssignmentIcon },
+  { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
+  { href: '/cogs-batches', label: 'COGS Batches', icon: StackedLineChartIcon },
+  { href: '/exceptions', label: 'Exceptions', icon: ReportProblemIcon },
+  { href: '/sellerboard-export', label: 'Sellerboard Export', icon: OutboxIcon },
   { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
   { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
