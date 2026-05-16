@@ -21,11 +21,14 @@ import { normalizeSettlementOperatingMemo } from '@/lib/amazon-finances/settleme
 import {
   fetchAccountsByFullyQualifiedName,
   fetchBills,
+  fetchJournalEntries,
   fetchQboReport,
   type QboBill,
   type QboConnection,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { isSettlementDocNumber, normalizeSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
+import { getActiveQboConnection, qboQueryAll } from '@/lib/qbo/full-history-audit/fetch';
 import { loadSharedPlutusEnv } from './shared-env';
 
 type CliOptions = {
@@ -43,6 +46,20 @@ type AuditRow = {
   quantity: number;
   description: string;
   net: number;
+};
+
+type QboInventoryAdjustment = {
+  Id?: string;
+  SyncToken?: string;
+  DocNumber?: string;
+  TxnDate?: string;
+  PrivateNote?: string;
+  Line?: Array<{
+    ItemAdjustmentLineDetail?: {
+      ItemRef?: { value?: string; name?: string };
+      QtyDiff?: number;
+    };
+  }>;
 };
 
 function parseArgs(argv: string[]): CliOptions {
@@ -124,6 +141,54 @@ function soldUnitsFromRows(rows: AuditRow[]): ExactSoldUnitInput[] {
     .map(([sellerSku, quantity]) => ({ sellerSku, quantity }));
 }
 
+function parsePlutusNativeInventoryAdjustment(
+  adjustment: QboInventoryAdjustment,
+): { settlementDocNumber: string; marketplace: string } | null {
+  const note = adjustment.PrivateNote?.trim();
+  if (note === undefined || note === '') return null;
+
+  const match = /^Plutus inventory movement \| Settlement: (US-\d{6}-\d{6}-S\d+) \| Marketplace: (amazon\.com)$/.exec(note);
+  if (match === null) return null;
+
+  return {
+    settlementDocNumber: match[1]!,
+    marketplace: match[2]!,
+  };
+}
+
+function nativeInventoryAdjustmentQuantity(adjustment: QboInventoryAdjustment): number {
+  return (adjustment.Line ?? []).reduce((sum, line) => {
+    const qty = line.ItemAdjustmentLineDetail?.QtyDiff;
+    if (qty === undefined) return sum;
+    return sum + qty;
+  }, 0);
+}
+
+async function fetchQboLegacyNativeInventoryAdjustments(input: { marketplace: string }) {
+  const activeConnection = await getActiveQboConnection();
+  const result = await qboQueryAll(activeConnection, 'SELECT * FROM InventoryAdjustment');
+  return (result.rows as QboInventoryAdjustment[])
+    .map((adjustment) => {
+      const parsed = parsePlutusNativeInventoryAdjustment(adjustment);
+      if (parsed === null) return null;
+      if (parsed.marketplace !== input.marketplace) return null;
+      return {
+        id: adjustment.Id ?? null,
+        docNumber: adjustment.DocNumber ?? null,
+        txnDate: adjustment.TxnDate ?? null,
+        settlementDocNumber: parsed.settlementDocNumber,
+        quantityDelta: nativeInventoryAdjustmentQuantity(adjustment),
+        privateNote: adjustment.PrivateNote ?? null,
+      };
+    })
+    .filter((row) => row !== null)
+    .sort((left, right) => {
+      const dateCompare = (left.txnDate ?? '').localeCompare(right.txnDate ?? '');
+      if (dateCompare !== 0) return dateCompare;
+      return (left.docNumber ?? '').localeCompare(right.docNumber ?? '');
+    });
+}
+
 function receiptDateForLayer(input: {
   layer: QboInventoryLandedCostLayer;
   parsedLines: ParsedQboInventoryAssetLine[];
@@ -188,6 +253,47 @@ async function fetchAllBillsInWindow(input: {
   return { bills, updatedConnection: activeConnection };
 }
 
+async function fetchPostedSettlementDocNumbers(input: {
+  connection: QboConnection;
+  marketplace: string;
+  startDate: string;
+}): Promise<{ docNumbers: Set<string>; updatedConnection: QboConnection }> {
+  const docNumberContains = input.marketplace === 'amazon.com' ? 'US-' : 'UK-';
+  const pageSize = 100;
+  let startPosition = 1;
+  let connection = input.connection;
+  const docNumbers = new Set<string>();
+
+  while (true) {
+    const page = await fetchJournalEntries(connection, {
+      docNumberContains,
+      startDate: input.startDate,
+      maxResults: pageSize,
+      startPosition,
+    });
+    if (page.updatedConnection !== undefined) {
+      connection = page.updatedConnection;
+    }
+
+    for (const entry of page.journalEntries) {
+      const docNumber = entry.DocNumber?.trim();
+      if (docNumber === undefined || docNumber === '') continue;
+      if (docNumber.toUpperCase().startsWith('COGS-')) continue;
+      if (docNumber.toUpperCase().startsWith('C-')) continue;
+      if (!isSettlementDocNumber(docNumber)) continue;
+      const parsed = parseSettlementDocNumber(docNumber);
+      if (parsed.marketplace.id !== input.marketplace) continue;
+      docNumbers.add(normalizeSettlementDocNumber(docNumber));
+    }
+
+    if (page.journalEntries.length === 0) break;
+    startPosition += page.journalEntries.length;
+    if (startPosition > page.totalCount) break;
+  }
+
+  return { docNumbers, updatedConnection: connection };
+}
+
 function collectInventoryAssetLines(bills: QboBill[]): QboInventoryAssetLineInput[] {
   const lines: QboInventoryAssetLineInput[] = [];
   for (const bill of bills) {
@@ -239,7 +345,12 @@ async function main(): Promise<void> {
       endDate: options.assetEndDate,
     }),
   ]);
-  await saveServerQboConnection(qboBillsResult.updatedConnection);
+  const postedSettlements = await fetchPostedSettlementDocNumbers({
+    connection: qboBillsResult.updatedConnection,
+    marketplace: options.marketplace,
+    startDate: '2025-12-01',
+  });
+  await saveServerQboConnection(postedSettlements.updatedConnection);
 
   const rowsByInvoice = new Map<string, AuditRow[]>();
   for (const row of auditRows) {
@@ -267,21 +378,21 @@ async function main(): Promise<void> {
     parsedLines: marketAssetLines,
   });
 
-  const exactConsumptions: ExactCostLayerConsumptionInput[] = [];
-  const plutusExactCogsPreview = Array.from(rowsByInvoice.entries())
-    .sort((left, right) => {
+  const previewExactConsumptions: ExactCostLayerConsumptionInput[] = [];
+  const sortedInvoiceRows = Array.from(rowsByInvoice.entries()).sort((left, right) => {
       const dateCompare = settlementTxnDate(left[1]).localeCompare(settlementTxnDate(right[1]));
       if (dateCompare !== 0) return dateCompare;
       return left[0].localeCompare(right[0]);
-    })
-    .map(([invoiceId, rows]) => {
+  });
+
+  const plutusExactCogsPreview = sortedInvoiceRows.map(([invoiceId, rows]) => {
       const plan = buildExactCogsPlan({
         marketplace: options.marketplace,
         settlementDocNumber: invoiceId,
         txnDate: settlementTxnDate(rows),
         soldUnits: soldUnitsFromRows(rows),
         layers: exactCostLayers,
-        priorConsumptions: exactConsumptions,
+        priorConsumptions: previewExactConsumptions,
         componentAccountIds: {
           manufacturing: 'QBO_COGS_MANUFACTURING_ACCOUNT_REQUIRED',
           freight: 'QBO_COGS_FREIGHT_ACCOUNT_REQUIRED',
@@ -291,7 +402,50 @@ async function main(): Promise<void> {
         inventoryAssetAccountId: 'QBO_INVENTORY_ASSET_PLUTUS_ACCOUNT_REQUIRED',
       });
       if (plan.ok) {
-        exactConsumptions.push(
+        const mappedConsumptions = plan.consumptions.map((consumption) => ({
+          layerId: consumption.layerId,
+          settlementDocNumber: consumption.settlementDocNumber,
+          sellerSku: consumption.sellerSku,
+          quantity: consumption.quantity,
+          componentAmounts: consumption.componentAmounts,
+          totalAmount: consumption.totalAmount,
+        }));
+        previewExactConsumptions.push(...mappedConsumptions);
+      }
+      return {
+        settlementDocNumber: invoiceId,
+        txnDate: settlementTxnDate(rows),
+        ok: plan.ok,
+        soldUnits: soldUnitsFromRows(rows),
+        blocks: plan.blocks,
+        consumptionCount: plan.consumptions.length,
+        componentTotals: plan.componentTotals,
+        totalCogsAmount: plan.consumptions.reduce((sum, consumption) => sum + consumption.totalAmount, 0),
+        qboJournalEntryDraft: plan.qboJournalEntryDraft,
+      };
+    });
+
+  const processedExactConsumptions: ExactCostLayerConsumptionInput[] = [];
+  const plutusExactPostedCogsPreview = sortedInvoiceRows
+    .filter(([invoiceId]) => postedSettlements.docNumbers.has(invoiceId))
+    .map(([invoiceId, rows]) => {
+      const plan = buildExactCogsPlan({
+        marketplace: options.marketplace,
+        settlementDocNumber: invoiceId,
+        txnDate: settlementTxnDate(rows),
+        soldUnits: soldUnitsFromRows(rows),
+        layers: exactCostLayers,
+        priorConsumptions: processedExactConsumptions,
+        componentAccountIds: {
+          manufacturing: 'QBO_COGS_MANUFACTURING_ACCOUNT_REQUIRED',
+          freight: 'QBO_COGS_FREIGHT_ACCOUNT_REQUIRED',
+          duty: 'QBO_COGS_DUTY_ACCOUNT_REQUIRED',
+          mfgAccessories: 'QBO_COGS_ACCESSORIES_ACCOUNT_REQUIRED',
+        },
+        inventoryAssetAccountId: 'QBO_INVENTORY_ASSET_PLUTUS_ACCOUNT_REQUIRED',
+      });
+      if (plan.ok) {
+        processedExactConsumptions.push(
           ...plan.consumptions.map((consumption) => ({
             layerId: consumption.layerId,
             settlementDocNumber: consumption.settlementDocNumber,
@@ -316,7 +470,7 @@ async function main(): Promise<void> {
     });
   const plutusExactInventoryValuation = buildPlutusInventoryValuation({
     layers: exactCostLayers,
-    consumptions: exactConsumptions,
+    consumptions: processedExactConsumptions,
   });
 
   let activeConnection = qboBillsResult.updatedConnection;
@@ -349,18 +503,23 @@ async function main(): Promise<void> {
     inventoryValuationAssetValue: qboInventoryValuation.totalAssetValue,
   });
   const qboVsPlutusExactInventoryTieout = {
-    ok: Math.abs(qboInventoryValuation.totalAssetValue - plutusExactInventoryValuation.totalRemainingAmount) <= 0.01,
-    qboInventoryValuationAssetValue: qboInventoryValuation.totalAssetValue,
+    ok: Math.abs(inventoryAssetBalance - plutusExactInventoryValuation.totalRemainingAmount) <= 0.01,
+    qboInventoryAssetBalance: inventoryAssetBalance,
     plutusExactRemainingAmount: plutusExactInventoryValuation.totalRemainingAmount,
-    delta: Number((qboInventoryValuation.totalAssetValue - plutusExactInventoryValuation.totalRemainingAmount).toFixed(2)),
+    delta: Number((inventoryAssetBalance - plutusExactInventoryValuation.totalRemainingAmount).toFixed(2)),
     tolerance: 0.01,
   };
+  const qboLegacyNativeInventoryAdjustments = await fetchQboLegacyNativeInventoryAdjustments({
+    marketplace: options.marketplace,
+  });
 
   const ok =
     qboAssetPlan.blocks.length === 0 &&
     plutusExactCogsPreview.every((preview) => preview.ok) &&
+    plutusExactPostedCogsPreview.every((preview) => preview.ok) &&
     qboInventoryAssetReclassPlan.lines.length === 0 &&
-    qboInventoryValuationTieout.ok;
+    qboLegacyNativeInventoryAdjustments.length === 0 &&
+    qboVsPlutusExactInventoryTieout.ok;
 
   console.log(
     JSON.stringify(
@@ -373,11 +532,14 @@ async function main(): Promise<void> {
           startDate: options.assetStartDate,
           endDate: options.assetEndDate,
         },
+        postedSettlementCount: postedSettlements.docNumbers.size,
         qboInventoryAssetLines: marketAssetLines.length,
         qboLandedCostLayers: qboAssetPlan.layers,
         qboInventoryAssetBlocks: qboAssetPlan.blocks,
+        qboLegacyNativeInventoryAdjustments,
         plutusExactInventoryValuation,
         plutusExactCogsPreview,
+        plutusExactPostedCogsPreview,
         qboInventoryAssetReclassPlan,
         qboInventoryValuation,
         qboInventoryValuationTieout,
