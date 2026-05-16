@@ -10,6 +10,9 @@ import {
   type ExactSoldUnitInput,
 } from '@/lib/plutus/exact-cost-layer-subledger';
 import type { QboInventoryAssetComponent } from '@/lib/plutus/qbo-inventory-asset-lines';
+import { fetchJournalEntries, type QboConnection } from '@/lib/qbo/api';
+import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
+import { isSettlementDocNumber, normalizeSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
 import { loadSharedPlutusEnv } from './shared-env';
 
 type CliOptions = {
@@ -221,6 +224,47 @@ function buildLayers(rows: CostLayerRow[]): {
   return { layers, metadataByLayerId };
 }
 
+async function fetchPostedSettlementDocNumbers(input: {
+  connection: QboConnection;
+  marketplace: string;
+  startDate: string;
+}): Promise<{ docNumbers: Set<string>; updatedConnection: QboConnection }> {
+  const docNumberContains = input.marketplace === 'amazon.com' ? 'US-' : 'UK-';
+  const pageSize = 100;
+  let startPosition = 1;
+  let connection = input.connection;
+  const docNumbers = new Set<string>();
+
+  while (true) {
+    const page = await fetchJournalEntries(connection, {
+      docNumberContains,
+      startDate: input.startDate,
+      maxResults: pageSize,
+      startPosition,
+    });
+    if (page.updatedConnection !== undefined) {
+      connection = page.updatedConnection;
+    }
+
+    for (const entry of page.journalEntries) {
+      const docNumber = entry.DocNumber?.trim();
+      if (docNumber === undefined || docNumber === '') continue;
+      if (docNumber.toUpperCase().startsWith('COGS-')) continue;
+      if (docNumber.toUpperCase().startsWith('C-')) continue;
+      if (!isSettlementDocNumber(docNumber)) continue;
+      const parsed = parseSettlementDocNumber(docNumber);
+      if (parsed.marketplace.id !== input.marketplace) continue;
+      docNumbers.add(normalizeSettlementDocNumber(docNumber));
+    }
+
+    if (page.journalEntries.length === 0) break;
+    startPosition += page.journalEntries.length;
+    if (startPosition > page.totalCount) break;
+  }
+
+  return { docNumbers, updatedConnection: connection };
+}
+
 async function main(): Promise<void> {
   loadSharedPlutusEnv();
   const options = parseArgs(process.argv.slice(2));
@@ -268,13 +312,31 @@ async function main(): Promise<void> {
     }),
   ]);
 
+  const qboConnection = await getQboConnection();
+  if (qboConnection === null) throw new Error('QBO connection is not configured');
+  const postedSettlements = await fetchPostedSettlementDocNumbers({
+    connection: qboConnection,
+    marketplace: options.marketplace,
+    startDate: '2025-12-01',
+  });
+  await saveServerQboConnection(postedSettlements.updatedConnection);
+  const postedSettlementDocNumbers = Array.from(postedSettlements.docNumbers).sort();
+
   const { layers, metadataByLayerId } = buildLayers(layerRows);
   if (layers.length === 0) {
     throw new Error(`No exact cost layers exist for ${options.marketplace}`);
   }
 
+  await db.cogsPostingBatch.deleteMany({
+    where: {
+      marketplace: options.marketplace,
+      settlementDocNumber: { notIn: postedSettlementDocNumbers },
+    },
+  });
+
   const rowsByInvoice = new Map<string, AuditRow[]>();
   for (const row of auditRows) {
+    if (!postedSettlements.docNumbers.has(row.invoiceId)) continue;
     const existing = rowsByInvoice.get(row.invoiceId);
     if (existing === undefined) {
       rowsByInvoice.set(row.invoiceId, [row]);
@@ -312,6 +374,23 @@ async function main(): Promise<void> {
       throw new Error(`Exact COGS blocked for ${invoiceId}: ${JSON.stringify(plan.blocks)}`);
     }
 
+    const existingBatch = await db.cogsPostingBatch.findUnique({
+      where: {
+        marketplace_settlementDocNumber: {
+          marketplace: options.marketplace,
+          settlementDocNumber: invoiceId,
+        },
+      },
+      select: {
+        status: true,
+        qboJournalEntryId: true,
+        qboDocNumber: true,
+      },
+    });
+    const preservePostedBatch = existingBatch?.status === 'posted';
+    if (preservePostedBatch && existingBatch.qboJournalEntryId === null) {
+      throw new Error(`Exact COGS batch ${invoiceId} is posted without qboJournalEntryId`);
+    }
     const batch = await db.cogsPostingBatch.upsert({
       where: {
         marketplace_settlementDocNumber: {
@@ -322,8 +401,9 @@ async function main(): Promise<void> {
       update: {
         txnDate: settlementTxnDate(rows),
         currency,
-        status: 'draft',
-        qboDocNumber: plan.qboJournalEntryDraft?.docNumber ?? null,
+        status: preservePostedBatch ? 'posted' : 'processed',
+        qboJournalEntryId: preservePostedBatch ? existingBatch.qboJournalEntryId : null,
+        qboDocNumber: preservePostedBatch ? existingBatch.qboDocNumber : plan.qboJournalEntryDraft?.docNumber ?? null,
         sourceHash: hashJson(rows),
         postingHash: hashJson(plan.qboJournalEntryDraft),
       },
@@ -332,7 +412,8 @@ async function main(): Promise<void> {
         settlementDocNumber: invoiceId,
         txnDate: settlementTxnDate(rows),
         currency,
-        status: 'draft',
+        status: 'processed',
+        qboJournalEntryId: null,
         qboDocNumber: plan.qboJournalEntryDraft?.docNumber ?? null,
         sourceHash: hashJson(rows),
         postingHash: hashJson(plan.qboJournalEntryDraft),
@@ -398,7 +479,7 @@ async function main(): Promise<void> {
           quantity: consumption.quantity,
           amountCents,
           currency,
-          status: 'draft',
+          status: 'ready',
         },
         create: {
           cogsPostingBatchId: batch.id,
@@ -410,7 +491,7 @@ async function main(): Promise<void> {
           quantity: consumption.quantity,
           amountCents,
           currency,
-          status: 'draft',
+          status: 'ready',
         },
       });
       sellerboardRows += 1;
@@ -434,6 +515,7 @@ async function main(): Promise<void> {
         ok: true,
         marketplace: options.marketplace,
         exactLayers: layers.length,
+        postedSettlements: postedSettlementDocNumbers.length,
         settlements: rowsByInvoice.size,
         batches,
         consumptionRows,

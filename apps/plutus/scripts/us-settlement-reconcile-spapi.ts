@@ -5,7 +5,7 @@ import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFrom
 import { normalizeSettlementOperatingMemo } from '@/lib/amazon-finances/settlement-memo-normalization';
 import {
   fetchAllFinancialEventsByGroupId,
-  findFinancialEventGroupIdForSettlementId,
+  listSettlementEventGroupsFromTransactions,
   listAllFinancialEventGroups,
 } from '@/lib/amazon-finances/sp-api-finances';
 import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
@@ -233,6 +233,8 @@ async function fetchUsSettlementJournalEntries(input: {
       const docNumber = entry.DocNumber;
       if (typeof docNumber !== 'string') return false;
       const trimmed = docNumber.trim();
+      if (trimmed.toUpperCase().startsWith('C-')) return false;
+      if (trimmed.toUpperCase().startsWith('COGS-')) return false;
       if (!isSettlementDocNumber(trimmed)) return false;
       const meta = parseSettlementDocNumber(trimmed);
       return meta.marketplace.id === 'amazon.com';
@@ -300,6 +302,11 @@ async function main(): Promise<void> {
     startedAfterIso: postedAfterIso,
     startedBeforeIso: postedBeforeIso,
   });
+  const settlementEventGroupIds = await listSettlementEventGroupsFromTransactions({
+    tenantCode: 'US',
+    postedAfterIso,
+    postedBeforeIso,
+  });
 
   const groupById = new Map<string, any>();
   for (const g of eventGroups) {
@@ -316,12 +323,10 @@ async function main(): Promise<void> {
     const settlementJournals = journalsBySettlement.get(settlementId);
     if (!settlementJournals) continue;
 
-    const eventGroupId = await findFinancialEventGroupIdForSettlementId({
-      tenantCode: 'US',
-      settlementId,
-      postedAfterIso,
-      postedBeforeIso,
-    });
+    const eventGroupId = settlementEventGroupIds.get(settlementId);
+    if (eventGroupId === undefined) {
+      throw new Error(`No SP-API transactions found for settlementId ${settlementId}`);
+    }
 
     const eventGroup = groupById.get(eventGroupId);
     if (!eventGroup) {

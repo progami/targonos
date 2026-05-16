@@ -169,11 +169,17 @@ test('package exposes QBO inventory bridge audit workflow', () => {
   assert.equal(pkg.includes('scripts/plutus-sync-exact-cost-layers-from-qbo.ts'), true);
   assert.equal(pkg.includes('"inventory:exact:cogs:sync"'), true);
   assert.equal(pkg.includes('scripts/plutus-sync-exact-cogs-from-audit.ts'), true);
+  assert.equal(pkg.includes('"inventory:exact:cogs:post"'), true);
+  assert.equal(pkg.includes('scripts/plutus-post-exact-cogs-to-qbo.ts'), true);
+  assert.equal(pkg.includes('"inventory:native:retire"'), true);
+  assert.equal(pkg.includes('scripts/plutus-retire-native-inventory-adjustments.ts'), true);
   assert.equal(pkg.includes('"inventory:exact:audit"'), true);
   assert.equal(pkg.includes('scripts/plutus-exact-cost-layer-audit.ts'), true);
   assert.equal(existsSync('scripts/qbo-inventory-bridge-audit.ts'), true);
   assert.equal(existsSync('scripts/plutus-sync-exact-cost-layers-from-qbo.ts'), true);
   assert.equal(existsSync('scripts/plutus-sync-exact-cogs-from-audit.ts'), true);
+  assert.equal(existsSync('scripts/plutus-post-exact-cogs-to-qbo.ts'), true);
+  assert.equal(existsSync('scripts/plutus-retire-native-inventory-adjustments.ts'), true);
   assert.equal(existsSync('scripts/plutus-exact-cost-layer-audit.ts'), true);
 });
 
@@ -186,13 +192,56 @@ test('QBO inventory audit reports exact Plutus cost-layer evidence', () => {
   assert.equal(source.includes('parseQboInventoryValuationSummary'), true);
   assert.equal(source.includes('plutusExactInventoryValuation'), true);
   assert.equal(source.includes('plutusExactCogsPreview'), true);
+  assert.equal(source.includes('plutusExactPostedCogsPreview'), true);
   assert.equal(source.includes('qboInventoryValuationTieout'), true);
   assert.equal(source.includes('qboInventoryAssetLines'), true);
   assert.equal(source.includes('qboLandedCostLayers'), true);
   assert.equal(source.includes('qboInventoryAssetBlocks'), true);
+  assert.equal(source.includes('qboLegacyNativeInventoryAdjustments'), true);
   assert.equal(source.includes('qboVsPlutusExactInventoryTieout'), true);
+  assert.equal(source.includes('postedSettlementCount'), true);
+  assert.equal(source.includes('qboInventoryAssetBalance'), true);
   assert.equal(source.includes('buildSettlementInventoryMovementPlan'), false);
   assert.equal(source.includes('qboNativeInventoryMigration'), false);
+});
+
+test('exact COGS sync only consumes processed settlements', () => {
+  const source = read('scripts/plutus-sync-exact-cogs-from-audit.ts');
+  assert.equal(source.includes('fetchPostedSettlementDocNumbers'), true);
+  assert.equal(source.includes('postedSettlements.docNumbers.has(row.invoiceId)'), true);
+  assert.equal(source.includes('settlementDocNumber: { notIn: postedSettlementDocNumbers }'), true);
+  assert.equal(source.includes('existingBatch?.status === \'posted\''), true);
+  assert.equal(source.includes("status: 'ready'"), true);
+});
+
+test('native QBO inventory adjustment retirement is explicit and scoped to Plutus US movements', () => {
+  const source = read('scripts/plutus-retire-native-inventory-adjustments.ts');
+  assert.equal(source.includes('InventoryAdjustment'), true);
+  assert.equal(source.includes('Plutus inventory movement \\| Settlement:'), true);
+  assert.equal(source.includes('--apply'), true);
+  assert.equal(source.includes('HUMAN_APPROVAL_PHRASE'), true);
+  assert.equal(source.includes("url.searchParams.set('operation', 'delete')"), true);
+  assert.equal(source.includes("marketplace: 'amazon.com'"), true);
+});
+
+test('exact COGS QBO posting uses parent accounts and idempotent doc numbers', () => {
+  const source = read('scripts/plutus-post-exact-cogs-to-qbo.ts');
+  assert.equal(source.includes("manufacturing: 'Manufacturing'"), true);
+  assert.equal(source.includes("freight: 'Freight & Custom Duty'"), true);
+  assert.equal(source.includes("duty: 'Freight & Custom Duty'"), true);
+  assert.equal(source.includes("mfgAccessories: 'Mfg Accessories'"), true);
+  assert.equal(source.includes("requireOneActiveAccountByName(accounts, 'Inventory Asset')"), true);
+  assert.equal(source.includes('findExistingJournalEntryIdByDocNumber'), true);
+  assert.equal(source.includes('createJournalEntry'), true);
+  assert.equal(source.includes('C-${input.batch.settlementDocNumber}'), true);
+});
+
+test('US SP-API reconcile ignores exact COGS journals', () => {
+  const source = read('scripts/us-settlement-reconcile-spapi.ts');
+  assert.equal(source.includes("trimmed.toUpperCase().startsWith('C-')"), true);
+  assert.equal(source.includes("trimmed.toUpperCase().startsWith('COGS-')"), true);
+  assert.equal(source.includes('listSettlementEventGroupsFromTransactions'), true);
+  assert.equal(source.includes('findFinancialEventGroupIdForSettlementId'), false);
 });
 
 test('QBO audit page explains Plutus exact subledger controls', () => {
