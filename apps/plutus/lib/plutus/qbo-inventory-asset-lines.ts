@@ -1,5 +1,28 @@
 export type QboInventoryAssetComponent = 'manufacturing' | 'freight' | 'duty' | 'mfgAccessories';
 
+export type QboInventoryAssetPurchaseOrderSourceType = 'QBO_PURCHASE_ORDER' | 'LEGACY_INTERNAL_PO';
+
+export type QboInventoryAssetLineNativePurchaseOrderRef = {
+  qboPurchaseOrderId: string;
+  qboPurchaseOrderLineId: string | null;
+  qboPurchaseOrderDocNumber: string;
+  qboItemId: string | null;
+  qboItemName: string | null;
+  quantity: number | null;
+};
+
+export type QboInventoryAssetLineAllocation = {
+  qboPurchaseOrderId: string;
+  qboPurchaseOrderLineId: string;
+  qboPurchaseOrderDocNumber: string;
+  sellerSku: string;
+  component: QboInventoryAssetComponent;
+  amount: number;
+  quantity: number | null;
+  allocationMethod: string;
+  sourceRef: string | null;
+};
+
 export type QboInventoryAssetLineInput = {
   billId: string;
   billDocNumber?: string;
@@ -9,6 +32,11 @@ export type QboInventoryAssetLineInput = {
   accountName: string;
   amount: number;
   description?: string;
+  qboItemId?: string;
+  qboItemName?: string;
+  qboQuantity?: number;
+  nativePurchaseOrderRef?: QboInventoryAssetLineNativePurchaseOrderRef;
+  landedCostAllocation?: QboInventoryAssetLineAllocation;
 };
 
 export type ParsedQboInventoryAssetLine = {
@@ -19,6 +47,12 @@ export type ParsedQboInventoryAssetLine = {
   qboLineId: string;
   accountName: string;
   amount: number;
+  purchaseOrderSourceType: QboInventoryAssetPurchaseOrderSourceType;
+  purchaseOrderSourceId: string;
+  qboPurchaseOrderId: string | null;
+  qboPurchaseOrderLineId: string | null;
+  qboItemId: string | null;
+  qboItemName: string | null;
   component: QboInventoryAssetComponent;
   marketCode: string | null;
   descriptionKind: string;
@@ -31,12 +65,17 @@ export type ParsedQboInventoryAssetLine = {
 
 export type QboInventoryLandedCostLayer = {
   internalPo: string;
+  purchaseOrderSourceType: QboInventoryAssetPurchaseOrderSourceType;
+  purchaseOrderSourceId: string;
+  qboPurchaseOrderId: string | null;
+  qboPurchaseOrderLineIds: string[];
   sellerSku: string;
   quantity: number;
   componentAmounts: Record<QboInventoryAssetComponent, number>;
   totalAmount: number;
   unitCost: number;
   sourceRefs: string[];
+  qboSourceLineKeys: string[];
   qboBillLineRefs: string[];
 };
 
@@ -156,6 +195,13 @@ function componentForDescriptionKind(kind: string): QboInventoryAssetComponent {
   throw new Error(`Unsupported QBO inventory asset line kind: ${kind}`);
 }
 
+function descriptionKindForComponent(component: QboInventoryAssetComponent): string {
+  for (const contract of COMPONENT_ACCOUNT_CONTRACTS) {
+    if (contract.component === component) return contract.descriptionKind;
+  }
+  throw new Error(`Unsupported QBO inventory asset component: ${component}`);
+}
+
 function marketCodeFromOwner(owner: string | null): string | null {
   if (owner === null) return null;
   const normalized = owner.trim().toUpperCase();
@@ -209,6 +255,22 @@ function normalizeSku(value: string | null): string | null {
   return value.toUpperCase();
 }
 
+function nativeSku(input: QboInventoryAssetLineInput): string | null {
+  const nativeItemName = input.nativePurchaseOrderRef?.qboItemName ?? input.qboItemName;
+  return normalizeSku(nullableToken(nativeItemName));
+}
+
+function nativeItemId(input: QboInventoryAssetLineInput): string | null {
+  return nullableToken(input.nativePurchaseOrderRef?.qboItemId ?? input.qboItemId);
+}
+
+function nativeQuantity(input: QboInventoryAssetLineInput): number | null {
+  const quantity = input.nativePurchaseOrderRef?.quantity ?? input.qboQuantity;
+  if (quantity === undefined || quantity === null) return null;
+  if (!Number.isFinite(quantity)) throw new Error(`QBO inventory asset quantity is not finite: ${quantity}`);
+  return Math.trunc(quantity);
+}
+
 function parseQuantity(value: string | undefined): number | null {
   if (value === undefined) return null;
   const match = value.trim().match(/^([0-9]+)(?:\.[0-9]+)?/);
@@ -241,36 +303,80 @@ function pushUnique(values: string[], value: string | null): void {
   values.push(value);
 }
 
+function qboSourceLineKey(line: ParsedQboInventoryAssetLine): string {
+  return [
+    line.billId,
+    line.qboLineId,
+    line.purchaseOrderSourceType,
+    line.purchaseOrderSourceId,
+    line.sellerSku ?? 'NO_SKU',
+    line.component,
+  ].join(':');
+}
+
 function isInventoryAssetAccountName(accountName: string): boolean {
   return accountName === 'Inventory Asset' || accountName.startsWith('Inventory Asset:');
 }
 
 export function parseQboInventoryAssetLine(input: QboInventoryAssetLineInput): ParsedQboInventoryAssetLine {
-  const description = input.description;
-  if (description === undefined || description.trim() === '') {
+  const hasNativePo = input.nativePurchaseOrderRef !== undefined;
+  const allocation = input.landedCostAllocation;
+  if (hasNativePo && allocation !== undefined) {
+    throw new Error(`QBO inventory asset line ${input.billId}:${input.qboLineId} has both native PO and Plutus allocation`);
+  }
+
+  const description = input.description?.trim();
+  const needsDescription = !hasNativePo && allocation === undefined;
+  if (needsDescription && (description === undefined || description === '')) {
     throw new Error(`QBO inventory asset line ${input.billId}:${input.qboLineId} is missing description`);
   }
 
-  const parsedDescription = parseDescription(description);
+  const parsedDescription = description !== undefined && description !== '' ? parseDescription(description) : null;
   const account = parseComponentAccount(input.accountName);
-  const component = account.component ?? componentForDescriptionKind(parsedDescription.kind);
-  if (account.descriptionKind !== null && parsedDescription.kind !== account.descriptionKind) {
+  const component =
+    allocation?.component ??
+    account.component ??
+    (parsedDescription !== null
+      ? componentForDescriptionKind(parsedDescription.kind)
+      : hasNativePo
+        ? 'manufacturing'
+        : null);
+  if (component === null) {
+    throw new Error(`QBO inventory asset line ${input.billId}:${input.qboLineId} cannot resolve component`);
+  }
+  if (account.descriptionKind !== null && parsedDescription !== null && parsedDescription.kind !== account.descriptionKind) {
     throw new Error(
       `QBO inventory asset line ${input.billId}:${input.qboLineId} kind ${parsedDescription.kind} does not match account ${input.accountName}`,
     );
   }
+  if (account.component !== null && allocation !== undefined && account.component !== allocation.component) {
+    throw new Error(
+      `QBO inventory asset allocation ${input.billId}:${input.qboLineId} component ${allocation.component} does not match account ${input.accountName}`,
+    );
+  }
 
-  const owner = nullableToken(parsedDescription.values.get('OWNER'));
-  const explicitPo = nullableToken(parsedDescription.values.get('PO'));
+  const owner = nullableToken(parsedDescription?.values.get('OWNER'));
+  const explicitPo = nullableToken(parsedDescription?.values.get('PO'));
   const internalPo =
-    explicitPo !== null
+    input.nativePurchaseOrderRef?.qboPurchaseOrderDocNumber ??
+    allocation?.qboPurchaseOrderDocNumber ??
+    (explicitPo !== null
       ? explicitPo
       : owner !== null && owner.toUpperCase().startsWith('PO-')
         ? owner
-        : null;
+        : null);
   const skuToken = component === 'mfgAccessories'
-    ? nullableToken(parsedDescription.values.get('FOR_SKU'))
-    : nullableToken(parsedDescription.values.get('SKU'));
+    ? nullableToken(parsedDescription?.values.get('FOR_SKU'))
+    : nullableToken(parsedDescription?.values.get('SKU'));
+  const sellerSku = normalizeSku(allocation?.sellerSku ?? nativeSku(input) ?? skuToken);
+  const quantity = allocation?.quantity ?? nativeQuantity(input) ?? parseQuantity(parsedDescription?.values.get('QTY'));
+  const sourceRef = allocation?.sourceRef ?? nullableToken(parsedDescription?.values.get('SOURCE')) ?? input.billDocNumber ?? null;
+  const amount = allocation?.amount ?? input.amount;
+  const qboPurchaseOrderId = input.nativePurchaseOrderRef?.qboPurchaseOrderId ?? allocation?.qboPurchaseOrderId ?? null;
+  const qboPurchaseOrderLineId = input.nativePurchaseOrderRef?.qboPurchaseOrderLineId ?? allocation?.qboPurchaseOrderLineId ?? null;
+  const purchaseOrderSourceType: QboInventoryAssetPurchaseOrderSourceType =
+    qboPurchaseOrderId !== null ? 'QBO_PURCHASE_ORDER' : 'LEGACY_INTERNAL_PO';
+  const purchaseOrderSourceId = qboPurchaseOrderId ?? internalPo ?? `UNASSIGNED:${input.billId}:${input.qboLineId}`;
 
   return {
     billId: input.billId,
@@ -279,15 +385,21 @@ export function parseQboInventoryAssetLine(input: QboInventoryAssetLineInput): P
     ...(input.vendorName !== undefined ? { vendorName: input.vendorName } : {}),
     qboLineId: input.qboLineId,
     accountName: input.accountName,
-    amount: input.amount,
+    amount,
+    purchaseOrderSourceType,
+    purchaseOrderSourceId,
+    qboPurchaseOrderId,
+    qboPurchaseOrderLineId,
+    qboItemId: nativeItemId(input),
+    qboItemName: input.nativePurchaseOrderRef?.qboItemName ?? input.qboItemName ?? null,
     component,
     marketCode: account.marketCode ?? marketCodeFromOwner(owner),
-    descriptionKind: parsedDescription.kind,
+    descriptionKind: parsedDescription?.kind ?? descriptionKindForComponent(component),
     owner,
     internalPo,
-    sellerSku: normalizeSku(skuToken),
-    quantity: parseQuantity(parsedDescription.values.get('QTY')),
-    sourceRef: nullableToken(parsedDescription.values.get('SOURCE')),
+    sellerSku,
+    quantity,
+    sourceRef,
   };
 }
 
@@ -301,7 +413,9 @@ export function buildQboInventoryLandedCostPlan(input: {
     const account = parseComponentAccount(line.accountName);
     if (account.marketCode !== null && account.marketCode !== targetMarketCode) continue;
     const description = line.description?.trim().toUpperCase();
-    if (account.marketCode === null && !COMPONENT_ACCOUNT_CONTRACTS.some((contract) => description?.startsWith(`${contract.descriptionKind};`))) {
+    const hasStructuredDescription = COMPONENT_ACCOUNT_CONTRACTS.some((contract) => description?.startsWith(`${contract.descriptionKind};`));
+    const hasNativePurchaseEvidence = line.nativePurchaseOrderRef !== undefined || line.landedCostAllocation !== undefined;
+    if (account.marketCode === null && !hasStructuredDescription && !hasNativePurchaseEvidence) {
       continue;
     }
     parsedLines.push(parseQboInventoryAssetLine(line));
@@ -314,6 +428,7 @@ export function buildQboInventoryLandedCostPlan(input: {
   const marketLines = parsedLines.filter((line) => {
     if (line.marketCode !== null) return line.marketCode === targetMarketCode;
     if (line.owner === 'RESIDUAL') return true;
+    if (line.qboPurchaseOrderId !== null) return true;
     if (line.internalPo === null) return false;
     return marketByPo.get(line.internalPo) === targetMarketCode;
   });
@@ -323,10 +438,15 @@ export function buildQboInventoryLandedCostPlan(input: {
     string,
     {
       internalPo: string;
+      purchaseOrderSourceType: QboInventoryAssetPurchaseOrderSourceType;
+      purchaseOrderSourceId: string;
+      qboPurchaseOrderId: string | null;
+      qboPurchaseOrderLineIds: string[];
       sellerSku: string;
       manufacturingQuantity: number;
       componentAmounts: Record<QboInventoryAssetComponent, number>;
       sourceRefs: string[];
+      qboSourceLineKeys: string[];
       qboBillLineRefs: string[];
     }
   >();
@@ -359,21 +479,27 @@ export function buildQboInventoryLandedCostPlan(input: {
       continue;
     }
 
-    const key = `${line.internalPo}\u0000${line.sellerSku}`;
+    const key = `${line.purchaseOrderSourceType}\u0000${line.purchaseOrderSourceId}\u0000${line.sellerSku}`;
     let group = groupByPoSku.get(key);
     if (group === undefined) {
       group = {
         internalPo: line.internalPo,
+        purchaseOrderSourceType: line.purchaseOrderSourceType,
+        purchaseOrderSourceId: line.purchaseOrderSourceId,
+        qboPurchaseOrderId: line.qboPurchaseOrderId,
+        qboPurchaseOrderLineIds: [],
         sellerSku: line.sellerSku,
         manufacturingQuantity: 0,
         componentAmounts: createComponentAmounts(),
         sourceRefs: [],
+        qboSourceLineKeys: [],
         qboBillLineRefs: [],
       };
       groupByPoSku.set(key, group);
     }
 
     group.componentAmounts[line.component] = roundMoney(group.componentAmounts[line.component] + line.amount);
+    pushUnique(group.qboPurchaseOrderLineIds, line.qboPurchaseOrderLineId);
     if (line.component === 'manufacturing') {
       if (line.quantity === null) {
         blocks.push({ code: 'MISSING_MANUFACTURING_QUANTITY', internalPo: line.internalPo, sellerSku: line.sellerSku });
@@ -382,6 +508,7 @@ export function buildQboInventoryLandedCostPlan(input: {
       }
     }
     pushUnique(group.sourceRefs, line.sourceRef);
+    pushUnique(group.qboSourceLineKeys, qboSourceLineKey(line));
     pushUnique(group.qboBillLineRefs, `${line.billId}:${line.qboLineId}`);
   }
 
@@ -407,12 +534,17 @@ export function buildQboInventoryLandedCostPlan(input: {
     );
     layers.push({
       internalPo: group.internalPo,
+      purchaseOrderSourceType: group.purchaseOrderSourceType,
+      purchaseOrderSourceId: group.purchaseOrderSourceId,
+      qboPurchaseOrderId: group.qboPurchaseOrderId,
+      qboPurchaseOrderLineIds: group.qboPurchaseOrderLineIds.sort(),
       sellerSku: group.sellerSku,
       quantity: group.manufacturingQuantity,
       componentAmounts: group.componentAmounts,
       totalAmount,
       unitCost: roundUnitCost(totalAmount / group.manufacturingQuantity),
       sourceRefs: group.sourceRefs.sort(),
+      qboSourceLineKeys: group.qboSourceLineKeys.sort(),
       qboBillLineRefs: group.qboBillLineRefs.sort(),
     });
   }

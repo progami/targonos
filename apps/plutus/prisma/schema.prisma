@@ -334,6 +334,8 @@ model SourceDocument {
   qboTxnType        String
   qboTxnId          String
   qboLineId         String?
+  qboPurchaseOrderId     String?
+  qboPurchaseOrderLineId String?
   docNumber         String?
   vendorName        String?
   txnDate           String?
@@ -352,7 +354,34 @@ model SourceDocument {
   @@index([purchaseOrderId])
   @@index([landedCostBatchId])
   @@index([qboTxnType, qboTxnId])
+  @@index([qboPurchaseOrderId])
+  @@index([qboPurchaseOrderLineId])
   @@index([attachmentStatus])
+}
+
+/// QboLandedCostAllocation links non-PO landed-cost bill lines to QBO PO/SKU layers.
+model QboLandedCostAllocation {
+  id                         String @id @default(cuid())
+  qboBillId                  String
+  qboBillLineId              String
+  qboPurchaseOrderId         String
+  qboPurchaseOrderLineId     String
+  qboPurchaseOrderDocNumber  String
+  sellerSku                  String
+  component                  String
+  amountCents                Int
+  quantity                   Int?
+  allocationMethod           String
+  sourceRef                  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([qboBillId, qboBillLineId, qboPurchaseOrderId, qboPurchaseOrderLineId, sellerSku, component])
+  @@index([qboPurchaseOrderId])
+  @@index([qboPurchaseOrderLineId])
+  @@index([sellerSku])
+  @@index([component])
 }
 
 /// LandedCostBatch groups QBO purchase, freight, duty, and packaging evidence into one costing batch.

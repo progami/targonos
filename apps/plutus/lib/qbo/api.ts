@@ -145,6 +145,7 @@ export interface QboPurchase {
     Id: string;
     Amount: number;
     Description?: string;
+    LinkedTxn?: QboLinkedTxn[];
     AccountBasedExpenseLineDetail?: {
       AccountRef: {
         value: string;
@@ -154,6 +155,51 @@ export interface QboPurchase {
     ItemBasedExpenseLineDetail?: {
       ItemRef?: { value: string; name: string };
       AccountRef?: { value: string; name: string };
+    };
+  }>;
+  MetaData?: {
+    CreateTime: string;
+    LastUpdatedTime: string;
+  };
+}
+
+export interface QboLinkedTxn {
+  TxnId: string;
+  TxnType: string;
+  TxnLineId?: string;
+}
+
+export interface QboPurchaseOrder {
+  Id: string;
+  SyncToken: string;
+  TxnDate: string;
+  DocNumber?: string;
+  PrivateNote?: string;
+  TotalAmt?: number;
+  VendorRef?: {
+    value: string;
+    name: string;
+  };
+  CurrencyRef?: {
+    value: string;
+    name?: string;
+  };
+  POStatus?: string;
+  Line?: Array<{
+    Id: string;
+    Amount?: number;
+    Description?: string;
+    LinkedTxn?: QboLinkedTxn[];
+    ItemBasedExpenseLineDetail?: {
+      ItemRef?: { value: string; name: string };
+      Qty?: number;
+      UnitPrice?: number;
+    };
+    AccountBasedExpenseLineDetail?: {
+      AccountRef: {
+        value: string;
+        name: string;
+      };
     };
   }>;
   MetaData?: {
@@ -198,6 +244,7 @@ export interface QboBill {
     Id: string;
     Amount: number;
     Description?: string;
+    LinkedTxn?: QboLinkedTxn[];
     AccountBasedExpenseLineDetail?: {
       AccountRef: {
         value: string;
@@ -219,6 +266,8 @@ export interface QboBill {
     ItemBasedExpenseLineDetail?: {
       ItemRef?: { value: string; name: string };
       AccountRef?: { value: string; name: string };
+      Qty?: number;
+      UnitPrice?: number;
     };
   }>;
   MetaData?: {
@@ -598,6 +647,7 @@ export interface QboPreferences {
 export interface QboQueryResponse {
   QueryResponse: {
     Purchase?: QboPurchase[];
+    PurchaseOrder?: QboPurchaseOrder[];
     Bill?: QboBill[];
     Invoice?: QboInvoice[];
     RecurringTransaction?: QboRecurringTransaction[];
@@ -1079,6 +1129,35 @@ export async function fetchBillById(
 
   const data = (await response.json()) as { Bill: QboBill };
   return { bill: data.Bill, updatedConnection };
+}
+
+/**
+ * Fetch a single PurchaseOrder by ID.
+ */
+export async function fetchPurchaseOrderById(
+  connection: QboConnection,
+  purchaseOrderId: string,
+): Promise<{ purchaseOrder: QboPurchaseOrder; updatedConnection?: QboConnection }> {
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/purchaseorder/${purchaseOrderId}`;
+
+  const response = await fetchWithRetry(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch purchase order', { purchaseOrderId, status: response.status, error: errorText });
+    throw new Error(`Failed to fetch purchase order: ${response.status} ${errorText}`);
+  }
+
+  const data = (await response.json()) as { PurchaseOrder: QboPurchaseOrder };
+  return { purchaseOrder: data.PurchaseOrder, updatedConnection };
 }
 
 /**

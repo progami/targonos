@@ -2,7 +2,10 @@ import { db } from '@/lib/db';
 import {
   buildQboInventoryAssetReclassPlan,
   buildQboInventoryLandedCostPlan,
+  type QboInventoryAssetComponent,
+  type QboInventoryAssetLineAllocation,
   type QboInventoryAssetLineInput,
+  type QboInventoryAssetLineNativePurchaseOrderRef,
   type QboInventoryLandedCostLayer,
   type ParsedQboInventoryAssetLine,
 } from '@/lib/plutus/qbo-inventory-asset-lines';
@@ -22,9 +25,12 @@ import {
   fetchAccountsByFullyQualifiedName,
   fetchBills,
   fetchJournalEntries,
+  fetchPurchaseOrderById,
   fetchQboReport,
   type QboBill,
   type QboConnection,
+  type QboLinkedTxn,
+  type QboPurchaseOrder,
 } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { isSettlementDocNumber, normalizeSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/settlement-doc-number';
@@ -60,6 +66,22 @@ type QboInventoryAdjustment = {
       QtyDiff?: number;
     };
   }>;
+};
+
+type QboBillLine = NonNullable<QboBill['Line']>[number];
+
+type QboLandedCostAllocationRow = {
+  qboBillId: string;
+  qboBillLineId: string;
+  qboPurchaseOrderId: string;
+  qboPurchaseOrderLineId: string;
+  qboPurchaseOrderDocNumber: string;
+  sellerSku: string;
+  component: QboInventoryAssetComponent;
+  amountCents: number;
+  quantity: number | null;
+  allocationMethod: string;
+  sourceRef: string | null;
 };
 
 function parseArgs(argv: string[]): CliOptions {
@@ -189,13 +211,121 @@ async function fetchQboLegacyNativeInventoryAdjustments(input: { marketplace: st
     });
 }
 
+function qboLineRefFromIds(billId: string, qboLineId: string): string {
+  return `${billId}:${qboLineId}`;
+}
+
+function qboSourceLineKey(line: ParsedQboInventoryAssetLine): string {
+  return [
+    line.billId,
+    line.qboLineId,
+    line.purchaseOrderSourceType,
+    line.purchaseOrderSourceId,
+    line.sellerSku ?? 'NO_SKU',
+    line.component,
+  ].join(':');
+}
+
+function centsToMoney(value: number): number {
+  return value / 100;
+}
+
+function linkedPurchaseOrder(line: QboBillLine): QboLinkedTxn | null {
+  for (const linkedTxn of line.LinkedTxn ?? []) {
+    if (linkedTxn.TxnType === 'PurchaseOrder') return linkedTxn;
+  }
+  return null;
+}
+
+function collectLinkedPurchaseOrderIds(bills: QboBill[]): string[] {
+  const ids = new Set<string>();
+  for (const bill of bills) {
+    for (const line of bill.Line ?? []) {
+      const linkedTxn = linkedPurchaseOrder(line);
+      if (linkedTxn === null) continue;
+      ids.add(linkedTxn.TxnId);
+    }
+  }
+  return Array.from(ids).sort();
+}
+
+async function fetchLinkedPurchaseOrders(input: {
+  connection: QboConnection;
+  purchaseOrderIds: string[];
+}): Promise<{ purchaseOrdersById: Map<string, QboPurchaseOrder>; updatedConnection: QboConnection }> {
+  let activeConnection = input.connection;
+  const purchaseOrdersById = new Map<string, QboPurchaseOrder>();
+  for (const purchaseOrderId of input.purchaseOrderIds) {
+    const result = await fetchPurchaseOrderById(activeConnection, purchaseOrderId);
+    if (result.updatedConnection !== undefined) {
+      activeConnection = result.updatedConnection;
+    }
+    purchaseOrdersById.set(result.purchaseOrder.Id, result.purchaseOrder);
+  }
+  return { purchaseOrdersById, updatedConnection: activeConnection };
+}
+
+function purchaseOrderLine(input: {
+  purchaseOrder: QboPurchaseOrder;
+  linkedTxn: QboLinkedTxn;
+}): NonNullable<QboPurchaseOrder['Line']>[number] | null {
+  const txnLineId = input.linkedTxn.TxnLineId;
+  if (txnLineId === undefined || txnLineId === '') return null;
+  for (const line of input.purchaseOrder.Line ?? []) {
+    if (line.Id === txnLineId) return line;
+  }
+  throw new Error(`QBO PurchaseOrder ${input.purchaseOrder.Id} does not contain linked line ${txnLineId}`);
+}
+
+function nativePurchaseOrderRef(input: {
+  line: QboBillLine;
+  purchaseOrdersById: Map<string, QboPurchaseOrder>;
+}): QboInventoryAssetLineNativePurchaseOrderRef | undefined {
+  const linkedTxn = linkedPurchaseOrder(input.line);
+  if (linkedTxn === null) return undefined;
+  const purchaseOrder = input.purchaseOrdersById.get(linkedTxn.TxnId);
+  if (purchaseOrder === undefined) {
+    throw new Error(`QBO PurchaseOrder ${linkedTxn.TxnId} was linked from bill line ${input.line.Id} but was not fetched`);
+  }
+  const docNumber = purchaseOrder.DocNumber?.trim();
+  if (docNumber === undefined || docNumber === '') {
+    throw new Error(`QBO PurchaseOrder ${purchaseOrder.Id} is missing DocNumber`);
+  }
+  const poLine = purchaseOrderLine({ purchaseOrder, linkedTxn });
+  const billItem = input.line.ItemBasedExpenseLineDetail?.ItemRef;
+  const poItem = poLine?.ItemBasedExpenseLineDetail?.ItemRef;
+  const item = poItem ?? billItem ?? null;
+  return {
+    qboPurchaseOrderId: purchaseOrder.Id,
+    qboPurchaseOrderLineId: linkedTxn.TxnLineId ?? null,
+    qboPurchaseOrderDocNumber: docNumber,
+    qboItemId: item?.value ?? null,
+    qboItemName: item?.name ?? null,
+    quantity: poLine?.ItemBasedExpenseLineDetail?.Qty ?? input.line.ItemBasedExpenseLineDetail?.Qty ?? null,
+  };
+}
+
+function allocationInput(row: QboLandedCostAllocationRow): QboInventoryAssetLineAllocation {
+  return {
+    qboPurchaseOrderId: row.qboPurchaseOrderId,
+    qboPurchaseOrderLineId: row.qboPurchaseOrderLineId,
+    qboPurchaseOrderDocNumber: row.qboPurchaseOrderDocNumber,
+    sellerSku: row.sellerSku,
+    component: row.component,
+    amount: centsToMoney(row.amountCents),
+    quantity: row.quantity,
+    allocationMethod: row.allocationMethod,
+    sourceRef: row.sourceRef,
+  };
+}
+
 function receiptDateForLayer(input: {
   layer: QboInventoryLandedCostLayer;
   parsedLines: ParsedQboInventoryAssetLine[];
 }): string {
-  const qboRefs = new Set(input.layer.qboBillLineRefs);
+  const qboRefs = new Set(input.layer.qboSourceLineKeys);
   const dates = input.parsedLines
-    .filter((line) => qboRefs.has(`${line.billId}:${line.qboLineId}`))
+    .filter((line) => qboRefs.has(qboSourceLineKey(line)))
     .map((line) => line.billDate)
     .sort();
   const lastDate = dates[dates.length - 1];
@@ -294,15 +424,23 @@ async function fetchPostedSettlementDocNumbers(input: {
   return { docNumbers, updatedConnection: connection };
 }
 
-function collectInventoryAssetLines(bills: QboBill[]): QboInventoryAssetLineInput[] {
+function collectInventoryAssetLines(input: {
+  bills: QboBill[];
+  purchaseOrdersById: Map<string, QboPurchaseOrder>;
+  allocationsByBillLineRef: Map<string, QboLandedCostAllocationRow[]>;
+}): QboInventoryAssetLineInput[] {
   const lines: QboInventoryAssetLineInput[] = [];
-  for (const bill of bills) {
+  for (const bill of input.bills) {
     for (const line of bill.Line ?? []) {
-      const accountName = line.AccountBasedExpenseLineDetail?.AccountRef.name;
+      const accountName =
+        line.AccountBasedExpenseLineDetail?.AccountRef.name ??
+        line.ItemBasedExpenseLineDetail?.AccountRef?.name ??
+        (line.ItemBasedExpenseLineDetail?.ItemRef !== undefined && linkedPurchaseOrder(line) !== null ? 'Inventory Asset' : undefined);
       if (accountName === undefined) continue;
       if (accountName !== 'Inventory Asset' && !accountName.startsWith('Inventory Asset:')) continue;
       if (line.Id === undefined) throw new Error(`QBO bill ${bill.Id} has an inventory asset line without line id`);
-      lines.push({
+      const nativeRef = nativePurchaseOrderRef({ line, purchaseOrdersById: input.purchaseOrdersById });
+      const baseLine = {
         billId: bill.Id,
         ...(bill.DocNumber !== undefined ? { billDocNumber: bill.DocNumber } : {}),
         billDate: bill.TxnDate,
@@ -311,6 +449,27 @@ function collectInventoryAssetLines(bills: QboBill[]): QboInventoryAssetLineInpu
         accountName,
         amount: line.Amount,
         ...(line.Description !== undefined ? { description: line.Description } : {}),
+        ...(line.ItemBasedExpenseLineDetail?.ItemRef?.value !== undefined
+          ? { qboItemId: line.ItemBasedExpenseLineDetail.ItemRef.value }
+          : {}),
+        ...(line.ItemBasedExpenseLineDetail?.ItemRef?.name !== undefined
+          ? { qboItemName: line.ItemBasedExpenseLineDetail.ItemRef.name }
+          : {}),
+        ...(line.ItemBasedExpenseLineDetail?.Qty !== undefined ? { qboQuantity: line.ItemBasedExpenseLineDetail.Qty } : {}),
+      };
+      const allocations = input.allocationsByBillLineRef.get(qboLineRefFromIds(bill.Id, line.Id)) ?? [];
+      if (allocations.length > 0) {
+        for (const allocation of allocations) {
+          lines.push({
+            ...baseLine,
+            landedCostAllocation: allocationInput(allocation),
+          });
+        }
+        continue;
+      }
+      lines.push({
+        ...baseLine,
+        ...(nativeRef !== undefined ? { nativePurchaseOrderRef: nativeRef } : {}),
       });
     }
   }
@@ -350,7 +509,12 @@ async function main(): Promise<void> {
     marketplace: options.marketplace,
     startDate: '2025-12-01',
   });
-  await saveServerQboConnection(postedSettlements.updatedConnection);
+  const linkedPurchaseOrderIds = collectLinkedPurchaseOrderIds(qboBillsResult.bills);
+  const linkedPurchaseOrders = await fetchLinkedPurchaseOrders({
+    connection: postedSettlements.updatedConnection,
+    purchaseOrderIds: linkedPurchaseOrderIds,
+  });
+  await saveServerQboConnection(linkedPurchaseOrders.updatedConnection);
 
   const rowsByInvoice = new Map<string, AuditRow[]>();
   for (const row of auditRows) {
@@ -362,7 +526,24 @@ async function main(): Promise<void> {
     }
   }
 
-  const qboInventoryAssetLines = collectInventoryAssetLines(qboBillsResult.bills);
+  const allocations = await db.qboLandedCostAllocation.findMany({
+    where: {
+      qboBillId: { in: qboBillsResult.bills.map((bill) => bill.Id) },
+    },
+  });
+  const allocationsByBillLineRef = new Map<string, QboLandedCostAllocationRow[]>();
+  for (const allocation of allocations) {
+    const key = qboLineRefFromIds(allocation.qboBillId, allocation.qboBillLineId);
+    const existing = allocationsByBillLineRef.get(key) ?? [];
+    existing.push(allocation as QboLandedCostAllocationRow);
+    allocationsByBillLineRef.set(key, existing);
+  }
+
+  const qboInventoryAssetLines = collectInventoryAssetLines({
+    bills: qboBillsResult.bills,
+    purchaseOrdersById: linkedPurchaseOrders.purchaseOrdersById,
+    allocationsByBillLineRef,
+  });
   const qboAssetPlan = buildQboInventoryLandedCostPlan({
     marketplace: options.marketplace,
     lines: qboInventoryAssetLines,
@@ -371,7 +552,10 @@ async function main(): Promise<void> {
     marketplace: options.marketplace,
     lines: qboInventoryAssetLines,
   });
-  const marketAssetLines = qboAssetPlan.parsedLines.filter((line) => line.marketCode === qboAssetPlan.marketCode);
+  const marketAssetLines = qboAssetPlan.parsedLines.filter((line) => {
+    if (line.marketCode === qboAssetPlan.marketCode) return true;
+    return line.marketCode === null && line.qboPurchaseOrderId !== null;
+  });
   const exactCostLayers = exactLayersFromQbo({
     marketplace: options.marketplace,
     layers: qboAssetPlan.layers,
