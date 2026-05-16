@@ -3,12 +3,21 @@ import {
   buildQboInventoryAssetReclassPlan,
   buildQboInventoryLandedCostPlan,
   type QboInventoryAssetLineInput,
+  type QboInventoryLandedCostLayer,
+  type ParsedQboInventoryAssetLine,
 } from '@/lib/plutus/qbo-inventory-asset-lines';
+import {
+  buildExactCogsPlan,
+  buildPlutusInventoryValuation,
+  type ExactCostLayerConsumptionInput,
+  type ExactCostLayerInput,
+  type ExactSoldUnitInput,
+} from '@/lib/plutus/exact-cost-layer-subledger';
 import {
   assessQboInventoryValuationTieout,
   parseQboInventoryValuationSummary,
 } from '@/lib/plutus/qbo-inventory-valuation';
-import { buildSettlementInventoryMovementPlan, type QboInventoryItemMapping } from '@/lib/plutus/qbo-inventory-movements';
+import { normalizeSettlementOperatingMemo } from '@/lib/amazon-finances/settlement-memo-normalization';
 import {
   fetchAccountsByFullyQualifiedName,
   fetchBills,
@@ -23,12 +32,6 @@ type CliOptions = {
   marketplace: string;
   assetStartDate: string;
   assetEndDate: string;
-};
-
-type MappingRow = {
-  marketplace: string;
-  sellerSku: string;
-  qboItemId: string;
 };
 
 type AuditRow = {
@@ -104,15 +107,54 @@ function settlementTxnDate(rows: AuditRow[]): string {
   return last;
 }
 
-async function fetchMappings(marketplace: string): Promise<QboInventoryItemMapping[]> {
-  const rows = await db.$queryRawUnsafe<MappingRow[]>(
-    'SELECT "marketplace", "sellerSku", "qboItemId" FROM "QboInventoryItemMapping" WHERE "marketplace" = $1 AND "active" = true ORDER BY "sellerSku"',
-    marketplace,
-  );
-  return rows.map((row) => ({
-    marketplace: row.marketplace,
-    sellerSku: row.sellerSku,
-    qboItemId: row.qboItemId,
+function isSoldPrincipalRow(row: AuditRow): boolean {
+  return row.quantity > 0 && normalizeSettlementOperatingMemo(row.description) === 'Amazon Sales - Principal';
+}
+
+function soldUnitsFromRows(rows: AuditRow[]): ExactSoldUnitInput[] {
+  const qtyBySku = new Map<string, number>();
+  for (const row of rows) {
+    if (!isSoldPrincipalRow(row)) continue;
+    const sellerSku = row.sku.trim().toUpperCase();
+    if (sellerSku === '') continue;
+    qtyBySku.set(sellerSku, (qtyBySku.get(sellerSku) ?? 0) + row.quantity);
+  }
+  return Array.from(qtyBySku.entries())
+    .sort((left, right) => left[0].localeCompare(right[0]))
+    .map(([sellerSku, quantity]) => ({ sellerSku, quantity }));
+}
+
+function receiptDateForLayer(input: {
+  layer: QboInventoryLandedCostLayer;
+  parsedLines: ParsedQboInventoryAssetLine[];
+}): string {
+  const qboRefs = new Set(input.layer.qboBillLineRefs);
+  const dates = input.parsedLines
+    .filter((line) => qboRefs.has(`${line.billId}:${line.qboLineId}`))
+    .map((line) => line.billDate)
+    .sort();
+  const lastDate = dates[dates.length - 1];
+  if (lastDate === undefined) {
+    throw new Error(`Cannot determine receipt date for ${input.layer.internalPo} ${input.layer.sellerSku}`);
+  }
+  return lastDate;
+}
+
+function exactLayersFromQbo(input: {
+  marketplace: string;
+  layers: QboInventoryLandedCostLayer[];
+  parsedLines: ParsedQboInventoryAssetLine[];
+}): ExactCostLayerInput[] {
+  return input.layers.map((layer) => ({
+    layerId: `${layer.internalPo}:${layer.sellerSku}`,
+    marketplace: input.marketplace,
+    internalPo: layer.internalPo,
+    sellerSku: layer.sellerSku,
+    receiptDate: receiptDateForLayer({ layer, parsedLines: input.parsedLines }),
+    quantity: layer.quantity,
+    componentAmounts: layer.componentAmounts,
+    sourceRefs: layer.sourceRefs,
+    qboBillLineRefs: layer.qboBillLineRefs,
   }));
 }
 
@@ -176,8 +218,7 @@ async function main(): Promise<void> {
   const qboConnection = await getQboConnection();
   if (qboConnection === null) throw new Error('QBO connection is not configured');
 
-  const [mappings, auditRows, qboBillsResult] = await Promise.all([
-    fetchMappings(options.marketplace),
+  const [auditRows, qboBillsResult] = await Promise.all([
     db.auditDataRow.findMany({
       where: { market: { equals: market, mode: 'insensitive' } },
       select: {
@@ -210,23 +251,6 @@ async function main(): Promise<void> {
     }
   }
 
-  const plans = Array.from(rowsByInvoice.entries()).map(([invoiceId, rows]) =>
-    buildSettlementInventoryMovementPlan({
-      marketplace: options.marketplace,
-      settlementDocNumber: invoiceId,
-      txnDate: settlementTxnDate(rows),
-      adjustmentAccountId: 'QBO_COGS_ADJUSTMENT_ACCOUNT_REQUIRED',
-      auditRows: rows,
-      itemMappings: mappings,
-    }),
-  );
-
-  const missingMappings = new Set<string>();
-  for (const plan of plans) {
-    for (const block of plan.blocks) {
-      if (block.code === 'MISSING_QBO_ITEM_MAPPING') missingMappings.add(block.sellerSku);
-    }
-  }
   const qboInventoryAssetLines = collectInventoryAssetLines(qboBillsResult.bills);
   const qboAssetPlan = buildQboInventoryLandedCostPlan({
     marketplace: options.marketplace,
@@ -237,6 +261,63 @@ async function main(): Promise<void> {
     lines: qboInventoryAssetLines,
   });
   const marketAssetLines = qboAssetPlan.parsedLines.filter((line) => line.marketCode === qboAssetPlan.marketCode);
+  const exactCostLayers = exactLayersFromQbo({
+    marketplace: options.marketplace,
+    layers: qboAssetPlan.layers,
+    parsedLines: marketAssetLines,
+  });
+
+  const exactConsumptions: ExactCostLayerConsumptionInput[] = [];
+  const plutusExactCogsPreview = Array.from(rowsByInvoice.entries())
+    .sort((left, right) => {
+      const dateCompare = settlementTxnDate(left[1]).localeCompare(settlementTxnDate(right[1]));
+      if (dateCompare !== 0) return dateCompare;
+      return left[0].localeCompare(right[0]);
+    })
+    .map(([invoiceId, rows]) => {
+      const plan = buildExactCogsPlan({
+        marketplace: options.marketplace,
+        settlementDocNumber: invoiceId,
+        txnDate: settlementTxnDate(rows),
+        soldUnits: soldUnitsFromRows(rows),
+        layers: exactCostLayers,
+        priorConsumptions: exactConsumptions,
+        componentAccountIds: {
+          manufacturing: 'QBO_COGS_MANUFACTURING_ACCOUNT_REQUIRED',
+          freight: 'QBO_COGS_FREIGHT_ACCOUNT_REQUIRED',
+          duty: 'QBO_COGS_DUTY_ACCOUNT_REQUIRED',
+          mfgAccessories: 'QBO_COGS_ACCESSORIES_ACCOUNT_REQUIRED',
+        },
+        inventoryAssetAccountId: 'QBO_INVENTORY_ASSET_PLUTUS_ACCOUNT_REQUIRED',
+      });
+      if (plan.ok) {
+        exactConsumptions.push(
+          ...plan.consumptions.map((consumption) => ({
+            layerId: consumption.layerId,
+            settlementDocNumber: consumption.settlementDocNumber,
+            sellerSku: consumption.sellerSku,
+            quantity: consumption.quantity,
+            componentAmounts: consumption.componentAmounts,
+            totalAmount: consumption.totalAmount,
+          })),
+        );
+      }
+      return {
+        settlementDocNumber: invoiceId,
+        txnDate: settlementTxnDate(rows),
+        ok: plan.ok,
+        soldUnits: soldUnitsFromRows(rows),
+        blocks: plan.blocks,
+        consumptionCount: plan.consumptions.length,
+        componentTotals: plan.componentTotals,
+        totalCogsAmount: plan.consumptions.reduce((sum, consumption) => sum + consumption.totalAmount, 0),
+        qboJournalEntryDraft: plan.qboJournalEntryDraft,
+      };
+    });
+  const plutusExactInventoryValuation = buildPlutusInventoryValuation({
+    layers: exactCostLayers,
+    consumptions: exactConsumptions,
+  });
 
   let activeConnection = qboBillsResult.updatedConnection;
   const valuationReportResult = await fetchQboReport(activeConnection, 'InventoryValuationSummary', {
@@ -267,11 +348,17 @@ async function main(): Promise<void> {
     inventoryAssetBalance,
     inventoryValuationAssetValue: qboInventoryValuation.totalAssetValue,
   });
+  const qboVsPlutusExactInventoryTieout = {
+    ok: Math.abs(qboInventoryValuation.totalAssetValue - plutusExactInventoryValuation.totalRemainingAmount) <= 0.01,
+    qboInventoryValuationAssetValue: qboInventoryValuation.totalAssetValue,
+    plutusExactRemainingAmount: plutusExactInventoryValuation.totalRemainingAmount,
+    delta: Number((qboInventoryValuation.totalAssetValue - plutusExactInventoryValuation.totalRemainingAmount).toFixed(2)),
+    tolerance: 0.01,
+  };
 
   const ok =
-    plans.every((plan) => plan.ok) &&
-    missingMappings.size === 0 &&
     qboAssetPlan.blocks.length === 0 &&
+    plutusExactCogsPreview.every((preview) => preview.ok) &&
     qboInventoryAssetReclassPlan.lines.length === 0 &&
     qboInventoryValuationTieout.ok;
 
@@ -282,11 +369,6 @@ async function main(): Promise<void> {
         marketplace: options.marketplace,
         market,
         invoicesScanned: rowsByInvoice.size,
-        qboItemMappings: mappings.length,
-        movementPlans: plans.length,
-        blockedPlans: plans.filter((plan) => !plan.ok).length,
-        adjustmentLines: plans.reduce((sum, plan) => sum + plan.adjustmentLines.length, 0),
-        missingMappings: Array.from(missingMappings).sort(),
         qboInventoryAssetWindow: {
           startDate: options.assetStartDate,
           endDate: options.assetEndDate,
@@ -294,9 +376,12 @@ async function main(): Promise<void> {
         qboInventoryAssetLines: marketAssetLines.length,
         qboLandedCostLayers: qboAssetPlan.layers,
         qboInventoryAssetBlocks: qboAssetPlan.blocks,
+        plutusExactInventoryValuation,
+        plutusExactCogsPreview,
         qboInventoryAssetReclassPlan,
         qboInventoryValuation,
         qboInventoryValuationTieout,
+        qboVsPlutusExactInventoryTieout,
       },
       null,
       2,

@@ -13,13 +13,11 @@ import { normalizeSettlementOperatingMemo } from '../lib/amazon-finances/settlem
 import { isPostableFundTransferStatus } from '../lib/amazon-finances/fund-transfer-status';
 import { isBlockingProcessingCode } from '../lib/plutus/settlement-types';
 import { computeProcessingHash } from '../lib/plutus/settlement-utils';
-import { buildQboInventoryAdjustmentPayload } from '../lib/qbo/inventory-adjustments';
 import {
-  buildQboInventoryItemPayload,
-  buildQboItemBasedBillPayload,
-  buildQboPurchaseOrderPayload,
-} from '../lib/qbo/inventory-documents';
-import { buildSettlementInventoryMovementPlan } from '../lib/plutus/qbo-inventory-movements';
+  buildExactCogsPlan,
+  buildPlutusInventoryValuation,
+  type ExactCostLayerInput,
+} from '../lib/plutus/exact-cost-layer-subledger';
 import {
   buildQboInventoryLandedCostPlan,
   buildQboInventoryAssetReclassPlan,
@@ -48,23 +46,35 @@ function money(currency: string, amount: number) {
 test('Plutus nav exposes bridge surfaces only', () => {
   const source = read('components/app-header.tsx');
   assert.equal(source.includes("href: '/settlements'"), true);
+  assert.equal(source.includes("href: '/purchase-orders'"), true);
+  assert.equal(source.includes("href: '/inventory-ledger'"), true);
+  assert.equal(source.includes("href: '/cogs-batches'"), true);
+  assert.equal(source.includes("href: '/exceptions'"), true);
+  assert.equal(source.includes("href: '/sellerboard-export'"), true);
   assert.equal(source.includes("href: '/settlement-mapping'"), true);
   assert.equal(source.includes("href: '/qbo-audit'"), true);
   assert.equal(source.includes("href: '/products'"), false);
-  assert.equal(source.includes("href: '/purchase-orders'"), false);
-  assert.equal(source.includes("href: '/inventory-ledger'"), false);
   assert.equal(source.includes("href: '/cogs-inputs'"), false);
 });
 
-test('Plutus inventory owner surfaces are hard deleted', () => {
+test('Plutus exact inventory control surfaces are exposed without generic QBO creation flows', () => {
   for (const path of [
-    'app/products/page.tsx',
     'app/purchase-orders/page.tsx',
     'app/inventory-ledger/page.tsx',
-    'app/cogs-inputs/page.tsx',
-    'app/api/plutus/products/route.ts',
+    'app/cogs-batches/page.tsx',
+    'app/exceptions/page.tsx',
+    'app/sellerboard-export/page.tsx',
     'app/api/plutus/purchase-orders/route.ts',
     'app/api/plutus/inventory-ledger/route.ts',
+    'lib/plutus/exact-cost-layer-subledger.ts',
+  ]) {
+    assert.equal(existsSync(path), true, `${path} should exist`);
+  }
+
+  for (const path of [
+    'app/products/page.tsx',
+    'app/cogs-inputs/page.tsx',
+    'app/api/plutus/products/route.ts',
     'app/api/plutus/bills/route.ts',
     'app/api/plutus/purchases/create/route.ts',
     'app/api/setup/brands/route.ts',
@@ -75,51 +85,65 @@ test('Plutus inventory owner surfaces are hard deleted', () => {
     'lib/plutus/settlement-validation.ts',
     'lib/plutus/journal-builder.ts',
     'lib/qbo/plutus-qbo-plan.ts',
+    'lib/qbo/inventory-adjustments.ts',
+    'lib/qbo/inventory-documents.ts',
+    'lib/plutus/qbo-inventory-movements.ts',
     'scripts/inventory-audit.ts',
     'scripts/inventory-bills-audit.ts',
     'scripts/backfill-subledger-foundation.ts',
+    'scripts/qbo-complete-inventory-migration.ts',
+    'scripts/qbo-create-inventory-purchase-orders.ts',
+    'scripts/qbo-repair-inventory-valuation-tieout.ts',
   ]) {
     assertDeleted(path);
   }
 });
 
-test('Prisma schema no longer models Plutus-owned inventory', () => {
+test('Prisma schema models exact Plutus PO cost layers and consumption records', () => {
   const schema = read('prisma/schema.prisma');
-  for (const forbidden of [
-    'model Brand',
-    'model Sku',
-    'model BillMapping',
-    'model BillLineMapping',
-    'model OrderSale',
-    'model OrderReturn',
+  for (const required of [
     'model ProductGroup',
     'model CanonicalProduct',
     'model SkuAlias',
     'model PurchaseOrder',
+    'model SourceDocument',
+    'model LandedCostBatch',
     'model PoCostLayer',
     'model InventoryMovement',
+    'model CostLayerConsumption',
+    'model CogsPostingBatch',
+    'model SellerboardCogsExport',
+    'model PlutusException',
+    '@@unique([marketplace, normalizedSellerSku])',
+    '@@unique([purchaseOrderId, canonicalProductId, component])',
+    '@@index([settlementDocNumber])',
+  ]) {
+    assert.equal(schema.includes(required), true, `${required} should exist in schema`);
+  }
+
+  for (const forbidden of [
+    'model Brand',
+    'model Sku {',
+    'model BillMapping',
+    'model BillLineMapping',
+    'model OrderSale',
+    'model OrderReturn',
     'invManufacturing',
-    'cogsManufacturing',
-    'warehousing3pl',
     'productExpenses',
   ]) {
     assert.equal(schema.includes(forbidden), false, `${forbidden} should not exist in schema`);
   }
 });
 
-test('Prisma schema tracks QBO inventory bridge mappings and movement postings only', () => {
+test('Prisma schema does not keep QBO native inventory adjustment bridge state', () => {
   const schema = read('prisma/schema.prisma');
-  for (const required of [
+  for (const forbidden of [
     'model QboInventoryItemMapping',
     'model QboInventoryMovementPosting',
-    'sellerSku',
-    'qboItemId',
     'qboInventoryAdjustmentId',
     'quantityDelta',
-    '@@unique([marketplace, sellerSku])',
-    '@@unique([marketplace, settlementDocNumber, sellerSku])',
   ]) {
-    assert.equal(schema.includes(required), true, `${required} should exist in schema`);
+    assert.equal(schema.includes(forbidden), false, `${forbidden} should not exist in schema`);
   }
 });
 
@@ -129,6 +153,7 @@ test('package scripts do not expose inventory ownership workflows', () => {
     'subledger:backfill',
     'inventory-audit',
     'inventory-bills-audit',
+    'inventory:qbo:repair',
     'repair-missing-processing-jes',
     'reprocess-invoice-conflicts',
   ]) {
@@ -140,60 +165,40 @@ test('package exposes QBO inventory bridge audit workflow', () => {
   const pkg = read('package.json');
   assert.equal(pkg.includes('"inventory:qbo:audit"'), true);
   assert.equal(pkg.includes('scripts/qbo-inventory-bridge-audit.ts'), true);
-  assert.equal(pkg.includes('"inventory:qbo:repair"'), true);
-  assert.equal(pkg.includes('scripts/qbo-repair-inventory-valuation-tieout.ts'), true);
+  assert.equal(pkg.includes('"inventory:exact:sync"'), true);
+  assert.equal(pkg.includes('scripts/plutus-sync-exact-cost-layers-from-qbo.ts'), true);
+  assert.equal(pkg.includes('"inventory:exact:cogs:sync"'), true);
+  assert.equal(pkg.includes('scripts/plutus-sync-exact-cogs-from-audit.ts'), true);
+  assert.equal(pkg.includes('"inventory:exact:audit"'), true);
+  assert.equal(pkg.includes('scripts/plutus-exact-cost-layer-audit.ts'), true);
   assert.equal(existsSync('scripts/qbo-inventory-bridge-audit.ts'), true);
-  assert.equal(existsSync('scripts/qbo-repair-inventory-valuation-tieout.ts'), true);
+  assert.equal(existsSync('scripts/plutus-sync-exact-cost-layers-from-qbo.ts'), true);
+  assert.equal(existsSync('scripts/plutus-sync-exact-cogs-from-audit.ts'), true);
+  assert.equal(existsSync('scripts/plutus-exact-cost-layer-audit.ts'), true);
 });
 
-test('QBO inventory bridge audit reports live asset bill landed-cost evidence', () => {
+test('QBO inventory audit reports exact Plutus cost-layer evidence', () => {
   const source = read('scripts/qbo-inventory-bridge-audit.ts');
   assert.equal(source.includes('buildQboInventoryLandedCostPlan'), true);
   assert.equal(source.includes('buildQboInventoryAssetReclassPlan'), true);
+  assert.equal(source.includes('buildExactCogsPlan'), true);
+  assert.equal(source.includes('buildPlutusInventoryValuation'), true);
   assert.equal(source.includes('parseQboInventoryValuationSummary'), true);
+  assert.equal(source.includes('plutusExactInventoryValuation'), true);
+  assert.equal(source.includes('plutusExactCogsPreview'), true);
   assert.equal(source.includes('qboInventoryValuationTieout'), true);
   assert.equal(source.includes('qboInventoryAssetLines'), true);
   assert.equal(source.includes('qboLandedCostLayers'), true);
   assert.equal(source.includes('qboInventoryAssetBlocks'), true);
+  assert.equal(source.includes('qboVsPlutusExactInventoryTieout'), true);
+  assert.equal(source.includes('buildSettlementInventoryMovementPlan'), false);
   assert.equal(source.includes('qboNativeInventoryMigration'), false);
 });
 
-test('QBO inventory repair script moves only valuation drift lines to clearing', () => {
-  const source = read('scripts/qbo-repair-inventory-valuation-tieout.ts');
-  assert.equal(source.includes("const INVENTORY_ASSET_ACCOUNT_NAME = 'Inventory Asset'"), true);
-  assert.equal(source.includes("const INVENTORY_CLEARING_ACCOUNT_NAME = 'Inventory Clearing'"), true);
-  assert.equal(source.includes("const INVENTORY_COGS_RELEASE_ACCOUNT_NAME = 'Inventory COGS Release'"), true);
-  assert.equal(source.includes('buildQboInventoryAssetReclassPlan'), true);
-  assert.equal(source.includes('updateBillLineAccounts'), true);
-  assert.equal(source.includes('afterTieout'), true);
-});
-
-test('QBO inventory migration uses explicit COGS release adjustment account', () => {
-  const source = read('scripts/qbo-complete-inventory-migration.ts');
-  assert.equal(source.includes("requireAccount(accountsResult.accounts, 'Inventory COGS Release')"), true);
-  assert.equal(source.includes("requireAccount(accountsResult.accounts, 'Inventory Shrinkage')"), false);
-});
-
-test('QBO inventory setup scripts only reuse inventory-tracked SKU items', () => {
-  for (const path of ['scripts/qbo-create-inventory-purchase-orders.ts', 'scripts/qbo-complete-inventory-migration.ts']) {
-    const source = read(path);
-    assert.equal(source.includes("if (item.Type !== 'Inventory') continue;"), true, `${path} should require inventory items`);
-  }
-});
-
-test('QBO inventory migration scripts paginate bill fetches', () => {
-  for (const path of ['scripts/qbo-create-inventory-purchase-orders.ts', 'scripts/qbo-complete-inventory-migration.ts']) {
-    const source = read(path);
-    assert.equal(source.includes('let startPosition = 1;'), true, `${path} should start paginated bill reads`);
-    assert.equal(source.includes('startPosition += result.bills.length;'), true, `${path} should advance paginated bill reads`);
-    assert.equal(source.includes('if (result.bills.length < maxResults) break;'), true, `${path} should stop at the final page`);
-  }
-});
-
-test('QBO audit page uses bridge language, not subledger language', () => {
+test('QBO audit page explains Plutus exact subledger controls', () => {
   const source = read('components/subledger/qbo-audit-page.tsx');
-  assert.equal(source.includes('kicker="Subledger"'), false);
-  assert.equal(source.includes('Posting drift and attachment state will appear after QBO traces are recorded.'), false);
+  assert.equal(source.includes('Exact cost subledger'), true);
+  assert.equal(source.includes('QBO is the ledger; Plutus owns PO-layer COGS proof.'), true);
 });
 
 test('SP-API settlements with processing fund transfers are not postable', () => {
@@ -384,143 +389,6 @@ test('rollback/reset tools preserve historical COGS journal entries', () => {
   }
 });
 
-test('QBO inventory adjustment payload carries quantities only', () => {
-  const payload = buildQboInventoryAdjustmentPayload({
-    adjustmentAccountId: 'cogs-account',
-    txnDate: '2026-05-08',
-    docNumber: 'IA-260501-08-S2',
-    privateNote: 'Plutus inventory movement | Settlement: US-260501-260508-S2',
-    lines: [
-      { qboItemId: 'item-cs007', qtyDiff: -3 },
-      { qboItemId: 'item-cs010', qtyDiff: 1 },
-    ],
-  });
-
-  assert.deepEqual(payload, {
-    AdjustAccountRef: { value: 'cogs-account' },
-    domain: 'QBO',
-    sparse: false,
-    TxnDate: '2026-05-08',
-    DocNumber: 'IA-260501-08-S2',
-    PrivateNote: 'Plutus inventory movement | Settlement: US-260501-260508-S2',
-    Line: [
-      {
-        Id: '1',
-        DetailType: 'ItemAdjustmentLineDetail',
-        ItemAdjustmentLineDetail: {
-          ItemRef: { value: 'item-cs007' },
-          QtyDiff: -3,
-        },
-      },
-      {
-        Id: '2',
-        DetailType: 'ItemAdjustmentLineDetail',
-        ItemAdjustmentLineDetail: {
-          ItemRef: { value: 'item-cs010' },
-          QtyDiff: 1,
-        },
-      },
-    ],
-  });
-  assert.equal(JSON.stringify(payload).includes('Amount'), false);
-  assert.equal(JSON.stringify(payload).includes('UnitPrice'), false);
-});
-
-test('QBO inventory item payload creates inventory-tracked SKU item', () => {
-  const payload = buildQboInventoryItemPayload({
-    name: 'CS-007',
-    sku: 'CS-007',
-    inventoryStartDate: '2025-12-01',
-    initialQuantityOnHand: 0,
-    assetAccountId: 'inventory-asset',
-    incomeAccountId: 'sales',
-    expenseAccountId: 'cogs',
-    purchaseCost: 0.84,
-    unitPrice: 9.99,
-  });
-
-  assert.deepEqual(payload, {
-    Name: 'CS-007',
-    Sku: 'CS-007',
-    Type: 'Inventory',
-    TrackQtyOnHand: true,
-    QtyOnHand: 0,
-    InvStartDate: '2025-12-01',
-    AssetAccountRef: { value: 'inventory-asset' },
-    IncomeAccountRef: { value: 'sales' },
-    ExpenseAccountRef: { value: 'cogs' },
-    PurchaseCost: 0.84,
-    UnitPrice: 9.99,
-  });
-});
-
-test('QBO PO and item-based bill payloads carry item quantities and landed unit costs', () => {
-  const lines = [
-    {
-      qboItemId: 'item-cs007',
-      description: 'INTERNAL PO: 19; SUPPLIER REF: PH250940; SKU: CS-007',
-      quantity: 29440,
-      unitCost: 0.841229,
-    },
-  ];
-
-  assert.deepEqual(
-    buildQboPurchaseOrderPayload({
-      vendorId: 'jiangsu',
-      txnDate: '2025-09-29',
-      docNumber: 'PO-19-PDS',
-      privateNote: 'INTERNAL PO: 19; SUPPLIER REF: PH250940',
-      lines,
-    }),
-    {
-      VendorRef: { value: 'jiangsu' },
-      TxnDate: '2025-09-29',
-      DocNumber: 'PO-19-PDS',
-      PrivateNote: 'INTERNAL PO: 19; SUPPLIER REF: PH250940',
-      Line: [
-        {
-          DetailType: 'ItemBasedExpenseLineDetail',
-          Amount: 24765.78,
-          Description: 'INTERNAL PO: 19; SUPPLIER REF: PH250940; SKU: CS-007',
-          ItemBasedExpenseLineDetail: {
-            ItemRef: { value: 'item-cs007' },
-            Qty: 29440,
-            UnitPrice: 0.841229,
-          },
-        },
-      ],
-    },
-  );
-
-  assert.deepEqual(
-    buildQboItemBasedBillPayload({
-      vendorId: 'jiangsu',
-      txnDate: '2025-09-29',
-      docNumber: 'PH250940',
-      privateNote: 'INTERNAL PO: 19; SUPPLIER REF: PH250940',
-      lines,
-    }),
-    {
-      VendorRef: { value: 'jiangsu' },
-      TxnDate: '2025-09-29',
-      DocNumber: 'PH250940',
-      PrivateNote: 'INTERNAL PO: 19; SUPPLIER REF: PH250940',
-      Line: [
-        {
-          DetailType: 'ItemBasedExpenseLineDetail',
-          Amount: 24765.78,
-          Description: 'INTERNAL PO: 19; SUPPLIER REF: PH250940; SKU: CS-007',
-          ItemBasedExpenseLineDetail: {
-            ItemRef: { value: 'item-cs007' },
-            Qty: 29440,
-            UnitPrice: 0.841229,
-          },
-        },
-      ],
-    },
-  );
-});
-
 test('QBO inventory asset line parser enforces the bill-line description contract', () => {
   assert.deepEqual(
     parseQboInventoryAssetLine({
@@ -695,6 +563,239 @@ test('QBO landed cost plan aggregates US asset bills by internal PO and SKU', ()
     { code: 'RESIDUAL_ASSET_LINE', billId: '46', qboLineId: '18', owner: 'RESIDUAL', sellerSku: 'CS-007' },
     { code: 'NON_SKU_ASSET_LINE', billId: '48', qboLineId: '1', owner: 'US-PDS' },
   ]);
+});
+
+test('exact cost subledger values remaining inventory from unconsumed PO layers', () => {
+  const valuation = buildPlutusInventoryValuation({
+    layers: [
+      {
+        layerId: 'PO-19-PDS:CS-007',
+        marketplace: 'amazon.com',
+        internalPo: 'PO-19-PDS',
+        sellerSku: 'CS-007',
+        receiptDate: '2025-09-29',
+        quantity: 29440,
+        componentAmounts: {
+          manufacturing: 17310.72,
+          freight: 1702.48,
+          duty: 2514.18,
+          mfgAccessories: 3238.4,
+        },
+        sourceRefs: ['FSHY2509087198', 'PH250940', 'PI-250804BOXB', 'PI-2508204A'],
+        qboBillLineRefs: ['44:1', '46:16', '49:5', '51:1', '51:5'],
+      },
+    ],
+    consumptions: [
+      {
+        layerId: 'PO-19-PDS:CS-007',
+        settlementDocNumber: 'US-260102-260116-S1',
+        sellerSku: 'CS-007',
+        quantity: 226,
+        componentAmounts: {
+          manufacturing: 132.89,
+          freight: 13.07,
+          duty: 19.3,
+          mfgAccessories: 24.86,
+        },
+        totalAmount: 190.12,
+      },
+    ],
+  });
+
+  assert.deepEqual(valuation.layers, [
+    {
+      layerId: 'PO-19-PDS:CS-007',
+      marketplace: 'amazon.com',
+      internalPo: 'PO-19-PDS',
+      sellerSku: 'CS-007',
+      receiptDate: '2025-09-29',
+      quantityReceived: 29440,
+      quantityConsumed: 226,
+      quantityRemaining: 29214,
+      totalAmount: 24765.78,
+      consumedAmount: 190.12,
+      remainingAmount: 24575.66,
+      unitCost: 0.841229,
+      componentRemainingAmounts: {
+        manufacturing: 17177.83,
+        freight: 1689.41,
+        duty: 2494.88,
+        mfgAccessories: 3213.54,
+      },
+    },
+  ]);
+  assert.equal(valuation.totalRemainingAmount, 24575.66);
+});
+
+test('exact COGS engine consumes FIFO PO layers and builds QBO COGS journal draft', () => {
+  const layers: ExactCostLayerInput[] = [
+    {
+      layerId: 'PO-19-PDS:CS-007',
+      marketplace: 'amazon.com',
+      internalPo: 'PO-19-PDS',
+      sellerSku: 'CS-007',
+      receiptDate: '2025-09-29',
+      quantity: 29440,
+      componentAmounts: {
+        manufacturing: 17310.72,
+        freight: 1702.48,
+        duty: 2514.18,
+        mfgAccessories: 3238.4,
+      },
+      sourceRefs: ['FSHY2509087198', 'PH250940', 'PI-250804BOXB', 'PI-2508204A'],
+      qboBillLineRefs: ['44:1', '46:16', '49:5', '51:1', '51:5'],
+    },
+    {
+      layerId: 'PO-20-PDS:CS-007',
+      marketplace: 'amazon.com',
+      internalPo: 'PO-20-PDS',
+      sellerSku: 'CS-007',
+      receiptDate: '2026-01-08',
+      quantity: 33920,
+      componentAmounts: {
+        manufacturing: 20792.96,
+        freight: 0,
+        duty: 0,
+        mfgAccessories: 0,
+      },
+      sourceRefs: ['PI-2601082'],
+      qboBillLineRefs: ['362:4'],
+    },
+  ];
+
+  const plan = buildExactCogsPlan({
+    marketplace: 'amazon.com',
+    settlementDocNumber: 'US-260102-260116-S1',
+    txnDate: '2026-01-16',
+    soldUnits: [{ sellerSku: 'CS-007', quantity: 226 }],
+    layers,
+    componentAccountIds: {
+      manufacturing: 'cogs-mfg',
+      freight: 'cogs-freight',
+      duty: 'cogs-duty',
+      mfgAccessories: 'cogs-accessories',
+    },
+    inventoryAssetAccountId: 'inventory-asset-plutus',
+  });
+
+  assert.equal(plan.ok, true);
+  assert.deepEqual(plan.blocks, []);
+  assert.deepEqual(plan.consumptions, [
+    {
+      layerId: 'PO-19-PDS:CS-007',
+      settlementDocNumber: 'US-260102-260116-S1',
+      marketplace: 'amazon.com',
+      internalPo: 'PO-19-PDS',
+      sellerSku: 'CS-007',
+      receiptDate: '2025-09-29',
+      quantity: 226,
+      unitCost: 0.841229,
+      componentUnitCosts: {
+        manufacturing: 0.588,
+        freight: 0.057829,
+        duty: 0.0854,
+        mfgAccessories: 0.11,
+      },
+      componentAmounts: {
+        manufacturing: 132.89,
+        freight: 13.07,
+        duty: 19.3,
+        mfgAccessories: 24.86,
+      },
+      totalAmount: 190.12,
+      sourceRefs: ['FSHY2509087198', 'PH250940', 'PI-250804BOXB', 'PI-2508204A'],
+      qboBillLineRefs: ['44:1', '46:16', '49:5', '51:1', '51:5'],
+    },
+  ]);
+  assert.deepEqual(plan.componentTotals, {
+    manufacturing: 132.89,
+    freight: 13.07,
+    duty: 19.3,
+    mfgAccessories: 24.86,
+  });
+  assert.deepEqual(plan.qboJournalEntryDraft, {
+    txnDate: '2026-01-16',
+    docNumber: 'COGS-US-260102-260116-S1',
+    privateNote: 'Plutus exact COGS | Settlement: US-260102-260116-S1 | Marketplace: amazon.com',
+    lines: [
+      {
+        accountId: 'cogs-mfg',
+        postingType: 'Debit',
+        amount: 132.89,
+        description: 'Manufacturing COGS; SKU=CS-007; PO=PO-19-PDS; QTY=226; UNIT=0.588000',
+      },
+      {
+        accountId: 'cogs-freight',
+        postingType: 'Debit',
+        amount: 13.07,
+        description: 'Freight COGS; SKU=CS-007; PO=PO-19-PDS; QTY=226; UNIT=0.057829',
+      },
+      {
+        accountId: 'cogs-duty',
+        postingType: 'Debit',
+        amount: 19.3,
+        description: 'Duty COGS; SKU=CS-007; PO=PO-19-PDS; QTY=226; UNIT=0.085400',
+      },
+      {
+        accountId: 'cogs-accessories',
+        postingType: 'Debit',
+        amount: 24.86,
+        description: 'Mfg Accessories COGS; SKU=CS-007; PO=PO-19-PDS; QTY=226; UNIT=0.110000',
+      },
+      {
+        accountId: 'inventory-asset-plutus',
+        postingType: 'Credit',
+        amount: 190.12,
+        description: 'Inventory Asset release; SKU=CS-007; PO=PO-19-PDS; QTY=226; UNIT=0.841229',
+      },
+    ],
+  });
+});
+
+test('exact COGS engine blocks when sold units exceed available PO layers', () => {
+  const plan = buildExactCogsPlan({
+    marketplace: 'amazon.com',
+    settlementDocNumber: 'US-260102-260116-S1',
+    txnDate: '2026-01-16',
+    soldUnits: [{ sellerSku: 'CS-007', quantity: 3 }],
+    layers: [
+      {
+        layerId: 'PO-19-PDS:CS-007',
+        marketplace: 'amazon.com',
+        internalPo: 'PO-19-PDS',
+        sellerSku: 'CS-007',
+        receiptDate: '2025-09-29',
+        quantity: 2,
+        componentAmounts: {
+          manufacturing: 1.18,
+          freight: 0.12,
+          duty: 0.17,
+          mfgAccessories: 0.22,
+        },
+        sourceRefs: ['PH250940'],
+        qboBillLineRefs: ['49:5'],
+      },
+    ],
+    componentAccountIds: {
+      manufacturing: 'cogs-mfg',
+      freight: 'cogs-freight',
+      duty: 'cogs-duty',
+      mfgAccessories: 'cogs-accessories',
+    },
+    inventoryAssetAccountId: 'inventory-asset-plutus',
+  });
+
+  assert.equal(plan.ok, false);
+  assert.deepEqual(plan.blocks, [
+    {
+      code: 'INSUFFICIENT_INVENTORY_LAYER',
+      sellerSku: 'CS-007',
+      requestedQuantity: 3,
+      availableQuantity: 2,
+      missingQuantity: 1,
+    },
+  ]);
+  assert.equal(plan.qboJournalEntryDraft, null);
 });
 
 test('QBO inventory asset reclass plan moves only non-item valuation drift lines', () => {
@@ -877,147 +978,6 @@ test('QBO inventory valuation summary parser reads item rows and report total', 
       averageCost: 0.7,
     },
   ]);
-});
-
-test('inventory movement planning blocks missing QBO item mappings and ignores refund stockbacks without proof', () => {
-  const plan = buildSettlementInventoryMovementPlan({
-    marketplace: 'amazon.com',
-    settlementDocNumber: 'US-260501-260508-S2',
-    txnDate: '2026-05-08',
-    adjustmentAccountId: 'cogs-account',
-    itemMappings: [{ marketplace: 'amazon.com', sellerSku: 'CS-007', qboItemId: 'item-cs007' }],
-    auditRows: [
-      {
-        invoiceId: 'US-260501-260508-S2',
-        market: 'us',
-        date: '2026-05-01',
-        orderId: 'ORDER-1',
-        sku: 'CS-007',
-        quantity: 3,
-        description: 'Amazon Sales - Principal - US-PDS',
-        net: 3000,
-      },
-      {
-        invoiceId: 'US-260501-260508-S2',
-        market: 'us',
-        date: '2026-05-02',
-        orderId: 'ORDER-2',
-        sku: 'CS-007',
-        quantity: -1,
-        description: 'Amazon Refunds - Refunded Principal',
-        net: -1000,
-      },
-      {
-        invoiceId: 'US-260501-260508-S2',
-        market: 'us',
-        date: '2026-05-03',
-        orderId: 'ORDER-3',
-        sku: 'CS-010',
-        quantity: 2,
-        description: 'Amazon Sales - Principal - US-PDS',
-        net: 2000,
-      },
-    ],
-  });
-
-  assert.equal(plan.ok, false);
-  assert.deepEqual(plan.blocks, [{ code: 'MISSING_QBO_ITEM_MAPPING', sellerSku: 'CS-010' }]);
-  assert.deepEqual(plan.adjustmentLines, [{ sellerSku: 'CS-007', qboItemId: 'item-cs007', qtyDiff: -3 }]);
-});
-
-test('inventory movement planning emits QBO adjustment when every sold SKU is mapped', () => {
-  const plan = buildSettlementInventoryMovementPlan({
-    marketplace: 'amazon.com',
-    settlementDocNumber: 'US-260501-260508-S2',
-    txnDate: '2026-05-08',
-    adjustmentAccountId: 'cogs-account',
-    itemMappings: [
-      { marketplace: 'amazon.com', sellerSku: 'CS-007', qboItemId: 'item-cs007' },
-      { marketplace: 'amazon.com', sellerSku: 'CS-010', qboItemId: 'item-cs010' },
-    ],
-    auditRows: [
-      {
-        invoiceId: 'US-260501-260508-S2',
-        market: 'us',
-        date: '2026-05-01',
-        orderId: 'ORDER-1',
-        sku: 'CS-007',
-        quantity: 3,
-        description: 'Amazon Sales - Principal',
-        net: 3000,
-      },
-      {
-        invoiceId: 'US-260501-260508-S2',
-        market: 'us',
-        date: '2026-05-03',
-        orderId: 'ORDER-3',
-        sku: 'CS-010',
-        quantity: 2,
-        description: 'Amazon Sales - Principal',
-        net: 2000,
-      },
-    ],
-  });
-
-  assert.equal(plan.ok, true);
-  assert.deepEqual(plan.blocks, []);
-  assert.deepEqual(plan.qboInventoryAdjustmentPayload, {
-    AdjustAccountRef: { value: 'cogs-account' },
-    domain: 'QBO',
-    sparse: false,
-    TxnDate: '2026-05-08',
-    DocNumber: 'IA-260501-08-S2',
-    PrivateNote: 'Plutus inventory movement | Settlement: US-260501-260508-S2 | Marketplace: amazon.com',
-    Line: [
-      {
-        Id: '1',
-        DetailType: 'ItemAdjustmentLineDetail',
-        ItemAdjustmentLineDetail: {
-          ItemRef: { value: 'item-cs007' },
-          QtyDiff: -3,
-        },
-      },
-      {
-        Id: '2',
-        DetailType: 'ItemAdjustmentLineDetail',
-        ItemRef: undefined,
-        ItemAdjustmentLineDetail: {
-          ItemRef: { value: 'item-cs010' },
-          QtyDiff: -2,
-        },
-      },
-    ].map((line) => {
-      const next = { ...line };
-      delete (next as { ItemRef?: unknown }).ItemRef;
-      return next;
-    }),
-  });
-});
-
-test('inventory movement planning supports UK settlement adjustment doc numbers', () => {
-  const plan = buildSettlementInventoryMovementPlan({
-    marketplace: 'amazon.co.uk',
-    settlementDocNumber: 'UK-260501-260508-S2',
-    txnDate: '2026-05-08',
-    adjustmentAccountId: 'cogs-account',
-    itemMappings: [{ marketplace: 'amazon.co.uk', sellerSku: 'CS-007', qboItemId: 'item-cs007' }],
-    auditRows: [
-      {
-        invoiceId: 'UK-260501-260508-S2',
-        market: 'uk',
-        date: '2026-05-01',
-        orderId: 'ORDER-UK-1',
-        sku: 'CS-007',
-        quantity: 4,
-        description: 'Amazon Sales - Principal - UK-PDS',
-        net: 4000,
-      },
-    ],
-  });
-
-  assert.equal(plan.ok, true);
-  assert.equal(plan.qboInventoryAdjustmentPayload?.DocNumber, 'IA-UK-260501-08-S2');
-  assert.equal(plan.qboInventoryAdjustmentPayload?.Line[0]?.ItemAdjustmentLineDetail.QtyDiff, -4);
 });
 
 test('processing blocks fail closed', () => {
