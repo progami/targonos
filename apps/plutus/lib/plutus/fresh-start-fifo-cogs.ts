@@ -93,6 +93,14 @@ function roundUnitCost(value: number): number {
   return Math.round(value * 1000000) / 1000000;
 }
 
+export function buildFreshCogsDocNumber(settlementId: string): string {
+  const docNumber = `C-${settlementId}`;
+  if (docNumber.length > 21) {
+    throw new Error(`QBO COGS doc number exceeds 21 characters: ${docNumber}`);
+  }
+  return docNumber;
+}
+
 function requirePositiveInteger(value: number, label: string): void {
   if (!Number.isInteger(value) || value <= 0) throw new Error(`${label} must be a positive integer`);
 }
@@ -190,7 +198,7 @@ export function buildFreshStartCogsPlan(input: {
     cogsTotal,
     qboCogsJournalDraft: {
       txnDate: input.txnDate,
-      docNumber: `COGS-${input.settlementId}`,
+      docNumber: buildFreshCogsDocNumber(input.settlementId),
       privateNote: `Plutus FIFO COGS | Settlement ${input.settlementId}`,
       lines: [
         {
