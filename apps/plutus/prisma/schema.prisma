@@ -270,10 +270,6 @@ model CanonicalProduct {
 
   productGroup       ProductGroup          @relation(fields: [productGroupId], references: [id], onDelete: Restrict)
   skuAliases         SkuAlias[]
-  poCostLayers       PoCostLayer[]
-  inventoryMovements InventoryMovement[]
-  consumptions       CostLayerConsumption[]
-  sellerboardExports SellerboardCogsExport[]
 
   @@unique([code])
   @@index([productGroupId])
@@ -302,257 +298,122 @@ model SkuAlias {
   @@index([active])
 }
 
-/// PurchaseOrder mirrors QBO purchase-order identity; QBO remains the source document system.
-model PurchaseOrder {
-  id          String  @id @default(cuid())
-  internalRef String
-  sourceType  String
-  sourceId    String
-  supplierRef String?
-  marketplace String?
-  status      String  @default("OPEN")
-  sourceNotes String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  sourceDocuments SourceDocument[]
-  landedBatches   LandedCostBatch[]
-  poCostLayers    PoCostLayer[]
-
-  @@unique([sourceType, sourceId])
-  @@index([internalRef])
-  @@index([marketplace])
-  @@index([status])
+enum CostLayerStatus {
+  NOT_READY
+  READY
 }
 
-/// SourceDocument stores the QBO bill/PO/vendor-credit line evidence that feeds a landed batch.
-model SourceDocument {
-  id                String  @id @default(cuid())
-  purchaseOrderId   String?
-  landedCostBatchId String?
-  qboTxnType        String
-  qboTxnId          String
-  qboLineId         String?
+/// CostLayer is the fresh-start PO/SKU FIFO subledger. QBO owns source documents; Plutus stores only locked costing state.
+model CostLayer {
+  id                     String          @id @default(cuid())
+  marketplace            String
   qboPurchaseOrderId     String?
+  poNumber               String
   qboPurchaseOrderLineId String?
-  docNumber         String?
-  vendorName        String?
-  txnDate           String?
-  amountCents       Int
-  currency          String
-  attachmentStatus  String  @default("missing")
-  sourceHash        String
+  sku                    String
+  qboItemId              String?
+  qtyReceived            Int
+  qtyRemaining           Int
+  landedTotalCents       Int
+  unitCost               Decimal         @db.Decimal(18, 6)
+  currency               String
+  status                 CostLayerStatus @default(NOT_READY)
+  receiptDate            DateTime?
+  lockedAt               DateTime?
+  openingRef             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  purchaseOrder   PurchaseOrder?   @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
-  landedCostBatch LandedCostBatch? @relation(fields: [landedCostBatchId], references: [id], onDelete: SetNull)
+  cogsConsumptions CogsConsumption[]
 
-  @@unique([qboTxnType, qboTxnId, qboLineId])
-  @@index([purchaseOrderId])
-  @@index([landedCostBatchId])
-  @@index([qboTxnType, qboTxnId])
-  @@index([qboPurchaseOrderId])
-  @@index([qboPurchaseOrderLineId])
-  @@index([attachmentStatus])
-}
-
-/// QboLandedCostAllocation links non-PO landed-cost bill lines to QBO PO/SKU layers.
-model QboLandedCostAllocation {
-  id                         String @id @default(cuid())
-  qboBillId                  String
-  qboBillLineId              String
-  qboPurchaseOrderId         String
-  qboPurchaseOrderLineId     String
-  qboPurchaseOrderDocNumber  String
-  sellerSku                  String
-  component                  String
-  amountCents                Int
-  quantity                   Int?
-  allocationMethod           String
-  sourceRef                  String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([qboBillId, qboBillLineId, qboPurchaseOrderId, qboPurchaseOrderLineId, sellerSku, component])
-  @@index([qboPurchaseOrderId])
-  @@index([qboPurchaseOrderLineId])
-  @@index([sellerSku])
-  @@index([component])
-}
-
-/// LandedCostBatch groups QBO purchase, freight, duty, and packaging evidence into one costing batch.
-model LandedCostBatch {
-  id              String    @id @default(cuid())
-  purchaseOrderId String
-  batchRef        String
-  marketplace     String
-  currency        String
-  status          String    @default("draft")
-  lockedAt        DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  purchaseOrder   PurchaseOrder    @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  sourceDocuments SourceDocument[]
-  poCostLayers    PoCostLayer[]
-
-  @@unique([purchaseOrderId, batchRef])
+  @@unique([marketplace, poNumber, sku, qboPurchaseOrderLineId])
   @@index([marketplace])
+  @@index([poNumber])
+  @@index([qboPurchaseOrderId])
+  @@index([qboPurchaseOrderLineId])
+  @@index([qboItemId])
+  @@index([sku])
   @@index([status])
-  @@index([lockedAt])
 }
 
-/// PoCostLayer is the exact PO/SKU landed-cost layer that Plutus consumes for COGS.
-model PoCostLayer {
-  id                 String    @id @default(cuid())
-  purchaseOrderId    String
-  landedCostBatchId  String?
-  canonicalProductId String
-  marketplace        String
-  sellerSku          String
-  component          String
-  quantity           Int
-  amountCents        Int
-  currency           String
-  allocationMethod   String
-  receiptDate        DateTime?
-  sourceQboTxnType   String?
-  sourceQboTxnId     String?
-  sourceQboLineId    String?
-  sourceDocumentName String?
+/// LandedCostAllocation links QBO landed-cost bill lines to a PO/SKU cost layer candidate.
+model LandedCostAllocation {
+  id                     String  @id @default(cuid())
+  qboBillId              String
+  qboBillLineId          String
+  qboPurchaseOrderId     String
+  qboPurchaseOrderLineId String?
+  sku                    String
+  costType               String
+  allocatedAmountCents   Int
+  currency               String
+  allocationPercent      Decimal? @db.Decimal(9, 6)
+  sourceNote             String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  purchaseOrder    PurchaseOrder          @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
-  landedCostBatch  LandedCostBatch?       @relation(fields: [landedCostBatchId], references: [id], onDelete: SetNull)
-  canonicalProduct CanonicalProduct       @relation(fields: [canonicalProductId], references: [id], onDelete: Restrict)
-  consumptions     CostLayerConsumption[]
-
-  @@unique([purchaseOrderId, canonicalProductId, component])
-  @@index([marketplace])
-  @@index([sellerSku])
-  @@index([canonicalProductId])
-  @@index([component])
-  @@index([sourceQboTxnType, sourceQboTxnId])
+  @@unique([qboBillId, qboBillLineId, qboPurchaseOrderId, qboPurchaseOrderLineId, sku, costType])
+  @@index([qboBillId])
+  @@index([qboPurchaseOrderId])
+  @@index([qboPurchaseOrderLineId])
+  @@index([sku])
+  @@index([costType])
 }
 
-/// InventoryMovement stores Amazon-derived unit movement evidence before FIFO COGS consumption.
-model InventoryMovement {
-  id                 String   @id @default(cuid())
-  canonicalProductId String
-  marketplace        String
-  sellerSku          String
-  movementType       String
-  quantity           Int
-  movementDate       DateTime
-  settlementDocNumber String?
-  sourceType         String
-  sourceId           String
-  sourceLineId       String?
+/// SettlementPosting stores idempotency and QBO posting IDs for financial and COGS journals.
+model SettlementPosting {
+  id            String  @id @default(cuid())
+  marketplace   String
+  settlementId  String
+  postingType   String
+  txnDate       String
+  currency      String
+  qboJournalId  String?
+  qboDocNumber  String?
+  sourceHash    String
+  postingHash   String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Restrict)
+  cogsConsumptions CogsConsumption[]
 
-  @@unique([sourceType, sourceId, sourceLineId])
-  @@index([canonicalProductId])
-  @@index([marketplace])
-  @@index([sellerSku])
-  @@index([movementType])
-  @@index([movementDate])
-  @@index([settlementDocNumber])
+  @@unique([marketplace, settlementId, postingType])
+  @@index([settlementId])
+  @@index([postingType])
+  @@index([qboJournalId])
 }
 
-/// CogsPostingBatch is one exact COGS posting batch per settlement.
-model CogsPostingBatch {
+/// CogsConsumption records the FIFO PO/SKU layer consumption behind each settlement COGS journal.
+model CogsConsumption {
   id                  String  @id @default(cuid())
+  settlementPostingId String?
+  settlementId        String
   marketplace         String
-  settlementDocNumber String
-  txnDate             String
+  sku                 String
+  poNumber            String
+  costLayerId         String
+  qtyConsumed         Int
+  unitCost            Decimal @db.Decimal(18, 6)
+  cogsAmountCents     Int
   currency            String
-  status              String  @default("draft")
-  qboJournalEntryId   String?
-  qboDocNumber        String?
-  sourceHash          String
-  postingHash         String
+  qboJournalId        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  consumptions       CostLayerConsumption[]
-  sellerboardExports SellerboardCogsExport[]
+  settlementPosting SettlementPosting? @relation(fields: [settlementPostingId], references: [id], onDelete: SetNull)
+  costLayer         CostLayer          @relation(fields: [costLayerId], references: [id], onDelete: Restrict)
 
-  @@unique([marketplace, settlementDocNumber])
-  @@index([settlementDocNumber])
-  @@index([status])
-  @@index([qboJournalEntryId])
-}
-
-/// CostLayerConsumption records the FIFO PO/SKU layer consumption behind each COGS posting.
-model CostLayerConsumption {
-  id                  String @id @default(cuid())
-  cogsPostingBatchId  String
-  poCostLayerId       String?
-  canonicalProductId  String
-  marketplace         String
-  settlementDocNumber String
-  internalPo          String
-  sellerSku           String
-  quantity            Int
-  amountCents         Int
-  currency            String
-  componentAmounts    Json   @db.JsonB
-  sourceHash          String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cogsPostingBatch CogsPostingBatch @relation(fields: [cogsPostingBatchId], references: [id], onDelete: Cascade)
-  poCostLayer      PoCostLayer?     @relation(fields: [poCostLayerId], references: [id], onDelete: SetNull)
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Restrict)
-
-  @@unique([cogsPostingBatchId, internalPo, sellerSku])
-  @@index([poCostLayerId])
-  @@index([canonicalProductId])
+  @@unique([settlementId, sku, poNumber, costLayerId])
+  @@index([settlementId])
   @@index([marketplace])
-  @@index([settlementDocNumber])
-  @@index([internalPo])
-  @@index([sellerSku])
-}
-
-/// SellerboardCogsExport records the exact COGS rows exported for Sellerboard.
-model SellerboardCogsExport {
-  id                  String    @id @default(cuid())
-  cogsPostingBatchId  String
-  canonicalProductId  String
-  marketplace         String
-  settlementDocNumber String
-  sellerSku           String
-  internalPo          String
-  quantity            Int
-  amountCents         Int
-  currency            String
-  status              String    @default("draft")
-  exportedAt          DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  cogsPostingBatch CogsPostingBatch @relation(fields: [cogsPostingBatchId], references: [id], onDelete: Cascade)
-  canonicalProduct CanonicalProduct @relation(fields: [canonicalProductId], references: [id], onDelete: Restrict)
-
-  @@unique([cogsPostingBatchId, sellerSku, internalPo])
-  @@index([marketplace])
-  @@index([settlementDocNumber])
-  @@index([status])
-  @@index([exportedAt])
+  @@index([sku])
+  @@index([poNumber])
+  @@index([costLayerId])
+  @@index([qboJournalId])
 }
 
 /// PlutusException blocks posting when exact source evidence is missing or ambiguous.

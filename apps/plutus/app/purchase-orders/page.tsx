@@ -1,5 +1,4 @@
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -14,47 +13,34 @@ import { db } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 type PurchaseOrderRow = {
-  id: string;
-  internalRef: string;
-  sourceType: string;
-  sourceId: string;
-  supplierRef: string | null;
-  marketplace: string | null;
-  status: string;
+  poNumber: string;
+  qboPurchaseOrderId: string | null;
+  marketplace: string;
   layerCount: bigint;
-  layerAmountCents: bigint | null;
+  readyLayerCount: bigint;
+  remainingQty: bigint | null;
+  remainingValueCents: bigint | null;
 };
-
-const tableWrapSx = {
-  overflow: 'hidden',
-  border: 1,
-  borderColor: 'divider',
-  bgcolor: 'background.paper',
-} as const;
 
 async function getPurchaseOrders(): Promise<PurchaseOrderRow[]> {
   return db.$queryRawUnsafe<PurchaseOrderRow[]>(`
     SELECT
-      po."id",
-      po."internalRef",
-      po."sourceType",
-      po."sourceId",
-      po."supplierRef",
-      po."marketplace",
-      po."status",
-      COUNT(layer."id") AS "layerCount",
-      COALESCE(SUM(layer."amountCents"), 0) AS "layerAmountCents"
-    FROM "PurchaseOrder" po
-    LEFT JOIN "PoCostLayer" layer ON layer."purchaseOrderId" = po."id"
-    GROUP BY po."id"
-    ORDER BY po."internalRef" ASC
+      "poNumber",
+      MIN("qboPurchaseOrderId") AS "qboPurchaseOrderId",
+      "marketplace",
+      COUNT("id") AS "layerCount",
+      COUNT(*) FILTER (WHERE "status" = 'READY') AS "readyLayerCount",
+      COALESCE(SUM("qtyRemaining"), 0) AS "remainingQty",
+      COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents"
+    FROM "CostLayer"
+    GROUP BY "poNumber", "marketplace"
+    ORDER BY "poNumber" ASC
     LIMIT 500
   `);
 }
 
 function formatCents(value: bigint | null): string {
-  const cents = Number(value ?? 0n);
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value ?? 0n) / 100);
 }
 
 export default async function PurchaseOrdersPage() {
@@ -62,48 +48,41 @@ export default async function PurchaseOrdersPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="Purchase Orders" kicker="QBO source docs" />
+      <PageHeader title="Purchase Orders" kicker="QBO PO references from locked cost layers" />
 
-      <Box sx={tableWrapSx}>
+      <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 960 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Internal PO</TableCell>
-                <TableCell>Supplier Ref</TableCell>
+                <TableCell>PO</TableCell>
+                <TableCell>QBO PO Id</TableCell>
                 <TableCell>Marketplace</TableCell>
-                <TableCell>QBO Source</TableCell>
-                <TableCell>Status</TableCell>
                 <TableCell align="right">Layers</TableCell>
-                <TableCell align="right">Layer Value</TableCell>
+                <TableCell align="right">Ready</TableCell>
+                <TableCell align="right">Qty Remaining</TableCell>
+                <TableCell align="right">Remaining Value</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7}>
-                    <EmptyState
-                      title="No purchase orders synced"
-                      description="QBO purchase orders will appear here after the exact cost-layer sync runs."
-                    />
+                    <EmptyState title="No cost-layer POs" description="Native QBO POs appear here after opening import or operator lock." />
                   </TableCell>
                 </TableRow>
               )}
               {rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={`${row.marketplace}:${row.poNumber}`}>
                   <TableCell>
-                    <Typography sx={{ fontWeight: 650 }}>{row.internalRef}</Typography>
+                    <Typography sx={{ fontWeight: 650 }}>{row.poNumber}</Typography>
                   </TableCell>
-                  <TableCell>{row.supplierRef ?? '-'}</TableCell>
-                  <TableCell>{row.marketplace ?? '-'}</TableCell>
-                  <TableCell>
-                    {row.sourceType} {row.sourceId}
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={row.status} size="small" variant="outlined" />
-                  </TableCell>
+                  <TableCell>{row.qboPurchaseOrderId ?? '-'}</TableCell>
+                  <TableCell>{row.marketplace}</TableCell>
                   <TableCell align="right">{Number(row.layerCount)}</TableCell>
-                  <TableCell align="right">{formatCents(row.layerAmountCents)}</TableCell>
+                  <TableCell align="right">{Number(row.readyLayerCount)}</TableCell>
+                  <TableCell align="right">{Number(row.remainingQty ?? 0n).toLocaleString('en-US')}</TableCell>
+                  <TableCell align="right">{formatCents(row.remainingValueCents)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
