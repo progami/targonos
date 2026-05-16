@@ -20,6 +20,8 @@
     "settlements:reclass:repair": "tsx scripts/settlement-reclass-repair.ts",
     "settlements:us:reconcile:spapi": "tsx scripts/us-settlement-reconcile-spapi.ts",
     "settlements:us:ingest:spapi": "tsx scripts/us-settlement-ingest-spapi.ts",
+    "inventory:qbo:audit": "tsx scripts/qbo-inventory-bridge-audit.ts",
+    "inventory:qbo:repair": "tsx scripts/qbo-repair-inventory-valuation-tieout.ts",
     "settlements:backfill-docnumbers": "tsx scripts/backfill-settlement-doc-numbers.ts",
     "settlements:backfill-fx": "tsx scripts/backfill-settlement-exchange-rates.ts",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
