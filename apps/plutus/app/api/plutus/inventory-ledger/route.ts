@@ -7,14 +7,15 @@ const logger = createLogger({ name: 'plutus-inventory-ledger-api' });
 
 type InventoryLayerRow = {
   id: string;
-  internalRef: string;
+  poNumber: string;
   marketplace: string;
-  sellerSku: string;
-  component: string;
-  quantity: number;
-  amountCents: number;
+  sku: string;
+  qtyReceived: number;
+  qtyRemaining: number;
+  landedTotalCents: number;
+  unitCost: number;
   currency: string;
-  allocationMethod: string;
+  status: string;
   receiptDate: Date | null;
 };
 
@@ -22,33 +23,34 @@ export async function GET() {
   try {
     const rows = await db.$queryRawUnsafe<InventoryLayerRow[]>(`
       SELECT
-        layer."id",
-        po."internalRef",
-        layer."marketplace",
-        layer."sellerSku",
-        layer."component",
-        layer."quantity",
-        layer."amountCents",
-        layer."currency",
-        layer."allocationMethod",
-        layer."receiptDate"
-      FROM "PoCostLayer" layer
-      INNER JOIN "PurchaseOrder" po ON po."id" = layer."purchaseOrderId"
-      ORDER BY po."internalRef" ASC, layer."sellerSku" ASC, layer."component" ASC
+        "id",
+        "poNumber",
+        "marketplace",
+        "sku",
+        "qtyReceived",
+        "qtyRemaining",
+        "landedTotalCents",
+        "unitCost",
+        "currency",
+        "status",
+        "receiptDate"
+      FROM "CostLayer"
+      ORDER BY "poNumber" ASC, "sku" ASC, "receiptDate" ASC
       LIMIT 1000
     `);
 
     return NextResponse.json({
       layers: rows.map((row) => ({
         id: row.id,
-        internalRef: row.internalRef,
+        poNumber: row.poNumber,
         marketplace: row.marketplace,
-        sellerSku: row.sellerSku,
-        component: row.component,
-        quantity: row.quantity,
-        amountCents: row.amountCents,
+        sku: row.sku,
+        qtyReceived: row.qtyReceived,
+        qtyRemaining: row.qtyRemaining,
+        landedTotalCents: row.landedTotalCents,
+        unitCost: Number(row.unitCost),
         currency: row.currency,
-        allocationMethod: row.allocationMethod,
+        status: row.status,
         receiptDate: row.receiptDate === null ? null : row.receiptDate.toISOString(),
       })),
     });

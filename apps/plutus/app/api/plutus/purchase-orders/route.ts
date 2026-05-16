@@ -6,48 +6,41 @@ import { db } from '@/lib/db';
 const logger = createLogger({ name: 'plutus-purchase-orders-api' });
 
 type PurchaseOrderRow = {
-  id: string;
-  internalRef: string;
-  sourceType: string;
-  sourceId: string;
-  supplierRef: string | null;
-  marketplace: string | null;
-  status: string;
+  poNumber: string;
+  qboPurchaseOrderId: string | null;
+  marketplace: string;
   layerCount: bigint;
-  layerAmountCents: bigint | null;
+  readyLayerCount: bigint;
+  remainingQty: bigint | null;
+  remainingValueCents: bigint | null;
 };
 
 export async function GET() {
   try {
     const rows = await db.$queryRawUnsafe<PurchaseOrderRow[]>(`
       SELECT
-        po."id",
-        po."internalRef",
-        po."sourceType",
-        po."sourceId",
-        po."supplierRef",
-        po."marketplace",
-        po."status",
-        COUNT(layer."id") AS "layerCount",
-        COALESCE(SUM(layer."amountCents"), 0) AS "layerAmountCents"
-      FROM "PurchaseOrder" po
-      LEFT JOIN "PoCostLayer" layer ON layer."purchaseOrderId" = po."id"
-      GROUP BY po."id"
-      ORDER BY po."internalRef" ASC
+        "poNumber",
+        MIN("qboPurchaseOrderId") AS "qboPurchaseOrderId",
+        "marketplace",
+        COUNT("id") AS "layerCount",
+        COUNT(*) FILTER (WHERE "status" = 'READY') AS "readyLayerCount",
+        COALESCE(SUM("qtyRemaining"), 0) AS "remainingQty",
+        COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents"
+      FROM "CostLayer"
+      GROUP BY "poNumber", "marketplace"
+      ORDER BY "poNumber" ASC
       LIMIT 500
     `);
 
     return NextResponse.json({
       purchaseOrders: rows.map((row) => ({
-        id: row.id,
-        internalRef: row.internalRef,
-        sourceType: row.sourceType,
-        sourceId: row.sourceId,
-        supplierRef: row.supplierRef,
+        poNumber: row.poNumber,
+        qboPurchaseOrderId: row.qboPurchaseOrderId,
         marketplace: row.marketplace,
-        status: row.status,
         layerCount: Number(row.layerCount),
-        layerAmountCents: Number(row.layerAmountCents ?? 0n),
+        readyLayerCount: Number(row.readyLayerCount),
+        remainingQty: Number(row.remainingQty ?? 0n),
+        remainingValueCents: Number(row.remainingValueCents ?? 0n),
       })),
     });
   } catch (error) {

@@ -1,4 +1,5 @@
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -14,40 +15,34 @@ export const dynamic = 'force-dynamic';
 
 type InventoryLayerRow = {
   id: string;
-  internalRef: string;
+  poNumber: string;
   marketplace: string;
-  sellerSku: string;
-  component: string;
-  quantity: number;
-  amountCents: number;
+  sku: string;
+  qtyReceived: number;
+  qtyRemaining: number;
+  landedTotalCents: number;
+  unitCost: number;
   currency: string;
-  allocationMethod: string;
+  status: string;
   receiptDate: Date | null;
 };
-
-const tableWrapSx = {
-  overflow: 'hidden',
-  border: 1,
-  borderColor: 'divider',
-  bgcolor: 'background.paper',
-} as const;
 
 async function getInventoryLayers(): Promise<InventoryLayerRow[]> {
   return db.$queryRawUnsafe<InventoryLayerRow[]>(`
     SELECT
-      layer."id",
-      po."internalRef",
-      layer."marketplace",
-      layer."sellerSku",
-      layer."component",
-      layer."quantity",
-      layer."amountCents",
-      layer."currency",
-      layer."allocationMethod",
-      layer."receiptDate"
-    FROM "PoCostLayer" layer
-    INNER JOIN "PurchaseOrder" po ON po."id" = layer."purchaseOrderId"
-    ORDER BY po."internalRef" ASC, layer."sellerSku" ASC, layer."component" ASC
+      "id",
+      "poNumber",
+      "marketplace",
+      "sku",
+      "qtyReceived",
+      "qtyRemaining",
+      "landedTotalCents",
+      "unitCost",
+      "currency",
+      "status",
+      "receiptDate"
+    FROM "CostLayer"
+    ORDER BY "poNumber" ASC, "sku" ASC, "receiptDate" ASC
     LIMIT 1000
   `);
 }
@@ -66,45 +61,46 @@ export default async function InventoryLedgerPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="Inventory Ledger" kicker="Exact PO/SKU layers" />
+      <PageHeader title="Inventory Ledger" kicker="Fresh-start PO/SKU FIFO layers" />
 
-      <Box sx={tableWrapSx}>
+      <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 1040 }}>
             <TableHead>
               <TableRow>
                 <TableCell>PO</TableCell>
                 <TableCell>SKU</TableCell>
-                <TableCell>Component</TableCell>
                 <TableCell>Marketplace</TableCell>
-                <TableCell align="right">Qty</TableCell>
-                <TableCell align="right">Amount</TableCell>
-                <TableCell>Allocation</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Qty Received</TableCell>
+                <TableCell align="right">Qty Remaining</TableCell>
+                <TableCell align="right">Landed Total</TableCell>
+                <TableCell align="right">Unit Cost</TableCell>
                 <TableCell>Receipt</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
-                    <EmptyState
-                      title="No exact cost layers"
-                      description="Locked QBO PO and bill evidence will appear here as PO/SKU cost layers."
-                    />
+                  <TableCell colSpan={9}>
+                    <EmptyState title="No cost layers" description="Opening layers and locked QBO PO/SKU layers will appear here." />
                   </TableCell>
                 </TableRow>
               )}
               {rows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>
-                    <Typography sx={{ fontWeight: 650 }}>{row.internalRef}</Typography>
+                    <Typography sx={{ fontWeight: 650 }}>{row.poNumber}</Typography>
                   </TableCell>
-                  <TableCell>{row.sellerSku}</TableCell>
-                  <TableCell>{row.component}</TableCell>
+                  <TableCell>{row.sku}</TableCell>
                   <TableCell>{row.marketplace}</TableCell>
-                  <TableCell align="right">{row.quantity.toLocaleString('en-US')}</TableCell>
-                  <TableCell align="right">{formatCents(row.amountCents, row.currency)}</TableCell>
-                  <TableCell>{row.allocationMethod}</TableCell>
+                  <TableCell>
+                    <Chip label={row.status} size="small" variant="outlined" />
+                  </TableCell>
+                  <TableCell align="right">{row.qtyReceived.toLocaleString('en-US')}</TableCell>
+                  <TableCell align="right">{row.qtyRemaining.toLocaleString('en-US')}</TableCell>
+                  <TableCell align="right">{formatCents(row.landedTotalCents, row.currency)}</TableCell>
+                  <TableCell align="right">{Number(row.unitCost).toFixed(6)}</TableCell>
                   <TableCell>{formatDate(row.receiptDate)}</TableCell>
                 </TableRow>
               ))}

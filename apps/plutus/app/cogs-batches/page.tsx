@@ -1,5 +1,4 @@
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -16,38 +15,32 @@ export const dynamic = 'force-dynamic';
 type CogsBatchRow = {
   id: string;
   marketplace: string;
-  settlementDocNumber: string;
+  settlementId: string;
   txnDate: string;
   currency: string;
-  status: string;
-  qboJournalEntryId: string | null;
+  qboJournalId: string | null;
+  qboDocNumber: string | null;
   consumptionCount: bigint;
   cogsAmountCents: bigint | null;
 };
 
-const tableWrapSx = {
-  overflow: 'hidden',
-  border: 1,
-  borderColor: 'divider',
-  bgcolor: 'background.paper',
-} as const;
-
 async function getCogsBatches(): Promise<CogsBatchRow[]> {
   return db.$queryRawUnsafe<CogsBatchRow[]>(`
     SELECT
-      batch."id",
-      batch."marketplace",
-      batch."settlementDocNumber",
-      batch."txnDate",
-      batch."currency",
-      batch."status",
-      batch."qboJournalEntryId",
+      posting."id",
+      posting."marketplace",
+      posting."settlementId",
+      posting."txnDate",
+      posting."currency",
+      posting."qboJournalId",
+      posting."qboDocNumber",
       COUNT(consumption."id") AS "consumptionCount",
-      COALESCE(SUM(consumption."amountCents"), 0) AS "cogsAmountCents"
-    FROM "CogsPostingBatch" batch
-    LEFT JOIN "CostLayerConsumption" consumption ON consumption."cogsPostingBatchId" = batch."id"
-    GROUP BY batch."id"
-    ORDER BY batch."txnDate" DESC, batch."settlementDocNumber" DESC
+      COALESCE(SUM(consumption."cogsAmountCents"), 0) AS "cogsAmountCents"
+    FROM "SettlementPosting" posting
+    LEFT JOIN "CogsConsumption" consumption ON consumption."settlementPostingId" = posting."id"
+    WHERE posting."postingType" = 'COGS'
+    GROUP BY posting."id"
+    ORDER BY posting."txnDate" DESC, posting."settlementId" DESC
     LIMIT 500
   `);
 }
@@ -61,9 +54,9 @@ export default async function CogsBatchesPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="COGS Batches" kicker="FIFO postings" />
+      <PageHeader title="COGS Batches" kicker="Fresh-start FIFO postings" />
 
-      <Box sx={tableWrapSx}>
+      <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 960 }}>
             <TableHead>
@@ -71,7 +64,7 @@ export default async function CogsBatchesPage() {
                 <TableCell>Settlement</TableCell>
                 <TableCell>Marketplace</TableCell>
                 <TableCell>Date</TableCell>
-                <TableCell>Status</TableCell>
+                <TableCell>QBO Doc</TableCell>
                 <TableCell>QBO JE</TableCell>
                 <TableCell align="right">Lines</TableCell>
                 <TableCell align="right">COGS</TableCell>
@@ -81,24 +74,19 @@ export default async function CogsBatchesPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7}>
-                    <EmptyState
-                      title="No COGS batches posted"
-                      description="Exact settlement COGS postings will appear here after FIFO consumption is approved and posted."
-                    />
+                    <EmptyState title="No COGS postings" description="Fresh-start FIFO COGS postings will appear here after settlement posting." />
                   </TableCell>
                 </TableRow>
               )}
               {rows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>
-                    <Typography sx={{ fontWeight: 650 }}>{row.settlementDocNumber}</Typography>
+                    <Typography sx={{ fontWeight: 650 }}>{row.settlementId}</Typography>
                   </TableCell>
                   <TableCell>{row.marketplace}</TableCell>
                   <TableCell>{row.txnDate}</TableCell>
-                  <TableCell>
-                    <Chip label={row.status} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{row.qboJournalEntryId ?? '-'}</TableCell>
+                  <TableCell>{row.qboDocNumber ?? '-'}</TableCell>
+                  <TableCell>{row.qboJournalId ?? '-'}</TableCell>
                   <TableCell align="right">{Number(row.consumptionCount)}</TableCell>
                   <TableCell align="right">{formatCents(row.cogsAmountCents, row.currency)}</TableCell>
                 </TableRow>
