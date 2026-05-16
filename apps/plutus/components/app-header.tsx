@@ -110,6 +110,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
   { href: '/purchase-orders', label: 'Purchase Orders', icon: AssignmentIcon },
   { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
+  { href: '/landed-cost-allocations', label: 'Allocations', icon: FactCheckIcon },
   { href: '/cogs-batches', label: 'COGS Batches', icon: StackedLineChartIcon },
   { href: '/exceptions', label: 'Exceptions', icon: ReportProblemIcon },
   { href: '/sellerboard-export', label: 'Sellerboard Export', icon: OutboxIcon },
