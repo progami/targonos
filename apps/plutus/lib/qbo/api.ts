@@ -1599,7 +1599,7 @@ export async function fetchAccounts(
   const baseUrl = getApiBaseUrl();
 
   const query = includeInactive
-    ? `SELECT * FROM Account MAXRESULTS 1000`
+    ? `SELECT * FROM Account WHERE Active IN (true, false) MAXRESULTS 1000`
     : `SELECT * FROM Account WHERE Active = true MAXRESULTS 1000`;
   const queryUrl = `${baseUrl}/v3/company/${connection.realmId}/query?query=${encodeURIComponent(query)}`;
 
@@ -1655,6 +1655,37 @@ export async function fetchAccountsByFullyQualifiedName(
   const data = (await response.json()) as QboQueryResponse;
   const accounts = data.QueryResponse.Account;
   return { accounts: accounts ? accounts : [], updatedConnection };
+}
+
+export async function fetchQboReport(
+  connection: QboConnection,
+  reportName: string,
+  params: Record<string, string> = {},
+): Promise<{ report: unknown; updatedConnection?: QboConnection }> {
+  if (reportName.trim() === '') throw new Error('QBO report name is required');
+
+  const { accessToken, updatedConnection } = await getValidToken(connection);
+  const baseUrl = getApiBaseUrl();
+  const searchParams = new URLSearchParams(params);
+  searchParams.set('minorversion', '75');
+
+  const url = `${baseUrl}/v3/company/${connection.realmId}/reports/${reportName}?${searchParams.toString()}`;
+  logger.info('Fetching QBO report', { reportName, params });
+
+  const response = await fetchWithRetry(url, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    logger.error('Failed to fetch QBO report', { reportName, status: response.status, error: errorText });
+    throw new Error(`Failed to fetch QBO report ${reportName}: ${response.status} ${errorText}`);
+  }
+
+  return { report: await response.json(), updatedConnection };
 }
 
 export async function createAccount(
@@ -1746,6 +1777,9 @@ export async function updateAccountActive(
   }
 
   const data = await response.json();
+  invalidateCache(`accounts:${connection.realmId}:all`);
+  invalidateCache(`accounts:${connection.realmId}:active`);
+  invalidateCache(`accounts:${connection.realmId}`);
   return { account: data.Account, updatedConnection };
 }
 
