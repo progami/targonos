@@ -107,6 +107,7 @@ test('Prisma schema models exact Plutus PO cost layers and consumption records',
     'model SkuAlias',
     'model PurchaseOrder',
     'model SourceDocument',
+    'model QboLandedCostAllocation',
     'model LandedCostBatch',
     'model PoCostLayer',
     'model InventoryMovement',
@@ -458,6 +459,12 @@ test('QBO inventory asset line parser enforces the bill-line description contrac
       qboLineId: '5',
       accountName: 'Inventory Asset:Manufacturing - US-PDS',
       amount: 17310.72,
+      purchaseOrderSourceType: 'LEGACY_INTERNAL_PO',
+      purchaseOrderSourceId: 'PO-19-PDS',
+      qboPurchaseOrderId: null,
+      qboPurchaseOrderLineId: null,
+      qboItemId: null,
+      qboItemName: null,
       component: 'manufacturing',
       marketCode: 'US-PDS',
       descriptionKind: 'MFG',
@@ -482,6 +489,52 @@ test('QBO inventory asset line parser enforces the bill-line description contrac
         'DUTY; OWNER=US-PDS; PO=PO-19-PDS; SKU=CS-007; ENTRY=N/A; SHIP=FBA19523CMQ9; SERVICE=CUSTOMS DUTY; ALLOC=FOB_VALUE; SOURCE=FSHY2509087198',
     }).component,
     'duty',
+  );
+
+  assert.deepEqual(
+    parseQboInventoryAssetLine({
+      billId: '701',
+      billDocNumber: 'PH260521',
+      billDate: '2026-05-21',
+      vendorName: 'JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD',
+      qboLineId: '1',
+      accountName: 'Inventory Asset',
+      amount: 1200,
+      qboItemId: '4',
+      qboItemName: 'CS-007',
+      qboQuantity: 2000,
+      nativePurchaseOrderRef: {
+        qboPurchaseOrderId: 'PO_QBO_21',
+        qboPurchaseOrderLineId: '3',
+        qboPurchaseOrderDocNumber: 'PO-21-PDS',
+        qboItemId: '4',
+        qboItemName: 'CS-007',
+        quantity: 2000,
+      },
+    }),
+    {
+      billId: '701',
+      billDocNumber: 'PH260521',
+      billDate: '2026-05-21',
+      vendorName: 'JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD',
+      qboLineId: '1',
+      accountName: 'Inventory Asset',
+      amount: 1200,
+      purchaseOrderSourceType: 'QBO_PURCHASE_ORDER',
+      purchaseOrderSourceId: 'PO_QBO_21',
+      qboPurchaseOrderId: 'PO_QBO_21',
+      qboPurchaseOrderLineId: '3',
+      qboItemId: '4',
+      qboItemName: 'CS-007',
+      component: 'manufacturing',
+      marketCode: null,
+      descriptionKind: 'MFG',
+      owner: null,
+      internalPo: 'PO-21-PDS',
+      sellerSku: 'CS-007',
+      quantity: 2000,
+      sourceRef: 'PH260521',
+    },
   );
 
   assert.deepEqual(
@@ -594,6 +647,10 @@ test('QBO landed cost plan aggregates US asset bills by internal PO and SKU', ()
   assert.deepEqual(plan.layers, [
     {
       internalPo: 'PO-19-PDS',
+      purchaseOrderSourceType: 'LEGACY_INTERNAL_PO',
+      purchaseOrderSourceId: 'PO-19-PDS',
+      qboPurchaseOrderId: null,
+      qboPurchaseOrderLineIds: [],
       sellerSku: 'CS-007',
       quantity: 29440,
       componentAmounts: {
@@ -605,12 +662,94 @@ test('QBO landed cost plan aggregates US asset bills by internal PO and SKU', ()
       totalAmount: 24765.78,
       unitCost: 0.841229,
       sourceRefs: ['FSHY2509087198', 'PH250940', 'PI-250804BOXB', 'PI-2508204A'],
+      qboSourceLineKeys: [
+        '44:1:LEGACY_INTERNAL_PO:PO-19-PDS:CS-007:mfgAccessories',
+        '46:16:LEGACY_INTERNAL_PO:PO-19-PDS:CS-007:mfgAccessories',
+        '49:5:LEGACY_INTERNAL_PO:PO-19-PDS:CS-007:manufacturing',
+        '51:1:LEGACY_INTERNAL_PO:PO-19-PDS:CS-007:freight',
+        '51:5:LEGACY_INTERNAL_PO:PO-19-PDS:CS-007:duty',
+      ],
       qboBillLineRefs: ['44:1', '46:16', '49:5', '51:1', '51:5'],
     },
   ]);
   assert.deepEqual(plan.blocks, [
     { code: 'RESIDUAL_ASSET_LINE', billId: '46', qboLineId: '18', owner: 'RESIDUAL', sellerSku: 'CS-007' },
     { code: 'NON_SKU_ASSET_LINE', billId: '48', qboLineId: '1', owner: 'US-PDS' },
+  ]);
+});
+
+test('QBO landed cost plan prefers native PO links and Plutus allocations over description tokens', () => {
+  const plan = buildQboInventoryLandedCostPlan({
+    marketplace: 'amazon.com',
+    lines: [
+      {
+        billId: '701',
+        billDocNumber: 'PH260521',
+        billDate: '2026-05-21',
+        vendorName: 'JIANGSU ZHEWEI ELECTROMECHANICAL CO., LTD',
+        qboLineId: '1',
+        accountName: 'Inventory Asset',
+        amount: 1200,
+        qboItemId: '4',
+        qboItemName: 'CS-007',
+        qboQuantity: 2000,
+        nativePurchaseOrderRef: {
+          qboPurchaseOrderId: 'PO_QBO_21',
+          qboPurchaseOrderLineId: '3',
+          qboPurchaseOrderDocNumber: 'PO-21-PDS',
+          qboItemId: '4',
+          qboItemName: 'CS-007',
+          quantity: 2000,
+        },
+      },
+      {
+        billId: '702',
+        billDocNumber: 'FRT260521',
+        billDate: '2026-05-22',
+        vendorName: 'FOREST SHIPPING WORLDWIDE LTD',
+        qboLineId: '1',
+        accountName: 'Inventory Asset:Freight - US-PDS',
+        amount: 300,
+        landedCostAllocation: {
+          qboPurchaseOrderId: 'PO_QBO_21',
+          qboPurchaseOrderLineId: '3',
+          qboPurchaseOrderDocNumber: 'PO-21-PDS',
+          sellerSku: 'CS-007',
+          component: 'freight',
+          amount: 300,
+          quantity: null,
+          allocationMethod: 'MANUAL_SKU_SPLIT',
+          sourceRef: 'FRT260521',
+        },
+      },
+    ],
+  });
+
+  assert.deepEqual(plan.blocks, []);
+  assert.deepEqual(plan.layers, [
+    {
+      internalPo: 'PO-21-PDS',
+      purchaseOrderSourceType: 'QBO_PURCHASE_ORDER',
+      purchaseOrderSourceId: 'PO_QBO_21',
+      qboPurchaseOrderId: 'PO_QBO_21',
+      qboPurchaseOrderLineIds: ['3'],
+      sellerSku: 'CS-007',
+      quantity: 2000,
+      componentAmounts: {
+        manufacturing: 1200,
+        freight: 300,
+        duty: 0,
+        mfgAccessories: 0,
+      },
+      totalAmount: 1500,
+      unitCost: 0.75,
+      sourceRefs: ['FRT260521', 'PH260521'],
+      qboSourceLineKeys: [
+        '701:1:QBO_PURCHASE_ORDER:PO_QBO_21:CS-007:manufacturing',
+        '702:1:QBO_PURCHASE_ORDER:PO_QBO_21:CS-007:freight',
+      ],
+      qboBillLineRefs: ['701:1', '702:1'],
+    },
   ]);
 });
 
