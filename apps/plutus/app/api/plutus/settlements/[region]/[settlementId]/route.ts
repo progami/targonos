@@ -49,7 +49,7 @@ function buildHistory(parent: Awaited<ReturnType<typeof fetchSettlementParentDet
         id: `processed:${child.processing.id}`,
         timestamp: child.processing.uploadedAt,
         title: 'Processed in Plutus',
-        description: `Matched to invoice ${child.processing.invoiceId}.`,
+        description: `Matched to support ${child.processing.invoiceId}.`,
         childDocNumber: child.docNumber,
         kind: 'processed',
       });
@@ -60,7 +60,7 @@ function buildHistory(parent: Awaited<ReturnType<typeof fetchSettlementParentDet
         id: `rolled-back:${child.rollback.id}`,
         timestamp: child.rollback.rolledBackAt,
         title: 'Rolled back in Plutus',
-        description: `Previously processed with invoice ${child.rollback.invoiceId}.`,
+        description: `Previously processed with support ${child.rollback.invoiceId}.`,
         childDocNumber: child.docNumber,
         kind: 'rolled_back',
       });
@@ -91,7 +91,9 @@ export async function GET(_req: NextRequest, context: RouteContext) {
       await saveServerQboConnection(detail.updatedConnection);
     }
 
-    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(detail.parent.children);
+    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(
+      detail.parent.children,
+    );
 
     return NextResponse.json({
       settlement: {
@@ -162,7 +164,10 @@ export async function POST(req: NextRequest, context: RouteContext) {
     });
 
     if (detail.parent.plutusStatus !== 'Processed') {
-      return NextResponse.json({ error: 'Parent settlement is not fully processed' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Parent settlement is not fully processed' },
+        { status: 400 },
+      );
     }
 
     let activeConnection = detail.updatedConnection;

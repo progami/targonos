@@ -55,21 +55,73 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
     throw new Error(`Settlement not processed: ${input.settlementJournalEntryId}`);
   }
 
-  if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
+  if (isQboJournalEntryId(existing.qboCogsJournalEntryId)) {
     try {
-      const deleted = await deleteJournalEntry(activeConnection, existing.qboPnlReclassJournalEntryId);
+      const deleted = await deleteJournalEntry(activeConnection, existing.qboCogsJournalEntryId);
       if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
     } catch (error) {
       if (!isQboNotFoundError(error)) throw error;
-      logger.warn('P&L Reclass Journal Entry already missing in QBO; skipping delete during rollback', {
-        journalEntryId: existing.qboPnlReclassJournalEntryId,
+      logger.warn('COGS Journal Entry already missing in QBO; skipping delete during rollback', {
+        journalEntryId: existing.qboCogsJournalEntryId,
         settlementJournalEntryId: input.settlementJournalEntryId,
       });
     }
   }
 
-  await db.$transaction([
-    db.settlementRollback.create({
+  if (isQboJournalEntryId(existing.qboPnlReclassJournalEntryId)) {
+    try {
+      const deleted = await deleteJournalEntry(
+        activeConnection,
+        existing.qboPnlReclassJournalEntryId,
+      );
+      if (deleted.updatedConnection) activeConnection = deleted.updatedConnection;
+    } catch (error) {
+      if (!isQboNotFoundError(error)) throw error;
+      logger.warn(
+        'P&L Reclass Journal Entry already missing in QBO; skipping delete during rollback',
+        {
+          journalEntryId: existing.qboPnlReclassJournalEntryId,
+          settlementJournalEntryId: input.settlementJournalEntryId,
+        },
+      );
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    const consumptions = await tx.cogsConsumption.findMany({
+      where: {
+        marketplace: existing.marketplace,
+        settlementId: existing.invoiceId,
+      },
+      select: {
+        costLayerId: true,
+        qtyConsumed: true,
+      },
+    });
+
+    for (const consumption of consumptions) {
+      await tx.costLayer.update({
+        where: { id: consumption.costLayerId },
+        data: { qtyRemaining: { increment: consumption.qtyConsumed } },
+      });
+    }
+
+    await tx.cogsConsumption.deleteMany({
+      where: {
+        marketplace: existing.marketplace,
+        settlementId: existing.invoiceId,
+      },
+    });
+
+    await tx.settlementPosting.deleteMany({
+      where: {
+        marketplace: existing.marketplace,
+        settlementId: existing.invoiceId,
+        postingType: 'COGS',
+      },
+    });
+
+    await tx.settlementRollback.create({
       data: {
         marketplace: existing.marketplace,
         qboSettlementJournalEntryId: existing.qboSettlementJournalEntryId,
@@ -84,11 +136,12 @@ export async function rollbackProcessedSettlementByJournalEntryId(input: {
         orderSalesCount: 0,
         orderReturnsCount: 0,
       },
-    }),
-    db.settlementProcessing.delete({
+    });
+
+    await tx.settlementProcessing.delete({
       where: { qboSettlementJournalEntryId: input.settlementJournalEntryId },
-    }),
-  ]);
+    });
+  });
 
   return {
     updatedConnection: activeConnection,

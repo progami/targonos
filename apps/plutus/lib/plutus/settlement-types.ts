@@ -3,7 +3,8 @@ export type ProcessingBlock = {
     | 'MISSING_SETUP'
     | 'AUDIT_NET_SCALE_SUSPECT'
     | 'ALREADY_PROCESSED'
-    | 'INVOICE_CONFLICT';
+    | 'INVOICE_CONFLICT'
+    | 'COGS_INSUFFICIENT_READY_LAYER';
   message: string;
   details?: Record<string, string | number>;
 };
@@ -61,6 +62,7 @@ export type SettlementProcessingResult =
       ok: true;
       preview: SettlementProcessingPreview;
       posted: {
+        cogsJournalEntryId: string;
         pnlJournalEntryId: string;
       };
     };

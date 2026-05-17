@@ -1,7 +1,9 @@
 import { lastDayOfMonth, parseIsoDayParts } from './time';
 
-export const SPLIT_MONTH_ROLLOVER_PREV_MEMO = 'Split month settlement - balance of previous invoice(s) rolled forward';
-export const SPLIT_MONTH_ROLLOVER_THIS_MEMO = 'Split month settlement - balance of this invoice rolled forward';
+export const SPLIT_MONTH_ROLLOVER_PREV_MEMO =
+  'Split month settlement - balance of previous posting(s) rolled forward';
+export const SPLIT_MONTH_ROLLOVER_THIS_MEMO =
+  'Split month settlement - balance of this posting rolled forward';
 
 export type MonthlySettlementSegmentDraft<TAuditRow> = {
   seq: number;
@@ -65,7 +67,9 @@ export function buildMonthlySettlementSegments<TAuditRow>(input: {
   }
 
   if (segments.length === 0) {
-    throw new Error(`Failed to build settlement segments for ${input.startIsoDay} → ${input.endIsoDay}`);
+    throw new Error(
+      `Failed to build settlement segments for ${input.startIsoDay} → ${input.endIsoDay}`,
+    );
   }
 
   return segments;
@@ -100,4 +104,3 @@ export function applySplitMonthRollovers(input: {
     carriedCents = nextCarried;
   }
 }
-

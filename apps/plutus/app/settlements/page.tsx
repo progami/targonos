@@ -34,7 +34,10 @@ import {
   useSettlementsListStore,
   type SettlementListStatus,
 } from '@/lib/store/settlements';
-import { buildSettlementListRowViewModel, formatPlutusSettlementStatus } from '@/lib/plutus/settlement-review';
+import {
+  buildSettlementListRowViewModel,
+  formatPlutusSettlementStatus,
+} from '@/lib/plutus/settlement-review';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
 if (basePath === undefined) {
@@ -81,7 +84,12 @@ type SettlementsResponse = {
 type ConnectionStatus = { connected: boolean; canConnect: boolean; error?: string };
 
 /* ── shared chip styles ── */
-const chipBase = { height: 22, fontSize: '0.6875rem', fontWeight: 500, borderRadius: '6px' } as const;
+const chipBase = {
+  height: 22,
+  fontSize: '0.6875rem',
+  fontWeight: 500,
+  borderRadius: '6px',
+} as const;
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -146,7 +154,12 @@ function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
       label={formatPlutusSettlementStatus(status)}
       size="small"
       variant="outlined"
-      sx={{ ...chipBase, borderColor: 'rgba(34, 197, 94, 0.5)', color: 'success.dark', bgcolor: 'rgba(34, 197, 94, 0.05)' }}
+      sx={{
+        ...chipBase,
+        borderColor: 'rgba(34, 197, 94, 0.5)',
+        color: 'success.dark',
+        bgcolor: 'rgba(34, 197, 94, 0.05)',
+      }}
     />
   );
 }
@@ -157,7 +170,12 @@ function QboPill({ status }: { status: SettlementRow['qboStatus'] }) {
       label={`QBO ${status}`}
       size="small"
       variant="outlined"
-      sx={{ ...chipBase, borderColor: 'divider', color: 'text.secondary', bgcolor: 'background.paper' }}
+      sx={{
+        ...chipBase,
+        borderColor: 'divider',
+        color: 'text.secondary',
+        bgcolor: 'background.paper',
+      }}
     />
   );
 }
@@ -168,7 +186,25 @@ function buildParentSettlementHref(settlement: SettlementRow): string {
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
+  const data = (await res.json()) as Partial<ConnectionStatus> & {
+    error?: string;
+    details?: string;
+  };
+  if (!res.ok) {
+    return {
+      connected: false,
+      canConnect: false,
+      error: data.details ?? data.error ?? 'Plutus API authentication failed.',
+    };
+  }
+  if (typeof data.connected !== 'boolean' || typeof data.canConnect !== 'boolean') {
+    return {
+      connected: false,
+      canConnect: false,
+      error: 'Plutus API returned an invalid QBO status response.',
+    };
+  }
+  return data as ConnectionStatus;
 }
 
 async function fetchSettlements({
@@ -362,8 +398,28 @@ export default function SettlementsPage() {
   });
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['plutus-settlements', page, search, normalizedStartDate, normalizedEndDate, marketplace, statusFilter, totalMin, totalMax],
-    queryFn: () => fetchSettlements({ page, search, startDate: normalizedStartDate, endDate: normalizedEndDate, marketplace, status: statusFilter, totalMin, totalMax }),
+    queryKey: [
+      'plutus-settlements',
+      page,
+      search,
+      normalizedStartDate,
+      normalizedEndDate,
+      marketplace,
+      statusFilter,
+      totalMin,
+      totalMax,
+    ],
+    queryFn: () =>
+      fetchSettlements({
+        page,
+        search,
+        startDate: normalizedStartDate,
+        endDate: normalizedEndDate,
+        marketplace,
+        status: statusFilter,
+        totalMin,
+        totalMax,
+      }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 5 * 60 * 1000,
   });
@@ -374,7 +430,13 @@ export default function SettlementsPage() {
   }, [data]);
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlements" canConnect={connection.canConnect} error={connection.error} />;
+    return (
+      <NotConnectedScreen
+        title="Settlements"
+        canConnect={connection.canConnect}
+        error={connection.error}
+      />
+    );
   }
 
   return (
@@ -393,11 +455,30 @@ export default function SettlementsPage() {
 
         <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-end' }}>
           <Box sx={{ flex: '1 1 22rem', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#008f87',
+              }}
+            >
               Search
             </Typography>
             <Box sx={{ position: 'relative' }}>
-              <SearchIcon sx={{ pointerEvents: 'none', position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: 'text.disabled', zIndex: 1 }} />
+              <SearchIcon
+                sx={{
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  left: 12,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  fontSize: 16,
+                  color: 'text.disabled',
+                  zIndex: 1,
+                }}
+              />
               <TextField
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -417,8 +498,23 @@ export default function SettlementsPage() {
             </Box>
           </Box>
 
-          <Box sx={{ width: { xs: '100%', sm: '10rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+          <Box
+            sx={{
+              width: { xs: '100%', sm: '10rem' },
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.75,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#008f87',
+              }}
+            >
               Start date
             </Typography>
             <TextField
@@ -437,8 +533,23 @@ export default function SettlementsPage() {
             />
           </Box>
 
-          <Box sx={{ width: { xs: '100%', sm: '10rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+          <Box
+            sx={{
+              width: { xs: '100%', sm: '10rem' },
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.75,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#008f87',
+              }}
+            >
               End date
             </Typography>
             <TextField
@@ -457,8 +568,23 @@ export default function SettlementsPage() {
             />
           </Box>
 
-          <Box sx={{ width: { xs: '100%', sm: '14rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+          <Box
+            sx={{
+              width: { xs: '100%', sm: '14rem' },
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.75,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#008f87',
+              }}
+            >
               Settlement Total
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
@@ -485,8 +611,23 @@ export default function SettlementsPage() {
             </Box>
           </Box>
 
-          <Box sx={{ width: { xs: '100%', sm: '12rem' }, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}>
+          <Box
+            sx={{
+              width: { xs: '100%', sm: '12rem' },
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 0.75,
+            }}
+          >
+            <Typography
+              sx={{
+                fontSize: '0.625rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: '#008f87',
+              }}
+            >
               Plutus Processing
             </Typography>
             <Box>
@@ -501,12 +642,24 @@ export default function SettlementsPage() {
                   justifyContent: 'space-between',
                 }}
               >
-                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {statusFilter.length === 0 ? 'All States' : statusFilter.map(formatPlutusSettlementStatus).join(', ')}
+                <Box
+                  component="span"
+                  sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                  {statusFilter.length === 0
+                    ? 'All States'
+                    : statusFilter.map(formatPlutusSettlementStatus).join(', ')}
                 </Box>
-                <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>&#9662;</Box>
+                <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>
+                  &#9662;
+                </Box>
               </MuiButton>
-              <Popper open={Boolean(statusAnchorEl)} anchorEl={statusAnchorEl} placement="bottom-start" sx={{ zIndex: 1300 }}>
+              <Popper
+                open={Boolean(statusAnchorEl)}
+                anchorEl={statusAnchorEl}
+                placement="bottom-start"
+                sx={{ zIndex: 1300 }}
+              >
                 <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
                   <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
                     {SETTLEMENT_LIST_STATUSES.map((status) => (
@@ -527,7 +680,11 @@ export default function SettlementsPage() {
                             sx={{ py: 0.25 }}
                           />
                         }
-                        label={<Typography sx={{ fontSize: '0.875rem' }}>{formatPlutusSettlementStatus(status)}</Typography>}
+                        label={
+                          <Typography sx={{ fontSize: '0.875rem' }}>
+                            {formatPlutusSettlementStatus(status)}
+                          </Typography>
+                        }
                         sx={{ display: 'flex', mx: 0 }}
                       />
                     ))}
@@ -556,7 +713,14 @@ export default function SettlementsPage() {
             onClick={() => {
               clear();
             }}
-            disabled={searchInput.trim() === '' && startDate.trim() === '' && endDate.trim() === '' && statusFilter.length === 0 && totalMin.trim() === '' && totalMax.trim() === ''}
+            disabled={
+              searchInput.trim() === '' &&
+              startDate.trim() === '' &&
+              endDate.trim() === '' &&
+              statusFilter.length === 0 &&
+              totalMin.trim() === '' &&
+              totalMax.trim() === ''
+            }
             sx={{ ...outlineSx, ...defaultSize }}
           >
             Clear
@@ -569,15 +733,28 @@ export default function SettlementsPage() {
               <MuiTableHead
                 sx={{
                   bgcolor: 'rgba(245, 245, 245, 0.8)',
-                  '[data-mui-color-scheme="dark"] &, .dark &': { bgcolor: 'rgba(255, 255, 255, 0.05)' },
+                  '[data-mui-color-scheme="dark"] &, .dark &': {
+                    bgcolor: 'rgba(255, 255, 255, 0.05)',
+                  },
                   '& .MuiTableRow-root': { borderBottom: 1, borderColor: 'divider' },
                 }}
               >
                 <MuiTableRow>
-                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement</MuiTableCell>
-                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Period</MuiTableCell>
-                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>Settlement Total</MuiTableCell>
-                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}>Plutus Processing</MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>
+                    Settlement
+                  </MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>
+                    Period
+                  </MuiTableCell>
+                  <MuiTableCell component="th" sx={{ ...thSx, fontWeight: 600 }}>
+                    Settlement Total
+                  </MuiTableCell>
+                  <MuiTableCell
+                    component="th"
+                    sx={{ ...thSx, fontWeight: 600, textAlign: 'right' }}
+                  >
+                    Plutus Processing
+                  </MuiTableCell>
                 </MuiTableRow>
               </MuiTableHead>
               <MuiTableBody sx={{ '& .MuiTableRow-root:last-child': { borderBottom: 0 } }}>
@@ -586,7 +763,16 @@ export default function SettlementsPage() {
                     {Array.from({ length: 6 }).map((_, idx) => (
                       <MuiTableRow key={idx} sx={rowHoverSx}>
                         <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 2 }}>
-                          <Skeleton variant="rectangular" animation="pulse" sx={{ height: 40, width: '100%', bgcolor: 'action.hover', borderRadius: 1 }} />
+                          <Skeleton
+                            variant="rectangular"
+                            animation="pulse"
+                            sx={{
+                              height: 40,
+                              width: '100%',
+                              bgcolor: 'action.hover',
+                              borderRadius: 1,
+                            }}
+                          />
                         </MuiTableCell>
                       </MuiTableRow>
                     ))}
@@ -595,7 +781,16 @@ export default function SettlementsPage() {
 
                 {!isLoading && error && (
                   <MuiTableRow sx={rowHoverSx}>
-                    <MuiTableCell colSpan={4} sx={{ ...tdSx, py: 5, textAlign: 'center', fontSize: '0.875rem', color: 'error.main' }}>
+                    <MuiTableCell
+                      colSpan={4}
+                      sx={{
+                        ...tdSx,
+                        py: 5,
+                        textAlign: 'center',
+                        fontSize: '0.875rem',
+                        color: 'error.main',
+                      }}
+                    >
                       {error instanceof Error ? error.message : String(error)}
                     </MuiTableCell>
                   </MuiTableRow>
@@ -622,19 +817,49 @@ export default function SettlementsPage() {
                     return (
                       <MuiTableRow
                         key={s.parentId}
-                        sx={{ ...rowHoverSx, cursor: 'pointer', '& td:first-of-type': { position: 'relative' }, '&:hover td:first-of-type::before': { content: '""', position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, borderRadius: '0 4px 4px 0', bgcolor: '#00C2B9' } }}
+                        sx={{
+                          ...rowHoverSx,
+                          cursor: 'pointer',
+                          '& td:first-of-type': { position: 'relative' },
+                          '&:hover td:first-of-type::before': {
+                            content: '""',
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: 3,
+                            borderRadius: '0 4px 4px 0',
+                            bgcolor: '#00C2B9',
+                          },
+                        }}
                         onClick={() => router.push(settlementHref)}
                       >
                         <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top' }}>
                           <Box>
-                            <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'text.primary', transition: 'color 0.15s' }}>
+                            <Typography
+                              sx={{
+                                fontSize: '0.875rem',
+                                fontWeight: 500,
+                                color: 'text.primary',
+                                transition: 'color 0.15s',
+                              }}
+                            >
                               {rowView.title}
                             </Typography>
-                            <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem', mt: 0.25 }}>
+                            <Typography
+                              sx={{ color: 'text.secondary', fontSize: '0.8125rem', mt: 0.25 }}
+                            >
                               {rowView.subtitle}
                             </Typography>
                             {rowView.warningText !== null && (
-                              <Typography sx={{ mt: 0.5, fontSize: '0.75rem', color: 'warning.dark', fontWeight: 600 }}>
+                              <Typography
+                                sx={{
+                                  mt: 0.5,
+                                  fontSize: '0.75rem',
+                                  color: 'warning.dark',
+                                  fontWeight: 600,
+                                }}
+                              >
                                 {rowView.warningText}
                               </Typography>
                             )}
@@ -645,14 +870,42 @@ export default function SettlementsPage() {
                             {formatPeriod(s.periodStart, s.periodEnd)}
                           </Box>
                           <Box sx={{ mt: 0.25, fontSize: '0.875rem', color: 'text.secondary' }}>
-                            Posted {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })}
+                            Posted{' '}
+                            {new Date(`${s.postedDate}T00:00:00Z`).toLocaleDateString('en-US', {
+                              timeZone: 'UTC',
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                            })}
                           </Box>
                         </MuiTableCell>
-                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', fontSize: '0.875rem', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: 'text.primary' }}>
-                          {s.settlementTotal === null ? '—' : formatMoney(s.settlementTotal, s.marketplace.currency)}
+                        <MuiTableCell
+                          sx={{
+                            ...tdSx,
+                            verticalAlign: 'top',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: 'text.primary',
+                          }}
+                        >
+                          {s.settlementTotal === null
+                            ? '—'
+                            : formatMoney(s.settlementTotal, s.marketplace.currency)}
                         </MuiTableCell>
-                        <MuiTableCell sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap' }}>
+                        <MuiTableCell
+                          sx={{ ...tdSx, verticalAlign: 'top', textAlign: 'right' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-end',
+                              gap: 1,
+                              flexWrap: 'wrap',
+                            }}
+                          >
                             <QboPill status={s.qboStatus} />
                             <PlutusPill status={rowView.statusText} />
                             <MuiButton
@@ -673,9 +926,28 @@ export default function SettlementsPage() {
           </Box>
 
           {data && data.pagination.totalPages > 1 && (
-            <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'center' }, justifyContent: { sm: 'space-between' }, p: 2, borderTop: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
-              <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
-                Page {data.pagination.page} of {data.pagination.totalPages} &middot; {data.pagination.totalCount} settlements
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: { xs: 'column', sm: 'row' },
+                gap: 1.5,
+                alignItems: { sm: 'center' },
+                justifyContent: { sm: 'space-between' },
+                p: 2,
+                borderTop: 1,
+                borderColor: 'divider',
+                bgcolor: 'action.hover',
+              }}
+            >
+              <Typography
+                sx={{
+                  fontSize: '0.75rem',
+                  color: 'text.secondary',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                Page {data.pagination.page} of {data.pagination.totalPages} &middot;{' '}
+                {data.pagination.totalCount} settlements
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <MuiButton
@@ -710,7 +982,12 @@ export default function SettlementsPage() {
                   );
                 })}
                 {data.pagination.totalPages > 5 && (
-                  <Box component="span" sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}>…</Box>
+                  <Box
+                    component="span"
+                    sx={{ px: 0.5, fontSize: '0.75rem', color: 'text.disabled' }}
+                  >
+                    …
+                  </Box>
                 )}
                 <MuiButton
                   variant="outlined"
@@ -725,8 +1002,7 @@ export default function SettlementsPage() {
             </Box>
           )}
         </Box>
-
-        </Box>
       </Box>
+    </Box>
   );
 }

@@ -61,9 +61,11 @@ export default async function InventoryLedgerPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="Inventory Ledger" kicker="Fresh-start PO/SKU FIFO layers" />
+      <PageHeader title="Inventory Ledger" kicker="PO/SKU FIFO layers" />
 
-      <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Box
+        sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
+      >
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 1040 }}>
             <TableHead>
@@ -83,7 +85,10 @@ export default async function InventoryLedgerPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={9}>
-                    <EmptyState title="No cost layers" description="Opening layers and locked QBO PO/SKU layers will appear here." />
+                    <EmptyState
+                      title="No cost layers"
+                      description="Opening layers and locked QBO PO/SKU layers will appear here."
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -99,7 +104,9 @@ export default async function InventoryLedgerPage() {
                   </TableCell>
                   <TableCell align="right">{row.qtyReceived.toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{row.qtyRemaining.toLocaleString('en-US')}</TableCell>
-                  <TableCell align="right">{formatCents(row.landedTotalCents, row.currency)}</TableCell>
+                  <TableCell align="right">
+                    {formatCents(row.landedTotalCents, row.currency)}
+                  </TableCell>
                   <TableCell align="right">{Number(row.unitCost).toFixed(6)}</TableCell>
                   <TableCell>{formatDate(row.receiptDate)}</TableCell>
                 </TableRow>
