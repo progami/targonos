@@ -360,19 +360,20 @@ async function main(): Promise<void> {
 
   if (originalTotalCents !== 0) {
     const absAmount = Math.abs(originalTotalCents) / 100;
+    const description = 'Settlement Control';
     if (originalTotalCents > 0) {
       lines.push({
         accountId: settlementControlAccountId,
         postingType: 'Debit',
         amount: absAmount,
-        description: 'Transfer to Bank',
+        description,
       });
     } else {
       lines.push({
         accountId: settlementControlAccountId,
         postingType: 'Credit',
         amount: absAmount,
-        description: 'Payment to Amazon',
+        description,
       });
     }
   }

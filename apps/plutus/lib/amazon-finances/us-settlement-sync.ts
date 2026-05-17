@@ -1,5 +1,4 @@
 import { buildQboJournalEntriesFromUsSettlementDraft, buildUsSettlementDraftFromSpApiFinances } from '@/lib/amazon-finances/us-settlement-builder';
-import { assertSettlementCashMappingDoesNotUseRealBankMovement } from '@/lib/amazon-finances/settlement-cash-account-guardrails';
 import { isPostableFundTransferStatus } from '@/lib/amazon-finances/fund-transfer-status';
 import {
   normalizeSettlementOperatingMemo,
@@ -287,21 +286,14 @@ function requireMemoMapping(value: unknown): Record<string, MemoMappingEntry> {
 
 async function loadUsSettlementPostingMapping(input: {
   requiredMemos: Set<string>;
-  needBankAccount: boolean;
-  needPaymentAccount: boolean;
 }): Promise<{
   accountIdByMemo: Map<string, string>;
   taxCodeIdByMemo: Map<string, string | null>;
-  bankAccountId: string;
-  paymentAccountId: string;
 }> {
   const config = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.com' } });
   if (!config) {
     throw new Error('Missing settlement mapping: configure Settlement Mapping first');
   }
-
-  const bankAccountId = config.bankAccountId ? config.bankAccountId.trim() : '';
-  const paymentAccountId = config.paymentAccountId ? config.paymentAccountId.trim() : '';
 
   const memoMapping = requireMemoMapping(config.accountIdByMemo);
   const setupConfig = await db.setupConfig.findFirst();
@@ -324,55 +316,16 @@ async function loadUsSettlementPostingMapping(input: {
     throw new Error(`Missing account mappings for memos: ${missingMemos.join(' | ')}`);
   }
 
-  if (input.needBankAccount && bankAccountId === '') {
-    throw new Error("Missing 'Transfer to Bank' account id (configure it in Settlement Mapping)");
-  }
-  if (input.needPaymentAccount && paymentAccountId === '') {
-    throw new Error("Missing 'Payment to Amazon' account id (configure it in Settlement Mapping)");
-  }
-
   return {
     accountIdByMemo,
     taxCodeIdByMemo,
-    bankAccountId,
-    paymentAccountId,
   };
 }
 
 async function validateUsSettlementCashAccountCurrencies(input: {
   connection: QboConnection;
-  needBankAccount: boolean;
-  needPaymentAccount: boolean;
-  bankAccountId: string;
-  paymentAccountId: string;
 }): Promise<{ updatedConnection?: QboConnection; settlementControlAccountId: string }> {
   const accountsResult = await fetchAccounts(input.connection, { includeInactive: true });
-  const accountById = new Map(accountsResult.accounts.map((a) => [a.Id, a]));
-
-  function requireAccountCurrency(accountId: string, role: 'Transfer to Bank' | 'Payment to Amazon'): void {
-    const account = accountById.get(accountId);
-    if (!account) {
-      throw new Error(`Settlement mapping account not found in QBO for ${role}: ${accountId}`);
-    }
-    assertSettlementCashMappingDoesNotUseRealBankMovement(account, role);
-
-    const currency = account.CurrencyRef?.value ? account.CurrencyRef.value.trim().toUpperCase() : '';
-    if (currency === '') {
-      throw new Error(`Settlement mapping account currency missing for ${role}: ${accountId} (${account.Name})`);
-    }
-    if (currency !== 'USD') {
-      throw new Error(
-        `Settlement mapping currency mismatch for ${role}: expected USD account, got ${currency} (${account.Name} / ${accountId})`,
-      );
-    }
-  }
-
-  if (input.needBankAccount) {
-    requireAccountCurrency(input.bankAccountId, 'Transfer to Bank');
-  }
-  if (input.needPaymentAccount) {
-    requireAccountCurrency(input.paymentAccountId, 'Payment to Amazon');
-  }
 
   const settlementControlMatches = accountsResult.accounts.filter(
     (account) => account.Name.trim().toLowerCase() === 'plutus settlement control',
@@ -473,8 +426,6 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
 
   const bundles: SettlementDraftBundle[] = [];
   const requiredMemos = new Set<string>();
-  let needBankAccount = false;
-  let needPaymentAccount = false;
 
   for (const [settlementId, eventGroupId] of Array.from(settlementToGroupId.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
     const eventGroup = groupById.get(eventGroupId);
@@ -490,8 +441,6 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
       eventGroup,
       events,
     });
-
-    if (draft.originalTotalCents < 0) needPaymentAccount = true;
 
     for (const segment of draft.segments) {
       for (const [memo, cents] of segment.memoTotalsCents.entries()) {
@@ -525,14 +474,10 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
 
   const processingByInvoiceId = new Map(existingProcessings.map((p) => [p.invoiceId, p]));
 
-  const mapping = await loadUsSettlementPostingMapping({ requiredMemos, needBankAccount, needPaymentAccount });
+  const mapping = await loadUsSettlementPostingMapping({ requiredMemos });
 
   const currencyValidation = await validateUsSettlementCashAccountCurrencies({
     connection: activeConnection,
-    needBankAccount,
-    needPaymentAccount,
-    bankAccountId: mapping.bankAccountId,
-    paymentAccountId: mapping.paymentAccountId,
   });
   if (currencyValidation.updatedConnection) {
     activeConnection = currencyValidation.updatedConnection;
@@ -620,8 +565,6 @@ export async function syncUsSettlementsFromSpApiFinances(input: UsSpApiSettlemen
       draft: bundle.draft,
       privateNote: `Plutus (SP-API Finances) | Settlement: ${bundle.settlementId} | Group: ${bundle.eventGroupId}${upload ? ` | Upload: ${upload.id}` : ''}`,
       settlementControlAccountId,
-      bankAccountId: mapping.bankAccountId,
-      paymentAccountId: mapping.paymentAccountId,
       accountIdByMemo: mapping.accountIdByMemo,
     });
 

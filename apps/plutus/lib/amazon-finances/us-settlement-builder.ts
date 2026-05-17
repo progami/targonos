@@ -751,8 +751,6 @@ export function buildQboJournalEntriesFromUsSettlementDraft(input: {
   draft: UsSettlementDraft;
   privateNote: string;
   settlementControlAccountId: string;
-  bankAccountId: string;
-  paymentAccountId: string;
   accountIdByMemo: Map<string, string>;
 }): QboJournalEntryDraft[] {
   const entries: QboJournalEntryDraft[] = [];
@@ -792,11 +790,12 @@ export function buildQboJournalEntriesFromUsSettlementDraft(input: {
           description,
         });
       } else {
+        const description = `Settlement Control (FundTransferStatus=${input.draft.fundTransferStatus})`;
         lines.push({
           accountId: input.settlementControlAccountId,
           postingType: 'Credit',
           amount,
-          description: 'Payment to Amazon',
+          description,
         });
       }
     }

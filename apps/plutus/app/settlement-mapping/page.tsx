@@ -57,20 +57,14 @@ type QboTaxCode = {
 };
 
 type SettlementMappingResponse = {
-  usSettlementBankAccountId: string | null;
-  usSettlementPaymentAccountId: string | null;
   usSettlementAccountIdByMemo: Record<string, string>;
   usSettlementTaxCodeIdByMemo: Record<string, string | null>;
-  ukSettlementBankAccountId: string | null;
-  ukSettlementPaymentAccountId: string | null;
   ukSettlementAccountIdByMemo: Record<string, string>;
   ukSettlementTaxCodeIdByMemo: Record<string, string | null>;
 };
 
 type ImportSettlementMappingResponse = {
   success: true;
-  bankAccountId: string | null;
-  paymentAccountId: string | null;
   memoMappings: Record<string, string>;
   taxCodeMappings: Record<string, string | null>;
 };
@@ -171,15 +165,13 @@ export default function SettlementMappingPage() {
   });
 
   type RegionState = {
-    bankAccountId: string;
-    paymentAccountId: string;
     memoMappings: Record<string, string>;
     taxCodeMappings: Record<string, string | null>;
   };
   const [region, setRegion] = useState<Region>('US');
   const [byRegion, setByRegion] = useState<Record<Region, RegionState>>({
-    US: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
-    UK: { bankAccountId: '', paymentAccountId: '', memoMappings: {}, taxCodeMappings: {} },
+    US: { memoMappings: {}, taxCodeMappings: {} },
+    UK: { memoMappings: {}, taxCodeMappings: {} },
   });
   const [search, setSearch] = useState('');
 
@@ -188,14 +180,10 @@ export default function SettlementMappingPage() {
 
     setByRegion({
       US: {
-        bankAccountId: mappingData.usSettlementBankAccountId ?? '',
-        paymentAccountId: mappingData.usSettlementPaymentAccountId ?? '',
         memoMappings: mappingData.usSettlementAccountIdByMemo ?? {},
         taxCodeMappings: mappingData.usSettlementTaxCodeIdByMemo ?? {},
       },
       UK: {
-        bankAccountId: mappingData.ukSettlementBankAccountId ?? '',
-        paymentAccountId: mappingData.ukSettlementPaymentAccountId ?? '',
         memoMappings: mappingData.ukSettlementAccountIdByMemo ?? {},
         taxCodeMappings: mappingData.ukSettlementTaxCodeIdByMemo ?? {},
       },
@@ -213,15 +201,9 @@ export default function SettlementMappingPage() {
   const accounts = useMemo(() => (accountsData ? accountsData.accounts : []), [accountsData]);
   const taxCodes = useMemo(() => (taxCodesData ? taxCodesData.taxCodes : []), [taxCodesData]);
 
-  const bankAndCardAccounts = useMemo(() => {
-    return accounts.filter((a) => a.type === 'Bank' || a.type === 'Credit Card');
-  }, [accounts]);
-
   const activeTaxCodes = useMemo(() => taxCodes.filter((taxCode) => taxCode.active), [taxCodes]);
 
   const active = byRegion[region];
-  const bankAccountId = active.bankAccountId;
-  const paymentAccountId = active.paymentAccountId;
   const memoMappings = active.memoMappings;
   const taxCodeMappings = active.taxCodeMappings;
 
@@ -238,16 +220,12 @@ export default function SettlementMappingPage() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          usSettlementBankAccountId: byRegion.US.bankAccountId.trim() === '' ? null : byRegion.US.bankAccountId.trim(),
-          usSettlementPaymentAccountId: byRegion.US.paymentAccountId.trim() === '' ? null : byRegion.US.paymentAccountId.trim(),
           usSettlementAccountIdByMemo: byRegion.US.memoMappings,
           usSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
             memoMappings: byRegion.US.memoMappings,
             taxCodeMappings: byRegion.US.taxCodeMappings,
             taxEngineEnabled,
           }),
-          ukSettlementBankAccountId: byRegion.UK.bankAccountId.trim() === '' ? null : byRegion.UK.bankAccountId.trim(),
-          ukSettlementPaymentAccountId: byRegion.UK.paymentAccountId.trim() === '' ? null : byRegion.UK.paymentAccountId.trim(),
           ukSettlementAccountIdByMemo: byRegion.UK.memoMappings,
           ukSettlementTaxCodeIdByMemo: normalizeTaxCodeMappings({
             memoMappings: byRegion.UK.memoMappings,
@@ -296,8 +274,6 @@ export default function SettlementMappingPage() {
         ...prev,
         [importedRegion]: {
           ...prev[importedRegion],
-          bankAccountId: data.bankAccountId ?? '',
-          paymentAccountId: data.paymentAccountId ?? '',
           memoMappings: data.memoMappings,
           taxCodeMappings: data.taxCodeMappings,
         },
@@ -343,6 +319,7 @@ export default function SettlementMappingPage() {
                       ? '3) Tax code mapping mirrors TaxCodeRef used on historical settlement JEs (import first, then edit if needed).'
                       : '3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef and tax mapping stays hidden.'}
                   </div>
+                  <div style={{ marginTop: 4 }}>4) Settlement cash always balances through Plutus Settlement Control.</div>
                 </>
               }
               arrow
@@ -408,84 +385,6 @@ export default function SettlementMappingPage() {
         </Box>
 
         <Box sx={{ mt: 3, display: 'grid', gap: 2 }}>
-          <Card sx={{ border: 1, borderColor: 'divider' }}>
-            <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                {region} Bank Accounts
-              </Typography>
-
-              <Box sx={{ mt: 2, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                      Transfer to Bank
-                    </Typography>
-                    <Tooltip title="The bank account that receives the settlement payout on the last segment of the journal entry." arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary', cursor: 'help' }} />
-                    </Tooltip>
-                  </Box>
-                  <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
-                    <Select
-                      value={bankAccountId}
-                      onChange={(e) =>
-                        setByRegion((prev) => ({
-                          ...prev,
-                          [region]: { ...prev[region], bankAccountId: e.target.value as string },
-                        }))
-                      }
-                      displayEmpty
-                      renderValue={(sel) => {
-                        if (!sel) return <span style={{ color: '#94a3b8' }}>Select bank account...</span>;
-                        const found = bankAndCardAccounts.find((a) => a.id === sel);
-                        return found ? accountLabel(found) : (sel as string);
-                      }}
-                    >
-                      {bankAndCardAccounts.map((a) => (
-                        <MenuItem key={a.id} value={a.id}>
-                          {accountLabel(a)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                <Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#00C2B9' }}>
-                      Payment to Amazon
-                    </Typography>
-                    <Tooltip title="The account used when Amazon deducts payment from your settlement balance." arrow>
-                      <InfoOutlinedIcon sx={{ fontSize: 14, color: 'text.secondary', cursor: 'help' }} />
-                    </Tooltip>
-                  </Box>
-                  <FormControl size="small" fullWidth sx={{ mt: 0.75 }}>
-                    <Select
-                      value={paymentAccountId}
-                      onChange={(e) =>
-                        setByRegion((prev) => ({
-                          ...prev,
-                          [region]: { ...prev[region], paymentAccountId: e.target.value as string },
-                        }))
-                      }
-                      displayEmpty
-                      renderValue={(sel) => {
-                        if (!sel) return <span style={{ color: '#94a3b8' }}>Select payment account...</span>;
-                        const found = bankAndCardAccounts.find((a) => a.id === sel);
-                        return found ? accountLabel(found) : (sel as string);
-                      }}
-                    >
-                      {bankAndCardAccounts.map((a) => (
-                        <MenuItem key={a.id} value={a.id}>
-                          {accountLabel(a)}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Box>
-              </Box>
-            </CardContent>
-          </Card>
-
           <Card sx={{ border: 1, borderColor: 'divider' }}>
             <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
