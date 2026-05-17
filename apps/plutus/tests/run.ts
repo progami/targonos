@@ -51,18 +51,22 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
   for (const href of [
     "href: '/settlements'",
     "href: '/purchase-orders'",
-    "href: '/inventory-ledger'",
-    "href: '/landed-cost-allocations'",
-    "href: '/cogs-batches'",
     "href: '/exceptions'",
-    "href: '/sellerboard-export'",
     "href: '/settlement-mapping'",
     "href: '/qbo-audit'",
+    "href: '/settings'",
   ]) {
     assert.equal(source.includes(href), true, `${href} should be in nav`);
   }
 
-  for (const forbidden of ["href: '/products'", "href: '/cogs-inputs'"]) {
+  for (const forbidden of [
+    "href: '/products'",
+    "href: '/cogs-inputs'",
+    "href: '/inventory-ledger'",
+    "href: '/landed-cost-allocations'",
+    "href: '/cogs-batches'",
+    "href: '/sellerboard-export'",
+  ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} should not be in nav`);
   }
 });
@@ -399,20 +403,23 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
     read('app/api/plutus/purchase-orders/route.ts').includes('"status" = \'NOT_READY\''),
     true,
   );
+  assert.equal(read('app/purchase-orders/page.tsx').includes('tab=ledger'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('tab=cogs'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('Live Value'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('In Transit Value'), true);
-  assert.equal(read('app/inventory-ledger/page.tsx').includes('Inventory in Transit - Plutus'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Inventory in Transit - Plutus'), true);
+  assert.equal(read('app/inventory-ledger/page.tsx').includes("redirect('/purchase-orders?tab=ledger')"), true);
+  assert.equal(read('app/cogs-batches/page.tsx').includes("redirect('/purchase-orders?tab=cogs')"), true);
   assert.equal(
     read('app/api/plutus/landed-cost-allocations/route.ts').includes('LandedCostAllocation'),
     true,
   );
-  assert.equal(read('app/sellerboard-export/page.tsx').includes('FROM "CogsConsumption"'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('JOIN "CogsConsumption"'), true);
 });
 
 test('fresh-start UI displays unit costs at two decimals', () => {
   for (const path of [
     'app/purchase-orders/page.tsx',
-    'app/inventory-ledger/page.tsx',
     'app/sellerboard-export/page.tsx',
   ]) {
     const source = read(path);
