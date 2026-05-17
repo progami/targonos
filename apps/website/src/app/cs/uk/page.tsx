@@ -1,23 +1,19 @@
-import type { RegionImages } from '../CaelumStarContent';
-import { CaelumStarContent } from '../CaelumStarContent';
+import { PacksPageContent } from '../components/PacksPageContent';
 import { productsUK } from '@/content/products';
 
 export const metadata = {
-  title: 'Caelum Star — UK'
-};
-
-const ukImages: RegionImages = {
-  pickProtection: '/images/amazon/pick-protection.webp',
-  fitCoverage: '/images/amazon/fit-coverage.webp',
-  generalProjects: '/images/amazon/uk/6pk-light-lifestyle.webp',
-  multiRoomProjects: '/images/amazon/uk/12pk-light-lifestyle.webp',
-  applications: '/images/amazon/applications.webp',
-  strongVsLight: '/images/amazon/strong-vs-light.webp',
-  benefits: '/images/amazon/aplus-4.webp',
-  sustainableProcess: '/images/amazon/sustainable-process.webp',
-  sustainableEfficiency: '/images/amazon/sustainable-efficiency.webp'
+  title: 'Caelum Star UK'
 };
 
 export default function CsUkPage() {
-  return <CaelumStarContent images={ukImages} products={productsUK} region="uk" />;
+  return (
+    <PacksPageContent
+      catalog={productsUK}
+      copy={{
+        description: 'Pick the pack size. Check the price. Buy on Amazon.',
+        marketLabel: 'UK',
+        title: 'Dust Sheet Packs'
+      }}
+    />
+  );
 }

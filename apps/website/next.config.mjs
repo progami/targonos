@@ -8,6 +8,61 @@ const nextConfig = {
         destination: '/talos/amazon/fba-fee-discrepancies',
         permanent: false,
       },
+      {
+        source: '/cs/us/packs',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/us/packs/:slug',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/us/where-to-buy',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/us/support',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/us/about',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/us/gallery',
+        destination: '/cs/us',
+        permanent: false,
+      },
+      {
+        source: '/cs/uk/packs',
+        destination: '/cs/uk',
+        permanent: false,
+      },
+      {
+        source: '/cs/uk/packs/:slug',
+        destination: '/cs/uk',
+        permanent: false,
+      },
+      {
+        source: '/cs/uk/where-to-buy',
+        destination: '/cs/uk',
+        permanent: false,
+      },
+      {
+        source: '/cs/uk/support',
+        destination: '/cs/uk',
+        permanent: false,
+      },
+      {
+        source: '/cs/uk/about',
+        destination: '/cs/uk',
+        permanent: false,
+      },
     ]
   },
   images: {

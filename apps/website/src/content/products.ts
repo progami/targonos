@@ -190,7 +190,7 @@ export const products: Product[] = [
     slug: '3pk-standard',
     name: '3 Pack',
     packLabel: '3 PK',
-    thicknessLabel: 'Standard',
+    thicknessLabel: 'Strong',
     coverageLabel: '324 sq ft',
     price: '$17.99',
     unitPrice: '$6.00 / count',
@@ -201,12 +201,12 @@ export const products: Product[] = [
       'Strong durability for reliable protection.',
       '55% recycled plastic, globally certified.'
     ],
-    highlights: ['12ft × 9ft per sheet', 'Standard durability', '55% recycled plastic (GRS)'],
+    highlights: ['12ft × 9ft per sheet', 'Strong durability', '55% recycled plastic (GRS)'],
     specs: [
       { label: 'Pack', value: '3 sheets' },
       { label: 'Total coverage', value: '324 sq ft (≈30 m²)' },
       { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft) each' },
-      { label: 'Durability', value: 'Standard' },
+      { label: 'Durability', value: 'Strong' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
     image: { src: '/images/products/US-products/3pk-standard.png', alt: 'CS 3 Pack Extra Large Drop Cloths by Caelum Star' },
@@ -440,7 +440,7 @@ export const productsUK: Product[] = [
       { label: 'Durability', value: 'Light' },
       { label: 'Material', value: 'LDPE (plastic sheeting)' }
     ],
-    image: { src: '/images/products/UK-products/3pk-strong-alt.png', alt: 'CS 3 Pack Extra Large Dust Sheets — Light by Caelum Star' },
+    image: { src: '/images/products/UK-products/3pk-light.png', alt: 'CS 3 Pack Extra Large Dust Sheets — Light by Caelum Star' },
     gallery: [
       {
         src: '/images/amazon/uk/3pk-standard-lifestyle.webp',
