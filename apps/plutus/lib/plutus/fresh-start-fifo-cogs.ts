@@ -87,6 +87,10 @@ function normalizeSku(value: string): string {
   return normalized;
 }
 
+function isPrincipalSaleRow(description: string): boolean {
+  return description.trim().startsWith('Amazon Sales - Principal');
+}
+
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -120,6 +124,7 @@ export function deriveSoldUnitsFromSettlementAuditRows(
 
   for (const row of rows) {
     if (row.quantity <= 0) continue;
+    if (!isPrincipalSaleRow(row.description)) continue;
     const sku = normalizeSku(row.sku);
     totalsBySku.set(sku, (totalsBySku.get(sku) ?? 0) + row.quantity);
   }
