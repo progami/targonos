@@ -13,33 +13,28 @@ import { db } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 type SellerboardExportRow = {
-  id: string;
   marketplace: string;
-  settlementId: string;
   sku: string;
   poNumber: string;
   qtyConsumed: number;
   unitCost: number;
   cogsAmountCents: number;
   currency: string;
-  qboJournalId: string | null;
 };
 
 async function getSellerboardExports(): Promise<SellerboardExportRow[]> {
   return db.$queryRawUnsafe<SellerboardExportRow[]>(`
     SELECT
-      "id",
       "marketplace",
-      "settlementId",
       "sku",
       "poNumber",
-      "qtyConsumed",
+      SUM("qtyConsumed")::integer AS "qtyConsumed",
       "unitCost",
-      "cogsAmountCents",
-      "currency",
-      "qboJournalId"
+      SUM("cogsAmountCents")::integer AS "cogsAmountCents",
+      "currency"
     FROM "CogsConsumption"
-    ORDER BY "settlementId" DESC, "sku" ASC, "poNumber" ASC
+    GROUP BY "marketplace", "sku", "poNumber", "unitCost", "currency"
+    ORDER BY "poNumber" ASC, "sku" ASC, "marketplace" ASC
     LIMIT 1000
   `);
 }
@@ -53,43 +48,39 @@ export default async function SellerboardExportPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="Sellerboard Export" kicker="Same FIFO rows as QBO COGS support" />
+      <PageHeader title="Sellerboard Export" kicker="PO/SKU COGS totals for Sellerboard" />
 
       <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 1040 }}>
+          <Table size="small" sx={{ minWidth: 860 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Settlement</TableCell>
-                <TableCell>SKU</TableCell>
                 <TableCell>PO</TableCell>
+                <TableCell>SKU</TableCell>
                 <TableCell>Marketplace</TableCell>
                 <TableCell align="right">Qty Sold</TableCell>
                 <TableCell align="right">Unit Cost</TableCell>
                 <TableCell align="right">COGS</TableCell>
-                <TableCell>QBO JE</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8}>
-                    <EmptyState title="No Sellerboard COGS rows" description="Posted FIFO COGS consumptions are the Sellerboard export source." />
+                  <TableCell colSpan={6}>
+                    <EmptyState title="No Sellerboard COGS rows" description="Posted FIFO COGS consumptions are grouped by PO and SKU here." />
                   </TableCell>
                 </TableRow>
               )}
               {rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow key={`${row.marketplace}:${row.poNumber}:${row.sku}:${row.unitCost}`}>
                   <TableCell>
-                    <Typography sx={{ fontWeight: 650 }}>{row.settlementId}</Typography>
+                    <Typography sx={{ fontWeight: 650 }}>{row.poNumber}</Typography>
                   </TableCell>
                   <TableCell>{row.sku}</TableCell>
-                  <TableCell>{row.poNumber}</TableCell>
                   <TableCell>{row.marketplace}</TableCell>
                   <TableCell align="right">{row.qtyConsumed.toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{Number(row.unitCost).toFixed(2)}</TableCell>
                   <TableCell align="right">{formatCents(row.cogsAmountCents, row.currency)}</TableCell>
-                  <TableCell>{row.qboJournalId ?? '-'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
