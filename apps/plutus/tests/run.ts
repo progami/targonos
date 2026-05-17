@@ -394,6 +394,14 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
 
   assert.equal(read('app/api/plutus/inventory-ledger/route.ts').includes('FROM "CostLayer"'), true);
   assert.equal(read('app/api/plutus/purchase-orders/route.ts').includes('FROM "CostLayer"'), true);
+  assert.equal(read('app/api/plutus/purchase-orders/route.ts').includes('"status" = \'READY\''), true);
+  assert.equal(
+    read('app/api/plutus/purchase-orders/route.ts').includes('"status" = \'NOT_READY\''),
+    true,
+  );
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Live Value'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('In Transit Value'), true);
+  assert.equal(read('app/inventory-ledger/page.tsx').includes('Inventory in Transit - Plutus'), true);
   assert.equal(
     read('app/api/plutus/landed-cost-allocations/route.ts').includes('LandedCostAllocation'),
     true,
@@ -414,6 +422,16 @@ test('COGS posting uses direct FIFO journal accounts and no QtyDiff path', () =>
   assert.equal(source.includes('createJournalEntry'), true);
   assert.equal(source.includes('InventoryAdjustment'), false);
   assert.equal(source.includes('QtyDiff'), false);
+});
+
+test('fresh FIFO audit ties READY and NOT_READY layers to separate QBO control accounts', () => {
+  const source = read('scripts/plutus-fresh-cogs-audit.ts');
+  assert.equal(source.includes("'Inventory Asset - Plutus'"), true);
+  assert.equal(source.includes("'Inventory in Transit - Plutus'"), true);
+  assert.equal(source.includes('WHERE "status" = \'READY\''), true);
+  assert.equal(source.includes('WHERE "status" = \'NOT_READY\''), true);
+  assert.equal(source.includes('inventoryInTransitTieout'), true);
+  assert.equal(source.includes('combinedInventoryTieout'), true);
 });
 
 test('settlement processing creates FIFO COGS journal support rows', () => {

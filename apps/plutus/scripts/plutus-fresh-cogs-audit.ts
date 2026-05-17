@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { fetchAccounts } from '@/lib/qbo/api';
+import { fetchAccounts, type QboAccount } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { loadSharedPlutusEnv } from './shared-env';
 
@@ -26,6 +26,13 @@ function requireOneAccountByName<T extends { Name: string; Active?: boolean }>(
   return matches[0]!;
 }
 
+function accountBalanceCents(account: QboAccount): number {
+  if (account.CurrentBalanceWithSubAccounts === undefined) {
+    throw new Error(`QBO account ${account.Name} is missing CurrentBalanceWithSubAccounts`);
+  }
+  return cents(Number(account.CurrentBalanceWithSubAccounts));
+}
+
 async function main() {
   let connection = await getQboConnection();
   if (connection === null) {
@@ -41,11 +48,23 @@ async function main() {
     accountResult.accounts,
     'Inventory Asset - Plutus',
   );
+  const inventoryInTransitPlutusAccount = requireOneAccountByName(
+    accountResult.accounts,
+    'Inventory in Transit - Plutus',
+  );
 
-  const [layerRows, postingRows] = await Promise.all([
+  const [readyLayerRows, notReadyLayerRows, postingRows] = await Promise.all([
     db.$queryRaw<Array<{ marketplace: string; remainingValueCents: bigint | number | null }>>`
       SELECT "marketplace", COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents"
       FROM "CostLayer"
+      WHERE "status" = 'READY'
+      GROUP BY "marketplace"
+      ORDER BY "marketplace" ASC
+    `,
+    db.$queryRaw<Array<{ marketplace: string; remainingValueCents: bigint | number | null }>>`
+      SELECT "marketplace", COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents"
+      FROM "CostLayer"
+      WHERE "status" = 'NOT_READY'
       GROUP BY "marketplace"
       ORDER BY "marketplace" ASC
     `,
@@ -70,17 +89,16 @@ async function main() {
     `,
   ]);
 
-  const plutusRemainingInventoryAssetCents = layerRows.reduce(
+  const plutusReadyInventoryAssetCents = readyLayerRows.reduce(
     (sum, row) => sum + numericValue(row.remainingValueCents),
     0,
   );
-  const qboInventoryAssetPlutusCents = cents(
-    Number(
-      inventoryAssetPlutusAccount.CurrentBalanceWithSubAccounts ??
-        inventoryAssetPlutusAccount.CurrentBalance ??
-        0,
-    ),
+  const plutusNotReadyInventoryTransitCents = notReadyLayerRows.reduce(
+    (sum, row) => sum + numericValue(row.remainingValueCents),
+    0,
   );
+  const qboInventoryAssetPlutusCents = accountBalanceCents(inventoryAssetPlutusAccount);
+  const qboInventoryInTransitPlutusCents = accountBalanceCents(inventoryInTransitPlutusAccount);
 
   process.stdout.write(
     JSON.stringify(
@@ -89,12 +107,37 @@ async function main() {
           accountId: inventoryAssetPlutusAccount.Id,
           balanceCents: qboInventoryAssetPlutusCents,
         },
-        plutusRemainingInventoryAssetCents,
-        inventoryAssetTieout: {
-          deltaCents: qboInventoryAssetPlutusCents - plutusRemainingInventoryAssetCents,
-          ok: qboInventoryAssetPlutusCents === plutusRemainingInventoryAssetCents,
+        qboInventoryInTransitPlutus: {
+          accountId: inventoryInTransitPlutusAccount.Id,
+          balanceCents: qboInventoryInTransitPlutusCents,
         },
-        plutusRemainingInventoryAssetSupport: layerRows.map((row) => ({
+        plutusReadyInventoryAssetCents,
+        plutusNotReadyInventoryTransitCents,
+        inventoryAssetTieout: {
+          deltaCents: qboInventoryAssetPlutusCents - plutusReadyInventoryAssetCents,
+          ok: qboInventoryAssetPlutusCents === plutusReadyInventoryAssetCents,
+        },
+        inventoryInTransitTieout: {
+          deltaCents: qboInventoryInTransitPlutusCents - plutusNotReadyInventoryTransitCents,
+          ok: qboInventoryInTransitPlutusCents === plutusNotReadyInventoryTransitCents,
+        },
+        combinedInventoryTieout: {
+          qboCombinedCents: qboInventoryAssetPlutusCents + qboInventoryInTransitPlutusCents,
+          plutusCombinedCents:
+            plutusReadyInventoryAssetCents + plutusNotReadyInventoryTransitCents,
+          deltaCents:
+            qboInventoryAssetPlutusCents +
+            qboInventoryInTransitPlutusCents -
+            (plutusReadyInventoryAssetCents + plutusNotReadyInventoryTransitCents),
+          ok:
+            qboInventoryAssetPlutusCents + qboInventoryInTransitPlutusCents ===
+            plutusReadyInventoryAssetCents + plutusNotReadyInventoryTransitCents,
+        },
+        plutusReadyInventoryAssetSupport: readyLayerRows.map((row) => ({
+          ...row,
+          remainingValueCents: numericValue(row.remainingValueCents),
+        })),
+        plutusNotReadyInventoryTransitSupport: notReadyLayerRows.map((row) => ({
           ...row,
           remainingValueCents: numericValue(row.remainingValueCents),
         })),

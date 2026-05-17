@@ -56,6 +56,12 @@ function formatDate(value: Date | null): string {
   return value.toISOString().slice(0, 10);
 }
 
+function controlAccount(status: string): 'Inventory Asset - Plutus' | 'Inventory in Transit - Plutus' {
+  if (status === 'READY') return 'Inventory Asset - Plutus';
+  if (status === 'NOT_READY') return 'Inventory in Transit - Plutus';
+  throw new Error(`Unsupported cost layer status: ${status}`);
+}
+
 export default async function InventoryLedgerPage() {
   const rows = await getInventoryLayers();
 
@@ -74,6 +80,7 @@ export default async function InventoryLedgerPage() {
                 <TableCell>SKU</TableCell>
                 <TableCell>Marketplace</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Control Account</TableCell>
                 <TableCell align="right">Qty Received</TableCell>
                 <TableCell align="right">Qty Remaining</TableCell>
                 <TableCell align="right">Landed Total</TableCell>
@@ -84,7 +91,7 @@ export default async function InventoryLedgerPage() {
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9}>
+                  <TableCell colSpan={10}>
                     <EmptyState
                       title="No cost layers"
                       description="Opening layers and locked QBO PO/SKU layers will appear here."
@@ -102,6 +109,7 @@ export default async function InventoryLedgerPage() {
                   <TableCell>
                     <Chip label={row.status} size="small" variant="outlined" />
                   </TableCell>
+                  <TableCell>{controlAccount(row.status)}</TableCell>
                   <TableCell align="right">{row.qtyReceived.toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{row.qtyRemaining.toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">

@@ -19,6 +19,12 @@ type InventoryLayerRow = {
   receiptDate: Date | null;
 };
 
+function controlAccount(status: string): 'Inventory Asset - Plutus' | 'Inventory in Transit - Plutus' {
+  if (status === 'READY') return 'Inventory Asset - Plutus';
+  if (status === 'NOT_READY') return 'Inventory in Transit - Plutus';
+  throw new Error(`Unsupported cost layer status: ${status}`);
+}
+
 export async function GET() {
   try {
     const rows = await db.$queryRawUnsafe<InventoryLayerRow[]>(`
@@ -51,6 +57,7 @@ export async function GET() {
         unitCost: Number(row.unitCost),
         currency: row.currency,
         status: row.status,
+        controlAccount: controlAccount(row.status),
         receiptDate: row.receiptDate === null ? null : row.receiptDate.toISOString(),
       })),
     });
