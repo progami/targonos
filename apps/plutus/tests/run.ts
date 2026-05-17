@@ -5,6 +5,7 @@ import {
   buildFreshStartCogsPlan,
   buildOpeningLayersFromCsv,
   calculateLayerCost,
+  deriveSoldUnitsFromSettlementAuditRows,
   type FreshCostLayer,
 } from '../lib/plutus/fresh-start-fifo-cogs';
 import { isPostableFundTransferStatus } from '../lib/amazon-finances/fund-transfer-status';
@@ -170,9 +171,28 @@ test('fresh FIFO consumes READY layers only and oldest layer first', () => {
     currency: 'USD',
     soldUnits: [{ sku: 'CS-007', quantity: 90 }],
     layers: [
-      baseLayer({ id: 'new-ready', poNumber: 'PO-20-PDS', qtyRemaining: 80, unitCost: 2, receiptDate: '2026-05-10' }),
-      baseLayer({ id: 'old-not-ready', poNumber: 'PO-18-PDS', qtyRemaining: 1000, unitCost: 0.5, status: 'NOT_READY', receiptDate: '2026-04-01' }),
-      baseLayer({ id: 'old-ready', poNumber: 'PO-19-PDS', qtyRemaining: 75, unitCost: 1.25, receiptDate: '2026-05-01' }),
+      baseLayer({
+        id: 'new-ready',
+        poNumber: 'PO-20-PDS',
+        qtyRemaining: 80,
+        unitCost: 2,
+        receiptDate: '2026-05-10',
+      }),
+      baseLayer({
+        id: 'old-not-ready',
+        poNumber: 'PO-18-PDS',
+        qtyRemaining: 1000,
+        unitCost: 0.5,
+        status: 'NOT_READY',
+        receiptDate: '2026-04-01',
+      }),
+      baseLayer({
+        id: 'old-ready',
+        poNumber: 'PO-19-PDS',
+        qtyRemaining: 75,
+        unitCost: 1.25,
+        receiptDate: '2026-05-01',
+      }),
     ],
   });
 
@@ -216,6 +236,57 @@ test('fresh FIFO blocks when sold SKU has no enough READY quantity', () => {
     },
   ]);
   assert.equal(plan.qboCogsJournalDraft, null);
+});
+
+test('COGS sold-unit derivation uses positive shipment quantities only', () => {
+  assert.deepEqual(
+    deriveSoldUnitsFromSettlementAuditRows([
+      {
+        invoiceId: 'US-260501-260515-S1',
+        market: 'us',
+        date: '2026-05-02',
+        orderId: 'ORDER-1',
+        sku: 'cs-007',
+        quantity: 2,
+        description: 'Amazon Sales - Principal',
+        net: -2000,
+      },
+      {
+        invoiceId: 'US-260501-260515-S1',
+        market: 'us',
+        date: '2026-05-02',
+        orderId: 'ORDER-1',
+        sku: 'cs-007',
+        quantity: 0,
+        description: 'Amazon FBA Fees - FBA Per Unit Fulfilment Fee',
+        net: 500,
+      },
+      {
+        invoiceId: 'US-260501-260515-S1',
+        market: 'us',
+        date: '2026-05-03',
+        orderId: 'ORDER-2',
+        sku: 'CS-010',
+        quantity: 1,
+        description: 'Amazon Sales - Principal',
+        net: -1200,
+      },
+      {
+        invoiceId: 'US-260501-260515-S1',
+        market: 'us',
+        date: '2026-05-04',
+        orderId: 'ORDER-3',
+        sku: 'CS-007',
+        quantity: -1,
+        description: 'Amazon Refunds - Refunded Principal',
+        net: 1000,
+      },
+    ]),
+    [
+      { sku: 'CS-007', quantity: 2 },
+      { sku: 'CS-010', quantity: 1 },
+    ],
+  );
 });
 
 test('opening CSV import creates READY OPENING layers and validates value math', () => {
@@ -313,15 +384,34 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
 
   assert.equal(read('app/api/plutus/inventory-ledger/route.ts').includes('FROM "CostLayer"'), true);
   assert.equal(read('app/api/plutus/purchase-orders/route.ts').includes('FROM "CostLayer"'), true);
-  assert.equal(read('app/api/plutus/landed-cost-allocations/route.ts').includes('LandedCostAllocation'), true);
+  assert.equal(
+    read('app/api/plutus/landed-cost-allocations/route.ts').includes('LandedCostAllocation'),
+    true,
+  );
   assert.equal(read('app/sellerboard-export/page.tsx').includes('FROM "CogsConsumption"'), true);
 });
 
 test('COGS posting uses direct FIFO journal accounts and no QtyDiff path', () => {
   const source = read('scripts/plutus-post-fresh-cogs-to-qbo.ts');
-  assert.equal(source.includes("requireOneActiveAccountByName(accounts, 'COGS - Product FIFO')"), true);
-  assert.equal(source.includes("requireOneActiveAccountByName(accounts, 'Inventory Asset - Plutus')"), true);
+  assert.equal(
+    source.includes("requireOneActiveAccountByName(accounts, 'COGS - Product FIFO')"),
+    true,
+  );
+  assert.equal(
+    source.includes("requireOneActiveAccountByName(accounts, 'Inventory Asset - Plutus')"),
+    true,
+  );
   assert.equal(source.includes('createJournalEntry'), true);
+  assert.equal(source.includes('InventoryAdjustment'), false);
+  assert.equal(source.includes('QtyDiff'), false);
+});
+
+test('settlement processing creates FIFO COGS journal support rows', () => {
+  const source = read('lib/plutus/settlement-processing.ts');
+  assert.equal(source.includes("'COGS - Product FIFO'"), true);
+  assert.equal(source.includes("'Inventory Asset - Plutus'"), true);
+  assert.equal(source.includes('tx.cogsConsumption.create'), true);
+  assert.equal(source.includes('data: { qtyRemaining: { decrement: line.qtyConsumed } }'), true);
   assert.equal(source.includes('InventoryAdjustment'), false);
   assert.equal(source.includes('QtyDiff'), false);
 });

@@ -14,7 +14,10 @@ import { HumanApprovalError, requireHumanApprovalHeader } from '@/lib/plutus/hum
 import { fetchSettlementParentDetail } from '@/lib/plutus/settlement-parents-server';
 import { computeSettlementPreview, processSettlement } from '@/lib/plutus/settlement-processing';
 import { rollbackProcessedSettlementByJournalEntryId } from '@/lib/plutus/settlement-rollback';
-import { isBlockingProcessingBlock, type SettlementProcessingPreview } from '@/lib/plutus/settlement-types';
+import {
+  isBlockingProcessingBlock,
+  type SettlementProcessingPreview,
+} from '@/lib/plutus/settlement-types';
 
 const logger = createLogger({ name: 'plutus-parent-settlement-process' });
 
@@ -44,7 +47,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
       sourceSettlementId,
     });
 
-    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(detail.parent.children);
+    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(
+      detail.parent.children,
+    );
     const unresolved = detail.parent.children.flatMap((child) => {
       const resolution = invoiceResolutions.get(child.qboJournalEntryId);
       if (!resolution) {
@@ -80,7 +85,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
         throw new Error(`Missing invoice resolution for ${child.docNumber}`);
       }
       if (resolution.status !== 'resolved') {
-        throw new Error(`Unresolved audit invoice for ${child.docNumber}`);
+        throw new Error(`Unresolved settlement support for ${child.docNumber}`);
       }
       const invoiceId = resolution.invoiceId;
 
@@ -189,10 +194,13 @@ export async function POST(req: NextRequest, context: RouteContext) {
           });
           activeConnection = rolledBack.updatedConnection;
         } catch (rollbackError) {
-          logger.error('Failed to compensate parent settlement processing after partial child success', {
-            settlementJournalEntryId,
-            rollbackError,
-          });
+          logger.error(
+            'Failed to compensate parent settlement processing after partial child success',
+            {
+              settlementJournalEntryId,
+              rollbackError,
+            },
+          );
         }
       }
 

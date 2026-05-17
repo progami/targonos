@@ -8,7 +8,10 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import { formatPlutusSettlementStatus, type SettlementPostingSectionViewModel } from '@/lib/plutus/settlement-review';
+import {
+  formatPlutusSettlementStatus,
+  type SettlementPostingSectionViewModel,
+} from '@/lib/plutus/settlement-review';
 
 type SettlementLedgerLine = {
   id?: string;
@@ -58,7 +61,11 @@ function formatPeriod(start: string | null, end: string | null): string {
   return `${startText} – ${endText}`;
 }
 
-export function SettlementLedgerSection({ section, currency, lines }: SettlementLedgerSectionProps) {
+export function SettlementLedgerSection({
+  section,
+  currency,
+  lines,
+}: SettlementLedgerSectionProps) {
   return (
     <Box
       component="section"
@@ -88,16 +95,25 @@ export function SettlementLedgerSection({ section, currency, lines }: Settlement
             {section.docNumber}
           </Typography>
           <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
-            {section.invoiceId === null ? 'Invoice unresolved' : `Invoice ${section.invoiceId}`}
+            {section.invoiceId === null ? 'Support unresolved' : `Support ${section.invoiceId}`}
           </Typography>
         </Box>
 
         <Box sx={{ display: 'grid', justifyItems: 'end', gap: 0.35 }}>
-          <Typography sx={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+          <Typography
+            sx={{
+              fontSize: '0.72rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: 'text.secondary',
+            }}
+          >
             {formatPlutusSettlementStatus(section.plutusStatus)}
           </Typography>
           <Typography sx={{ fontSize: '0.95rem', fontWeight: 700 }}>
-            {section.settlementTotal === null ? '—' : formatMoney(section.settlementTotal, currency)}
+            {section.settlementTotal === null
+              ? '—'
+              : formatMoney(section.settlementTotal, currency)}
           </Typography>
         </Box>
       </Box>

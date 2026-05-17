@@ -46,7 +46,9 @@ async function getCogsBatches(): Promise<CogsBatchRow[]> {
 }
 
 function formatCents(value: bigint | null, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(value ?? 0n) / 100);
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(
+    Number(value ?? 0n) / 100,
+  );
 }
 
 export default async function CogsBatchesPage() {
@@ -54,9 +56,11 @@ export default async function CogsBatchesPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="COGS Batches" kicker="Fresh-start FIFO postings" />
+      <PageHeader title="COGS Postings" kicker="FIFO COGS journals" />
 
-      <Box sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Box
+        sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
+      >
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 960 }}>
             <TableHead>
@@ -74,7 +78,10 @@ export default async function CogsBatchesPage() {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7}>
-                    <EmptyState title="No COGS postings" description="Fresh-start FIFO COGS postings will appear here after settlement posting." />
+                    <EmptyState
+                      title="No COGS postings"
+                      description="FIFO COGS journals will appear here after settlement posting."
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -88,7 +95,9 @@ export default async function CogsBatchesPage() {
                   <TableCell>{row.qboDocNumber ?? '-'}</TableCell>
                   <TableCell>{row.qboJournalId ?? '-'}</TableCell>
                   <TableCell align="right">{Number(row.consumptionCount)}</TableCell>
-                  <TableCell align="right">{formatCents(row.cogsAmountCents, row.currency)}</TableCell>
+                  <TableCell align="right">
+                    {formatCents(row.cogsAmountCents, row.currency)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

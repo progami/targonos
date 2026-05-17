@@ -158,23 +158,70 @@ function formatPeriod(start: string | null, end: string | null): string {
   return `${startText} – ${endText}`;
 }
 
-function PlutusPill({ status }: { status: ParentSettlementDetailResponse['settlement']['plutusStatus'] }) {
+function PlutusPill({
+  status,
+}: {
+  status: ParentSettlementDetailResponse['settlement']['plutusStatus'];
+}) {
   if (status === 'Processed') {
-    return <Chip label="Processed" size="small" color="success" sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }} />;
+    return (
+      <Chip
+        label="Processed"
+        size="small"
+        color="success"
+        sx={{ bgcolor: 'rgba(34, 197, 94, 0.1)', color: 'success.dark' }}
+      />
+    );
   }
   if (status === 'RolledBack') {
-    return <Chip label="Rolled Back" size="small" sx={{ bgcolor: 'action.hover', color: 'text.secondary' }} />;
+    return (
+      <Chip
+        label="Rolled Back"
+        size="small"
+        sx={{ bgcolor: 'action.hover', color: 'text.secondary' }}
+      />
+    );
   }
-  return <Chip label={formatPlutusSettlementStatus(status)} size="small" variant="outlined" sx={{ borderColor: 'rgba(34, 197, 94, 0.45)', color: 'success.dark' }} />;
+  return (
+    <Chip
+      label={formatPlutusSettlementStatus(status)}
+      size="small"
+      variant="outlined"
+      sx={{ borderColor: 'rgba(34, 197, 94, 0.45)', color: 'success.dark' }}
+    />
+  );
 }
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
+  const data = (await res.json()) as Partial<ConnectionStatus> & {
+    error?: string;
+    details?: string;
+  };
+  if (!res.ok) {
+    return {
+      connected: false,
+      canConnect: false,
+      error: data.details ?? data.error ?? 'Plutus API authentication failed.',
+    };
+  }
+  if (typeof data.connected !== 'boolean' || typeof data.canConnect !== 'boolean') {
+    return {
+      connected: false,
+      canConnect: false,
+      error: 'Plutus API returned an invalid QBO status response.',
+    };
+  }
+  return data as ConnectionStatus;
 }
 
-async function fetchParentSettlement(region: string, settlementId: string): Promise<ParentSettlementDetailResponse> {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}`);
+async function fetchParentSettlement(
+  region: string,
+  settlementId: string,
+): Promise<ParentSettlementDetailResponse> {
+  const res = await fetch(
+    `${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}`,
+  );
   const data = await res.json();
   if (!res.ok) {
     throw new Error(data.details ?? data.error ?? 'Failed to fetch settlement');
@@ -182,10 +229,16 @@ async function fetchParentSettlement(region: string, settlementId: string): Prom
   return data as ParentSettlementDetailResponse;
 }
 
-async function previewParentSettlement(region: string, settlementId: string): Promise<ParentPreviewResponse> {
-  const res = await fetch(`${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}/preview`, {
-    method: 'POST',
-  });
+async function previewParentSettlement(
+  region: string,
+  settlementId: string,
+): Promise<ParentPreviewResponse> {
+  const res = await fetch(
+    `${basePath}/api/plutus/settlements/${region}/${encodeURIComponent(settlementId)}/preview`,
+    {
+      method: 'POST',
+    },
+  );
   const data = await res.json();
   if (!res.ok && !data.children) {
     throw new Error(data.details ?? data.error ?? 'Failed to preview settlement');
@@ -196,7 +249,8 @@ async function previewParentSettlement(region: string, settlementId: string): Pr
 export default function ParentSettlementDetailPage() {
   const params = useParams();
   const region = typeof params.region === 'string' ? params.region : '';
-  const settlementId = typeof params.settlementId === 'string' ? decodeURIComponent(params.settlementId) : '';
+  const settlementId =
+    typeof params.settlementId === 'string' ? decodeURIComponent(params.settlementId) : '';
 
   if (region === '' || settlementId === '') {
     throw new Error('Settlement route params are required');
@@ -268,19 +322,31 @@ export default function ParentSettlementDetailPage() {
     () => new Map((data?.children ?? []).map((child) => [child.qboJournalEntryId, child] as const)),
     [data],
   );
-  const historyRows = useMemo(() => (data ? buildSettlementHistoryViewModel(data.history) : []), [data]);
+  const historyRows = useMemo(
+    () => (data ? buildSettlementHistoryViewModel(data.history) : []),
+    [data],
+  );
   const unresolvedChildren = useMemo(
-    () => (data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : []),
+    () =>
+      data ? data.children.filter((child) => child.invoiceResolution.status !== 'resolved') : [],
     [data],
   );
 
   if (!isCheckingConnection && connection?.connected === false) {
-    return <NotConnectedScreen title="Settlement Details" canConnect={connection.canConnect} error={connection.error} />;
+    return (
+      <NotConnectedScreen
+        title="Settlement Details"
+        canConnect={connection.canConnect}
+        error={connection.error}
+      />
+    );
   }
 
   async function handlePreview() {
     if (unresolvedChildren.length > 0) {
-      setActionError('Plutus could not resolve an audit invoice for one or more month-end postings.');
+      setActionError(
+        'Plutus could not resolve settlement support for one or more month-end postings.',
+      );
       return;
     }
 
@@ -299,23 +365,38 @@ export default function ParentSettlementDetailPage() {
   return (
     <Box component="main" sx={{ flex: 1 }}>
       <Box sx={{ maxWidth: '78rem', mx: 'auto', px: { xs: 2, sm: 3, lg: 4 }, py: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 2,
+            flexWrap: 'wrap',
+          }}
+        >
           <Box sx={{ display: 'grid', gap: 0.35 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-            <BackButton />
-            {data && (
-              <>
-                <MarketplaceFlag region={data.settlement.marketplace.region} />
-                <Typography variant="h4" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>
-                  {visibleSettlementId}
-                </Typography>
-                <PlutusPill status={settlementView ? settlementView.statusText : data.settlement.plutusStatus} />
-              </>
-            )}
+              <BackButton />
+              {data && (
+                <>
+                  <MarketplaceFlag region={data.settlement.marketplace.region} />
+                  <Typography variant="h4" sx={{ fontSize: '1.5rem', fontWeight: 700 }}>
+                    {visibleSettlementId}
+                  </Typography>
+                  <PlutusPill
+                    status={
+                      settlementView ? settlementView.statusText : data.settlement.plutusStatus
+                    }
+                  />
+                </>
+              )}
             </Box>
             {data ? (
-              <Typography sx={{ pl: { sm: '2.25rem' }, fontSize: '0.8rem', color: 'text.secondary' }}>
-                {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)} · {data.settlement.marketplace.label}
+              <Typography
+                sx={{ pl: { sm: '2.25rem' }, fontSize: '0.8rem', color: 'text.secondary' }}
+              >
+                {formatPeriod(data.settlement.periodStart, data.settlement.periodEnd)} ·{' '}
+                {data.settlement.marketplace.label}
               </Typography>
             ) : null}
           </Box>
@@ -323,7 +404,11 @@ export default function ParentSettlementDetailPage() {
           {data && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               {data.settlement.plutusStatus !== 'Processed' && (
-                <Button variant="outlined" onClick={() => void handlePreview()} disabled={isPreviewLoading || unresolvedChildren.length > 0}>
+                <Button
+                  variant="outlined"
+                  onClick={() => void handlePreview()}
+                  disabled={isPreviewLoading || unresolvedChildren.length > 0}
+                >
                   {isPreviewLoading ? 'Previewing…' : 'Preview'}
                 </Button>
               )}
@@ -339,8 +424,18 @@ export default function ParentSettlementDetailPage() {
         )}
 
         {!isLoading && error && (
-          <Box sx={{ mt: 3, py: 1.5, borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'error.light' }}>
-            <Typography color="error.main">{error instanceof Error ? error.message : String(error)}</Typography>
+          <Box
+            sx={{
+              mt: 3,
+              py: 1.5,
+              borderTop: '1px solid',
+              borderBottom: '1px solid',
+              borderColor: 'error.light',
+            }}
+          >
+            <Typography color="error.main">
+              {error instanceof Error ? error.message : String(error)}
+            </Typography>
           </Box>
         )}
 
@@ -348,19 +443,21 @@ export default function ParentSettlementDetailPage() {
           <Box sx={{ mt: 3, display: 'grid', gap: 1.5 }}>
             {data.settlement.isSplit ? (
               <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                {data.settlement.splitCount} month-end postings cover this settlement. Review them in order below.
+                {data.settlement.splitCount} month-end postings cover this settlement. Review them
+                in order below.
               </Typography>
             ) : null}
 
             {data.settlement.hasInconsistency ? (
               <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
-                Child posting states disagree. Treat this settlement as inconsistent until the backend state is repaired.
+                Child posting states disagree. Treat this settlement as inconsistent until the
+                backend state is repaired.
               </Typography>
             ) : null}
 
             {unresolvedChildren.length > 0 ? (
               <Typography color="warning.main" sx={{ fontSize: '0.8rem' }}>
-                Preview stays blocked until every posting resolves to one audit invoice.
+                Preview stays blocked until every posting resolves to settlement support.
               </Typography>
             ) : null}
 
@@ -389,7 +486,14 @@ export default function ParentSettlementDetailPage() {
             </Box>
 
             <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
-              <Typography sx={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'text.secondary' }}>
+              <Typography
+                sx={{
+                  fontSize: '0.8rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'text.secondary',
+                }}
+              >
                 History
               </Typography>
               <SettlementHistoryList rows={historyRows} />

@@ -1,3 +1,5 @@
+import type { SettlementAuditRow } from '@/lib/plutus/settlement-audit';
+
 export type CostLayerStatus = 'NOT_READY' | 'READY';
 
 export type FreshCostLayer = {
@@ -102,11 +104,29 @@ export function buildFreshCogsDocNumber(settlementId: string): string {
 }
 
 function requirePositiveInteger(value: number, label: string): void {
-  if (!Number.isInteger(value) || value <= 0) throw new Error(`${label} must be a positive integer`);
+  if (!Number.isInteger(value) || value <= 0)
+    throw new Error(`${label} must be a positive integer`);
 }
 
 function requireMoney(value: number, label: string): void {
-  if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be a non-negative amount`);
+  if (!Number.isFinite(value) || value < 0)
+    throw new Error(`${label} must be a non-negative amount`);
+}
+
+export function deriveSoldUnitsFromSettlementAuditRows(
+  rows: SettlementAuditRow[],
+): SoldUnitInput[] {
+  const totalsBySku = new Map<string, number>();
+
+  for (const row of rows) {
+    if (row.quantity <= 0) continue;
+    const sku = normalizeSku(row.sku);
+    totalsBySku.set(sku, (totalsBySku.get(sku) ?? 0) + row.quantity);
+  }
+
+  return Array.from(totalsBySku.entries())
+    .sort(([leftSku], [rightSku]) => leftSku.localeCompare(rightSku))
+    .map(([sku, quantity]) => ({ sku, quantity }));
 }
 
 function sortReadyLayersForFifo(layers: FreshCostLayer[]): FreshCostLayer[] {
@@ -188,7 +208,8 @@ export function buildFreshStartCogsPlan(input: {
 
   const cogsTotal = roundMoney(consumptions.reduce((sum, line) => sum + line.cogsAmount, 0));
   const descriptions = consumptions.map(
-    (line) => `SKU=${line.sku} | PO=${line.poNumber} | Qty=${line.qtyConsumed} | UnitCost=${line.unitCost.toFixed(6)}`,
+    (line) =>
+      `SKU=${line.sku} | PO=${line.poNumber} | Qty=${line.qtyConsumed} | UnitCost=${line.unitCost.toFixed(6)}`,
   );
 
   return {
@@ -271,7 +292,8 @@ export function buildOpeningLayersFromCsv(csvText: string): OpeningCostLayerDraf
   const header = parseCsvLine(lines[0]);
   const required = ['marketplace', 'sku', 'qty', 'value', 'unit_cost', 'currency', 'opening_ref'];
   for (const column of required) {
-    if (!header.includes(column)) throw new Error(`Opening layer CSV missing required column ${column}`);
+    if (!header.includes(column))
+      throw new Error(`Opening layer CSV missing required column ${column}`);
   }
 
   return lines.slice(1).map((line, rowIndex) => {

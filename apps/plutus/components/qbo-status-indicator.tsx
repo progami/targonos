@@ -17,7 +17,18 @@ if (basePath === undefined) {
 
 async function fetchQboStatus(): Promise<QboConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
+  const data = (await res.json()) as Partial<QboConnectionStatus> & {
+    error?: string;
+    details?: string;
+  };
+  if (!res.ok) {
+    return {
+      connected: false,
+      canConnect: false,
+      error: data.details ?? data.error ?? 'Plutus API authentication failed.',
+    };
+  }
+  return data as QboConnectionStatus;
 }
 
 async function disconnectQbo(): Promise<{ success: boolean }> {
@@ -164,10 +175,22 @@ export function QboStatusIndicator() {
           slotProps={{ paper: { sx: { minWidth: 224, mt: 0.75, p: 0.5 } } }}
         >
           <Box sx={{ p: 1.5, borderBottom: 1, borderColor: 'divider' }}>
-            <Typography variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+            <Typography
+              variant="caption"
+              sx={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}
+            >
               Connected to
             </Typography>
-            <Typography variant="body2" sx={{ fontWeight: 500, color: 'text.primary', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 500,
+                color: 'text.primary',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {status.companyName}
             </Typography>
           </Box>

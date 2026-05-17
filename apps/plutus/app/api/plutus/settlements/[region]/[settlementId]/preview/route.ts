@@ -10,7 +10,10 @@ import {
 } from '@/lib/plutus/audit-invoice-resolution';
 import { fetchSettlementParentDetail } from '@/lib/plutus/settlement-parents-server';
 import { computeSettlementPreview } from '@/lib/plutus/settlement-processing';
-import { isBlockingProcessingBlock, type SettlementProcessingPreview } from '@/lib/plutus/settlement-types';
+import {
+  isBlockingProcessingBlock,
+  type SettlementProcessingPreview,
+} from '@/lib/plutus/settlement-types';
 
 const logger = createLogger({ name: 'plutus-parent-settlement-preview' });
 
@@ -39,7 +42,9 @@ export async function POST(_req: NextRequest, context: RouteContext) {
       sourceSettlementId,
     });
 
-    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(detail.parent.children);
+    const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(
+      detail.parent.children,
+    );
     const unresolved = detail.parent.children.flatMap((child) => {
       const resolution = invoiceResolutions.get(child.qboJournalEntryId);
       if (!resolution) {
@@ -74,7 +79,7 @@ export async function POST(_req: NextRequest, context: RouteContext) {
         throw new Error(`Missing invoice resolution for ${child.docNumber}`);
       }
       if (resolution.status !== 'resolved') {
-        throw new Error(`Unresolved audit invoice for ${child.docNumber}`);
+        throw new Error(`Unresolved settlement support for ${child.docNumber}`);
       }
       const invoiceId = resolution.invoiceId;
 
