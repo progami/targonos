@@ -409,6 +409,18 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   assert.equal(read('app/sellerboard-export/page.tsx').includes('FROM "CogsConsumption"'), true);
 });
 
+test('fresh-start UI displays unit costs at two decimals', () => {
+  for (const path of [
+    'app/purchase-orders/page.tsx',
+    'app/inventory-ledger/page.tsx',
+    'app/sellerboard-export/page.tsx',
+  ]) {
+    const source = read(path);
+    assert.equal(source.includes('toFixed(2)'), true, `${path} should display unit cost at two decimals`);
+    assert.equal(source.includes('toFixed(6)'), false, `${path} should not display six-decimal unit cost`);
+  }
+});
+
 test('COGS posting uses direct FIFO journal accounts and no QtyDiff path', () => {
   const source = read('scripts/plutus-post-fresh-cogs-to-qbo.ts');
   assert.equal(

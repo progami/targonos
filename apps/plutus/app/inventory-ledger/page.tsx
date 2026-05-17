@@ -115,7 +115,7 @@ export default async function InventoryLedgerPage() {
                   <TableCell align="right">
                     {formatCents(row.landedTotalCents, row.currency)}
                   </TableCell>
-                  <TableCell align="right">{Number(row.unitCost).toFixed(6)}</TableCell>
+                  <TableCell align="right">{Number(row.unitCost).toFixed(2)}</TableCell>
                   <TableCell>{formatDate(row.receiptDate)}</TableCell>
                 </TableRow>
               ))}
