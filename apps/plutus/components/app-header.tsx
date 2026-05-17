@@ -19,7 +19,6 @@ import Inventory2Icon from '@mui/icons-material/Inventory2';
 import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
-import SettingsIcon from '@mui/icons-material/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
@@ -116,7 +115,6 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   { href: '/settlement-mapping', label: 'Settlement Rules', icon: MapIcon },
   { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
-  { href: '/settings', label: 'QBO Connection', icon: SettingsIcon },
 ];
 
 const ALL_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
