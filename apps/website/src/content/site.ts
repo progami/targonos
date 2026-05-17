@@ -1,4 +1,4 @@
-const defaultDomain = 'targonglobal.com';
+const defaultDomain = 'www.targonglobal.com';
 const domain = process.env.NEXT_PUBLIC_SITE_DOMAIN ?? defaultDomain;
 
 export const site = {
