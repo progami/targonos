@@ -77,25 +77,6 @@
   object-fit: contain;
 }
 
-.headerNav {
-  display: flex;
-  align-items: center;
-  gap: 2.25rem;
-}
-
-.headerNavLink {
-  color: rgba(255, 255, 255, 0.85);
-  text-decoration: none;
-  font-size: 1.05rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  transition: color 180ms ease;
-}
-
-.headerNavLink:hover {
-  color: var(--cs-accent);
-}
-
 .primaryButton {
   display: inline-flex;
   align-items: center;
@@ -108,6 +89,7 @@
   font-weight: 700;
   border: none;
   box-shadow: none;
+  white-space: nowrap;
   transition: background 200ms ease;
 }
 
@@ -140,6 +122,26 @@
 
 .primaryButton:hover {
   background: #2de0ed;
+}
+
+@media (max-width: 520px) {
+  .siteHeader .contentWrap {
+    min-height: 72px;
+  }
+
+  .headerTopRow {
+    gap: 0.55rem;
+  }
+
+  .brandWrap {
+    gap: 0.45rem;
+  }
+
+  .primaryButton {
+    border-radius: 12px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.82rem;
+  }
 }
 
 .hero {
@@ -491,10 +493,6 @@
     width: min(1120px, calc(100% - 1.5rem));
   }
 
-  .headerNav {
-    display: none;
-  }
-
   .brandText {
     font-size: 0.95rem;
   }
@@ -559,6 +557,12 @@
   }
 }
 
+@media (max-width: 1024px) {
+  .primaryButton {
+    padding-inline: 1.35rem;
+  }
+}
+
 /* ─── Large screens (1440px+) ─── */
 @media (min-width: 1440px) {
   .heroTitle,
@@ -582,14 +586,6 @@
 
   .regionSubtitle {
     font-size: 1.1rem;
-  }
-
-  .headerNav {
-    gap: 3rem;
-  }
-
-  .headerNavLink {
-    font-size: 1.12rem;
   }
 
   .footerGrid {
@@ -625,10 +621,6 @@
   .regionButton {
     padding: 0.85rem 1.4rem;
     font-size: 1.05rem;
-  }
-
-  .headerNavLink {
-    font-size: 1.2rem;
   }
 
   .primaryButton {

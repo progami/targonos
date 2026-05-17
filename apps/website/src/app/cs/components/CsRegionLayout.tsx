@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import { CaelumStarHeader } from './Header';
-import { CaelumStarFooter } from './Footer';
 
 export function CsRegionLayout({
   region,

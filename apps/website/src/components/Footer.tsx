@@ -6,12 +6,11 @@ const footerLinks = {
   Explore: [
     { label: 'Home', href: '/' },
     { label: 'Caelum Star', href: '/cs' },
-    { label: 'Packs', href: '/cs/us/packs' },
-    { label: 'Where to buy', href: '/cs/us/where-to-buy' }
+    { label: 'US site', href: '/cs/us' },
+    { label: 'UK site', href: '/cs/uk' }
   ],
   Company: [
-    { label: 'About', href: '/cs/us/about' },
-    { label: 'Support', href: '/cs/us/support' }
+    { label: 'Contact', href: `mailto:${site.contactEmail}` }
   ],
   Legal: [
     { label: 'Privacy', href: '/legal/privacy' },

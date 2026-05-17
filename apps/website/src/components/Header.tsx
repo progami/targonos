@@ -10,10 +10,8 @@ import { site } from '@/content/site';
 import { Container } from '@/components/Container';
 
 const productNavLinks = [
-  { label: 'Packs', href: '/cs/us/packs' },
-  { label: 'Where to buy', href: '/cs/us/where-to-buy' },
-  { label: 'Support', href: '/cs/us/support' },
-  { label: 'About', href: '/cs/us/about' }
+  { label: 'US', href: '/cs/us' },
+  { label: 'UK', href: '/cs/uk' }
 ];
 
 const homeNavLinks = [
@@ -70,10 +68,9 @@ export function Header() {
           <Image
             src="/brand/logo-inverted.svg"
             alt=""
-            width={160}
+            width={122}
             height={32}
             priority
-            className="h-8 w-auto"
           />
         </Link>
 
