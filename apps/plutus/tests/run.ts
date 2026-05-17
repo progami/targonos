@@ -484,6 +484,32 @@ test('fresh-start UI displays unit costs at two decimals', () => {
   }
 });
 
+test('Sellerboard export is PO/SKU COGS output, not settlement audit output', () => {
+  const source = read('app/sellerboard-export/page.tsx');
+  for (const required of [
+    'GROUP BY',
+    '"marketplace"',
+    '"sku"',
+    '"poNumber"',
+    '"unitCost"',
+    'qtyConsumed',
+    'cogsAmountCents',
+    'Qty Sold',
+    'COGS',
+  ]) {
+    assert.equal(source.includes(required), true, `${required} should be in Sellerboard export`);
+  }
+
+  for (const forbidden of [
+    'settlementId',
+    'qboJournalId',
+    'Settlement',
+    'QBO JE',
+  ]) {
+    assert.equal(source.includes(forbidden), false, `${forbidden} should not be in Sellerboard export`);
+  }
+});
+
 test('COGS posting uses direct FIFO journal accounts and no QtyDiff path', () => {
   const source = read('scripts/plutus-post-fresh-cogs-to-qbo.ts');
   assert.equal(
