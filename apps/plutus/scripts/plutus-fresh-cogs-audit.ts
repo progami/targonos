@@ -9,6 +9,10 @@ function cents(value: number): number {
   return Math.round(value * 100);
 }
 
+function numericValue(value: bigint | number | null): number {
+  return Number(value ?? 0);
+}
+
 function requireOneAccountByName<T extends { Name: string; Active?: boolean }>(
   accounts: T[],
   name: string,
@@ -67,7 +71,7 @@ async function main() {
   ]);
 
   const plutusRemainingInventoryAssetCents = layerRows.reduce(
-    (sum, row) => sum + Number(row.remainingValueCents ?? 0),
+    (sum, row) => sum + numericValue(row.remainingValueCents),
     0,
   );
   const qboInventoryAssetPlutusCents = cents(
@@ -90,10 +94,16 @@ async function main() {
           deltaCents: qboInventoryAssetPlutusCents - plutusRemainingInventoryAssetCents,
           ok: qboInventoryAssetPlutusCents === plutusRemainingInventoryAssetCents,
         },
-        plutusRemainingInventoryAssetSupport: layerRows,
-        cogsPostingConsumptionTieout: postingRows.map((row) => ({
+        plutusRemainingInventoryAssetSupport: layerRows.map((row) => ({
           ...row,
-          ok: Number(row.postingCents ?? 0) === Number(row.consumptionCents ?? 0),
+          remainingValueCents: numericValue(row.remainingValueCents),
+        })),
+        cogsPostingConsumptionTieout: postingRows.map((row) => ({
+          marketplace: row.marketplace,
+          settlementId: row.settlementId,
+          postingCents: numericValue(row.postingCents),
+          consumptionCents: numericValue(row.consumptionCents),
+          ok: numericValue(row.postingCents) === numericValue(row.consumptionCents),
         })),
       },
       null,

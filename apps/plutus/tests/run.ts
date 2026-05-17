@@ -238,7 +238,7 @@ test('fresh FIFO blocks when sold SKU has no enough READY quantity', () => {
   assert.equal(plan.qboCogsJournalDraft, null);
 });
 
-test('COGS sold-unit derivation uses positive shipment quantities only', () => {
+test('COGS sold-unit derivation uses principal sale quantities only', () => {
   assert.deepEqual(
     deriveSoldUnitsFromSettlementAuditRows([
       {
@@ -255,9 +255,19 @@ test('COGS sold-unit derivation uses positive shipment quantities only', () => {
         invoiceId: 'US-260501-260515-S1',
         market: 'us',
         date: '2026-05-02',
+        orderId: 'ORDER-REMOVAL',
+        sku: 'B09HXC3NL8',
+        quantity: 1,
+        description: 'Amazon Sales - Removal Shipment Revenue',
+        net: 75,
+      },
+      {
+        invoiceId: 'US-260501-260515-S1',
+        market: 'us',
+        date: '2026-05-02',
         orderId: 'ORDER-1',
         sku: 'cs-007',
-        quantity: 0,
+        quantity: 2,
         description: 'Amazon FBA Fees - FBA Per Unit Fulfilment Fee',
         net: 500,
       },
