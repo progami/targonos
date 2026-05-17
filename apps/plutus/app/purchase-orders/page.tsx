@@ -150,7 +150,7 @@ export default async function PurchaseOrdersPage() {
                   <TableCell align="right">{Number(row.qtyReceived ?? 0n).toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{Number(row.liveQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{Number(row.inTransitQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
-                  <TableCell align="right">{row.unitCost === null ? '-' : Number(row.unitCost).toFixed(6)}</TableCell>
+                  <TableCell align="right">{row.unitCost === null ? '-' : Number(row.unitCost).toFixed(2)}</TableCell>
                   <TableCell align="right">{formatCents(row.landedTotalCents)}</TableCell>
                   <TableCell align="right">{formatCents(row.liveValueCents)}</TableCell>
                   <TableCell align="right">{formatCents(row.inTransitValueCents)}</TableCell>
