@@ -9,9 +9,9 @@ export function CaelumStarHeader({ region }: { region: 'us' | 'uk' }) {
       <div className={styles.contentWrap}>
         <div className={styles.headerTopRow}>
           <div className="flex items-center gap-4">
-            <Link href="/" className="opacity-50 transition-opacity hover:opacity-100">
+            <a href="https://targonglobal.com" className="opacity-50 transition-opacity hover:opacity-100">
               <Image src="/brand/logo-inverted.svg" alt="Targon" width={107} height={28} className="h-5 w-auto sm:h-7" />
-            </Link>
+            </a>
             <span className="text-white/20 text-lg">|</span>
             <Link href="/cs" className={styles.brandWrap}>
               <Image src="/logos/caelum-star-white.png" alt="Caelum Star logo" width={124} height={28} priority className="h-6 w-auto sm:h-7" />
