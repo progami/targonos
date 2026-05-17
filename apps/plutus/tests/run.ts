@@ -54,7 +54,6 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/exceptions'",
     "href: '/settlement-mapping'",
     "href: '/qbo-audit'",
-    "href: '/settings'",
   ]) {
     assert.equal(source.includes(href), true, `${href} should be in nav`);
   }
@@ -66,9 +65,18 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/landed-cost-allocations'",
     "href: '/cogs-batches'",
     "href: '/sellerboard-export'",
+    "href: '/settings'",
   ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} should not be in nav`);
   }
+});
+
+test('useless settings route is deleted because QBO controls live in the header', () => {
+  assertDeleted('app/settings/page.tsx');
+  const header = read('components/app-header.tsx');
+  assert.equal(header.includes('QboStatusIndicator'), true);
+  assert.equal(header.includes('SettingsIcon'), false);
+  assert.equal(header.includes('QBO Connection'), false);
 });
 
 test('Prisma schema is fresh-start FIFO, not component-row inventory ownership', () => {
