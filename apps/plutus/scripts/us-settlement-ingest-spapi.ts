@@ -187,15 +187,18 @@ async function fetchJeByDocNumber(connection: any, docNumber: string): Promise<{
   return { je: full.journalEntry, updatedConnection: activeConnection };
 }
 
+const SETTLEMENT_CASH_CONTROL_DESCRIPTIONS = new Set(['Transfer to Bank', 'Payment to Amazon']);
+
+function isSettlementCashControlDescription(description: string): boolean {
+  if (SETTLEMENT_CASH_CONTROL_DESCRIPTIONS.has(description)) return true;
+  return description.startsWith('Settlement Control');
+}
+
 function extractAccountMappingFromJournalEntry(je: QboJournalEntry): {
   accountIdByMemo: Map<string, string>;
-  bankAccountId: string;
-  paymentAccountId: string;
 } {
   const lines = Array.isArray(je.Line) ? je.Line : [];
   const accountIdByMemo = new Map<string, string>();
-  let bankAccountId = '';
-  let paymentAccountId = '';
 
   for (const line of lines) {
     const detail = line.JournalEntryLineDetail;
@@ -206,81 +209,14 @@ function extractAccountMappingFromJournalEntry(je: QboJournalEntry): {
     const description = typeof line.Description === 'string' ? line.Description : '';
     if (description === '') continue;
 
-    if (description === 'Transfer to Bank') {
-      bankAccountId = accountId;
-      continue;
-    }
-    if (description === 'Payment to Amazon') {
-      paymentAccountId = accountId;
-      continue;
-    }
+    if (isSettlementCashControlDescription(description)) continue;
 
     if (!accountIdByMemo.has(description)) {
       accountIdByMemo.set(description, accountId);
     }
   }
 
-  return { accountIdByMemo, bankAccountId, paymentAccountId };
-}
-
-function getLineAccountIdByDescription(je: QboJournalEntry, description: string): string | null {
-  const lines = Array.isArray(je.Line) ? je.Line : [];
-  for (const line of lines) {
-    const detail = line.JournalEntryLineDetail;
-    if (!detail) continue;
-    const accountId = detail.AccountRef?.value;
-    if (typeof accountId !== 'string') continue;
-    const desc = typeof line.Description === 'string' ? line.Description : '';
-    if (desc === description) return accountId;
-  }
-  return null;
-}
-
-async function findAccountIdInRecentUsSettlementJournals(input: {
-  connection: QboConnection;
-  startDate: string;
-  description: string;
-}): Promise<{ accountId: string; updatedConnection?: QboConnection }> {
-  const pageSize = 100;
-  let startPosition = 1;
-  let connection: QboConnection = input.connection;
-
-  while (true) {
-    const page = await fetchJournalEntries(connection, {
-      docNumberContains: 'US-',
-      startDate: input.startDate,
-      maxResults: pageSize,
-      startPosition,
-    });
-    if (page.updatedConnection) {
-      connection = page.updatedConnection;
-    }
-
-    for (const je of page.journalEntries) {
-      const docNumber = je.DocNumber ? je.DocNumber.trim() : '';
-      const stripped = stripPlutusDocPrefix(docNumber);
-      const first = stripped[0] ? stripped[0].toUpperCase() : '';
-      if (first === 'C' || first === 'P') {
-        continue;
-      }
-
-      const full = await fetchJournalEntryById(connection, je.Id);
-      if (full.updatedConnection) {
-        connection = full.updatedConnection;
-      }
-
-      const accountId = getLineAccountIdByDescription(full.journalEntry, input.description);
-      if (accountId) {
-        return { accountId, updatedConnection: connection };
-      }
-    }
-
-    if (page.journalEntries.length === 0) break;
-    startPosition += page.journalEntries.length;
-    if (startPosition > page.totalCount) break;
-  }
-
-  throw new Error(`Could not find '${input.description}' line in any recent US settlement JE`);
+  return { accountIdByMemo };
 }
 
 async function main(): Promise<void> {
@@ -330,28 +266,6 @@ async function main(): Promise<void> {
   }
 
   const templateMapping = extractAccountMappingFromJournalEntry(templateJe);
-  let bankAccountId = templateMapping.bankAccountId;
-  let paymentAccountId = templateMapping.paymentAccountId;
-
-  if (bankAccountId === '') {
-    const found = await findAccountIdInRecentUsSettlementJournals({
-      connection,
-      startDate: options.startDate,
-      description: 'Transfer to Bank',
-    });
-    if (found.updatedConnection) connection = found.updatedConnection;
-    bankAccountId = found.accountId;
-  }
-
-  if (paymentAccountId === '') {
-    const found = await findAccountIdInRecentUsSettlementJournals({
-      connection,
-      startDate: options.startDate,
-      description: 'Payment to Amazon',
-    });
-    if (found.updatedConnection) connection = found.updatedConnection;
-    paymentAccountId = found.accountId;
-  }
 
   const accountsResult = await fetchAccounts(connection, { includeInactive: true });
   if (accountsResult.updatedConnection) connection = accountsResult.updatedConnection;
@@ -417,8 +331,6 @@ async function main(): Promise<void> {
       draft,
       privateNote: `Plutus (SP-API Finances) | Settlement: ${settlementId} | Group: ${eventGroupId}`,
       settlementControlAccountId,
-      bankAccountId,
-      paymentAccountId,
       accountIdByMemo: templateMapping.accountIdByMemo,
     });
 

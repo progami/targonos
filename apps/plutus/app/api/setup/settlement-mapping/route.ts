@@ -6,12 +6,8 @@ import { getCurrentUser } from '@/lib/current-user';
 import { logAudit } from '@/lib/plutus/audit-log';
 
 const SettlementMappingSchema = z.object({
-  usSettlementBankAccountId: z.string().nullable().optional(),
-  usSettlementPaymentAccountId: z.string().nullable().optional(),
   usSettlementAccountIdByMemo: z.record(z.string(), z.string()).optional(),
   usSettlementTaxCodeIdByMemo: z.record(z.string(), z.string().nullable()).optional(),
-  ukSettlementBankAccountId: z.string().nullable().optional(),
-  ukSettlementPaymentAccountId: z.string().nullable().optional(),
   ukSettlementAccountIdByMemo: z.record(z.string(), z.string()).optional(),
   ukSettlementTaxCodeIdByMemo: z.record(z.string(), z.string().nullable()).optional(),
 });
@@ -125,12 +121,8 @@ export async function GET() {
     const ukSplit = splitCombinedMemoMapping(ukCombined);
 
     return NextResponse.json({
-      usSettlementBankAccountId: usConfig?.bankAccountId ?? null,
-      usSettlementPaymentAccountId: usConfig?.paymentAccountId ?? null,
       usSettlementAccountIdByMemo: usSplit.accountIdByMemo,
       usSettlementTaxCodeIdByMemo: usSplit.taxCodeIdByMemo,
-      ukSettlementBankAccountId: ukConfig?.bankAccountId ?? null,
-      ukSettlementPaymentAccountId: ukConfig?.paymentAccountId ?? null,
       ukSettlementAccountIdByMemo: ukSplit.accountIdByMemo,
       ukSettlementTaxCodeIdByMemo: ukSplit.taxCodeIdByMemo,
     });
@@ -152,15 +144,11 @@ export async function POST(request: NextRequest) {
 
     const writeUs =
       existingUs !== null ||
-      parsed.usSettlementBankAccountId !== undefined ||
-      parsed.usSettlementPaymentAccountId !== undefined ||
       parsed.usSettlementAccountIdByMemo !== undefined ||
       parsed.usSettlementTaxCodeIdByMemo !== undefined;
 
     const writeUk =
       existingUk !== null ||
-      parsed.ukSettlementBankAccountId !== undefined ||
-      parsed.ukSettlementPaymentAccountId !== undefined ||
       parsed.ukSettlementAccountIdByMemo !== undefined ||
       parsed.ukSettlementTaxCodeIdByMemo !== undefined;
 
@@ -168,16 +156,6 @@ export async function POST(request: NextRequest) {
     const existingUkCombined = parseCombinedMemoMapping(existingUk?.accountIdByMemo);
     const existingUsSplit = splitCombinedMemoMapping(existingUsCombined);
     const existingUkSplit = splitCombinedMemoMapping(existingUkCombined);
-
-    const nextUsBank =
-      parsed.usSettlementBankAccountId === undefined
-        ? existingUs?.bankAccountId ?? null
-        : parsed.usSettlementBankAccountId;
-
-    const nextUsPayment =
-      parsed.usSettlementPaymentAccountId === undefined
-        ? existingUs?.paymentAccountId ?? null
-        : parsed.usSettlementPaymentAccountId;
 
     const nextUsAccounts =
       parsed.usSettlementAccountIdByMemo === undefined ? existingUsSplit.accountIdByMemo : parsed.usSettlementAccountIdByMemo;
@@ -188,16 +166,6 @@ export async function POST(request: NextRequest) {
       taxCodeIdByMemo: nextUsTax,
       existing: existingUsCombined,
     });
-
-    const nextUkBank =
-      parsed.ukSettlementBankAccountId === undefined
-        ? existingUk?.bankAccountId ?? null
-        : parsed.ukSettlementBankAccountId;
-
-    const nextUkPayment =
-      parsed.ukSettlementPaymentAccountId === undefined
-        ? existingUk?.paymentAccountId ?? null
-        : parsed.ukSettlementPaymentAccountId;
 
     const nextUkAccounts =
       parsed.ukSettlementAccountIdByMemo === undefined ? existingUkSplit.accountIdByMemo : parsed.ukSettlementAccountIdByMemo;
@@ -213,14 +181,10 @@ export async function POST(request: NextRequest) {
       await db.settlementPostingConfig.upsert({
         where: { marketplace: 'amazon.com' },
         update: {
-          bankAccountId: nextUsBank,
-          paymentAccountId: nextUsPayment,
           accountIdByMemo: nextUsCombined,
         },
         create: {
           marketplace: 'amazon.com',
-          bankAccountId: nextUsBank,
-          paymentAccountId: nextUsPayment,
           accountIdByMemo: nextUsCombined,
         },
       });
@@ -230,14 +194,10 @@ export async function POST(request: NextRequest) {
       await db.settlementPostingConfig.upsert({
         where: { marketplace: 'amazon.co.uk' },
         update: {
-          bankAccountId: nextUkBank,
-          paymentAccountId: nextUkPayment,
           accountIdByMemo: nextUkCombined,
         },
         create: {
           marketplace: 'amazon.co.uk',
-          bankAccountId: nextUkBank,
-          paymentAccountId: nextUkPayment,
           accountIdByMemo: nextUkCombined,
         },
       });
