@@ -87,7 +87,7 @@ export default async function SellerboardExportPage() {
                   <TableCell>{row.poNumber}</TableCell>
                   <TableCell>{row.marketplace}</TableCell>
                   <TableCell align="right">{row.qtyConsumed.toLocaleString('en-US')}</TableCell>
-                  <TableCell align="right">{Number(row.unitCost).toFixed(6)}</TableCell>
+                  <TableCell align="right">{Number(row.unitCost).toFixed(2)}</TableCell>
                   <TableCell align="right">{formatCents(row.cogsAmountCents, row.currency)}</TableCell>
                   <TableCell>{row.qboJournalId ?? '-'}</TableCell>
                 </TableRow>
