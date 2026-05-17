@@ -9,12 +9,12 @@ const regions = [
   {
     flag: '\u{1F1FA}\u{1F1F8}',
     title: 'United States',
-    href: '/cs/us/packs'
+    href: '/cs/us'
   },
   {
     flag: '\u{1F1EC}\u{1F1E7}',
     title: 'United Kingdom',
-    href: '/cs/uk/packs'
+    href: '/cs/uk'
   }
 ];
 

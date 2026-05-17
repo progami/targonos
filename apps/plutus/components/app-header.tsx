@@ -8,6 +8,9 @@ import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import Drawer from '@mui/material/Drawer';
 import FormControl from '@mui/material/FormControl';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
@@ -22,6 +25,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { QboStatusIndicator } from '@/components/qbo-status-indicator';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { type Marketplace, useMarketplaceStore } from '@/lib/store/marketplace';
@@ -106,22 +110,34 @@ function MarketplaceSelector() {
 
 type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
-const NAV_ITEMS: NavItem[] = [
+const PRIMARY_NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
   { href: '/purchase-orders', label: 'Purchase Orders', icon: AssignmentIcon },
   { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
-  { href: '/landed-cost-allocations', label: 'Allocations', icon: FactCheckIcon },
-  { href: '/cogs-batches', label: 'COGS Batches', icon: StackedLineChartIcon },
   { href: '/exceptions', label: 'Exceptions', icon: ReportProblemIcon },
+];
+
+const SECONDARY_NAV_ITEMS: NavItem[] = [
+  { href: '/landed-cost-allocations', label: 'Landed Allocations', icon: FactCheckIcon },
+  { href: '/cogs-batches', label: 'COGS Postings', icon: StackedLineChartIcon },
   { href: '/sellerboard-export', label: 'Sellerboard Export', icon: OutboxIcon },
   { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
   { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
+const ALL_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
+
+function isActivePath(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 export function AppHeader() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
+  const moreOpen = Boolean(moreAnchor);
+  const secondaryActive = SECONDARY_NAV_ITEMS.some((item) => isActivePath(pathname, item.href));
 
   return (
     <Box
@@ -142,7 +158,7 @@ export function AppHeader() {
           mx: 'auto',
           display: 'flex',
           height: 56,
-          maxWidth: 1280,
+          maxWidth: 1440,
           alignItems: 'center',
           justifyContent: 'space-between',
           gap: 2,
@@ -176,9 +192,9 @@ export function AppHeader() {
 
           {/* Desktop nav */}
           <Box component="nav" sx={{ display: { xs: 'none', lg: 'flex' }, alignItems: 'center', gap: 0.25 }}>
-            {NAV_ITEMS.map((item) => {
+            {PRIMARY_NAV_ITEMS.map((item) => {
               const Icon = item.icon;
-              const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const isActive = isActivePath(pathname, item.href);
               return (
                 <Link
                   key={item.href}
@@ -221,6 +237,82 @@ export function AppHeader() {
                 </Link>
               );
             })}
+            <Box sx={{ position: 'relative' }}>
+              <IconButton
+                aria-label="More Plutus sections"
+                aria-controls={moreOpen ? 'plutus-more-menu' : undefined}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen ? 'true' : undefined}
+                onClick={(event) => setMoreAnchor(event.currentTarget)}
+                size="small"
+                sx={{
+                  ml: 0.25,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 2,
+                  color: secondaryActive ? '#008f87' : 'text.secondary',
+                  bgcolor: secondaryActive ? 'rgba(0, 194, 185, 0.08)' : 'transparent',
+                  '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+                }}
+              >
+                <MoreHorizIcon sx={{ fontSize: 19 }} />
+              </IconButton>
+              {secondaryActive && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    bottom: -12,
+                    left: 8,
+                    right: 8,
+                    height: 2,
+                    borderRadius: 1,
+                    bgcolor: '#00C2B9',
+                  }}
+                />
+              )}
+            </Box>
+            <Menu
+              id="plutus-more-menu"
+              anchorEl={moreAnchor}
+              open={moreOpen}
+              onClose={() => setMoreAnchor(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              slotProps={{
+                paper: {
+                  sx: {
+                    mt: 1,
+                    minWidth: 230,
+                    border: 1,
+                    borderColor: 'divider',
+                    boxShadow: '0 14px 40px rgba(2, 12, 27, 0.18)',
+                  },
+                },
+              }}
+            >
+              {SECONDARY_NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const isActive = isActivePath(pathname, item.href);
+                return (
+                  <MenuItem
+                    key={item.href}
+                    component={Link}
+                    href={item.href}
+                    selected={isActive}
+                    onClick={() => setMoreAnchor(null)}
+                    sx={{ gap: 1, py: 1 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 30 }}>
+                      <Icon sx={{ fontSize: 17, color: isActive ? '#00A59E' : 'text.secondary' }} />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={item.label}
+                      primaryTypographyProps={{ fontSize: 13, fontWeight: isActive ? 650 : 500 }}
+                    />
+                  </MenuItem>
+                );
+              })}
+            </Menu>
           </Box>
         </Box>
 
@@ -276,9 +368,9 @@ export function AppHeader() {
           <Box sx={{ mb: 1, px: 1.5, display: { md: 'none' } }}>
             <MarketplaceSelector />
           </Box>
-          {NAV_ITEMS.map((item) => {
+          {ALL_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            const isActive = isActivePath(pathname, item.href);
             return (
               <Link
                 key={item.href}

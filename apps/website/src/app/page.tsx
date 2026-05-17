@@ -72,7 +72,7 @@ export default function HomePage() {
                 size="lg"
                 className="border-white/15 bg-white/5 text-white hover:bg-white/10"
               >
-                <Link href="/cs/us/about">About</Link>
+                <Link href="/cs/us">About</Link>
               </Button>
             </div>
           </Reveal>
