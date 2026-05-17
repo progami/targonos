@@ -26,10 +26,13 @@ type PurchaseOrderRow = {
   sku: string;
   layerCount: bigint;
   readyLayerCount: bigint;
+  notReadyLayerCount: bigint;
   qtyReceived: bigint | null;
-  remainingQty: bigint | null;
+  liveQtyRemaining: bigint | null;
+  inTransitQtyRemaining: bigint | null;
   landedTotalCents: bigint | null;
-  remainingValueCents: bigint | null;
+  liveValueCents: bigint | null;
+  inTransitValueCents: bigint | null;
   unitCost: number | null;
 };
 
@@ -47,10 +50,13 @@ async function getPurchaseOrderRows(): Promise<PurchaseOrderRow[]> {
       "sku",
       COUNT("id") AS "layerCount",
       COUNT(*) FILTER (WHERE "status" = 'READY') AS "readyLayerCount",
+      COUNT(*) FILTER (WHERE "status" = 'NOT_READY') AS "notReadyLayerCount",
       COALESCE(SUM("qtyReceived"), 0) AS "qtyReceived",
-      COALESCE(SUM("qtyRemaining"), 0) AS "remainingQty",
+      COALESCE(SUM("qtyRemaining") FILTER (WHERE "status" = 'READY'), 0) AS "liveQtyRemaining",
+      COALESCE(SUM("qtyRemaining") FILTER (WHERE "status" = 'NOT_READY'), 0) AS "inTransitQtyRemaining",
       COALESCE(SUM("landedTotalCents"), 0) AS "landedTotalCents",
-      COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents",
+      COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)) FILTER (WHERE "status" = 'READY'), 0) AS "liveValueCents",
+      COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)) FILTER (WHERE "status" = 'NOT_READY'), 0) AS "inTransitValueCents",
       CASE
         WHEN COALESCE(SUM("qtyReceived"), 0) = 0 THEN NULL
         ELSE (SUM("landedTotalCents")::numeric / 100) / SUM("qtyReceived")
@@ -72,6 +78,10 @@ async function getPurchaseOrderCounts(): Promise<PurchaseOrderCounts> {
 
 function formatCents(value: bigint | null): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value ?? 0n) / 100);
+}
+
+function statusLabel(row: PurchaseOrderRow): 'READY' | 'NOT_READY' {
+  return Number(row.notReadyLayerCount) === 0 ? 'READY' : 'NOT_READY';
 }
 
 export default async function PurchaseOrdersPage() {
@@ -105,16 +115,18 @@ export default async function PurchaseOrdersPage() {
                 <TableCell>Status</TableCell>
                 <TableCell>QBO PO</TableCell>
                 <TableCell align="right">Qty Received</TableCell>
-                <TableCell align="right">Qty Remaining</TableCell>
+                <TableCell align="right">Live Qty</TableCell>
+                <TableCell align="right">In Transit Qty</TableCell>
                 <TableCell align="right">Unit Cost</TableCell>
                 <TableCell align="right">Landed Total</TableCell>
-                <TableCell align="right">Remaining Value</TableCell>
+                <TableCell align="right">Live Value</TableCell>
+                <TableCell align="right">In Transit Value</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10}>
+                  <TableCell colSpan={12}>
                     <EmptyState title="No purchase-order layers" description="Opening layers and locked native QBO PO/SKU layers appear here." />
                   </TableCell>
                 </TableRow>
@@ -128,18 +140,20 @@ export default async function PurchaseOrdersPage() {
                   <TableCell>{row.marketplace}</TableCell>
                   <TableCell>
                     <Chip
-                      label={Number(row.readyLayerCount) === Number(row.layerCount) ? 'READY' : 'NOT_READY'}
+                      label={statusLabel(row)}
                       size="small"
                       variant="outlined"
-                      color={Number(row.readyLayerCount) === Number(row.layerCount) ? 'success' : 'warning'}
+                      color={statusLabel(row) === 'READY' ? 'success' : 'warning'}
                     />
                   </TableCell>
                   <TableCell>{row.qboPurchaseOrderId ?? 'OPENING'}</TableCell>
                   <TableCell align="right">{Number(row.qtyReceived ?? 0n).toLocaleString('en-US')}</TableCell>
-                  <TableCell align="right">{Number(row.remainingQty ?? 0n).toLocaleString('en-US')}</TableCell>
+                  <TableCell align="right">{Number(row.liveQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
+                  <TableCell align="right">{Number(row.inTransitQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
                   <TableCell align="right">{row.unitCost === null ? '-' : Number(row.unitCost).toFixed(6)}</TableCell>
                   <TableCell align="right">{formatCents(row.landedTotalCents)}</TableCell>
-                  <TableCell align="right">{formatCents(row.remainingValueCents)}</TableCell>
+                  <TableCell align="right">{formatCents(row.liveValueCents)}</TableCell>
+                  <TableCell align="right">{formatCents(row.inTransitValueCents)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

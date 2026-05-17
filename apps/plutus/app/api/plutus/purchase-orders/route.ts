@@ -11,8 +11,11 @@ type PurchaseOrderRow = {
   marketplace: string;
   layerCount: bigint;
   readyLayerCount: bigint;
-  remainingQty: bigint | null;
-  remainingValueCents: bigint | null;
+  notReadyLayerCount: bigint;
+  liveQtyRemaining: bigint | null;
+  inTransitQtyRemaining: bigint | null;
+  liveValueCents: bigint | null;
+  inTransitValueCents: bigint | null;
 };
 
 export async function GET() {
@@ -24,8 +27,11 @@ export async function GET() {
         "marketplace",
         COUNT("id") AS "layerCount",
         COUNT(*) FILTER (WHERE "status" = 'READY') AS "readyLayerCount",
-        COALESCE(SUM("qtyRemaining"), 0) AS "remainingQty",
-        COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)), 0) AS "remainingValueCents"
+        COUNT(*) FILTER (WHERE "status" = 'NOT_READY') AS "notReadyLayerCount",
+        COALESCE(SUM("qtyRemaining") FILTER (WHERE "status" = 'READY'), 0) AS "liveQtyRemaining",
+        COALESCE(SUM("qtyRemaining") FILTER (WHERE "status" = 'NOT_READY'), 0) AS "inTransitQtyRemaining",
+        COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)) FILTER (WHERE "status" = 'READY'), 0) AS "liveValueCents",
+        COALESCE(SUM(ROUND("qtyRemaining" * "unitCost" * 100)) FILTER (WHERE "status" = 'NOT_READY'), 0) AS "inTransitValueCents"
       FROM "CostLayer"
       GROUP BY "poNumber", "marketplace"
       ORDER BY "poNumber" ASC
@@ -39,8 +45,11 @@ export async function GET() {
         marketplace: row.marketplace,
         layerCount: Number(row.layerCount),
         readyLayerCount: Number(row.readyLayerCount),
-        remainingQty: Number(row.remainingQty ?? 0n),
-        remainingValueCents: Number(row.remainingValueCents ?? 0n),
+        notReadyLayerCount: Number(row.notReadyLayerCount),
+        liveQtyRemaining: Number(row.liveQtyRemaining ?? 0n),
+        inTransitQtyRemaining: Number(row.inTransitQtyRemaining ?? 0n),
+        liveValueCents: Number(row.liveValueCents ?? 0n),
+        inTransitValueCents: Number(row.inTransitValueCents ?? 0n),
       })),
     });
   } catch (error) {
