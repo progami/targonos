@@ -12,6 +12,8 @@ import { isSettlementDocNumber, parseSettlementDocNumber } from '@/lib/plutus/se
 import { fetchAccounts, fetchJournalEntries, fetchJournalEntryById, type QboAccount, type QboConnection, type QboJournalEntry } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 
+const SETTLEMENT_CASH_CONTROL_DESCRIPTIONS = new Set(['Transfer to Bank', 'Payment to Amazon']);
+
 type CliOptions = {
   startDate: string;
   amazonEnvPath: string | null;
@@ -375,20 +377,13 @@ async function main(): Promise<void> {
       const actualLines = extractLinesFromJe(actualJe);
 
       const accountIdByMemo = new Map<string, string>();
-      let bankAccountId = '';
-      let paymentAccountId = '';
       let settlementControlAccountId = '';
 
       for (const line of actualLines) {
-        if (line.description === 'Transfer to Bank') {
-          bankAccountId = line.accountId;
+        if (SETTLEMENT_CASH_CONTROL_DESCRIPTIONS.has(line.description)) {
           continue;
         }
-        if (line.description === 'Payment to Amazon') {
-          paymentAccountId = line.accountId;
-          continue;
-        }
-        if (line.description.startsWith('Settlement Control (FundTransferStatus=')) {
+        if (line.description.startsWith('Settlement Control')) {
           settlementControlAccountId = line.accountId;
           continue;
         }
@@ -420,8 +415,6 @@ async function main(): Promise<void> {
         },
         privateNote: 'Plutus reconcile (SP-API Finances)',
         settlementControlAccountId,
-        bankAccountId,
-        paymentAccountId,
         accountIdByMemo,
       });
 

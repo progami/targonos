@@ -374,12 +374,68 @@ test('settlement mapping fails closed when an Amazon category has no configured 
         },
         privateNote: 'test',
         settlementControlAccountId: 'control',
-        bankAccountId: 'bank',
-        paymentAccountId: 'payment',
         accountIdByMemo: new Map(),
       }),
     /Missing account mapping/,
   );
+});
+
+test('settlement mapping screen is category rules only', () => {
+  const page = read('app/settlement-mapping/page.tsx');
+  for (const forbidden of [
+    'Bank Accounts',
+    'Transfer to Bank',
+    'Payment to Amazon',
+    'bankAndCardAccounts',
+    'bankAccountId',
+    'paymentAccountId',
+  ]) {
+    assert.equal(page.includes(forbidden), false, `${forbidden} should not be editable on settlement mappings`);
+  }
+
+  assert.equal(page.includes('Plutus Settlement Control'), true);
+});
+
+test('settlement sync does not require editable cash-leg mapping accounts', () => {
+  for (const path of [
+    'lib/amazon-finances/us-settlement-sync.ts',
+    'lib/amazon-finances/uk-settlement-sync.ts',
+  ]) {
+    const source = read(path);
+    assert.equal(source.includes("Missing 'Transfer to Bank' account id"), false, `${path} should not require transfer account mapping`);
+    assert.equal(source.includes("Missing 'Payment to Amazon' account id"), false, `${path} should not require payment account mapping`);
+  }
+});
+
+test('settlement cash lines use settlement control wording', () => {
+  const [entry] = buildQboJournalEntriesFromUsSettlementDraft({
+    draft: {
+      settlementId: 'US-260501-260515-S1',
+      eventGroupId: 'event-group',
+      timeZone: 'America/Los_Angeles',
+      originalTotalCents: -2500,
+      fundTransferStatus: 'Succeeded',
+      segments: [
+        {
+          seq: 1,
+          yearMonth: '2026-05',
+          startIsoDay: '2026-05-01',
+          endIsoDay: '2026-05-15',
+          txnDate: '2026-05-16',
+          docNumber: 'US-260501-260515-S1',
+          memoTotalsCents: new Map(),
+          auditRows: [],
+        },
+      ],
+    },
+    privateNote: 'test',
+    settlementControlAccountId: 'control',
+    accountIdByMemo: new Map(),
+  });
+
+  assert.equal(entry?.lines.length, 1);
+  assert.equal(entry?.lines[0]?.accountId, 'control');
+  assert.equal(entry?.lines[0]?.description, 'Settlement Control (FundTransferStatus=Succeeded)');
 });
 
 test('fresh-start pages read new layer/allocation/consumption tables', () => {

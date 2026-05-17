@@ -38,12 +38,6 @@ model SettlementPostingConfig {
   /// Marketplace identifier (e.g. "amazon.com")
   marketplace String @unique
 
-  /// QBO account id for the payout line when OriginalTotal is positive ("Transfer to Bank")
-  bankAccountId String?
-
-  /// QBO account id for the payout line when OriginalTotal is negative ("Payment to Amazon")
-  paymentAccountId String?
-
   /// Maps settlement memo strings to QBO account ids.
   accountIdByMemo Json @db.JsonB
 

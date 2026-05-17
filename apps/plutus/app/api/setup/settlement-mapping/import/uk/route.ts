@@ -13,19 +13,22 @@ export const runtime = 'nodejs';
 const logger = createLogger({ name: 'plutus-settlement-mapping-import-uk' });
 
 type ImportResult = {
-  bankAccountId: string | null;
-  paymentAccountId: string | null;
   memoMappings: Record<string, string>;
   taxCodeMappings: Record<string, string | null>;
 };
+
+const SETTLEMENT_CASH_CONTROL_DESCRIPTIONS = new Set(['Transfer to Bank', 'Payment to Amazon']);
+
+function isSettlementCashControlDescription(description: string): boolean {
+  if (SETTLEMENT_CASH_CONTROL_DESCRIPTIONS.has(description)) return true;
+  return description.startsWith('Settlement Control');
+}
 
 async function importFromQbo(connection: QboConnection): Promise<{ result: ImportResult; updatedConnection?: QboConnection }> {
   let activeConnection = connection;
 
   const memoMappings = new Map<string, string>();
   const taxCodeMappings = new Map<string, string | null>();
-  let bankAccountId: string | null = null;
-  let paymentAccountId: string | null = null;
 
   const pageSize = 100;
   let startPosition = 1;
@@ -67,21 +70,7 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
         const taxCodeIdRaw = detail.TaxCodeRef?.value;
         const taxCodeId = typeof taxCodeIdRaw === 'string' && taxCodeIdRaw.trim() !== '' ? taxCodeIdRaw.trim() : null;
 
-        if (description === 'Transfer to Bank') {
-          if (bankAccountId !== null && bankAccountId !== accountId) {
-            throw new Error(`Multiple bank accounts detected for 'Transfer to Bank': ${bankAccountId}, ${accountId}`);
-          }
-          bankAccountId = accountId;
-          continue;
-        }
-
-        if (description === 'Payment to Amazon') {
-          if (paymentAccountId !== null && paymentAccountId !== accountId) {
-            throw new Error(`Multiple payment accounts detected for 'Payment to Amazon': ${paymentAccountId}, ${accountId}`);
-          }
-          paymentAccountId = accountId;
-          continue;
-        }
+        if (isSettlementCashControlDescription(description)) continue;
 
         const existing = memoMappings.get(description);
         if (existing !== undefined && existing !== accountId) {
@@ -120,8 +109,6 @@ async function importFromQbo(connection: QboConnection): Promise<{ result: Impor
 
   return {
     result: {
-      bankAccountId,
-      paymentAccountId,
       memoMappings: memoMappingsObject,
       taxCodeMappings: taxMappingsObject,
     },
@@ -141,10 +128,6 @@ export async function POST() {
       await saveServerQboConnection(imported.updatedConnection);
     }
 
-    const existing = await db.settlementPostingConfig.findUnique({ where: { marketplace: 'amazon.co.uk' } });
-    const nextBankAccountId = imported.result.bankAccountId ?? existing?.bankAccountId ?? null;
-    const nextPaymentAccountId = imported.result.paymentAccountId ?? existing?.paymentAccountId ?? null;
-
     const combinedMemoMappings = Object.fromEntries(
       Object.entries(imported.result.memoMappings).map(([memo, accountId]) => [
         memo,
@@ -160,14 +143,10 @@ export async function POST() {
     await db.settlementPostingConfig.upsert({
       where: { marketplace: 'amazon.co.uk' },
       update: {
-        bankAccountId: nextBankAccountId,
-        paymentAccountId: nextPaymentAccountId,
         accountIdByMemo: combinedMemoMappings,
       },
       create: {
         marketplace: 'amazon.co.uk',
-        bankAccountId: nextBankAccountId,
-        paymentAccountId: nextPaymentAccountId,
         accountIdByMemo: combinedMemoMappings,
       },
     });
@@ -181,8 +160,6 @@ export async function POST() {
       details: {
         ukSettlementMemoMappings: Object.keys(imported.result.memoMappings).length,
         ukSettlementTaxMemoMappings: Object.keys(imported.result.taxCodeMappings).length,
-        ukSettlementBankAccountId: nextBankAccountId,
-        ukSettlementPaymentAccountId: nextPaymentAccountId,
       },
     });
 
