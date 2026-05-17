@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 
 import { db } from '@/lib/db';
+import {
+  requireLandedCostCurrency,
+  requireLandedCostType,
+} from '@/lib/plutus/landed-cost-allocation-rules';
 
 const logger = createLogger({ name: 'plutus-landed-cost-allocations-api' });
 
@@ -17,6 +21,14 @@ type AllocationRow = {
   currency: string;
   sourceNote: string | null;
 };
+
+function requireNonBlankString(body: Record<string, unknown>, key: string): string {
+  const value = body[key];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`${key} is required`);
+  }
+  return value.trim();
+}
 
 export async function GET() {
   try {
@@ -41,7 +53,10 @@ export async function GET() {
   } catch (error) {
     logger.error('Failed to list landed-cost allocations', error);
     return NextResponse.json(
-      { error: 'Failed to list landed-cost allocations', details: error instanceof Error ? error.message : String(error) },
+      {
+        error: 'Failed to list landed-cost allocations',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     );
   }
@@ -50,32 +65,36 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const required = ['qboBillId', 'qboBillLineId', 'qboPurchaseOrderId', 'sku', 'costType', 'allocatedAmountCents', 'currency'];
-    for (const key of required) {
-      if (typeof body[key] !== 'string' && key !== 'allocatedAmountCents') {
-        throw new Error(`${key} is required`);
-      }
-    }
+    const qboBillId = requireNonBlankString(body, 'qboBillId');
+    const qboBillLineId = requireNonBlankString(body, 'qboBillLineId');
+    const qboPurchaseOrderId = requireNonBlankString(body, 'qboPurchaseOrderId');
+    const sku = requireNonBlankString(body, 'sku').toUpperCase();
+    const costType = requireLandedCostType(requireNonBlankString(body, 'costType'));
+    const currency = requireLandedCostCurrency(requireNonBlankString(body, 'currency'));
 
     const allocatedAmountCents = Number(body.allocatedAmountCents);
-    if (!Number.isInteger(allocatedAmountCents) || allocatedAmountCents < 0) {
-      throw new Error('allocatedAmountCents must be a non-negative integer');
+    if (!Number.isInteger(allocatedAmountCents) || allocatedAmountCents <= 0) {
+      throw new Error('allocatedAmountCents must be a positive integer');
     }
 
     const created = await db.landedCostAllocation.create({
       data: {
-        qboBillId: String(body.qboBillId).trim(),
-        qboBillLineId: String(body.qboBillLineId).trim(),
-        qboPurchaseOrderId: String(body.qboPurchaseOrderId).trim(),
+        qboBillId,
+        qboBillLineId,
+        qboPurchaseOrderId,
         qboPurchaseOrderLineId:
-          typeof body.qboPurchaseOrderLineId === 'string' && body.qboPurchaseOrderLineId.trim() !== ''
+          typeof body.qboPurchaseOrderLineId === 'string' &&
+          body.qboPurchaseOrderLineId.trim() !== ''
             ? body.qboPurchaseOrderLineId.trim()
             : null,
-        sku: String(body.sku).trim().toUpperCase(),
-        costType: String(body.costType).trim().toUpperCase(),
+        sku,
+        costType,
         allocatedAmountCents,
-        currency: String(body.currency).trim().toUpperCase(),
-        sourceNote: typeof body.sourceNote === 'string' && body.sourceNote.trim() !== '' ? body.sourceNote.trim() : null,
+        currency,
+        sourceNote:
+          typeof body.sourceNote === 'string' && body.sourceNote.trim() !== ''
+            ? body.sourceNote.trim()
+            : null,
       },
     });
 
@@ -83,7 +102,10 @@ export async function POST(request: Request) {
   } catch (error) {
     logger.error('Failed to create landed-cost allocation', error);
     return NextResponse.json(
-      { error: 'Failed to create landed-cost allocation', details: error instanceof Error ? error.message : String(error) },
+      {
+        error: 'Failed to create landed-cost allocation',
+        details: error instanceof Error ? error.message : String(error),
+      },
       { status: 400 },
     );
   }

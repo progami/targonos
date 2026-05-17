@@ -43,7 +43,14 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
   };
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 8, md: 12 } }}>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: { xs: 8, md: 12 },
+      }}
+    >
       <Box sx={{ maxWidth: 448, width: '100%', px: { xs: 2, sm: 3 } }}>
         <Paper
           elevation={0}
@@ -76,8 +83,17 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
                   bgcolor: 'action.hover',
                 }}
               >
-                <svg style={{ width: 16, height: 16, color: '#94a3b8' }} viewBox="0 0 16 16" fill="none">
-                  <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <svg
+                  style={{ width: 16, height: 16, color: '#94a3b8' }}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                >
+                  <path
+                    d="M8 3v10M3 8h10"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
                 </svg>
               </Box>
             </Box>
@@ -85,7 +101,12 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
 
           <Typography
             variant="caption"
-            sx={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#008f87' }}
+            sx={{
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: '#008f87',
+            }}
           >
             QuickBooks Online
           </Typography>
@@ -93,13 +114,22 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
             Connect to continue
           </Typography>
           <Typography variant="body2" sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}>
-            Connect your QuickBooks Online account to view and manage your {title.toLowerCase()}.
+            {error
+              ? `Plutus cannot read the QuickBooks status needed for ${title.toLowerCase()}.`
+              : `Connect your QuickBooks Online account to view and manage your ${title.toLowerCase()}.`}
           </Typography>
-          <Typography variant="caption" component="p" sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}>
-            This connection is shared across Plutus users.
-            {canConnect
-              ? ' You must also be a QuickBooks Company Admin to authorize the connection.'
-              : ' Only platform admins can connect/disconnect QBO. Ask one to connect.'}
+          <Typography
+            variant="caption"
+            component="p"
+            sx={{ mt: 1, color: 'text.secondary', lineHeight: 1.6 }}
+          >
+            {error
+              ? 'Resolve the access message below, then reload this page.'
+              : `This connection is shared across Plutus users.${
+                  canConnect
+                    ? ' You must also be a QuickBooks Company Admin to authorize the connection.'
+                    : ' Only platform admins can connect/disconnect QBO. Ask one to connect.'
+                }`}
           </Typography>
 
           <Box sx={{ mt: 4 }}>
@@ -127,8 +157,9 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
                   alignItems: 'flex-start',
                   gap: 1,
                   borderRadius: 2,
-                  bgcolor: 'error.main',
-                  opacity: 0.1,
+                  bgcolor: 'rgba(239, 68, 68, 0.08)',
+                  border: 1,
+                  borderColor: 'rgba(239, 68, 68, 0.24)',
                   px: 2,
                   py: 1.5,
                   textAlign: 'left',
@@ -136,7 +167,15 @@ export function NotConnectedScreen({ title, canConnect, error }: NotConnectedScr
               >
                 <Box
                   component="span"
-                  sx={{ mt: 0.25, display: 'inline-block', height: 8, width: 8, borderRadius: '50%', bgcolor: 'error.main', opacity: 0.8 }}
+                  sx={{
+                    mt: 0.25,
+                    display: 'inline-block',
+                    height: 8,
+                    width: 8,
+                    borderRadius: '50%',
+                    bgcolor: 'error.main',
+                    opacity: 0.8,
+                  }}
                 />
                 <Typography variant="body2" sx={{ color: 'error.main' }}>
                   {error}

@@ -45,7 +45,9 @@ function buildResolvedResolution(
   return { status: 'resolved', invoiceId, source };
 }
 
-function buildUnresolvedResolution(match: Exclude<AuditInvoiceMatch, { kind: 'match' }>): AuditInvoiceResolution {
+function buildUnresolvedResolution(
+  match: Exclude<AuditInvoiceMatch, { kind: 'match' }>,
+): AuditInvoiceResolution {
   if (match.kind === 'ambiguous') {
     return {
       status: 'unresolved',
@@ -82,7 +84,9 @@ export async function fetchAuditInvoiceSummaries(): Promise<AuditInvoiceSummary[
 
   return rows.map((row) => {
     if (row.marketplaceId !== 'amazon.com' && row.marketplaceId !== 'amazon.co.uk') {
-      throw new Error(`Unrecognized audit marketplace: ${row.marketplaceId === null ? 'null' : row.marketplaceId}`);
+      throw new Error(
+        `Unrecognized audit marketplace: ${row.marketplaceId === null ? 'null' : row.marketplaceId}`,
+      );
     }
 
     return {
@@ -151,20 +155,23 @@ export async function resolveAuditInvoicesForSettlementChildren(
 
 export function formatAuditInvoiceResolutionMessage(resolution: AuditInvoiceResolution): string {
   if (resolution.status === 'resolved') {
-    if (resolution.source === 'processing') return `Processed with invoice ${resolution.invoiceId}`;
-    if (resolution.source === 'rollback') return `Will reuse rolled-back invoice ${resolution.invoiceId}`;
-    if (resolution.source === 'doc_number') return `Matched invoice ${resolution.invoiceId} by doc number`;
-    if (resolution.source === 'contained') return `Matched invoice ${resolution.invoiceId} by contained date range`;
-    return `Matched invoice ${resolution.invoiceId} by overlapping date range`;
+    if (resolution.source === 'processing') return `Processed with support ${resolution.invoiceId}`;
+    if (resolution.source === 'rollback')
+      return `Will reuse rolled-back support ${resolution.invoiceId}`;
+    if (resolution.source === 'doc_number')
+      return `Matched support ${resolution.invoiceId} by doc number`;
+    if (resolution.source === 'contained')
+      return `Matched support ${resolution.invoiceId} by contained date range`;
+    return `Matched support ${resolution.invoiceId} by overlapping date range`;
   }
 
   if (resolution.reason === 'missing_period') {
-    return 'Cannot resolve an audit invoice because this posting is missing a settlement period.';
+    return 'Cannot resolve settlement support because this posting is missing a settlement period.';
   }
 
   if (resolution.reason === 'none') {
-    return 'No stored audit invoice matches this posting period.';
+    return 'No stored settlement support matches this posting period.';
   }
 
-  return `Multiple stored audit invoices match this posting period: ${resolution.candidateInvoiceIds.join(', ')}`;
+  return `Multiple stored settlement support records match this posting period: ${resolution.candidateInvoiceIds.join(', ')}`;
 }

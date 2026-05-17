@@ -24,7 +24,25 @@ type ConnectionStatus = {
 
 async function fetchConnectionStatus(): Promise<ConnectionStatus> {
   const res = await fetch(`${basePath}/api/qbo/status`);
-  return res.json();
+  const data = (await res.json()) as Partial<ConnectionStatus> & {
+    error?: string;
+    details?: string;
+  };
+  if (!res.ok) {
+    return {
+      connected: false,
+      canConnect: false,
+      error: data.details ?? data.error ?? 'Plutus API authentication failed.',
+    };
+  }
+  if (typeof data.connected !== 'boolean' || typeof data.canConnect !== 'boolean') {
+    return {
+      connected: false,
+      canConnect: false,
+      error: 'Plutus API returned an invalid QBO status response.',
+    };
+  }
+  return data as ConnectionStatus;
 }
 
 async function disconnectQbo(): Promise<{ success: boolean }> {
@@ -57,7 +75,11 @@ export default function SettingsPage() {
     window.location.href = `${basePath}/api/qbo/connect`;
   }
 
-  const connectionLabel = isLoading ? 'Checking...' : status?.connected === true ? status.companyName ?? 'Connected' : 'Not connected';
+  const connectionLabel = isLoading
+    ? 'Checking...'
+    : status?.connected === true
+      ? (status.companyName ?? 'Connected')
+      : 'Not connected';
 
   return (
     <Box component="main" sx={{ flex: 1 }}>
@@ -66,17 +88,31 @@ export default function SettingsPage() {
 
         <Card sx={{ mt: 3, border: 1, borderColor: 'divider' }}>
           <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-            <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
+            <Typography
+              sx={{
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                color: 'text.secondary',
+              }}
+            >
               QuickBooks Online
             </Typography>
-            <Typography sx={{ mt: 1, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
+            <Typography
+              sx={{ mt: 1, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}
+            >
               {connectionLabel}
             </Typography>
             {status?.connected === true && status.homeCurrency ? (
-              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>Home currency: {status.homeCurrency}</Typography>
+              <Typography sx={{ mt: 0.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+                Home currency: {status.homeCurrency}
+              </Typography>
             ) : null}
             {!isLoading && status?.connected === false && status.error ? (
-              <Typography sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>{status.error}</Typography>
+              <Typography sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
+                {status.error}
+              </Typography>
             ) : null}
 
             <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
