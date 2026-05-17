@@ -15,14 +15,11 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
-import AssignmentIcon from '@mui/icons-material/Assignment';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import MapIcon from '@mui/icons-material/Map';
-import OutboxIcon from '@mui/icons-material/Outbox';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import ReportProblemIcon from '@mui/icons-material/ReportProblem';
 import SettingsIcon from '@mui/icons-material/Settings';
-import StackedLineChartIcon from '@mui/icons-material/StackedLineChart';
 import MenuIcon from '@mui/icons-material/Menu';
 import CloseIcon from '@mui/icons-material/Close';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
@@ -112,18 +109,14 @@ type NavItem = { href: string; label: string; icon: SvgIconComponent };
 
 const PRIMARY_NAV_ITEMS: NavItem[] = [
   { href: '/settlements', label: 'Settlements', icon: ReceiptLongIcon },
-  { href: '/purchase-orders', label: 'Purchase Orders', icon: AssignmentIcon },
-  { href: '/inventory-ledger', label: 'Inventory Ledger', icon: Inventory2Icon },
+  { href: '/purchase-orders', label: 'Inventory', icon: Inventory2Icon },
   { href: '/exceptions', label: 'Exceptions', icon: ReportProblemIcon },
 ];
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
-  { href: '/landed-cost-allocations', label: 'Landed Allocations', icon: FactCheckIcon },
-  { href: '/cogs-batches', label: 'COGS Postings', icon: StackedLineChartIcon },
-  { href: '/sellerboard-export', label: 'Sellerboard Export', icon: OutboxIcon },
-  { href: '/settlement-mapping', label: 'Mappings', icon: MapIcon },
+  { href: '/settlement-mapping', label: 'Settlement Rules', icon: MapIcon },
   { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
-  { href: '/settings', label: 'Settings', icon: SettingsIcon },
+  { href: '/settings', label: 'QBO Connection', icon: SettingsIcon },
 ];
 
 const ALL_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];
