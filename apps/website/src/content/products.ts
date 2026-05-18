@@ -273,7 +273,8 @@ export const productsUK: Product[] = [
     packLabel: '6 PK',
     thicknessLabel: 'Light',
     coverageLabel: '648 sq ft',
-    price: '£9.89',
+    price: '£9.99',
+    priceBadge: 'VAT Inclusive',
     tagline: 'Multi coverage for standard projects.',
     description: 'Extra large plastic dust sheets for decorating, painting, and quick protection.',
     longDescription: [

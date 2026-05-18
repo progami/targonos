@@ -10,9 +10,9 @@ export default function CsUsPage() {
     <PacksPageContent
       catalog={products}
       copy={{
-        description: 'Pick the pack size. Check the price. Buy on Amazon.',
+        description: 'Reliable protection for painting, decorating, DIY and renovation projects.',
         marketLabel: 'US',
-        title: 'Drop Cloth Packs'
+        title: 'Premium Plastic Drop Cloth Packs'
       }}
     />
   );
