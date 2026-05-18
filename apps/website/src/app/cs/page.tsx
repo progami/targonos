@@ -56,8 +56,6 @@ export default function CaelumStarPage() {
       <style
         dangerouslySetInnerHTML={{
           __html: `
-            body > header,
-            main#main-content + footer,
             a[href="#main-content"] {
               display: none;
             }
