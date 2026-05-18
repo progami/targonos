@@ -318,13 +318,28 @@
   line-height: 1.12;
 }
 
-.packNameBlock strong {
+.priceLine {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.priceLine strong {
   color: var(--cs-cyan-strong);
   font-family: var(--font-cs-montserrat), "Montserrat", "Bahnschrift", sans-serif;
   font-size: 1.32rem;
   font-weight: 900;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+}
+
+.priceLine span {
+  color: var(--cs-muted);
+  font-size: 0.58rem;
+  font-weight: 900;
+  line-height: 1.05;
+  text-transform: uppercase;
 }
 
 .packFacts {

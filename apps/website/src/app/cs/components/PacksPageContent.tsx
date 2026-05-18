@@ -142,7 +142,10 @@ export function PacksPageContent({
                   <div className={styles.packDetails}>
                     <div className={styles.packNameBlock}>
                       <h3>{product.name} {product.thicknessLabel}</h3>
-                      <strong>{getProductPrice(product)}</strong>
+                      <div className={styles.priceLine}>
+                        <strong>{getProductPrice(product)}</strong>
+                        {product.priceBadge ? <span>{product.priceBadge}</span> : null}
+                      </div>
                     </div>
 
                     <dl className={styles.packFacts}>
