@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, kairos, atlas, plutus, hermes, argus" >&2
+  echo "  app-key: talos, sso, kairos, atlas, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -194,18 +194,6 @@ build_talos_changed_migrate_cmd() {
   join_commands "${commands[@]}"
 }
 
-plutus_prisma_changed() {
-  if any_changed "apps/plutus/prisma/schema.prisma"; then
-    return 0
-  fi
-
-  if any_changed_under "apps/plutus/prisma/migrations/"; then
-    return 0
-  fi
-
-  return 1
-}
-
 skip_git="${DEPLOY_SKIP_GIT:-false}"
 skip_install="${DEPLOY_SKIP_INSTALL:-false}"
 skip_pm2_save="${DEPLOY_SKIP_PM2_SAVE:-false}"
@@ -315,14 +303,6 @@ case "$app_key" in
     prisma_cmd="cd $app_dir && npx prisma generate"
     migrate_cmd="cd $app_dir && pnpm run db:migrate:deploy --schema prisma/schema.prisma"
     build_cmd="cd $app_dir && pnpm run build"
-    ;;
-  plutus)
-    workspace="@targon/plutus"
-    app_dir="$REPO_DIR/apps/plutus"
-    pm2_name="${PM2_PREFIX}-plutus"
-    prisma_cmd=""
-    migrate_cmd="pnpm --filter $workspace db:migrate:deploy"
-    build_cmd="pnpm --filter $workspace build"
     ;;
   hermes)
     workspace="@targon/hermes"
@@ -847,7 +827,6 @@ hosted_app_base_path() {
     talos) printf '/talos' ;;
     atlas) printf '/atlas' ;;
     kairos) printf '/kairos' ;;
-    plutus) printf '/plutus' ;;
     hermes) printf '/hermes' ;;
     argus) printf '/argus' ;;
     sso|targon|targonos) printf '' ;;
@@ -934,9 +913,6 @@ migration_owner_role_for_app() {
     talos|argus)
       printf 'portal_talos'
       ;;
-    plutus)
-      printf 'portal_plutus'
-      ;;
     *)
       error "No owner role mapping for migration-enabled app: $app_key"
       exit 1
@@ -960,12 +936,6 @@ migration_schema_for_app() {
       ;;
     kairos:dev|kairos:main)
       printf 'kairos'
-      ;;
-    plutus:dev)
-      printf 'plutus_dev'
-      ;;
-    plutus:main)
-      printf 'plutus'
       ;;
     argus:dev)
       printf 'argus_dev'
@@ -999,7 +969,7 @@ prepare_shared_owner_migration_env() {
     sso|targon|targonos)
       export PORTAL_DB_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
       ;;
-    atlas|kairos|plutus|argus)
+    atlas|kairos|argus)
       export DATABASE_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
       ;;
     *)
@@ -1034,7 +1004,7 @@ prepare_owner_migration_env() {
     talos)
       prepare_talos_owner_migration_env
       ;;
-    sso|targon|targonos|atlas|kairos|plutus|argus)
+    sso|targon|targonos|atlas|kairos|argus)
       prepare_shared_owner_migration_env
       ;;
     *)
@@ -1044,41 +1014,6 @@ prepare_owner_migration_env() {
 }
 ensure_app_env_loaded() {
   [[ "$selected_app_env_loaded" == "true" ]]
-}
-
-validate_plutus_qbo_env() {
-  local expected_redirect
-  expected_redirect="$(hosted_portal_origin)/plutus/api/qbo/callback"
-
-  if [[ -z "${QBO_CLIENT_ID:-}" ]]; then
-    error "QBO_CLIENT_ID is required for plutus deployments"
-    exit 1
-  fi
-
-  if [[ -z "${QBO_CLIENT_SECRET:-}" ]]; then
-    error "QBO_CLIENT_SECRET is required for plutus deployments"
-    exit 1
-  fi
-
-  if [[ "${QBO_CLIENT_ID}" == "ci-placeholder" ]]; then
-    error "QBO_CLIENT_ID cannot use ci-placeholder for plutus deployments"
-    exit 1
-  fi
-
-  if [[ "${QBO_CLIENT_SECRET}" == "ci-placeholder" ]]; then
-    error "QBO_CLIENT_SECRET cannot use ci-placeholder for plutus deployments"
-    exit 1
-  fi
-
-  if [[ -z "${QBO_REDIRECT_URI:-}" ]]; then
-    error "QBO_REDIRECT_URI is required for plutus deployments"
-    exit 1
-  fi
-
-  if [[ "${QBO_REDIRECT_URI}" != "$expected_redirect" ]]; then
-    error "QBO_REDIRECT_URI must be $expected_redirect for plutus deployments"
-    exit 1
-  fi
 }
 
 validate_hermes_env() {
@@ -1180,15 +1115,6 @@ if [[ "$app_key" == "talos" && "$changed_files_available" == "true" ]]; then
   if talos_changed_migrate_cmd="$(build_talos_changed_migrate_cmd)"; then
     migrate_cmd="$talos_changed_migrate_cmd"
   else
-    migrate_cmd=""
-  fi
-fi
-
-if [[ "$app_key" == "plutus" && "$changed_files_available" == "true" ]]; then
-  if plutus_prisma_changed; then
-    log "Plutus Prisma files changed; running migrations"
-  else
-    log "Skipping Plutus migrations (no Prisma changes in deploy range)"
     migrate_cmd=""
   fi
 fi
@@ -1374,10 +1300,6 @@ fi
 apply_build_metadata_env
 apply_hosted_env_overrides
 
-if [[ "$app_key" == "plutus" ]]; then
-  validate_plutus_qbo_env
-fi
-
 if [[ "$app_key" == "hermes" ]]; then
   validate_hermes_env
 fi
@@ -1456,15 +1378,6 @@ log "$pm2_name started and verified"
 if [[ "$app_key" == "hermes" ]]; then
   hermes_workers=("${PM2_PREFIX}-hermes-orders-sync" "${PM2_PREFIX}-hermes-request-review")
   for worker in "${hermes_workers[@]}"; do
-    log "Step 7: Starting $worker"
-    start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
-    log "$worker started and verified"
-  done
-fi
-
-if [[ "$app_key" == "plutus" ]]; then
-  plutus_workers=("${PM2_PREFIX}-plutus-settlement-sync")
-  for worker in "${plutus_workers[@]}"; do
     log "Step 7: Starting $worker"
     start_and_verify_pm2_process "$worker" "$app_dir" "$deploy_runtime_sha"
     log "$worker started and verified"

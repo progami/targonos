@@ -10,7 +10,6 @@ const talosDbCommon = fs.readFileSync(path.join(rootDir, 'scripts', 'db', 'talos
 const talosLoadEnv = fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'scripts', 'load-env.ts'), 'utf8')
 const authPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'packages', 'auth', 'package.json'), 'utf8'))
 const talosPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'talos', 'package.json'), 'utf8'))
-const plutusPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'plutus', 'package.json'), 'utf8'))
 
 test('auth package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
@@ -23,13 +22,6 @@ test('talos package exposes a deploy-safe prisma migrate command', () => {
   assert.equal(
     talosPackage.scripts['db:migrate:deploy'],
     'prisma migrate deploy --schema prisma/schema.prisma',
-  )
-})
-
-test('plutus package exposes a deploy-safe prisma migrate command', () => {
-  assert.equal(
-    plutusPackage.scripts['db:migrate:deploy'],
-    'tsx scripts/require-database-url-schema.ts && prisma migrate deploy --schema prisma/schema.prisma',
   )
 })
 
@@ -51,23 +43,10 @@ test('sso deploy uses PORTAL_DB_URL for migration readiness instead of app DATAB
   )
 })
 
-test('plutus deploy applies Prisma migrations instead of db push', () => {
-  assert.match(
-    deployScript,
-    /plutus\)[\s\S]*?migrate_cmd="pnpm --filter \$workspace db:migrate:deploy"/,
-  )
-  assert.doesNotMatch(
-    deployScript,
-    /plutus\)[\s\S]*?migrate_cmd="pnpm --filter \$workspace db:push"/,
-  )
-})
-
-test('plutus deploy starts only active Plutus worker processes', () => {
-  assert.match(
-    deployScript,
-    /plutus_workers=\("\$\{PM2_PREFIX\}-plutus-settlement-sync"\)/,
-  )
-  assert.doesNotMatch(deployScript, /plutus-cashflow-refresh/)
+test('monorepo deploy no longer owns Plutus', () => {
+  assert.doesNotMatch(deployScript, /@targon\/plutus/)
+  assert.doesNotMatch(deployScript, /apps\/plutus/)
+  assert.doesNotMatch(deployScript, /plutus-settlement-sync/)
 })
 
 test('shared-db deploys map apps onto deterministic owner roles and local owner URLs', () => {
@@ -86,10 +65,6 @@ test('shared-db deploys map apps onto deterministic owner roles and local owner 
   assert.match(
     deployScript,
     /migration_owner_role_for_app\(\)[\s\S]*?talos\|argus\)[\s\S]*?printf 'portal_talos'/,
-  )
-  assert.match(
-    deployScript,
-    /migration_owner_role_for_app\(\)[\s\S]*?plutus\)[\s\S]*?printf 'portal_plutus'/,
   )
   assert.match(
     deployScript,
@@ -131,17 +106,6 @@ test('talos deploy always applies pending prisma migrations for both tenant sche
   assert.match(
     deployScript,
     /local commands=\("\$talos_prisma_migrate_cmd"\)/,
-  )
-})
-
-test('plutus deploy skips migrations when prisma files did not change', () => {
-  assert.match(
-    deployScript,
-    /plutus_prisma_changed\(\)[\s\S]*?any_changed "apps\/plutus\/prisma\/schema\.prisma"[\s\S]*?any_changed_under "apps\/plutus\/prisma\/migrations\/"/,
-  )
-  assert.match(
-    deployScript,
-    /if \[\[ "\$app_key" == "plutus" && "\$changed_files_available" == "true" \]\]; then[\s\S]*?if plutus_prisma_changed; then[\s\S]*?else[\s\S]*?migrate_cmd=""/,
   )
 })
 

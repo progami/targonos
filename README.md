@@ -10,9 +10,10 @@ TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps.
 | Talos | `@targon/talos` | `/talos` |
 | Atlas | `@targon/atlas` | `/atlas` |
 | Kairos | `@targon/kairos` | `/kairos` |
-| Plutus | `@targon/plutus` | `/plutus` |
 | Hermes | `@targon/hermes` | `/hermes` |
 | Argus | `@targon/argus` | `/argus` |
+
+Plutus is a standalone repo/runtime at `/Users/jarraramjad/dev/plutus`. The SSO portal still links to `/plutus`, but this monorepo no longer owns the Plutus app, Prisma package, deploy flow, or worker.
 
 ## Local development
 
@@ -38,7 +39,6 @@ pnpm --filter @targon/sso dev
 pnpm --filter @targon/talos dev
 pnpm --filter @targon/atlas dev
 pnpm --filter @targon/kairos dev
-pnpm --filter @targon/plutus dev
 pnpm --filter @targon/hermes dev
 pnpm --filter @targon/argus dev
 ```
@@ -101,7 +101,6 @@ pnpm --filter @targon/sso exec next dev -p 3200
 pnpm --filter @targon/talos exec next dev -p 3201
 pnpm --filter @targon/atlas exec next dev --webpack -p 3206
 pnpm --filter @targon/kairos exec next dev -p 3210
-pnpm --filter @targon/plutus exec next dev -p 3212
 pnpm --filter @targon/hermes exec next dev -p 3214
 pnpm --filter @targon/argus exec next dev -p 3216
 ```
