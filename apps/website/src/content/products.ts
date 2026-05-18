@@ -98,7 +98,6 @@ const AMAZON_US_12PK = 'https://www.amazon.com/dp/B0FP66CWQ6?th=1';
 const AMAZON_UK_1PK = 'https://www.amazon.co.uk/dp/B0FLKJ7WWM';
 const AMAZON_UK_3PK = 'https://www.amazon.co.uk/dp/B0CR1GSBQ9';
 const AMAZON_UK_6PK = 'https://www.amazon.co.uk/dp/B09HXC3NL8';
-const AMAZON_UK_12PK = 'https://www.amazon.co.uk/dp/B0FP66CWQ6';
 
 /**
  * Product set:
@@ -453,42 +452,6 @@ export const productsUK: Product[] = [
       { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' }
     ],
     amazonUrl: AMAZON_UK_3PK
-  },
-  {
-    slug: '10pk-light',
-    name: '10 Pack',
-    packLabel: '10 PK',
-    thicknessLabel: 'Light',
-    coverageLabel: '1080 sq ft',
-    price: '£13.99',
-    tagline: 'Pro coverage for multi-room renovations.',
-    description: 'More sheets for bigger rooms, repeat work, and bigger prep.',
-    longDescription: [
-      'Pro coverage for multi-room renovations.',
-      'Light durability, universal protection.',
-      '55% recycled plastic, globally certified.'
-    ],
-    highlights: ['12ft × 9ft per sheet', 'Light durability', '55% recycled plastic (GRS)'],
-    specs: [
-      { label: 'Pack', value: '10 sheets' },
-      { label: 'Total coverage', value: '1080 sq ft (≈100 m²)' },
-      { label: 'Sheet size', value: '3.6m × 2.7m (12ft × 9ft) each' },
-      { label: 'Durability', value: 'Light' },
-      { label: 'Material', value: 'LDPE (plastic sheeting)' }
-    ],
-    image: { src: '/images/products/UK-products/10pk-light.png', alt: 'CS 10 Pack Extra Large Dust Sheets — Light by Caelum Star' },
-    gallery: [
-      {
-        src: '/images/amazon/uk/12pk-light-lifestyle.webp',
-        alt: 'Pro coverage — perfect for multi-room projects (10 pack)',
-        variant: 'square'
-      },
-      { src: '/images/amazon/multi-room-projects.webp', alt: 'Ideal for multi-room projects: pro coverage', variant: 'square' },
-      { src: '/images/amazon/light-durability.webp', alt: 'Light durability: universal protection', variant: 'square' },
-      { src: '/images/amazon/fit-coverage.webp', alt: 'Find your perfect fit: pack-to-coverage comparison', variant: 'wide' },
-      { src: '/images/amazon/applications.webp', alt: 'Applications: moving, painting, renovating', variant: 'square' }
-    ],
-    amazonUrl: AMAZON_UK_12PK
   }
 ];
 

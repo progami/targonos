@@ -11,7 +11,7 @@ import { Container } from '@/components/Container';
 
 const productNavLinks = [
   { label: 'US', href: '/cs/us' },
-  { label: 'UK', href: '/cs/uk' }
+  { label: 'UK', href: 'https://caelumstar.co.uk/' }
 ];
 
 const homeNavLinks = [
