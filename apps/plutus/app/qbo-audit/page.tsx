@@ -1,3 +1,5 @@
-import { QboAuditPage } from '@/components/subledger/qbo-audit-page';
+import { redirect } from 'next/navigation';
 
-export default QboAuditPage;
+export default function QboAuditRedirectPage() {
+  redirect('/exceptions');
+}
