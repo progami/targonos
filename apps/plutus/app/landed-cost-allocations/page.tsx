@@ -7,7 +7,11 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import { AllocationCreateForm } from '@/components/landed-cost-allocations/allocation-create-form';
+import {
+  AllocationWorkbench,
+  type AllocationLayerOption,
+  type AllocationWorkbenchLine,
+} from '@/components/landed-cost-allocations/allocation-create-form';
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { db } from '@/lib/db';
@@ -29,20 +33,8 @@ type AllocationRow = {
   sourceNote: string | null;
 };
 
-type UnallocatedBillLine = {
-  qboBillId: string;
-  qboBillLineId: string;
-  billDate: string;
-  vendor: string;
-  docNumber: string;
-  account: string;
-  description: string;
-  amountCents: number;
-  currency: string;
-};
-
 type UnallocatedBillLineResult =
-  | { status: 'ok'; lines: UnallocatedBillLine[] }
+  | { status: 'ok'; lines: AllocationWorkbenchLine[] }
   | { status: 'not_connected'; message: string }
   | { status: 'error'; message: string };
 
@@ -51,6 +43,27 @@ async function getAllocations(): Promise<AllocationRow[]> {
     orderBy: [{ qboBillId: 'asc' }, { qboBillLineId: 'asc' }, { sku: 'asc' }],
     take: 1000,
   });
+}
+
+async function getLayerOptions(): Promise<AllocationLayerOption[]> {
+  return db.$queryRawUnsafe<AllocationLayerOption[]>(`
+    SELECT
+      "id",
+      "marketplace",
+      "poNumber",
+      "qboPurchaseOrderId",
+      "qboPurchaseOrderLineId",
+      "qboItemId",
+      "sku",
+      "qtyReceived",
+      "qtyRemaining",
+      "status"
+    FROM "CostLayer"
+    WHERE "qboPurchaseOrderId" IS NOT NULL
+      AND "status" = 'NOT_READY'
+    ORDER BY "poNumber" ASC, "sku" ASC, "receiptDate" ASC NULLS LAST
+    LIMIT 1000
+  `);
 }
 
 const landedCostAccountMatchers = ['freight', 'duty', 'custom', 'box', 'packaging', 'broker'];
@@ -80,9 +93,14 @@ async function getUnallocatedBillLines(
     return { status: 'not_connected', message: 'QBO connection is required to list bill lines.' };
   }
 
-  const allocatedRefs = new Set(
-    allocations.map((allocation) => `${allocation.qboBillId}:${allocation.qboBillLineId}`),
-  );
+  const allocatedCentsByRef = new Map<string, number>();
+  for (const allocation of allocations) {
+    const ref = `${allocation.qboBillId}:${allocation.qboBillLineId}`;
+    allocatedCentsByRef.set(
+      ref,
+      (allocatedCentsByRef.get(ref) ?? 0) + allocation.allocatedAmountCents,
+    );
+  }
 
   try {
     const result = await fetchBills(connection, {
@@ -93,12 +111,15 @@ async function getUnallocatedBillLines(
       await saveServerQboConnection(result.updatedConnection);
     }
 
-    const lines: UnallocatedBillLine[] = [];
+    const lines: AllocationWorkbenchLine[] = [];
     for (const bill of result.bills) {
       for (const line of bill.Line ?? []) {
         if (line.Amount <= 0) continue;
         if (!isLandedCostBillLine(line)) continue;
-        if (allocatedRefs.has(`${bill.Id}:${line.Id}`)) continue;
+        const amountCents = Math.round(line.Amount * 100);
+        const allocatedCents = allocatedCentsByRef.get(`${bill.Id}:${line.Id}`) ?? 0;
+        const remainingCents = amountCents - allocatedCents;
+        if (remainingCents <= 0) continue;
 
         lines.push({
           qboBillId: bill.Id,
@@ -112,7 +133,9 @@ async function getUnallocatedBillLines(
             line.ItemBasedExpenseLineDetail?.ItemRef?.name ??
             '-',
           description: line.Description ?? '-',
-          amountCents: Math.round(line.Amount * 100),
+          amountCents,
+          allocatedCents,
+          remainingCents,
           currency: billLineCurrency(bill),
         });
       }
@@ -141,7 +164,7 @@ function formatCents(value: number, currency: string): string {
 }
 
 export default async function LandedCostAllocationsPage() {
-  const rows = await getAllocations();
+  const [rows, layerOptions] = await Promise.all([getAllocations(), getLayerOptions()]);
   const unallocatedBillLines = await getUnallocatedBillLines(rows);
 
   return (
@@ -150,7 +173,13 @@ export default async function LandedCostAllocationsPage() {
         title="Landed Cost Allocations"
         kicker="Freight, duty, boxes, broker lines assigned to PO/SKU"
       />
-      <AllocationCreateForm />
+      {unallocatedBillLines.status !== 'ok' ? (
+        <Alert severity={unallocatedBillLines.status === 'not_connected' ? 'warning' : 'error'}>
+          {unallocatedBillLines.message}
+        </Alert>
+      ) : (
+        <AllocationWorkbench lines={unallocatedBillLines.lines} layerOptions={layerOptions} />
+      )}
 
       <Box
         sx={{
@@ -163,62 +192,9 @@ export default async function LandedCostAllocationsPage() {
       >
         <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider' }}>
           <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-            Unallocated QBO landed-cost bill lines
+            Existing landed-cost allocations
           </Typography>
         </Box>
-        {unallocatedBillLines.status !== 'ok' ? (
-          <Alert severity={unallocatedBillLines.status === 'not_connected' ? 'warning' : 'error'}>
-            {unallocatedBillLines.message}
-          </Alert>
-        ) : (
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small" sx={{ minWidth: 1120 }}>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Vendor</TableCell>
-                  <TableCell>Doc</TableCell>
-                  <TableCell>QBO Bill</TableCell>
-                  <TableCell>Line</TableCell>
-                  <TableCell>Account</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell align="right">Amount</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {unallocatedBillLines.lines.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={8}>
-                      <EmptyState
-                        title="No unallocated landed-cost bill lines"
-                        description="No matching current QBO bill lines remain after allocation filtering."
-                      />
-                    </TableCell>
-                  </TableRow>
-                )}
-                {unallocatedBillLines.lines.map((line) => (
-                  <TableRow key={`${line.qboBillId}:${line.qboBillLineId}`}>
-                    <TableCell>{line.billDate}</TableCell>
-                    <TableCell>{line.vendor}</TableCell>
-                    <TableCell>{line.docNumber}</TableCell>
-                    <TableCell>{line.qboBillId}</TableCell>
-                    <TableCell>{line.qboBillLineId}</TableCell>
-                    <TableCell>{line.account}</TableCell>
-                    <TableCell>{line.description}</TableCell>
-                    <TableCell align="right">
-                      {formatCents(line.amountCents, line.currency)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-        )}
-      </Box>
-
-      <Box
-        sx={{ overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}
-      >
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 1040 }}>
             <TableHead>
