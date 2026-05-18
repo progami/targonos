@@ -1,6 +1,10 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
+import { isStandaloneProductRoute } from '@/lib/standaloneProductRoutes';
 
 const footerLinks = {
   Explore: [
@@ -19,7 +23,12 @@ const footerLinks = {
 };
 
 export function Footer() {
+  const pathname = usePathname();
   const year = new Date().getFullYear();
+
+  if (isStandaloneProductRoute(pathname)) {
+    return null;
+  }
 
   return (
     <footer className="border-t border-white/10 bg-black text-white">

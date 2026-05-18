@@ -8,6 +8,7 @@ import { Menu, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { site } from '@/content/site';
 import { Container } from '@/components/Container';
+import { isStandaloneProductRoute } from '@/lib/standaloneProductRoutes';
 
 const productNavLinks = [
   { label: 'US', href: '/cs/us' },
@@ -51,6 +52,10 @@ export function Header() {
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  if (isStandaloneProductRoute(pathname)) {
+    return null;
+  }
 
   return (
     <header

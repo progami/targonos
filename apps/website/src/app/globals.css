@@ -30,6 +30,12 @@ body {
   letter-spacing: -0.01em;
 }
 
+html[data-standalone-product-site='true'] body > header,
+html[data-standalone-product-site='true'] main#main-content + footer,
+html[data-standalone-product-site='true'] a[href='#main-content'] {
+  display: none;
+}
+
 /* Smooth, Apple-ish tap highlights */
 * {
   -webkit-tap-highlight-color: transparent;
