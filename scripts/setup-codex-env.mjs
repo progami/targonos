@@ -28,7 +28,7 @@ const APP_BASE_PATHS = {
   argus: '/argus',
 }
 
-const APP_ORDER = ['sso', 'talos', 'website', 'atlas', 'kairos', 'plutus', 'hermes', 'argus']
+const APP_ORDER = ['sso', 'talos', 'atlas', 'kairos', 'plutus', 'hermes', 'argus']
 const WORKTREE_DEV_AUTHZ_JSON = stringifyWorktreeDevAuthz()
 const ENABLE_SSO_WORKTREE_DEV_AUTH = process.env.TARGON_SSO_WORKTREE_DEV_AUTH?.trim().toLowerCase() === 'true'
 
@@ -219,11 +219,6 @@ function buildManagedEntries(context) {
       entries.set('PORTAL_APPS_CONFIG', worktreeAppMapPath)
       entries.set('PORTAL_DB_URL', withSchema(baseDevDbUrl, 'auth_dev'))
       entries.set('ALLOW_CALLBACK_REDIRECT', 'true')
-      return entries
-    case 'website':
-      entries.set('NODE_ENV', 'development')
-      entries.set('PORT', String(port))
-      entries.set('HOST', '0.0.0.0')
       return entries
     case 'talos':
       entries.set('NODE_ENV', 'development')

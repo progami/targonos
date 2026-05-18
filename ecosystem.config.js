@@ -289,18 +289,6 @@ module.exports = {
       max_memory_restart: '500M'
     },
     {
-      name: 'dev-website',
-      cwd: path.join(DEV_DIR, 'apps/website'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3105',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createNextAppEnv(DEV_DIR, 'website', 'dev', { NODE_ENV: 'production', PORT: 3105 }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
       name: 'dev-atlas',
       cwd: path.join(DEV_DIR, 'apps/atlas'),
       script: 'node_modules/next/dist/bin/next',
@@ -480,18 +468,6 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '500M'
-    },
-    {
-      name: 'main-website',
-      cwd: path.join(MAIN_DIR, 'apps/website'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3005',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createNextAppEnv(MAIN_DIR, 'website', 'production', { NODE_ENV: 'production', PORT: 3005 }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
     },
     {
       name: 'main-atlas',

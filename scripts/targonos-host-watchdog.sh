@@ -107,7 +107,7 @@ maybe_build_next_app_if_missing() {
 }
 
 ensure_pm2_processes_healthy() {
-  local processes_csv="${TARGONOS_PM2_PROCESSES_CSV:-main-targonos,main-talos,main-website,main-atlas,main-kairos,main-kairos-ml,main-plutus,main-hermes,main-argus,dev-targonos,dev-talos,dev-website,dev-atlas,dev-kairos,dev-kairos-ml,dev-plutus,dev-hermes,dev-argus}"
+  local processes_csv="${TARGONOS_PM2_PROCESSES_CSV:-main-targonos,main-talos,main-atlas,main-kairos,main-kairos-ml,main-plutus,main-hermes,main-argus,dev-targonos,dev-talos,dev-atlas,dev-kairos,dev-kairos-ml,dev-plutus,dev-hermes,dev-argus}"
   local IFS=,
   local pm_name
   for pm_name in $processes_csv; do

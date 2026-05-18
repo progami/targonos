@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, kairos, atlas, plutus, hermes, argus" >&2
+  echo "  app-key: talos, sso, kairos, atlas, plutus, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -298,13 +298,6 @@ case "$app_key" in
     pm2_name="${PM2_PREFIX}-targonos"
     prisma_cmd=""
     migrate_cmd="pnpm --filter @targon/auth prisma:migrate:deploy"
-    build_cmd="pnpm --filter $workspace build"
-    ;;
-  website)
-    workspace="@targon/website"
-    app_dir="$REPO_DIR/apps/website"
-    pm2_name="${PM2_PREFIX}-website"
-    prisma_cmd=""
     build_cmd="pnpm --filter $workspace build"
     ;;
   kairos)
@@ -857,7 +850,7 @@ hosted_app_base_path() {
     plutus) printf '/plutus' ;;
     hermes) printf '/hermes' ;;
     argus) printf '/argus' ;;
-    sso|targon|targonos|website) printf '' ;;
+    sso|targon|targonos) printf '' ;;
     *)
       error "No hosted base path mapping for $app_key"
       exit 1
@@ -890,10 +883,6 @@ apply_hosted_env_overrides() {
   cookie_domain="$(hosted_cookie_domain)"
 
   export COOKIE_DOMAIN="$cookie_domain"
-
-  if [[ "$app_key" == "website" ]]; then
-    return 0
-  fi
 
   export PORTAL_AUTH_URL="$portal_origin"
   export NEXT_PUBLIC_PORTAL_AUTH_URL="$portal_origin"
