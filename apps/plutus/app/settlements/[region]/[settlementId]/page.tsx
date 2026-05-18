@@ -115,7 +115,7 @@ type ParentSettlementDetailResponse = {
         };
     invoiceResolutionMessage: string;
   }>;
-  cogsConsumptions: Array<{
+  cogsConsumptions?: Array<{
     id: string;
     settlementId: string;
     marketplace: string;
@@ -154,6 +154,8 @@ type ParentPreviewResponse = {
     };
   }>;
 };
+
+type SettlementCogsRows = NonNullable<ParentSettlementDetailResponse['cogsConsumptions']>;
 
 function formatPeriod(start: string | null, end: string | null): string {
   if (start === null || end === null) return '—';
@@ -226,11 +228,18 @@ function formatInteger(value: number): string {
   return value.toLocaleString('en-US');
 }
 
+function normalizeCogsRows(
+  rows: ParentSettlementDetailResponse['cogsConsumptions'],
+): SettlementCogsRows {
+  if (rows === undefined) return [];
+  return rows;
+}
+
 function SettlementCogsSection({
   rows,
   currency,
 }: {
-  rows: ParentSettlementDetailResponse['cogsConsumptions'];
+  rows: SettlementCogsRows;
   currency: string;
 }) {
   const totalCents = rows.reduce((sum, row) => sum + row.cogsAmountCents, 0);
@@ -629,7 +638,7 @@ export default function ParentSettlementDetailPage() {
             </Box>
 
             <SettlementCogsSection
-              rows={data.cogsConsumptions}
+              rows={normalizeCogsRows(data.cogsConsumptions)}
               currency={data.settlement.marketplace.currency}
             />
 
