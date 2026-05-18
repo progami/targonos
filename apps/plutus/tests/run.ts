@@ -519,7 +519,7 @@ test('settlement detail page shows regular posting and FIFO COGS support togethe
     'SettlementCogsSection',
     'FIFO COGS',
     'PO/SKU consumption support for this settlement',
-    'data.cogsConsumptions',
+    'normalizeCogsRows(data.cogsConsumptions)',
   ]) {
     assert.equal(page.includes(required), true, `${required} should be visible on settlement detail`);
   }
