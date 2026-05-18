@@ -1,3 +1,5 @@
+const CAELUM_STAR_UK_URL = 'https://caelumstar.co.uk/';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -40,27 +42,27 @@ const nextConfig = {
       },
       {
         source: '/cs/uk/packs',
-        destination: '/cs/uk',
+        destination: CAELUM_STAR_UK_URL,
         permanent: false,
       },
       {
         source: '/cs/uk/packs/:slug',
-        destination: '/cs/uk',
+        destination: CAELUM_STAR_UK_URL,
         permanent: false,
       },
       {
         source: '/cs/uk/where-to-buy',
-        destination: '/cs/uk',
+        destination: CAELUM_STAR_UK_URL,
         permanent: false,
       },
       {
         source: '/cs/uk/support',
-        destination: '/cs/uk',
+        destination: CAELUM_STAR_UK_URL,
         permanent: false,
       },
       {
         source: '/cs/uk/about',
-        destination: '/cs/uk',
+        destination: CAELUM_STAR_UK_URL,
         permanent: false,
       },
     ]

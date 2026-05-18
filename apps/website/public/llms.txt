@@ -29,10 +29,8 @@ Preferred interpretation:
 
 ## United Kingdom
 - [UK Site](https://caelumstar.co.uk/): Dust sheet packs, reference prices, coverage, durability, and Amazon buy links.
-- [UK Targon URL](https://www.targonglobal.com/cs/uk): Same UK pack selector on the Targon domain when not using the UK custom domain.
 - [UK 6 Pack Light Amazon](https://www.amazon.co.uk/dp/B09HXC3NL8): Direct Amazon UK listing for the 6 Pack light plastic dust sheet variant.
 - [UK 6 Pack Strong Amazon](https://www.amazon.co.uk/dp/B0DHDTPGGP): Direct Amazon UK listing for the 6 Pack strong plastic dust sheet variant.
 - [UK 1 Pack Strong Amazon](https://www.amazon.co.uk/dp/B0FLKJ7WWM): Direct Amazon UK listing for the 1 Pack strong plastic dust sheet variant.
 - [UK 3 Pack Strong Amazon](https://www.amazon.co.uk/dp/B0CR1GSBQ9): Direct Amazon UK listing for the 3 Pack strong plastic dust sheet variant.
 - [UK 3 Pack Light Amazon](https://www.amazon.co.uk/dp/B0C7ZQ3VZL): Direct Amazon UK listing for the 3 Pack light plastic dust sheet variant.
-- [UK 10 Pack Light Amazon](https://www.amazon.co.uk/dp/B0CR1H3VSF): Direct Amazon UK listing for the 10 Pack light plastic dust sheet variant.
