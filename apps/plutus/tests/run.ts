@@ -57,6 +57,7 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
   ]) {
     assert.equal(source.includes(href), true, `${href} should be in nav`);
   }
+  assert.equal(source.includes('{ALL_NAV_ITEMS.map((item)'), true, 'desktop nav should expose every Plutus section');
 
   for (const forbidden of [
     "href: '/products'",
@@ -66,6 +67,9 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/cogs-batches'",
     "href: '/sellerboard-export'",
     "href: '/settings'",
+    'More Plutus sections',
+    'MoreHorizIcon',
+    'plutus-more-menu',
   ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} should not be in nav`);
   }
@@ -449,9 +453,7 @@ test('settlement cash lines use settlement control wording', () => {
 test('fresh-start pages read new layer/allocation/consumption tables', () => {
   for (const path of [
     'app/purchase-orders/page.tsx',
-    'app/inventory-ledger/page.tsx',
     'app/landed-cost-allocations/page.tsx',
-    'app/cogs-batches/page.tsx',
     'app/sellerboard-export/page.tsx',
     'app/api/plutus/purchase-orders/route.ts',
     'app/api/plutus/inventory-ledger/route.ts',
@@ -469,16 +471,57 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   );
   assert.equal(read('app/purchase-orders/page.tsx').includes('tab=ledger'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('tab=cogs'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('Live Value'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('In Transit Value'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('PO / SKU'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('QBO PO line'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('FIFO layer'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('COGS journal'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Sellerboard export'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('Inventory in Transit - Plutus'), true);
-  assert.equal(read('app/inventory-ledger/page.tsx').includes("redirect('/purchase-orders?tab=ledger')"), true);
-  assert.equal(read('app/cogs-batches/page.tsx').includes("redirect('/purchase-orders?tab=cogs')"), true);
+  assertDeleted('app/inventory-ledger/page.tsx');
+  assertDeleted('app/cogs-batches/page.tsx');
   assert.equal(
     read('app/api/plutus/landed-cost-allocations/route.ts').includes('LandedCostAllocation'),
     true,
   );
-  assert.equal(read('app/purchase-orders/page.tsx').includes('JOIN "CogsConsumption"'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('FROM "CogsConsumption"'), true);
+});
+
+test('inventory tables avoid repeating connection columns', () => {
+  const source = read('app/purchase-orders/page.tsx');
+  for (const forbidden of [
+    '<TableCell>PO</TableCell>',
+    '<TableCell>SKU</TableCell>',
+    '<TableCell>Marketplace</TableCell>',
+    '<TableCell>QBO PO</TableCell>',
+    '<TableCell align="right">Live Qty</TableCell>',
+    '<TableCell align="right">In Transit Qty</TableCell>',
+    '<TableCell align="right">Live Value</TableCell>',
+    '<TableCell align="right">In Transit Value</TableCell>',
+  ]) {
+    assert.equal(source.includes(forbidden), false, `${forbidden} should not be repeated as a standalone column`);
+  }
+});
+
+test('settlement mapping is framed as category to QBO account rules', () => {
+  const source = read('app/settlement-mapping/page.tsx');
+  for (const required of [
+    'Settlement Rules',
+    'Amazon Category',
+    'QBO Account',
+    'Every Amazon settlement category must map to a QBO account',
+  ]) {
+    assert.equal(source.includes(required), true, `${required} should be visible on settlement rules`);
+  }
+
+  for (const forbidden of [
+    'Settlement Mappings',
+    'Search memos',
+    'memo mappings',
+    'Transaction Category',
+    'Account Name',
+  ]) {
+    assert.equal(source.includes(forbidden), false, `${forbidden} should not be visible settlement-rule wording`);
+  }
 });
 
 test('fresh-start UI displays unit costs at two decimals', () => {

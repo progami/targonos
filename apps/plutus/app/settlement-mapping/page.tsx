@@ -245,7 +245,7 @@ export default function SettlementMappingPage() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['setup-settlement-mapping'] });
-      enqueueSnackbar('Saved settlement mappings', { variant: 'success' });
+      enqueueSnackbar('Saved settlement rules', { variant: 'success' });
     },
     onError: (error) => {
       enqueueSnackbar(error instanceof Error ? error.message : String(error), { variant: 'error' });
@@ -281,8 +281,8 @@ export default function SettlementMappingPage() {
       const memoCount = Object.keys(data.memoMappings).length;
       const taxCount = Object.keys(data.taxCodeMappings).length;
       const message = taxEngineEnabled
-        ? `Imported ${memoCount} memo mappings + ${taxCount} tax mappings from QBO`
-        : `Imported ${memoCount} memo mappings from QBO`;
+        ? `Imported ${memoCount} category rules + ${taxCount} tax rules from QBO`
+        : `Imported ${memoCount} category rules from QBO`;
       enqueueSnackbar(message, { variant: 'success' });
     },
     onError: (error) => {
@@ -291,7 +291,7 @@ export default function SettlementMappingPage() {
   });
 
   if (!isCheckingConnection && connectionStatus?.connected === false) {
-    return <NotConnectedScreen title="Settlement Mappings" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
+    return <NotConnectedScreen title="Settlement Rules" canConnect={connectionStatus.canConnect} error={connectionStatus.error} />;
   }
 
   const isLoading =
@@ -306,18 +306,18 @@ export default function SettlementMappingPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <PageHeader
-              title="Settlement Mappings"
+              title="Settlement Rules"
               variant="accent"
             />
             <Tooltip
               title={
                 <>
-                  <div>1) Import while your historical US settlements still exist in QBO.</div>
-                  <div style={{ marginTop: 4 }}>2) Plutus will fail if a memo is missing from the mapping (to prevent mis-posts).</div>
+                  <div>1) Import while your historical settlements still exist in QBO.</div>
+                  <div style={{ marginTop: 4 }}>2) Plutus blocks posting when an Amazon category has no QBO account rule.</div>
                   <div style={{ marginTop: 4 }}>
                     {taxEngineEnabled
-                      ? '3) Tax code mapping mirrors TaxCodeRef used on historical settlement JEs (import first, then edit if needed).'
-                      : '3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef and tax mapping stays hidden.'}
+                      ? '3) Tax code rules mirror TaxCodeRef used on historical settlement journals.'
+                      : '3) QBO sales tax is disabled, so settlement postings omit TaxCodeRef.'}
                   </div>
                   <div style={{ marginTop: 4 }}>4) Settlement cash always balances through Plutus Settlement Control.</div>
                 </>
@@ -390,9 +390,9 @@ export default function SettlementMappingPage() {
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}>
-                    {region} Transaction Categories
+                    {region} Amazon Category Rules
                   </Typography>
-                  <Tooltip title="Every settlement line memo must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed." arrow>
+                  <Tooltip title="Every Amazon settlement category must map to a QBO account. Import from QBO to mirror existing postings, then review/update existing rows if needed." arrow>
                     <InfoOutlinedIcon sx={{ fontSize: 16, color: 'text.secondary', cursor: 'help' }} />
                   </Tooltip>
                 </Box>
@@ -400,7 +400,7 @@ export default function SettlementMappingPage() {
                   <TextField
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search memos…"
+                    placeholder="Search categories…"
                     size="small"
                     sx={{ width: 220 }}
                   />
@@ -429,10 +429,10 @@ export default function SettlementMappingPage() {
                     }}
                   >
                     <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary' }}>
-                      Transaction Category
+                      Amazon Category
                     </Typography>
                     <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
-                      Account Name
+                      QBO Account
                     </Typography>
                     {taxEngineEnabled && (
                       <Typography sx={{ fontSize: '0.625rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'text.secondary', display: { xs: 'none', md: 'block' } }}>
