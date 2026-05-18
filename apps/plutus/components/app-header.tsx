@@ -11,7 +11,6 @@ import FormControl from '@mui/material/FormControl';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import FactCheckIcon from '@mui/icons-material/FactCheck';
 import Inventory2Icon from '@mui/icons-material/Inventory2';
 import MapIcon from '@mui/icons-material/Map';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
@@ -110,7 +109,6 @@ const PRIMARY_NAV_ITEMS: NavItem[] = [
 
 const SECONDARY_NAV_ITEMS: NavItem[] = [
   { href: '/settlement-mapping', label: 'Settlement Rules', icon: MapIcon },
-  { href: '/qbo-audit', label: 'QBO Audit', icon: FactCheckIcon },
 ];
 
 const ALL_NAV_ITEMS = [...PRIMARY_NAV_ITEMS, ...SECONDARY_NAV_ITEMS];

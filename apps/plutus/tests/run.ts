@@ -53,7 +53,6 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/purchase-orders'",
     "href: '/exceptions'",
     "href: '/settlement-mapping'",
-    "href: '/qbo-audit'",
   ]) {
     assert.equal(source.includes(href), true, `${href} should be in nav`);
   }
@@ -67,12 +66,23 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/cogs-batches'",
     "href: '/sellerboard-export'",
     "href: '/settings'",
+    "href: '/qbo-audit'",
+    'QBO Audit',
     'More Plutus sections',
     'MoreHorizIcon',
     'plutus-more-menu',
   ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} should not be in nav`);
   }
+});
+
+test('QBO audit is part of Exceptions instead of a separate nav surface', () => {
+  const exceptionsPage = read('app/exceptions/page.tsx');
+  const qboAuditRoute = read('app/qbo-audit/page.tsx');
+
+  assert.equal(exceptionsPage.includes('QboAuditSection'), true);
+  assert.equal(exceptionsPage.includes('Posting blockers and QBO audit'), true);
+  assert.equal(qboAuditRoute.includes("redirect('/exceptions')"), true);
 });
 
 test('useless settings route is deleted because QBO controls live in the header', () => {

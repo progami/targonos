@@ -8,6 +8,7 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
+import { QboAuditSection } from '@/components/subledger/qbo-audit-page';
 import { EmptyState } from '@/components/ui/empty-state';
 import { db } from '@/lib/db';
 
@@ -55,51 +56,65 @@ export default async function ExceptionsPage() {
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="Exceptions" kicker="Posting blockers" />
+      <PageHeader title="Exceptions" kicker="Posting blockers and QBO audit" />
 
-      <Box sx={tableWrapSx}>
-        <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" sx={{ minWidth: 1040 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell>Code</TableCell>
-                <TableCell>Scope</TableCell>
-                <TableCell>Marketplace</TableCell>
-                <TableCell>Severity</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Message</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6}>
-                    <EmptyState
-                      title="No open exceptions"
-                      description="Blocked settlements, missing SKU aliases, and unmatched QBO source lines will appear here."
-                    />
-                  </TableCell>
-                </TableRow>
-              )}
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell>
-                    <Typography sx={{ fontWeight: 650 }}>{row.code}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    {row.scopeType} {row.scopeId}
-                  </TableCell>
-                  <TableCell>{row.marketplace ?? '-'}</TableCell>
-                  <TableCell>{row.severity}</TableCell>
-                  <TableCell>
-                    <Chip label={row.status} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{row.message}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      <Box sx={{ display: 'grid', gap: 3 }}>
+        <Box sx={{ display: 'grid', gap: 1.5 }}>
+          <Box>
+            <Typography variant="h2" sx={{ fontSize: '1.05rem', fontWeight: 700 }}>
+              Open exceptions
+            </Typography>
+            <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: '0.8125rem' }}>
+              Current posting blockers and operator-required fixes.
+            </Typography>
+          </Box>
+          <Box sx={tableWrapSx}>
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small" sx={{ minWidth: 1040 }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Code</TableCell>
+                    <TableCell>Scope</TableCell>
+                    <TableCell>Marketplace</TableCell>
+                    <TableCell>Severity</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Message</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6}>
+                        <EmptyState
+                          title="No open exceptions"
+                          description="Blocked settlements, missing SKU aliases, and unmatched QBO source lines will appear here."
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {rows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        <Typography sx={{ fontWeight: 650 }}>{row.code}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        {row.scopeType} {row.scopeId}
+                      </TableCell>
+                      <TableCell>{row.marketplace ?? '-'}</TableCell>
+                      <TableCell>{row.severity}</TableCell>
+                      <TableCell>
+                        <Chip label={row.status} size="small" variant="outlined" />
+                      </TableCell>
+                      <TableCell>{row.message}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </Box>
         </Box>
+
+        <QboAuditSection />
       </Box>
     </Box>
   );
