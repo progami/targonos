@@ -12,7 +12,6 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
-import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -72,7 +71,6 @@ type QboAuditResponse = {
 };
 
 const tableWrapSx = {
-  mt: 2,
   overflow: 'hidden',
   border: 1,
   borderColor: 'divider',
@@ -179,7 +177,7 @@ function LineSummary({ lineCount, lines }: { lineCount: number; lines: LineFinge
   );
 }
 
-export function QboAuditPage() {
+export function QboAuditSection() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['plutus-qbo-audit'],
     queryFn: fetchQboAudit,
@@ -189,9 +187,15 @@ export function QboAuditPage() {
   const postings = data ? data.postings : [];
 
   return (
-    <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
-      <PageHeader title="QBO Audit" kicker="Exact cost subledger" />
-
+    <Box sx={{ display: 'grid', gap: 1.5 }}>
+      <Box>
+        <Typography variant="h2" sx={{ fontSize: '1.05rem', fontWeight: 700 }}>
+          QBO posting audit
+        </Typography>
+        <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: '0.8125rem' }}>
+          Posted QBO objects, line drift, and attachment status.
+        </Typography>
+      </Box>
       <Box sx={tableWrapSx}>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" sx={{ minWidth: 1120 }}>
