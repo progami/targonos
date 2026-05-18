@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createLogger } from '@targon/logger';
 
+import { db } from '@/lib/db';
 import { QboAuthError } from '@/lib/qbo/api';
 import { getQboConnection, saveServerQboConnection } from '@/lib/qbo/connection-store';
 import { getCurrentUser } from '@/lib/current-user';
@@ -70,6 +71,52 @@ function buildHistory(parent: Awaited<ReturnType<typeof fetchSettlementParentDet
   return events.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 }
 
+async function fetchCogsConsumptions(input: {
+  marketplace: string;
+  settlementIds: string[];
+}) {
+  const distinctSettlementIds = Array.from(new Set(input.settlementIds));
+  if (distinctSettlementIds.length === 0) return [];
+
+  const rows = await db.cogsConsumption.findMany({
+    where: {
+      marketplace: input.marketplace,
+      settlementId: { in: distinctSettlementIds },
+    },
+    include: {
+      settlementPosting: {
+        select: {
+          txnDate: true,
+          qboDocNumber: true,
+          qboJournalId: true,
+        },
+      },
+    },
+    orderBy: [
+      { settlementId: 'asc' },
+      { poNumber: 'asc' },
+      { sku: 'asc' },
+      { createdAt: 'asc' },
+    ],
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    settlementId: row.settlementId,
+    marketplace: row.marketplace,
+    sku: row.sku,
+    poNumber: row.poNumber,
+    costLayerId: row.costLayerId,
+    qtyConsumed: row.qtyConsumed,
+    unitCost: Number(row.unitCost),
+    cogsAmountCents: row.cogsAmountCents,
+    currency: row.currency,
+    qboJournalId: row.settlementPosting?.qboJournalId ?? row.qboJournalId,
+    qboDocNumber: row.settlementPosting?.qboDocNumber ?? null,
+    txnDate: row.settlementPosting?.txnDate ?? null,
+  }));
+}
+
 export async function GET(_req: NextRequest, context: RouteContext) {
   try {
     const connection = await getQboConnection();
@@ -94,6 +141,23 @@ export async function GET(_req: NextRequest, context: RouteContext) {
     const invoiceResolutions = await resolveAuditInvoicesForSettlementChildren(
       detail.parent.children,
     );
+    const cogsSettlementIds = new Set<string>([detail.parent.sourceSettlementId]);
+    for (const child of detail.parent.children) {
+      const invoiceResolution = invoiceResolutions.get(child.qboJournalEntryId);
+      if (invoiceResolution?.status === 'resolved') {
+        cogsSettlementIds.add(invoiceResolution.invoiceId);
+      }
+      if (child.processing !== null) {
+        cogsSettlementIds.add(child.processing.invoiceId);
+      }
+      if (child.rollback !== null) {
+        cogsSettlementIds.add(child.rollback.invoiceId);
+      }
+    }
+    const cogsConsumptions = await fetchCogsConsumptions({
+      marketplace: detail.parent.marketplace.id,
+      settlementIds: Array.from(cogsSettlementIds),
+    });
 
     return NextResponse.json({
       settlement: {
@@ -122,6 +186,7 @@ export async function GET(_req: NextRequest, context: RouteContext) {
           invoiceResolutionMessage: formatAuditInvoiceResolutionMessage(invoiceResolution),
         };
       }),
+      cogsConsumptions,
       history: buildHistory(detail.parent),
     });
   } catch (error) {

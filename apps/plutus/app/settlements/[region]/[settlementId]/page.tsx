@@ -7,6 +7,11 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import Skeleton from '@mui/material/Skeleton';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 
 import { BackButton } from '@/components/back-button';
@@ -110,6 +115,21 @@ type ParentSettlementDetailResponse = {
         };
     invoiceResolutionMessage: string;
   }>;
+  cogsConsumptions: Array<{
+    id: string;
+    settlementId: string;
+    marketplace: string;
+    sku: string;
+    poNumber: string;
+    costLayerId: string;
+    qtyConsumed: number;
+    unitCost: number;
+    cogsAmountCents: number;
+    currency: string;
+    qboJournalId: string | null;
+    qboDocNumber: string | null;
+    txnDate: string | null;
+  }>;
   history: Array<{
     id: string;
     timestamp: string;
@@ -189,6 +209,119 @@ function PlutusPill({
       variant="outlined"
       sx={{ borderColor: 'rgba(34, 197, 94, 0.45)', color: 'success.dark' }}
     />
+  );
+}
+
+function formatMoney(amount: number, currency: string): string {
+  const formatted = new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+  }).format(Math.abs(amount));
+
+  if (amount < 0) return `(${formatted})`;
+  return formatted;
+}
+
+function formatInteger(value: number): string {
+  return value.toLocaleString('en-US');
+}
+
+function SettlementCogsSection({
+  rows,
+  currency,
+}: {
+  rows: ParentSettlementDetailResponse['cogsConsumptions'];
+  currency: string;
+}) {
+  const totalCents = rows.reduce((sum, row) => sum + row.cogsAmountCents, 0);
+
+  return (
+    <Box
+      component="section"
+      sx={{
+        display: 'grid',
+        gap: 1.5,
+        py: 2,
+        borderTop: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Box
+        component="header"
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Box sx={{ display: 'grid', gap: 0.35 }}>
+          <Typography sx={{ fontSize: '0.95rem', fontWeight: 700 }}>FIFO COGS</Typography>
+          <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>
+            PO/SKU consumption support for this settlement
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'grid', justifyItems: 'end', gap: 0.35 }}>
+          <Typography
+            sx={{
+              fontSize: '0.72rem',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: 'text.secondary',
+            }}
+          >
+            COGS total
+          </Typography>
+          <Typography sx={{ fontSize: '0.95rem', fontWeight: 700 }}>
+            {formatMoney(totalCents / 100, currency)}
+          </Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ overflowX: 'auto' }}>
+        <Table size="small" sx={{ minWidth: 980 }}>
+          <TableHead>
+            <TableRow>
+              <TableCell>Support Settlement</TableCell>
+              <TableCell>PO</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell>QBO COGS Doc</TableCell>
+              <TableCell>QBO JE</TableCell>
+              <TableCell align="right">Qty</TableCell>
+              <TableCell align="right">Unit Cost</TableCell>
+              <TableCell align="right">COGS</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8}>
+                  <Typography sx={{ py: 2, fontSize: '0.875rem', color: 'text.secondary' }}>
+                    No FIFO COGS consumption rows are posted for this settlement.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell>{row.settlementId}</TableCell>
+                  <TableCell>{row.poNumber}</TableCell>
+                  <TableCell>{row.sku}</TableCell>
+                  <TableCell>{row.qboDocNumber ?? '-'}</TableCell>
+                  <TableCell>{row.qboJournalId ?? '-'}</TableCell>
+                  <TableCell align="right">{formatInteger(row.qtyConsumed)}</TableCell>
+                  <TableCell align="right">{formatMoney(row.unitCost, row.currency)}</TableCell>
+                  <TableCell align="right">
+                    {formatMoney(row.cogsAmountCents / 100, row.currency)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </Box>
+    </Box>
   );
 }
 
@@ -467,7 +600,17 @@ export default function ParentSettlementDetailPage() {
               </Typography>
             )}
 
-            <Box component="section" sx={{ display: 'grid', gap: 0 }}>
+            <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
+              <Typography
+                sx={{
+                  fontSize: '0.8rem',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: 'text.secondary',
+                }}
+              >
+                Regular Settlement Posting
+              </Typography>
               {ledgerSections.map((section) => {
                 const child = childByJournalEntryId.get(section.qboJournalEntryId);
                 if (child === undefined) {
@@ -484,6 +627,11 @@ export default function ParentSettlementDetailPage() {
                 );
               })}
             </Box>
+
+            <SettlementCogsSection
+              rows={data.cogsConsumptions}
+              currency={data.settlement.marketplace.currency}
+            />
 
             <Box component="section" sx={{ display: 'grid', gap: 0.5 }}>
               <Typography
