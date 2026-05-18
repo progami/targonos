@@ -500,6 +500,46 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   assert.equal(read('app/purchase-orders/page.tsx').includes('FROM "CogsConsumption"'), true);
 });
 
+test('landed-cost allocation page uses selected QBO bill lines instead of raw ID entry', () => {
+  const page = read('app/landed-cost-allocations/page.tsx');
+  const form = read('components/landed-cost-allocations/allocation-create-form.tsx');
+
+  for (const required of [
+    'AllocationWorkbench',
+    'getLayerOptions',
+    'FROM "CostLayer"',
+    '"qboPurchaseOrderId" IS NOT NULL',
+    '"status" = \'NOT_READY\'',
+    'allocatedCents',
+    'remainingCents',
+    'Existing landed-cost allocations',
+  ]) {
+    assert.equal(page.includes(required), true, `${required} should be part of landed-cost page`);
+  }
+
+  for (const required of [
+    'QBO bill line queue',
+    'PO/SKU layer',
+    'selectedLine.qboBillId',
+    'selectedLine.qboBillLineId',
+    'selectedLayer.qboPurchaseOrderId',
+    'selectedLayer.qboPurchaseOrderLineId',
+    'Allocation amount cannot exceed the bill line remaining amount',
+  ]) {
+    assert.equal(form.includes(required), true, `${required} should be part of allocation workbench`);
+  }
+
+  for (const forbidden of [
+    'label="QBO Bill ID"',
+    'label="QBO Bill Line ID"',
+    'label="QBO PO ID"',
+    'label="QBO PO Line ID"',
+    'LANDED_COST_CURRENCIES',
+  ]) {
+    assert.equal(form.includes(forbidden), false, `${forbidden} should not remain in raw-entry form`);
+  }
+});
+
 test('inventory tables expose operational fields as standalone columns', () => {
   const source = read('app/purchase-orders/page.tsx');
   for (const required of [
