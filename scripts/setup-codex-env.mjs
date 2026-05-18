@@ -23,12 +23,11 @@ const APP_BASE_PATHS = {
   talos: '/talos',
   atlas: '/atlas',
   kairos: '/kairos',
-  plutus: '/plutus',
   hermes: '/hermes',
   argus: '/argus',
 }
 
-const APP_ORDER = ['sso', 'talos', 'atlas', 'kairos', 'plutus', 'hermes', 'argus']
+const APP_ORDER = ['sso', 'talos', 'atlas', 'kairos', 'hermes', 'argus']
 const WORKTREE_DEV_AUTHZ_JSON = stringifyWorktreeDevAuthz()
 const ENABLE_SSO_WORKTREE_DEV_AUTH = process.env.TARGON_SSO_WORKTREE_DEV_AUTH?.trim().toLowerCase() === 'true'
 
@@ -279,30 +278,6 @@ function buildManagedEntries(context) {
       entries.set('COOKIE_DOMAIN', 'localhost')
       entries.set('DATABASE_URL', withSchema(baseDevDbUrl, 'kairos'))
       entries.set('BASE_URL', currentAppUrl)
-      return entries
-    case 'plutus':
-      entries.set('NODE_ENV', 'development')
-      entries.set('PORT', String(port))
-      entries.set('HOST', '0.0.0.0')
-      applyWorktreeDevAuth(entries)
-      entries.set('BASE_PATH', basePath)
-      entries.set('NEXT_PUBLIC_BASE_PATH', basePath)
-      entries.set('NEXT_PUBLIC_APP_URL', currentAppUrl)
-      entries.set('NEXTAUTH_URL', currentAppUrl)
-      entries.set('NEXTAUTH_SECRET', sharedSecret)
-      entries.set('PORTAL_AUTH_URL', portalOrigin)
-      entries.set('NEXT_PUBLIC_PORTAL_AUTH_URL', portalOrigin)
-      entries.set('PORTAL_AUTH_SECRET', sharedSecret)
-      entries.set('COOKIE_DOMAIN', 'localhost')
-      entries.set('DATABASE_URL', withSchema(baseDevDbUrl, 'plutus_dev'))
-      entries.set('PORTAL_DB_URL', withSchema(baseDevDbUrl, 'auth_dev'))
-      entries.set('BASE_URL', currentAppUrl)
-      if (
-        sourceValues[appName].values.has('QBO_REDIRECT_URI') ||
-        sourceValues[appName].values.has('QBO_CLIENT_ID')
-      ) {
-        entries.set('QBO_REDIRECT_URI', `${currentAppUrl}/api/qbo/callback`)
-      }
       return entries
     case 'hermes':
       entries.set('NODE_ENV', 'development')

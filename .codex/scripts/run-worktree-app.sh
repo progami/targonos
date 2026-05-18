@@ -57,12 +57,6 @@ case "$APP_ID" in
     cd "$ROOT/apps/talos"
     exec node ../../scripts/run-dev-with-logs.js talos -- pnpm exec next dev -p "$PORT_TALOS"
     ;;
-  website)
-    export PORT="$PORT_WEBSITE"
-    export NEXT_PUBLIC_APP_URL="http://localhost:${PORT_WEBSITE}"
-    cd "$ROOT/apps/website"
-    exec node ../../scripts/run-dev-with-logs.js website -- pnpm exec next dev -p "$PORT_WEBSITE"
-    ;;
   atlas)
     export PORT="$PORT_ATLAS"
     export BASE_PATH="/atlas"
@@ -90,15 +84,6 @@ case "$APP_ID" in
     export KAIROS_ML_URL="http://localhost:${PORT_KAIROS_ML}"
     cd "$ROOT/apps/kairos"
     exec pnpm exec next dev -p "$PORT_KAIROS"
-    ;;
-  plutus)
-    export PORT="$PORT_PLUTUS"
-    export BASE_PATH="/plutus"
-    export NEXT_PUBLIC_BASE_PATH="/plutus"
-    export NEXTAUTH_URL="http://localhost:${PORT_PLUTUS}/plutus"
-    export NEXT_PUBLIC_APP_URL="http://localhost:${PORT_PLUTUS}/plutus"
-    cd "$ROOT/apps/plutus"
-    exec node ../../scripts/run-dev-with-logs.js plutus -- pnpm exec next dev -p "$PORT_PLUTUS"
     ;;
   hermes)
     export PORT="$PORT_HERMES"

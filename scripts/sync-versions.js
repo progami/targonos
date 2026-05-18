@@ -24,7 +24,6 @@ const APPS_TO_SYNC = [
   'apps/talos',
   'apps/sso',
   'apps/atlas',
-  'apps/plutus',
 ]
 
 function readJSON(filePath) {

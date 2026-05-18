@@ -28,12 +28,10 @@ export const HOST_ENVIRONMENTS = {
       'main-atlas',
       'main-kairos',
       'main-kairos-ml',
-      'main-plutus',
       'main-hermes',
       'main-argus',
     ],
     workerProcesses: [
-      'main-plutus-settlement-sync',
       'main-hermes-orders-sync',
       'main-hermes-request-review',
     ],
@@ -42,7 +40,6 @@ export const HOST_ENVIRONMENTS = {
       ['main-talos', '/talos'],
       ['main-atlas', '/atlas'],
       ['main-kairos', '/kairos'],
-      ['main-plutus', '/plutus'],
       ['main-hermes', '/hermes'],
       ['main-argus', '/argus'],
     ],
@@ -57,12 +54,10 @@ export const HOST_ENVIRONMENTS = {
       'dev-atlas',
       'dev-kairos',
       'dev-kairos-ml',
-      'dev-plutus',
       'dev-hermes',
       'dev-argus',
     ],
     workerProcesses: [
-      'dev-plutus-settlement-sync',
       'dev-hermes-orders-sync',
       'dev-hermes-request-review',
     ],
@@ -71,14 +66,13 @@ export const HOST_ENVIRONMENTS = {
       ['dev-talos', '/talos'],
       ['dev-atlas', '/atlas'],
       ['dev-kairos', '/kairos'],
-      ['dev-plutus', '/plutus'],
       ['dev-hermes', '/hermes'],
       ['dev-argus', '/argus'],
     ],
   },
 }
 
-const appRoutes = ['/talos/', '/atlas/', '/kairos/', '/plutus/', '/hermes/', '/argus/']
+const appRoutes = ['/talos/', '/atlas/', '/kairos/', '/hermes/', '/argus/']
 
 export function parseCloudflaredReady(raw) {
   const payload = JSON.parse(raw)

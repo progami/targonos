@@ -18,7 +18,6 @@ on:
           - talos
           - kairos
           - atlas
-          - plutus
           - hermes
           - argus
       environment:
@@ -44,7 +43,6 @@ jobs:
       talos: ${{ steps.changes.outputs.talos }}
       kairos: ${{ steps.changes.outputs.kairos }}
       atlas: ${{ steps.changes.outputs.atlas }}
-      plutus: ${{ steps.changes.outputs.plutus }}
       hermes: ${{ steps.changes.outputs.hermes }}
       argus: ${{ steps.changes.outputs.argus }}
       packages: ${{ steps.changes.outputs.packages }}
@@ -303,7 +301,6 @@ jobs:
           [[ "${{ needs.detect-changes.outputs.talos }}" == "true" ]] && apps+=(talos)
           [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
           [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
-          [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
           [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
           [[ "${{ needs.detect-changes.outputs.argus }}" == "true" ]] && apps+=(argus)
 
@@ -421,7 +418,6 @@ jobs:
             [[ "${{ needs.detect-changes.outputs.talos }}" == "true" ]] && apps+=(talos)
             [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
             [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
-            [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
             [[ "${{ needs.detect-changes.outputs.hermes }}" == "true" ]] && apps+=(hermes)
             [[ "${{ needs.detect-changes.outputs.argus }}" == "true" ]] && apps+=(argus)
           fi

@@ -37,11 +37,9 @@ start_process() {
 
 start_process sso "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" sso
 start_process talos "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" talos
-start_process website "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" website
 start_process atlas "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" atlas
 start_process xplan "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" xplan
 start_process kairos "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" kairos
 start_process kairos-ml "$SOURCE_ROOT/.codex/scripts/run-kairos-ml.sh"
-start_process plutus "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" plutus
 start_process hermes "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" hermes
 start_process argus "$SOURCE_ROOT/.codex/scripts/run-worktree-app.sh" argus

@@ -26,11 +26,6 @@ icon = "run"
 command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-worktree-app.sh\" talos"
 
 [[actions]]
-name = "Website"
-icon = "run"
-command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-worktree-app.sh\" website"
-
-[[actions]]
 name = "Atlas"
 icon = "run"
 command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-worktree-app.sh\" atlas"
@@ -49,11 +44,6 @@ command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-worktree-app.sh\" kairos
 name = "Kairos ML"
 icon = "run"
 command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-kairos-ml.sh\""
-
-[[actions]]
-name = "Plutus"
-icon = "run"
-command = "\"$CODEX_SOURCE_TREE_PATH/.codex/scripts/run-worktree-app.sh\" plutus"
 
 [[actions]]
 name = "Hermes"
