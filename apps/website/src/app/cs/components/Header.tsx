@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { site } from '@/content/site';
 import styles from '../caelumStarLanding.module.css';
 
@@ -19,7 +20,8 @@ export function CaelumStarHeader({ region }: { region: 'us' | 'uk' }) {
           </div>
 
           <a href={region === 'uk' ? 'https://www.amazon.co.uk/dp/B09HXC3NL8' : site.amazonStoreUrl} target="_blank" rel="noreferrer" className={styles.primaryButton}>
-            Buy Now
+            Buy on Amazon
+            <ArrowRight className={styles.headerCtaIcon} aria-hidden="true" />
           </a>
         </div>
       </div>
