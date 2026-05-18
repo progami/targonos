@@ -57,6 +57,7 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
   ]) {
     assert.equal(source.includes(href), true, `${href} should be in nav`);
   }
+  assert.equal(source.includes('{ALL_NAV_ITEMS.map((item)'), true, 'desktop nav should expose every Plutus section');
 
   for (const forbidden of [
     "href: '/products'",
@@ -66,6 +67,9 @@ test('Plutus nav exposes fresh-start bridge surfaces only', () => {
     "href: '/cogs-batches'",
     "href: '/sellerboard-export'",
     "href: '/settings'",
+    'More Plutus sections',
+    'MoreHorizIcon',
+    'plutus-more-menu',
   ]) {
     assert.equal(source.includes(forbidden), false, `${forbidden} should not be in nav`);
   }
