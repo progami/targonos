@@ -8,7 +8,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: baseUrl, lastModified: new Date() },
     { url: `${baseUrl}/cs`, lastModified: new Date() },
     { url: `${baseUrl}/cs/us`, lastModified: new Date() },
-    { url: `${baseUrl}/cs/uk`, lastModified: new Date() },
+    { url: 'https://caelumstar.co.uk/', lastModified: new Date() },
     { url: `${baseUrl}/legal/privacy`, lastModified: new Date() },
     { url: `${baseUrl}/legal/terms`, lastModified: new Date() }
   ];

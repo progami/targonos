@@ -14,7 +14,7 @@ const regions = [
   {
     flag: '\u{1F1EC}\u{1F1E7}',
     title: 'United Kingdom',
-    href: '/cs/uk'
+    href: 'https://caelumstar.co.uk/'
   }
 ];
 

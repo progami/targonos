@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const CAELUM_STAR_UK_HOSTS = new Set(['caelumstar.co.uk', 'www.caelumstar.co.uk']);
+const TARGON_HOSTS = new Set(['targonglobal.com', 'www.targonglobal.com']);
 const CAELUM_STAR_UK_ROOT = '/cs/uk';
 const CAELUM_STAR_UK_ROOT_REDIRECT_PATHS = new Set(['/cs', '/cs/', CAELUM_STAR_UK_ROOT]);
+const CAELUM_STAR_UK_URL = 'https://caelumstar.co.uk/';
 const TARGON_US_PATH = '/cs/us';
 const TARGON_US_URL = 'https://www.targonglobal.com/cs/us';
 
@@ -26,6 +28,16 @@ function isCaelumStarUkHost(request: NextRequest) {
   return CAELUM_STAR_UK_HOSTS.has(hostname);
 }
 
+function isTargonHost(request: NextRequest) {
+  const hostname = getHostname(request);
+
+  if (!hostname) {
+    return false;
+  }
+
+  return TARGON_HOSTS.has(hostname);
+}
+
 function isAtOrUnderPath(pathname: string, rootPath: string) {
   if (pathname === rootPath) {
     return true;
@@ -42,11 +54,15 @@ function redirectToRoot(request: NextRequest) {
 }
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  if (isTargonHost(request) && isAtOrUnderPath(pathname, CAELUM_STAR_UK_ROOT)) {
+    return NextResponse.redirect(CAELUM_STAR_UK_URL);
+  }
+
   if (!isCaelumStarUkHost(request)) {
     return NextResponse.next();
   }
-
-  const { pathname } = request.nextUrl;
 
   if (pathname === '/') {
     const url = request.nextUrl.clone();

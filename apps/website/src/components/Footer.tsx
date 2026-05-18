@@ -7,7 +7,7 @@ const footerLinks = {
     { label: 'Home', href: '/' },
     { label: 'Caelum Star', href: '/cs' },
     { label: 'US site', href: '/cs/us' },
-    { label: 'UK site', href: '/cs/uk' }
+    { label: 'UK site', href: 'https://caelumstar.co.uk/' }
   ],
   Company: [
     { label: 'Contact', href: `mailto:${site.contactEmail}` }
