@@ -163,6 +163,9 @@ export function getCandidateSessionCookieNames(appId) {
     return Array.from(names);
 }
 export function isWorktreeDevAuthEnabled() {
+    if (process.env.NODE_ENV === 'production') {
+        return false;
+    }
     const raw = process.env.TARGON_WORKTREE_DEV_AUTH;
     if (!raw) {
         return false;
@@ -649,11 +652,7 @@ export function getAppEntitlement(rolesOrAuthz, appId) {
         };
     }
     const rec = rolesOrAuthz;
-    let ent = rec[appId];
-    if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
-        const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
-        ent = rec[legacyKey];
-    }
+    const ent = rec[appId];
     if (!ent || typeof ent !== 'object')
         return undefined;
     const raw = ent;

@@ -110,9 +110,6 @@ clone_schema() {
     dev_atlas)
       grant_roles+=("portal_atlas")
       ;;
-    dev_xplan)
-      grant_roles+=("portal_xplan")
-      ;;
     dev_talos_us|dev_talos_uk)
       grant_roles+=("portal_talos")
       ;;
@@ -134,7 +131,6 @@ ensure_dev_database
 clone_schema "main_talos_us" "dev_talos_us"
 clone_schema "main_talos_uk" "dev_talos_uk"
 clone_schema "atlas" "dev_atlas"
-clone_schema "xplan" "dev_xplan"
 clone_schema "kairos" "kairos"
 clone_schema "auth" "auth_dev"
 clone_schema "plutus" "plutus_dev"

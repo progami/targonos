@@ -4,7 +4,7 @@ set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: deploy-app.sh <app-key> <environment>" >&2
-  echo "  app-key: talos, sso, website, xplan, kairos, atlas, plutus, hermes, argus" >&2
+  echo "  app-key: talos, sso, website, kairos, atlas, plutus, hermes, argus" >&2
   echo "  environment: dev, main" >&2
   exit 1
 fi
@@ -306,14 +306,6 @@ case "$app_key" in
     pm2_name="${PM2_PREFIX}-website"
     prisma_cmd=""
     build_cmd="pnpm --filter $workspace build"
-    ;;
-  xplan)
-    workspace="@targon/xplan"
-    app_dir="$REPO_DIR/apps/xplan"
-    pm2_name="${PM2_PREFIX}-xplan"
-    prisma_cmd="pnpm --filter $workspace prisma:generate"
-    migrate_cmd="pnpm --filter $workspace prisma:migrate:deploy"
-    build_cmd="pnpm --filter $workspace exec next build"
     ;;
   kairos)
     workspace="@targon/kairos"
@@ -861,7 +853,6 @@ hosted_app_base_path() {
   case "$app_key" in
     talos) printf '/talos' ;;
     atlas) printf '/atlas' ;;
-    xplan) printf '/xplan' ;;
     kairos) printf '/kairos' ;;
     plutus) printf '/plutus' ;;
     hermes) printf '/hermes' ;;
@@ -948,7 +939,7 @@ migration_owner_role_for_app() {
     atlas)
       printf 'portal_atlas'
       ;;
-    xplan|kairos)
+    kairos)
       printf 'portal_xplan'
       ;;
     talos|argus)
@@ -977,12 +968,6 @@ migration_schema_for_app() {
       ;;
     atlas:main)
       printf 'atlas'
-      ;;
-    xplan:dev)
-      printf 'dev_xplan'
-      ;;
-    xplan:main)
-      printf 'xplan'
       ;;
     kairos:dev|kairos:main)
       printf 'kairos'
@@ -1025,7 +1010,7 @@ prepare_shared_owner_migration_env() {
     sso|targon|targonos)
       export PORTAL_DB_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
       ;;
-    atlas|xplan|kairos|plutus|argus)
+    atlas|kairos|plutus|argus)
       export DATABASE_URL="$(build_owner_database_url "$owner_role" "$database_name" "$schema_name")"
       ;;
     *)
@@ -1060,7 +1045,7 @@ prepare_owner_migration_env() {
     talos)
       prepare_talos_owner_migration_env
       ;;
-    sso|targon|targonos|atlas|xplan|kairos|plutus|argus)
+    sso|targon|targonos|atlas|kairos|plutus|argus)
       prepare_shared_owner_migration_env
       ;;
     *)

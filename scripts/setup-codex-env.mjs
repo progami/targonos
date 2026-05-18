@@ -22,14 +22,13 @@ const WORKTREE_PRISMA_CONNECTION_LIMIT = '1'
 const APP_BASE_PATHS = {
   talos: '/talos',
   atlas: '/atlas',
-  xplan: '/xplan',
   kairos: '/kairos',
   plutus: '/plutus',
   hermes: '/hermes',
   argus: '/argus',
 }
 
-const APP_ORDER = ['sso', 'talos', 'website', 'atlas', 'xplan', 'kairos', 'plutus', 'hermes', 'argus']
+const APP_ORDER = ['sso', 'talos', 'website', 'atlas', 'kairos', 'plutus', 'hermes', 'argus']
 const WORKTREE_DEV_AUTHZ_JSON = stringifyWorktreeDevAuthz()
 const ENABLE_SSO_WORKTREE_DEV_AUTH = process.env.TARGON_SSO_WORKTREE_DEV_AUTH?.trim().toLowerCase() === 'true'
 
@@ -267,27 +266,6 @@ function buildManagedEntries(context) {
       entries.set('COOKIE_DOMAIN', 'localhost')
       entries.set('DATABASE_URL', withSchema(baseDevDbUrl, 'dev_atlas'))
       entries.set('NEXT_PUBLIC_API_BASE', basePath)
-      return entries
-    case 'xplan':
-      entries.set('NODE_ENV', 'development')
-      entries.set('PORT', String(port))
-      entries.set('HOST', '0.0.0.0')
-      applyWorktreeDevAuth(entries)
-      entries.set('XPLAN_SUPER_ADMIN_EMAILS', WORKTREE_DEV_USER_EMAIL)
-      entries.set('BASE_PATH', basePath)
-      entries.set('NEXT_PUBLIC_BASE_PATH', basePath)
-      entries.set('NEXT_PUBLIC_APP_URL', currentAppUrl)
-      entries.set('NEXTAUTH_URL', currentAppUrl)
-      entries.set('NEXTAUTH_SECRET', sharedSecret)
-      entries.set('PORTAL_AUTH_URL', portalOrigin)
-      entries.set('NEXT_PUBLIC_PORTAL_AUTH_URL', portalOrigin)
-      entries.set('PORTAL_AUTH_SECRET', sharedSecret)
-      entries.set('COOKIE_DOMAIN', 'localhost')
-      entries.set('DATABASE_URL', withSchema(baseDevDbUrl, 'dev_xplan'))
-      entries.set('PORTAL_DB_URL', withSchema(baseDevDbUrl, 'auth_dev'))
-      entries.set('TALOS_DATABASE_URL_US', withSchema(baseDevDbUrl, 'dev_talos_us'))
-      entries.set('TALOS_DATABASE_URL_UK', withSchema(baseDevDbUrl, 'dev_talos_uk'))
-      entries.set('BASE_URL', currentAppUrl)
       return entries
     case 'kairos':
       entries.set('NODE_ENV', 'development')

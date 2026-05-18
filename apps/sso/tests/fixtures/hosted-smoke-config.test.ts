@@ -11,7 +11,7 @@ import {
 test('hosted smoke grants cover every hosted app route under test', () => {
   assert.deepEqual(
     hostedSmokeAppGrants.map((grant) => grant.appSlug),
-    ['talos', 'atlas', 'kairos', 'xplan', 'plutus', 'hermes'],
+    ['talos', 'atlas', 'kairos', 'plutus', 'hermes'],
   )
 })
 

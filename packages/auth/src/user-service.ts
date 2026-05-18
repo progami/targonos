@@ -670,7 +670,6 @@ function buildDemoUser(): AuthenticatedUser {
     atlas: { departments: ['People Ops'], tenantMemberships: [] },
     website: { departments: [], tenantMemberships: [] },
     kairos: { departments: ['Product'], tenantMemberships: [] },
-    xplan: { departments: ['Product'], tenantMemberships: [] },
     hermes: { departments: ['Account / Listing'], tenantMemberships: [] },
     plutus: { departments: ['Finance'], tenantMemberships: [] }
   }

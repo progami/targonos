@@ -149,15 +149,6 @@ const BASE_APPS: AppBase[] = [
     devUrl: 'http://localhost:3210',
   },
   {
-    id: 'xplan',
-    name: 'xPlan',
-    description: 'Cross planning between Sales, Ops and Finance',
-    url: joinBaseUrl(PORTAL_BASE_URL, '/xplan/1-setup'),
-    category: 'Product',
-    devPath: '/xplan',
-    devUrl: 'http://localhost:3208',
-  },
-  {
     id: 'plutus',
     name: 'Plutus',
     description: 'Settlement Controller',

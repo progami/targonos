@@ -1,6 +1,6 @@
 import { ALL_APPS, resolveAppUrl, type AppDef } from './apps'
 
-const ALLOWED_PORTAL_PATHS = ['/', '/login', '/logout', '/xplan']
+const ALLOWED_PORTAL_PATHS = ['/', '/login', '/logout']
 
 function normalizeBasePath(pathname: string): string {
   if (pathname === '/' || pathname.trim() === '') {
