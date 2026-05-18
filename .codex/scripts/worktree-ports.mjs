@@ -11,11 +11,9 @@ export const KAIROS_ML_OFFSET = 50;
 export const APP_PORTS = [
   { id: 'sso', envKey: 'PORT_SSO', offset: SSO_OFFSET, includeInMap: false },
   { id: 'talos', envKey: 'PORT_TALOS', offset: 1, includeInMap: true },
-  { id: 'website', envKey: 'PORT_WEBSITE', offset: 5, includeInMap: true },
   { id: 'atlas', envKey: 'PORT_ATLAS', offset: 6, includeInMap: true },
   { id: 'xplan', envKey: 'PORT_XPLAN', offset: 8, includeInMap: true },
   { id: 'kairos', envKey: 'PORT_KAIROS', offset: 10, includeInMap: true },
-  { id: 'plutus', envKey: 'PORT_PLUTUS', offset: 12, includeInMap: true },
   { id: 'hermes', envKey: 'PORT_HERMES', offset: 14, includeInMap: true },
   { id: 'argus', envKey: 'PORT_ARGUS', offset: 16, includeInMap: true },
 ];

@@ -34,13 +34,11 @@ const hostedAppExpectations = [
   { name: 'dev-talos', appUrl: 'https://dev-os.targonglobal.com/talos', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'dev-atlas', appUrl: 'https://dev-os.targonglobal.com/atlas', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'dev-kairos', appUrl: 'https://dev-os.targonglobal.com/kairos', portalUrl: 'https://dev-os.targonglobal.com' },
-  { name: 'dev-plutus', appUrl: 'https://dev-os.targonglobal.com/plutus', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'dev-hermes', appUrl: 'https://dev-os.targonglobal.com/hermes', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'dev-argus', appUrl: 'https://dev-os.targonglobal.com/argus', portalUrl: 'https://dev-os.targonglobal.com' },
   { name: 'main-talos', appUrl: 'https://os.targonglobal.com/talos', portalUrl: 'https://os.targonglobal.com' },
   { name: 'main-atlas', appUrl: 'https://os.targonglobal.com/atlas', portalUrl: 'https://os.targonglobal.com' },
   { name: 'main-kairos', appUrl: 'https://os.targonglobal.com/kairos', portalUrl: 'https://os.targonglobal.com' },
-  { name: 'main-plutus', appUrl: 'https://os.targonglobal.com/plutus', portalUrl: 'https://os.targonglobal.com' },
   { name: 'main-hermes', appUrl: 'https://os.targonglobal.com/hermes', portalUrl: 'https://os.targonglobal.com' },
   { name: 'main-argus', appUrl: 'https://os.targonglobal.com/argus', portalUrl: 'https://os.targonglobal.com' },
 ]
@@ -129,9 +127,9 @@ test('hosted Hermes workers load production env files', () => {
 test('hosted child app env strips local hosted overrides and uses portal-managed values', () => {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'targonos-hosted-env-'))
   const ssoDir = path.join(fixtureRoot, 'apps', 'sso')
-  const plutusDir = path.join(fixtureRoot, 'apps', 'plutus')
+  const atlasDir = path.join(fixtureRoot, 'apps', 'atlas')
   fs.mkdirSync(ssoDir, { recursive: true })
-  fs.mkdirSync(plutusDir, { recursive: true })
+  fs.mkdirSync(atlasDir, { recursive: true })
   writeSharedEnv(fixtureRoot, 'dev')
 
   fs.writeFileSync(
@@ -147,18 +145,18 @@ test('hosted child app env strips local hosted overrides and uses portal-managed
   )
 
   fs.writeFileSync(
-    path.join(plutusDir, '.env.dev'),
+    path.join(atlasDir, '.env.dev'),
     [
-      'PORTAL_AUTH_SECRET=wrong-plutus-secret',
-      'NEXTAUTH_SECRET=wrong-plutus-secret',
+      'PORTAL_AUTH_SECRET=wrong-atlas-secret',
+      'NEXTAUTH_SECRET=wrong-atlas-secret',
       'COOKIE_DOMAIN=.targonglobal.com',
-      'NEXTAUTH_URL=http://localhost:3112',
-      'NEXT_PUBLIC_APP_URL=http://localhost:3112',
-      'BASE_URL=http://localhost:3112',
+      'NEXTAUTH_URL=http://localhost:3106',
+      'NEXT_PUBLIC_APP_URL=http://localhost:3106',
+      'BASE_URL=http://localhost:3106',
       'NEXT_PUBLIC_VERSION=1.0.0-stale',
       'NEXT_PUBLIC_COMMIT_SHA=deadbeef',
       'BUILD_TIME=2025-01-01T00:00:00Z',
-      'DATABASE_URL=postgresql://portal_dev_external:secret@localhost:6432/portal_db_dev?schema=plutus_dev&pgbouncer=true',
+      'DATABASE_URL=postgresql://portal_dev_external:secret@localhost:6432/portal_db_dev?schema=dev_atlas&pgbouncer=true',
       '',
     ].join('\n'),
   )
@@ -182,25 +180,25 @@ test('hosted child app env strips local hosted overrides and uses portal-managed
   process.env.NEXT_PUBLIC_BUILD_TIME = '2026-04-13T12:00:00Z'
 
   try {
-    const env = ecosystem.createNextAppEnvWithPortal(fixtureRoot, 'plutus', 'dev', {
-      BASE_PATH: '/plutus',
-      NEXT_PUBLIC_BASE_PATH: '/plutus',
-      PORT: 3112,
+    const env = ecosystem.createNextAppEnvWithPortal(fixtureRoot, 'atlas', 'dev', {
+      BASE_PATH: '/atlas',
+      NEXT_PUBLIC_BASE_PATH: '/atlas',
+      PORT: 3106,
     })
 
     assert.equal(env.PORTAL_AUTH_SECRET, 'portal-shared-secret')
     assert.equal(env.NEXTAUTH_SECRET, 'portal-shared-secret')
     assert.equal(env.PORTAL_DB_URL, 'postgresql://portal_auth:secret@localhost:5432/portal_db?schema=auth')
     assert.equal(env.COOKIE_DOMAIN, '.dev-os.targonglobal.com')
-    assert.equal(env.NEXTAUTH_URL, 'https://dev-os.targonglobal.com/plutus')
-    assert.equal(env.NEXT_PUBLIC_APP_URL, 'https://dev-os.targonglobal.com/plutus')
-    assert.equal(env.BASE_URL, 'https://dev-os.targonglobal.com/plutus')
+    assert.equal(env.NEXTAUTH_URL, 'https://dev-os.targonglobal.com/atlas')
+    assert.equal(env.NEXT_PUBLIC_APP_URL, 'https://dev-os.targonglobal.com/atlas')
+    assert.equal(env.BASE_URL, 'https://dev-os.targonglobal.com/atlas')
     assert.equal(env.NEXT_PUBLIC_VERSION, '9.9.9')
     assert.equal(env.NEXT_PUBLIC_COMMIT_SHA, 'feedbeef')
     assert.equal(env.BUILD_TIME, '2026-04-13T12:00:00Z')
     assert.equal(
       env.DATABASE_URL,
-      'postgresql://portal_dev_external:secret@localhost:6432/portal_db_dev?schema=plutus_dev&pgbouncer=true',
+      'postgresql://portal_dev_external:secret@localhost:6432/portal_db_dev?schema=dev_atlas&pgbouncer=true',
     )
   } finally {
     for (const [key, value] of Object.entries(previousEnv)) {

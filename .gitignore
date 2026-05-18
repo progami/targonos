@@ -25,7 +25,6 @@ packages/prisma-xplan/generated/
 packages/prisma-atlas/generated/
 packages/prisma-kairos/generated/
 packages/prisma-talos/generated/
-packages/prisma-plutus/generated/
 packages/prisma-argus/generated/
 
 # TypeScript
@@ -75,7 +74,6 @@ env/shared.production.env
 !apps/kairos/.env.dev.ci
 !apps/atlas/.env.dev.ci
 !apps/sso/.env.dev.ci
-!apps/plutus/.env.dev.ci
 !apps/argus/.env.dev.ci
 !apps/hermes/.env.dev.ci
 !apps/website/.env.dev.ci

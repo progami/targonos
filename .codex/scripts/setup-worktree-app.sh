@@ -23,11 +23,9 @@ sync_worktree_overrides() {
 apps=(
   sso
   talos
-  website
   kairos
   atlas
   xplan
-  plutus
   hermes
   argus
 )
@@ -59,7 +57,6 @@ pnpm --filter @targon/talos db:generate
 pnpm --filter @targon/xplan prisma:generate
 pnpm --filter @targon/atlas db:generate
 pnpm --filter @targon/kairos prisma:generate
-pnpm --filter @targon/plutus db:generate
 pnpm --filter @targon/argus exec prisma generate --schema prisma/schema.prisma
 
 rm -rf apps/sso/node_modules/.prisma/client-auth

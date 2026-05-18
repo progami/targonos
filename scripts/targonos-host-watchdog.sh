@@ -107,7 +107,7 @@ maybe_build_next_app_if_missing() {
 }
 
 ensure_pm2_processes_healthy() {
-  local processes_csv="${TARGONOS_PM2_PROCESSES_CSV:-main-targonos,main-talos,main-atlas,main-kairos,main-kairos-ml,main-plutus,main-hermes,main-argus,dev-targonos,dev-talos,dev-atlas,dev-kairos,dev-kairos-ml,dev-plutus,dev-hermes,dev-argus}"
+  local processes_csv="${TARGONOS_PM2_PROCESSES_CSV:-main-targonos,main-talos,main-atlas,main-kairos,main-kairos-ml,main-hermes,main-argus,dev-targonos,dev-talos,dev-atlas,dev-kairos,dev-kairos-ml,dev-hermes,dev-argus}"
   local IFS=,
   local pm_name
   for pm_name in $processes_csv; do
@@ -229,7 +229,7 @@ check_nginx_routes() {
 
   local base p
   for base in "http://127.0.0.1:8080" "http://127.0.0.1:8081"; do
-    for p in "/talos/" "/atlas/" "/kairos/" "/plutus/" "/hermes/" "/argus/"; do
+    for p in "/talos/" "/atlas/" "/kairos/" "/hermes/" "/argus/"; do
       if ! check_http_not_5xx "${base}${p}"; then exit 1; fi
     done
   done
@@ -238,7 +238,6 @@ check_nginx_routes() {
   if ! check_next_build_manifest "http://127.0.0.1:8080" "/talos" "main-talos"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8080" "/atlas" "main-atlas"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8080" "/kairos" "main-kairos"; then exit 1; fi
-  if ! check_next_build_manifest "http://127.0.0.1:8080" "/plutus" "main-plutus"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8080" "/hermes" "main-hermes"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8080" "/argus" "main-argus"; then exit 1; fi
 
@@ -246,7 +245,6 @@ check_nginx_routes() {
   if ! check_next_build_manifest "http://127.0.0.1:8081" "/talos" "dev-talos"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8081" "/atlas" "dev-atlas"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8081" "/kairos" "dev-kairos"; then exit 1; fi
-  if ! check_next_build_manifest "http://127.0.0.1:8081" "/plutus" "dev-plutus"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8081" "/hermes" "dev-hermes"; then exit 1; fi
   if ! check_next_build_manifest "http://127.0.0.1:8081" "/argus" "dev-argus"; then exit 1; fi
 }

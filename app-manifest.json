@@ -5,7 +5,6 @@
     "kairos": { "lifecycle": "dev" },
     "atlas": { "lifecycle": "dev" },
     "xplan": { "lifecycle": "archived" },
-    "plutus": { "lifecycle": "active" },
     "hermes": { "lifecycle": "dev" },
     "argus": { "lifecycle": "active" },
     "legal-suite": { "lifecycle": "archived" },

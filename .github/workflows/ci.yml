@@ -107,9 +107,6 @@ jobs:
           cp apps/atlas/.env.dev.ci apps/atlas/.env.dev
           cp apps/atlas/.env.dev.ci apps/atlas/.env.local
           cp apps/atlas/.env.dev.ci apps/atlas/.env.production
-          cp apps/plutus/.env.dev.ci apps/plutus/.env.dev
-          cp apps/plutus/.env.dev.ci apps/plutus/.env.local
-          cp apps/plutus/.env.dev.ci apps/plutus/.env.production
           cp apps/argus/.env.dev.ci apps/argus/.env.dev
           cp apps/argus/.env.dev.ci apps/argus/.env.local
           cp apps/argus/.env.dev.ci apps/argus/.env.production

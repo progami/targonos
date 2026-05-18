@@ -251,10 +251,6 @@ if (!HOME_DIR) {
   throw new Error('Missing HOME environment variable.');
 }
 
-const PLUTUS_STATE_DIR = path.join(HOME_DIR, '.targonos', 'plutus');
-const DEV_PLUTUS_QBO_CONNECTION_PATH = path.join(PLUTUS_STATE_DIR, 'qbo_connection.dev.production.json');
-const MAIN_PLUTUS_QBO_CONNECTION_PATH = path.join(PLUTUS_STATE_DIR, 'qbo_connection.main.production.json');
-
 module.exports = {
   apps: [
     // ===========================================
@@ -331,45 +327,6 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: { PYTHONUNBUFFERED: '1', PORT: 3111 },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-plutus',
-      cwd: path.join(DEV_DIR, 'apps/plutus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3112',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
-        NODE_ENV: 'production',
-        PORT: 3112,
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-plutus-settlement-sync',
-      cwd: path.join(DEV_DIR, 'apps/plutus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/settlement-sync-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(DEV_DIR, 'plutus', 'dev', {
-        NODE_ENV: 'production',
-        PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '0',
-        PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only',
-        PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
-        PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
-        PLUTUS_QBO_CONNECTION_PATH: DEV_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
@@ -512,45 +469,6 @@ module.exports = {
       interpreter: 'none',
       exec_mode: 'fork',
       env: { PYTHONUNBUFFERED: '1', PORT: 3011 },
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'main-plutus',
-      cwd: path.join(MAIN_DIR, 'apps/plutus'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3012',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
-        NODE_ENV: 'production',
-        PORT: 3012,
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'main-plutus-settlement-sync',
-      cwd: path.join(MAIN_DIR, 'apps/plutus'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/settlement-sync-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createNextAppEnvWithPortal(MAIN_DIR, 'plutus', 'production', {
-        NODE_ENV: 'production',
-        PLUTUS_SETTLEMENT_SYNC_WORKER_ENABLED: '1',
-        PLUTUS_SETTLEMENT_SYNC_QBO_POST_MODE: 'read_only',
-        PLUTUS_SETTLEMENT_SYNC_INTERVAL_MINUTES: '60',
-        PLUTUS_SETTLEMENT_SYNC_LOOKBACK_DAYS: '45',
-        PLUTUS_QBO_CONNECTION_PATH: MAIN_PLUTUS_QBO_CONNECTION_PATH,
-        BASE_PATH: '/plutus',
-        NEXT_PUBLIC_BASE_PATH: '/plutus',
-      }),
       autorestart: true,
       watch: false,
       max_memory_restart: '300M'
