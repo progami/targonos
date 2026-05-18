@@ -45,24 +45,6 @@ test.afterEach(() => {
   resetEnv()
 })
 
-test('resolveAppUrl preserves the xplan base path when using the local dev app map', async () => {
-  Object.assign(process.env, { NODE_ENV: 'development' })
-  process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
-
-  const cwd = createTempWorkspace({
-    host: 'http://localhost',
-    apps: {
-      xplan: 3008,
-    },
-  })
-
-  const mod = await importFreshAppsModule(cwd)
-  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'xplan')
-
-  assert.ok(app)
-  assert.equal(mod.resolveAppUrl(app), 'http://localhost:3008/xplan')
-})
-
 test('resolveAppUrl preserves the talos base path when using the local dev app map', async () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
   process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
@@ -88,15 +70,15 @@ test('resolveAppUrl prefers the codex worktree app map when present', async () =
   const cwd = createTempWorkspaceWithWorktreeConfig({
     host: 'http://localhost',
     apps: {
-      xplan: 41208,
+      plutus: 41212,
     },
   })
 
   const mod = await importFreshAppsModule(cwd)
-  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'xplan')
+  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'plutus')
 
   assert.ok(app)
-  assert.equal(mod.resolveAppUrl(app), 'http://localhost:41208/xplan')
+  assert.equal(mod.resolveAppUrl(app), 'http://localhost:41212/plutus')
 })
 
 test('resolveAppUrl fails loudly in development when no local app mapping exists', async () => {
@@ -124,7 +106,6 @@ test('ALL_APPS does not expose legacy hardcoded devUrl fields', async () => {
       talos: 3001,
       atlas: 3006,
       website: 3005,
-      xplan: 3008,
       kairos: 3010,
       plutus: 3012,
       hermes: 3014,
@@ -153,7 +134,6 @@ test('ALL_APPS marks only Website, Argus, and Plutus as active by default', asyn
       talos: 3001,
       atlas: 3006,
       website: 3005,
-      xplan: 3008,
       kairos: 3010,
       plutus: 3012,
       hermes: 3014,
@@ -171,7 +151,6 @@ test('ALL_APPS marks only Website, Argus, and Plutus as active by default', asyn
     atlas: 'dev',
     website: 'active',
     kairos: 'dev',
-    xplan: 'dev',
     plutus: 'active',
     hermes: 'dev',
     argus: 'active',

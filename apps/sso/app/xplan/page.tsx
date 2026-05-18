@@ -1,10 +1,18 @@
-import { redirect } from 'next/navigation'
-import { ALL_APPS, resolveAppUrl } from '@/lib/apps'
+import Link from 'next/link'
+import styles from './xplanArchive.module.css'
 
-export default async function XplanRedirect() {
-  const xplan = ALL_APPS.find((app) => app.id === 'xplan')
-  if (!xplan) {
-    throw new Error('xPlan app definition is missing from the portal app registry.')
-  }
-  redirect(resolveAppUrl(xplan))
+export default function XplanArchivePage() {
+  return (
+    <main className={styles.page}>
+      <section className={styles.panel}>
+        <p className={styles.kicker}>Decommissioned</p>
+        <h1>xPlan is archived</h1>
+        <p>
+          Planning and inventory evidence now lives in Sellerboard, QuickBooks, and Plutus. Do not use xPlan as a
+          source of truth.
+        </p>
+        <Link href="/" className={styles.link}>Back to portal</Link>
+      </section>
+    </main>
+  )
 }

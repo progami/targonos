@@ -44,15 +44,9 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
 
     let normalized = rolesClaim
     const legacyAtlasKey = String.fromCharCode(104, 114, 109, 115)
-    const legacyXplanKey = String.fromCharCode(120, 45, 112, 108, 97, 110)
-
     // Backwards-compat: Atlas was previously keyed differently in entitlements.
     if (legacyAtlasKey in normalized && !('atlas' in normalized)) {
       normalized = { ...normalized, atlas: (normalized as any)[legacyAtlasKey] }
-    }
-
-    if (legacyXplanKey in normalized && !('xplan' in normalized)) {
-      normalized = { ...normalized, xplan: (normalized as any)[legacyXplanKey] }
     }
 
     return normalized

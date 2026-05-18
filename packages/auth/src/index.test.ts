@@ -34,7 +34,7 @@ test('resolvePortalAuthOrigin uses configured portal auth env even for loopback 
 
   const origin = resolvePortalAuthOrigin({
     request: {
-      url: 'http://localhost:3008/xplan/1-setup',
+      url: 'http://localhost:3216/argus/wpr',
       headers: new Headers(),
     },
   })
@@ -50,7 +50,7 @@ test('resolvePortalAuthOrigin fails when portal auth env is missing', () => {
   assert.throws(
     () => resolvePortalAuthOrigin({
       request: {
-        url: 'http://localhost:3008/xplan/1-setup',
+        url: 'http://localhost:3216/argus/wpr',
         headers: new Headers(),
       },
     }),
@@ -60,20 +60,20 @@ test('resolvePortalAuthOrigin fails when portal auth env is missing', () => {
 
 test('resolveAppAuthOrigin uses configured app env even when request is loopback', () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
-  process.env.NEXT_PUBLIC_APP_URL = 'https://xplan.targonglobal.com/xplan'
-  process.env.BASE_URL = 'https://xplan.targonglobal.com/xplan'
-  process.env.NEXTAUTH_URL = 'https://xplan.targonglobal.com/xplan'
+  process.env.NEXT_PUBLIC_APP_URL = 'https://argus.targonglobal.com/argus'
+  process.env.BASE_URL = 'https://argus.targonglobal.com/argus'
+  process.env.NEXTAUTH_URL = 'https://argus.targonglobal.com/argus'
 
   const origin = resolveAppAuthOrigin({
     request: {
-      url: 'http://localhost:3008/xplan/1-setup',
+      url: 'http://localhost:3216/argus/wpr',
       headers: new Headers({
-        host: 'localhost:3008',
+        host: 'localhost:3216',
       }),
     },
   })
 
-  assert.equal(origin, 'https://xplan.targonglobal.com')
+  assert.equal(origin, 'https://argus.targonglobal.com')
 })
 
 test('resolveAppAuthOrigin fails when app auth env is missing', () => {
@@ -96,9 +96,9 @@ test('resolveAppAuthOrigin fails when app auth env is missing', () => {
 })
 
 test('resolveAppAuthOrigin ignores forwarded request headers when app auth env is configured', () => {
-  process.env.NEXT_PUBLIC_APP_URL = 'https://xplan.targonglobal.com'
-  process.env.BASE_URL = 'https://xplan.targonglobal.com'
-  process.env.NEXTAUTH_URL = 'https://xplan.targonglobal.com'
+  process.env.NEXT_PUBLIC_APP_URL = 'https://argus.targonglobal.com'
+  process.env.BASE_URL = 'https://argus.targonglobal.com'
+  process.env.NEXTAUTH_URL = 'https://argus.targonglobal.com'
 
   const origin = resolveAppAuthOrigin({
     request: {
@@ -110,7 +110,7 @@ test('resolveAppAuthOrigin ignores forwarded request headers when app auth env i
     },
   })
 
-  assert.equal(origin, 'https://xplan.targonglobal.com')
+  assert.equal(origin, 'https://argus.targonglobal.com')
 })
 
 test('hasPortalSession does not probe the portal when session decode fails', async () => {
@@ -458,7 +458,7 @@ test('hasCapability returns false without authz even when dev bypass env is set'
   assert.equal(
     hasCapability({
       session: null,
-      appId: 'xplan',
+      appId: 'argus',
       capability: 'enter',
     }),
     false,
@@ -479,8 +479,8 @@ test('decodePortalSession returns the dedicated worktree dev session without coo
         departments: ['Ops'],
         tenantMemberships: ['US', 'UK'],
       },
-      xplan: {
-        departments: ['Admin'],
+      argus: {
+        departments: ['Account / Listing'],
         tenantMemberships: [],
       },
     },
@@ -503,8 +503,8 @@ test('decodePortalSession returns the dedicated worktree dev session without coo
           departments: ['Ops'],
           tenantMemberships: ['US', 'UK'],
         },
-        xplan: {
-          departments: ['Admin'],
+        argus: {
+          departments: ['Account / Listing'],
           tenantMemberships: [],
         },
       },
@@ -517,13 +517,13 @@ test('decodePortalSession returns the dedicated worktree dev session without coo
         depts: ['Ops'],
         tenantMemberships: ['US', 'UK'],
       },
-      xplan: {
-        departments: ['Admin'],
-        depts: ['Admin'],
+      argus: {
+        departments: ['Account / Listing'],
+        depts: ['Account / Listing'],
         tenantMemberships: [],
       },
     },
-    apps: ['talos', 'xplan'],
+    apps: ['talos', 'argus'],
   })
 })
 

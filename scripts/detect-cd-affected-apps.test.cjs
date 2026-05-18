@@ -28,8 +28,6 @@ test('deploy infrastructure changes redeploy every hosted app', () => {
     'plutus=true',
     'sso=true',
     'talos=true',
-    'website=true',
-    'xplan=true',
     'any_app=true',
   ])
 })
@@ -40,7 +38,6 @@ test('workspace package changes keep package flag and dependent app selection', 
   assert.ok(lines.includes('packages=true'))
   assert.ok(lines.includes('sso=true'))
   assert.ok(lines.includes('talos=true'))
-  assert.ok(lines.includes('xplan=true'))
   assert.ok(lines.includes('kairos=true'))
   assert.ok(lines.includes('atlas=true'))
   assert.ok(lines.includes('plutus=true'))

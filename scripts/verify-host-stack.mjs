@@ -21,14 +21,11 @@ export const HOST_ENVIRONMENTS = {
   main: {
     portalOrigin: 'https://os.targonglobal.com',
     nginxBaseUrl: 'http://127.0.0.1:8080',
-    websiteBaseUrl: 'http://127.0.0.1:8082',
     portalProcess: 'main-targonos',
     webProcesses: [
       'main-targonos',
       'main-talos',
-      'main-website',
       'main-atlas',
-      'main-xplan',
       'main-kairos',
       'main-kairos-ml',
       'main-plutus',
@@ -43,26 +40,21 @@ export const HOST_ENVIRONMENTS = {
     mountedApps: [
       ['main-targonos', ''],
       ['main-talos', '/talos'],
-      ['main-xplan', '/xplan'],
       ['main-atlas', '/atlas'],
       ['main-kairos', '/kairos'],
       ['main-plutus', '/plutus'],
       ['main-hermes', '/hermes'],
       ['main-argus', '/argus'],
     ],
-    websiteProcess: 'main-website',
   },
   dev: {
     portalOrigin: 'https://dev-os.targonglobal.com',
     nginxBaseUrl: 'http://127.0.0.1:8081',
-    websiteBaseUrl: 'http://127.0.0.1:8083',
     portalProcess: 'dev-targonos',
     webProcesses: [
       'dev-targonos',
       'dev-talos',
-      'dev-website',
       'dev-atlas',
-      'dev-xplan',
       'dev-kairos',
       'dev-kairos-ml',
       'dev-plutus',
@@ -77,18 +69,16 @@ export const HOST_ENVIRONMENTS = {
     mountedApps: [
       ['dev-targonos', ''],
       ['dev-talos', '/talos'],
-      ['dev-xplan', '/xplan'],
       ['dev-atlas', '/atlas'],
       ['dev-kairos', '/kairos'],
       ['dev-plutus', '/plutus'],
       ['dev-hermes', '/hermes'],
       ['dev-argus', '/argus'],
     ],
-    websiteProcess: 'dev-website',
   },
 }
 
-const appRoutes = ['/talos/', '/xplan/', '/atlas/', '/kairos/', '/plutus/', '/hermes/', '/argus/']
+const appRoutes = ['/talos/', '/atlas/', '/kairos/', '/plutus/', '/hermes/', '/argus/']
 
 export function parseCloudflaredReady(raw) {
   const payload = JSON.parse(raw)
@@ -508,8 +498,6 @@ function checkEnvironment(environmentName, environment, pm2Processes) {
     results.push(checkHttpRoute('nginx', `${environmentName}:${route}`, `${environment.nginxBaseUrl}${route}`))
   }
 
-  results.push(checkHttpRoute('nginx', `${environmentName}:website`, `${environment.websiteBaseUrl}/`))
-
   for (const processName of environment.webProcesses) {
     results.push(checkPm2Process(processName, pm2Processes, 'pm2-web'))
   }
@@ -526,13 +514,6 @@ function checkEnvironment(environmentName, environment, pm2Processes) {
       pm2Processes,
     }))
   }
-
-  results.push(checkNextManifest({
-    pm2Name: environment.websiteProcess,
-    basePath: '',
-    baseUrl: environment.websiteBaseUrl,
-    pm2Processes,
-  }))
 
   results.push(checkHttpRoute('external', environmentName, `${environment.portalOrigin}/`, httpCodeIsSuccess))
   results.push(checkDeployLocks(environmentName, environment, pm2Processes))

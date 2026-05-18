@@ -19,15 +19,7 @@ export const WORKTREE_DEV_AUTHZ = {
       departments: ['People Ops'],
       tenantMemberships: [],
     },
-    website: {
-      departments: [],
-      tenantMemberships: [],
-    },
     kairos: {
-      departments: ['Admin'],
-      tenantMemberships: [],
-    },
-    xplan: {
       departments: ['Admin'],
       tenantMemberships: [],
     },

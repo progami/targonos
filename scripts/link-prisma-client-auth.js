@@ -36,33 +36,6 @@ const authSource = path.resolve(repoRoot, 'packages/auth/node_modules/.prisma/cl
 const authDest = path.resolve(repoRoot, 'apps/sso/node_modules/.prisma/client-auth');
 copyDir('auth', authSource, authDest);
 
-// 2. X-Plan client
-function findXPlanSource() {
-  const candidates = [];
-  const pnpmRoot = path.join(repoRoot, 'node_modules/.pnpm');
-  if (fs.existsSync(pnpmRoot)) {
-    for (const entry of fs.readdirSync(pnpmRoot)) {
-      if (entry.startsWith('@prisma+client@')) {
-        candidates.push(path.join(pnpmRoot, entry, 'node_modules/.prisma/client'));
-      }
-    }
-  }
-  const pnpmApp = path.join(repoRoot, 'apps/xplan/node_modules/.pnpm');
-  if (fs.existsSync(pnpmApp)) {
-    for (const entry of fs.readdirSync(pnpmApp)) {
-      if (entry.startsWith('@prisma+client@')) {
-        candidates.push(path.join(pnpmApp, entry, 'node_modules/.prisma/client'));
-      }
-    }
-  }
-  candidates.push(path.join(repoRoot, 'apps/xplan/node_modules/.prisma/client'));
-  return candidates.find((candidate) => fs.existsSync(candidate));
-}
-
-const xplanSource = findXPlanSource();
-const xplanDest = path.resolve(repoRoot, 'apps/xplan/node_modules/.prisma/client');
-copyDir('xplan', xplanSource, xplanDest);
-
 if (process.exitCode) {
   process.exit(process.exitCode);
 }

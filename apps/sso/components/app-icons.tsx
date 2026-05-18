@@ -59,33 +59,6 @@ export const KairosIcon = (
   </svg>
 )
 
-/** X-Plan: cross-functional compass mark */
-export const XPlanIcon = (
-  <svg viewBox="0 0 24 24" width="54" height="54" style={{ width: '54px', height: '54px' }} aria-hidden="true">
-    <path
-      d="M12 3.4 14.1 9.7 20.1 6.6 16 12 20.1 17.4 14.1 14.3 12 20.6 9.9 14.3 3.9 17.4 8 12 3.9 6.6 9.9 9.7 12 3.4Z"
-      fill="var(--icon-navy)"
-    />
-    <circle cx="12" cy="12" r="1.9" fill="var(--icon-teal)" />
-    <path
-      d="M12 4.2v2.5M19.1 12h-2.5M12 19.8v-2.5M4.9 12h2.5"
-      stroke="var(--icon-navy)"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-    />
-    <path
-      d="M12 3.8v3.1M20.2 12h-3.1M12 20.2v-3.1M3.8 12h3.1"
-      stroke="var(--icon-gold)"
-      strokeWidth="1.25"
-      strokeLinecap="round"
-    />
-    <circle cx="12" cy="3.8" r="1.05" fill="var(--icon-gold)" />
-    <circle cx="20.2" cy="12" r="1.05" fill="var(--icon-teal)" />
-    <circle cx="12" cy="20.2" r="1.05" fill="var(--icon-navy)" />
-    <circle cx="3.8" cy="12" r="1.05" fill="var(--icon-navy)" />
-  </svg>
-)
-
 /** Plutus: treasury temple and settlement coin */
 export const PlutusIcon = (
   <svg viewBox="0 0 24 24" width="52" height="52" style={{ width: '52px', height: '52px' }} aria-hidden="true">
@@ -183,7 +156,6 @@ export const APP_ICONS: Record<string, ReactNode> = {
   atlas: AtlasIcon,
   argus: ArgusIcon,
   kairos: KairosIcon,
-  xplan: XPlanIcon,
   plutus: PlutusIcon,
   hermes: HermesIcon,
   website: WebsiteIcon,

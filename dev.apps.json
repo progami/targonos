@@ -4,8 +4,6 @@
     "talos": "/talos",
     "kairos": "/kairos/forecasts",
     "atlas": "/atlas",
-    "website": "https://dev.targonglobal.com",
-    "xplan": "/xplan",
     "plutus": "/plutus",
     "hermes": "/hermes"
   }
