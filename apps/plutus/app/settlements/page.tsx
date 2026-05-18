@@ -2,26 +2,18 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import SearchIcon from '@mui/icons-material/Search';
-import Checkbox from '@mui/material/Checkbox';
 import Box from '@mui/material/Box';
 import MuiButton from '@mui/material/Button';
-import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
-import ClickAwayListener from '@mui/material/ClickAwayListener';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Popper from '@mui/material/Popper';
 import Skeleton from '@mui/material/Skeleton';
 import MuiTable from '@mui/material/Table';
 import MuiTableBody from '@mui/material/TableBody';
 import MuiTableCell from '@mui/material/TableCell';
 import MuiTableHead from '@mui/material/TableHead';
 import MuiTableRow from '@mui/material/TableRow';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
 import { EmptyState } from '@/components/ui/empty-state';
@@ -29,11 +21,6 @@ import { PageHeader } from '@/components/page-header';
 import { NotConnectedScreen } from '@/components/not-connected-screen';
 import { normalizeSettlementMarketplaceQuery } from '@/lib/plutus/settlement-marketplace-query';
 import { useMarketplaceStore, type Marketplace } from '@/lib/store/marketplace';
-import {
-  SETTLEMENT_LIST_STATUSES,
-  useSettlementsListStore,
-  type SettlementListStatus,
-} from '@/lib/store/settlements';
 import {
   buildSettlementListRowViewModel,
   formatPlutusSettlementStatus,
@@ -58,7 +45,7 @@ type SettlementRow = {
   periodEnd: string | null;
   settlementTotal: number | null;
   qboStatus: 'Posted';
-  plutusStatus: SettlementListStatus;
+  plutusStatus: PlutusSettlementStatus;
   splitCount: number;
   isSplit: boolean;
   childCount: number;
@@ -71,8 +58,27 @@ type SettlementRow = {
   }>;
 };
 
+type PlutusSettlementStatus = 'Pending' | 'Processed' | 'RolledBack';
+
+type SettlementCurrencyTotal = {
+  currency: 'USD' | 'GBP';
+  amount: number;
+  count: number;
+};
+
+type SettlementsSummary = {
+  totalCount: number;
+  processedCount: number;
+  pendingCount: number;
+  rolledBackCount: number;
+  inconsistencyCount: number;
+  splitCount: number;
+  totalsByCurrency: SettlementCurrencyTotal[];
+};
+
 type SettlementsResponse = {
   settlements: SettlementRow[];
+  summary: SettlementsSummary;
   pagination: {
     page: number;
     pageSize: number;
@@ -126,6 +132,111 @@ function formatMoney(amount: number, currency: string): string {
 
   if (amount < 0) return `(${formatted})`;
   return formatted;
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value);
+}
+
+function formatCurrencyTotals(totals: SettlementCurrencyTotal[]): string {
+  if (totals.length === 0) return '—';
+  return totals.map((total) => formatMoney(total.amount, total.currency)).join(' / ');
+}
+
+function SettlementOverviewCards({
+  summary,
+  page,
+  totalPages,
+  isLoading,
+}: {
+  summary: SettlementsSummary | null;
+  page: number;
+  totalPages: number;
+  isLoading: boolean;
+}) {
+  const processed = summary?.processedCount ?? 0;
+  const pending = summary?.pendingCount ?? 0;
+  const rolledBack = summary?.rolledBackCount ?? 0;
+  const cards = [
+    {
+      label: 'Settlements',
+      value: summary ? formatCount(summary.totalCount) : '0',
+      detail: `Page ${formatCount(page)} of ${formatCount(Math.max(totalPages, 1))}`,
+    },
+    {
+      label: 'Settlement Total',
+      value: summary ? formatCurrencyTotals(summary.totalsByCurrency) : '—',
+      detail: 'QBO settlement-control amount',
+    },
+    {
+      label: 'Plutus Processed',
+      value: summary ? formatCount(processed) : '0',
+      detail: `${formatCount(pending)} pending · ${formatCount(rolledBack)} rolled back`,
+    },
+    {
+      label: 'Needs Review',
+      value: summary ? formatCount(summary.inconsistencyCount) : '0',
+      detail: `${formatCount(summary?.splitCount ?? 0)} split settlements`,
+    },
+  ];
+
+  return (
+    <Box
+      sx={{
+        mt: 3,
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))',
+        gap: 1.5,
+      }}
+    >
+      {cards.map((card) => (
+        <Box
+          key={card.label}
+          sx={{
+            minHeight: 104,
+            border: 1,
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            p: 2,
+            display: 'grid',
+            alignContent: 'space-between',
+            gap: 1,
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: '0.6875rem',
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              color: '#008f87',
+            }}
+          >
+            {card.label}
+          </Typography>
+          {isLoading ? (
+            <Skeleton variant="text" sx={{ width: '65%', fontSize: '1.65rem' }} />
+          ) : (
+            <Typography
+              sx={{
+                color: 'text.primary',
+                fontSize: '1.35rem',
+                lineHeight: 1.2,
+                fontWeight: 700,
+                fontVariantNumeric: 'tabular-nums',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {card.value}
+            </Typography>
+          )}
+          <Typography sx={{ color: 'text.secondary', fontSize: '0.8125rem' }}>
+            {card.detail}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
 }
 
 function PlutusPill({ status }: { status: SettlementRow['plutusStatus'] }) {
@@ -209,33 +320,15 @@ async function fetchConnectionStatus(): Promise<ConnectionStatus> {
 
 async function fetchSettlements({
   page,
-  search,
-  startDate,
-  endDate,
   marketplace,
-  status,
-  totalMin,
-  totalMax,
 }: {
   page: number;
-  search: string;
-  startDate: string | null;
-  endDate: string | null;
   marketplace: Marketplace;
-  status: SettlementListStatus[];
-  totalMin: string;
-  totalMax: string;
 }): Promise<SettlementsResponse> {
   const params = new URLSearchParams();
   params.set('page', String(page));
   params.set('pageSize', '25');
-  if (search.trim() !== '') params.set('search', search.trim());
-  if (startDate !== null && startDate.trim() !== '') params.set('startDate', startDate.trim());
-  if (endDate !== null && endDate.trim() !== '') params.set('endDate', endDate.trim());
   if (marketplace !== 'all') params.set('marketplace', marketplace);
-  if (status.length > 0) params.set('status', status.join(','));
-  if (totalMin.trim() !== '') params.set('totalMin', totalMin.trim());
-  if (totalMax.trim() !== '') params.set('totalMax', totalMax.trim());
 
   const res = await fetch(`${basePath}/api/plutus/settlements?${params.toString()}`);
   if (!res.ok) {
@@ -309,19 +402,6 @@ const defaultBtnSx = {
 const smSize = { height: 32, px: 1.5, fontSize: '0.75rem' } as const;
 const defaultSize = { height: 36, px: 2, fontSize: '0.875rem' } as const;
 
-/* ── shared TextField styles ── */
-const textFieldSx = {
-  '& .MuiOutlinedInput-root': {
-    borderRadius: '8px',
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9' },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#00C2B9', borderWidth: 2 },
-  },
-} as const;
-
-const textFieldInputSlotProps = {
-  input: { sx: { fontSize: '0.875rem', height: 36 } },
-} as const;
-
 function SettlementMarketplaceQuerySync({
   setMarketplace,
   setPage,
@@ -348,48 +428,13 @@ function SettlementMarketplaceQuerySync({
 
 export default function SettlementsPage() {
   const router = useRouter();
-  const queryClient = useQueryClient();
   const marketplace = useMarketplaceStore((s) => s.marketplace);
   const setMarketplace = useMarketplaceStore((s) => s.setMarketplace);
-  const searchInput = useSettlementsListStore((s) => s.searchInput);
-  const search = useSettlementsListStore((s) => s.search);
-  const page = useSettlementsListStore((s) => s.page);
-  const startDate = useSettlementsListStore((s) => s.startDate);
-  const endDate = useSettlementsListStore((s) => s.endDate);
-  const statusFilter = useSettlementsListStore((s) => s.statusFilter);
-  const totalMin = useSettlementsListStore((s) => s.totalMin);
-  const totalMax = useSettlementsListStore((s) => s.totalMax);
-  const setSearchInput = useSettlementsListStore((s) => s.setSearchInput);
-  const setSearch = useSettlementsListStore((s) => s.setSearch);
-  const setPage = useSettlementsListStore((s) => s.setPage);
-  const setStartDate = useSettlementsListStore((s) => s.setStartDate);
-  const setEndDate = useSettlementsListStore((s) => s.setEndDate);
-  const setStatusFilter = useSettlementsListStore((s) => s.setStatusFilter);
-  const setTotalMin = useSettlementsListStore((s) => s.setTotalMin);
-  const setTotalMax = useSettlementsListStore((s) => s.setTotalMax);
-  const clear = useSettlementsListStore((s) => s.clear);
-
-  const [statusAnchorEl, setStatusAnchorEl] = useState<HTMLElement | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    const handle = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [searchInput, setPage, setSearch]);
-
-  useEffect(() => {
-    const normalized = statusFilter.filter((status) =>
-      (SETTLEMENT_LIST_STATUSES as readonly string[]).includes(status),
-    ) as SettlementListStatus[];
-    if (normalized.length !== statusFilter.length) {
-      setStatusFilter(normalized);
-    }
-  }, [setStatusFilter, statusFilter]);
-
-  const normalizedStartDate = startDate.trim() === '' ? null : startDate.trim();
-  const normalizedEndDate = endDate.trim() === '' ? null : endDate.trim();
+    setPage(1);
+  }, [marketplace]);
 
   const { data: connection, isLoading: isCheckingConnection } = useQuery({
     queryKey: ['qbo-status'],
@@ -401,24 +446,12 @@ export default function SettlementsPage() {
     queryKey: [
       'plutus-settlements',
       page,
-      search,
-      normalizedStartDate,
-      normalizedEndDate,
       marketplace,
-      statusFilter,
-      totalMin,
-      totalMax,
     ],
     queryFn: () =>
       fetchSettlements({
         page,
-        search,
-        startDate: normalizedStartDate,
-        endDate: normalizedEndDate,
         marketplace,
-        status: statusFilter,
-        totalMin,
-        totalMax,
       }),
     enabled: connection !== undefined && connection.connected === true,
     staleTime: 5 * 60 * 1000,
@@ -448,284 +481,17 @@ export default function SettlementsPage() {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <PageHeader
             title="Settlements"
-            description="Review Amazon settlement postings in QuickBooks and their Plutus processing state."
+            description="Review Amazon settlement postings, payout totals, and Plutus processing state."
             variant="accent"
           />
         </Box>
 
-        <Box sx={{ mt: 3, display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'flex-end' }}>
-          <Box sx={{ flex: '1 1 22rem', display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: '#008f87',
-              }}
-            >
-              Search
-            </Typography>
-            <Box sx={{ position: 'relative' }}>
-              <SearchIcon
-                sx={{
-                  pointerEvents: 'none',
-                  position: 'absolute',
-                  left: 12,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  fontSize: 16,
-                  color: 'text.disabled',
-                  zIndex: 1,
-                }}
-              />
-              <TextField
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Amazon settlement ID, posting doc number, memo…"
-                size="small"
-                variant="outlined"
-                fullWidth
-                slotProps={textFieldInputSlotProps}
-                sx={{
-                  ...textFieldSx,
-                  '& .MuiOutlinedInput-root': {
-                    ...textFieldSx['& .MuiOutlinedInput-root'],
-                    '& input': { pl: 4.5 },
-                  },
-                }}
-              />
-            </Box>
-          </Box>
-
-          <Box
-            sx={{
-              width: { xs: '100%', sm: '10rem' },
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.75,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: '#008f87',
-              }}
-            >
-              Start date
-            </Typography>
-            <TextField
-              type="date"
-              value={startDate}
-              onChange={(e) => {
-                const value = e.target.value.trim();
-                setStartDate(value);
-                setPage(1);
-              }}
-              size="small"
-              variant="outlined"
-              fullWidth
-              slotProps={textFieldInputSlotProps}
-              sx={textFieldSx}
-            />
-          </Box>
-
-          <Box
-            sx={{
-              width: { xs: '100%', sm: '10rem' },
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.75,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: '#008f87',
-              }}
-            >
-              End date
-            </Typography>
-            <TextField
-              type="date"
-              value={endDate}
-              onChange={(e) => {
-                const value = e.target.value.trim();
-                setEndDate(value);
-                setPage(1);
-              }}
-              size="small"
-              variant="outlined"
-              fullWidth
-              slotProps={textFieldInputSlotProps}
-              sx={textFieldSx}
-            />
-          </Box>
-
-          <Box
-            sx={{
-              width: { xs: '100%', sm: '14rem' },
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.75,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: '#008f87',
-              }}
-            >
-              Settlement Total
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                value={totalMin}
-                onChange={(e) => setTotalMin(e.target.value)}
-                placeholder="Min"
-                size="small"
-                variant="outlined"
-                fullWidth
-                slotProps={textFieldInputSlotProps}
-                sx={textFieldSx}
-              />
-              <TextField
-                value={totalMax}
-                onChange={(e) => setTotalMax(e.target.value)}
-                placeholder="Max"
-                size="small"
-                variant="outlined"
-                fullWidth
-                slotProps={textFieldInputSlotProps}
-                sx={textFieldSx}
-              />
-            </Box>
-          </Box>
-
-          <Box
-            sx={{
-              width: { xs: '100%', sm: '12rem' },
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.75,
-            }}
-          >
-            <Typography
-              sx={{
-                fontSize: '0.625rem',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                color: '#008f87',
-              }}
-            >
-              Plutus Processing
-            </Typography>
-            <Box>
-              <MuiButton
-                variant="outlined"
-                disableElevation
-                onClick={(e) => setStatusAnchorEl(statusAnchorEl ? null : e.currentTarget)}
-                sx={{
-                  ...outlineSx,
-                  ...defaultSize,
-                  width: '100%',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Box
-                  component="span"
-                  sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                >
-                  {statusFilter.length === 0
-                    ? 'All States'
-                    : statusFilter.map(formatPlutusSettlementStatus).join(', ')}
-                </Box>
-                <Box component="span" sx={{ fontSize: 10, color: 'text.disabled', ml: 0.5 }}>
-                  &#9662;
-                </Box>
-              </MuiButton>
-              <Popper
-                open={Boolean(statusAnchorEl)}
-                anchorEl={statusAnchorEl}
-                placement="bottom-start"
-                sx={{ zIndex: 1300 }}
-              >
-                <ClickAwayListener onClickAway={() => setStatusAnchorEl(null)}>
-                  <Card sx={{ border: 1, borderColor: 'divider', mt: 0.5, minWidth: 200, p: 1 }}>
-                    {SETTLEMENT_LIST_STATUSES.map((status) => (
-                      <FormControlLabel
-                        key={status}
-                        control={
-                          <Checkbox
-                            size="small"
-                            checked={statusFilter.includes(status)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setStatusFilter([...statusFilter, status]);
-                              } else {
-                                setStatusFilter(statusFilter.filter((s) => s !== status));
-                              }
-                              setPage(1);
-                            }}
-                            sx={{ py: 0.25 }}
-                          />
-                        }
-                        label={
-                          <Typography sx={{ fontSize: '0.875rem' }}>
-                            {formatPlutusSettlementStatus(status)}
-                          </Typography>
-                        }
-                        sx={{ display: 'flex', mx: 0 }}
-                      />
-                    ))}
-                  </Card>
-                </ClickAwayListener>
-              </Popper>
-            </Box>
-          </Box>
-
-          <MuiButton
-            variant="contained"
-            disableElevation
-            onClick={() => {
-              setPage(1);
-              queryClient.invalidateQueries({ queryKey: ['plutus-settlements'] });
-            }}
-            startIcon={<FilterListIcon sx={{ fontSize: 14 }} />}
-            sx={{ ...defaultBtnSx, ...defaultSize }}
-          >
-            Filter
-          </MuiButton>
-
-          <MuiButton
-            variant="outlined"
-            disableElevation
-            onClick={() => {
-              clear();
-            }}
-            disabled={
-              searchInput.trim() === '' &&
-              startDate.trim() === '' &&
-              endDate.trim() === '' &&
-              statusFilter.length === 0 &&
-              totalMin.trim() === '' &&
-              totalMax.trim() === ''
-            }
-            sx={{ ...outlineSx, ...defaultSize }}
-          >
-            Clear
-          </MuiButton>
-        </Box>
+        <SettlementOverviewCards
+          summary={data?.summary ?? null}
+          page={data?.pagination.page ?? page}
+          totalPages={data?.pagination.totalPages ?? 1}
+          isLoading={isLoading}
+        />
 
         <Box sx={{ mt: 2, overflow: 'hidden', border: 1, borderColor: 'divider' }}>
           <Box sx={{ overflow: 'auto' }}>
@@ -802,7 +568,7 @@ export default function SettlementsPage() {
                       <EmptyState
                         icon={<SettlementsEmptyIcon />}
                         title="No settlements found"
-                        description="No settlements match your current filters. Try adjusting the date range or search terms."
+                        description="QBO has no settlement journals for the selected marketplace."
                       />
                     </MuiTableCell>
                   </MuiTableRow>
@@ -820,17 +586,6 @@ export default function SettlementsPage() {
                         sx={{
                           ...rowHoverSx,
                           cursor: 'pointer',
-                          '& td:first-of-type': { position: 'relative' },
-                          '&:hover td:first-of-type::before': {
-                            content: '""',
-                            position: 'absolute',
-                            left: 0,
-                            top: 0,
-                            bottom: 0,
-                            width: 3,
-                            borderRadius: '0 4px 4px 0',
-                            bgcolor: '#00C2B9',
-                          },
                         }}
                         onClick={() => router.push(settlementHref)}
                       >

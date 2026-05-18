@@ -36,12 +36,6 @@ type SettlementListRow = {
   plutusStatus: PlutusSettlementStatus;
 };
 
-const LIST_SETTLEMENT_STATUSES = ['Pending', 'Processed', 'RolledBack'] as const;
-
-function isSettlementListStatus(value: string): value is SettlementRow['plutusStatus'] {
-  return (LIST_SETTLEMENT_STATUSES as readonly string[]).includes(value);
-}
-
 function isCanonicalSettlementDocNumber(docNumber: string): boolean {
   const trimmedUpper = docNumber.trim().toUpperCase();
   if (!isSettlementDocNumber(trimmedUpper)) return false;
@@ -73,26 +67,8 @@ export async function GET(req: NextRequest) {
     }
 
     const searchParams = req.nextUrl.searchParams;
-    const rawStartDate = searchParams.get('startDate');
-    const rawEndDate = searchParams.get('endDate');
-    const rawSearch = searchParams.get('search');
     const rawMarketplace = searchParams.get('marketplace');
-    const startDate = rawStartDate === null ? undefined : rawStartDate;
-    const endDate = rawEndDate === null ? undefined : rawEndDate;
-    const search = rawSearch === null ? undefined : rawSearch.trim();
     const marketplaceFilter = rawMarketplace === 'US' || rawMarketplace === 'UK' ? rawMarketplace : null;
-
-    const rawStatus = searchParams.get('status');
-    const rawTotalMin = searchParams.get('totalMin');
-    const rawTotalMax = searchParams.get('totalMax');
-    const statusFilter = rawStatus
-      ? rawStatus
-          .split(',')
-          .map((status) => status.trim())
-          .filter((status): status is SettlementRow['plutusStatus'] => status !== '' && isSettlementListStatus(status))
-      : null;
-    const totalMin = rawTotalMin ? parseFloat(rawTotalMin) : null;
-    const totalMax = rawTotalMax ? parseFloat(rawTotalMax) : null;
 
     const rawPage = searchParams.get('page');
     const rawPageSize = searchParams.get('pageSize');
@@ -109,8 +85,6 @@ export async function GET(req: NextRequest) {
       let startPosition = 1;
       while (true) {
         const pageResult = await fetchJournalEntries(activeConnection, {
-          startDate,
-          endDate,
           docNumberContains: docQuery,
           maxResults: queryPageSize,
           startPosition,
@@ -207,7 +181,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    let allRows = groupSettlementChildren(
+    const allRows = groupSettlementChildren(
       allChildRows.map((row) => ({
         qboJournalEntryId: row.qboJournalEntryId,
         docNumber: row.docNumber,
@@ -221,41 +195,44 @@ export async function GET(req: NextRequest) {
       })),
     );
 
-    if (search !== undefined && search !== '') {
-      const searchLower = search.toLowerCase();
-      allRows = allRows.filter((row) => {
-        if (row.sourceSettlementId.toLowerCase().includes(searchLower)) return true;
-        if (row.parentId.toLowerCase().includes(searchLower)) return true;
-        return row.children.some((child) => {
-          if (child.docNumber.toLowerCase().includes(searchLower)) return true;
-          return child.memo.toLowerCase().includes(searchLower);
+    const totalsByCurrencyMap = new Map<string, { currency: string; amount: number; count: number }>();
+    for (const row of allRows) {
+      if (row.settlementTotal === null) continue;
+      const existing = totalsByCurrencyMap.get(row.marketplace.currency);
+      if (existing) {
+        existing.amount += row.settlementTotal;
+        existing.count += 1;
+      } else {
+        totalsByCurrencyMap.set(row.marketplace.currency, {
+          currency: row.marketplace.currency,
+          amount: row.settlementTotal,
+          count: 1,
         });
-      });
+      }
     }
 
-    // Apply status and total filters before pagination
-    const filteredRows = allRows.filter((row) => {
-      if (statusFilter && statusFilter.length > 0) {
-        if (!statusFilter.includes(row.plutusStatus)) return false;
-      }
-      if (totalMin !== null && Number.isFinite(totalMin)) {
-        if (row.settlementTotal === null || row.settlementTotal < totalMin) return false;
-      }
-      if (totalMax !== null && Number.isFinite(totalMax)) {
-        if (row.settlementTotal === null || row.settlementTotal > totalMax) return false;
-      }
-      return true;
-    });
+    const summary = {
+      totalCount: allRows.length,
+      processedCount: allRows.filter((row) => row.plutusStatus === 'Processed').length,
+      pendingCount: allRows.filter((row) => row.plutusStatus === 'Pending').length,
+      rolledBackCount: allRows.filter((row) => row.plutusStatus === 'RolledBack').length,
+      inconsistencyCount: allRows.filter((row) => row.hasInconsistency).length,
+      splitCount: allRows.filter((row) => row.isSplit).length,
+      totalsByCurrency: Array.from(totalsByCurrencyMap.values()).sort((a, b) =>
+        a.currency.localeCompare(b.currency),
+      ),
+    };
 
-    const totalCount = filteredRows.length;
+    const totalCount = allRows.length;
     const pageStart = (page - 1) * pageSize;
-    const rows = filteredRows.slice(pageStart, pageStart + pageSize).map((row) => ({
+    const rows = allRows.slice(pageStart, pageStart + pageSize).map((row) => ({
       ...row,
       qboStatus: 'Posted' as const,
     }));
 
     return NextResponse.json({
       settlements: rows,
+      summary,
       pagination: {
         page,
         pageSize,
