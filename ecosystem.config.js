@@ -239,22 +239,6 @@ function createHermesWorkerEnv(rootDir, environment, runtimeEnv) {
   };
 }
 
-const XPLAN_SELLERBOARD_ENV_KEYS = [
-  'SELLERBOARD_SYNC_TOKEN',
-  'SELLERBOARD_US_ORDERS_REPORT_URL',
-  'SELLERBOARD_US_DASHBOARD_REPORT_URL',
-  'SELLERBOARD_UK_ORDERS_REPORT_URL',
-  'SELLERBOARD_UK_DASHBOARD_REPORT_URL',
-  'XPLAN_SELLERBOARD_SYNC_INTERVAL_MINUTES',
-];
-
-function createXplanRuntimeEnv(rootDir, environment, runtimeEnv) {
-  return {
-    ...createNextAppEnvWithPortal(rootDir, 'xplan', environment, runtimeEnv),
-    ...pickProcessEnv(XPLAN_SELLERBOARD_ENV_KEYS),
-  };
-}
-
 if (!DEV_DIR) {
   throw new Error('Missing TARGONOS_DEV_DIR (or legacy TARGON_DEV_DIR).');
 }
@@ -333,41 +317,6 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
-    {
-      name: 'dev-xplan',
-      cwd: path.join(DEV_DIR, 'apps/xplan'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3108',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createXplanRuntimeEnv(DEV_DIR, 'dev', {
-        NODE_ENV: 'production',
-        PORT: 3108,
-        BASE_PATH: '/xplan',
-        NEXT_PUBLIC_BASE_PATH: '/xplan',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'dev-xplan-sellerboard-sync',
-      cwd: path.join(DEV_DIR, 'apps/xplan'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/sellerboard-sync-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createXplanRuntimeEnv(DEV_DIR, 'dev', {
-        NODE_ENV: 'production',
-        XPLAN_SELLERBOARD_SYNC_INTERVAL_MINUTES: '60',
-        BASE_PATH: '/xplan',
-        NEXT_PUBLIC_BASE_PATH: '/xplan',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M'
-    },
-
     {
       name: 'dev-kairos',
       cwd: path.join(DEV_DIR, 'apps/kairos'),
@@ -561,41 +510,6 @@ module.exports = {
       watch: false,
       max_memory_restart: '300M'
     },
-    {
-      name: 'main-xplan',
-      cwd: path.join(MAIN_DIR, 'apps/xplan'),
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start -p 3008',
-      interpreter: 'node',
-      exec_mode: 'fork',
-      env: createXplanRuntimeEnv(MAIN_DIR, 'production', {
-        NODE_ENV: 'production',
-        PORT: 3008,
-        BASE_PATH: '/xplan',
-        NEXT_PUBLIC_BASE_PATH: '/xplan',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '300M'
-    },
-    {
-      name: 'main-xplan-sellerboard-sync',
-      cwd: path.join(MAIN_DIR, 'apps/xplan'),
-      script: 'node_modules/.bin/tsx',
-      args: 'scripts/sellerboard-sync-worker.ts',
-      interpreter: 'none',
-      exec_mode: 'fork',
-      env: createXplanRuntimeEnv(MAIN_DIR, 'production', {
-        NODE_ENV: 'production',
-        XPLAN_SELLERBOARD_SYNC_INTERVAL_MINUTES: '60',
-        BASE_PATH: '/xplan',
-        NEXT_PUBLIC_BASE_PATH: '/xplan',
-      }),
-      autorestart: true,
-      watch: false,
-      max_memory_restart: '200M'
-    },
-
     {
       name: 'main-kairos',
       cwd: path.join(MAIN_DIR, 'apps/kairos'),

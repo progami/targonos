@@ -17,7 +17,6 @@ on:
           - targon
           - talos
           - website
-          - xplan
           - kairos
           - atlas
           - plutus
@@ -45,7 +44,6 @@ jobs:
       sso: ${{ steps.changes.outputs.sso }}
       talos: ${{ steps.changes.outputs.talos }}
       website: ${{ steps.changes.outputs.website }}
-      xplan: ${{ steps.changes.outputs.xplan }}
       kairos: ${{ steps.changes.outputs.kairos }}
       atlas: ${{ steps.changes.outputs.atlas }}
       plutus: ${{ steps.changes.outputs.plutus }}
@@ -306,7 +304,6 @@ jobs:
           [[ "${{ needs.detect-changes.outputs.sso }}" == "true" ]] && apps+=(sso)
           [[ "${{ needs.detect-changes.outputs.talos }}" == "true" ]] && apps+=(talos)
           [[ "${{ needs.detect-changes.outputs.website }}" == "true" ]] && apps+=(website)
-          [[ "${{ needs.detect-changes.outputs.xplan }}" == "true" ]] && apps+=(xplan)
           [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
           [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
           [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)
@@ -426,7 +423,6 @@ jobs:
             [[ "${{ needs.detect-changes.outputs.sso }}" == "true" ]] && apps+=(sso)
             [[ "${{ needs.detect-changes.outputs.talos }}" == "true" ]] && apps+=(talos)
             [[ "${{ needs.detect-changes.outputs.website }}" == "true" ]] && apps+=(website)
-            [[ "${{ needs.detect-changes.outputs.xplan }}" == "true" ]] && apps+=(xplan)
             [[ "${{ needs.detect-changes.outputs.kairos }}" == "true" ]] && apps+=(kairos)
             [[ "${{ needs.detect-changes.outputs.atlas }}" == "true" ]] && apps+=(atlas)
             [[ "${{ needs.detect-changes.outputs.plutus }}" == "true" ]] && apps+=(plutus)

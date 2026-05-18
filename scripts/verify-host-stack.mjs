@@ -28,7 +28,6 @@ export const HOST_ENVIRONMENTS = {
       'main-talos',
       'main-website',
       'main-atlas',
-      'main-xplan',
       'main-kairos',
       'main-kairos-ml',
       'main-plutus',
@@ -43,7 +42,6 @@ export const HOST_ENVIRONMENTS = {
     mountedApps: [
       ['main-targonos', ''],
       ['main-talos', '/talos'],
-      ['main-xplan', '/xplan'],
       ['main-atlas', '/atlas'],
       ['main-kairos', '/kairos'],
       ['main-plutus', '/plutus'],
@@ -62,7 +60,6 @@ export const HOST_ENVIRONMENTS = {
       'dev-talos',
       'dev-website',
       'dev-atlas',
-      'dev-xplan',
       'dev-kairos',
       'dev-kairos-ml',
       'dev-plutus',
@@ -77,7 +74,6 @@ export const HOST_ENVIRONMENTS = {
     mountedApps: [
       ['dev-targonos', ''],
       ['dev-talos', '/talos'],
-      ['dev-xplan', '/xplan'],
       ['dev-atlas', '/atlas'],
       ['dev-kairos', '/kairos'],
       ['dev-plutus', '/plutus'],
@@ -88,7 +84,7 @@ export const HOST_ENVIRONMENTS = {
   },
 }
 
-const appRoutes = ['/talos/', '/xplan/', '/atlas/', '/kairos/', '/plutus/', '/hermes/', '/argus/']
+const appRoutes = ['/talos/', '/atlas/', '/kairos/', '/plutus/', '/hermes/', '/argus/']
 
 export function parseCloudflaredReady(raw) {
   const payload = JSON.parse(raw)

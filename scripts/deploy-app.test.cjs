@@ -81,7 +81,7 @@ test('shared-db deploys map apps onto deterministic owner roles and local owner 
   )
   assert.match(
     deployScript,
-    /migration_owner_role_for_app\(\)[\s\S]*?xplan\|kairos\)[\s\S]*?printf 'portal_xplan'/,
+    /migration_owner_role_for_app\(\)[\s\S]*?kairos\)[\s\S]*?printf 'portal_xplan'/,
   )
   assert.match(
     deployScript,

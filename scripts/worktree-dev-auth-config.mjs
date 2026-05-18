@@ -27,10 +27,6 @@ export const WORKTREE_DEV_AUTHZ = {
       departments: ['Admin'],
       tenantMemberships: [],
     },
-    xplan: {
-      departments: ['Admin'],
-      tenantMemberships: [],
-    },
     hermes: {
       departments: ['Account / Listing'],
       tenantMemberships: [],

@@ -21,7 +21,6 @@ const hostedRouteChecks: HostedRouteCheck[] = [
   { name: 'portal', path: '/', visibleText: 'Control plane' },
   { name: 'atlas', path: '/atlas/employees', visibleText: 'Employees' },
   { name: 'kairos', path: '/kairos/forecasts', visibleText: 'Forecasts' },
-  { name: 'xplan', path: '/xplan/1-setup', visibleText: 'Setup' },
   { name: 'plutus', path: '/plutus/settlements', visibleText: 'Settlements' },
   { name: 'hermes', path: '/hermes/insights', visibleText: 'Insights' },
   { name: 'talos-dashboard', path: '/talos/dashboard', visibleText: 'Dashboard' },

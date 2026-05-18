@@ -31,13 +31,6 @@ export const hostedSmokeAppGrants: HostedSmokeGrant[] = [
     locked: false,
   },
   {
-    appSlug: 'xplan',
-    appName: 'xPlan',
-    departments: ['Product'],
-    tenantMemberships: [],
-    locked: false,
-  },
-  {
     appSlug: 'plutus',
     appName: 'Plutus',
     departments: ['Finance'],

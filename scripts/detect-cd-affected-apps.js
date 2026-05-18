@@ -9,7 +9,6 @@ const DEPLOYABLE_APPS = [
   { id: 'sso', key: 'sso' },
   { id: 'talos', key: 'talos' },
   { id: 'website', key: 'website' },
-  { id: 'xplan', key: 'xplan' },
   { id: 'kairos', key: 'kairos' },
   { id: 'atlas', key: 'atlas' },
   { id: 'plutus', key: 'plutus' },

@@ -565,7 +565,7 @@ export type AppEntitlement = {
   tenantMemberships?: string[];
 };
 
-export type RolesClaim = Record<string, AppEntitlement>; // legacy alias: { talos: { depts }, xplan: { ... } }
+export type RolesClaim = Record<string, AppEntitlement>; // legacy alias: { talos: { depts } }
 
 export type AppLifecycle = 'active' | 'dev' | 'archive';
 export type AppEntryPolicy = 'role_gated' | 'public';
@@ -888,11 +888,7 @@ export function getAppEntitlement(rolesOrAuthz: unknown, appId: string): AppEnti
   }
 
   const rec = rolesOrAuthz as Record<string, unknown>;
-  let ent = rec[appId];
-  if ((!ent || typeof ent !== 'object') && appId === 'xplan') {
-    const legacyKey = String.fromCharCode(120, 45, 112, 108, 97, 110);
-    ent = rec[legacyKey];
-  }
+  const ent = rec[appId];
   if (!ent || typeof ent !== 'object') return undefined;
   const raw = ent as Record<string, unknown>;
   const departments = normalizeStringArray(raw.departments ?? raw.depts);
