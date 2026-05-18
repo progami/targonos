@@ -6,7 +6,6 @@ import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import Typography from '@mui/material/Typography';
 
 import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -67,12 +66,6 @@ type CogsPostingRow = {
   qboJournalId: string | null;
   qboDocNumber: string | null;
   cogsAmountCents: number;
-};
-
-type InventoryFlowStep = {
-  label: string;
-  title: string;
-  description: string;
 };
 
 async function getPurchaseOrderRows(): Promise<PurchaseOrderRow[]> {
@@ -178,127 +171,40 @@ function parseInventoryTab(raw: string | string[] | undefined): InventoryTab {
   throw new Error(`Unsupported inventory tab: ${value}`);
 }
 
-function connectionKey(poNumber: string, sku: string, marketplace: string) {
-  return (
-    <Box>
-      <Typography sx={{ fontWeight: 650 }}>{poNumber}</Typography>
-      <Typography sx={{ mt: 0.25, fontSize: '0.78rem', color: 'text.secondary' }}>
-        {sku} · {marketplace}
-      </Typography>
-    </Box>
-  );
-}
-
-function stackedMetric(label: string, value: string) {
-  return (
-    <Box>
-      <Typography sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>{label}</Typography>
-      <Typography sx={{ fontWeight: 600 }}>{value}</Typography>
-    </Box>
-  );
-}
-
-function InventoryFlow() {
-  const steps: InventoryFlowStep[] = [
-    {
-      label: '1',
-      title: 'QBO PO line',
-      description: 'Native purchase evidence creates the PO/SKU layer key.',
-    },
-    {
-      label: '2',
-      title: 'FIFO layer',
-      description: 'READY layers hold remaining quantity and landed value.',
-    },
-    {
-      label: '3',
-      title: 'COGS journal',
-      description: 'Settlement units consume READY layers and post QBO COGS.',
-    },
-    {
-      label: '4',
-      title: 'Sellerboard export',
-      description: 'The same PO/SKU consumption totals support Sellerboard.',
-    },
-  ];
-
-  return (
-    <Box
-      sx={{
-        mt: 2.5,
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', md: 'repeat(4, minmax(0, 1fr))' },
-        gap: 1,
-      }}
-    >
-      {steps.map((step) => (
-        <Box
-          key={step.title}
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: '28px 1fr',
-            gap: 1,
-            alignItems: 'start',
-            border: 1,
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-            px: 1.25,
-            py: 1,
-          }}
-        >
-          <Box
-            sx={{
-              display: 'grid',
-              placeItems: 'center',
-              width: 24,
-              height: 24,
-              borderRadius: '50%',
-              bgcolor: 'action.hover',
-              color: 'text.secondary',
-              fontSize: '0.75rem',
-              fontWeight: 700,
-            }}
-          >
-            {step.label}
-          </Box>
-          <Box>
-            <Typography sx={{ fontSize: '0.82rem', fontWeight: 700 }}>{step.title}</Typography>
-            <Typography sx={{ mt: 0.25, fontSize: '0.76rem', color: 'text.secondary', lineHeight: 1.35 }}>
-              {step.description}
-            </Typography>
-          </Box>
-        </Box>
-      ))}
-    </Box>
-  );
-}
-
 function PurchaseOrderSummaryTable({ rows }: { rows: PurchaseOrderRow[] }) {
   return (
     <Box sx={{ mt: 2, overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
       <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ minWidth: 1120 }}>
+        <Table size="small" sx={{ minWidth: 1320 }}>
           <TableHead>
             <TableRow>
-              <TableCell>PO / SKU</TableCell>
+              <TableCell>PO</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell>Marketplace</TableCell>
               <TableCell>Status</TableCell>
-              <TableCell>QBO Source</TableCell>
-              <TableCell align="right">Quantity</TableCell>
+              <TableCell>QBO PO</TableCell>
+              <TableCell align="right">Received Qty</TableCell>
+              <TableCell align="right">READY Qty</TableCell>
+              <TableCell align="right">NOT_READY Qty</TableCell>
               <TableCell align="right">Unit Cost</TableCell>
-              <TableCell align="right">Value</TableCell>
+              <TableCell align="right">Landed Value</TableCell>
+              <TableCell align="right">Inventory Asset</TableCell>
+              <TableCell align="right">Inventory In Transit</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={12}>
                   <EmptyState title="No purchase-order layers" description="Opening layers and locked native QBO PO/SKU layers appear here." />
                 </TableCell>
               </TableRow>
             )}
             {rows.map((row) => (
               <TableRow key={`${row.marketplace}:${row.poNumber}:${row.sku}`}>
-                <TableCell>{connectionKey(row.poNumber, row.sku, row.marketplace)}</TableCell>
+                <TableCell>{row.poNumber}</TableCell>
+                <TableCell>{row.sku}</TableCell>
+                <TableCell>{row.marketplace}</TableCell>
                 <TableCell>
                   <Chip
                     label={statusLabel(row)}
@@ -308,21 +214,13 @@ function PurchaseOrderSummaryTable({ rows }: { rows: PurchaseOrderRow[] }) {
                   />
                 </TableCell>
                 <TableCell>{row.qboPurchaseOrderId ?? 'OPENING'}</TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'grid', gap: 0.75 }}>
-                    {stackedMetric('Received', Number(row.qtyReceived ?? 0n).toLocaleString('en-US'))}
-                    {stackedMetric('READY', Number(row.liveQtyRemaining ?? 0n).toLocaleString('en-US'))}
-                    {stackedMetric('NOT_READY', Number(row.inTransitQtyRemaining ?? 0n).toLocaleString('en-US'))}
-                  </Box>
-                </TableCell>
+                <TableCell align="right">{Number(row.qtyReceived ?? 0n).toLocaleString('en-US')}</TableCell>
+                <TableCell align="right">{Number(row.liveQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
+                <TableCell align="right">{Number(row.inTransitQtyRemaining ?? 0n).toLocaleString('en-US')}</TableCell>
                 <TableCell align="right">{row.unitCost === null ? '-' : Number(row.unitCost).toFixed(2)}</TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'grid', gap: 0.75 }}>
-                    {stackedMetric('Landed', formatUsdCents(row.landedTotalCents))}
-                    {stackedMetric('Inventory Asset - Plutus', formatUsdCents(row.liveValueCents))}
-                    {stackedMetric('Inventory in Transit - Plutus', formatUsdCents(row.inTransitValueCents))}
-                  </Box>
-                </TableCell>
+                <TableCell align="right">{formatUsdCents(row.landedTotalCents)}</TableCell>
+                <TableCell align="right">{formatUsdCents(row.liveValueCents)}</TableCell>
+                <TableCell align="right">{formatUsdCents(row.inTransitValueCents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -336,13 +234,16 @@ function InventoryLedgerTable({ rows }: { rows: InventoryLayerRow[] }) {
   return (
     <Box sx={{ mt: 2, overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
       <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ minWidth: 1040 }}>
+        <Table size="small" sx={{ minWidth: 1120 }}>
           <TableHead>
             <TableRow>
-              <TableCell>PO / SKU</TableCell>
+              <TableCell>PO</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell>Marketplace</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Control Account</TableCell>
-              <TableCell align="right">Quantity</TableCell>
+              <TableCell align="right">Received Qty</TableCell>
+              <TableCell align="right">Remaining Qty</TableCell>
               <TableCell align="right">Layer Value</TableCell>
               <TableCell align="right">Unit Cost</TableCell>
               <TableCell>Receipt</TableCell>
@@ -351,7 +252,7 @@ function InventoryLedgerTable({ rows }: { rows: InventoryLayerRow[] }) {
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={10}>
                   <EmptyState
                     title="No cost layers"
                     description="Opening layers and locked QBO PO/SKU layers will appear here."
@@ -361,17 +262,15 @@ function InventoryLedgerTable({ rows }: { rows: InventoryLayerRow[] }) {
             )}
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{connectionKey(row.poNumber, row.sku, row.marketplace)}</TableCell>
+                <TableCell>{row.poNumber}</TableCell>
+                <TableCell>{row.sku}</TableCell>
+                <TableCell>{row.marketplace}</TableCell>
                 <TableCell>
                   <Chip label={row.status} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell>{controlAccount(row.status)}</TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'grid', gap: 0.75 }}>
-                    {stackedMetric('Received', row.qtyReceived.toLocaleString('en-US'))}
-                    {stackedMetric('Remaining', row.qtyRemaining.toLocaleString('en-US'))}
-                  </Box>
-                </TableCell>
+                <TableCell align="right">{row.qtyReceived.toLocaleString('en-US')}</TableCell>
+                <TableCell align="right">{row.qtyRemaining.toLocaleString('en-US')}</TableCell>
                 <TableCell align="right">
                   {formatCurrencyCents(row.landedTotalCents, row.currency)}
                 </TableCell>
@@ -390,10 +289,12 @@ function CogsPostingsTable({ rows }: { rows: CogsPostingRow[] }) {
   return (
     <Box sx={{ mt: 2, overflow: 'hidden', border: 1, borderColor: 'divider', bgcolor: 'background.paper' }}>
       <Box sx={{ overflowX: 'auto' }}>
-        <Table size="small" sx={{ minWidth: 960 }}>
+        <Table size="small" sx={{ minWidth: 1160 }}>
           <TableHead>
             <TableRow>
-              <TableCell>PO / SKU</TableCell>
+              <TableCell>PO</TableCell>
+              <TableCell>SKU</TableCell>
+              <TableCell>Marketplace</TableCell>
               <TableCell>Settlement</TableCell>
               <TableCell>Date</TableCell>
               <TableCell>QBO Doc</TableCell>
@@ -406,7 +307,7 @@ function CogsPostingsTable({ rows }: { rows: CogsPostingRow[] }) {
           <TableBody>
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={10}>
                   <EmptyState
                     title="No COGS postings"
                     description="Posted FIFO COGS consumption lines will appear here by PO and SKU."
@@ -416,13 +317,10 @@ function CogsPostingsTable({ rows }: { rows: CogsPostingRow[] }) {
             )}
             {rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{connectionKey(row.poNumber, row.sku, row.marketplace)}</TableCell>
-                <TableCell>
-                  <Typography sx={{ fontWeight: 650 }}>{row.settlementId}</Typography>
-                  <Typography sx={{ mt: 0.25, fontSize: '0.78rem', color: 'text.secondary' }}>
-                    {row.marketplace}
-                  </Typography>
-                </TableCell>
+                <TableCell>{row.poNumber}</TableCell>
+                <TableCell>{row.sku}</TableCell>
+                <TableCell>{row.marketplace}</TableCell>
+                <TableCell>{row.settlementId}</TableCell>
                 <TableCell>{row.txnDate}</TableCell>
                 <TableCell>{row.qboDocNumber ?? '-'}</TableCell>
                 <TableCell>{row.qboJournalId ?? '-'}</TableCell>
@@ -466,7 +364,6 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
         }
       />
 
-      <InventoryFlow />
       <InventoryTabsClient
         initialActiveTab={activeTab}
         purchaseOrdersPanel={<PurchaseOrderSummaryTable rows={purchaseOrderRows} />}
