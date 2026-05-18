@@ -12,6 +12,8 @@ import { PageHeader } from '@/components/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { db } from '@/lib/db';
 
+import { InventoryTabsClient, type InventoryTab } from './inventory-tabs';
+
 export const dynamic = 'force-dynamic';
 
 const appBasePath = process.env.NEXT_PUBLIC_BASE_PATH;
@@ -20,7 +22,6 @@ if (appBasePath === undefined) {
 }
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
-type InventoryTab = 'purchase-orders' | 'inventory-ledger' | 'cogs-postings';
 
 type PurchaseOrderRow = {
   poNumber: string;
@@ -172,14 +173,9 @@ function parseInventoryTab(raw: string | string[] | undefined): InventoryTab {
   const value = Array.isArray(raw) ? raw[0] : raw;
   if (value === 'ledger') return 'inventory-ledger';
   if (value === 'cogs') return 'cogs-postings';
-  if (value === undefined || value === 'po') return 'purchase-orders';
+  if (value === undefined) return 'purchase-orders';
+  if (value === 'po') return 'purchase-orders';
   throw new Error(`Unsupported inventory tab: ${value}`);
-}
-
-function tabHref(tab: InventoryTab): string {
-  if (tab === 'inventory-ledger') return `${appBasePath}/purchase-orders?tab=ledger`;
-  if (tab === 'cogs-postings') return `${appBasePath}/purchase-orders?tab=cogs`;
-  return `${appBasePath}/purchase-orders`;
 }
 
 function connectionKey(poNumber: string, sku: string, marketplace: string) {
@@ -273,38 +269,6 @@ function InventoryFlow() {
           </Box>
         </Box>
       ))}
-    </Box>
-  );
-}
-
-function InventoryTabs({ activeTab }: { activeTab: InventoryTab }) {
-  const tabs: Array<{ value: InventoryTab; label: string }> = [
-    { value: 'purchase-orders', label: '1. PO Source' },
-    { value: 'inventory-ledger', label: '2. FIFO Ledger' },
-    { value: 'cogs-postings', label: '3. COGS Posted' },
-  ];
-
-  return (
-    <Box sx={{ mt: 2.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-      {tabs.map((tab) => {
-        const active = tab.value === activeTab;
-        return (
-          <Button
-            key={tab.value}
-            href={tabHref(tab.value)}
-            variant={active ? 'contained' : 'outlined'}
-            size="small"
-            sx={{
-              borderRadius: 2,
-              textTransform: 'none',
-              bgcolor: active ? '#00C2B9' : undefined,
-              '&:hover': active ? { bgcolor: '#00a89f' } : undefined,
-            }}
-          >
-            {tab.label}
-          </Button>
-        );
-      })}
     </Box>
   );
 }
@@ -479,9 +443,11 @@ function CogsPostingsTable({ rows }: { rows: CogsPostingRow[] }) {
 export default async function PurchaseOrdersPage({ searchParams }: { searchParams?: SearchParams } = {}) {
   const resolvedSearchParams = searchParams === undefined ? {} : await searchParams;
   const activeTab = parseInventoryTab(resolvedSearchParams.tab);
-  const purchaseOrderRows = activeTab === 'purchase-orders' ? await getPurchaseOrderRows() : [];
-  const inventoryLayerRows = activeTab === 'inventory-ledger' ? await getInventoryLayers() : [];
-  const cogsPostingRows = activeTab === 'cogs-postings' ? await getCogsPostings() : [];
+  const [purchaseOrderRows, inventoryLayerRows, cogsPostingRows] = await Promise.all([
+    getPurchaseOrderRows(),
+    getInventoryLayers(),
+    getCogsPostings(),
+  ]);
 
   return (
     <Box component="main" sx={{ mx: 'auto', maxWidth: 1280, px: { xs: 2, sm: 3, lg: 4 }, py: 3 }}>
@@ -501,10 +467,12 @@ export default async function PurchaseOrdersPage({ searchParams }: { searchParam
       />
 
       <InventoryFlow />
-      <InventoryTabs activeTab={activeTab} />
-      {activeTab === 'purchase-orders' ? <PurchaseOrderSummaryTable rows={purchaseOrderRows} /> : null}
-      {activeTab === 'inventory-ledger' ? <InventoryLedgerTable rows={inventoryLayerRows} /> : null}
-      {activeTab === 'cogs-postings' ? <CogsPostingsTable rows={cogsPostingRows} /> : null}
+      <InventoryTabsClient
+        initialActiveTab={activeTab}
+        purchaseOrdersPanel={<PurchaseOrderSummaryTable rows={purchaseOrderRows} />}
+        ledgerPanel={<InventoryLedgerTable rows={inventoryLayerRows} />}
+        cogsPanel={<CogsPostingsTable rows={cogsPostingRows} />}
+      />
     </Box>
   );
 }

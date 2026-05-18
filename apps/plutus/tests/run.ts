@@ -453,6 +453,7 @@ test('settlement cash lines use settlement control wording', () => {
 test('fresh-start pages read new layer/allocation/consumption tables', () => {
   for (const path of [
     'app/purchase-orders/page.tsx',
+    'app/purchase-orders/inventory-tabs.tsx',
     'app/landed-cost-allocations/page.tsx',
     'app/sellerboard-export/page.tsx',
     'app/api/plutus/purchase-orders/route.ts',
@@ -469,8 +470,14 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
     read('app/api/plutus/purchase-orders/route.ts').includes('"status" = \'NOT_READY\''),
     true,
   );
-  assert.equal(read('app/purchase-orders/page.tsx').includes('tab=ledger'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('tab=cogs'), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("'use client'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("queryValue: 'ledger'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("queryValue: 'cogs'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes('window.history.pushState'), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes('hidden={activeTab !== tab.value}'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Promise.all(['), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('href={tabHref(tab.value)}'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes("activeTab === 'purchase-orders'"), false);
   assert.equal(read('app/purchase-orders/page.tsx').includes('PO / SKU'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('QBO PO line'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('FIFO layer'), true);
