@@ -15,9 +15,9 @@ type InventoryTabsClientProps = {
 };
 
 const tabs: Array<{ value: InventoryTab; label: string; queryValue: string | null }> = [
-  { value: 'purchase-orders', label: '1. PO Source', queryValue: null },
-  { value: 'inventory-ledger', label: '2. FIFO Ledger', queryValue: 'ledger' },
-  { value: 'cogs-postings', label: '3. COGS Posted', queryValue: 'cogs' },
+  { value: 'purchase-orders', label: 'PO Source', queryValue: null },
+  { value: 'inventory-ledger', label: 'FIFO Ledger', queryValue: 'ledger' },
+  { value: 'cogs-postings', label: 'COGS Posted', queryValue: 'cogs' },
 ];
 
 function inventoryTabFromSearch(search: string): InventoryTab {

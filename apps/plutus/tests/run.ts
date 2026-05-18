@@ -473,16 +473,23 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("'use client'"), true);
   assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("queryValue: 'ledger'"), true);
   assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("queryValue: 'cogs'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: 'PO Source'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: 'FIFO Ledger'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: 'COGS Posted'"), true);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: '1."), false);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: '2."), false);
+  assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes("label: '3."), false);
   assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes('window.history.pushState'), true);
   assert.equal(read('app/purchase-orders/inventory-tabs.tsx').includes('hidden={activeTab !== tab.value}'), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('Promise.all(['), true);
   assert.equal(read('app/purchase-orders/page.tsx').includes('href={tabHref(tab.value)}'), false);
   assert.equal(read('app/purchase-orders/page.tsx').includes("activeTab === 'purchase-orders'"), false);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('PO / SKU'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('QBO PO line'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('FIFO layer'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('COGS journal'), true);
-  assert.equal(read('app/purchase-orders/page.tsx').includes('Sellerboard export'), true);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('<InventoryFlow />'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('QBO PO line'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Native purchase evidence creates the PO/SKU layer key.'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('READY layers hold remaining quantity and landed value.'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('Settlement units consume READY layers and post QBO COGS.'), false);
+  assert.equal(read('app/purchase-orders/page.tsx').includes('The same PO/SKU consumption totals support Sellerboard.'), false);
   assert.equal(read('app/purchase-orders/page.tsx').includes('Inventory in Transit - Plutus'), true);
   assertDeleted('app/inventory-ledger/page.tsx');
   assertDeleted('app/cogs-batches/page.tsx');
@@ -493,19 +500,29 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   assert.equal(read('app/purchase-orders/page.tsx').includes('FROM "CogsConsumption"'), true);
 });
 
-test('inventory tables avoid repeating connection columns', () => {
+test('inventory tables expose operational fields as standalone columns', () => {
   const source = read('app/purchase-orders/page.tsx');
-  for (const forbidden of [
+  for (const required of [
     '<TableCell>PO</TableCell>',
     '<TableCell>SKU</TableCell>',
     '<TableCell>Marketplace</TableCell>',
     '<TableCell>QBO PO</TableCell>',
-    '<TableCell align="right">Live Qty</TableCell>',
-    '<TableCell align="right">In Transit Qty</TableCell>',
-    '<TableCell align="right">Live Value</TableCell>',
-    '<TableCell align="right">In Transit Value</TableCell>',
+    '<TableCell align="right">Received Qty</TableCell>',
+    '<TableCell align="right">READY Qty</TableCell>',
+    '<TableCell align="right">NOT_READY Qty</TableCell>',
+    '<TableCell align="right">Remaining Qty</TableCell>',
+    '<TableCell align="right">Inventory Asset</TableCell>',
+    '<TableCell align="right">Inventory In Transit</TableCell>',
   ]) {
-    assert.equal(source.includes(forbidden), false, `${forbidden} should not be repeated as a standalone column`);
+    assert.equal(source.includes(required), true, `${required} should be a standalone column`);
+  }
+
+  for (const forbidden of [
+    '<TableCell>PO / SKU</TableCell>',
+    "stackedMetric('Received'",
+    "stackedMetric('Landed'",
+  ]) {
+    assert.equal(source.includes(forbidden), false, `${forbidden} should not be used in inventory tables`);
   }
 });
 
