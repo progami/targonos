@@ -510,6 +510,31 @@ test('fresh-start pages read new layer/allocation/consumption tables', () => {
   assert.equal(read('app/purchase-orders/page.tsx').includes('FROM "CogsConsumption"'), true);
 });
 
+test('settlement detail page shows regular posting and FIFO COGS support together', () => {
+  const page = read('app/settlements/[region]/[settlementId]/page.tsx');
+  const route = read('app/api/plutus/settlements/[region]/[settlementId]/route.ts');
+
+  for (const required of [
+    'Regular Settlement Posting',
+    'SettlementCogsSection',
+    'FIFO COGS',
+    'PO/SKU consumption support for this settlement',
+    'data.cogsConsumptions',
+  ]) {
+    assert.equal(page.includes(required), true, `${required} should be visible on settlement detail`);
+  }
+
+  for (const required of [
+    'db.cogsConsumption.findMany',
+    'settlementId: { in: distinctSettlementIds }',
+    'cogsConsumptions',
+    'detail.parent.sourceSettlementId',
+    'invoiceResolution.invoiceId',
+  ]) {
+    assert.equal(route.includes(required), true, `${required} should be fetched by settlement detail API`);
+  }
+});
+
 test('landed-cost allocation page uses selected QBO bill lines instead of raw ID entry', () => {
   const page = read('app/landed-cost-allocations/page.tsx');
   const form = read('components/landed-cost-allocations/allocation-create-form.tsx');
