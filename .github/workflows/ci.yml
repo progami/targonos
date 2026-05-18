@@ -116,9 +116,6 @@ jobs:
           cp apps/hermes/.env.dev.ci apps/hermes/.env.dev
           cp apps/hermes/.env.dev.ci apps/hermes/.env.local
           cp apps/hermes/.env.dev.ci apps/hermes/.env.production
-          cp apps/website/.env.dev.ci apps/website/.env.dev
-          cp apps/website/.env.dev.ci apps/website/.env.local
-          cp apps/website/.env.dev.ci apps/website/.env.production
       - name: Verify CI env contracts
         run: node scripts/verify-ci-env-contracts.mjs
       - name: Verify dev environment configuration

@@ -8,7 +8,6 @@ const repoRoot = path.resolve(__dirname, '..')
 const DEPLOYABLE_APPS = [
   { id: 'sso', key: 'sso' },
   { id: 'talos', key: 'talos' },
-  { id: 'website', key: 'website' },
   { id: 'kairos', key: 'kairos' },
   { id: 'atlas', key: 'atlas' },
   { id: 'plutus', key: 'plutus' },

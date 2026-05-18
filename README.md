@@ -1,6 +1,6 @@
 # TargonOS
 
-TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps and website.
+TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps.
 
 ## Apps
 
@@ -8,7 +8,6 @@ TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps and website.
 | --- | --- | --- |
 | Portal / SSO | `@targon/sso` | `/` |
 | Talos | `@targon/talos` | `/talos` |
-| Website | `@targon/website` | `/` |
 | Atlas | `@targon/atlas` | `/atlas` |
 | Kairos | `@targon/kairos` | `/kairos` |
 | Plutus | `@targon/plutus` | `/plutus` |
@@ -37,7 +36,6 @@ Run only what you need:
 ```bash
 pnpm --filter @targon/sso dev
 pnpm --filter @targon/talos dev
-pnpm --filter @targon/website dev
 pnpm --filter @targon/atlas dev
 pnpm --filter @targon/kairos dev
 pnpm --filter @targon/plutus dev
@@ -101,7 +99,6 @@ pnpm --filter @targon/sso exec next dev -p 3200
 
 # Terminal 2 — whichever app you're working on
 pnpm --filter @targon/talos exec next dev -p 3201
-pnpm --filter @targon/website exec next dev -p 3205
 pnpm --filter @targon/atlas exec next dev --webpack -p 3206
 pnpm --filter @targon/kairos exec next dev -p 3210
 pnpm --filter @targon/plutus exec next dev -p 3212
@@ -186,8 +183,8 @@ Workflow: `.github/workflows/cd.yml`
 ```bash
 pm2 status
 pm2 logs main-targonos --lines 100
-pm2 restart dev-targonos dev-talos dev-atlas dev-website --update-env
-pm2 restart main-targonos main-talos main-atlas main-website --update-env
+pm2 restart dev-targonos dev-talos dev-atlas --update-env
+pm2 restart main-targonos main-talos main-atlas --update-env
 pm2 save
 ```
 

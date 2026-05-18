@@ -28,7 +28,6 @@ test('deploy infrastructure changes redeploy every hosted app', () => {
     'plutus=true',
     'sso=true',
     'talos=true',
-    'website=true',
     'any_app=true',
   ])
 })

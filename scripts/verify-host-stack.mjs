@@ -21,12 +21,10 @@ export const HOST_ENVIRONMENTS = {
   main: {
     portalOrigin: 'https://os.targonglobal.com',
     nginxBaseUrl: 'http://127.0.0.1:8080',
-    websiteBaseUrl: 'http://127.0.0.1:8082',
     portalProcess: 'main-targonos',
     webProcesses: [
       'main-targonos',
       'main-talos',
-      'main-website',
       'main-atlas',
       'main-kairos',
       'main-kairos-ml',
@@ -48,17 +46,14 @@ export const HOST_ENVIRONMENTS = {
       ['main-hermes', '/hermes'],
       ['main-argus', '/argus'],
     ],
-    websiteProcess: 'main-website',
   },
   dev: {
     portalOrigin: 'https://dev-os.targonglobal.com',
     nginxBaseUrl: 'http://127.0.0.1:8081',
-    websiteBaseUrl: 'http://127.0.0.1:8083',
     portalProcess: 'dev-targonos',
     webProcesses: [
       'dev-targonos',
       'dev-talos',
-      'dev-website',
       'dev-atlas',
       'dev-kairos',
       'dev-kairos-ml',
@@ -80,7 +75,6 @@ export const HOST_ENVIRONMENTS = {
       ['dev-hermes', '/hermes'],
       ['dev-argus', '/argus'],
     ],
-    websiteProcess: 'dev-website',
   },
 }
 
@@ -504,8 +498,6 @@ function checkEnvironment(environmentName, environment, pm2Processes) {
     results.push(checkHttpRoute('nginx', `${environmentName}:${route}`, `${environment.nginxBaseUrl}${route}`))
   }
 
-  results.push(checkHttpRoute('nginx', `${environmentName}:website`, `${environment.websiteBaseUrl}/`))
-
   for (const processName of environment.webProcesses) {
     results.push(checkPm2Process(processName, pm2Processes, 'pm2-web'))
   }
@@ -522,13 +514,6 @@ function checkEnvironment(environmentName, environment, pm2Processes) {
       pm2Processes,
     }))
   }
-
-  results.push(checkNextManifest({
-    pm2Name: environment.websiteProcess,
-    basePath: '',
-    baseUrl: environment.websiteBaseUrl,
-    pm2Processes,
-  }))
 
   results.push(checkHttpRoute('external', environmentName, `${environment.portalOrigin}/`, httpCodeIsSuccess))
   results.push(checkDeployLocks(environmentName, environment, pm2Processes))

@@ -2,7 +2,6 @@
   "apps": {
     "sso": { "lifecycle": "active" },
     "talos": { "lifecycle": "dev" },
-    "website": { "lifecycle": "active" },
     "kairos": { "lifecycle": "dev" },
     "atlas": { "lifecycle": "dev" },
     "xplan": { "lifecycle": "archived" },
