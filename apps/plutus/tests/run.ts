@@ -535,6 +535,53 @@ test('settlement detail page shows regular posting and FIFO COGS support togethe
   }
 });
 
+test('settlements list replaces filters with overview cards', () => {
+  const page = read('app/settlements/page.tsx');
+  const route = read('app/api/plutus/settlements/route.ts');
+
+  for (const required of [
+    'SettlementOverviewCards',
+    'Settlements',
+    'Settlement Total',
+    'Plutus Processed',
+    'Needs Review',
+    'summary',
+    'totalsByCurrency',
+  ]) {
+    assert.equal(page.includes(required), true, `${required} should support the overview cards`);
+  }
+
+  for (const forbidden of [
+    'useSettlementsListStore',
+    'SETTLEMENT_LIST_STATUSES',
+    'FilterListIcon',
+    'SearchIcon',
+    'type="date"',
+    'placeholder="Min"',
+    'placeholder="Max"',
+    'No settlements match your current filters',
+  ]) {
+    assert.equal(page.includes(forbidden), false, `${forbidden} should be removed from settlements list`);
+  }
+
+  for (const required of [
+    'processedCount',
+    'pendingCount',
+    'rolledBackCount',
+    'inconsistencyCount',
+    'splitCount',
+    'totalsByCurrency',
+  ]) {
+    assert.equal(route.includes(required), true, `${required} should be returned by settlements API`);
+  }
+
+  for (const forbidden of ['rawStartDate', 'rawEndDate', 'rawSearch', 'rawTotalMin', 'rawTotalMax']) {
+    assert.equal(route.includes(forbidden), false, `${forbidden} should not drive settlements list`);
+  }
+
+  assertDeleted('lib/store/settlements.ts');
+});
+
 test('landed-cost allocation page uses selected QBO bill lines instead of raw ID entry', () => {
   const page = read('app/landed-cost-allocations/page.tsx');
   const form = read('components/landed-cost-allocations/allocation-create-form.tsx');
