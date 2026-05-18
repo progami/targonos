@@ -10,9 +10,9 @@ export default function CsUkPage() {
     <PacksPageContent
       catalog={productsUK}
       copy={{
-        description: 'Pick the pack size. Check the price. Buy on Amazon.',
+        description: 'Reliable protection for painting, decorating, DIY and renovation projects.',
         marketLabel: 'UK',
-        title: 'Dust Sheet Packs'
+        title: 'Premium Plastic Dust Sheet Packs'
       }}
     />
   );
