@@ -7,10 +7,7 @@ export default function XplanArchivePage() {
       <section className={styles.panel}>
         <p className={styles.kicker}>Decommissioned</p>
         <h1>xPlan is archived</h1>
-        <p>
-          Planning and inventory evidence now lives in Sellerboard, QuickBooks, and Plutus. Do not use xPlan as a
-          source of truth.
-        </p>
+        <p>Planning and inventory evidence now lives outside xPlan. Do not use xPlan as a source of truth.</p>
         <Link href="/" className={styles.link}>Back to portal</Link>
       </section>
     </main>

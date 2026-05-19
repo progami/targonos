@@ -70,15 +70,15 @@ test('resolveAppUrl prefers the codex worktree app map when present', async () =
   const cwd = createTempWorkspaceWithWorktreeConfig({
     host: 'http://localhost',
     apps: {
-      plutus: 41212,
+      argus: 41216,
     },
   })
 
   const mod = await importFreshAppsModule(cwd)
-  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'plutus')
+  const app = mod.ALL_APPS.find((entry: { id: string }) => entry.id === 'argus')
 
   assert.ok(app)
-  assert.equal(mod.resolveAppUrl(app), 'http://localhost:41212/plutus')
+  assert.equal(mod.resolveAppUrl(app), 'http://localhost:41216/argus')
 })
 
 test('resolveAppUrl fails loudly in development when no local app mapping exists', async () => {
@@ -107,7 +107,6 @@ test('ALL_APPS does not expose legacy hardcoded devUrl fields', async () => {
       atlas: 3006,
       website: 3005,
       kairos: 3010,
-      plutus: 3012,
       hermes: 3014,
       argus: 3016,
     },
@@ -124,7 +123,7 @@ test('ALL_APPS does not expose legacy hardcoded devUrl fields', async () => {
   }
 })
 
-test('ALL_APPS marks only Website, Argus, and Plutus as active by default', async () => {
+test('ALL_APPS marks only Website and Argus as active by default', async () => {
   Object.assign(process.env, { NODE_ENV: 'development' })
   process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
 
@@ -135,7 +134,6 @@ test('ALL_APPS marks only Website, Argus, and Plutus as active by default', asyn
       atlas: 3006,
       website: 3005,
       kairos: 3010,
-      plutus: 3012,
       hermes: 3014,
       argus: 3016,
     },
@@ -151,8 +149,31 @@ test('ALL_APPS marks only Website, Argus, and Plutus as active by default', asyn
     atlas: 'dev',
     website: 'active',
     kairos: 'dev',
-    plutus: 'active',
     hermes: 'dev',
     argus: 'active',
   })
+})
+
+test('ALL_APPS does not expose Plutus as a portal-owned app', async () => {
+  Object.assign(process.env, { NODE_ENV: 'development' })
+  process.env.PORTAL_APPS_BASE_URL = 'http://localhost:3000'
+
+  const cwd = createTempWorkspace({
+    host: 'http://localhost',
+    apps: {
+      talos: 3001,
+      atlas: 3006,
+      website: 3005,
+      kairos: 3010,
+      hermes: 3014,
+      argus: 3016,
+    },
+  })
+
+  const mod = await importFreshAppsModule(cwd)
+
+  assert.equal(
+    mod.ALL_APPS.some((entry: { id: string }) => entry.id === 'plutus'),
+    false,
+  )
 })

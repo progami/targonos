@@ -10,8 +10,6 @@ WITH schema_map AS (
       ('dev_atlas', 'portal_atlas'),
       ('kairos', 'portal_xplan'),
       ('chronos', 'portal_xplan'),
-      ('plutus', 'portal_plutus'),
-      ('plutus_dev', 'portal_plutus'),
       ('dev_talos_us', 'portal_talos'),
       ('dev_talos_uk', 'portal_talos'),
       ('main_talos_us', 'portal_talos'),

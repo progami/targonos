@@ -4,7 +4,6 @@
     "talos": "/talos",
     "kairos": "/kairos/forecasts",
     "atlas": "/atlas",
-    "plutus": "/plutus",
     "hermes": "/hermes"
   }
 }

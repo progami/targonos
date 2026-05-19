@@ -52,7 +52,7 @@ function getHostedCookieDomain(environment) {
   }
 
   if (environment === 'production') {
-    return '.os.targonglobal.com';
+    return '.targonglobal.com';
   }
 
   throw new Error(`Unsupported environment for hosted cookie domain: ${environment}`);

@@ -11,7 +11,7 @@ import {
 test('hosted smoke grants cover every hosted app route under test', () => {
   assert.deepEqual(
     hostedSmokeAppGrants.map((grant) => grant.appSlug),
-    ['talos', 'atlas', 'kairos', 'plutus', 'hermes'],
+    ['talos', 'atlas', 'kairos', 'hermes'],
   )
 })
 
@@ -20,7 +20,7 @@ test('buildHostedSmokeAuthz mirrors the hosted smoke grant plan', () => {
 
   assert.deepEqual(Object.keys(authz.apps), hostedSmokeAppGrants.map((grant) => grant.appSlug))
   assert.deepEqual(authz.apps.talos?.tenantMemberships, ['US', 'UK'])
-  assert.deepEqual(authz.apps.plutus?.departments, ['Finance'])
+  assert.equal(authz.apps.plutus, undefined)
 })
 
 test('getHostedAuthSecret accepts NEXTAUTH_SECRET', () => {

@@ -13,7 +13,7 @@ TargonOS is a pnpm + Turborepo monorepo for Targon's internal apps.
 | Hermes | `@targon/hermes` | `/hermes` |
 | Argus | `@targon/argus` | `/argus` |
 
-Plutus is a standalone repo/runtime at `/Users/jarraramjad/dev/plutus`. The SSO portal still links to `/plutus`, but this monorepo no longer owns the Plutus app, Prisma package, deploy flow, or worker.
+Plutus is a standalone repo/runtime at `/Users/jarraramjad/dev/plutus` and is hosted at `https://plutus.targonglobal.com`. This monorepo does not own the Plutus app, launcher route, Prisma package, deploy flow, or worker.
 
 ## Local development
 

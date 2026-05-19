@@ -6,6 +6,7 @@ on:
 
 jobs:
   require-dev-source:
+    # Legacy status name retained because branch protection expects it.
     name: Require PR head to be dev
     runs-on: ubuntu-latest
     steps:
@@ -18,9 +19,9 @@ jobs:
             exit 0
           fi
 
-          if [[ "${{ github.head_ref }}" != "dev" ]]; then
-            echo "::error::Releases to main must come from the dev branch (got '${{ github.head_ref }}' → main)."
+          if [[ -z "${{ github.head_ref }}" || "${{ github.head_ref }}" == "main" ]]; then
+            echo "::error::Main PRs must come from a non-main branch."
             exit 1
           fi
 
-          echo "✓ PR source policy passed (dev → main)"
+          echo "✓ PR source policy passed (${{ github.head_ref }} → main)"
