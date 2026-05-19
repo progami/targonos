@@ -112,7 +112,7 @@ export type AppDef = AppBase & {
 }
 
 const PORTAL_BASE_URL = resolvePortalBaseUrl()
-const DEFAULT_ACTIVE_APP_IDS = new Set(['website', 'argus', 'plutus'])
+const DEFAULT_ACTIVE_APP_IDS = new Set(['website', 'argus'])
 
 const BASE_APPS: AppBase[] = [
   {
@@ -147,15 +147,6 @@ const BASE_APPS: AppBase[] = [
     category: 'Product',
     devPath: '/kairos',
     devUrl: 'http://localhost:3210',
-  },
-  {
-    id: 'plutus',
-    name: 'Plutus',
-    description: 'Settlement Controller',
-    url: joinBaseUrl(PORTAL_BASE_URL, '/plutus'),
-    category: 'Finance',
-    devPath: '/plutus',
-    devUrl: 'http://localhost:3212',
   },
   {
     id: 'hermes',

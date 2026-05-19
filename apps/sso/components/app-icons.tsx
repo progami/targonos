@@ -59,30 +59,6 @@ export const KairosIcon = (
   </svg>
 )
 
-/** Plutus: treasury temple and settlement coin */
-export const PlutusIcon = (
-  <svg viewBox="0 0 24 24" width="52" height="52" style={{ width: '52px', height: '52px' }} aria-hidden="true">
-    <path d="M4.9 8.5 12 4.4l7.1 4.1H4.9Z" fill="var(--icon-navy)" />
-    <rect x="5.6" y="9.4" width="12.8" height="1.6" fill="var(--icon-navy)" rx="0.35" />
-    <rect x="6.3" y="17.4" width="11.4" height="1.5" fill="var(--icon-navy)" rx="0.35" />
-    <rect x="5.1" y="19.5" width="13.8" height="1.4" fill="var(--icon-teal)" rx="0.35" />
-    <path
-      d="M7.3 11.3v5.4M10.3 11.3v5.4M13.7 11.3v5.4M16.7 11.3v5.4"
-      stroke="var(--icon-navy)"
-      strokeWidth="1.35"
-      strokeLinecap="round"
-    />
-    <circle cx="12" cy="14.1" r="2.45" fill="var(--icon-gold)" />
-    <path
-      d="M12 12.5v3.3M10.9 13.2c.25-.45.65-.7 1.2-.7.7 0 1.15.35 1.15.85 0 .55-.45.8-1.25.95-.75.15-1.2.4-1.2.95 0 .52.48.85 1.17.85.58 0 1-.24 1.28-.68"
-      fill="none"
-      stroke="var(--icon-navy)"
-      strokeWidth="0.75"
-      strokeLinecap="round"
-    />
-  </svg>
-)
-
 /** Hermes: winged messenger helm */
 export const HermesIcon = (
   <svg viewBox="0 0 24 24" width="54" height="54" style={{ width: '54px', height: '54px' }} aria-hidden="true">
@@ -156,7 +132,6 @@ export const APP_ICONS: Record<string, ReactNode> = {
   atlas: AtlasIcon,
   argus: ArgusIcon,
   kairos: KairosIcon,
-  plutus: PlutusIcon,
   hermes: HermesIcon,
   website: WebsiteIcon,
 }

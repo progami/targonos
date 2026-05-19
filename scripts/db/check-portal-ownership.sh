@@ -48,8 +48,6 @@ privilege_issues="$(
           'dev_atlas',
           'kairos',
           'chronos',
-          'plutus',
-          'plutus_dev',
           'dev_talos_us',
           'dev_talos_uk',
           'main_talos_us',

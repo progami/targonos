@@ -32,7 +32,7 @@ pnpm db:portal:harden
 pnpm db:portal:audit-ownership
 ```
 
-Portal hardening covers auth/atlas/kairos/plutus/talos/hermes/argus schemas (when present), normalizes ownership to app roles, and enforces no `CREATE` for `portal_dev_external` on those schemas and `public`.
+Portal hardening covers auth/atlas/kairos/talos/hermes/argus schemas (when present), normalizes ownership to app roles, and enforces no `CREATE` for `portal_dev_external` on those schemas and `public`.
 
 ## Talos-only scripts
 

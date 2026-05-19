@@ -27,10 +27,6 @@ export const WORKTREE_DEV_AUTHZ = {
       departments: ['Account / Listing'],
       tenantMemberships: [],
     },
-    plutus: {
-      departments: ['Finance'],
-      tenantMemberships: [],
-    },
     argus: {
       departments: ['Account / Listing'],
       tenantMemberships: [],

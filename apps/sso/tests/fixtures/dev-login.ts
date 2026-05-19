@@ -16,7 +16,6 @@ function buildPortalAuthz() {
       atlas: { departments: ['People Ops'], tenantMemberships: ['US', 'UK'] },
       website: { departments: [], tenantMemberships: [] },
       kairos: { departments: ['Product'], tenantMemberships: [] },
-      plutus: { departments: ['Finance'], tenantMemberships: [] },
       hermes: { departments: ['Account / Listing'], tenantMemberships: [] },
       argus: { departments: ['Account / Listing'], tenantMemberships: [] },
     },

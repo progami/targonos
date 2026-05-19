@@ -113,9 +113,6 @@ clone_schema() {
     dev_talos_us|dev_talos_uk)
       grant_roles+=("portal_talos")
       ;;
-    plutus_dev)
-      grant_roles+=("portal_plutus")
-      ;;
   esac
 
   log "Grant privileges on schema $to_schema -> ${grant_roles[*]}"
@@ -133,7 +130,6 @@ clone_schema "main_talos_uk" "dev_talos_uk"
 clone_schema "atlas" "dev_atlas"
 clone_schema "kairos" "kairos"
 clone_schema "auth" "auth_dev"
-clone_schema "plutus" "plutus_dev"
 clone_schema "main_argus" "argus_dev"
 clone_schema "main_hermes" "dev_hermes"
 

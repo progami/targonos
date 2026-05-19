@@ -100,9 +100,9 @@ test('validateSharedEnvEntries allows tenant Amazon SP-API app credential keys',
 
 test('parseBwRef decodes Bitwarden item and field names', () => {
   assert.deepEqual(
-    parseBwRef('bw://Amazon%20SP-API%20credentials%20-%20plutus/AMAZON_REFRESH_TOKEN_US'),
+    parseBwRef('bw://Amazon%20SP-API%20credentials%20-%20argus/AMAZON_REFRESH_TOKEN_US'),
     {
-      itemName: 'Amazon SP-API credentials - plutus',
+      itemName: 'Amazon SP-API credentials - argus',
       fieldName: 'AMAZON_REFRESH_TOKEN_US',
     }
   )
@@ -160,7 +160,7 @@ test('loadEnvForApp resolves bw refs before export', () => {
   const repoRoot = tempRepo()
   writeFile(
     path.join(repoRoot, 'env/shared.local.env'),
-    'AMAZON_REFRESH_TOKEN_US=bw://Amazon%20SP-API%20credentials%20-%20plutus/AMAZON_REFRESH_TOKEN_US\n'
+    'AMAZON_REFRESH_TOKEN_US=bw://Amazon%20SP-API%20credentials%20-%20argus/AMAZON_REFRESH_TOKEN_US\n'
   )
   writeFile(path.join(repoRoot, 'apps/talos/.env.local'), 'PORT=4100\n')
 
@@ -171,7 +171,7 @@ test('loadEnvForApp resolves bw refs before export', () => {
     mode: 'local',
     targetEnv,
     resolveBitwardenRef(ref) {
-      assert.equal(ref, 'bw://Amazon%20SP-API%20credentials%20-%20plutus/AMAZON_REFRESH_TOKEN_US')
+      assert.equal(ref, 'bw://Amazon%20SP-API%20credentials%20-%20argus/AMAZON_REFRESH_TOKEN_US')
       return 'resolved-token'
     },
   })

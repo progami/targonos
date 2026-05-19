@@ -79,8 +79,8 @@ test('hosted child apps use environment cookie domains and hosted launchers', ()
 
   assert.equal(devHermes.env.COOKIE_DOMAIN, '.dev-os.targonglobal.com')
   assert.equal(devArgus.env.COOKIE_DOMAIN, '.dev-os.targonglobal.com')
-  assert.equal(mainHermes.env.COOKIE_DOMAIN, '.os.targonglobal.com')
-  assert.equal(mainArgus.env.COOKIE_DOMAIN, '.os.targonglobal.com')
+  assert.equal(mainHermes.env.COOKIE_DOMAIN, '.targonglobal.com')
+  assert.equal(mainArgus.env.COOKIE_DOMAIN, '.targonglobal.com')
 })
 
 test('talos hosted runtimes skip server dotenv loading', () => {
