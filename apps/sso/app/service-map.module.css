@@ -1,0 +1,631 @@
+.shell {
+  --line-session: #009c94;
+  --line-postgres: #2e5f8a;
+  --line-sp-api: #c2672a;
+  --line-s3: #6a58a8;
+  --line-google: #5f8a24;
+  --line-redis: #a3437a;
+  --line-jobs: #6f7b8b;
+  --state-up: #1d8a5a;
+  --state-down: #c23b30;
+  --track-width: 4px;
+  --stop-size: 14px;
+  display: grid;
+  gap: var(--space-md);
+  padding-top: var(--space-xl);
+}
+
+.shell [data-line='session'] { --line-color: var(--line-session); }
+.shell [data-line='postgres'] { --line-color: var(--line-postgres); }
+.shell [data-line='sp-api'] { --line-color: var(--line-sp-api); }
+.shell [data-line='s3'] { --line-color: var(--line-s3); }
+.shell [data-line='google'] { --line-color: var(--line-google); }
+.shell [data-line='redis'] { --line-color: var(--line-redis); }
+.shell [data-line='jobs'] { --line-color: var(--line-jobs); }
+
+.top {
+  display: grid;
+  gap: 6px;
+}
+
+.title {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.72rem;
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.lede {
+  margin: 0;
+  max-width: 70ch;
+  color: var(--ink-soft);
+  font-size: 0.98rem;
+  line-height: 1.4;
+}
+
+.code,
+.stationMount {
+  font-family: var(--font-mono), var(--font-sans), sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+
+/* Request path: the trunk line every request rides before it reaches a workspace. */
+.route {
+  margin: 0;
+  padding: var(--space-md) var(--space-lg);
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.routeStop {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 26px var(--space-sm) 0 0;
+}
+
+.routeStop::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  left: 0;
+  right: 0;
+  height: var(--track-width);
+  background: var(--navy);
+}
+
+.routeStop:last-child::before {
+  right: auto;
+  width: 0;
+}
+
+.routeStop::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 0;
+  width: var(--stop-size);
+  height: var(--stop-size);
+  border: 3px solid var(--navy);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.routeBranch::after {
+  border-color: var(--teal);
+  background: var(--teal);
+}
+
+.routeName {
+  color: var(--navy);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.routeNote {
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.routeNote.code {
+  font-size: 0.76rem;
+  word-spacing: 0.4em;
+}
+
+/* Line matrix: one transit line per shared service, one station per app. */
+.board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: var(--space-md);
+}
+
+.matrixScroll {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.matrix {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.cornerCell {
+  width: 210px;
+}
+
+.lineHead {
+  padding: var(--space-sm) 4px;
+  vertical-align: bottom;
+  border-bottom: 1px solid var(--line);
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lineButton {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 2px;
+  background: transparent;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  cursor: pointer;
+}
+
+.lineButton:hover,
+.lineButton:focus-visible,
+.stationButton:hover,
+.stationButton:focus-visible {
+  background: color-mix(in srgb, var(--teal) 12%, var(--surface));
+  outline: none;
+}
+
+.lineButton:focus-visible,
+.stationButton:focus-visible {
+  box-shadow: 0 0 0 2px var(--teal);
+}
+
+.lineButton[aria-pressed='true'],
+.stationButton[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--teal) 18%, var(--surface));
+}
+
+.lineSwatch {
+  width: 22px;
+  height: var(--track-width);
+  flex-shrink: 0;
+  border-radius: 2px;
+  background: var(--line-color);
+}
+
+[data-line='jobs'] .lineSwatch {
+  background: repeating-linear-gradient(90deg, var(--line-color) 0 5px, transparent 5px 8px);
+}
+
+.stationHead {
+  padding: var(--space-xs) var(--space-sm);
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  text-align: left;
+  vertical-align: middle;
+  border-top: 1px solid var(--line);
+}
+
+tbody tr:first-child .stationHead {
+  border-top: 0;
+}
+
+.stationButton {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  background: transparent;
+  color: var(--navy);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stationName {
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.stationMount {
+  color: var(--slate);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1.5px solid var(--slate);
+}
+
+.status[data-tone='up'] .statusDot {
+  border-color: var(--state-up);
+  background: var(--state-up);
+}
+
+.status[data-tone='down'] {
+  color: var(--state-down);
+  font-weight: 700;
+}
+
+.status[data-tone='down'] .statusDot {
+  border-color: var(--state-down);
+  background: var(--state-down);
+}
+
+.cell {
+  position: relative;
+  height: 60px;
+  padding: 0;
+  text-align: center;
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.cell[data-track-up]::before,
+.cell[data-track-down]::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - var(--track-width) / 2);
+  width: var(--track-width);
+  background: var(--line-color);
+}
+
+.cell[data-track-up]::before {
+  top: 0;
+  bottom: 50%;
+}
+
+.cell[data-track-down]::after {
+  top: 50%;
+  bottom: 0;
+}
+
+.cell[data-line='jobs'][data-track-up]::before,
+.cell[data-line='jobs'][data-track-down]::after {
+  background: repeating-linear-gradient(180deg, var(--line-color) 0 6px, transparent 6px 10px);
+}
+
+.stop {
+  position: relative;
+  z-index: 1;
+  width: var(--stop-size);
+  height: var(--stop-size);
+  display: inline-block;
+  vertical-align: middle;
+  border: 3px solid var(--line-color);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.cellLabel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.cellLine {
+  font-weight: 700;
+}
+
+.cellLine::after {
+  content: ': ';
+}
+
+.matrix[data-selecting] [data-lit='false'] {
+  opacity: 0.22;
+}
+
+.detail {
+  display: grid;
+  gap: var(--space-sm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: var(--space-md);
+}
+
+.detailTitle {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.detailText {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.detailList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.detailItem {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-sm);
+}
+
+.detailItem .lineSwatch {
+  margin-top: 0.55em;
+}
+
+.detailItemName {
+  display: block;
+  color: var(--navy);
+  font-size: 0.94rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.detailItemNote {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+/* Other hosts under targonglobal.com that are not served by this portal. */
+.hosts {
+  display: grid;
+  gap: var(--space-sm);
+}
+
+.hostsTitle {
+  margin: 0;
+  color: var(--navy);
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.hostList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-sm);
+}
+
+.host {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: var(--space-sm) var(--space-md);
+}
+
+.hostLink {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px var(--space-xs);
+  color: var(--navy);
+  text-decoration: none;
+}
+
+.hostLink:hover .hostName,
+.hostLink:focus-visible .hostName {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hostLink:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.hostName {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.hostLink .code {
+  color: var(--slate);
+}
+
+.hostNote {
+  color: var(--ink-soft);
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .route {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+    padding: var(--space-md);
+  }
+
+  .routeStop {
+    padding: 0 0 0 28px;
+  }
+
+  .routeStop::before {
+    top: 7px;
+    bottom: calc(-1 * var(--space-sm) - 7px);
+    left: 5px;
+    right: auto;
+    width: var(--track-width);
+    height: auto;
+  }
+
+  .routeStop:last-child::before {
+    display: none;
+  }
+
+  .hostList {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phones: the matrix becomes one card per app listing only the lines it rides. */
+@media (max-width: 760px) {
+  .matrixScroll {
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .matrix,
+  .matrix tbody,
+  .matrix tr,
+  .matrix th,
+  .matrix td {
+    display: block;
+    width: auto;
+    min-width: 0;
+  }
+
+  .matrix thead {
+    display: none;
+  }
+
+  .matrix tbody {
+    display: grid;
+    gap: var(--space-sm);
+  }
+
+  .matrix tr {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+  }
+
+  .stationHead,
+  tbody tr:first-child .stationHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px var(--space-sm);
+    padding: 0 0 var(--space-xs);
+    border-top: 0;
+  }
+
+  .cell {
+    height: auto;
+    text-align: left;
+  }
+
+  .cell:not([data-stop]) {
+    display: none;
+  }
+
+  .cell[data-track-up]::before,
+  .cell[data-track-down]::after {
+    display: none;
+  }
+
+  .cell[data-stop] {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-sm);
+    padding: 6px 0;
+  }
+
+  .stop {
+    width: 22px;
+    height: var(--track-width);
+    margin-top: 0.6em;
+    border: 0;
+    border-radius: 2px;
+    background: var(--line-color);
+  }
+
+  .cell[data-line='jobs'] .stop {
+    background: repeating-linear-gradient(90deg, var(--line-color) 0 5px, transparent 5px 8px);
+  }
+
+  .cellLabel {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  .cellLine {
+    color: var(--navy);
+  }
+
+  .detail {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell,
+  .lineHead,
+  .stationHead {
+    transition-duration: 0.01ms;
+  }
+}

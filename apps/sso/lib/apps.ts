@@ -112,6 +112,10 @@ export type AppDef = AppBase & {
 }
 
 const PORTAL_BASE_URL = resolvePortalBaseUrl()
+
+export function getPortalHost(): string {
+  return new URL(PORTAL_BASE_URL).host
+}
 const DEFAULT_ACTIVE_APP_IDS = new Set(['website', 'argus'])
 
 const BASE_APPS: AppBase[] = [

@@ -1,4 +1,4 @@
-import { filterAppsForUser, resolveAppUrl, ALL_APPS, type AppDef } from '@/lib/apps'
+import { filterAppsForUser, getPortalHost, resolveAppUrl, ALL_APPS, type AppDef } from '@/lib/apps'
 import { getSafeServerSession } from '@/lib/safe-session'
 import PortalClient, { type PortalAppCard } from './PortalClient'
 import LoginPage from './login/page'
@@ -73,6 +73,11 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
 
   const assignedAppsWithUrls = assignedApps.map(withLaunchUrl)
 
+  const cookieDomain = process.env.COOKIE_DOMAIN
+  if (!cookieDomain) {
+    throw new Error('COOKIE_DOMAIN is required.')
+  }
+
   return (
     <PortalClient
       session={session}
@@ -81,6 +86,8 @@ export default async function PortalHome({ searchParams }: { searchParams: Searc
       roles={normalizedRolesClaim}
       isPlatformAdmin={isPlatformAdmin}
       accessError={accessError}
+      cookieDomain={cookieDomain}
+      portalHost={getPortalHost()}
     />
   )
 }

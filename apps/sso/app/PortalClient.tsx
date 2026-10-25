@@ -2,12 +2,14 @@
 
 import { signOut } from 'next-auth/react'
 import type { Session } from 'next-auth'
-import type { CSSProperties } from 'react'
+import { useEffect, useState } from 'react'
 
 import type { AppDef } from '@/lib/apps'
 import { getAppIcon } from '@/components/app-icons'
 import { getPublicBuildTime, getPublicVersion, getPublicVersionHref } from '@/lib/public-build-metadata'
+import type { ServiceProbe, ServiceStatusPayload } from '@/lib/service-map'
 
+import ServiceMap from './ServiceMap'
 import styles from './portal.module.css'
 
 type PortalRoleMap = Record<string, { departments?: string[]; depts?: string[] }>
@@ -21,7 +23,6 @@ type AppStateTone = 'locked' | 'muted' | 'public' | 'standard'
 
 type AppState = {
   actionText: string
-  isDevLifecycle: boolean
   isDisabled: boolean
   isEntitled: boolean
   isPublicEntry: boolean
@@ -44,9 +45,51 @@ type PortalClientProps = {
   accessApps?: PortalAppCard[]
   accessError?: string
   apps: PortalAppCard[]
+  cookieDomain: string
   isPlatformAdmin?: boolean
+  portalHost: string
   roles?: PortalRoleMap
   session: Session
+}
+
+const STATUS_REFRESH_MS = 60_000
+
+// Live reachability for every workspace and host, refreshed while the tab is visible.
+function useServiceStatus() {
+  const [probes, setProbes] = useState<Map<string, ServiceProbe> | null>(null)
+
+  useEffect(() => {
+    let active = true
+
+    const load = async () => {
+      if (document.visibilityState !== 'visible') {
+        return
+      }
+      const response = await fetch('/api/v1/service-status', { cache: 'no-store' })
+      if (!response.ok) {
+        console.error(`[portal] service status request failed with HTTP ${response.status}`)
+        if (active) setProbes(new Map())
+        return
+      }
+      const payload = (await response.json()) as ServiceStatusPayload
+      if (active) {
+        setProbes(new Map(payload.services.map((probe) => [probe.id, probe])))
+      }
+    }
+
+    void load()
+    const timer = window.setInterval(() => void load(), STATUS_REFRESH_MS)
+    const onVisibilityChange = () => void load()
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      active = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [])
+
+  return probes
 }
 
 function getWorkspaceRowClassName(state: AppState) {
@@ -111,12 +154,14 @@ export default function PortalClient({
   roles,
   isPlatformAdmin,
   accessError,
+  cookieDomain,
+  portalHost,
 }: PortalClientProps) {
   const roleMap = roles ?? {}
   const hasApps = apps.length > 0
+  const probes = useServiceStatus()
 
   const resolveState = (app: PortalAppCard): AppState => {
-    const isDevLifecycle = app.lifecycle === 'dev'
     const isPublicEntry = app.entryPolicy === 'public'
     const isEntitled = isPublicEntry || Boolean(isPlatformAdmin) || Boolean(roleMap[app.id])
     const isDisabled = !isEntitled || !app.launchUrl
@@ -124,7 +169,6 @@ export default function PortalClient({
     if (!isEntitled) {
       return {
         actionText: 'Access required',
-        isDevLifecycle,
         isDisabled,
         isEntitled,
         isPublicEntry,
@@ -135,7 +179,6 @@ export default function PortalClient({
     if (!app.launchUrl) {
       return {
         actionText: 'Launch unavailable',
-        isDevLifecycle,
         isDisabled,
         isEntitled,
         isPublicEntry,
@@ -146,7 +189,6 @@ export default function PortalClient({
     if (isPublicEntry) {
       return {
         actionText: 'Open public surface',
-        isDevLifecycle,
         isDisabled,
         isEntitled,
         isPublicEntry,
@@ -156,7 +198,6 @@ export default function PortalClient({
 
     return {
       actionText: 'Open workspace',
-      isDevLifecycle,
       isDisabled,
       isEntitled,
       isPublicEntry,
@@ -303,12 +344,9 @@ export default function PortalClient({
 
         <section className={styles.launcherShell} aria-labelledby="portal-title">
           <div className={styles.launcherTop}>
-            <div className={styles.launcherHeading}>
-              <span className={styles.sectionEyebrow}>{accessModeLabel}</span>
-              <h1 id="portal-title" className={styles.launcherTitle}>Workspaces</h1>
-            </div>
+            <h1 id="portal-title" className={styles.launcherTitle}>Workspaces</h1>
             <span className={styles.launcherMeta}>
-              {launcherApps.length} applications
+              {accessModeLabel} · {launcherApps.length} applications
             </span>
           </div>
 
@@ -329,8 +367,9 @@ export default function PortalClient({
                 </div>
 
                 <div className={styles.workspaceList}>
-                  {section.apps.map((app, appIndex) => {
+                  {section.apps.map((app) => {
                     const state = resolveState(app)
+                    const probe = probes?.get(app.id)
                     const linkProps = state.isDisabled
                       ? {}
                       : {
@@ -345,16 +384,12 @@ export default function PortalClient({
                         className={getWorkspaceRowClassName(state)}
                         aria-disabled={state.isDisabled}
                         tabIndex={state.isDisabled ? -1 : undefined}
-                        style={{ '--row-delay': `${appIndex * 35}ms` } as CSSProperties}
                         title={app.description}
                         {...linkProps}
                       >
                         <span className={styles.workspaceIcon}>{getAppIcon(app.id)}</span>
 
                         <span className={styles.workspaceMain}>
-                          <span className={styles.workspaceCategory}>
-                            {normalizeCategory(app.category)}
-                          </span>
                           <span className={styles.workspaceName}>{app.name}</span>
                           <span className={styles.workspaceDescription}>{app.description}</span>
                           {state.isEntitled && app.launchError ? (
@@ -363,6 +398,17 @@ export default function PortalClient({
                         </span>
 
                         <span className={styles.workspaceBadges}>
+                          <span className={styles.workspaceCategory}>
+                            {normalizeCategory(app.category)}
+                          </span>
+                          {probe ? (
+                            <span
+                              className={`${styles.stateBadge} ${probe.state === 'up' ? styles.stateBadgeUp : styles.stateBadgeDown}`}
+                              title={probe.httpStatus === null ? 'No response' : `HTTP ${probe.httpStatus} in ${probe.latencyMs} ms`}
+                            >
+                              {probe.state === 'up' ? 'Up' : 'Down'}
+                            </span>
+                          ) : null}
                           {state.isPublicEntry ? (
                             <span className={`${styles.stateBadge} ${styles.stateBadgePublic}`}>
                               Public
@@ -376,11 +422,6 @@ export default function PortalClient({
                           {state.isEntitled && !app.launchUrl ? (
                             <span className={`${styles.stateBadge} ${styles.stateBadgeMuted}`}>
                               Unavailable
-                            </span>
-                          ) : null}
-                          {state.isDevLifecycle ? (
-                            <span className={`${styles.stateBadge} ${styles.stateBadgeDev}`}>
-                              Under development
                             </span>
                           ) : null}
                         </span>
@@ -417,6 +458,8 @@ export default function PortalClient({
             ) : null}
           </div>
         </section>
+
+        <ServiceMap cookieDomain={cookieDomain} portalHost={portalHost} probes={probes} />
       </main>
     </div>
   )
